@@ -24,11 +24,36 @@ The web dev server proxies `/api/*` requests to the API server automatically.
 
 ### Test Users (from seed)
 
+By default, `pnpm db:seed` creates the following test users:
+
 | Username    | Password       | Role       |
 | ----------- | -------------- | ---------- |
 | `admin`     | `admin123`     | SuperAdmin |
 | `teacher`   | `teacher123`   | Teacher    |
 | `candidate` | `candidate123` | Candidate  |
+
+You can customize these users by setting environment variables in your `.env` file (copy from `.env.example`):
+
+```bash
+# Organization settings
+SEED_ORG_NAME="My Organization"
+SEED_ORG_DISPLAY_NAME="My Organization"
+
+# Admin user
+SEED_ADMIN_USERNAME="admin"
+SEED_ADMIN_PASSWORD="admin123"
+SEED_ADMIN_NAME="Admin"
+
+# Teacher user
+SEED_TEACHER_USERNAME="teacher"
+SEED_TEACHER_PASSWORD="teacher123"
+SEED_TEACHER_NAME="Teacher"
+
+# Candidate user
+SEED_CANDIDATE_USERNAME="candidate"
+SEED_CANDIDATE_PASSWORD="candidate123"
+SEED_CANDIDATE_NAME="Candidate"
+```
 
 ## Development Commands
 
@@ -69,11 +94,34 @@ packages/
 
 ## Environment Variables
 
-| Variable            | Default      | Description                     |
-| ------------------- | ------------ | ------------------------------- |
-| `VITE_API_BASE_URL` | `""` (proxy) | API base URL for the web client |
-| `APP_PORT`          | `3000`       | API server port                 |
-| `HOST`              | `0.0.0.0`    | API server host                 |
+### Application Settings
+
+| Variable            | Default                   | Description                                   |
+| ------------------- | ------------------------- | --------------------------------------------- |
+| `VITE_API_BASE_URL` | `""` (proxy)              | API base URL for the web client               |
+| `APP_PORT`          | `3000`                    | API server port                               |
+| `HOST`              | `0.0.0.0`                 | API server host                               |
+| `DATABASE_URL`      | `sqlite:./dev.db`         | Database connection URL                       |
+| `JWT_SECRET`        | `change-me-in-production` | Secret key for JWT token generation           |
+| `NODE_ENV`          | `development`             | Application environment                       |
+| `COOKIE_SECURE`     | `false`                   | Whether cookies should be secure (HTTPS only) |
+| `CORS_ORIGIN`       | `http://localhost:5173`   | CORS origin for API server                    |
+
+### Seed Data Configuration (Optional)
+
+| Variable                  | Default                | Description                       |
+| ------------------------- | ---------------------- | --------------------------------- |
+| `SEED_ORG_NAME`           | `Default Organization` | Default organization name         |
+| `SEED_ORG_DISPLAY_NAME`   | Same as SEED_ORG_NAME  | Default organization display name |
+| `SEED_ADMIN_USERNAME`     | `admin`                | Admin username                    |
+| `SEED_ADMIN_PASSWORD`     | `admin123`             | Admin password                    |
+| `SEED_ADMIN_NAME`         | `Admin`                | Admin display name                |
+| `SEED_TEACHER_USERNAME`   | `teacher`              | Teacher username                  |
+| `SEED_TEACHER_PASSWORD`   | `teacher123`           | Teacher password                  |
+| `SEED_TEACHER_NAME`       | `Teacher`              | Teacher display name              |
+| `SEED_CANDIDATE_USERNAME` | `candidate`            | Candidate username                |
+| `SEED_CANDIDATE_PASSWORD` | `candidate123`         | Candidate password                |
+| `SEED_CANDIDATE_NAME`     | `Candidate`            | Candidate display name            |
 
 ## Testing
 
