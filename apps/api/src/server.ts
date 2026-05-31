@@ -8,6 +8,7 @@ import rateLimitPlugin from "./plugins/rateLimit.js";
 import authRoutes from "./routes/auth.js";
 import settingsRoutes from "./routes/settings.js";
 import organizationRoutes from "./routes/organization.js";
+import candidateFieldRoutes from "./routes/candidateField.js";
 
 const port = Number(process.env.APP_PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -29,6 +30,7 @@ async function main() {
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(settingsRoutes, { prefix: "/api" });
   await app.register(organizationRoutes, { prefix: "/api" });
+  await app.register(candidateFieldRoutes, { prefix: "/api" });
 
   await app.listen({ port, host });
 }
