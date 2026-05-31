@@ -129,11 +129,11 @@ pnpm verify
 
 `pnpm db:seed` 创建以下测试用户：
 
-| Username | Password | Role |
-|----------|----------|------|
-| `admin` | `admin123` | SuperAdmin |
-| `teacher` | `teacher123` | Teacher |
-| `candidate` | `candidate123` | Candidate |
+| Username    | Password       | Role       |
+| ----------- | -------------- | ---------- |
+| `admin`     | `admin123`     | SuperAdmin |
+| `teacher`   | `teacher123`   | Teacher    |
+| `candidate` | `candidate123` | Candidate  |
 
 ## Review Checklist
 

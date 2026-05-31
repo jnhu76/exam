@@ -14,8 +14,8 @@ const now = new Date();
 
 const org = {
   id: randomUUID(),
-  name: "默认机构",
-  displayName: "默认机构",
+  name: "Default Organization",
+  displayName: "Default Organization",
   slug: "default",
   createdAt: now,
   updatedAt: now,
@@ -27,7 +27,7 @@ const users = [
     organizationId: org.id,
     username: "admin",
     passwordHash: hashPassword("admin123"),
-    name: "管理员",
+    name: "Admin",
     role: "SuperAdmin" as const,
     isActive: true,
     createdAt: now,
@@ -38,7 +38,7 @@ const users = [
     organizationId: org.id,
     username: "teacher",
     passwordHash: hashPassword("teacher123"),
-    name: "教师",
+    name: "Teacher",
     role: "Teacher" as const,
     isActive: true,
     createdAt: now,
@@ -49,7 +49,7 @@ const users = [
     organizationId: org.id,
     username: "candidate",
     passwordHash: hashPassword("candidate123"),
-    name: "考生",
+    name: "Candidate",
     role: "Candidate" as const,
     isActive: true,
     createdAt: now,
@@ -68,7 +68,9 @@ async function seed() {
 
   for (const user of users) {
     db.insert(sqliteSchema.users).values(user).run();
-    console.log(`  User: ${user.username} / ${user.username}123 (${user.role})`);
+    console.log(
+      `  User: ${user.username} / ${user.username}123 (${user.role})`,
+    );
   }
 
   console.log("\nDone! Login credentials:");

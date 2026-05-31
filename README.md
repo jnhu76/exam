@@ -16,6 +16,7 @@ pnpm dev
 ```
 
 This starts:
+
 - **Web** (Vite): http://localhost:5173
 - **API** (Fastify): http://localhost:3000
 
@@ -23,25 +24,25 @@ The web dev server proxies `/api/*` requests to the API server automatically.
 
 ### Test Users (from seed)
 
-| Username | Password | Role |
-|----------|----------|------|
-| `admin` | `admin123` | SuperAdmin |
-| `teacher` | `teacher123` | Teacher |
-| `candidate` | `candidate123` | Candidate |
+| Username    | Password       | Role       |
+| ----------- | -------------- | ---------- |
+| `admin`     | `admin123`     | SuperAdmin |
+| `teacher`   | `teacher123`   | Teacher    |
+| `candidate` | `candidate123` | Candidate  |
 
 ## Development Commands
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start all services in dev mode (hot reload) |
-| `pnpm --filter web dev` | Start only the web frontend |
-| `pnpm --filter api dev` | Start only the API server |
-| `pnpm db:seed` | Seed database with test users |
-| `pnpm test` | Run all tests |
-| `pnpm --filter web test` | Run web tests only |
-| `pnpm typecheck` | Type-check all packages |
-| `pnpm lint` | Lint all packages |
-| `pnpm verify` | Full verification: format + lint + typecheck + test + build |
+| Command                  | Description                                                 |
+| ------------------------ | ----------------------------------------------------------- |
+| `pnpm dev`               | Start all services in dev mode (hot reload)                 |
+| `pnpm --filter web dev`  | Start only the web frontend                                 |
+| `pnpm --filter api dev`  | Start only the API server                                   |
+| `pnpm db:seed`           | Seed database with test users                               |
+| `pnpm test`              | Run all tests                                               |
+| `pnpm --filter web test` | Run web tests only                                          |
+| `pnpm typecheck`         | Type-check all packages                                     |
+| `pnpm lint`              | Lint all packages                                           |
+| `pnpm verify`            | Full verification: format + lint + typecheck + test + build |
 
 ## Project Structure
 
@@ -68,11 +69,11 @@ packages/
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
+| Variable            | Default      | Description                     |
+| ------------------- | ------------ | ------------------------------- |
 | `VITE_API_BASE_URL` | `""` (proxy) | API base URL for the web client |
-| `APP_PORT` | `3000` | API server port |
-| `HOST` | `0.0.0.0` | API server host |
+| `APP_PORT`          | `3000`       | API server port                 |
+| `HOST`              | `0.0.0.0`    | API server host                 |
 
 ## Testing
 
