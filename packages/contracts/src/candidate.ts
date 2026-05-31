@@ -75,7 +75,7 @@ export const CandidateImportRowSchema = z.record(z.unknown());
 export type CandidateImportRow = z.infer<typeof CandidateImportRowSchema>;
 
 export const CandidateImportRequestSchema = z.object({
-  rows: z.array(CandidateImportRowSchema).min(1),
+  rows: z.array(CandidateImportRowSchema).min(1).max(500),
 });
 export type CandidateImportRequest = z.infer<
   typeof CandidateImportRequestSchema

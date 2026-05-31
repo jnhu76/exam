@@ -73,6 +73,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.authenticate,
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: 60 * 1000,
+        },
+      },
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
