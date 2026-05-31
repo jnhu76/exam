@@ -858,6 +858,13 @@ exam/
 | 正式生产 | Docker Compose | PostgreSQL | app + DB 一键部署 |
 | 手动部署 | systemd + Nginx | PostgreSQL | 不用 Docker，传统方式 |
 
+**Phase 1 数据库落地节奏**：
+
+- J1-J8：SQLite-first。开发、CI、集成测试和单机演示默认使用 SQLite，优先完成业务闭环。
+- J9：增加 PostgreSQL schema、migration 和 Docker Compose 生产部署，执行 PostgreSQL 兼容性验证。
+- Phase 1 正式发布：PostgreSQL 是生产默认数据库；SQLite 仅保留给本地开发、测试和单机演示。
+- Phase 2 不承担首次 PostgreSQL 切换。Phase 2 在已经验证过的 PostgreSQL 生产基线上继续开发。
+
 **Docker Compose（正式生产）**：
 
 ```yaml

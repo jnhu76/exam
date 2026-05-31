@@ -343,6 +343,14 @@ CORS_ORIGIN
 
 ## 12. Database Migration
 
+### 数据库落地策略
+
+- J1-J8 默认使用 SQLite 完成开发、CI 和集成测试。
+- J9 增加 PostgreSQL 支持，并将 PostgreSQL 设为生产部署默认数据库。
+- SQLite 仅用于 dev/demo，不作为多人考试生产数据库。
+- repository 和 service 代码必须保持数据库无关；SQLite 专属 SQL 只能出现在 Drizzle 数据库层。
+- Phase 1 发布前必须在 PostgreSQL 上运行 migration、integration test 和 smoke test。首次 PostgreSQL 切换不能推迟到 Phase 2。
+
 规则：
 
 1. Schema 修改必须生成 migration
@@ -351,6 +359,7 @@ CORS_ORIGIN
 4. 不允许随意清空业务数据
 5. Seed 只用于 dev/test，不用于生产覆盖数据
 6. 所有 migration 必须在 CI/test db 上跑过
+7. J9 必须验证 SQLite 与 PostgreSQL 在 JSON、时间戳、布尔值、唯一约束、事务和并发写入上的差异
 
 涉及 DB 的 Job 必须运行：
 

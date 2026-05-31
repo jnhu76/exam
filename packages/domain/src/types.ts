@@ -107,6 +107,7 @@ export interface Question {
   score: number;
   difficulty: number;
   tags: string[];
+  gradingRule: GradingRule;
   createdAt: Date;
   updatedAt: Date;
 }

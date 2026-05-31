@@ -27,6 +27,14 @@ Multi-tenant: each organization runs exams independently. Supports open-book qui
 | Auth     | HTTP-only Cookie + JWT, argon2/bcrypt password hashing             |
 | Monorepo | pnpm workspace: `apps/`, `packages/`                               |
 
+### Database Rollout Strategy
+
+- J1-J8 use SQLite as the default development, test, and demo database.
+- J9 adds PostgreSQL support and switches the production deployment default to PostgreSQL.
+- SQLite remains supported after J9 for local development, CI, and single-machine demos only.
+- Repository and service code must remain database-agnostic. Do not add SQLite-specific SQL outside the Drizzle database layer.
+- Before Phase 1 release, run migrations, integration tests, and smoke tests against PostgreSQL.
+
 ## Commands
 
 ```bash

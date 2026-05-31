@@ -21,6 +21,11 @@ const AttachmentSchema = z.object({
   name: z.string(),
 });
 
+export const GradingRuleSchema = z.object({
+  multiSelectScoring: z.enum(["all_correct_full", "partial_half"]),
+  fillBlankMatchMode: z.enum(["exact", "keyword"]),
+});
+
 const StandardAnswerSchema = z
   .unknown()
   .refine((value) => value !== undefined && value !== null, {
@@ -80,6 +85,7 @@ export const QuestionSchema = z.object({
   score: z.number().positive(),
   difficulty: z.number().int().min(1).max(5),
   tags: z.array(z.string()),
+  gradingRule: GradingRuleSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -96,6 +102,10 @@ export const CreateQuestionRequestSchema = z
     score: z.number().positive(),
     difficulty: z.number().int().min(1).max(5).default(3),
     tags: z.array(z.string()).default([]),
+    gradingRule: GradingRuleSchema.default({
+      multiSelectScoring: "all_correct_full",
+      fillBlankMatchMode: "exact",
+    }),
   })
   .superRefine(validateQuestionType);
 export type CreateQuestionRequest = z.infer<typeof CreateQuestionRequestSchema>;
@@ -110,6 +120,7 @@ export const UpdateQuestionRequestSchema = z.object({
   score: z.number().positive().optional(),
   difficulty: z.number().int().min(1).max(5).optional(),
   tags: z.array(z.string()).optional(),
+  gradingRule: GradingRuleSchema.optional(),
 });
 export type UpdateQuestionRequest = z.infer<typeof UpdateQuestionRequestSchema>;
 
@@ -126,6 +137,10 @@ export const QuestionImportRowSchema = z.object({
   score: z.number().positive(),
   difficulty: z.number().int().min(1).max(5).optional(),
   tags: z.string().optional(),
+  gradingRule: GradingRuleSchema.default({
+    multiSelectScoring: "all_correct_full",
+    fillBlankMatchMode: "exact",
+  }),
 });
 export type QuestionImportRow = z.infer<typeof QuestionImportRowSchema>;
 

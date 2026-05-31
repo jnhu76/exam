@@ -124,6 +124,13 @@ Week 5:  J8 → J9
 - **环境变量校验** — Zod 校验，启动时 fail fast
 - **配置驱动 UI 文案** — 登录页标题、侧栏产品名、页脚、机构名称、考试名称均来自 Organization/Platform settings 或业务数据；生产代码不得硬编码"校内/校园/大学/实验室/学生/工号/化学"等场景词
 
+### Database Rollout
+
+- J1-J8 默认使用 SQLite：本地开发、CI、集成测试和单机演示先共用一套轻量数据库链路。
+- J9 增加 PostgreSQL schema、migration、repository adapter 和 Docker Compose 生产部署。
+- J9 必须在 PostgreSQL 上跑完整 migration、integration test 和 smoke test，重点检查 JSON、时间戳、布尔值、唯一约束、事务和并发写入差异。
+- Phase 1 发布时 PostgreSQL 为生产默认；SQLite 继续用于 dev/demo。首次 PostgreSQL 切换不得推迟到 Phase 2。
+
 ---
 
 ## Product Generalization Decisions

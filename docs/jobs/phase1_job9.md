@@ -12,6 +12,7 @@ Build server health check endpoint, admin dashboard with stats, basic system hea
 - Dockerfile (multi-stage: build web + serve from api)
 - Docker Compose (app + PostgreSQL for production)
 - Docker Compose dev variant (app + SQLite for dev/demo)
+- PostgreSQL schema, migrations, and repository adapter for the Phase 1 production switch
 - Migration on startup strategy
 - .env.example + README deploy section
 
@@ -85,6 +86,11 @@ None.
   - Files: `Dockerfile`, `.dockerignore`
   - Verify: `docker build -t exam .` succeeds; `docker run -p 3000:3000 exam` starts and serves both API and frontend
 
+- [ ] **9.4.1** PostgreSQL production adapter + compatibility verification
+  - Acceptance: Add PostgreSQL Drizzle schema, migrations, connection factory, and repository adapter while preserving SQLite for dev/demo. Run migration and integration tests against PostgreSQL. Verify JSON, timestamp, boolean, unique constraint, transaction, answer-save concurrency, and idempotency behavior.
+  - Files: `packages/db/src/schema/postgres.ts`, `packages/db/src/postgres.ts`, `packages/db/src/repository/postgresRepositories.ts`, `packages/db/drizzle.postgres.config.ts`, `packages/db/migrations/postgres/`
+  - Verify: PostgreSQL migration succeeds on an empty database; full integration and smoke suites pass with PostgreSQL `DATABASE_URL`
+
 - [ ] **9.5** Docker Compose (app + PostgreSQL)
   - Acceptance: docker-compose.yml defines app service + PostgreSQL service with persistent volume; .env file switches DATABASE_URL between PostgreSQL (prod) and SQLite (dev); docker-compose.dev.yml provides app + SQLite configuration for dev/demo; healthcheck configured on both services; proper network isolation; migration runs on app startup
   - Files: `docker-compose.yml`, `docker-compose.dev.yml`
@@ -103,6 +109,7 @@ None.
 9. Complete exam flow works in Docker
 10. .env.example documents all Docker-related vars
 11. `pnpm typecheck` passes
+12. PostgreSQL migration, integration, and smoke tests pass before the Phase 1 release
 
 ## Verify Commands
 
@@ -115,6 +122,9 @@ docker run -p 3000:3000 exam
 docker compose up
 docker compose -f docker-compose.dev.yml up
 curl http://localhost:3000/api/system/health
+DATABASE_URL=postgresql://... pnpm --filter @exam/db db:migrate:postgres
+DATABASE_URL=postgresql://... pnpm test:integration
+DATABASE_URL=postgresql://... pnpm smoke
 pnpm verify
 ```
 
@@ -124,6 +134,8 @@ pnpm verify
 - [ ] No adaptive degradation in Phase 1
 - [ ] Dockerfile uses node:lts-alpine, non-root user
 - [ ] PostgreSQL is production default, SQLite dev/demo only
+- [ ] PostgreSQL migration, integration tests, and smoke tests pass before release
+- [ ] JSON, timestamp, boolean, unique constraint, transaction, and answer-save concurrency differences are verified
 - [ ] Migration runs before app serves requests
 - [ ] .env.example has DATABASE_URL for both PostgreSQL and SQLite
 - [ ] Docker Compose has persistent volumes for PostgreSQL

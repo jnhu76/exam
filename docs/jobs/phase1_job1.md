@@ -2,7 +2,7 @@
 
 ## Goal
 
-Drizzle ORM setup with PostgreSQL/SQLite dual support, all Phase 1 tables, migrations tooling, and the repository pattern with RequestContext enforcement.
+Drizzle ORM setup with SQLite support, all Phase 1 tables, migrations tooling, and the repository pattern with RequestContext enforcement. PostgreSQL support is deferred until deployment hardening in J9.
 
 ## Scope
 
@@ -72,8 +72,8 @@ None.
 
 ## Subtasks
 
-- [ ] **1.1** Drizzle ORM setup + PostgreSQL/SQLite connection
-  - Acceptance: `import { db }` works, can connect to SQLite file for dev, PostgreSQL via DATABASE_URL
+- [ ] **1.1** Drizzle ORM setup + SQLite connection
+  - Acceptance: `createDatabase()` works and `DATABASE_URL` connects to a SQLite file. PostgreSQL support is deferred to J9.
   - Files: `packages/db/src/index.ts`, `packages/db/package.json`, `packages/db/tsconfig.json`
   - Verify: `pnpm --filter api dev` starts without db import errors
 
@@ -93,7 +93,7 @@ None.
   - Verify: `pnpm --filter db db:push` creates all 3 tables
 
 - [ ] **1.5** Schema: audit_logs + drizzle config + scripts
-  - Acceptance: `audit_logs` has `organizationId`, `actorId`, `action`, `targetType`, `targetId`, `metadata` (JSON), `ipAddress`, `userAgent`, `createdAt`. Drizzle config supports both PostgreSQL and SQLite. Scripts `db:push` and `db:studio` work.
+  - Acceptance: `audit_logs` has `organizationId`, `actorId`, `action`, `targetType`, `targetId`, `metadata` (JSON), `ipAddress`, `userAgent`, `createdAt`. Drizzle config supports SQLite. Scripts `db:push` and `db:studio` work.
   - Files: `packages/db/src/schema.ts`, `packages/db/drizzle.config.ts`
   - Verify: full `pnpm --filter db db:push` creates all tables; `pnpm --filter db db:studio` opens Drizzle Studio
 
@@ -142,7 +142,7 @@ pnpm verify
 - [ ] No `db.select()` outside repository files
 - [ ] organizationId is NOT nullable on business tables
 - [ ] JSON columns use typed interfaces from domain
-- [ ] Migration scripts work for both PostgreSQL and SQLite
+- [ ] Migration scripts work for SQLite; PostgreSQL migration support is deferred to J9
 - [ ] No duplicate DTOs (types imported from `@exam/domain` or `@exam/contracts`)
 - [ ] No `any` / `as any`
 - [ ] No bare `db.select()` in routes (repository pattern only)
