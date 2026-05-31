@@ -9,7 +9,8 @@
     "lint": "echo 'lint: TODO'",
     "test": "vitest run",
     "coverage": "echo 'coverage: TODO'",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@exam/auth": "workspace:*",

@@ -3,6 +3,7 @@ import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
 import authPlugin from "../plugins/auth.js";
+import { hashPassword } from "@exam/auth/src/password.js";
 import { createSqliteDatabase } from "@exam/db/src/sqlite.js";
 import { migrateSqlite } from "@exam/db/src/sqlite.js";
 import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
@@ -32,7 +33,7 @@ export async function buildTestApp(
 ): Promise<TestContext> {
   const { db } = createSqliteDatabase(":memory:");
   migrateSqlite(db);
-  seed(db);
+  await seed(db, hashPassword);
 
   const app = Fastify();
   await app.register(fastifyCookie);

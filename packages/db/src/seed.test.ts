@@ -4,10 +4,10 @@ import { migrateSqlite } from "./sqlite.js";
 import { seed } from "./seed.js";
 
 describe("seed idempotency", () => {
-  it("does not throw on second run", () => {
-    const { db } = createDatabase();
+  it("does not throw on second run", async () => {
+    const { db } = createDatabase(":memory:");
     migrateSqlite(db);
-    seed(db);
-    expect(() => seed(db)).not.toThrow();
+    await seed(db);
+    await expect(seed(db)).resolves.toBeUndefined();
   });
 });

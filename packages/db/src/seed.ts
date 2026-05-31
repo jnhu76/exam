@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { scryptSync, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { SqliteDatabase } from "./sqlite.js";
 import { createDatabase } from "./database.js";
@@ -9,13 +8,17 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
+export type HashFunction = (password: string) => string | Promise<string>;
+
+function defaultHash(password: string): string {
+  // Fallback for tests — not for production use
+  return `$scrypt$${Buffer.from(password).toString("base64")}`;
 }
 
-export function seed(db: SqliteDatabase) {
+export async function seed(
+  db: SqliteDatabase,
+  hashFn: HashFunction = defaultHash,
+) {
   const timestamp = new Date();
 
   const slug = "default";
@@ -48,7 +51,7 @@ export function seed(db: SqliteDatabase) {
       id: randomUUID(),
       organizationId: org.id,
       username: process.env.SEED_ADMIN_USERNAME || "admin",
-      passwordHash: hashPassword(process.env.SEED_ADMIN_PASSWORD || "admin123"),
+      passwordHash: await hashFn(process.env.SEED_ADMIN_PASSWORD || "admin123"),
       name: process.env.SEED_ADMIN_NAME || "Admin",
       role: "SuperAdmin" as const,
       isActive: true,
@@ -59,7 +62,7 @@ export function seed(db: SqliteDatabase) {
       id: randomUUID(),
       organizationId: org.id,
       username: process.env.SEED_TEACHER_USERNAME || "teacher",
-      passwordHash: hashPassword(
+      passwordHash: await hashFn(
         process.env.SEED_TEACHER_PASSWORD || "teacher123",
       ),
       name: process.env.SEED_TEACHER_NAME || "Teacher",
@@ -72,7 +75,7 @@ export function seed(db: SqliteDatabase) {
       id: randomUUID(),
       organizationId: org.id,
       username: process.env.SEED_CANDIDATE_USERNAME || "candidate",
-      passwordHash: hashPassword(
+      passwordHash: await hashFn(
         process.env.SEED_CANDIDATE_PASSWORD || "candidate123",
       ),
       name: process.env.SEED_CANDIDATE_NAME || "Candidate",
@@ -100,21 +103,5 @@ export function seed(db: SqliteDatabase) {
   }
 }
 
-async function main() {
-  const { db } = createDatabase();
-  migrateSqlite(db);
-
-  console.log("Seeding database...");
-  await seed(db);
-  console.log("\nDone! Login credentials:");
-  console.log("  Admin:     admin / admin123");
-  console.log("  Teacher:   teacher / teacher123");
-  console.log("  Candidate: candidate / candidate123");
-}
-
-if (process.argv[1]?.includes("seed") && !process.argv[1]?.includes("test")) {
-  main().catch((err) => {
-    console.error("Seed failed:", err);
-    process.exit(1);
-  });
-}
+// CLI entry point moved to apps/api/src/seed.ts
+// This file exports the seed function for programmatic use
