@@ -8,6 +8,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
 import { OrganizationsPage } from "@/pages/admin/OrganizationsPage";
+import { CandidateFieldsPage } from "@/pages/admin/CandidateFieldsPage";
 
 export function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ export function AppRoutes() {
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="organizations" element={<OrganizationsPage />} />
+        <Route path="candidate-fields" element={<CandidateFieldsPage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
       <Route path="/exam" element={<ExamLayout />}>
