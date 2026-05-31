@@ -1,49 +1,12 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import Fastify from "fastify";
-import fastifyCookie from "@fastify/cookie";
-import authPlugin from "../plugins/auth.js";
-import { createDatabase } from "@exam/db/src/database.js";
-import { migrateSqlite } from "@exam/db/src/sqlite.js";
-import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
-import { signJWT } from "@exam/auth/src/session.js";
-import { seed } from "@exam/db/src/seed.js";
 import userRoutes from "./user.js";
-
-async function buildApp() {
-  const { db } = createDatabase();
-  migrateSqlite(db);
-  seed(db);
-
-  const org = db.select().from(sqliteSchema.organizations).get()!;
-  const users = db.select().from(sqliteSchema.users).all();
-  const admin = users.find((u) => u.role === "SuperAdmin")!;
-  const teacher = users.find((u) => u.role === "Teacher")!;
-
-  const app = Fastify();
-  await app.register(fastifyCookie);
-  await app.register(authPlugin);
-  await app.register(userRoutes, { prefix: "/api" });
-  await app.ready();
-
-  const adminToken = signJWT({
-    actorId: admin.id,
-    role: admin.role,
-    organizationId: admin.organizationId,
-  });
-  const teacherToken = signJWT({
-    actorId: teacher.id,
-    role: teacher.role,
-    organizationId: teacher.organizationId,
-  });
-
-  return { app, org, admin, teacher, adminToken, teacherToken, db };
-}
+import { buildTestApp } from "./testHelpers.js";
 
 describe("user routes", () => {
-  let ctx: Awaited<ReturnType<typeof buildApp>>;
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
   beforeAll(async () => {
-    ctx = await buildApp();
+    ctx = await buildTestApp(userRoutes);
   });
 
   afterAll(async () => {

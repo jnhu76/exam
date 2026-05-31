@@ -4,7 +4,6 @@ import {
   UpdateUserRequestSchema,
 } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { createDatabase } from "@exam/db/src/database.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
@@ -20,8 +19,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const { db } = createDatabase();
-      const repo = createUserRepo(db);
+      const repo = createUserRepo(fastify.db);
       const users = repo.list(ctx);
       return users.map((u) => ({
         id: u.id,
@@ -47,8 +45,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateUserRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const repo = createUserRepo(db);
+      const repo = createUserRepo(fastify.db);
       const passwordHash = await hashPassword(data.password);
       const user = repo.create(ctx, {
         username: data.username,
@@ -82,8 +79,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const repo = createUserRepo(db);
+      const repo = createUserRepo(fastify.db);
       const updated = repo.update(ctx, id, data as Record<string, unknown>);
       if (!updated) {
         return reply
@@ -114,8 +110,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const { db } = createDatabase();
-      const repo = createUserRepo(db);
+      const repo = createUserRepo(fastify.db);
       const deleted = repo.delete(ctx, id);
       if (!deleted) {
         return reply

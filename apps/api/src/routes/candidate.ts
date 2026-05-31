@@ -4,7 +4,6 @@ import {
   CandidateImportRequestSchema,
 } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { createDatabase } from "@exam/db/src/database.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import type { RequestContext } from "@exam/domain";
@@ -21,8 +20,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const { db } = createDatabase();
-      const repo = createCandidateRepo(db);
+      const repo = createCandidateRepo(fastify.db);
       const candidates = repo.list(ctx);
       return candidates.map((c) => ({
         ...c,
@@ -43,9 +41,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateCandidateRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const userRepo = createUserRepo(db);
-      const candidateRepo = createCandidateRepo(db);
+      const userRepo = createUserRepo(fastify.db);
+      const candidateRepo = createCandidateRepo(fastify.db);
 
       const passwordHash = await hashPassword(data.password);
       const user = userRepo.create(ctx, {
@@ -80,9 +77,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CandidateImportRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const userRepo = createUserRepo(db);
-      const candidateRepo = createCandidateRepo(db);
+      const userRepo = createUserRepo(fastify.db);
+      const candidateRepo = createCandidateRepo(fastify.db);
 
       let created = 0;
       const errors: { row: number; message: string }[] = [];

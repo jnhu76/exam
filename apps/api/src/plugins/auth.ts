@@ -1,8 +1,6 @@
 import { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { verifyJWT } from "@exam/auth/src/session.js";
-import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
-import { createDatabase } from "@exam/db/src/database.js";
 import { RequestContext } from "@exam/domain";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {

@@ -3,7 +3,6 @@ import {
   CreateCandidateFieldRequestSchema,
   UpdateCandidateFieldRequestSchema,
 } from "@exam/contracts";
-import { createDatabase } from "@exam/db/src/database.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
@@ -19,8 +18,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const { db } = createDatabase();
-      const repo = createCandidateFieldRepo(db);
+      const repo = createCandidateFieldRepo(fastify.db);
       const fields = repo.list(ctx);
       return fields.map((f) => ({
         ...f,
@@ -40,8 +38,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateCandidateFieldRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const repo = createCandidateFieldRepo(db);
+      const repo = createCandidateFieldRepo(fastify.db);
       const field = repo.create(ctx, data);
       return reply.code(201).send({
         ...field,
@@ -62,8 +59,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const data = UpdateCandidateFieldRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const repo = createCandidateFieldRepo(db);
+      const repo = createCandidateFieldRepo(fastify.db);
       const updated = repo.update(ctx, id, data as Record<string, unknown>);
       if (!updated) {
         return reply.code(404).send({
@@ -85,8 +81,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const { db } = createDatabase();
-      const repo = createCandidateFieldRepo(db);
+      const repo = createCandidateFieldRepo(fastify.db);
       const deleted = repo.delete(ctx, id);
       if (!deleted) {
         return reply.code(404).send({

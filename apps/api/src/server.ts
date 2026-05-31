@@ -3,6 +3,7 @@ import fastifyCookie from "@fastify/cookie";
 import cors from "./plugins/cors.js";
 import setupSecurity from "./plugins/security.js";
 import authPlugin from "./plugins/auth.js";
+import dbPlugin from "./plugins/db.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
 import authRoutes from "./routes/auth.js";
@@ -21,6 +22,7 @@ async function main() {
   await app.register(fastifyCookie);
   await app.register(cors);
   setupSecurity(app);
+  await app.register(dbPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);
   await app.register(rateLimitPlugin);

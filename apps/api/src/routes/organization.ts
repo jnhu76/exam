@@ -3,7 +3,6 @@ import {
   CreateOrganizationRequestSchema,
   UpdateOrganizationRequestSchema,
 } from "@exam/contracts";
-import { createDatabase } from "@exam/db/src/database.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
@@ -16,8 +15,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const { db } = createDatabase();
-      const orgRepo = createOrganizationRepo(db);
+      const orgRepo = createOrganizationRepo(fastify.db);
       const orgs = orgRepo.list(ctx);
       return orgs.map((o) => ({
         ...o,
@@ -35,8 +33,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateOrganizationRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const orgRepo = createOrganizationRepo(db);
+      const orgRepo = createOrganizationRepo(fastify.db);
       const org = orgRepo.create(ctx, data);
       return reply.code(201).send({
         ...org,
@@ -55,8 +52,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const data = UpdateOrganizationRequestSchema.parse(request.body);
-      const { db } = createDatabase();
-      const orgRepo = createOrganizationRepo(db);
+      const orgRepo = createOrganizationRepo(fastify.db);
       const updated = orgRepo.update(
         ctx,
         id,
@@ -83,8 +79,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const { db } = createDatabase();
-      const orgRepo = createOrganizationRepo(db);
+      const orgRepo = createOrganizationRepo(fastify.db);
       const deleted = orgRepo.delete(ctx, id);
       if (!deleted) {
         return reply.code(404).send({

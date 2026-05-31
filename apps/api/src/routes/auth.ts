@@ -11,14 +11,12 @@ import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { RequestContext } from "@exam/domain";
-import { createDatabase } from "@exam/db/src/database.js";
 import { ValidationError, NotFoundError } from "@exam/domain";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request: any, reply: any) => {
     const data = RegisterRequestSchema.parse(request.body);
-    const { db } = createDatabase();
-    const userRepo = createUserRepo(db);
+    const userRepo = createUserRepo(fastify.db);
 
     // 检查用户是否已存在
     const existingUser = userRepo.findByUsername(data.username);
@@ -48,8 +46,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post("/login", async (request: any, reply: any) => {
     const data = LoginRequestSchema.parse(request.body);
-    const { db } = createDatabase();
-    const userRepo = createUserRepo(db);
+    const userRepo = createUserRepo(fastify.db);
 
     const user = userRepo.findByUsername(data.username);
     if (!user) {
@@ -104,8 +101,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     "/me",
     { preHandler: fastify.authenticate },
     async (request: any, reply: any) => {
-      const { db } = createDatabase();
-      const userRepo = createUserRepo(db);
+      const userRepo = createUserRepo(fastify.db);
       const user = userRepo.findById(request["ctx"], request["ctx"].actorId);
 
       if (!user) {
