@@ -1,0 +1,11 @@
+{
+  "name": "exam",
+  "private": true,
+  "workspaces": ["client", "server", "shared"],
+  "scripts": {
+    "dev": "bun run --filter './{client,server}' dev",
+    "dev:client": "bun run --filter client dev",
+    "dev:server": "bun run --filter server dev",
+    "build": "bun run --filter shared build && bun run --filter client build"
+  }
+}
