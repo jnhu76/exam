@@ -3,6 +3,7 @@ import {
   CreateUserRequestSchema,
   UpdateUserRequestSchema,
 } from "@exam/contracts";
+import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
@@ -19,18 +20,26 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
-      const users = repo.list(ctx);
-      return users.map((u) => ({
-        id: u.id,
-        organizationId: u.organizationId,
-        username: u.username,
-        name: u.name,
-        role: u.role,
-        isActive: u.isActive,
-        createdAt: u.createdAt.toISOString(),
-        updatedAt: u.updatedAt.toISOString(),
-      }));
+      const { items, total } = repo.listPaginated(ctx, page, pageSize);
+
+      return {
+        items: items.map((u) => ({
+          id: u.id,
+          organizationId: u.organizationId,
+          username: u.username,
+          name: u.name,
+          role: u.role,
+          isActive: u.isActive,
+          createdAt: u.createdAt.toISOString(),
+          updatedAt: u.updatedAt.toISOString(),
+        })),
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
     },
   );
 

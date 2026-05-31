@@ -19,6 +19,14 @@ interface CandidateRow {
   fields: Record<string, unknown>;
 }
 
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export function CandidatesPage() {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,8 +36,9 @@ export function CandidatesPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.get<CandidateRow[]>("/api/candidates");
-      setCandidates(data);
+      const data =
+        await api.get<PaginatedResponse<CandidateRow>>("/api/candidates");
+      setCandidates(data.items);
     } catch {
       setError("加载考生列表失败");
     } finally {

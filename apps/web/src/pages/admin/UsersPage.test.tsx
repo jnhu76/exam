@@ -7,22 +7,28 @@ import { UsersPage } from "./UsersPage";
 
 vi.mock("@/lib/api", () => ({
   api: {
-    get: vi.fn().mockResolvedValue([
-      {
-        id: "u1",
-        username: "teacher1",
-        name: "Teacher One",
-        role: "Teacher",
-        isActive: true,
-      },
-      {
-        id: "u2",
-        username: "proctor1",
-        name: "Proctor One",
-        role: "Proctor",
-        isActive: true,
-      },
-    ]),
+    get: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: "u1",
+          username: "teacher1",
+          name: "Teacher One",
+          role: "Teacher",
+          isActive: true,
+        },
+        {
+          id: "u2",
+          username: "proctor1",
+          name: "Proctor One",
+          role: "Proctor",
+          isActive: true,
+        },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    }),
     post: vi.fn().mockResolvedValue({
       id: "u3",
       username: "newuser",

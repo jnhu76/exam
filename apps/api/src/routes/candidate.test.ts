@@ -13,14 +13,19 @@ describe("candidate routes", () => {
     await ctx.app.close();
   });
 
-  it("GET /api/candidates returns list", async () => {
+  it("GET /api/candidates returns paginated list", async () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/candidates",
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toBeInstanceOf(Array);
+    const body = res.json();
+    expect(body).toHaveProperty("items");
+    expect(body).toHaveProperty("total");
+    expect(body).toHaveProperty("page", 1);
+    expect(body).toHaveProperty("pageSize");
+    expect(body.items).toBeInstanceOf(Array);
   });
 
   it("POST /api/candidates creates a candidate with user", async () => {

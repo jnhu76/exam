@@ -76,6 +76,36 @@ export function createTenantCrudRepo<TTable extends TenantTable>(
         .where(eq(table.organizationId, resolveOrganizationId(ctx)))
         .all() as Select[];
     },
+    count(ctx: RequestContext): number {
+      const orgId = resolveOrganizationId(ctx);
+      const result = db
+        .select({ count: table.id })
+        .from(table)
+        .where(eq(table.organizationId, orgId))
+        .all();
+      return result.length;
+    },
+    listPaginated(
+      ctx: RequestContext,
+      page: number,
+      pageSize: number,
+    ): { items: Select[]; total: number } {
+      const orgId = resolveOrganizationId(ctx);
+      const offset = (page - 1) * pageSize;
+      const items = db
+        .select()
+        .from(table)
+        .where(eq(table.organizationId, orgId))
+        .limit(pageSize)
+        .offset(offset)
+        .all() as Select[];
+      const result = db
+        .select({ count: table.id })
+        .from(table)
+        .where(eq(table.organizationId, orgId))
+        .all();
+      return { items, total: result.length };
+    },
     update(
       ctx: RequestContext,
       entityId: string,

@@ -3,9 +3,10 @@ import {
   CreateCandidateRequestSchema,
   CandidateImportRequestSchema,
 } from "@exam/contracts";
+import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 
@@ -20,13 +21,21 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCandidateRepo(fastify.db);
-      const candidates = repo.list(ctx);
-      return candidates.map((c) => ({
-        ...c,
-        createdAt: c.createdAt.toISOString(),
-        updatedAt: c.updatedAt.toISOString(),
-      }));
+      const { items, total } = repo.listPaginated(ctx, page, pageSize);
+
+      return {
+        items: items.map((c) => ({
+          ...c,
+          createdAt: c.createdAt.toISOString(),
+          updatedAt: c.updatedAt.toISOString(),
+        })),
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
     },
   );
 

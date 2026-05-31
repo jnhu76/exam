@@ -7,13 +7,19 @@ import { CandidatesPage } from "./CandidatesPage";
 
 vi.mock("@/lib/api", () => ({
   api: {
-    get: vi.fn().mockResolvedValue([
-      {
-        id: "c1",
-        userId: "u1",
-        fields: { employeeId: "E001", name: "Candidate One" },
-      },
-    ]),
+    get: vi.fn().mockResolvedValue({
+      items: [
+        {
+          id: "c1",
+          userId: "u1",
+          fields: { employeeId: "E001", name: "Candidate One" },
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    }),
     post: vi.fn().mockResolvedValue({
       id: "c2",
       userId: "u2",

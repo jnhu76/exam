@@ -21,6 +21,14 @@ interface UserRow {
   isActive: boolean;
 }
 
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,8 +38,8 @@ export function UsersPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.get<UserRow[]>("/api/users");
-      setUsers(data);
+      const data = await api.get<PaginatedResponse<UserRow>>("/api/users");
+      setUsers(data.items);
     } catch {
       setError("加载用户列表失败");
     } finally {

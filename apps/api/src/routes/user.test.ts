@@ -13,7 +13,7 @@ describe("user routes", () => {
     await ctx.app.close();
   });
 
-  it("GET /api/users returns list", async () => {
+  it("GET /api/users returns paginated list", async () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/users",
@@ -21,8 +21,11 @@ describe("user routes", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body).toBeInstanceOf(Array);
-    expect(body.length).toBeGreaterThanOrEqual(1);
+    expect(body).toHaveProperty("items");
+    expect(body).toHaveProperty("total");
+    expect(body).toHaveProperty("page", 1);
+    expect(body.items).toBeInstanceOf(Array);
+    expect(body.items.length).toBeGreaterThanOrEqual(1);
   });
 
   it("POST /api/users creates a user", async () => {
