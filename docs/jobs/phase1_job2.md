@@ -11,6 +11,7 @@ React Router layout shells, role-based sidebar, API client with auth, shared UI 
 - API client with auth cookie handling
 - Auth context + useAuth hook
 - Shared UI components (PageHeader, EmptyState, ConfirmDialog, StatsCard, ConnectionIndicator, SaveIndicator)
+- Branding context with generic fallback display values
 
 ## Out of Scope
 
@@ -26,9 +27,11 @@ J0 (Infrastructure), J0.5 (Domain + Contracts — types for API client and auth 
 
 - `apps/web/src/App.tsx`
 - `apps/web/src/pages/LoginPage.tsx` (shell only)
-- `apps/web/src/layouts/AdminLayout.tsx`
-- `apps/web/src/layouts/ExamLayout.tsx`
+- `apps/web/src/components/layout/AdminLayout.tsx`
+- `apps/web/src/components/layout/ExamLayout.tsx`
 - `apps/web/src/components/layout/AppSidebar.tsx`
+- `apps/web/src/components/layout/BrandProvider.tsx`
+- `apps/web/src/components/layout/BrandHeader.tsx`
 - `apps/web/src/lib/api.ts`
 - `apps/web/src/hooks/useAuth.ts`
 - `apps/web/src/contexts/AuthContext.tsx`
@@ -63,12 +66,12 @@ Uses types from `@exam/contracts` for API client response types.
 
 - [ ] **2.1** React Router setup + layout shells
   - Acceptance: Three layout modes work: (1) `/login` → fullscreen login layout, no sidebar; (2) `/admin/*` → Sidebar + Header layout (w-56 default, collapsible to w-14); (3) `/exam/*` → candidate minimal layout (thin top header only). Unmatched routes redirect to `/login`.
-  - Files: `apps/web/src/App.tsx`, `apps/web/src/pages/LoginPage.tsx`, `apps/web/src/layouts/AdminLayout.tsx`, `apps/web/src/layouts/ExamLayout.tsx`
+  - Files: `apps/web/src/App.tsx`, `apps/web/src/pages/LoginPage.tsx`, `apps/web/src/components/layout/AdminLayout.tsx`, `apps/web/src/components/layout/ExamLayout.tsx`
   - Verify: browser route switching — all three layouts render correctly with distinct chrome
 
-- [ ] **2.2** AppSidebar component + role-based navigation
-  - Acceptance: Sidebar navigation grouped into: 题库 (Question Bank), 考试 (Exams), 管理 (Management). "管理" group visible only to Admin role. "机构管理" (Organization Management) visible only to SuperAdmin. Bottom section shows current user name + logout button. Sidebar collapses to icon-only mode (w-14). Active route is highlighted.
-  - Files: `apps/web/src/components/layout/AppSidebar.tsx`
+- [ ] **2.2** Branding shell + AppSidebar component + role-based navigation
+  - Acceptance: `BrandProvider` exposes `BrandingView` with generic fallback values before J4 connects the settings API; `BrandHeader` is reusable by login, sidebar, and candidate header. Sidebar navigation grouped into: 题库 (Question Bank), 考试 (Exams), 管理 (Management). "管理" group visible only to Admin role. "机构管理" (Organization Management) visible only to SuperAdmin. Bottom section shows current user name + logout button. Sidebar collapses to icon-only mode (w-14). Active route is highlighted.
+  - Files: `apps/web/src/components/layout/BrandProvider.tsx`, `apps/web/src/components/layout/BrandHeader.tsx`, `apps/web/src/components/layout/AppSidebar.tsx`
   - Verify: login with different roles, confirm correct menu items visible/hidden
 
 - [ ] **2.3** API client + error handling + toast
@@ -89,7 +92,7 @@ Uses types from `@exam/contracts` for API client response types.
 ## Acceptance Criteria
 
 1. Three layout modes render correctly
-2. Sidebar shows/hides items based on role
+2. Branding shell renders generic fallback values and sidebar shows/hides items based on role
 3. API client attaches cookies and handles 401
 4. Auth context manages user state
 5. All 6 shared components render
@@ -103,6 +106,7 @@ pnpm --filter web dev
 pnpm lint:copy
 pnpm typecheck
 pnpm lint
+pnpm verify
 ```
 
 ## Review Checklist

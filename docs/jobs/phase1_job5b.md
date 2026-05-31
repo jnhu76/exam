@@ -43,6 +43,7 @@ None (uses existing exams/exam_enrollments tables from J1).
 ## API Contracts
 
 Uses `@exam/contracts` exam schemas (defined in J0.5):
+
 - Exam CRUD
 - Exam publish / archive
 - Exam detail with stats
@@ -87,7 +88,7 @@ Uses `@exam/contracts` exam schemas (defined in J0.5):
 
 1. Exam state machine enforces valid transitions
 2. publishExam() requires questions, timing config, and passingScore
-3. Question snapshot captured at publish time
+3. Publishing captures immutable `QuestionSnapshot` data from the selected question IDs; J6 copies that frozen snapshot when an attempt is created
 4. Manual question selection works from question bank
 5. Exam configuration supports timed_window + control flags + retake policy
 6. Exam list shows status badges correctly
@@ -105,13 +106,14 @@ pnpm test
 pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 pnpm --filter web dev
+pnpm verify
 ```
 
 ## Review Checklist
 
 - [ ] Exam status enum matches SPEC.md §3.3: draft/published/open/closed/archived
 - [ ] No direct status mutation in route handlers — all via command functions
-- [ ] Question snapshot captured (not just references) at publish
+- [ ] Question snapshot captured at publish time, including content, options, answer, score, grading rule, attachments, and order
 - [ ] Timing mode locked to timed_window (Phase 1)
 - [ ] Retake policy limited to unlimited/max_attempts/pass_then_stop (Phase 1)
 - [ ] Random selection UI disabled with [Phase 2] label

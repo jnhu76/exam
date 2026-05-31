@@ -115,6 +115,7 @@ docker run -p 3000:3000 exam
 docker compose up
 docker compose -f docker-compose.dev.yml up
 curl http://localhost:3000/api/system/health
+pnpm verify
 ```
 
 ## Review Checklist

@@ -40,6 +40,7 @@ None (uses existing exam_attempts/exam_enrollments data from J1).
 ## API Contracts
 
 Uses `@exam/contracts` schemas:
+
 - Score list query with pagination/filtering
 - Attempt detail with grading results
 - Export request/response
@@ -102,6 +103,7 @@ pnpm test
 pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 pnpm --filter web dev
+pnpm verify
 ```
 
 ## Review Checklist

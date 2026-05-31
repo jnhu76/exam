@@ -56,6 +56,7 @@ None (uses existing exam_attempts/exam_enrollments tables from J1).
 ## API Contracts
 
 Uses `@exam/contracts` attempt schemas (defined in J0.5):
+
 - `POST /api/attempts/:examId/start` — start or restore attempt
 - `GET /api/attempts/:id` — load attempt (no standardAnswer)
 - `POST /api/attempts/:attemptId/answers/:questionId` — Answer Save Protocol
@@ -66,6 +67,7 @@ Uses `@exam/contracts` attempt schemas (defined in J0.5):
 ### Answer Save Protocol (SPEC.md §3.5)
 
 Request:
+
 ```ts
 SaveAnswerRequest {
   attemptId: string
@@ -78,6 +80,7 @@ SaveAnswerRequest {
 ```
 
 Response:
+
 ```ts
 SaveAnswerResponse {
   accepted: boolean
@@ -109,7 +112,7 @@ SaveAnswerResponse {
 ## Subtasks
 
 - [ ] **6.1** ExamAttempt routes: start + load
-  - Acceptance: POST /api/attempts/:examId/start creates or restores ExamAttempt (checks time window, attempt count, ExamEnrollment status); uses `startAttempt()` command function; GET /api/attempts/:id returns questions without standardAnswer (only QuestionSnapshot data)
+  - Acceptance: POST /api/attempts/:examId/start creates or restores ExamAttempt (checks time window, attempt count, ExamEnrollment status); new attempts copy the published exam's immutable `QuestionSnapshot` data instead of reading current question bank rows; uses `startAttempt()` command function; GET /api/attempts/:id returns candidate-safe snapshot data without standardAnswer
   - Files: `apps/api/src/routes/attempts.ts`, `packages/exam-engine/src/examCommands.ts`
   - Verify: curl simulate candidate starting exam within time window; curl get attempt and confirm standardAnswer not exposed; test outside time window rejection; test max attempt count rejection
 
@@ -119,7 +122,7 @@ SaveAnswerResponse {
   - Verify: curl save answer successfully; test idempotent replay with same clientSeq returns identical response; test version conflict by sending stale baseVersion; test save rejected after submit
 
 - [ ] **6.3** Submit attempt route
-  - Acceptance: POST /api/attempts/:attemptId/submit uses `submitAttempt()` command; marks status submitted; triggers auto-grading; validates must be in_progress; checks deadlineAt — if past deadline, still accepts but notes timeout; transitions attempt to submitted
+  - Acceptance: POST /api/attempts/:attemptId/submit uses `submitAttempt()` command; validates must be in_progress; checks deadlineAt — if past deadline, still accepts but notes timeout; transitions attempt to submitted and exposes the grading hook that J7 implements
   - Files: `apps/api/src/routes/attempts.ts` (extend)
   - Verify: curl submit attempt; confirm status transitions to submitted; confirm grading triggered (J7 implements actual grading); test submit from wrong status rejected
 
@@ -153,9 +156,10 @@ SaveAnswerResponse {
 6. Disrupted attempt detected after 60s heartbeat timeout
 7. restoreAttempt() recovers answers + remaining time
 8. standardAnswer never exposed to candidate
-9. All routes use repository pattern with RequestContext
-10. All routes use Zod validation from `@exam/contracts`
-11. `pnpm typecheck` passes
+9. QuestionSnapshot is copied from the published exam when a new ExamAttempt is created, so later question bank edits cannot affect it
+10. All routes use repository pattern with RequestContext
+11. All routes use Zod validation from `@exam/contracts`
+12. `pnpm typecheck` passes
 
 ## Verify Commands
 
@@ -166,6 +170,7 @@ pnpm test
 pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 pnpm --filter web dev
+pnpm verify
 ```
 
 ## Review Checklist

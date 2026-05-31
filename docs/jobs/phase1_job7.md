@@ -44,6 +44,7 @@ None (uses existing exam_attempts.score fields from J1).
 ## API Contracts
 
 Uses `@exam/contracts` schemas:
+
 - Score result response
 - Attempt detail with grading results
 
@@ -111,6 +112,7 @@ pnpm test
 pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 pnpm --filter web dev
+pnpm verify
 ```
 
 ## Review Checklist

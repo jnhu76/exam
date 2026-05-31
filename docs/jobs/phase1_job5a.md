@@ -41,6 +41,7 @@ None (uses existing courses/questions tables from J1).
 ## API Contracts
 
 Uses `@exam/contracts` schemas (defined in J0.5):
+
 - Course CRUD
 - Question CRUD + import
 
@@ -71,7 +72,7 @@ Uses `@exam/contracts` schemas (defined in J0.5):
   - Verify: curl create single_choice, multiple_choice, fill_blank, true_false questions; browser filter by type/course/difficulty; paginate results
 
 - [ ] **5A.3** Question create/edit page (all 4 question types)
-  - Acceptance: single/multi choice — inline option marking (click ○/●), no duplicate answer field at bottom; fill blank — use ____ in content, standard answer per blank with | for multiple accepted answers, match mode select; true/false — binary radio; bottom live preview area (candidate perspective); type switching dynamically replaces the options/answer area
+  - Acceptance: single/multi choice — inline option marking (click ○/●), no duplicate answer field at bottom; fill blank — use \_\_\_\_ in content, standard answer per blank with | for multiple accepted answers, match mode select; true/false — binary radio; bottom live preview area (candidate perspective); type switching dynamically replaces the options/answer area
   - Files: `apps/web/src/pages/admin/QuestionEditPage.tsx`, `apps/web/src/components/question/QuestionForm.tsx`, `apps/web/src/components/question/QuestionPreview.tsx`
   - Verify: create all 4 question types; preview area updates in real-time as form changes; switch type and confirm UI updates correctly
 
@@ -100,6 +101,7 @@ pnpm test
 pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 pnpm --filter web dev
+pnpm verify
 ```
 
 ## Review Checklist

@@ -31,7 +31,7 @@ J1 (DB Schema + Repos), J3 (Auth System — middleware, RequestContext)
 - `apps/api/src/routes/settings.ts`
 - `packages/db/src/repository/settingsRepo.ts`
 - `apps/web/src/pages/admin/SettingsPage.tsx`
-- `apps/web/src/components/settings/BrandProvider.tsx`
+- `apps/web/src/components/layout/BrandProvider.tsx` (extend J2 implementation)
 - `apps/web/src/components/settings/PlatformSettingsForm.tsx`
 - `apps/api/src/routes/organization.ts`
 - `packages/contracts/src/organization.ts` (extend if needed)
@@ -48,11 +48,12 @@ J1 (DB Schema + Repos), J3 (Auth System — middleware, RequestContext)
 
 ## Data Model Changes
 
-- New `OrganizationSettings` table (or fields on `organizations`): `productName`, `productSubtitle`, `footerText`, `timezone`, `logoUrl` (Phase 2)
+None (uses `organization_settings` table from J1).
 
 ## API Contracts
 
 Uses `@exam/contracts` schemas (defined in J0.5):
+
 - Organization CRUD
 - User CRUD
 - Candidate CRUD + import
@@ -61,7 +62,7 @@ Uses `@exam/contracts` schemas (defined in J0.5):
 ## UI Tasks
 
 - Organization settings / branding page (§3.20)
-- Organization management page (§3.13)
+- Organization management page (`/admin/organizations`, see §2.1)
 - CandidateField config page (§3.13)
 - User management page (§3.17)
 - Candidate management page (§3.18)
@@ -83,9 +84,9 @@ Uses `@exam/contracts` schemas (defined in J0.5):
   - Verify: run seed → database has exactly 1 org + 1 super_admin user; run again → no duplicates
 
 - [ ] **4.2** Organization Settings API + settings page (see §3.20)
-  - Acceptance: API returns branding settings (`GET /settings/branding`); Admin can update product title, subtitle, footer text, org display name, timezone (`PATCH /admin/settings/branding`); UI page shows form with all fields; login page and sidebar read branding from API via BrandProvider; changes take effect immediately after save; fallback values when no settings exist
-  - Files: `packages/contracts/src/settings.ts`, `apps/api/src/routes/settings.ts`, `packages/db/src/repository/settingsRepo.ts`, `apps/web/src/pages/admin/SettingsPage.tsx`, `apps/web/src/components/settings/BrandProvider.tsx`, `apps/web/src/components/settings/PlatformSettingsForm.tsx`
-  - Verify: curl GET settings after PATCH → updated values; browser save form → login page shows new product title; sidebar shows new product name; integration test for fallback branding when no settings exist
+  - Acceptance: API returns public branding settings (`GET /api/settings/branding?organizationSlug=:slug`); `organizationSlug` selects the tenant before login and may be omitted for the deployment default organization; the public endpoint uses constrained `PublicBrandingContext` and returns only `BrandingView` fields; Admin can update product title, subtitle, footer text, org display name, timezone (`PATCH /api/admin/settings/branding`); UI page shows form with all fields and CandidateField-based identity preview; login page, sidebar, and candidate header read branding from API via `BrandProvider`; changes take effect immediately after save; fallback values when no settings exist
+  - Files: `packages/contracts/src/settings.ts`, `apps/api/src/routes/settings.ts`, `packages/db/src/repository/settingsRepo.ts`, `apps/web/src/pages/admin/SettingsPage.tsx`, `apps/web/src/components/layout/BrandProvider.tsx`, `apps/web/src/components/settings/PlatformSettingsForm.tsx`
+  - Verify: curl GET settings by organizationSlug after PATCH → updated values; browser save form → login page shows new product title; sidebar shows new product name; integration test for default-organization lookup and fallback branding when no settings exist
 
 - [ ] **4.3** Organization CRUD routes + Admin page
   - Acceptance: SuperAdmin can list/create/update/delete Organizations; Admin sees only own org; admin page shows org list + create/edit dialog; Zod request/response schemas from `@exam/contracts`
@@ -111,7 +112,7 @@ Uses `@exam/contracts` schemas (defined in J0.5):
 
 1. Seed script is idempotent
 2. Branding settings API has proper fallback when no settings exist
-3. Organization settings changes propagate to login page and sidebar
+3. Organization settings changes propagate to login page, sidebar, and candidate header
 4. Organization CRUD works with tenant isolation
 5. CandidateField config generates correct CSV template headers
 6. User management with role validation works
@@ -131,6 +132,7 @@ pnpm test
 pnpm --filter api db:seed
 pnpm --filter api dev
 pnpm --filter web dev
+pnpm verify
 ```
 
 ## Review Checklist
@@ -152,6 +154,7 @@ pnpm --filter web dev
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
 - [ ] Settings branding endpoints tested with fallback values
+- [ ] Public branding endpoint returns only BrandingView fields through PublicBrandingContext
 - [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes
 - [ ] Queries filter by organizationId

@@ -42,6 +42,7 @@ None (uses existing users/organizations tables from J1).
 ## API Contracts
 
 Uses `@exam/contracts` auth schemas (defined in J0.5):
+
 - `POST /api/auth/register` — register request/response
 - `POST /api/auth/login` — login request/response (sets HTTP-only cookie)
 - `POST /api/auth/logout` — clears cookie
@@ -87,7 +88,7 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
   - Verify: rapid sequential curl requests to /api/auth/login trigger 429 after limit
 
 - [ ] **3.6** Client: Login page
-  - Acceptance: full-screen centered login card (max-w-sm); username + password inputs + login button; login failure shows red text below form (not alert); success redirect by role (Admin → /admin/dashboard, Candidate → /exam/list); bottom text reads from OrganizationSettings (productSubtitle or footerText), never hardcoded
+  - Acceptance: full-screen centered login card (max-w-sm); username + password inputs + login button; login failure shows red text below form (not alert); success redirect by role (Admin → /admin/dashboard, Candidate → /exam/list); product title and bottom text read from `BrandingView` in `BrandProvider`, using its generic fallback values until J4 connects the settings API
   - Files: `apps/web/src/pages/LoginPage.tsx`
   - Verify: full login flow in browser — wrong password shows inline error, correct login redirects to role-appropriate page
 
@@ -115,6 +116,7 @@ curl -X POST http://localhost:3000/api/auth/register -H 'Content-Type: applicati
 curl -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"test","password":"pass123"}' -c cookies.txt
 curl http://localhost:3000/api/auth/me -b cookies.txt
 curl -X POST http://localhost:3000/api/auth/logout -b cookies.txt
+pnpm verify
 ```
 
 ## Review Checklist
