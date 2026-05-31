@@ -1,6 +1,6 @@
 import { FastifyPluginAsync, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
-import rateLimit from "fastify-rate-limit";
+import rateLimit from "@fastify/rate-limit";
 
 const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.register(rateLimit, {
