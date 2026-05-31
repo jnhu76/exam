@@ -62,4 +62,13 @@ export const api = {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   },
+  patch<T, TBody = unknown>(path: string, body?: TBody): Promise<T> {
+    return request<T>(path, {
+      method: "PATCH",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  },
+  delete<T>(path: string): Promise<T> {
+    return request<T>(path, { method: "DELETE" });
+  },
 };
