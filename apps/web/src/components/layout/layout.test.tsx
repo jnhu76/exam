@@ -7,6 +7,7 @@ import { AppSidebar } from "./AppSidebar";
 import { BrandProvider, useBranding } from "./BrandProvider";
 import { ExamLayout } from "./ExamLayout";
 import { LoginPage } from "@/pages/LoginPage";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 const admin: User = {
   id: "admin",
@@ -36,7 +37,9 @@ function BrandingProbe() {
 function renderWithProviders(ui: React.ReactElement, route = "/") {
   return render(
     <MemoryRouter initialEntries={[route]}>
-      <BrandProvider>{ui}</BrandProvider>
+      <AuthProvider>
+        <BrandProvider>{ui}</BrandProvider>
+      </AuthProvider>
     </MemoryRouter>,
   );
 }
