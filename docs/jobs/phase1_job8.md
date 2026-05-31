@@ -22,7 +22,21 @@ Build score query API, admin score management page with filtering/pagination, at
 
 ## Dependencies
 
-J7 (Auto-Grading — needs graded attempts with scores)
+J3.5 (UI Foundation — shared layout, page shell, empty/loading/error states), J7 (Auto-Grading — needs graded attempts with scores)
+
+## UI Strategy
+
+This job must produce fully usable score management and attempt review pages. Every page listed under UI Tasks must be complete enough for a teacher to review scores and export data end-to-end. J10 will polish visual consistency; it will not build missing pages.
+
+**Minimum UI per page:**
+
+- Score management page with filter bar, dynamic headers from CandidateField, stats row
+- Attempt detail page with score summary + answer review table
+- CSV export button with download
+- Empty state when no scores exist
+- Loading state while fetching
+- Error state on failure
+- All user-facing text in zh-CN
 
 ## Files to Create / Modify
 

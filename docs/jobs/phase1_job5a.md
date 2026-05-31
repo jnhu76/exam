@@ -20,7 +20,22 @@ Build course management and question bank with all 4 Phase 1 question types (sin
 
 ## Dependencies
 
-J3 (Auth — middleware, routes), J4 (Organization, CandidateField — import template reuse)
+J3 (Auth — middleware, routes), J3.5 (UI Foundation — shared layout, page shell, ImportWizard), J4 (Organization, CandidateField — import template reuse)
+
+## UI Strategy
+
+This job must produce fully usable admin pages for course and question management. Every page listed under UI Tasks must be complete enough for a teacher to create, edit, and import questions end-to-end. J10 will polish visual consistency; it will not build missing pages.
+
+**Minimum UI per page:**
+
+- Question bank table with filter bar (type/course/difficulty/tags + search)
+- Question editor with live preview for all 4 types
+- Question import with preview table and status indicators
+- Course management table with create/edit/delete
+- Empty state when no data exists
+- Loading state while fetching
+- Error state on failure
+- All user-facing text in zh-CN
 
 ## Files to Create / Modify
 

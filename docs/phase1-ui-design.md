@@ -999,6 +999,26 @@ Phase 2 完整版本（降级配置 + 事件流 + 手动切换）：
 
 ---
 
+## 3.21 QuestionNavItem State Model
+
+答题界面左侧题号导航（§3.8）的每道题有三种视觉状态：
+
+| State      | Symbol | Color  | CSS Token               | Meaning           |
+| ---------- | ------ | ------ | ----------------------- | ----------------- |
+| unanswered | ○      | gray   | `text-muted-foreground` | not yet answered  |
+| answered   | ●      | green  | `text-green-600`        | answer saved      |
+| flagged    | ◉      | yellow | `text-yellow-500`       | marked for review |
+
+Additional visual rules:
+
+- Current question: distinct ring highlight (`ring-2 ring-primary`) + slightly elevated background
+- Hover on non-current: subtle background change (`bg-accent`)
+- 50+ questions: two-column layout within the nav panel with `overflow-y-auto`
+- State transitions are client-side and derived from: (1) answer presence in local state, (2) flag toggle state
+- SaveIndicator status (saving/saved/failed) does not affect the question nav state — only answer presence matters
+
+---
+
 ## 4. Component Inventory
 
 ### 4.1 shadcn/ui 需要安装的组件

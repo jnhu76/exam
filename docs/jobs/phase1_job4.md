@@ -22,7 +22,21 @@ Build organization settings (branding, product display), organization CRUD, cand
 
 ## Dependencies
 
-J1 (DB Schema + Repos), J3 (Auth System — middleware, RequestContext)
+J1 (DB Schema + Repos), J3 (Auth System — middleware, RequestContext), J3.5 (UI Foundation Backfill — shared layout, page shell, empty/loading/error states)
+
+## UI Strategy
+
+This job must produce fully usable admin pages, not shells. Every page listed under UI Tasks must be complete enough for an admin to perform real workflows end-to-end. J10 will polish visual consistency; it will not build missing pages.
+
+**Minimum UI per page:**
+
+- Table with sort/filter where applicable
+- Create/edit dialogs with form validation
+- Delete confirmation dialog
+- Empty state when no data exists
+- Loading state while fetching
+- Error state on failure
+- All user-facing text in zh-CN
 
 ## Files to Create / Modify
 

@@ -27,7 +27,19 @@ Build server health check endpoint, admin dashboard with stats, basic system hea
 
 ## Dependencies
 
-J8 (Score Management — dashboard shows exam/score stats)
+J3.5 (UI Foundation — shared layout, page shell, StatsCard, EmptyState, LoadingState), J8 (Score Management — dashboard shows exam/score stats)
+
+## UI Strategy
+
+This job must produce a functional dashboard and system health page. The dashboard is the admin landing page and must show real stats. J10 will polish visual consistency; it will not build missing pages.
+
+**Minimum UI per page:**
+
+- Dashboard with 4 stats cards + recent exams table
+- System health page with 3 metric cards + auto-refresh
+- Loading skeleton state while fetching
+- Empty state when no data exists
+- All user-facing text in zh-CN
 
 ## Files to Create / Modify
 

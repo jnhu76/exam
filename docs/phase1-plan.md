@@ -16,6 +16,8 @@ J0.5  Domain + Contracts Skeleton
   ↓                                   ↓
   J3  Auth System (Server + Login) ───┘
   ↓
+  J3.5 UI Foundation Backfill
+  ↓
   J4  Organization Settings + User + Candidate Management
   ↓
   J5A Course + Question Bank
@@ -29,6 +31,8 @@ J0.5  Domain + Contracts Skeleton
   J8  Score Management + CSV Export
   ↓
   J9  Health Check + Dashboard + Docker Compose
+  ↓
+  J10 UI Polish + Visual Consistency Pass
 ```
 
 **并行**：J1 + J2 可以在 J0.5 之后同时进行。
@@ -49,7 +53,8 @@ J0.5  Domain + Contracts Skeleton
 | J0.5 | [phase1_job0.5.md](jobs/phase1_job0.5.md) | Domain + Contracts Skeleton                            | ⬜ Pending     |
 | J1   | [phase1_job1.md](jobs/phase1_job1.md)     | Database Schema + Repository Layer                     | ⬜ Pending     |
 | J2   | [phase1_job2.md](jobs/phase1_job2.md)     | Client Scaffold (Layout + Routing + Shared Components) | ⬜ Pending     |
-| J3   | [phase1_job3.md](jobs/phase1_job3.md)     | Auth System (Server + Login Page)                      | ⬜ Pending     |
+| J3   | [phase1_job3.md](jobs/phase1_job3.md)     | Auth System (Server + Login Page)                      | ✅ Completed   |
+| J3.5 | [phase1_job3.5.md](jobs/phase1_job3.5.md) | UI Foundation Backfill                                 | ⬜ Pending     |
 | J4   | [phase1_job4.md](jobs/phase1_job4.md)     | Organization Settings + User + Candidate Management    | ⬜ Pending     |
 | J5A  | [phase1_job5a.md](jobs/phase1_job5a.md)   | Course + Question Bank                                 | ⬜ Pending     |
 | J5B  | [phase1_job5b.md](jobs/phase1_job5b.md)   | Exam Management + Manual Paper Builder                 | ⬜ Pending     |
@@ -57,6 +62,44 @@ J0.5  Domain + Contracts Skeleton
 | J7   | [phase1_job7.md](jobs/phase1_job7.md)     | Auto-Grading + Result Page                             | ⬜ Pending     |
 | J8   | [phase1_job8.md](jobs/phase1_job8.md)     | Score Management + CSV Export                          | ⬜ Pending     |
 | J9   | [phase1_job9.md](jobs/phase1_job9.md)     | Health Check + Dashboard + Docker Compose              | ⬜ Pending     |
+| J10  | [phase1_job10.md](jobs/phase1_job10.md)   | UI Polish + Visual Consistency Pass                    | ⬜ Pending     |
+
+---
+
+## UI Implementation Strategy
+
+Phase 1 UI is implemented in two layers:
+
+1. **Minimum usable UI inside each business job**
+   - Each job from J4 to J9 must include the UI required to verify its workflow.
+   - These pages may be plain but must be usable, accessible enough for testing, and consistent with the shared UI foundation.
+   - Core pages must not be postponed to J10.
+
+2. **Final polish in J10**
+   - J10 handles visual consistency, spacing, form polish, empty/loading/error state cleanup, accessibility pass, and copy consistency.
+   - J10 must not introduce new business features or change API contracts.
+
+Do not defer these pages to J10:
+
+- Organization settings page
+- User management page
+- Candidate management page
+- Candidate field configuration page
+- Course management page
+- Question bank page
+- Question create/edit page
+- Question import page
+- Exam list page
+- Exam builder page
+- Exam detail page
+- Candidate exam list page
+- Start exam confirmation page
+- Full-screen exam-taking page
+- Result page
+- Score management page
+- Attempt detail page
+- Health check page
+- Dashboard page
 
 ---
 

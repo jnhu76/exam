@@ -26,7 +26,19 @@ Implement grading engine for all 4 Phase 1 question types (single choice, multip
 
 ## Dependencies
 
-J6 (Exam Taking Flow — needs submitted attempts to grade)
+J3.5 (UI Foundation — shared layout, page shell), J6 (Exam Taking Flow — needs submitted attempts to grade)
+
+## UI Strategy
+
+This job must produce a fully usable result page with both display modes. The result page is what candidates see after submitting, so it must be complete and correct. J10 will polish visual consistency; it will not build the result page.
+
+**Minimum UI per page:**
+
+- Result page with dual-state display (immediate score vs. waiting)
+- Score card with pass/fail indicator
+- Answer detail table with color + icon dual indicators
+- Fill-blank truncation with hover expand
+- All user-facing text in zh-CN
 
 ## Files to Create / Modify
 

@@ -24,7 +24,21 @@ Build exam creation with manual question selection, exam configuration (timing, 
 
 ## Dependencies
 
-J5A (Question Bank — need questions to select from)
+J3.5 (UI Foundation — shared layout, page shell), J5A (Question Bank — need questions to select from)
+
+## UI Strategy
+
+This job must produce fully usable exam creation and management pages. Every page listed under UI Tasks must be complete enough for a teacher to create, configure, and publish an exam end-to-end. J10 will polish visual consistency; it will not build missing pages.
+
+**Minimum UI per page:**
+
+- Exam create page with sectioned form + manual question selection
+- Exam list page with status badges and action buttons
+- Exam detail page with config summary + candidate list
+- Empty state when no exams exist
+- Loading state while fetching
+- Error state on failure
+- All user-facing text in zh-CN
 
 ## Files to Create / Modify
 

@@ -27,7 +27,29 @@ Implement the complete exam execution lifecycle for candidates: start attempt, l
 
 ## Dependencies
 
-J5B (Exam Management — need published exams with questions to attempt)
+J3.5 (UI Foundation — shared layout, ExamLayout, page shell), J5B (Exam Management — need published exams with questions to attempt)
+
+## UI Strategy
+
+This is the most UI-intensive job. The exam-taking page is the core product experience and must be fully functional. All three candidate-facing pages must work end-to-end. J10 will polish visual consistency; it will not build missing pages or question type renderers.
+
+**Minimum UI per page:**
+
+- Exam list: card list with available/ended sections, attempt counts, scores
+- Start confirmation: exam config summary, queue UI when enabled, auto-redirect
+- Exam taking: full-screen mode, question nav with color-coded state, all 4 question type renderers, auto-save with SaveIndicator, countdown timer, submit confirmation dialog
+- All user-facing text in zh-CN
+
+**QuestionNavItem state model (used in 6.7):**
+
+| State      | Symbol | Color  | Meaning           |
+| ---------- | ------ | ------ | ----------------- |
+| unanswered | ○      | gray   | not yet answered  |
+| answered   | ●      | green  | answer saved      |
+| flagged    | ◉      | yellow | marked for review |
+
+- Current question has a distinct ring/border highlight
+- 50+ questions: two-column layout with scroll
 
 ## Files to Create / Modify
 
@@ -142,9 +164,47 @@ SaveAnswerResponse {
   - Verify: walk through confirm → start flow; with requireQueue enabled, confirm queue UI shows; confirm auto-redirect when turn arrives
 
 - [ ] **6.7** Client: exam taking page (core answer interface)
-  - Acceptance: Full-screen mode with no sidebar or navigation; top toolbar: exam name, countdown timer (ExamTimer, <5min turns red, =0 auto-submit via `submitAttempt()`), progress indicator, submit button; left question nav (w-20): color marks (●answered / ○unanswered / ◉flagged), current question highlight, 50+ questions uses two-column layout with scroll; right answer area: QuestionRenderer renders component by question type (SingleChoiceInput, MultipleChoiceInput, FillBlankInput, TrueFalseInput); bottom nav: ◀ prev / ⚑ flag / next ▶; bottom status bar: answered/unanswered/flagged/total counts; auto-save: answer change debounced 1-2s via Answer Save Protocol, SaveIndicator shows "保存中...→✓已保存 / ⚠保存失败"; submit confirmation dialog shows unanswered+flagged count + "交卷后不可修改"
-  - Files: `apps/web/src/pages/exam/TakeExamPage.tsx`, `apps/web/src/components/exam/*.tsx`
-  - Verify: complete answer → submit full flow; test all 4 question types render correctly; test auto-save shows status indicator; test countdown <5min turns red; test submit confirmation dialog shows correct counts; test flag/unflag questions; test question nav color marks update correctly
+  - This subtask is split into 6.7.1–6.7.8 for incremental implementation.
+
+  - [ ] **6.7.1** Exam taking page shell + full-screen layout
+    - Acceptance: Full-screen mode with no sidebar or navigation; top toolbar area reserved for exam name, timer, progress, submit; main area split into left question nav column (w-20) and right answer area; bottom nav bar with prev/flag/next; bottom status bar with answered/unanswered/flagged/total counts; page loads attempt data on mount and redirects if attempt not in_progress
+    - Files: `apps/web/src/pages/exam/TakeExamPage.tsx`
+    - Verify: navigate to exam page with active attempt; confirm full-screen layout; confirm no sidebar/navigation; confirm redirect when no active attempt
+
+  - [ ] **6.7.2** QuestionNav component with state model
+    - Acceptance: Left column (w-20) shows numbered question buttons; each button renders with QuestionNavItem state model (○ gray=unanswered, ● green=answered, ◉ yellow=flagged); current question has distinct ring/border highlight; click navigates to that question; 50+ questions uses two-column layout with scroll
+    - Files: `apps/web/src/components/exam/QuestionNav.tsx`
+    - Verify: render with 10 questions in various states; confirm color coding; click each question and confirm navigation; render with 60 questions and confirm two-column scroll
+
+  - [ ] **6.7.3** ExamTimer component
+    - Acceptance: Top toolbar countdown timer; displays MM:SS format; <5min turns text red; =0 triggers auto-submit via `submitAttempt()`; countdown uses server-side `deadlineAt` (client is cosmetic display only); page refresh re-fetches deadline from server
+    - Files: `apps/web/src/components/exam/ExamTimer.tsx`
+    - Verify: render timer with various remaining durations; confirm red at <5min; confirm auto-submit at 0; confirm page refresh shows correct remaining time
+
+  - [ ] **6.7.4** SingleChoiceInput + TrueFalseInput renderers
+    - Acceptance: SingleChoiceInput renders radio group from question options; TrueFalseInput renders binary radio (是/否 or similar); answer change triggers auto-save; selected option visually distinct
+    - Files: `apps/web/src/components/exam/SingleChoiceInput.tsx`, `apps/web/src/components/exam/TrueFalseInput.tsx`
+    - Verify: render single choice with 4 options; select one; confirm auto-save fires; render true/false; select one; confirm auto-save fires
+
+  - [ ] **6.7.5** MultipleChoiceInput renderer
+    - Acceptance: Renders checkbox group from question options; multiple selections allowed; answer change triggers auto-save; selected options visually distinct
+    - Files: `apps/web/src/components/exam/MultipleChoiceInput.tsx`
+    - Verify: render multi-select with 5 options; select 2; confirm auto-save fires; select/deselect; confirm updated auto-save
+
+  - [ ] **6.7.6** FillBlankInput renderer
+    - Acceptance: Renders input fields matching blank positions in question content; answer change triggers auto-save; supports multiple blanks per question
+    - Files: `apps/web/src/components/exam/FillBlankInput.tsx`
+    - Verify: render fill-blank with 2 blanks; type into each; confirm auto-save fires for each change
+
+  - [ ] **6.7.7** SaveIndicator + auto-save integration
+    - Acceptance: SaveIndicator shows "保存中..." during save, "✓已保存" on success, "⚠保存失败" on failure; answer changes debounced 1-2s; uses Answer Save Protocol with clientSeq and baseVersion; version conflict shows error indicator; re-attempts on transient failure
+    - Files: `apps/web/src/components/exam/SaveIndicator.tsx`
+    - Verify: type answer and confirm debounced save; confirm indicator transitions through states; simulate conflict and confirm error indicator; confirm successful save shows ✓已保存
+
+  - [ ] **6.7.8** Submit confirmation dialog + bottom nav actions
+    - Acceptance: Submit button in top toolbar opens confirmation dialog; dialog shows unanswered count + flagged count + "交卷后不可修改"; confirm submits via `submitAttempt()` and navigates to result page; bottom nav: ◀ prev / ⚑ flag toggle / next ▶; flag toggle updates QuestionNavItem state
+    - Files: `apps/web/src/pages/exam/TakeExamPage.tsx` (extend)
+    - Verify: click submit with unanswered questions; confirm dialog shows correct counts; confirm submit navigates to result; test flag toggle updates nav state; test prev/next navigation
 
 ## Acceptance Criteria
 

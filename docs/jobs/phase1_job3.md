@@ -158,3 +158,7 @@ pnpm verify
 - [ ] 集成测试使用 `pnpm db:seed` 用户，不硬编码测试凭证
 - [ ] Queries filter by organizationId
 - [ ] AuditLog written where required
+
+## Post-Completion Note
+
+Job 3 has been completed before the UI foundation backfill step was introduced. Do not reopen Job 3 for visual polish. Any shared UI foundation gaps should be handled in J3.5, and final visual polish should be handled in J10.
