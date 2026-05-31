@@ -13,16 +13,10 @@ import settingsRoutes from "./settings.js";
 async function buildApp() {
   const { db } = createDatabase();
   migrateSqlite(db);
-  await seed(db);
+  seed(db);
 
-  const org = db
-    .select()
-    .from(sqliteSchema.organizations)
-    .get()!;
-  const admin = db
-    .select()
-    .from(sqliteSchema.users)
-    .get()!;
+  const org = db.select().from(sqliteSchema.organizations).get()!;
+  const admin = db.select().from(sqliteSchema.users).get()!;
 
   const app = Fastify();
   await app.register(fastifyCookie);
