@@ -1,18 +1,36 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { Toaster } from "@/components/ui/sonner";
+import { AdminLayout } from "@/components/layout/AdminLayout";
+import { BrandProvider } from "@/components/layout/BrandProvider";
+import { ExamLayout } from "@/components/layout/ExamLayout";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { LoginPage } from "@/pages/LoginPage";
+import { PlaceholderPage } from "@/pages/PlaceholderPage";
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route path="*" element={<PlaceholderPage />} />
+      </Route>
+      <Route path="/exam" element={<ExamLayout />}>
+        <Route path="*" element={<PlaceholderPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
+  );
+}
 
 export default function App() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-8">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>基础组件预览</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">基础设施已就绪。</p>
-          <Button type="button">确认</Button>
-        </CardContent>
-      </Card>
-    </div>
+    <BrowserRouter>
+      <BrandProvider>
+        <AuthProvider>
+          <AppRoutes />
+          <Toaster />
+        </AuthProvider>
+      </BrandProvider>
+    </BrowserRouter>
   );
 }
