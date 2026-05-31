@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { scryptSync, randomBytes } from "node:crypto";
+import { and, eq } from "drizzle-orm";
+import type { SqliteDatabase } from "./sqlite.js";
 import { createDatabase } from "./database.js";
 import { migrateSqlite } from "./sqlite.js";
 import { sqliteSchema } from "./schema/sqlite.js";
 import dotenv from "dotenv";
 
-// 加载环境变量
 dotenv.config();
 
 function hashPassword(password: string): string {
@@ -14,83 +15,116 @@ function hashPassword(password: string): string {
   return `${salt}:${hash}`;
 }
 
-const now = new Date();
+export async function seed(db: SqliteDatabase) {
+  const timestamp = new Date();
 
-const org = {
-  id: randomUUID(),
-  name: process.env.SEED_ORG_NAME || "Default Organization",
-  displayName:
-    process.env.SEED_ORG_DISPLAY_NAME ||
-    process.env.SEED_ORG_NAME ||
-    "Default Organization",
-  slug: "default",
-  createdAt: now,
-  updatedAt: now,
-};
+  const slug = "default";
+  const existingOrg = db
+    .select()
+    .from(sqliteSchema.organizations)
+    .where(eq(sqliteSchema.organizations.slug, slug))
+    .get();
 
-const users = [
-  {
-    id: randomUUID(),
-    organizationId: org.id,
-    username: process.env.SEED_ADMIN_USERNAME || "admin",
-    passwordHash: hashPassword(process.env.SEED_ADMIN_PASSWORD || "admin123"),
-    name: process.env.SEED_ADMIN_NAME || "Admin",
-    role: "SuperAdmin" as const,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: randomUUID(),
-    organizationId: org.id,
-    username: process.env.SEED_TEACHER_USERNAME || "teacher",
-    passwordHash: hashPassword(
-      process.env.SEED_TEACHER_PASSWORD || "teacher123",
-    ),
-    name: process.env.SEED_TEACHER_NAME || "Teacher",
-    role: "Teacher" as const,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  },
-  {
-    id: randomUUID(),
-    organizationId: org.id,
-    username: process.env.SEED_CANDIDATE_USERNAME || "candidate",
-    passwordHash: hashPassword(
-      process.env.SEED_CANDIDATE_PASSWORD || "candidate123",
-    ),
-    name: process.env.SEED_CANDIDATE_NAME || "Candidate",
-    role: "Candidate" as const,
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  },
-];
+  const orgId = existingOrg?.id ?? randomUUID();
 
-async function seed() {
+  const org = {
+    id: orgId,
+    name: process.env.SEED_ORG_NAME || "Default Organization",
+    displayName:
+      process.env.SEED_ORG_DISPLAY_NAME ||
+      process.env.SEED_ORG_NAME ||
+      "Default Organization",
+    slug,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  if (!existingOrg) {
+    db.insert(sqliteSchema.organizations).values(org).run();
+  }
+
+  const users = [
+    {
+      id: randomUUID(),
+      organizationId: org.id,
+      username: process.env.SEED_ADMIN_USERNAME || "admin",
+      passwordHash: hashPassword(
+        process.env.SEED_ADMIN_PASSWORD || "admin123",
+      ),
+      name: process.env.SEED_ADMIN_NAME || "Admin",
+      role: "SuperAdmin" as const,
+      isActive: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: randomUUID(),
+      organizationId: org.id,
+      username: process.env.SEED_TEACHER_USERNAME || "teacher",
+      passwordHash: hashPassword(
+        process.env.SEED_TEACHER_PASSWORD || "teacher123",
+      ),
+      name: process.env.SEED_TEACHER_NAME || "Teacher",
+      role: "Teacher" as const,
+      isActive: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: randomUUID(),
+      organizationId: org.id,
+      username: process.env.SEED_CANDIDATE_USERNAME || "candidate",
+      passwordHash: hashPassword(
+        process.env.SEED_CANDIDATE_PASSWORD || "candidate123",
+      ),
+      name: process.env.SEED_CANDIDATE_NAME || "Candidate",
+      role: "Candidate" as const,
+      isActive: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  ];
+
+  db.insert(sqliteSchema.organizations)
+    .values(org)
+    .onConflictDoNothing()
+    .run();
+
+  for (const user of users) {
+    const existing = db
+      .select()
+      .from(sqliteSchema.users)
+      .where(
+        and(
+          eq(sqliteSchema.users.organizationId, org.id),
+          eq(sqliteSchema.users.username, user.username),
+        ),
+      )
+      .get();
+    if (!existing) {
+      db.insert(sqliteSchema.users).values(user).run();
+    }
+  }
+}
+
+async function main() {
   const { db } = createDatabase();
   migrateSqlite(db);
 
   console.log("Seeding database...");
-
-  db.insert(sqliteSchema.organizations).values(org).run();
-  console.log(`  Organization: ${org.name} (${org.slug})`);
-
-  for (const user of users) {
-    db.insert(sqliteSchema.users).values(user).run();
-    console.log(
-      `  User: ${user.username} / ${user.username}123 (${user.role})`,
-    );
-  }
-
+  await seed(db);
   console.log("\nDone! Login credentials:");
   console.log("  Admin:     admin / admin123");
   console.log("  Teacher:   teacher / teacher123");
   console.log("  Candidate: candidate / candidate123");
 }
 
-seed().catch((err) => {
-  console.error("Seed failed:", err);
-  process.exit(1);
-});
+if (
+  process.argv[1]?.includes("seed") &&
+  !process.argv[1]?.includes("test")
+) {
+  main().catch((err) => {
+    console.error("Seed failed:", err);
+    process.exit(1);
+  });
+}
