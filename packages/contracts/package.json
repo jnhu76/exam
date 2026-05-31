@@ -11,6 +11,10 @@
     "test": "echo 'test: TODO'",
     "coverage": "echo 'coverage: TODO'"
   },
+  "dependencies": {
+    "@exam/domain": "workspace:*",
+    "zod": "^3.25.28"
+  },
   "devDependencies": {
     "typescript": "^5.8.3"
   }

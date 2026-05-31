@@ -111,6 +111,13 @@ importers:
         version: 5.9.3
 
   packages/contracts:
+    dependencies:
+      '@exam/domain':
+        specifier: workspace:*
+        version: link:../domain
+      zod:
+        specifier: ^3.25.28
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -129,6 +136,10 @@ importers:
         version: 5.9.3
 
   packages/exam-engine:
+    dependencies:
+      '@exam/domain':
+        specifier: workspace:*
+        version: link:../domain
     devDependencies:
       typescript:
         specifier: ^5.8.3

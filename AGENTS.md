@@ -11,7 +11,7 @@ Multi-tenant: each organization runs exams independently. Supports open-book qui
 ## Product Generalization Rules
 
 - Do not hardcode product title such as "校内考试", "校园内网考试平台", "University LAN exam system", or any single deployment scenario.
-- Product title, subtitle, footer, organization display name, and candidate identity fields are configurable.
+- Product title, subtitle, footer, and organization display name come from `OrganizationSettings`; organization display name falls back to `Organization.displayName`.
 - Exam titles come from `Exam.title`, set by Admin/Teacher.
 - Candidate identity comes from per-organization `CandidateField`; never assume Student, 学生, 学号, 工号, department, or class.
 - Course may mean course, training module, certification category, access qualification, or assessment domain. Keep the code generic.
@@ -19,13 +19,13 @@ Multi-tenant: each organization runs exams independently. Supports open-book qui
 
 ## Tech Stack
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4 |
-| Backend | Node.js LTS + Fastify + TypeScript + Zod validation |
+| Layer    | Tech                                                               |
+| -------- | ------------------------------------------------------------------ |
+| Frontend | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4          |
+| Backend  | Node.js LTS + Fastify + TypeScript + Zod validation                |
 | Database | PostgreSQL (prod default) / SQLite (dev/demo only) via Drizzle ORM |
-| Auth | HTTP-only Cookie + JWT, argon2/bcrypt password hashing |
-| Monorepo | pnpm workspace: `apps/`, `packages/` |
+| Auth     | HTTP-only Cookie + JWT, argon2/bcrypt password hashing             |
+| Monorepo | pnpm workspace: `apps/`, `packages/`                               |
 
 ## Commands
 
@@ -151,6 +151,7 @@ docs/                    # design documents
 - **AI coding rules** — see `docs/code-quality.md` §17
 
 Every Job completion requires:
+
 1. List of modified files
 2. List of new tests
 3. Coverage result

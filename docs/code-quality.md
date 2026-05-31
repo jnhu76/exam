@@ -24,18 +24,18 @@ Phase 1 代码质量目标：
 
 ## 2. Tooling
 
-| Tool | Purpose |
-|------|---------|
-| Prettier | Formatter |
-| ESLint + typescript-eslint | Lint |
-| TypeScript strict mode | Type safety |
-| Vitest | Unit/integration test |
-| Vitest coverage v8 | Coverage |
-| Playwright | E2E/smoke test |
-| Lefthook | Git hooks |
-| turbo | Monorepo runner |
-| dependency-cruiser | Architecture boundary lint |
-| pnpm | Package manager |
+| Tool                       | Purpose                    |
+| -------------------------- | -------------------------- |
+| Prettier                   | Formatter                  |
+| ESLint + typescript-eslint | Lint                       |
+| TypeScript strict mode     | Type safety                |
+| Vitest                     | Unit/integration test      |
+| Vitest coverage v8         | Coverage                   |
+| Playwright                 | E2E/smoke test             |
+| Lefthook                   | Git hooks                  |
+| turbo                      | Monorepo runner            |
+| dependency-cruiser         | Architecture boundary lint |
+| pnpm                       | Package manager            |
 
 ---
 
@@ -88,14 +88,14 @@ no-console                                  — 禁止 console.log
 
 ### no-console 分级
 
-| Package | console.log | console.warn/error |
-|---------|-------------|-------------------|
-| apps/api | 禁止，必须用 logger | 必须用 logger |
-| apps/web | 禁止（生产构建） | 开发期允许 |
-| packages/domain | 禁止 | 禁止 |
-| packages/exam-engine | 禁止 | 禁止 |
-| packages/db | 禁止 | 必须用 logger |
-| packages/auth | 禁止 | 必须用 logger |
+| Package              | console.log         | console.warn/error |
+| -------------------- | ------------------- | ------------------ |
+| apps/api             | 禁止，必须用 logger | 必须用 logger      |
+| apps/web             | 禁止（生产构建）    | 开发期允许         |
+| packages/domain      | 禁止                | 禁止               |
+| packages/exam-engine | 禁止                | 禁止               |
+| packages/db          | 禁止                | 必须用 logger      |
+| packages/auth        | 禁止                | 必须用 logger      |
 
 ### 复杂度限制
 
@@ -106,13 +106,13 @@ max-depth: 4
 ```
 
 例外（不适用复杂度限制）：
+
 - Schema 定义文件
 - Migration 文件
 - 测试数据 fixture
 - UI table columns 配置
 
 如果函数超过限制，应拆成：command / policy / validator / mapper / repository method。
-
 
 ---
 
@@ -136,7 +136,7 @@ University / campus / student
 
 ### 生产实现要求
 
-- 登录页标题、侧栏产品名、考生端页头必须从 `OrganizationSettings` / `BrandingView` 读取。
+- 登录页标题、侧栏产品名、考生端页头、页脚、机构显示名必须从 `OrganizationSettings` / `BrandingView` 读取。
 - 考试名称必须来自 `Exam.title`。
 - 考生身份列必须来自 `CandidateField`，不能假设一定存在"学号"或"工号"。
 - 示例数据不得进入正式 fallback 文案。
@@ -195,6 +195,7 @@ pnpm lint:arch
 ```
 
 检查项：
+
 1. domain 不依赖 Fastify
 2. contracts 不依赖 Fastify
 3. web 不直接依赖 db
@@ -216,13 +217,13 @@ Route handler 不允许直接访问 db。所有业务数据访问必须走 repos
 ### 禁止
 
 ```ts
-await db.select().from(questions)
+await db.select().from(questions);
 ```
 
 ### 允许
 
 ```ts
-await questionRepo.list(ctx, filters)
+await questionRepo.list(ctx, filters);
 ```
 
 ---
@@ -280,9 +281,9 @@ unknown error → 500 + requestId
 ```ts
 {
   error: {
-    code: string
-    message: string
-    requestId: string
+    code: string;
+    message: string;
+    requestId: string;
   }
 }
 ```
@@ -500,8 +501,8 @@ PR 不通过 CI，不允许合并。
 
 ### 按 Job 类型额外运行
 
-| Job 类型 | 额外命令 |
-|---------|---------|
-| 涉及数据库 | `pnpm db:generate && pnpm db:migrate && pnpm test:integration` |
-| 涉及 UI 主流程 | `pnpm test:e2e` |
-| Phase 1 完成 | `pnpm smoke` |
+| Job 类型       | 额外命令                                                       |
+| -------------- | -------------------------------------------------------------- |
+| 涉及数据库     | `pnpm db:generate && pnpm db:migrate && pnpm test:integration` |
+| 涉及 UI 主流程 | `pnpm test:e2e`                                                |
+| Phase 1 完成   | `pnpm smoke`                                                   |

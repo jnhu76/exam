@@ -33,6 +33,7 @@ J0.5  Domain + Contracts Skeleton
 
 **并行**：J1 + J2 可以在 J0.5 之后同时进行。
 **串行**：
+
 - J0 → J0.5 是硬前置
 - J0.5 → J1 → J3 是数据库+认证链
 - J3 → J4 → J5A → J5B → J6 → J7 → J8 → J9 是业务功能链
@@ -42,20 +43,20 @@ J0.5  Domain + Contracts Skeleton
 
 ## Jobs
 
-| Job | File | Description | Status |
-|-----|------|-------------|--------|
-| J0 | [phase1_job0.md](jobs/phase1_job0.md) | Infrastructure Setup | 🔄 In Progress |
-| J0.5 | [phase1_job0.5.md](jobs/phase1_job0.5.md) | Domain + Contracts Skeleton | ⬜ Pending |
-| J1 | [phase1_job1.md](jobs/phase1_job1.md) | Database Schema + Repository Layer | ⬜ Pending |
-| J2 | [phase1_job2.md](jobs/phase1_job2.md) | Client Scaffold (Layout + Routing + Shared Components) | ⬜ Pending |
-| J3 | [phase1_job3.md](jobs/phase1_job3.md) | Auth System (Server + Login Page) | ⬜ Pending |
-| J4 | [phase1_job4.md](jobs/phase1_job4.md) | Organization Settings + User + Candidate Management | ⬜ Pending |
-| J5A | [phase1_job5a.md](jobs/phase1_job5a.md) | Course + Question Bank | ⬜ Pending |
-| J5B | [phase1_job5b.md](jobs/phase1_job5b.md) | Exam Management + Manual Paper Builder | ⬜ Pending |
-| J6 | [phase1_job6.md](jobs/phase1_job6.md) | Exam Taking Flow | ⬜ Pending |
-| J7 | [phase1_job7.md](jobs/phase1_job7.md) | Auto-Grading + Result Page | ⬜ Pending |
-| J8 | [phase1_job8.md](jobs/phase1_job8.md) | Score Management + CSV Export | ⬜ Pending |
-| J9 | [phase1_job9.md](jobs/phase1_job9.md) | Health Check + Dashboard + Docker Compose | ⬜ Pending |
+| Job  | File                                      | Description                                            | Status         |
+| ---- | ----------------------------------------- | ------------------------------------------------------ | -------------- |
+| J0   | [phase1_job0.md](jobs/phase1_job0.md)     | Infrastructure Setup                                   | 🔄 In Progress |
+| J0.5 | [phase1_job0.5.md](jobs/phase1_job0.5.md) | Domain + Contracts Skeleton                            | ⬜ Pending     |
+| J1   | [phase1_job1.md](jobs/phase1_job1.md)     | Database Schema + Repository Layer                     | ⬜ Pending     |
+| J2   | [phase1_job2.md](jobs/phase1_job2.md)     | Client Scaffold (Layout + Routing + Shared Components) | ⬜ Pending     |
+| J3   | [phase1_job3.md](jobs/phase1_job3.md)     | Auth System (Server + Login Page)                      | ⬜ Pending     |
+| J4   | [phase1_job4.md](jobs/phase1_job4.md)     | Organization Settings + User + Candidate Management    | ⬜ Pending     |
+| J5A  | [phase1_job5a.md](jobs/phase1_job5a.md)   | Course + Question Bank                                 | ⬜ Pending     |
+| J5B  | [phase1_job5b.md](jobs/phase1_job5b.md)   | Exam Management + Manual Paper Builder                 | ⬜ Pending     |
+| J6   | [phase1_job6.md](jobs/phase1_job6.md)     | Exam Taking Flow                                       | ⬜ Pending     |
+| J7   | [phase1_job7.md](jobs/phase1_job7.md)     | Auto-Grading + Result Page                             | ⬜ Pending     |
+| J8   | [phase1_job8.md](jobs/phase1_job8.md)     | Score Management + CSV Export                          | ⬜ Pending     |
+| J9   | [phase1_job9.md](jobs/phase1_job9.md)     | Health Check + Dashboard + Docker Compose              | ⬜ Pending     |
 
 ---
 
@@ -131,14 +132,14 @@ Phase 1 必须把"考试系统"做成可适配不同机构、不同考试类型�
 
 ### 配置边界
 
-| 内容 | 来源 | Phase 1 要求 |
-|------|------|--------------|
-| 产品标题 | `OrganizationSettings.productName`，没有则使用系统默认值 | 登录页、侧栏、考生端页头统一读取 |
-| 产品副标题/页脚 | `OrganizationSettings.productSubtitle/footerText` | 登录页底部展示，可为空 |
-| 机构显示名 | `Organization.displayName` | 后台 header、SuperAdmin 机构列表展示 |
-| 考试名称 | `Exam.title` | 由管理员/教师创建考试时设置 |
-| 考生身份字段 | `CandidateField` | 不预设"学生/学号/工号"，导入模板动态生成 |
-| 课程/分类名称 | `Course.name` | 可表达课程、培训、认证、岗位准入等不同场景 |
+| 内容            | 来源                                                                                  | Phase 1 要求                               |
+| --------------- | ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| 产品标题        | `OrganizationSettings.productName`，没有则使用系统默认值                              | 登录页、侧栏、考生端页头统一读取           |
+| 产品副标题/页脚 | `OrganizationSettings.productSubtitle/footerText`                                     | 登录页底部展示，可为空                     |
+| 机构显示名      | `OrganizationSettings.organizationDisplayName`，没有则使用 `Organization.displayName` | 后台 header、SuperAdmin 机构列表展示       |
+| 考试名称        | `Exam.title`                                                                          | 由管理员/教师创建考试时设置                |
+| 考生身份字段    | `CandidateField`                                                                      | 不预设"学生/学号/工号"，导入模板动态生成   |
+| 课程/分类名称   | `Course.name`                                                                         | 可表达课程、培训、认证、岗位准入等不同场景 |
 
 ### 生产代码禁区
 
@@ -182,11 +183,11 @@ pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typec
 
 ### 按 Job 类型额外运行
 
-| Job 类型 | 额外命令 |
-|---------|---------|
-| 涉及数据库 (J1, J3-J8) | `pnpm db:generate && pnpm db:migrate && pnpm test:integration` |
-| 涉及 UI 主流程 (J6, J7) | `pnpm test:e2e` |
-| Phase 1 完成 (J9) | `pnpm smoke` |
+| Job 类型                | 额外命令                                                       |
+| ----------------------- | -------------------------------------------------------------- |
+| 涉及数据库 (J1, J3-J8)  | `pnpm db:generate && pnpm db:migrate && pnpm test:integration` |
+| 涉及 UI 主流程 (J6, J7) | `pnpm test:e2e`                                                |
+| Phase 1 完成 (J9)       | `pnpm smoke`                                                   |
 
 ### Code Quality Review Checklist
 
@@ -214,14 +215,14 @@ pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typec
 
 每个有 UI 的任务都标注了 `UI Ref` 指向 `phase1-ui-design.md` 的具体章节。
 
-| Job | UI 页面 | UI Ref |
-|-----|---------|--------|
-| J2 | Layout shells, Sidebar, Shared components | §2.1, §2.2, §4.2, §6 |
-| J3 | Login page | §3.1 |
-| J4 | Organization settings, CandidateField config, User mgmt, Candidate mgmt, Import | §3.20, §3.13, §3.17, §3.18, §3.16 |
-| J5A | Course mgmt, Question list, Question edit (4 types), Question import | §3.14, §3.3, §3.4, §3.5 |
-| J5B | Exam create, Exam detail | §3.6, §3.11 |
-| J6 | Exam list, Start exam, Take exam (core) | §3.7, §3.10, §3.8 |
-| J7 | Result page (2 variants) | §3.9 |
-| J8 | Score list, Attempt detail | §3.19, §3.12 |
-| J9 | Dashboard, System health | §3.2, §3.15 |
+| Job | UI 页面                                                                         | UI Ref                            |
+| --- | ------------------------------------------------------------------------------- | --------------------------------- |
+| J2  | Layout shells, Sidebar, Shared components                                       | §2.1, §2.2, §4.2, §6              |
+| J3  | Login page                                                                      | §3.1                              |
+| J4  | Organization settings, CandidateField config, User mgmt, Candidate mgmt, Import | §3.20, §3.13, §3.17, §3.18, §3.16 |
+| J5A | Course mgmt, Question list, Question edit (4 types), Question import            | §3.14, §3.3, §3.4, §3.5           |
+| J5B | Exam create, Exam detail                                                        | §3.6, §3.11                       |
+| J6  | Exam list, Start exam, Take exam (core)                                         | §3.7, §3.10, §3.8                 |
+| J7  | Result page (2 variants)                                                        | §3.9                              |
+| J8  | Score list, Attempt detail                                                      | §3.19, §3.12                      |
+| J9  | Dashboard, System health                                                        | §3.2, §3.15                       |
