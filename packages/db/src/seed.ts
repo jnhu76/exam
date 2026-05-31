@@ -3,6 +3,10 @@ import { scryptSync, randomBytes } from "node:crypto";
 import { createDatabase } from "./database.js";
 import { migrateSqlite } from "./sqlite.js";
 import { sqliteSchema } from "./schema/sqlite.js";
+import dotenv from "dotenv";
+
+// 加载环境变量
+dotenv.config();
 
 function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
@@ -14,8 +18,11 @@ const now = new Date();
 
 const org = {
   id: randomUUID(),
-  name: "Default Organization",
-  displayName: "Default Organization",
+  name: process.env.SEED_ORG_NAME || "Default Organization",
+  displayName:
+    process.env.SEED_ORG_DISPLAY_NAME ||
+    process.env.SEED_ORG_NAME ||
+    "Default Organization",
   slug: "default",
   createdAt: now,
   updatedAt: now,
@@ -25,9 +32,9 @@ const users = [
   {
     id: randomUUID(),
     organizationId: org.id,
-    username: "admin",
-    passwordHash: hashPassword("admin123"),
-    name: "Admin",
+    username: process.env.SEED_ADMIN_USERNAME || "admin",
+    passwordHash: hashPassword(process.env.SEED_ADMIN_PASSWORD || "admin123"),
+    name: process.env.SEED_ADMIN_NAME || "Admin",
     role: "SuperAdmin" as const,
     isActive: true,
     createdAt: now,
@@ -36,9 +43,11 @@ const users = [
   {
     id: randomUUID(),
     organizationId: org.id,
-    username: "teacher",
-    passwordHash: hashPassword("teacher123"),
-    name: "Teacher",
+    username: process.env.SEED_TEACHER_USERNAME || "teacher",
+    passwordHash: hashPassword(
+      process.env.SEED_TEACHER_PASSWORD || "teacher123",
+    ),
+    name: process.env.SEED_TEACHER_NAME || "Teacher",
     role: "Teacher" as const,
     isActive: true,
     createdAt: now,
@@ -47,9 +56,11 @@ const users = [
   {
     id: randomUUID(),
     organizationId: org.id,
-    username: "candidate",
-    passwordHash: hashPassword("candidate123"),
-    name: "Candidate",
+    username: process.env.SEED_CANDIDATE_USERNAME || "candidate",
+    passwordHash: hashPassword(
+      process.env.SEED_CANDIDATE_PASSWORD || "candidate123",
+    ),
+    name: process.env.SEED_CANDIDATE_NAME || "Candidate",
     role: "Candidate" as const,
     isActive: true,
     createdAt: now,
