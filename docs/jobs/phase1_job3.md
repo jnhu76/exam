@@ -22,7 +22,7 @@ Implement full authentication pipeline: JWT session management, password hashing
 
 ## Dependencies
 
-J0 (Infrastructure), J0.5 (Contracts — auth Zod schemas), J1 (DB — user/organization tables + repos)
+J0 (Infrastructure), J0.5 (Contracts — auth Zod schemas), J1 (DB — user/organization tables + repos), J2 (db:seed 脚本 — 提供测试用户)
 
 ## Files to Create / Modify
 
@@ -60,6 +60,8 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
 - Integration: wrong role → 403
 - Integration: cross-tenant data isolation
 
+**测试数据**：所有集成测试和 curl 验证使用 `pnpm db:seed` 创建的用户（admin/teacher/candidate），不要在测试中硬编码创建用户。
+
 ## Subtasks
 
 - [ ] **3.1** JWT plugin + password hashing
@@ -70,17 +72,17 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
 - [ ] **3.2** Auth routes: register + login + logout + me
   - Acceptance: POST /api/auth/register creates a user; POST /api/auth/login returns HTTP-only cookie; GET /api/auth/me returns current user; POST /api/auth/logout clears cookie; all inputs validated with Zod schemas from `@exam/contracts`
   - Files: `apps/api/src/routes/auth.ts`
-  - Verify: curl complete login flow (register → login → me → logout → me returns 401)
+  - Verify: 使用 seed 用户 (admin/admin123) 测试完整登录流程: login → me → logout → me returns 401
 
 - [ ] **3.3** Auth middleware: requireAuth + requireRole
   - Acceptance: unauthenticated request → 401; authenticated but wrong role → 403; correct role → request passes through with user on context
   - Files: `apps/api/src/plugins/auth.ts`
-  - Verify: curl test all three cases against a protected route
+  - Verify: 使用 seed 用户测试三种情况: admin (通过), candidate 访问 admin 路由 (403), 无 cookie (401)
 
 - [ ] **3.4** Multi-tenant middleware: scopeToTenant
   - Acceptance: all requests inject organizationId into RequestContext; repository queries auto-filter by organizationId; different tenant users cannot see each other's data
   - Files: `packages/auth/src/tenantGuard.ts`, `apps/api/src/plugins/tenant.ts`
-  - Verify: create two orgs with users, confirm cross-tenant data isolation via curl
+  - Verify: 使用 seed 用户确认同组织数据隔离，创建第二个组织用户确认跨组织隔离
 
 - [ ] **3.5** Rate limiter middleware
   - Acceptance: login endpoint limited to 10 requests/minute; exceeding limit returns 429 with retry-after header
@@ -90,7 +92,7 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
 - [ ] **3.6** Client: Login page
   - Acceptance: full-screen centered login card (max-w-sm); username + password inputs + login button; login failure shows red text below form (not alert); success redirect by role (Admin → /admin/dashboard, Candidate → /exam/list); product title and bottom text read from `BrandingView` in `BrandProvider`, using its generic fallback values until J4 connects the settings API
   - Files: `apps/web/src/pages/LoginPage.tsx`
-  - Verify: full login flow in browser — wrong password shows inline error, correct login redirects to role-appropriate page
+  - Verify: 使用 seed 用户在浏览器测试完整登录流程 — admin → /admin/dashboard, candidate → /exam/list
 
 ## Acceptance Criteria
 
@@ -103,6 +105,7 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
 7. Login page redirects by role
 8. All routes use Zod validation from `@exam/contracts`
 9. `pnpm typecheck` passes
+10. 集成测试和 curl 验证使用 `pnpm db:seed` 创建的用户，不硬编码测试用户
 
 ## Verify Commands
 
@@ -152,5 +155,6 @@ pnpm verify
 - [ ] No unnecessary new dependencies
 - [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes
+- [ ] 集成测试使用 `pnpm db:seed` 用户，不硬编码测试凭证
 - [ ] Queries filter by organizationId
 - [ ] AuditLog written where required
