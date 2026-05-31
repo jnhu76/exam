@@ -26,7 +26,7 @@ export const ScoreListItemSchema = z.object({
   candidateName: z.string(),
   candidateFields: z.record(z.unknown()),
   examId: z.string().uuid(),
-  examName: z.string(),
+  examTitle: z.string(),
   score: z.number(),
   passed: z.boolean(),
   attemptNo: z.number().int(),

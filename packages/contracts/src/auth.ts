@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RoleSchema } from "./user.js";
 
 // ── Register ──────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ export const LoginResponseSchema = z.object({
   id: z.string().uuid(),
   username: z.string(),
   name: z.string(),
-  role: z.string(),
+  role: RoleSchema,
   organizationId: z.string().uuid(),
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
@@ -39,12 +40,15 @@ export const MeResponseSchema = z.object({
   id: z.string().uuid(),
   username: z.string(),
   name: z.string(),
-  role: z.string(),
+  role: RoleSchema,
   organizationId: z.string().uuid(),
 });
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
 // ── Logout ────────────────────────────────────────────────────────
+
+export const LogoutRequestSchema = z.object({}).strict();
+export type LogoutRequest = z.infer<typeof LogoutRequestSchema>;
 
 export const LogoutResponseSchema = z.object({
   success: z.boolean(),

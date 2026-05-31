@@ -9,7 +9,12 @@ const ExamStatusEnum = z.enum([
   "closed",
   "archived",
 ]);
-const TimingModeEnum = z.enum(["timed_sync", "timed_window", "deadline", "untimed"]);
+const TimingModeEnum = z.enum([
+  "timed_sync",
+  "timed_window",
+  "deadline",
+  "untimed",
+]);
 const QuestionSelectionModeEnum = z.enum(["manual", "random"]);
 const ScoreStrategyEnum = z.enum(["highest", "latest", "first"]);
 const RetakePolicyEnum = z.enum([
@@ -36,7 +41,7 @@ const ControlFlagsSchema = z.object({
 export const ExamSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
-  name: z.string(),
+  title: z.string(),
   description: z.string(),
   courseId: z.string().uuid(),
   status: ExamStatusEnum,
@@ -47,6 +52,7 @@ export const ExamSchema = z.object({
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
   questionSelectionMode: QuestionSelectionModeEnum,
+  questionIds: z.array(z.string().uuid()),
   controlFlags: ControlFlagsSchema,
   retakePolicy: RetakePolicyEnum,
   scoreStrategy: ScoreStrategyEnum,
@@ -57,7 +63,7 @@ export const ExamSchema = z.object({
 export type ExamDTO = z.infer<typeof ExamSchema>;
 
 export const CreateExamRequestSchema = z.object({
-  name: z.string().min(1).max(200),
+  title: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),
   courseId: z.string().uuid(),
   timingMode: TimingModeEnum.default("timed_window"),
@@ -67,6 +73,7 @@ export const CreateExamRequestSchema = z.object({
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
   questionSelectionMode: QuestionSelectionModeEnum.default("manual"),
+  questionIds: z.array(z.string().uuid()).default([]),
   controlFlags: ControlFlagsSchema.default({}),
   retakePolicy: RetakePolicyEnum.default("unlimited"),
   scoreStrategy: ScoreStrategyEnum.default("highest"),
@@ -75,7 +82,7 @@ export const CreateExamRequestSchema = z.object({
 export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
 
 export const UpdateExamRequestSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
+  title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   timingMode: TimingModeEnum.optional(),
   durationMinutes: z.number().int().positive().optional(),
@@ -83,6 +90,7 @@ export const UpdateExamRequestSchema = z.object({
   closeAt: z.string().datetime().optional(),
   passingScore: z.number().min(0).optional(),
   totalScore: z.number().positive().optional(),
+  questionIds: z.array(z.string().uuid()).optional(),
   controlFlags: ControlFlagsSchema.partial().optional(),
   retakePolicy: RetakePolicyEnum.optional(),
   scoreStrategy: ScoreStrategyEnum.optional(),

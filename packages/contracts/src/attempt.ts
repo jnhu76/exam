@@ -19,7 +19,7 @@ const ConflictReasonEnum = z.enum([
   "ATTEMPT_CLOSED",
 ]);
 
-const QuestionSnapshotSchema = z.object({
+export const QuestionSnapshotSchema = z.object({
   originalQuestionId: z.string(),
   type: z.enum([
     "single_choice",
@@ -33,13 +33,13 @@ const QuestionSnapshotSchema = z.object({
       url: z.string(),
       type: z.enum(["image", "file"]),
       name: z.string(),
-    })
+    }),
   ),
   options: z.array(
     z.object({
       id: z.string(),
       content: z.string(),
-    })
+    }),
   ),
   standardAnswer: z.unknown(),
   score: z.number(),
@@ -48,6 +48,10 @@ const QuestionSnapshotSchema = z.object({
     fillBlankMatchMode: z.enum(["exact", "keyword"]),
   }),
   order: z.number().int(),
+});
+
+export const CandidateQuestionSnapshotSchema = QuestionSnapshotSchema.omit({
+  standardAnswer: true,
 });
 
 const AnswerRecordSchema = z.object({
@@ -77,6 +81,11 @@ export const AttemptSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type AttemptDTO = z.infer<typeof AttemptSchema>;
+
+export const LoadAttemptResponseSchema = AttemptSchema.extend({
+  questionSnapshot: z.array(CandidateQuestionSnapshotSchema),
+});
+export type LoadAttemptResponse = z.infer<typeof LoadAttemptResponseSchema>;
 
 // ── Save Answer (§3.5) ───────────────────────────────────────────
 
@@ -129,6 +138,4 @@ export type SubmitAttemptRequest = z.infer<typeof SubmitAttemptRequestSchema>;
 export const RestoreAttemptRequestSchema = z.object({
   attemptId: z.string().uuid(),
 });
-export type RestoreAttemptRequest = z.infer<
-  typeof RestoreAttemptRequestSchema
->;
+export type RestoreAttemptRequest = z.infer<typeof RestoreAttemptRequestSchema>;

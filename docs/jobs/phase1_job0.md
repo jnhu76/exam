@@ -12,6 +12,7 @@ Root monorepo, Fastify API server, React + Vite frontend, shadcn/ui component li
 - React 19 + Vite + TailwindCSS v4 client
 - Root dev script for concurrent frontend + backend
 - shadcn/ui component library initialized
+- Root hardcoded business copy guard
 
 ## Out of Scope
 
@@ -35,6 +36,8 @@ None.
 - `apps/api/src/plugins/cors.ts`, `apps/api/src/plugins/security.ts`
 - `apps/web/index.html`, `apps/web/src/main.tsx`, `apps/web/src/App.tsx`, `apps/web/src/index.css`, `apps/web/vite.config.ts`
 - `.env.example`
+- `.prettierignore`
+- `scripts/check-hardcoded-copy.mjs`
 - `apps/web/components.json`, `apps/web/src/lib/utils.ts`, `apps/web/src/components/ui/*.tsx`
 
 ## Data Model Changes
@@ -81,6 +84,11 @@ None.
   - Components: button, input, label, select, textarea, checkbox, radio-group, card, table, dialog, dropdown-menu, badge, tabs, separator, sonner, avatar, skeleton, alert, sheet, form, pagination, tooltip, alert-dialog, switch
   - Verify: render a `<Button>` + `<Card>` in `App.tsx`
 
+- [ ] **0.7** Hardcoded business copy guard
+  - Acceptance: root `lint:copy` script scans production files under `apps/**` and `packages/**`, rejects deployment-specific default copy, and excludes docs, tests, stories, and demo seed data
+  - Files: `scripts/check-hardcoded-copy.mjs`, `package.json`
+  - Verify: `pnpm lint:copy` passes; temporarily add a banned default string in a production fixture and confirm the command fails
+
 ## Acceptance Criteria
 
 1. `pnpm install` succeeds with zero errors
@@ -89,6 +97,7 @@ None.
 4. Vite proxy forwards `/api` → `:3000`
 5. CORS + security headers present
 6. shadcn/ui components render
+7. `pnpm lint:copy` enforces the production copy guard
 
 ## Verify Commands
 
@@ -100,6 +109,7 @@ pnpm --filter web dev
 pnpm dev
 curl http://localhost:3000/api/health
 curl -I http://localhost:3000/api/health
+pnpm verify
 ```
 
 ## Review Checklist
@@ -114,4 +124,5 @@ curl -I http://localhost:3000/api/health
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
 - [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
+- [ ] `lint:copy` scans production code and excludes docs/tests/stories/demo seed data
 - [ ] `pnpm verify` passes

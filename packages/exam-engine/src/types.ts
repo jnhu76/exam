@@ -14,59 +14,64 @@ import type {
 
 export declare function publishExam(
   ctx: RequestContext,
-  examId: string
+  examId: string,
 ): Promise<void>;
 
 export declare function openExam(
   ctx: RequestContext,
-  examId: string
+  examId: string,
 ): Promise<void>;
 
 export declare function closeExam(
   ctx: RequestContext,
-  examId: string
+  examId: string,
 ): Promise<void>;
 
 export declare function archiveExam(
   ctx: RequestContext,
-  examId: string
+  examId: string,
 ): Promise<void>;
 
 export declare function startAttempt(
   ctx: RequestContext,
   examId: string,
-  candidateId: string
+  candidateId: string,
+): Promise<ExamAttempt>;
+
+export declare function loadAttempt(
+  ctx: RequestContext,
+  attemptId: string,
 ): Promise<ExamAttempt>;
 
 export declare function saveAnswer(
   ctx: RequestContext,
   attemptId: string,
   questionId: string,
-  payload: SaveAnswerRequest
+  payload: SaveAnswerRequest,
 ): Promise<SaveAnswerResponse>;
 
 export declare function submitAttempt(
   ctx: RequestContext,
-  attemptId: string
+  attemptId: string,
 ): Promise<void>;
 
 export declare function gradeAttempt(
   ctx: RequestContext,
-  attemptId: string
+  attemptId: string,
 ): Promise<ScoreResult>;
 
 export declare function markDisrupted(
   ctx: RequestContext,
-  attemptId: string
+  attemptId: string,
 ): Promise<void>;
 
 export declare function restoreAttempt(
   ctx: RequestContext,
-  attemptId: string
+  attemptId: string,
 ): Promise<ExamAttempt>;
 
 export declare function voidAttempt(
   ctx: RequestContext,
   attemptId: string,
-  reason: string
+  reason: string,
 ): Promise<void>;

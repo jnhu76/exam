@@ -89,9 +89,7 @@ export const CandidateImportResultSchema = z.object({
     z.object({
       row: z.number().int(),
       message: z.string(),
-    })
+    }),
   ),
 });
-export type CandidateImportResult = z.infer<
-  typeof CandidateImportResultSchema
->;
+export type CandidateImportResult = z.infer<typeof CandidateImportResultSchema>;

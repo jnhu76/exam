@@ -21,6 +21,53 @@ const AttachmentSchema = z.object({
   name: z.string(),
 });
 
+const StandardAnswerSchema = z
+  .unknown()
+  .refine((value) => value !== undefined && value !== null, {
+    message: "standardAnswer is required",
+  });
+
+function validateQuestionType(
+  question: {
+    type: z.infer<typeof QuestionTypeEnum>;
+    content: string;
+    options?: z.infer<typeof OptionSchema>[] | undefined;
+    standardAnswer: unknown;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    (question.type === "single_choice" ||
+      question.type === "multiple_choice") &&
+    (!question.options || question.options.length < 2)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "choice questions require at least two options",
+      path: ["options"],
+    });
+  }
+
+  if (question.type === "fill_blank" && !question.content.includes("____")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "fill blank questions require a ____ placeholder",
+      path: ["content"],
+    });
+  }
+
+  if (
+    question.type === "true_false" &&
+    typeof question.standardAnswer !== "boolean"
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "true/false questions require a boolean standardAnswer",
+      path: ["standardAnswer"],
+    });
+  }
+}
+
 export const QuestionSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -28,7 +75,7 @@ export const QuestionSchema = z.object({
   type: QuestionTypeEnum,
   content: z.string(),
   options: z.array(OptionSchema),
-  standardAnswer: z.unknown(),
+  standardAnswer: StandardAnswerSchema,
   attachments: z.array(AttachmentSchema),
   score: z.number().positive(),
   difficulty: z.number().int().min(1).max(5),
@@ -38,17 +85,19 @@ export const QuestionSchema = z.object({
 });
 export type QuestionDTO = z.infer<typeof QuestionSchema>;
 
-export const CreateQuestionRequestSchema = z.object({
-  courseId: z.string().uuid(),
-  type: QuestionTypeEnum,
-  content: z.string().min(1),
-  options: z.array(OptionSchema).optional(),
-  standardAnswer: z.unknown(),
-  attachments: z.array(AttachmentSchema).default([]),
-  score: z.number().positive(),
-  difficulty: z.number().int().min(1).max(5).default(3),
-  tags: z.array(z.string()).default([]),
-});
+export const CreateQuestionRequestSchema = z
+  .object({
+    courseId: z.string().uuid(),
+    type: QuestionTypeEnum,
+    content: z.string().min(1),
+    options: z.array(OptionSchema).optional(),
+    standardAnswer: StandardAnswerSchema,
+    attachments: z.array(AttachmentSchema).default([]),
+    score: z.number().positive(),
+    difficulty: z.number().int().min(1).max(5).default(3),
+    tags: z.array(z.string()).default([]),
+  })
+  .superRefine(validateQuestionType);
 export type CreateQuestionRequest = z.infer<typeof CreateQuestionRequestSchema>;
 
 export const UpdateQuestionRequestSchema = z.object({
@@ -56,7 +105,7 @@ export const UpdateQuestionRequestSchema = z.object({
   type: QuestionTypeEnum.optional(),
   content: z.string().min(1).optional(),
   options: z.array(OptionSchema).optional(),
-  standardAnswer: z.unknown().optional(),
+  standardAnswer: StandardAnswerSchema.optional(),
   attachments: z.array(AttachmentSchema).optional(),
   score: z.number().positive().optional(),
   difficulty: z.number().int().min(1).max(5).optional(),
@@ -73,7 +122,7 @@ export const QuestionImportRowSchema = z.object({
   optionB: z.string().optional(),
   optionC: z.string().optional(),
   optionD: z.string().optional(),
-  standardAnswer: z.unknown(),
+  standardAnswer: StandardAnswerSchema,
   score: z.number().positive(),
   difficulty: z.number().int().min(1).max(5).optional(),
   tags: z.string().optional(),
@@ -84,9 +133,7 @@ export const QuestionImportRequestSchema = z.object({
   courseId: z.string().uuid(),
   rows: z.array(QuestionImportRowSchema).min(1),
 });
-export type QuestionImportRequest = z.infer<
-  typeof QuestionImportRequestSchema
->;
+export type QuestionImportRequest = z.infer<typeof QuestionImportRequestSchema>;
 
 export const QuestionImportResultSchema = z.object({
   total: z.number().int(),
@@ -98,7 +145,7 @@ export const QuestionImportResultSchema = z.object({
       row: z.number().int(),
       status: z.enum(["valid", "warning", "error"]),
       message: z.string().optional(),
-    })
+    }),
   ),
 });
 export type QuestionImportResult = z.infer<typeof QuestionImportResultSchema>;

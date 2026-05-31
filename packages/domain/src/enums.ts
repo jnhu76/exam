@@ -100,8 +100,7 @@ export const ScoreStrategy = {
   Latest: "latest",
   First: "first",
 } as const;
-export type ScoreStrategy =
-  (typeof ScoreStrategy)[keyof typeof ScoreStrategy];
+export type ScoreStrategy = (typeof ScoreStrategy)[keyof typeof ScoreStrategy];
 
 export const RetakePolicy = {
   Unlimited: "unlimited",
@@ -110,8 +109,7 @@ export const RetakePolicy = {
   WeeklyLimit: "weekly_limit",
   PassThenStop: "pass_then_stop",
 } as const;
-export type RetakePolicy =
-  (typeof RetakePolicy)[keyof typeof RetakePolicy];
+export type RetakePolicy = (typeof RetakePolicy)[keyof typeof RetakePolicy];
 
 export const MultiSelectScoring = {
   AllCorrectFull: "all_correct_full",

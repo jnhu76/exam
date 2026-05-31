@@ -19,17 +19,29 @@ import type {
 export interface Organization {
   id: string;
   name: string;
+  displayName: string;
   slug: string;
-  settings: OrganizationSettings;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface OrganizationSettings {
+  id: string;
+  organizationId: string;
   productName?: string;
   productSubtitle?: string;
   footerText?: string;
+  organizationDisplayName?: string;
   timezone?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface BrandingView {
+  productName: string;
+  productSubtitle?: string;
+  footerText?: string;
+  organizationDisplayName?: string;
 }
 
 // ── User ──────────────────────────────────────────────────────────
@@ -157,7 +169,7 @@ export interface ControlFlags {
 export interface Exam {
   id: string;
   organizationId: string;
-  name: string;
+  title: string;
   description: string;
   courseId: string;
   status: ExamStatus;
@@ -168,6 +180,8 @@ export interface Exam {
   passingScore: number;
   totalScore: number;
   questionSelectionMode: QuestionSelectionMode;
+  questionIds: string[];
+  questionSnapshot: QuestionSnapshot[];
   controlFlags: ControlFlags;
   retakePolicy: RetakePolicy;
   scoreStrategy: ScoreStrategy;
@@ -287,4 +301,9 @@ export interface RequestContext {
   permissions: Permission[];
   sessionId: string;
   targetOrganizationId?: string;
+}
+
+export interface PublicBrandingContext {
+  purpose: "public_branding";
+  organizationId?: string;
 }

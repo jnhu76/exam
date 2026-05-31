@@ -30,6 +30,7 @@ J0 (Infrastructure Setup — package.json files must exist)
 - `packages/domain/src/enums.ts`
 - `packages/domain/src/index.ts`
 - `packages/contracts/src/auth.ts`
+- `packages/contracts/src/settings.ts`
 - `packages/contracts/src/organization.ts`
 - `packages/contracts/src/user.ts`
 - `packages/contracts/src/candidate.ts`
@@ -53,6 +54,7 @@ None (types only, no database).
 This job IS the API contracts. Defines Zod schemas for:
 
 - Auth: register, login, logout, me
+- Settings: public branding view query, admin branding update
 - Organization: CRUD
 - User: CRUD
 - Candidate: CRUD, import
@@ -81,7 +83,7 @@ None.
 
 - [ ] **0.5.2** Core domain types
   - Acceptance: Define all types listed below. Every type uses enums from 0.5.1. No `any`. No Fastify dependency. Types must match SPEC.md §3 data models.
-  - Types: `Organization`, `User`, `Candidate`, `CandidateField`, `Course`, `Question`, `QuestionSnapshot`, `Exam`, `ExamEnrollment`, `ExamAttempt`, `AnswerRecord`, `SaveAnswerRequest`, `SaveAnswerResponse`, `ScoreResult`, `QuestionScoreResult`, `AuditLog`, `RequestContext`, `GradingRule`, `ControlFlags`
+  - Types: `Organization`, `OrganizationSettings`, `BrandingView`, `User`, `Candidate`, `CandidateField`, `Course`, `Question`, `QuestionSnapshot`, `Exam`, `ExamEnrollment`, `ExamAttempt`, `AnswerRecord`, `SaveAnswerRequest`, `SaveAnswerResponse`, `ScoreResult`, `QuestionScoreResult`, `AuditLog`, `RequestContext`, `PublicBrandingContext`, `GradingRule`, `ControlFlags`
   - Files: `packages/domain/src/types.ts`
   - Verify: `pnpm typecheck` passes; types are importable from `@exam/domain`
 
@@ -95,9 +97,9 @@ None.
   - Files: `packages/contracts/src/auth.ts`
   - Verify: `pnpm typecheck` passes; schemas importable from `@exam/contracts`
 
-- [ ] **0.5.5** Organization + User + Candidate contract schemas
-  - Acceptance: Zod schemas for CRUD request/response for organization, user, candidate, candidateField; candidate import request schema
-  - Files: `packages/contracts/src/organization.ts`, `packages/contracts/src/user.ts`, `packages/contracts/src/candidate.ts`
+- [ ] **0.5.5** Settings + Organization + User + Candidate contract schemas
+  - Acceptance: Zod schemas for public `BrandingView` query (`organizationSlug?`), public `BrandingView` response, admin branding update, CRUD request/response for organization, user, candidate, candidateField; candidate import request schema
+  - Files: `packages/contracts/src/settings.ts`, `packages/contracts/src/organization.ts`, `packages/contracts/src/user.ts`, `packages/contracts/src/candidate.ts`
   - Verify: `pnpm typecheck` passes
 
 - [ ] **0.5.6** Course + Question contract schemas
@@ -116,7 +118,7 @@ None.
   - Verify: `pnpm typecheck` passes
 
 - [ ] **0.5.9** Exam engine type signatures
-  - Acceptance: Type-only signatures for command functions: `startAttempt()`, `submitAttempt()`, `gradeAttempt()`, `restoreAttempt()`, `markDisrupted()`, `publishExam()`, `archiveExam()` — parameter types and return types defined, no implementation
+  - Acceptance: Type-only signatures for command functions: `publishExam()`, `openExam()`, `closeExam()`, `archiveExam()`, `startAttempt()`, `loadAttempt()`, `submitAttempt()`, `gradeAttempt()`, `restoreAttempt()`, `markDisrupted()` — parameter types and return types defined, no implementation
   - Files: `packages/exam-engine/src/types.ts`
   - Verify: `pnpm typecheck` passes; signatures importable from `@exam/exam-engine`
 
@@ -127,7 +129,7 @@ None.
 3. All shared types are exported from `@exam/domain` or `@exam/contracts`
 4. `apps/api` and `apps/web` do not redefine core DTOs — they import from packages
 5. `pnpm typecheck` passes across all packages
-6. Every domain type from SPEC.md §3 has a corresponding TypeScript type
+6. Every domain type from SPEC.md §3 and every branding type from `docs/phase1-plan.md` has a corresponding TypeScript type
 7. SaveAnswerRequest includes `clientSeq`, `baseVersion`, `clientSavedAt`
 8. SaveAnswerResponse includes `accepted`, `serverVersion`, `conflict?`
 
@@ -141,6 +143,7 @@ pnpm --filter domain typecheck
 pnpm --filter contracts typecheck
 pnpm --filter exam-engine typecheck
 pnpm build
+pnpm verify
 ```
 
 ## Review Checklist
@@ -149,7 +152,7 @@ pnpm build
 - [ ] No Fastify import in packages/contracts
 - [ ] All types match SPEC.md §3 data models
 - [ ] Exam status enum includes all 5 states: draft/published/open/closed/archived
-- [ ] AttemptStatus includes: in_progress/submitted/graded/disrupted
+- [ ] AttemptStatus includes: not_started/queued/in_progress/disrupted/submitted/grading/graded/voided
 - [ ] SaveAnswerRequest/SaveAnswerResponse match SPEC.md §3.5
 - [ ] Barrel exports (index.ts) are clean
 - [ ] Zod schemas use `.describe()` for API documentation where helpful

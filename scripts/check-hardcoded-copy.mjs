@@ -130,10 +130,10 @@ if (violations.length > 0) {
     console.error(`    ${v.content}\n`);
   }
   console.error(
-    "See docs/code-quality.md §4.1 for the Hardcoded Business Copy Guard rules."
+    "See docs/code-quality.md §4.1 for the Hardcoded Business Copy Guard rules.",
   );
   console.error(
-    "These terms are only allowed in docs, tests, stories, and demo seed data.\n"
+    "These terms are only allowed in docs, tests, stories, and demo seed data.\n",
   );
   process.exit(1);
 } else {
