@@ -6,13 +6,7 @@ import {
 import { createDatabase } from "@exam/db/src/database.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { RequestContext } from "@exam/domain";
-
-function ensureTargetOrg(ctx: RequestContext): RequestContext {
-  if (!ctx.targetOrganizationId) {
-    return { ...ctx, targetOrganizationId: ctx.organizationId };
-  }
-  return ctx;
-}
+import { ensureTargetOrg } from "./helpers.js";
 
 const organizationRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(

@@ -7,13 +7,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
-
-function ensureTargetOrg(ctx: RequestContext): RequestContext {
-  if (!ctx.targetOrganizationId) {
-    return { ...ctx, targetOrganizationId: ctx.organizationId };
-  }
-  return ctx;
-}
+import { ensureTargetOrg } from "./helpers.js";
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(

@@ -6,13 +6,7 @@ import {
 import { createDatabase } from "@exam/db/src/database.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import type { RequestContext } from "@exam/domain";
-
-function ensureTargetOrg(ctx: RequestContext): RequestContext {
-  if (!ctx.targetOrganizationId) {
-    return { ...ctx, targetOrganizationId: ctx.organizationId };
-  }
-  return ctx;
-}
+import { ensureTargetOrg } from "./helpers.js";
 
 const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
