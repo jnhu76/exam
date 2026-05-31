@@ -120,7 +120,9 @@ None.
 
 ```bash
 pnpm install
+pnpm lint:copy
 pnpm typecheck
+pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter db db:push
 pnpm --filter db db:studio
 pnpm test
@@ -140,12 +142,11 @@ pnpm test
 - [ ] No duplicate DTOs (types imported from `@exam/domain` or `@exam/contracts`)
 - [ ] No `any` / `as any`
 - [ ] No bare `db.select()` in routes (repository pattern only)
-- [ ] No complex business logic in route handlers
 - [ ] Repository methods receive RequestContext with organizationId
-- [ ] State changes via command functions
+- [ ] Queries filter by organizationId
 - [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes
-- [ ] Queries filter by organizationId
 - [ ] AuditLog written where required

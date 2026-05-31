@@ -135,6 +135,7 @@ None.
 
 ```bash
 pnpm install
+pnpm lint:copy
 pnpm typecheck
 pnpm --filter domain typecheck
 pnpm --filter contracts typecheck
@@ -150,16 +151,11 @@ pnpm build
 - [ ] Exam status enum includes all 5 states: draft/published/open/closed/archived
 - [ ] AttemptStatus includes: in_progress/submitted/graded/disrupted
 - [ ] SaveAnswerRequest/SaveAnswerResponse match SPEC.md §3.5
-- [ ] No `any` types
 - [ ] Barrel exports (index.ts) are clean
 - [ ] Zod schemas use `.describe()` for API documentation where helpful
 - [ ] No duplicate DTOs (types imported from `@exam/domain` or `@exam/contracts`)
 - [ ] No `any` / `as any`
-- [ ] No bare `db.select()` in routes (repository pattern only)
-- [ ] No complex business logic in route handlers
-- [ ] Repository methods receive RequestContext with organizationId
-- [ ] State changes via command functions
-- [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes

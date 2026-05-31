@@ -1,10 +1,21 @@
-# Exam System - Agent Instructions
+# Exam Platform - Agent Instructions
 
 ## Project Context
 
-University **LAN exam system** deployed on-premise. Multi-tenant: each department/lab runs its own exams independently. Supports open-book quizzes and strict closed-book proctored exams. Auto-graded, instant results, "pass to proceed" API for external systems.
+Configurable **LAN/on-premise exam and assessment platform**. It is not hardcoded to a university, school, lab, or single course scenario. Deployments may include departments, training centers, labs, enterprises, associations, or any organization that needs internal exams, certification, access checks, or pass-to-proceed workflows.
+
+Multi-tenant: each organization runs exams independently. Supports open-book quizzes and strict closed-book proctored exams. Auto-graded, optionally instant results, and Phase 2 exposes a pass-to-proceed API for external systems such as access control or training workflow gates.
 
 **Read `docs/SPEC.md` first** — that is the specification document. If your implementation conflicts with it, the spec wins.
+
+## Product Generalization Rules
+
+- Do not hardcode product title such as "校内考试", "校园内网考试平台", "University LAN exam system", or any single deployment scenario.
+- Product title, subtitle, footer, organization display name, and candidate identity fields are configurable.
+- Exam titles come from `Exam.title`, set by Admin/Teacher.
+- Candidate identity comes from per-organization `CandidateField`; never assume Student, 学生, 学号, 工号, department, or class.
+- Course may mean course, training module, certification category, access qualification, or assessment domain. Keep the code generic.
+- Scenario-specific words may appear only in docs, tests, stories, or demo seed data.
 
 ## Tech Stack
 
@@ -19,22 +30,22 @@ University **LAN exam system** deployed on-premise. Multi-tenant: each departmen
 ## Commands
 
 ```bash
-pnpm install                          # install all workspaces
-pnpm --filter api dev                 # start backend (port 3000)
-pnpm --filter web dev                 # start frontend (port 5173, proxies /api -> :3000)
-pnpm dev                              # start both (via turbo)
+pnpm install
+pnpm --filter api dev
+pnpm --filter web dev
+pnpm dev
 
-# Code Quality (see docs/code-quality.md)
-pnpm format:check                     # Prettier check
-pnpm lint                             # ESLint across all packages
-pnpm lint:arch                        # Architecture boundary check (dependency-cruiser)
-pnpm typecheck                        # TypeScript strict mode check
-pnpm test                             # Vitest unit tests
-pnpm coverage                         # Vitest coverage (v8)
-pnpm test:integration                 # Integration tests
-pnpm test:e2e                         # Playwright E2E tests
-pnpm build                            # Build all packages
-pnpm verify                           # Full quality gate: format + lint + arch + typecheck + test + coverage + build
+pnpm format:check
+pnpm lint
+pnpm lint:copy
+pnpm lint:arch
+pnpm typecheck
+pnpm test
+pnpm coverage
+pnpm test:integration
+pnpm test:e2e
+pnpm build
+pnpm verify
 ```
 
 ## Project Structure
@@ -42,54 +53,55 @@ pnpm verify                           # Full quality gate: format + lint + arch 
 ```
 apps/
   web/src/
-    components/ui/     # shadcn/ui components (generated, do not hand-edit)
-    components/shared/ # shared business components
-    pages/             # route-level components
-    lib/               # utilities, API client
-    hooks/             # shared React hooks
+    components/ui/       # shadcn/ui components (generated, do not hand-edit)
+    components/shared/   # shared business components
+    components/layout/   # layout components (sidebar, header)
+    components/settings/ # platform & organization settings components
+    pages/               # route-level components
+    lib/                 # utilities, API client
+    hooks/               # shared React hooks
   api/src/
-    routes/            # Fastify route handlers, one file per domain
-    plugins/           # Fastify plugins (auth, CORS, security headers)
-    server.ts          # Fastify entry point
-  desktop/             # Electron shell (Phase 2, not started)
+    routes/              # Fastify route handlers, one file per domain
+    plugins/             # Fastify plugins (auth, CORS, security headers)
+    server.ts            # Fastify entry point
+  desktop/               # Electron shell (Phase 2, not started)
 
 packages/
   domain/src/
-    types.ts           # domain types (ExamAttempt, ExamEnrollment, etc.)
-                        # this is the single source of truth for data shapes
-    errors.ts          # domain error types (AppError, NotFoundError, etc.)
-    examStateMachine.ts # exam state machine commands
-    gradingEngine.ts   # auto-grading logic
-    retakePolicy.ts    # retake/score strategy logic
+    types.ts             # domain types (ExamAttempt, ExamEnrollment, etc.)
+    errors.ts            # domain error types (AppError, NotFoundError, etc.)
+    examStateMachine.ts  # exam state machine commands
+    gradingEngine.ts     # auto-grading logic
+    retakePolicy.ts      # retake/score strategy logic
   contracts/src/
-    *.ts               # Zod schemas, DTO types, API contracts
+    *.ts                 # Zod schemas, DTO types, API contracts
   db/src/
-    schema.ts          # Drizzle schema mirrors domain types
-    migrations/        # Drizzle migrations
-    repository/        # data access layer — every method must receive ctx
+    schema.ts            # Drizzle schema mirrors domain types
+    migrations/          # Drizzle migrations
+    repository/          # data access layer — every method must receive ctx
   auth/src/
-    session.ts         # session/JWT management
-    rbac.ts            # role-based access control
-    tenantGuard.ts     # multi-tenant isolation
+    session.ts           # session/JWT management
+    rbac.ts              # role-based access control
+    tenantGuard.ts       # multi-tenant isolation
   exam-engine/src/
-    timer.ts           # server-side time authority
-    answerProtocol.ts  # answer save protocol (versioned, idempotent)
-    grading.ts         # grading engine integration
-  import-export/src/   # CSV/Excel/PDF import/export
+    timer.ts             # server-side time authority
+    answerProtocol.ts    # answer save protocol (versioned, idempotent)
+    grading.ts           # grading engine integration
+  import-export/src/     # CSV/Excel/PDF import/export
 
-docs/                   # design documents
+docs/                    # design documents
 ```
 
 ## Key Constraints
 
-- **LAN-only deployment**: no cloud dependencies, no CDN, no external APIs
-- **Offline-capable**: system must work when campus internet is down
-- **Multi-tenant**: all tables have `organizationId`; all repo methods must receive `ctx` — never access db directly from routes
+- **LAN/on-premise deployment**: no cloud dependencies, no CDN, no external APIs
+- **Offline-capable**: system must work when external internet is unavailable
+- **Multi-tenant**: all business tables have `organizationId`; all repo methods must receive `ctx` — never access db directly from routes
 - **Security is core**: exam system security is not optional — see SPEC.md §6
 - **Server is time authority**: never trust client timestamps for exam logic
 - **Question snapshot**: ExamAttempt copies questions at creation time via `QuestionSnapshot`; QuestionBank edits don't affect existing attempts
-- **"Pass to proceed"**: external systems can query exam results via API (e.g., lab access control) [Phase 2]
-- **Candidate ≠ Student**: examinee identity is defined per-organization via `CandidateField`, not hardcoded
+- **"Pass to proceed"**: external systems can query exam results via API (e.g., access control) [Phase 2]
+- **Candidate is a configurable examinee identity**, not Student — defined per-organization via `CandidateField`
 - **Exam is not CRUD**: all state changes go through command functions (`publishExam`, `startAttempt`, `submitAttempt`, etc.) — never mutate status directly
 - **Answer Save Protocol**: answers use versioned, idempotent saves with conflict detection — see SPEC.md §3.5
 - **Repository pattern**: all db access through `repo.method(ctx, ...)` — `db.select()` directly in routes is forbidden
@@ -105,7 +117,7 @@ docs/                   # design documents
 - `standardAnswer` on Question is required for auto-grading; questions without it cannot be used in auto-graded exams
 - Open-book vs closed-book is a spectrum — control flags can be overridden independently
 - ExamAttempt has a `disrupted` state — client heartbeat timeout auto-triggers it; recovery restores answers + remaining time from server
-- `lastActivityAt` on ExamAttempt is the heartbeat field — server uses it to detect disconnected students
+- `lastActivityAt` on ExamAttempt is the heartbeat field — server uses it to detect disconnected examinees
 - Phase 1 only implements `timed_window` timing mode; other modes deferred to Phase 2
 - Queued entry (`requireQueue` + `batchSize` + `batchInterval`) prevents exam-start traffic spikes
 - Degradation deferred to Phase 2; Phase 1 only does basic health check
@@ -113,7 +125,7 @@ docs/                   # design documents
 
 ## Dependency Rules
 
-- `packages/domain` cannot depend on `fastify`
+- `packages/domain` cannot depend on `fastify`, React, Drizzle, or internal packages
 - `packages/contracts` cannot depend on `fastify`
 - `packages/exam-engine` cannot depend on `fastify`
 - `fastify` can only appear in `apps/api`
@@ -129,12 +141,13 @@ docs/                   # design documents
 - **TypeScript strict mode** — no `any`, no `as any`, see `tsconfig.base.json`
 - **Prettier + ESLint** — `pnpm verify` must pass
 - **Architecture lint** — `pnpm lint:arch` checks dependency boundaries
+- **Copy guard** — `pnpm lint:copy` prevents hardcoded deployment-specific business copy
 - **Repository pattern** — no bare `db.select()` in routes; all repo methods take `ctx`
 - **Command functions** — no direct status mutation; state changes via `publishExam()`, `startAttempt()`, etc.
 - **Unified errors** — use `packages/domain/src/errors.ts` domain error types, not `throw new Error()`
 - **Structured logging** — pino in api, no `console.log` anywhere in packages
 - **No duplicate DTOs** — import from `@exam/domain` or `@exam/contracts`, never redefine
-- **Route handler simplicity** — read request → validate → call command → return response
+- **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
 - **AI coding rules** — see `docs/code-quality.md` §17
 
 Every Job completion requires:

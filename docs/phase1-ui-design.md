@@ -1,7 +1,7 @@
 # Phase 1 UI Design
 
 > 所有界面遵循 shadcn/ui 设计系统 + TailwindCSS v4。
-> 用户界面文字全部中文，以下 wireframe 中的中文即为实际 UI 文案。
+> 用户界面文字全部中文。wireframe 中的业务数据仅为示例；产品标题、机构名、考试名、考生字段必须来自配置或业务数据。
 > 项目结构基于 pnpm workspace monorepo: `apps/web/`, `apps/api/`, `packages/`。
 
 ---
@@ -44,6 +44,30 @@ Touch targets:   交互元素最小 44x44px
 Animation:       respect prefers-reduced-motion
 ```
 
+### Product Generalization Tokens
+
+所有产品级标题和机构级显示信息都不能硬编码。UI 组件应从 `BrandingContext` / `OrganizationSettings` 中读取：
+
+```ts
+type BrandingView = {
+  productName: string
+  productSubtitle?: string
+  footerText?: string
+  organizationDisplayName?: string
+}
+```
+
+默认 fallback：
+
+| 字段 | 默认值 | 可由管理员修改 |
+|------|--------|----------------|
+| `productName` | 内网考试平台 | 是 |
+| `productSubtitle` | 机构内部测评与准入认证 | 是 |
+| `footerText` | 空 | 是 |
+| `organizationDisplayName` | 当前 Organization.name | 是 |
+
+禁止在生产组件中写死"校内考试""校园内网考试平台""大学""学生""学号""编号""作业现场""安全"等场景词。文档和 demo fixture 可以使用示例数据，但必须标记为示例。
+
 ---
 
 ## 2. Navigation Structure
@@ -60,6 +84,7 @@ Animation:       respect prefers-reduced-motion
 │   ├── /admin/organizations        # 机构管理（SuperAdmin）
 │   ├── /admin/users                # 用户管理（Admin/Teacher/Proctor）
 │   ├── /admin/candidates           # 考生管理（动态字段表格）
+│   ├── /admin/settings             # 平台与机构设置
 │   ├── /admin/candidate-fields     # 考生字段配置
 │   ├── /admin/courses              # 课程管理
 │   ├── /admin/questions            # 题库管理
@@ -85,7 +110,7 @@ Animation:       respect prefers-reduced-motion
 
 ```
 ┌──────────────────────┐
-│  🎓 考试系统          │
+│  🎓 {{productName}}    │
 │                       │
 │  ── 题库 ──          │
 │  课程管理             │
@@ -100,11 +125,12 @@ Animation:       respect prefers-reduced-motion
 │  机构管理             │  ← SuperAdmin only
 │  用户管理             │
 │  考生管理             │
+│  平台设置             │
 │  考生字段             │
 │  系统状态             │
 │                       │
 │  ──── 底部 ────      │
-│  👤 张三 | 退出       │
+│  👤 {{displayName}} | 退出 │
 └──────────────────────┘
 ```
 
@@ -137,6 +163,7 @@ Animation:       respect prefers-reduced-motion
 | §3.17 | 用户管理页 | J4 |
 | §3.18 | 考生管理页 | J4 |
 | §3.19 | 成绩管理页（Teacher）| J8 |
+| §3.20 | 平台与机构设置页 | J4 |
 
 ---
 
@@ -148,7 +175,7 @@ Animation:       respect prefers-reduced-motion
 ┌──────────────────────────────────────────────────┐
 │                                                    │
 │              ┌─────────────────────┐              │
-│              │     🎓 考试系统      │              │
+│              │  🎓 {{productName}}  │              │
 │              │                      │              │
 │              │  用户名              │              │
 │              │  ┌─────────────────┐│              │
@@ -166,7 +193,7 @@ Animation:       respect prefers-reduced-motion
 │              │                      │              │
 │              └─────────────────────┘              │
 │                                                    │
-│              校园内网考试平台 v1.0                   │
+│              {{productSubtitle}}                     │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -930,6 +957,40 @@ Phase 2 完整版本（降级配置 + 事件流 + 手动切换）：
 - 专管考生（role=Candidate）
 - 表头列按机构的 CandidateField 动态生成（上例中机构定义了工号、姓名、部门）
 - 导入按钮弹出 §3.16 的导入向导
+
+---
+
+### 3.20 平台与机构设置页
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 平台与机构设置                        [保存修改]      │
+│                                                      │
+│ ── 产品信息 ─────────────────────────────────────── │
+│ 产品标题  [{{productName}}                  ]        │
+│ 产品副标题[{{productSubtitle}}             ]        │
+│ 页脚文字  [                                ]        │
+│                                                      │
+│ ── 机构信息 ─────────────────────────────────────── │
+│ 机构全称  [示例大学                          ]        │
+│ 机构简称  [示例大学                          ]        │
+│ 默认时区  [Asia/Shanghai ▼                  ]        │
+│                                                      │
+│ ── 高级设置 ─────────────────────────────────────── │
+│ 登录页 Logo [上传图片] [移除]                        │
+│ 考生身份标识预览                                      │
+│ ┌──────────────────────────────────────────────────┐ │
+│ │ 当前字段: 工号(唯一) | 姓名(必填) | 部门 | 手机   │ │
+│ │ [导入模板预览] → 下载 CSV 示例                    │ │
+│ └──────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
+```
+
+- 仅 Admin 可访问
+- 所有字段保存后即时生效（登录页、侧栏、页脚自动更新）
+- 时间区影响考试开始/截止时间的显示
+- 考生身份标识预览根据 CandidateField 动态生成，点击"导入模板预览"下载模板 CSV
+- Phase 1: Logo 上传暂为 placeholder（Phase 2 实现文件上传）
 
 ---
 

@@ -105,8 +105,10 @@ Uses `@exam/contracts` schemas:
 ## Verify Commands
 
 ```bash
+pnpm lint:copy
 pnpm typecheck
 pnpm test
+pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 pnpm --filter web dev
 ```
@@ -129,6 +131,7 @@ pnpm --filter web dev
 - [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes
 - [ ] Queries filter by organizationId
 - [ ] AuditLog written where required

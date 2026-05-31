@@ -94,6 +94,7 @@ None.
 
 ```bash
 pnpm install
+pnpm lint:copy
 pnpm --filter api dev
 pnpm --filter web dev
 pnpm dev
@@ -110,11 +111,7 @@ curl -I http://localhost:3000/api/health
 - [ ] Proxy config in vite.config.ts forwards /api
 - [ ] No duplicate DTOs (types imported from `@exam/domain` or `@exam/contracts`)
 - [ ] No `any` / `as any`
-- [ ] No bare `db.select()` in routes (repository pattern only)
-- [ ] No complex business logic in route handlers
-- [ ] Repository methods receive RequestContext with organizationId
-- [ ] State changes via command functions
-- [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes

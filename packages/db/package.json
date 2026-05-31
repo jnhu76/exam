@@ -1,0 +1,17 @@
+{
+  "name": "@exam/db",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'lint: TODO'",
+    "test": "echo 'test: TODO'",
+    "coverage": "echo 'coverage: TODO'"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

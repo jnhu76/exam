@@ -87,7 +87,7 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
   - Verify: rapid sequential curl requests to /api/auth/login trigger 429 after limit
 
 - [ ] **3.6** Client: Login page
-  - Acceptance: full-screen centered login card (max-w-sm); username + password inputs + login button; login failure shows red text below form (not alert); success redirect by role (Admin → /admin/dashboard, Candidate → /exam/list); bottom text "校园内网考试平台 v1.0"
+  - Acceptance: full-screen centered login card (max-w-sm); username + password inputs + login button; login failure shows red text below form (not alert); success redirect by role (Admin → /admin/dashboard, Candidate → /exam/list); bottom text reads from OrganizationSettings (productSubtitle or footerText), never hardcoded
   - Files: `apps/web/src/pages/LoginPage.tsx`
   - Verify: full login flow in browser — wrong password shows inline error, correct login redirects to role-appropriate page
 
@@ -106,8 +106,10 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
 ## Verify Commands
 
 ```bash
+pnpm lint:copy
 pnpm typecheck
 pnpm test
+pnpm db:generate && pnpm db:migrate && pnpm test:integration
 pnpm --filter api dev
 curl -X POST http://localhost:3000/api/auth/register -H 'Content-Type: application/json' -d '{"username":"test","password":"pass123","name":"Test","role":"Admin"}'
 curl -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"test","password":"pass123"}' -c cookies.txt
@@ -133,6 +135,7 @@ curl -X POST http://localhost:3000/api/auth/logout -b cookies.txt
 - [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes
 - [ ] Queries filter by organizationId
 - [ ] AuditLog written where required

@@ -18,6 +18,7 @@ Phase 1 代码质量目标：
 8. 没有临时 mock 混进正式代码
 9. 没有 console.log 乱飞
 10. AI 生成代码必须可 review、可验证、可回滚
+11. 产品文案配置驱动 — 不把具体学校、课程、考试场景写死进生产代码
 
 ---
 
@@ -112,6 +113,42 @@ max-depth: 4
 
 如果函数超过限制，应拆成：command / policy / validator / mapper / repository method。
 
+
+---
+
+## 4.1 Hardcoded Business Copy Guard
+
+产品需要适配不同机构和考试类型，因此生产代码不得硬编码具体业务场景。
+
+### 禁止出现在生产代码中的默认文案
+
+```text
+校内 / 校园 / 大学 / 学生 / 学号 / 工号 / 实验室 / 化学 / 物理 / 数学
+University / campus / student
+```
+
+### 允许出现的位置
+
+- `docs/**` 文档示例；
+- `*.test.ts` / `*.spec.ts` 测试；
+- `*.stories.tsx` 组件示例；
+- `seed/demo/**` 明确标记为 demo 的种子数据。
+
+### 生产实现要求
+
+- 登录页标题、侧栏产品名、考生端页头必须从 `OrganizationSettings` / `BrandingView` 读取。
+- 考试名称必须来自 `Exam.title`。
+- 考生身份列必须来自 `CandidateField`，不能假设一定存在"学号"或"工号"。
+- 示例数据不得进入正式 fallback 文案。
+
+建议增加脚本：
+
+```bash
+pnpm lint:copy
+```
+
+检查 `apps/**` 和 `packages/**` 中是否出现上述禁用词，并排除 test/story/demo 文件。
+
 ---
 
 ## 5. Prettier
@@ -120,6 +157,7 @@ max-depth: 4
 
 ```bash
 pnpm format:check
+pnpm lint:copy
 ```
 
 ---
@@ -371,6 +409,7 @@ CI 必须包含：
 pnpm install --frozen-lockfile
 pnpm format:check
 pnpm lint
+pnpm lint:copy
 pnpm lint:arch
 pnpm typecheck
 pnpm test
@@ -407,7 +446,8 @@ PR 不通过 CI，不允许合并。
 12. 覆盖率是否达标？
 13. 是否有 console.log？
 14. 是否引入了不必要依赖？
-15. 是否通过 `pnpm verify`？
+15. 是否存在硬编码业务场景文案？
+16. 是否通过 `pnpm verify`？
 
 ---
 
@@ -444,6 +484,7 @@ PR 不通过 CI，不允许合并。
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
+    "lint:copy": "node scripts/check-hardcoded-copy.mjs",
     "lint:arch": "dependency-cruiser .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
@@ -452,7 +493,7 @@ PR 不通过 CI，不允许合并。
     "test:e2e": "turbo run test:e2e",
     "smoke": "turbo run smoke",
     "build": "turbo run build",
-    "verify": "pnpm format:check && pnpm lint && pnpm lint:arch && pnpm typecheck && pnpm test && pnpm coverage && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm test && pnpm coverage && pnpm build"
   }
 }
 ```

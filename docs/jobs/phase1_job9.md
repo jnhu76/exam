@@ -107,6 +107,7 @@ None.
 ## Verify Commands
 
 ```bash
+pnpm lint:copy
 pnpm typecheck
 pnpm test
 docker build -t exam .
@@ -136,4 +137,5 @@ curl http://localhost:3000/api/system/health
 - [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes

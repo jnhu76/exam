@@ -1,12 +1,13 @@
-# Job 4: Organization + User + Candidate Management
+# Job 4: Organization Settings + User + Candidate Management
 
 ## Goal
 
-Build organization CRUD, candidate field configuration, user management, candidate management with dynamic fields, and bulk CSV import.
+Build organization settings (branding, product display), organization CRUD, candidate field configuration, user management, candidate management with dynamic fields, and bulk CSV import.
 
 ## Scope
 
 - Seed script for default org + super admin
+- Platform & organization settings (branding config)
 - Organization CRUD (SuperAdmin)
 - CandidateField configuration per org
 - User management (Admin/Teacher/Proctor)
@@ -26,6 +27,12 @@ J1 (DB Schema + Repos), J3 (Auth System — middleware, RequestContext)
 ## Files to Create / Modify
 
 - `packages/db/src/seed.ts`
+- `packages/contracts/src/settings.ts`
+- `apps/api/src/routes/settings.ts`
+- `packages/db/src/repository/settingsRepo.ts`
+- `apps/web/src/pages/admin/SettingsPage.tsx`
+- `apps/web/src/components/settings/BrandProvider.tsx`
+- `apps/web/src/components/settings/PlatformSettingsForm.tsx`
 - `apps/api/src/routes/organization.ts`
 - `packages/contracts/src/organization.ts` (extend if needed)
 - `apps/web/src/pages/admin/OrganizationPage.tsx`
@@ -41,7 +48,7 @@ J1 (DB Schema + Repos), J3 (Auth System — middleware, RequestContext)
 
 ## Data Model Changes
 
-None (uses existing tables from J1).
+- New `OrganizationSettings` table (or fields on `organizations`): `productName`, `productSubtitle`, `footerText`, `timezone`, `logoUrl` (Phase 2)
 
 ## API Contracts
 
@@ -53,6 +60,7 @@ Uses `@exam/contracts` schemas (defined in J0.5):
 
 ## UI Tasks
 
+- Organization settings / branding page (§3.20)
 - Organization management page (§3.13)
 - CandidateField config page (§3.13)
 - User management page (§3.17)
@@ -74,22 +82,27 @@ Uses `@exam/contracts` schemas (defined in J0.5):
   - Files: `packages/db/src/seed.ts`, `apps/api/package.json` (add db:seed script)
   - Verify: run seed → database has exactly 1 org + 1 super_admin user; run again → no duplicates
 
-- [ ] **4.2** Organization CRUD routes + Admin page
+- [ ] **4.2** Organization Settings API + settings page (see §3.20)
+  - Acceptance: API returns branding settings (`GET /settings/branding`); Admin can update product title, subtitle, footer text, org display name, timezone (`PATCH /admin/settings/branding`); UI page shows form with all fields; login page and sidebar read branding from API via BrandProvider; changes take effect immediately after save; fallback values when no settings exist
+  - Files: `packages/contracts/src/settings.ts`, `apps/api/src/routes/settings.ts`, `packages/db/src/repository/settingsRepo.ts`, `apps/web/src/pages/admin/SettingsPage.tsx`, `apps/web/src/components/settings/BrandProvider.tsx`, `apps/web/src/components/settings/PlatformSettingsForm.tsx`
+  - Verify: curl GET settings after PATCH → updated values; browser save form → login page shows new product title; sidebar shows new product name; integration test for fallback branding when no settings exist
+
+- [ ] **4.3** Organization CRUD routes + Admin page
   - Acceptance: SuperAdmin can list/create/update/delete Organizations; Admin sees only own org; admin page shows org list + create/edit dialog; Zod request/response schemas from `@exam/contracts`
   - Files: `apps/api/src/routes/organization.ts`, `apps/web/src/pages/admin/OrganizationPage.tsx`
   - Verify: curl full CRUD as SuperAdmin; browser create/edit/delete org; confirm Admin cannot access other orgs
 
-- [ ] **4.3** CandidateField API + config page
+- [ ] **4.4** CandidateField API + config page
   - Acceptance: Admin can define/modify/delete candidate fields per org; exactly one field marked as unique identifier; UI shows table (name, label, type, required, unique, sort) with drag-to-reorder; preview import template button generates CSV with configured field headers
   - Files: `apps/api/src/routes/candidateField.ts`, `apps/web/src/pages/admin/CandidateFieldPage.tsx`
   - Verify: curl configure fields; browser drag-reorder; download template and verify CSV headers match configured fields
 
-- [ ] **4.4** User management API + page (Admin/Teacher/Proctor)
+- [ ] **4.5** User management API + page (Admin/Teacher/Proctor)
   - Acceptance: Admin can create/list/modify/disable non-candidate users; UI shows table (username, name, role badge, status, action buttons) with add user dialog; role shown as colored badge
   - Files: `apps/api/src/routes/user.ts`, `apps/web/src/pages/admin/UserPage.tsx`
   - Verify: browser add Admin, Teacher, and Proctor users; edit name/role; disable/enable account
 
-- [ ] **4.5** Candidate management API + page + import
+- [ ] **4.6** Candidate management API + page + import
   - Acceptance: API supports manual create, bulk import (CSV), list query, modify, disable; UI table headers dynamically generated from CandidateField config; import button opens ImportWizard; ImportWizard flow: upload → preview (duplicate identifier marked "update", missing required marked "error") → confirm import
   - Files: `apps/api/src/routes/candidate.ts`, `apps/web/src/pages/admin/CandidatePage.tsx`, `apps/web/src/components/shared/ImportWizard.tsx`, `apps/web/src/components/shared/FileUpload.tsx`, `packages/import-export/src/csv.ts`
   - Verify: CSV import batch of candidates; dynamic table headers reflect CandidateField config; duplicate identifier rows show "update" status (not error); missing required field rows show "error"
@@ -97,19 +110,23 @@ Uses `@exam/contracts` schemas (defined in J0.5):
 ## Acceptance Criteria
 
 1. Seed script is idempotent
-2. Organization CRUD works with tenant isolation
-3. CandidateField config generates correct CSV template headers
-4. User management with role validation works
-5. CSV import handles duplicates and missing fields correctly
-6. All routes use repository pattern with RequestContext
-7. All routes use Zod validation from `@exam/contracts`
-8. All user-facing strings in zh-CN
-9. `pnpm typecheck` passes
+2. Branding settings API has proper fallback when no settings exist
+3. Organization settings changes propagate to login page and sidebar
+4. Organization CRUD works with tenant isolation
+5. CandidateField config generates correct CSV template headers
+6. User management with role validation works
+7. CSV import handles duplicates and missing fields correctly
+8. All routes use repository pattern with RequestContext
+9. All routes use Zod validation from `@exam/contracts`
+10. All user-facing strings in zh-CN
+11. No hardcoded deployment-specific product copy in production code
+12. `pnpm typecheck` passes
 
 ## Verify Commands
 
 ```bash
 pnpm typecheck
+pnpm lint:copy
 pnpm test
 pnpm --filter api db:seed
 pnpm --filter api dev
@@ -134,6 +151,8 @@ pnpm --filter web dev
 - [ ] Errors use domain error types from `packages/domain/src/errors.ts`
 - [ ] No `console.log` (use logger in api, nothing in packages)
 - [ ] No unnecessary new dependencies
+- [ ] Settings branding endpoints tested with fallback values
+- [ ] No hardcoded deployment-specific product copy (e.g., 校内/校园/大学/学生)
 - [ ] `pnpm verify` passes
 - [ ] Queries filter by organizationId
 - [ ] AuditLog written where required
