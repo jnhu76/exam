@@ -110,14 +110,27 @@ Uses `@exam/contracts` auth schemas (defined in J0.5):
 pnpm lint:copy
 pnpm typecheck
 pnpm test
-pnpm db:generate && pnpm db:migrate && pnpm test:integration
+pnpm db:generate && pnpm db:migrate && pnpm db:seed
+pnpm test:integration
 pnpm --filter api dev
-curl -X POST http://localhost:3000/api/auth/register -H 'Content-Type: application/json' -d '{"username":"test","password":"pass123","name":"Test","role":"Admin"}'
-curl -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"test","password":"pass123"}' -c cookies.txt
+# 使用 seed 用户测试登录流程
+curl -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin123"}' -c cookies.txt
 curl http://localhost:3000/api/auth/me -b cookies.txt
 curl -X POST http://localhost:3000/api/auth/logout -b cookies.txt
+# 测试注册新用户
+curl -X POST http://localhost:3000/api/auth/register -H 'Content-Type: application/json' -d '{"username":"test","password":"pass123","name":"Test","role":"Admin"}'
 pnpm verify
 ```
+
+### Seed 用户
+
+`pnpm db:seed` 创建以下测试用户：
+
+| Username | Password | Role |
+|----------|----------|------|
+| `admin` | `admin123` | SuperAdmin |
+| `teacher` | `teacher123` | Teacher |
+| `candidate` | `candidate123` | Candidate |
 
 ## Review Checklist
 

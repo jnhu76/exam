@@ -8,6 +8,9 @@ LAN/on-premise exam and assessment platform. Multi-tenant, auto-graded, supports
 # Install dependencies
 pnpm install
 
+# Seed database with test users
+pnpm db:seed
+
 # Start all services (API + Web) in development mode
 pnpm dev
 ```
@@ -18,6 +21,14 @@ This starts:
 
 The web dev server proxies `/api/*` requests to the API server automatically.
 
+### Test Users (from seed)
+
+| Username | Password | Role |
+|----------|----------|------|
+| `admin` | `admin123` | SuperAdmin |
+| `teacher` | `teacher123` | Teacher |
+| `candidate` | `candidate123` | Candidate |
+
 ## Development Commands
 
 | Command | Description |
@@ -25,6 +36,7 @@ The web dev server proxies `/api/*` requests to the API server automatically.
 | `pnpm dev` | Start all services in dev mode (hot reload) |
 | `pnpm --filter web dev` | Start only the web frontend |
 | `pnpm --filter api dev` | Start only the API server |
+| `pnpm db:seed` | Seed database with test users |
 | `pnpm test` | Run all tests |
 | `pnpm --filter web test` | Run web tests only |
 | `pnpm typecheck` | Type-check all packages |
