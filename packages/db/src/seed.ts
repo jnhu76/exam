@@ -15,7 +15,7 @@ function hashPassword(password: string): string {
   return `${salt}:${hash}`;
 }
 
-export async function seed(db: SqliteDatabase) {
+export function seed(db: SqliteDatabase) {
   const timestamp = new Date();
 
   const slug = "default";
@@ -48,9 +48,7 @@ export async function seed(db: SqliteDatabase) {
       id: randomUUID(),
       organizationId: org.id,
       username: process.env.SEED_ADMIN_USERNAME || "admin",
-      passwordHash: hashPassword(
-        process.env.SEED_ADMIN_PASSWORD || "admin123",
-      ),
+      passwordHash: hashPassword(process.env.SEED_ADMIN_PASSWORD || "admin123"),
       name: process.env.SEED_ADMIN_NAME || "Admin",
       role: "SuperAdmin" as const,
       isActive: true,
@@ -85,11 +83,6 @@ export async function seed(db: SqliteDatabase) {
     },
   ];
 
-  db.insert(sqliteSchema.organizations)
-    .values(org)
-    .onConflictDoNothing()
-    .run();
-
   for (const user of users) {
     const existing = db
       .select()
@@ -119,10 +112,7 @@ async function main() {
   console.log("  Candidate: candidate / candidate123");
 }
 
-if (
-  process.argv[1]?.includes("seed") &&
-  !process.argv[1]?.includes("test")
-) {
+if (process.argv[1]?.includes("seed") && !process.argv[1]?.includes("test")) {
   main().catch((err) => {
     console.error("Seed failed:", err);
     process.exit(1);
