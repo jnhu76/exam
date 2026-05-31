@@ -390,6 +390,63 @@ pnpm audit
 
 ---
 
+## 13.5. Testing Database Strategy
+
+### API Route 测试（apps/api）
+
+所有 API route 测试必须使用 **in-memory SQLite** 数据库，确保测试隔离和快速运行。
+
+**架构：**
+
+- `apps/api/src/plugins/db.ts` — 注册 `fastify.db` 装饰器，生产环境使用 `createDatabase()`
+- `apps/api/src/routes/testHelpers.ts` — 提供 `buildTestApp()` 函数，注入 `:memory:` 数据库
+- Route handlers 通过 `fastify.db` 访问数据库，永不直接调用 `createDatabase()`
+
+**测试模式：**
+
+```typescript
+import { buildTestApp } from "./testHelpers.js";
+import myRoutes from "./myRoutes.js";
+
+describe("my routes", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(myRoutes);
+  });
+
+  afterAll(async () => {
+    await ctx.app.close();
+  });
+
+  it("returns data", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/my-endpoint",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+});
+```
+
+**规则：**
+
+1. Route handlers 绝不直接调用 `createDatabase()` — 必须通过 `fastify.db` 装饰器
+2. 测试使用 `createSqliteDatabase(":memory:")` 注入内存数据库
+3. 每个 `buildTestApp()` 调用创建独立的数据库实例，测试之间零共享状态
+4. `packages/db` 层测试也必须使用 `:memory:` 模式
+5. 禁止在测试中使用文件数据库（`dev.db`）
+
+**验证：**
+
+```bash
+pnpm --filter api test        # API route tests (in-memory)
+pnpm --filter @exam/db test   # DB repository tests (in-memory)
+```
+
+---
+
 ## 14. Pre-commit / Pre-push Hooks
 
 使用 Lefthook：
