@@ -2,6 +2,7 @@
 
 > 所有界面遵循 shadcn/ui 设计系统 + TailwindCSS v4。
 > 用户界面文字全部中文，以下 wireframe 中的中文即为实际 UI 文案。
+> 项目结构基于 pnpm workspace monorepo: `apps/web/`, `apps/api/`, `packages/`。
 
 ---
 
@@ -34,6 +35,15 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 统一使用 Tailwind spacing scale: `p-4`(16px), `gap-4`(16px), `p-6`(24px)。不使用非标准值。
 
+### Accessibility Tokens
+
+```
+Focus ring:      ring-2 ring-ring ring-offset-2
+Color contrast:  文本 ≥ 4.5:1, 大文本 ≥ 3:1
+Touch targets:   交互元素最小 44x44px
+Animation:       respect prefers-reduced-motion
+```
+
 ---
 
 ## 2. Navigation Structure
@@ -60,7 +70,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │   ├── /admin/exams/new            # 新建考试（组卷）
 │   ├── /admin/exams/:id            # 考试详情（考生列表+状态）
 │   ├── /admin/exams/:id/scores     # 成绩管理
-│   ├── /admin/papers/:id           # 答卷详情（Teacher 视角）
+│   ├── /admin/attempts/:id         # 答卷详情（Teacher 视角）
 │   └── /admin/system               # 系统健康
 │
 └── /exam/*                         # 考生端（独立布局）
@@ -102,6 +112,34 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 ---
 
+### 2.3 Job → Section Reference
+
+> 本文档章节与 `docs/phase1-plan.md` Job 的对应关系。
+
+| Section | Title | Job |
+|---------|-------|-----|
+| §3.1 | 登录页 | J3 |
+| §3.2 | Admin Dashboard | J9 |
+| §3.3 | 题目管理页 | J5A |
+| §3.4 | 新建/编辑题目页 | J5A |
+| §3.5 | 题目导入页 | J5A |
+| §3.6 | 新建考试页（组卷）| J5B |
+| §3.7 | 考生端考试列表 | J6 |
+| §3.8 | 考生端答题界面 | J6 |
+| §3.9 | 考试结果页 | J7 |
+| §3.10 | 开始考试确认页 | J6 |
+| §3.11 | 考试详情页（Teacher）| J5B |
+| §3.12 | 答卷详情页（Teacher）| J8 |
+| §3.13 | 考生字段配置页 | J4 |
+| §3.14 | 课程管理页 | J5A |
+| §3.15 | 系统健康页 | J9 |
+| §3.16 | 考生导入弹窗 | J4 |
+| §3.17 | 用户管理页 | J4 |
+| §3.18 | 考生管理页 | J4 |
+| §3.19 | 成绩管理页（Teacher）| J8 |
+
+---
+
 ## 3. Page Designs
 
 ### 3.1 登录页
@@ -135,6 +173,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 - 全屏居中卡片，`max-w-sm`(384px)
 - 背景: 纯色（`bg-background`），无渐变
 - 登录失败: 表单下方红色提示文字（非 alert 弹窗）
+- 表单使用 `label` + `htmlFor` 关联，回车键提交
 
 ---
 
@@ -164,6 +203,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 - 4 个统计卡片用 `Card` 组件，一行排列
 - 统计数字 `text-3xl font-bold`
 - 最近考试用 `Table` 组件
+- 数据加载时显示 `Skeleton` 骨架屏
 
 ---
 
@@ -190,7 +230,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 - 顶部操作栏: 按钮 + 筛选器
 - 表格列: 选择框、题型(badge)、题干(截断显示)、标签(小chip)、分值
-- 操作列: 编辑、删除（icon 按钮）
+- 操作列: 编辑、删除（icon 按钮，带 `aria-label`）
 - 筛选器用 `Select` + `Input` 组件
 
 ---
@@ -287,6 +327,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 - 无底部重复的标准答案字段
 - 题型切换时整个"选项/答案区"动态替换
 - 底部实时预览区模拟考生视角
+- `standardAnswer` 必填校验：没有标准答案的题不能用于自动批改
 
 ---
 
@@ -333,6 +374,8 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 ### 3.6 新建考试页（组卷）
 
+> Phase 1 仅支持手动选题。随机抽题模式见 wireframe 但标记为 [Phase 2]。
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │ 新建考试                                              │
@@ -343,7 +386,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │ 描述      [本测验用于实验室准入考核...]                │
 │                                                      │
 │ ── 考试设置 ─────────────────────────────────────── │
-│ 计时方式  [窗口限时 ▼]                                │
+│ 计时方式  [窗口限时 ▼]     ← Phase 1 仅此一种        │
 │ 考试时长  [60] 分钟                                   │
 │ 开放时间  [2025-03-01] ~ [2025-03-07]                │
 │ 及格线    [60] 分  总分 [100] 分                     │
@@ -359,7 +402,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │ 取分策略  [取最高分 ▼]    ☐ 通过后不可重考           │
 │                                                      │
 │ ── 选择题目 ─────────────────────────────────────── │
-│ 选题方式  [● 手动选题  ○ 随机抽题]                   │
+│ 选题方式  [● 手动选题]              ← Phase 1 默认   │
 │                                                      │
 │ 已选题目 (15题 / 100分)                               │
 │ ┌──────────────────────────────────────────────────┐ │
@@ -375,7 +418,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 └─────────────────────────────────────────────────────┘
 ```
 
-**随机抽题模式**：
+**随机抽题模式** [Phase 2]：
 
 ```
 │ ── 选择题目 ─────────────────────────────────────── │
@@ -404,8 +447,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 - 长表单，用分割线分组（Section Header）
 - 管控设置: 模式预设按钮切换后自动填充复选框，但可单独改
-- 选题区: 手动模式显示已选题目表格；随机模式显示抽题规则表格
-- 切换选题方式时清空另一种方式的数据
+- 选题区: Phase 1 仅手动模式；随机抽题 UI 预留但 disabled
 - 底部固定操作栏
 
 ---
@@ -429,8 +471,8 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │                                                      │
 │  ┌────────────────────────────────────────────────┐ │
 │  │ 物理实验准入考试                                │ │
-│  │ 定时统考 · 90分钟 · 及格70分                    │ │
-│  │ 开放: 2025-03-10 09:00                          │ │
+│  │ 窗口限时 · 90分钟 · 及格70分                    │ │
+│  │ 开放: 2025-03-10 09:00 ~ 11:00                 │ │
 │  │ 已考 1/1 次    最高分: 82 ✅                    │ │
 │  │                                    [查看结果]   │ │
 │  └────────────────────────────────────────────────┘ │
@@ -447,8 +489,9 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 ```
 
 - 考试用卡片展示，区分"可参加"和"已结束"
-- 每张卡片: 考试名称、计时方式/时长/及格线、考试次数、操作按钮
+- 每张卡片: 考试名称、计时方式/时长/及格线、考试次数/最高分、操作按钮
 - 已通过考试显示 ✅ 和分数
+- Phase 1 计时方式仅显示"窗口限时"
 
 ---
 
@@ -473,7 +516,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │        │  ○  D. 在塑料杯中混合                       │
 │        │                                             │
 │ ● 已答 │  ◀ 上一题    ⚑ 标记    下一题 ▶            │
-│ ○ 未答 │                                             │
+│ ○ 未答 │         保存中... → ✓ 已保存                │
 │ ◉ 标记 │                                             │
 ├────────┴────────────────────────────────────────────┤
 │  ● 已答: 3  │  ○ 未答: 12  │  ◉ 标记: 1  │ 共 15 题 │
@@ -487,6 +530,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 - **右侧答题区**: 题目 + 选项/输入框
 - **底部导航**: 上/下题、标记按钮
 - **底部状态栏**: 答题统计
+- **自动保存状态**: 底部导航旁显示 `保存中...` → `✓ 已保存` / `⚠ 保存失败`（Answer Save Protocol）
 
 **交卷确认弹窗**:
 
@@ -502,6 +546,8 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │  [继续答题]    [确认交卷]     │
 └──────────────────────────────┘
 ```
+
+交卷时通过 `submitAttempt(ctx, attemptId)` command 提交，服务端判定是否超时。
 
 ---
 
@@ -553,9 +599,9 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 └─────────────────────────────────────────────────────┘
 ```
 
-- 变体 A: 答对 ✅ 绿色，答错 ❌ 红色
+- 变体 A: 答对 ✅ 绿色，答错 ❌ 红色。颜色 + 图标双重标识（非仅靠颜色）
 - 变体 B: 只确认已交卷，不显示任何答案或分数
-- 填空题答案过长时截断，hover 显示完整内容
+- 填空题答案过长时截断，hover 或点击展开显示完整内容
 
 ---
 
@@ -603,6 +649,7 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 - 确认页显示考试配置摘要，让考生了解规则
 - 排队页实时更新等待人数和预计时间
 - 轮到时自动跳转到答题界面
+- 开始考试调用 `startAttempt(ctx, examId, candidateId)` command
 
 ---
 
@@ -633,7 +680,8 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 ```
 
 - 顶部考试配置摘要 + 实时统计
-- 考生列表：显示每人状态和成绩，可跳转答卷详情
+- 考生列表：显示每人状态和成绩，可跳转 attempt 详情页
+- "考生列表"列头按机构 CandidateField 动态生成（上例中是工号）
 
 ---
 
@@ -654,13 +702,15 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 │ │ ...                                             │ │
 │ └──────────────────────────────────────────────────┘ │
 │                                                      │
-│ [导出 PDF]  [返回成绩列表]                            │
+│ [返回成绩列表]                                        │
 │                                                      │
 └─────────────────────────────────────────────────────┘
 ```
 
 - 完整展示考生每道题的作答和批改结果
-- 多选题部分正确时显示扣分逻辑
+- 多选题部分正确时显示扣分逻辑（半分）
+- Phase 1 不做 PDF 导出按钮（Phase 2）
+- 路由: `/admin/attempts/:id`（不是 papers/:id）
 
 ---
 
@@ -715,7 +765,23 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 ---
 
-### 3.15 系统健康页
+### 3.15 系统健康页 [Phase 2 完整版，Phase 1 仅基本健康检查]
+
+Phase 1 基本版本：
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 系统状态                                              │
+│                                                      │
+│ ┌──────────┐ ┌──────────┐ ┌──────────┐              │
+│ │ CPU 使用  │ │ 内存使用  │ │ DB 响应   │              │
+│ │   23%    │ │  45%     │ │  12ms    │              │
+│ └──────────┘ └──────────┘ └──────────┘              │
+│                                                      │
+└─────────────────────────────────────────────────────┘
+```
+
+Phase 2 完整版本（降级配置 + 事件流 + 手动切换）：
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -743,11 +809,8 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 └─────────────────────────────────────────────────────┘
 ```
 
-- 4 个实时指标卡片，每 10s 刷新
-- 当前档位用颜色标识（🟢正常 / 🟡省电 / 🔴极限）
-- Admin 可手动切换档位（覆盖自动）
-- 降级阈值可配置
-- 事件流记录所有档位变化和关键事件
+- Phase 1: 仅显示 3 个基本指标卡片
+- Phase 2: 4 个实时指标卡片每 10s 刷新，档位指示，降级配置，事件流
 
 ---
 
@@ -791,13 +854,13 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 
 ---
 
-### 3.10 成绩管理页（Teacher）
+### 3.19 成绩管理页（Teacher）
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │ 化学安全测验 - 成绩管理                               │
 │                                                      │
-│ [导出 Excel] [导出 CSV] [导出 PDF]                    │
+│ [导出 CSV]                                           │
 │                                                      │
 │ 筛选: [全部 ▼] [通过/未通过 ▼]  [搜索姓名/工号...] │
 │                                                      │
@@ -813,10 +876,10 @@ Background:  页面背景 / 卡片背景 / 弹窗背景
 └─────────────────────────────────────────────────────┘
 ```
 
-- 顶部操作: 导出按钮组
+- 顶部操作: Phase 1 仅 CSV 导出（Excel / PDF / Word → Phase 2）
 - 表格列头动态（按机构 CandidateField 生成）
 - 底部统计行
-- 点击"详情"跳转答卷详情页
+- 点击"详情"跳转 attempt 详情页 `/admin/attempts/:id`
 
 ---
 
@@ -879,11 +942,13 @@ Phase 1 必需:
 ```
 button, input, label, select, textarea, checkbox, radio-group,
 card, table, dialog, dropdown-menu, badge, tabs, separator,
-toast, sonner, avatar, skeleton, alert, sheet, command,
-form (react-hook-form + zod), pagination, tooltip
+toast, sonner, avatar, skeleton, alert, sheet,
+form (react-hook-form + zod), pagination, tooltip, alert-dialog, switch
 ```
 
 ### 4.2 自定义业务组件
+
+> 路径基于 `apps/web/src/`。
 
 | 组件 | 位置 | 说明 |
 |------|------|------|
@@ -903,41 +968,55 @@ form (react-hook-form + zod), pagination, tooltip
 | `ImportWizard` | `components/shared/ImportWizard.tsx` | 通用导入向导（上传→预览→确认） |
 | `FileUpload` | `components/shared/FileUpload.tsx` | 拖拽上传组件 |
 | `StatsCard` | `components/shared/StatsCard.tsx` | 仪表盘统计卡片 |
-| `ConfirmDialog` | `components/shared/ConfirmDialog.tsx` | 确认弹窗 |
+| `ConfirmDialog` | `components/shared/ConfirmDialog.tsx` | 确认弹窗（基于 AlertDialog） |
 | `ConnectionIndicator` | `components/shared/ConnectionIndicator.tsx` | 连接状态指示器（绿/黄/红） |
-| `DegradationIndicator` | `components/shared/DegradationIndicator.tsx` | 系统档位指示器（正常/省电/极限） |
+| `DegradationIndicator` | `components/shared/DegradationIndicator.tsx` | 系统档位指示器 [Phase 2] |
 | `EmptyState` | `components/shared/EmptyState.tsx` | 空状态占位 |
 | `PageHeader` | `components/shared/PageHeader.tsx` | 页面标题 + 操作按钮 |
+| `SaveIndicator` | `components/exam/SaveIndicator.tsx` | 答案保存状态（保存中/已保存/失败） |
 
 ---
 
 ## 5. Interaction Patterns
 
-### 5.1 自动保存
+### 5.1 Answer Save Protocol（答案自动保存）
 
 答题时，每次选择/输入变更后:
-1. 输入框旁显示灰色 `保存中...` → 绿色 `✓ 已保存`
-2. 保存失败显示红色 `⚠ 保存失败，正在重试...`
-3. 使用去抖（1-2s），避免每次按键都请求
+1. 本地状态即时更新（客户端内存）
+2. 去抖 1-2s 后按 Answer Save Protocol 发送:
+   ```
+   POST /attempts/:attemptId/answers/:questionId
+   { answer, clientSeq, clientSavedAt, baseVersion }
+   ```
+3. 输入框旁显示状态:
+   - 灰色 `保存中...` → 绿色 `✓ 已保存`
+   - 保存失败: 红色 `⚠ 保存失败，正在重试...`
+4. 服务端返回 `serverVersion`，客户端据此更新 baseVersion
+5. 冲突时（`accepted: false`）: 显示冲突提示，以服务端为准
+
+同步写入 localStorage/IndexedDB 作为离线兜底。
 
 ### 5.2 倒计时
 
 - 服务端返回 `startedAt` + `durationMinutes`，客户端计算剩余时间
 - 每 30s 向服务端同步一次（校正漂移）
 - `< 5min` 时倒计时文字变红
-- `= 0` 时自动交卷，弹窗提示"考试时间已到"
+- `= 0` 时调用 `submitAttempt()` 自动交卷，弹窗提示"考试时间已到"
+- 超时判定以服务端 `deadlineAt` 为准
 
 ### 5.3 表单验证
 
 - 使用 react-hook-form + zod
 - 实时校验 + 提交时校验
 - 错误提示在字段下方，红色文字
+- 错误提示用 `role="alert"` + `aria-live="polite"`
 
 ### 5.4 Toast 通知
 
 - 成功: 绿色 toast，3s 自动消失
 - 错误: 红色 toast，需手动关闭
 - 警告: 黄色 toast，5s 自动消失
+- 使用 sonner 组件
 
 ---
 
@@ -960,3 +1039,39 @@ form (react-hook-form + zod), pagination, tooltip
 // Error: 错误提示 + 重试
 <ErrorState message="加载失败" onRetry={refetch} />
 ```
+
+每个状态组件都设置正确的 ARIA 属性:
+- Loading: `aria-busy="true"` + `aria-label="加载中"`
+- Empty: `role="status"`
+- Error: `role="alert"`
+
+---
+
+## 7. Responsive Design
+
+系统主要在桌面端使用（LAN 考试场景），但仍需基本响应式支持:
+
+- **最小宽度**: 1024px（考试答题界面）
+- **Admin 后台**: 响应式表格 + 侧栏折叠
+- **考试列表**: 卡片布局，移动端单列
+- **答题界面**: 固定布局，不适配移动端（Phase 1 不做移动端）
+
+---
+
+## 8. Keyboard Navigation
+
+### 答题界面快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| `←` / `→` | 上/下一题 |
+| `Space` | 标记当前题 |
+| `1-4` | 选择选项 A-D（单选） |
+| `Enter` | 确认交卷（弹窗内） |
+| `Escape` | 关闭弹窗 |
+
+### Admin 后台
+
+- `Tab` 导航所有可交互元素
+- `Enter` 激活按钮/链接
+- 弹窗打开时 focus trap

@@ -20,25 +20,30 @@ export enum ExamTiming {
   Untimed = "untimed",
 }
 
-export enum ExamMode {
-  OpenBook = "open_book",
-  ClosedBook = "closed_book",
-}
-
 export enum ExamStatus {
   Draft = "draft",
   Published = "published",
-  InProgress = "in_progress",
-  Ended = "ended",
-  Graded = "graded",
+  Open = "open",
+  Closed = "closed",
+  Archived = "archived",
 }
 
-export enum ExamPaperStatus {
+export enum AttemptStatus {
   NotStarted = "not_started",
+  Queued = "queued",
   InProgress = "in_progress",
   Disrupted = "disrupted",
   Submitted = "submitted",
+  Grading = "grading",
   Graded = "graded",
+  Voided = "voided",
+}
+
+export enum EnrollmentStatus {
+  Assigned = "assigned",
+  Started = "started",
+  Completed = "completed",
+  Blocked = "blocked",
 }
 
 export enum RetakePolicy {
@@ -59,6 +64,16 @@ export enum DegradationLevel {
   Normal = "normal",
   PowerSave = "power_save",
   Extreme = "extreme",
+}
+
+export enum FillBlankMatchMode {
+  Exact = "exact",
+  Keyword = "keyword",
+}
+
+export enum MultiSelectScoring {
+  AllOrNothing = "all_or_nothing",
+  PartialHalf = "partial_half",
 }
 
 export interface Organization {
@@ -134,7 +149,6 @@ export interface Exam {
   title: string;
   description?: string;
   timing: ExamTiming;
-  mode: ExamMode;
   durationMinutes: number;
   totalScore: number;
   passingScore: number;
@@ -148,7 +162,6 @@ export interface Exam {
   batchInterval: number;
   restrictIp: boolean;
   requireLockdown: boolean;
-  allowGoBack: boolean;
   showResultImmediately: boolean;
   retakePolicy: RetakePolicy;
   maxRetakeAttempts?: number;
@@ -161,67 +174,115 @@ export interface Exam {
   createdAt: string;
 }
 
-export interface ExamSection {
-  id: string;
-  examId: string;
-  title: string;
-  description?: string;
-  questionIds: string[];
-  scorePerQuestion: number;
-  sortOrder: number;
-}
-
-export interface ExamRoom {
+export interface ExamEnrollment {
   id: string;
   organizationId: string;
-  name: string;
-  capacity: number;
-  ipRange?: string;
-  examIds: string[];
-}
-
-export interface ExamRoomAssignment {
-  id: string;
-  examRoomId: string;
   examId: string;
   candidateId: string;
-  seatNo: number;
+  status: EnrollmentStatus;
+  attemptCount: number;
+  finalScore?: number;
+  finalPassed?: boolean;
+  finalAttemptId?: string;
 }
 
-export interface ExamPaper {
+export interface ExamAttempt {
   id: string;
+  organizationId: string;
   examId: string;
   candidateId: string;
-  examRoomId: string;
-  status: ExamPaperStatus;
-  questionSnapshot: Question[];
-  answers: Record<string, Answer>;
+  attemptNo: number;
+  status: AttemptStatus;
+  questionSnapshot: QuestionSnapshot[];
+  answers: AnswerRecord[];
   score?: number;
   passed?: boolean;
-  attemptNumber: number;
   startedAt?: string;
   submittedAt?: string;
-  gradedAt?: string;
+  deadlineAt?: string;
   lastActivityAt?: string;
 }
 
-export interface Answer {
-  questionId: string;
+export interface QuestionSnapshot {
+  originalQuestionId: string;
+  type: QuestionType;
   content: string;
+  attachments?: string[];
+  options?: QuestionOption[];
+  standardAnswer?: string;
+  score: number;
+  gradingRule?: GradingRule;
+  order: number;
+}
+
+export interface GradingRule {
+  fillBlankMatchMode?: FillBlankMatchMode;
+  multiSelectScoring?: MultiSelectScoring;
+}
+
+export interface AnswerRecord {
+  questionId: string;
+  answer: unknown;
+  clientSeq: number;
+  clientSavedAt: string;
+  serverVersion: number;
+  serverSavedAt: string;
   score?: number;
-  gradedBy?: string;
-  gradedAt?: string;
-  feedback?: string;
+}
+
+export interface SaveAnswerRequest {
+  attemptId: string;
+  questionId: string;
+  answer: unknown;
+  clientSeq: number;
+  clientSavedAt: string;
+  baseVersion: number;
+}
+
+export interface SaveAnswerResponse {
+  accepted: boolean;
+  serverVersion: number;
+  savedAt: string;
+  conflict?: {
+    reason: "STALE_VERSION" | "SUBMITTED" | "ATTEMPT_CLOSED";
+    latestAnswer?: unknown;
+  };
+}
+
+export interface ScoreResult {
+  attemptId: string;
+  totalScore: number;
+  passed: boolean;
+  questionResults: QuestionScoreResult[];
+  gradedAt: string;
+}
+
+export interface QuestionScoreResult {
+  questionId: string;
+  correct: boolean;
+  score: number;
+  maxScore: number;
+  answer: unknown;
+  standardAnswer: unknown;
+}
+
+export interface RequestContext {
+  actorId: string;
+  organizationId: string;
+  role: UserRole;
+  permissions: string[];
+  sessionId: string;
 }
 
 export interface AuditLog {
   id: string;
   organizationId: string;
-  userId: string;
+  actorId: string;
   action: string;
-  resource: string;
-  resourceId?: string;
-  detail?: string;
-  ip: string;
-  timestamp: string;
+  targetType: string;
+  targetId: string;
+  metadata?: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
 }
