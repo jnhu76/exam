@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EmptyState } from "./EmptyState";
+import { ErrorState } from "./ErrorState";
+import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
 import { StatsCard } from "./StatsCard";
@@ -219,5 +221,56 @@ describe("SaveIndicator", () => {
   it("renders error state", () => {
     render(<SaveIndicator status="error" />);
     expect(screen.getByText("保存失败")).toBeInTheDocument();
+  });
+});
+
+describe("ErrorState", () => {
+  it("renders error message", () => {
+    render(<ErrorState message="加载失败" />);
+    expect(screen.getByText("加载失败")).toBeInTheDocument();
+  });
+
+  it("renders retry button when onRetry is provided", () => {
+    render(<ErrorState message="加载失败" onRetry={() => {}} />);
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  it("renders without retry button when onRetry is not provided", () => {
+    render(<ErrorState message="出错了" />);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("calls onRetry when retry button is clicked", async () => {
+    const onRetry = vi.fn();
+    render(<ErrorState message="加载失败" onRetry={onRetry} />);
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("has role alert for accessibility", () => {
+    render(<ErrorState message="加载失败" />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+describe("LoadingState", () => {
+  it("renders loading indicator", () => {
+    render(<LoadingState />);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("renders with custom label", () => {
+    render(<LoadingState label="加载题目中" />);
+    expect(screen.getByText("加载题目中")).toBeInTheDocument();
+  });
+
+  it("renders default loading text when no label", () => {
+    render(<LoadingState />);
+    expect(screen.getByText("加载中...")).toBeInTheDocument();
+  });
+
+  it("sets aria-busy on container", () => {
+    render(<LoadingState />);
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
   });
 });

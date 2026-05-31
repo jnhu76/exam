@@ -13,7 +13,7 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-muted/30">
+    <div data-testid="admin-layout" className="flex min-h-screen bg-muted/30">
       <AppSidebar
         user={user}
         collapsed={collapsed}

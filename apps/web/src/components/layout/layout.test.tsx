@@ -4,9 +4,11 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import { AppSidebar } from "./AppSidebar";
+import { AdminLayout } from "./AdminLayout";
 import { BrandProvider, useBranding } from "./BrandProvider";
 import { ExamLayout } from "./ExamLayout";
 import { LoginPage } from "@/pages/LoginPage";
+import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 const admin: User = {
@@ -183,5 +185,32 @@ describe("layout shells", () => {
     );
     expect(screen.queryByTestId("app-sidebar")).not.toBeInTheDocument();
     expect(screen.queryByTestId("login-layout")).not.toBeInTheDocument();
+  });
+
+  it("AdminLayout renders with admin layout test id", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={admin}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="*" element={<PlaceholderPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/dashboard",
+    );
+    expect(screen.getByTestId("admin-layout")).toBeInTheDocument();
+    expect(screen.getByTestId("app-sidebar")).toBeInTheDocument();
+  });
+
+  it("AdminLayout does not render without user", () => {
+    renderWithProviders(
+      <Routes>
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route path="*" element={<PlaceholderPage />} />
+        </Route>
+      </Routes>,
+      "/admin/dashboard",
+    );
+    expect(screen.queryByTestId("admin-layout")).not.toBeInTheDocument();
   });
 });
