@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // ── Score List ────────────────────────────────────────────────────
 
-const QuestionScoreResultSchema = z.object({
+export const QuestionScoreResultSchema = z.object({
   questionId: z.string(),
   score: z.number(),
   maxScore: z.number(),
@@ -19,6 +19,55 @@ export const ScoreResultSchema = z.object({
   gradedAt: z.string().datetime(),
 });
 export type ScoreResultDTO = z.infer<typeof ScoreResultSchema>;
+
+export const AttemptScoreParamsSchema = z.object({
+  attemptId: z.string().uuid(),
+});
+
+const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
+  type: z.enum([
+    "single_choice",
+    "multiple_choice",
+    "fill_blank",
+    "true_false",
+  ]),
+  content: z.string(),
+  order: z.number().int(),
+});
+
+const HiddenAttemptResultSchema = z.object({
+  attemptId: z.string().uuid(),
+  status: z.enum([
+    "not_started",
+    "queued",
+    "in_progress",
+    "disrupted",
+    "submitted",
+    "grading",
+    "graded",
+    "voided",
+  ]),
+  showResultImmediately: z.literal(false),
+  examTitle: z.string(),
+});
+
+const VisibleAttemptResultSchema = z.object({
+  attemptId: z.string().uuid(),
+  status: z.literal("graded"),
+  showResultImmediately: z.literal(true),
+  examTitle: z.string(),
+  passingScore: z.number(),
+  totalScore: z.number(),
+  passed: z.boolean(),
+  gradedAt: z.string().datetime(),
+  questionResults: z.array(AttemptQuestionResultSchema),
+});
+
+export const AttemptResultResponseSchema = z.discriminatedUnion(
+  "showResultImmediately",
+  [HiddenAttemptResultSchema, VisibleAttemptResultSchema],
+);
+export type AttemptResultResponse = z.infer<typeof AttemptResultResponseSchema>;
 
 export const ScoreListItemSchema = z.object({
   attemptId: z.string().uuid(),

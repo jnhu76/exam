@@ -148,6 +148,7 @@ export interface OptionSnapshot {
 export interface GradingRule {
   multiSelectScoring: MultiSelectScoring;
   fillBlankMatchMode: FillBlankMatchMode;
+  fillBlankCaseSensitive?: boolean | undefined;
 }
 
 // ── Control Flags (§2.6) ─────────────────────────────────────────
@@ -219,10 +220,12 @@ export interface ExamAttempt {
   status: AttemptStatus;
   questionSnapshot: QuestionSnapshot[];
   answers: AnswerRecord[];
+  gradingResult?: QuestionScoreResult[];
   score?: number;
   passed?: boolean;
   startedAt?: Date;
   submittedAt?: Date;
+  gradedAt?: Date;
   deadlineAt?: Date;
   lastActivityAt?: Date;
   createdAt: Date;

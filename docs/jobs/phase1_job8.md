@@ -24,6 +24,28 @@ Build score query API, admin score management page with filtering/pagination, at
 
 J3.5 (UI Foundation — shared layout, page shell, empty/loading/error states), J7 (Auto-Grading — needs graded attempts with scores)
 
+## J7 Baseline
+
+J7 already provides `GET /api/scores/attempts/:attemptId` for Candidate/Admin/Teacher single-attempt result queries, including tenant isolation, role-aware result visibility, frozen question content, candidate answers, standard answers, and question-level grading results.
+
+J8 must extend the score domain without duplicating this endpoint or its DTOs:
+
+- Keep `GET /api/scores/attempts/:attemptId` as the canonical single-attempt detail endpoint.
+- Reuse the J7 Zod schemas from `packages/contracts/src/score.ts`; extend them only when the teacher review page needs additional fields.
+- Add score list, filtering, pagination, statistics, and CSV export endpoints for the management workflow.
+- Build the Admin/Teacher pages that consume the existing single-attempt detail endpoint.
+
+## Execution Nodes
+
+Implement and verify J8 in this order:
+
+1. **Node J8-A: contracts + score list API** — extend score contracts; add tenant-scoped paginated score list with pass/fail filtering, search, sorting, statistics, and CandidateField-driven columns.
+2. **Node J8-B: attempt review API alignment** — verify the existing `GET /api/scores/attempts/:attemptId` response covers teacher review; extend the shared response schema only if required by the review UI.
+3. **Node J8-C: score management UI** — implement `/admin/exams/:id/scores`, including filters, dynamic CandidateField columns, statistics, pagination, empty/loading/error states, and detail navigation.
+4. **Node J8-D: attempt detail UI** — implement `/admin/attempts/:id` using the canonical J7 detail endpoint; include partial-credit explanation and return navigation.
+5. **Node J8-E: CSV export** — implement dynamic headers, escaping, tenant isolation, authorization, download headers, and AuditLog recording.
+6. **Node J8-F: end-to-end verification** — run migrations, integration tests, `pnpm verify`, and browser smoke checks for list → detail → return and export download.
+
 ## UI Strategy
 
 This job must produce fully usable score management and attempt review pages. Every page listed under UI Tasks must be complete enough for a teacher to review scores and export data end-to-end. J10 will polish visual consistency; it will not build missing pages.
@@ -75,9 +97,9 @@ Uses `@exam/contracts` schemas:
 ## Subtasks
 
 - [ ] **8.1** Score query API
-  - Acceptance: GET /api/exams/:id/scores returns paginated score list with sorting and filtering by pass/fail status; GET /api/attempts/:id returns full attempt detail including all answers and grading results; all queries scoped by organizationId for multi-tenant isolation
-  - Files: `apps/api/src/routes/scores.ts`
-  - Verify: curl query score list with pagination; curl filter by pass/fail; curl get attempt detail with full answers; confirm cross-tenant isolation
+  - Acceptance: GET /api/exams/:id/scores returns paginated score list with sorting, search, filtering by pass/fail status, statistics, and CandidateField-driven columns; reuse and extend the J7 canonical GET /api/scores/attempts/:attemptId endpoint for full attempt detail including all answers and grading results; all queries scoped by organizationId for multi-tenant isolation
+  - Files: `apps/api/src/routes/scores.ts`, `packages/contracts/src/score.ts`
+  - Verify: curl query score list with pagination; curl filter by pass/fail; curl search; curl get attempt detail with full answers; confirm cross-tenant isolation
 
 - [ ] **8.2** Client: score management page
   - Acceptance: Export button (CSV only for Phase 1); filter bar with all/pass/fail tabs + search input; score table with headers dynamically generated from CandidateField + score + pass status + submit time + actions column; bottom stats row showing average/max/min/pass rate; click "详情" navigates to attempt detail page; all user-facing strings in zh-CN
@@ -85,7 +107,7 @@ Uses `@exam/contracts` schemas:
   - Verify: browser view scores; test filter all/pass/fail; test search; test pagination; confirm dynamic headers from CandidateField; test "详情" navigation; confirm stats row calculates correctly
 
 - [ ] **8.3** Client: attempt detail page (teacher view)
-  - Acceptance: Top section shows score summary (candidate name + exam name + score + pass status + submit time); answer detail table (question number/type/candidate answer/correct answer/score); multi-select partial correct shows deduction explanation; "返回成绩列表" button; route /admin/attempts/:id; no PDF export button
+  - Acceptance: Top section shows score summary (candidate name + exam name + score + pass status + submit time); answer detail table (question number/type/candidate answer/correct answer/score); multi-select partial correct shows deduction explanation; "返回成绩列表" button; route /admin/attempts/:id; page loads from the canonical GET /api/scores/attempts/:attemptId endpoint; no PDF export button
   - Files: `apps/web/src/pages/admin/AttemptDetailPage.tsx`
   - Verify: click "详情" from score list; view complete attempt with all answers; confirm multi-select partial scoring displayed correctly; confirm "返回成绩列表" navigation works
 

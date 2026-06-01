@@ -22,6 +22,7 @@ interface CandidateExam {
   maxAttempts: number;
   finalScore: number | null;
   finalPassed: boolean | null;
+  finalAttemptId: string | null;
   isAvailable: boolean;
   isEnded: boolean;
 }
@@ -38,9 +39,11 @@ function formatTime(iso: string): string {
 function ExamCard({
   exam,
   onStart,
+  onResult,
 }: {
   exam: CandidateExam;
   onStart: (examId: string) => void;
+  onResult: (attemptId: string) => void;
 }) {
   return (
     <Card>
@@ -77,11 +80,11 @@ function ExamCard({
             <Button size="sm" onClick={() => onStart(exam.examId)}>
               开始考试
             </Button>
-          ) : exam.finalScore !== null && exam.finalScore !== undefined ? (
+          ) : exam.finalAttemptId ? (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onStart(exam.examId)}
+              onClick={() => onResult(exam.finalAttemptId!)}
             >
               查看结果
             </Button>
@@ -119,6 +122,10 @@ export function ExamListPage() {
     navigate(routes.exam.start(examId));
   }
 
+  function handleResult(attemptId: string) {
+    navigate(routes.exam.result(attemptId));
+  }
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
 
@@ -132,7 +139,12 @@ export function ExamListPage() {
           <h2 className="text-lg font-semibold">可参加的考试</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {available.map((exam) => (
-              <ExamCard key={exam.examId} exam={exam} onStart={handleStart} />
+              <ExamCard
+                key={exam.examId}
+                exam={exam}
+                onStart={handleStart}
+                onResult={handleResult}
+              />
             ))}
           </div>
         </section>
@@ -143,7 +155,12 @@ export function ExamListPage() {
           <h2 className="text-lg font-semibold">已结束</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {ended.map((exam) => (
-              <ExamCard key={exam.examId} exam={exam} onStart={handleStart} />
+              <ExamCard
+                key={exam.examId}
+                exam={exam}
+                onStart={handleStart}
+                onResult={handleResult}
+              />
             ))}
           </div>
         </section>

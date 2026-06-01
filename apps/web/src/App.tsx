@@ -21,6 +21,7 @@ import { ExamDetailPage } from "@/pages/admin/ExamDetailPage";
 import { ExamListPage } from "@/pages/exam/ExamListPage";
 import { StartExamPage } from "@/pages/exam/StartExamPage";
 import { TakeExamPage } from "@/pages/exam/TakeExamPage";
+import { ResultPage } from "@/pages/exam/ResultPage";
 
 export function AppRoutes() {
   return (
@@ -47,6 +48,7 @@ export function AppRoutes() {
         <Route path="list" element={<ExamListPage />} />
         <Route path=":examId/start" element={<StartExamPage />} />
         <Route path=":attemptId/take" element={<TakeExamPage />} />
+        <Route path=":attemptId/result" element={<ResultPage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />

@@ -24,6 +24,7 @@ const AttachmentSchema = z.object({
 export const GradingRuleSchema = z.object({
   multiSelectScoring: z.enum(["all_correct_full", "partial_half"]),
   fillBlankMatchMode: z.enum(["exact", "keyword"]),
+  fillBlankCaseSensitive: z.boolean().optional(),
 });
 
 const StandardAnswerSchema = z

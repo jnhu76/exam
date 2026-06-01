@@ -279,7 +279,7 @@ export const examAttempts = sqliteTable(
     gradingResult: text("grading_result", { mode: "json" }).$type<
       QuestionScoreResult[]
     >(),
-    totalScore: real("total_score"),
+    score: real("total_score"),
     passed: integer("passed", { mode: "boolean" }),
     startedAt: integer("started_at", { mode: "timestamp_ms" }),
     deadlineAt: integer("deadline_at", { mode: "timestamp_ms" }),

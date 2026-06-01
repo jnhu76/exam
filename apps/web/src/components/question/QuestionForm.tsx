@@ -32,6 +32,7 @@ export interface QuestionFormData {
   gradingRule: {
     multiSelectScoring: "all_correct_full" | "partial_half";
     fillBlankMatchMode: "exact" | "keyword";
+    fillBlankCaseSensitive?: boolean;
   };
 }
 
@@ -56,6 +57,7 @@ const defaultForm: QuestionFormData = {
   gradingRule: {
     multiSelectScoring: "all_correct_full",
     fillBlankMatchMode: "exact",
+    fillBlankCaseSensitive: false,
   },
 };
 
@@ -94,7 +96,9 @@ export function QuestionForm({
   }
 
   function toggleCorrect(optionId: string) {
-    if (form.type === "single_choice" || form.type === "true_false") {
+    if (form.type === "true_false") {
+      update({ standardAnswer: optionId === "true" });
+    } else if (form.type === "single_choice") {
       update({ standardAnswer: optionId });
     } else if (form.type === "multiple_choice") {
       const current = Array.isArray(form.standardAnswer)
@@ -211,11 +215,12 @@ export function QuestionForm({
                 {form.type === "single_choice" || form.type === "true_false" ? (
                   <RadioGroup
                     value={
-                      typeof form.standardAnswer === "string"
-                        ? form.standardAnswer
+                      typeof form.standardAnswer === "string" ||
+                      typeof form.standardAnswer === "boolean"
+                        ? String(form.standardAnswer)
                         : ""
                     }
-                    onValueChange={(v) => toggleCorrect(v)}
+                    onValueChange={toggleCorrect}
                   >
                     <RadioGroupItem value={opt.id} />
                   </RadioGroup>
@@ -340,7 +345,7 @@ export function QuestionForm({
       )}
 
       {form.type === "fill_blank" && (
-        <div className="space-y-2">
+        <div className="space-y-4">
           <Label>填空匹配模式</Label>
           <Select
             value={form.gradingRule.fillBlankMatchMode}
@@ -361,6 +366,20 @@ export function QuestionForm({
               <SelectItem value="keyword">关键词匹配</SelectItem>
             </SelectContent>
           </Select>
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={form.gradingRule.fillBlankCaseSensitive ?? false}
+              onCheckedChange={(checked) =>
+                update({
+                  gradingRule: {
+                    ...form.gradingRule,
+                    fillBlankCaseSensitive: checked === true,
+                  },
+                })
+              }
+            />
+            区分大小写
+          </label>
         </div>
       )}
     </div>

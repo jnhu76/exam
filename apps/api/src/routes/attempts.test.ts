@@ -563,7 +563,9 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(200);
-      expect(res.json().status).toBe("submitted");
+      expect(res.json().status).toBe("graded");
+      expect(res.json().score).toBe(0);
+      expect(res.json().passed).toBe(false);
       expect(res.json().submittedAt).toBeDefined();
       expect(res.json().questionSnapshot[0]).not.toHaveProperty(
         "standardAnswer",

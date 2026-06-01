@@ -18,6 +18,7 @@ import courseRoutes from "./routes/course.js";
 import questionRoutes from "./routes/question.js";
 import examRoutes from "./routes/exam.js";
 import attemptRoutes from "./routes/attempts.js";
+import scoreRoutes from "./routes/scores.js";
 
 const port = Number(process.env.APP_PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -49,6 +50,7 @@ async function main() {
   await app.register(questionRoutes, { prefix: "/api" });
   await app.register(examRoutes, { prefix: "/api" });
   await app.register(attemptRoutes, { prefix: "/api" });
+  await app.register(scoreRoutes, { prefix: "/api" });
 
   await app.listen({ port, host });
 }

@@ -46,6 +46,7 @@ export const QuestionSnapshotSchema = z.object({
   gradingRule: z.object({
     multiSelectScoring: z.enum(["all_correct_full", "partial_half"]),
     fillBlankMatchMode: z.enum(["exact", "keyword"]),
+    fillBlankCaseSensitive: z.boolean().optional(),
   }),
   order: z.number().int(),
 });

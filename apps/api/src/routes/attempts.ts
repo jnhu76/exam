@@ -22,6 +22,7 @@ import {
   startAttempt,
   submitAttempt,
   restoreAttempt,
+  gradeAttempt,
   type ExamRepository,
   type AttemptRepository as AttemptRepoInterface,
   type EnrollmentRepository,
@@ -306,6 +307,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             maxAttempts: exam.maxAttempts,
             finalScore: enrollment.finalScore,
             finalPassed: enrollment.finalPassed,
+            finalAttemptId: enrollment.finalAttemptId,
             isAvailable,
             isEnded,
           };
@@ -594,8 +596,18 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       getOwnedAttempt(fastify, ctx, attemptId);
       const attemptRepo = createAttemptRepo(fastify.db);
       const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
+      const examRepo = createExamRepo(fastify.db);
+      const enrollmentRepo = createEnrollmentRepo(fastify.db);
 
-      const attempt = submitAttempt(attRepoAdapter, attemptId, new Date());
+      submitAttempt(attRepoAdapter, attemptId, new Date());
+      gradeAttempt(
+        createExamRepoAdapter(examRepo, ctx),
+        createEnrollmentRepoAdapter(enrollmentRepo, ctx),
+        attRepoAdapter,
+        attemptId,
+        new Date(),
+      );
+      const attempt = attemptRepo.findById(ctx, attemptId) as ExamAttempt;
       recordAudit(
         fastify,
         request,
