@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { NotFoundError } from "@exam/domain";
+import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
 
@@ -71,8 +73,17 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
         `attachment; filename="scores-${examId}-${Date.now()}.csv"`,
       );
 
-      // Write audit log (placeholder - will implement properly later)
-      // For now, just return CSV
+      // Write audit log
+      const auditRepo = createAuditLogRepo(fastify.db);
+      auditRepo.create(ctx, {
+        actorId: ctx.actorId,
+        action: "export_scores",
+        targetType: "exam",
+        targetId: examId,
+        metadata: { format: "csv", rowCount: results.length },
+        ipAddress: request.ip ?? null,
+        userAgent: request.headers["user-agent"] ?? null,
+      });
 
       return reply.send(csv);
     },

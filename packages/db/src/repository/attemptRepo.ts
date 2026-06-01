@@ -143,7 +143,6 @@ export function createAttemptRepo(db: SqliteDatabase) {
         finalWhere = and(baseWhere, eq(examAttempts.passed, false));
       }
 
-      const results: any[] = [];
       const allResults = (db as any)
         .select({
           attempt: examAttempts,
@@ -157,13 +156,73 @@ export function createAttemptRepo(db: SqliteDatabase) {
         )
         .innerJoin(users, eq(candidateProfiles.userId, users.id))
         .where(finalWhere)
-        .all();
-
-      return allResults as Array<{
+        .all() as Array<{
         attempt: typeof examAttempts.$inferSelect;
         candidateProfile: typeof candidateProfiles.$inferSelect;
         candidateUser: typeof users.$inferSelect;
       }>;
+
+      // Sort
+      const sortBy = options.sortBy ?? "submittedAt";
+      const sortDir = options.sortOrder === "asc" ? 1 : -1;
+      allResults.sort((a, b) => {
+        if (sortBy === "score") {
+          return ((a.attempt.score ?? 0) - (b.attempt.score ?? 0)) * sortDir;
+        }
+        if (sortBy === "candidateName") {
+          return (
+            a.candidateUser.name.localeCompare(b.candidateUser.name) * sortDir
+          );
+        }
+        const aTime = a.attempt.submittedAt?.getTime() ?? 0;
+        const bTime = b.attempt.submittedAt?.getTime() ?? 0;
+        return (aTime - bTime) * sortDir;
+      });
+
+      // Paginate
+      const offset = options.offset ?? 0;
+      const limit = options.limit;
+      if (limit != null) {
+        return allResults.slice(offset, offset + limit);
+      }
+      return allResults.slice(offset);
+    },
+    getGradedStats(ctx: RequestContext, examId: string) {
+      const orgId = ctx.targetOrganizationId ?? ctx.organizationId;
+      const baseWhere = and(
+        eq(examAttempts.organizationId, orgId),
+        eq(examAttempts.examId, examId),
+        eq(examAttempts.status, "graded"),
+        isNotNull(examAttempts.score),
+      );
+      const result = (db as any)
+        .select({
+          count: sql`count(*)`.as("count"),
+          avg: sql`avg(${examAttempts.score})`.as("avg"),
+          max: sql`max(${examAttempts.score})`.as("max"),
+          min: sql`min(${examAttempts.score})`.as("min"),
+          passed:
+            sql`sum(case when ${examAttempts.passed} = 1 then 1 else 0 end)`.as(
+              "passed",
+            ),
+        })
+        .from(examAttempts)
+        .where(baseWhere)
+        .get() as {
+        count: number;
+        avg: number | null;
+        max: number | null;
+        min: number | null;
+        passed: number | null;
+      };
+      const count = result.count ?? 0;
+      return {
+        totalGraded: count,
+        averageScore: result.avg ?? 0,
+        maxScore: result.max ?? 0,
+        minScore: result.min ?? 0,
+        passRate: count > 0 ? (result.passed ?? 0) / count : 0,
+      };
     },
     countGradedByExam(
       ctx: RequestContext,

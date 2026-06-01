@@ -90,27 +90,21 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
 
       const attemptRepo = createAttemptRepo(fastify.db);
       const offset = (page - 1) * pageSize;
-      const results = attemptRepo.listGradedByExam(ctx, examId, {
-        passFilter,
-        sortBy,
-        sortOrder,
-        limit: pageSize,
-        offset,
-      });
-      const total = attemptRepo.countGradedByExam(ctx, examId, { passFilter });
-
-      // 计算统计数据
-      const allGraded = attemptRepo.listGradedByExam(ctx, examId);
-      const scores = allGraded
-        .map((r) => r.attempt.score)
-        .filter((s): s is number => s != null);
-      const passed = allGraded.filter((r) => r.attempt.passed).length;
-      const averageScore = scores.length
-        ? scores.reduce((a, b) => a + b, 0) / scores.length
-        : 0;
-      const maxScore = scores.length ? Math.max(...scores) : 0;
-      const minScore = scores.length ? Math.min(...scores) : 0;
-      const passRate = scores.length ? passed / scores.length : 0;
+      const [results, total, stats] = await Promise.all([
+        Promise.resolve(
+          attemptRepo.listGradedByExam(ctx, examId, {
+            passFilter,
+            sortBy,
+            sortOrder,
+            limit: pageSize,
+            offset,
+          }),
+        ),
+        Promise.resolve(
+          attemptRepo.countGradedByExam(ctx, examId, { passFilter }),
+        ),
+        Promise.resolve(attemptRepo.getGradedStats(ctx, examId)),
+      ]);
 
       const items = results.map(
         ({ attempt, candidateProfile, candidateUser }) => ({
@@ -129,13 +123,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
 
       return ScoreListResponseSchema.parse({
         items,
-        stats: {
-          averageScore,
-          maxScore,
-          minScore,
-          passRate,
-          totalGraded: scores.length,
-        },
+        stats,
         total,
         page,
         pageSize,
