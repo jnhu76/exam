@@ -8,13 +8,14 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'lint: TODO'",
-    "test": "echo 'test: TODO'",
-    "coverage": "echo 'coverage: TODO'"
+    "test": "vitest run",
+    "coverage": "vitest run"
   },
   "dependencies": {
     "@exam/domain": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
   }
 }

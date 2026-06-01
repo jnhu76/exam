@@ -1,36 +1,14 @@
 import type {
   RequestContext,
   ExamAttempt,
-  QuestionSnapshot,
-  AnswerRecord,
   ScoreResult,
-  GradingRule,
   SaveAnswerRequest,
   SaveAnswerResponse,
 } from "@exam/domain";
 
 // ── Command Function Signatures (§3.3) ───────────────────────────
-// Type-only signatures — no implementation in this package.
-
-export declare function publishExam(
-  ctx: RequestContext,
-  examId: string,
-): Promise<void>;
-
-export declare function openExam(
-  ctx: RequestContext,
-  examId: string,
-): Promise<void>;
-
-export declare function closeExam(
-  ctx: RequestContext,
-  examId: string,
-): Promise<void>;
-
-export declare function archiveExam(
-  ctx: RequestContext,
-  examId: string,
-): Promise<void>;
+// Type-only signatures for functions not yet implemented.
+// Implemented functions are in examCommands.ts.
 
 export declare function startAttempt(
   ctx: RequestContext,

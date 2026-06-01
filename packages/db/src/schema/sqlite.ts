@@ -152,6 +152,9 @@ export const exams = sqliteTable("exams", {
   organizationId: organizationId().references(() => organizations.id),
   title: text("title").notNull(),
   description: text("description").notNull(),
+  courseId: text("course_id")
+    .notNull()
+    .references(() => courses.id),
   status: text("status", {
     enum: ["draft", "published", "open", "closed", "archived"],
   }).notNull(),
@@ -162,6 +165,7 @@ export const exams = sqliteTable("exams", {
   openAt: integer("open_at", { mode: "timestamp_ms" }).notNull(),
   closeAt: integer("close_at", { mode: "timestamp_ms" }).notNull(),
   passingScore: real("passing_score").notNull(),
+  totalScore: real("total_score").notNull(),
   questionSelectionMode: text("question_selection_mode", {
     enum: ["manual", "random"],
   }).notNull(),

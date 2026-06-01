@@ -19,3 +19,9 @@ export class NotFoundError extends AppError {
     super(message, "NOT_FOUND");
   }
 }
+
+export class InvalidStateTransitionError extends AppError {
+  constructor(message: string) {
+    super(message, "INVALID_STATE_TRANSITION");
+  }
+}

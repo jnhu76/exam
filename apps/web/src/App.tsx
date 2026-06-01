@@ -15,6 +15,9 @@ import { CoursePage } from "@/pages/admin/CoursePage";
 import { QuestionPage } from "@/pages/admin/QuestionPage";
 import { QuestionEditPage } from "@/pages/admin/QuestionEditPage";
 import { QuestionImportPage } from "@/pages/admin/QuestionImportPage";
+import { ExamPage } from "@/pages/admin/ExamPage";
+import { ExamCreatePage } from "@/pages/admin/ExamCreatePage";
+import { ExamDetailPage } from "@/pages/admin/ExamDetailPage";
 
 export function AppRoutes() {
   return (
@@ -32,6 +35,9 @@ export function AppRoutes() {
         <Route path="questions/new" element={<QuestionEditPage />} />
         <Route path="questions/:id/edit" element={<QuestionEditPage />} />
         <Route path="questions/import" element={<QuestionImportPage />} />
+        <Route path="exams" element={<ExamPage />} />
+        <Route path="exams/new" element={<ExamCreatePage />} />
+        <Route path="exams/:id" element={<ExamDetailPage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
       <Route path="/exam" element={<ExamLayout />}>
