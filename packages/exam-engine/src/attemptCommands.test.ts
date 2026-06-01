@@ -1,0 +1,548 @@
+import { describe, expect, it } from "vitest";
+import {
+  startAttempt,
+  submitAttempt,
+  markDisrupted,
+  restoreAttempt,
+  type AttemptRepository,
+  type EnrollmentRepository,
+} from "./attemptCommands.js";
+import type {
+  Exam,
+  ExamAttempt,
+  ExamEnrollment,
+  QuestionSnapshot,
+  RequestContext,
+} from "@exam/domain";
+import { ExamNotOpenError, ValidationError } from "@exam/domain";
+
+function makeSnapshot(): QuestionSnapshot[] {
+  return [
+    {
+      originalQuestionId: "q1",
+      type: "single_choice",
+      content: "Q1",
+      attachments: [],
+      options: [{ id: "a", content: "A" }],
+      standardAnswer: "a",
+      score: 50,
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      order: 0,
+    },
+  ];
+}
+
+function makeExam(overrides: Partial<Exam> = {}): Exam {
+  return {
+    id: "exam-1",
+    organizationId: "org-1",
+    title: "Test Exam",
+    description: "",
+    courseId: "course-1",
+    status: "open",
+    timingMode: "timed_window",
+    durationMinutes: 60,
+    openAt: new Date("2025-01-01T09:00:00Z"),
+    closeAt: new Date("2025-01-01T12:00:00Z"),
+    passingScore: 60,
+    totalScore: 100,
+    questionSelectionMode: "manual",
+    questionIds: ["q1"],
+    questionSnapshot: makeSnapshot(),
+    controlFlags: {
+      shuffleQuestions: false,
+      shuffleOptions: false,
+      detectTabSwitch: false,
+      disableCopyPaste: false,
+      requireQueue: false,
+      batchSize: 10,
+      batchInterval: 3,
+      restrictIp: false,
+      requireLockdown: false,
+      showResultImmediately: true,
+    },
+    retakePolicy: "unlimited",
+    scoreStrategy: "highest",
+    maxAttempts: 3,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeEnrollment(
+  overrides: Partial<ExamEnrollment> = {},
+): ExamEnrollment {
+  return {
+    id: "enr-1",
+    organizationId: "org-1",
+    examId: "exam-1",
+    candidateId: "cand-1",
+    status: "assigned",
+    attemptCount: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeAttempt(overrides: Partial<ExamAttempt> = {}): ExamAttempt {
+  return {
+    id: "attempt-1",
+    organizationId: "org-1",
+    examId: "exam-1",
+    enrollmentId: "enr-1",
+    candidateId: "cand-1",
+    attemptNo: 1,
+    status: "in_progress",
+    questionSnapshot: makeSnapshot(),
+    answers: [],
+    startedAt: new Date("2025-01-01T10:00:00Z"),
+    deadlineAt: new Date("2025-01-01T11:00:00Z"),
+    lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
+  const store = [...attempts];
+  return {
+    findById(id) {
+      return store.find((a) => a.id === id) ?? null;
+    },
+    findActiveByEnrollment(enrollmentId) {
+      return (
+        store.find(
+          (a) => a.enrollmentId === enrollmentId && a.status === "in_progress",
+        ) ?? null
+      );
+    },
+    findByEnrollmentAndAttemptNo(enrollmentId, attemptNo) {
+      return (
+        store.find(
+          (a) => a.enrollmentId === enrollmentId && a.attemptNo === attemptNo,
+        ) ?? null
+      );
+    },
+    create(input) {
+      const base = {
+        id: input.id ?? "attempt-new",
+        organizationId: input.organizationId,
+        examId: input.examId,
+        enrollmentId: input.enrollmentId,
+        candidateId: input.candidateId,
+        attemptNo: input.attemptNo,
+        status: input.status,
+        questionSnapshot: input.questionSnapshot,
+        answers: input.answers,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const optional: Partial<
+        Pick<
+          ExamAttempt,
+          | "startedAt"
+          | "deadlineAt"
+          | "lastActivityAt"
+          | "score"
+          | "passed"
+          | "submittedAt"
+        >
+      > = {};
+      if (input.startedAt) optional.startedAt = input.startedAt;
+      if (input.deadlineAt) optional.deadlineAt = input.deadlineAt;
+      if (input.lastActivityAt) optional.lastActivityAt = input.lastActivityAt;
+      const attempt = { ...base, ...optional } as ExamAttempt;
+      store.push(attempt);
+      return attempt;
+    },
+    update(id, data) {
+      const idx = store.findIndex((a) => a.id === id);
+      if (idx === -1) return null;
+      store[idx] = { ...store[idx]!, ...data };
+      return store[idx]!;
+    },
+  };
+}
+
+function makeEnrollmentRepo(
+  enrollments: ExamEnrollment[] = [],
+): EnrollmentRepository {
+  const store = [...enrollments];
+  return {
+    findByExamAndCandidate(examId, candidateId) {
+      return (
+        store.find(
+          (e) => e.examId === examId && e.candidateId === candidateId,
+        ) ?? null
+      );
+    },
+    create(input) {
+      const enr: ExamEnrollment = {
+        id: input.id ?? "enr-new",
+        organizationId: input.organizationId,
+        examId: input.examId,
+        candidateId: input.candidateId,
+        status: input.status,
+        attemptCount: input.attemptCount,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      store.push(enr);
+      return enr;
+    },
+    update(id, data) {
+      const idx = store.findIndex((e) => e.id === id);
+      if (idx === -1) return null;
+      store[idx] = { ...store[idx]!, ...data };
+      return store[idx]!;
+    },
+  };
+}
+
+const fixedNow = new Date("2025-01-01T10:30:00Z");
+const fixedStart = new Date("2025-01-01T10:30:00Z");
+
+describe("attemptCommands", () => {
+  describe("startAttempt", () => {
+    it("creates new attempt for candidate with enrollment", () => {
+      const exam = makeExam();
+      const enrollment = makeEnrollment();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo();
+
+      const result = startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.status).toBe("in_progress");
+      expect(result.candidateId).toBe("cand-1");
+      expect(result.examId).toBe("exam-1");
+      expect(result.enrollmentId).toBe("enr-1");
+      expect(result.attemptNo).toBe(1);
+      expect(result.questionSnapshot).toEqual(exam.questionSnapshot);
+      expect(result.startedAt).toEqual(fixedStart);
+      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
+    });
+
+    it("creates enrollment if none exists", () => {
+      const exam = makeExam();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo();
+      const attRepo = makeAttemptRepo();
+
+      const result = startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.candidateId).toBe("cand-1");
+      const newEnrollment = enrRepo.findByExamAndCandidate("exam-1", "cand-1");
+      expect(newEnrollment).toBeDefined();
+      expect(newEnrollment!.status).toBe("started");
+    });
+
+    it("returns existing in_progress attempt instead of creating new", () => {
+      const exam = makeExam();
+      const enrollment = makeEnrollment({ attemptCount: 1 });
+      const existingAttempt = makeAttempt();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([existingAttempt]);
+
+      const result = startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.id).toBe("attempt-1");
+    });
+
+    it("throws ExamNotOpenError when exam is not open", () => {
+      const exam = makeExam({ status: "draft" });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo();
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+      ).toThrow(ExamNotOpenError);
+    });
+
+    it("throws ExamNotOpenError when exam is closed", () => {
+      const exam = makeExam({ status: "closed" });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo();
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+      ).toThrow(ExamNotOpenError);
+    });
+
+    it("throws ValidationError when exam not found", () => {
+      const examRepo = { findById: () => null, update: () => null };
+      const enrRepo = makeEnrollmentRepo();
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        startAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "nonexistent",
+          "cand-1",
+          fixedNow,
+        ),
+      ).toThrow(ValidationError);
+    });
+
+    it("throws ExamNotOpenError when current time is before openAt", () => {
+      const exam = makeExam({
+        openAt: new Date("2025-01-01T12:00:00Z"),
+        closeAt: new Date("2025-01-01T14:00:00Z"),
+      });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo();
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        startAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          new Date("2025-01-01T11:00:00Z"),
+        ),
+      ).toThrow(ExamNotOpenError);
+    });
+
+    it("throws ExamNotOpenError when current time is after closeAt", () => {
+      const exam = makeExam({
+        openAt: new Date("2025-01-01T09:00:00Z"),
+        closeAt: new Date("2025-01-01T10:00:00Z"),
+      });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo();
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        startAttempt(
+          examRepo,
+          enrRepo,
+          attRepo,
+          "exam-1",
+          "cand-1",
+          new Date("2025-01-01T10:30:00Z"),
+        ),
+      ).toThrow(ExamNotOpenError);
+    });
+
+    it("throws ValidationError when max attempts reached", () => {
+      const exam = makeExam({
+        retakePolicy: "max_attempts",
+        maxAttempts: 1,
+      });
+      const enrollment = makeEnrollment({ attemptCount: 1 });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+      ).toThrow(ValidationError);
+    });
+
+    it("increments attempt number for subsequent attempts", () => {
+      const exam = makeExam();
+      const enrollment = makeEnrollment({ attemptCount: 1 });
+      const prevAttempt = makeAttempt({
+        status: "submitted",
+        attemptNo: 1,
+      });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([prevAttempt]);
+
+      const result = startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.attemptNo).toBe(2);
+    });
+
+    it("copies questionSnapshot from published exam", () => {
+      const snapshot = makeSnapshot();
+      const exam = makeExam({ questionSnapshot: snapshot });
+      const enrollment = makeEnrollment();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo();
+
+      const result = startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.questionSnapshot).toEqual(snapshot);
+    });
+  });
+
+  describe("submitAttempt", () => {
+    it("transitions in_progress → submitted", () => {
+      const attempt = makeAttempt();
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      expect(result.status).toBe("submitted");
+      expect(result.submittedAt).toEqual(fixedNow);
+    });
+
+    it("throws InvalidStateTransitionError for submitted attempt", () => {
+      const attempt = makeAttempt({ status: "submitted" });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      expect(() => submitAttempt(attRepo, "attempt-1", fixedNow)).toThrow();
+    });
+
+    it("throws ValidationError for non-existent attempt", () => {
+      const attRepo = makeAttemptRepo();
+
+      expect(() => submitAttempt(attRepo, "nonexistent", fixedNow)).toThrow(
+        ValidationError,
+      );
+    });
+
+    it("accepts late submission (past deadline) but notes timeout", () => {
+      const attempt = makeAttempt({
+        deadlineAt: new Date("2025-01-01T09:00:00Z"),
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = submitAttempt(
+        attRepo,
+        "attempt-1",
+        new Date("2025-01-01T11:00:00Z"),
+      );
+
+      expect(result.status).toBe("submitted");
+    });
+  });
+
+  describe("markDisrupted", () => {
+    it("transitions in_progress → disrupted", () => {
+      const attempt = makeAttempt();
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = markDisrupted(attRepo, "attempt-1");
+
+      expect(result.status).toBe("disrupted");
+    });
+
+    it("throws for non in_progress attempt", () => {
+      const attempt = makeAttempt({ status: "submitted" });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      expect(() => markDisrupted(attRepo, "attempt-1")).toThrow();
+    });
+  });
+
+  describe("restoreAttempt", () => {
+    it("transitions disrupted → in_progress and preserves answers + remaining time", () => {
+      const attempt = makeAttempt({
+        status: "disrupted",
+        answers: [
+          {
+            questionId: "q1",
+            answer: "a",
+            version: 1,
+            savedAt: new Date("2025-01-01T10:15:00Z"),
+          },
+        ],
+        deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
+      });
+      const exam = makeExam();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const restoreNow = new Date("2025-01-01T10:30:00Z");
+      const result = restoreAttempt(examRepo, attRepo, "attempt-1", restoreNow);
+
+      expect(result.status).toBe("in_progress");
+      expect(result.answers).toHaveLength(1);
+      expect(result.answers[0]!.answer).toBe("a");
+      expect(result.deadlineAt).toBeDefined();
+      expect(result.lastActivityAt).toEqual(restoreNow);
+    });
+
+    it("throws for non disrupted attempt", () => {
+      const attempt = makeAttempt({ status: "in_progress" });
+      const exam = makeExam();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo([attempt]);
+
+      expect(() =>
+        restoreAttempt(examRepo, attRepo, "attempt-1", fixedNow),
+      ).toThrow();
+    });
+
+    it("throws for non-existent attempt", () => {
+      const exam = makeExam();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo();
+
+      expect(() =>
+        restoreAttempt(examRepo, attRepo, "nonexistent", fixedNow),
+      ).toThrow(ValidationError);
+    });
+
+    it("keeps the original deadline while restoring a disrupted attempt", () => {
+      const attempt = makeAttempt({
+        status: "disrupted",
+        startedAt: new Date("2025-01-01T10:00:00Z"),
+        deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
+      });
+      const exam = makeExam();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const restoreNow = new Date("2025-01-01T10:30:00Z");
+      const result = restoreAttempt(examRepo, attRepo, "attempt-1", restoreNow);
+
+      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:00:00Z"));
+    });
+  });
+});

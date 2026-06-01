@@ -112,6 +112,21 @@ export const SaveAnswerResponseSchema = z.object({
 });
 export type SaveAnswerResponseDTO = z.infer<typeof SaveAnswerResponseSchema>;
 
+// ── Route Params ─────────────────────────────────────────────────
+
+export const AttemptIdParamsSchema = z.object({
+  attemptId: z.string().uuid(),
+});
+
+export const LoadAttemptParamsSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export const SaveAnswerParamsSchema = z.object({
+  attemptId: z.string().uuid(),
+  questionId: z.string().uuid(),
+});
+
 // ── Start Attempt ─────────────────────────────────────────────────
 
 export const StartAttemptRequestSchema = z.object({
@@ -139,3 +154,14 @@ export const RestoreAttemptRequestSchema = z.object({
   attemptId: z.string().uuid(),
 });
 export type RestoreAttemptRequest = z.infer<typeof RestoreAttemptRequestSchema>;
+
+// ── Queue ─────────────────────────────────────────────────────────
+
+export const QueueStatusResponseSchema = z.object({
+  examId: z.string().uuid(),
+  status: z.enum(["waiting", "ready"]),
+  position: z.number().int().positive(),
+  waitCount: z.number().int().min(0),
+  estimatedWaitSeconds: z.number().int().min(0),
+});
+export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;

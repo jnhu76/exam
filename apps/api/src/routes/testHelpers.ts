@@ -26,8 +26,10 @@ export interface TestContext {
   org: typeof sqliteSchema.organizations.$inferSelect;
   admin: typeof sqliteSchema.users.$inferSelect;
   teacher: typeof sqliteSchema.users.$inferSelect;
+  candidate: typeof sqliteSchema.users.$inferSelect;
   adminToken: string;
   teacherToken: string;
+  candidateToken: string;
 }
 
 export async function buildTestApp(
@@ -52,6 +54,7 @@ export async function buildTestApp(
   const users = db.select().from(sqliteSchema.users).all();
   const admin = users.find((u) => u.role === "SuperAdmin")!;
   const teacher = users.find((u) => u.role === "Teacher")!;
+  const candidate = users.find((u) => u.role === "Candidate")!;
 
   const adminToken = signJWT({
     actorId: admin.id,
@@ -63,6 +66,21 @@ export async function buildTestApp(
     role: teacher.role,
     organizationId: teacher.organizationId,
   });
+  const candidateToken = signJWT({
+    actorId: candidate.id,
+    role: candidate.role,
+    organizationId: candidate.organizationId,
+  });
 
-  return { app, db, org, admin, teacher, adminToken, teacherToken };
+  return {
+    app,
+    db,
+    org,
+    admin,
+    teacher,
+    candidate,
+    adminToken,
+    teacherToken,
+    candidateToken,
+  };
 }

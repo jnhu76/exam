@@ -6,6 +6,7 @@ import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
+import heartbeatPlugin from "./plugins/heartbeat.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import authRoutes from "./routes/auth.js";
 import settingsRoutes from "./routes/settings.js";
@@ -16,6 +17,7 @@ import candidateRoutes from "./routes/candidate.js";
 import courseRoutes from "./routes/course.js";
 import questionRoutes from "./routes/question.js";
 import examRoutes from "./routes/exam.js";
+import attemptRoutes from "./routes/attempts.js";
 
 const port = Number(process.env.APP_PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -31,6 +33,7 @@ async function main() {
   await app.register(authPlugin);
   await app.register(tenantPlugin);
   await app.register(rateLimitPlugin);
+  await app.register(heartbeatPlugin);
 
   app.get("/api/health", async () => {
     return { status: "ok" };
@@ -45,6 +48,7 @@ async function main() {
   await app.register(courseRoutes, { prefix: "/api" });
   await app.register(questionRoutes, { prefix: "/api" });
   await app.register(examRoutes, { prefix: "/api" });
+  await app.register(attemptRoutes, { prefix: "/api" });
 
   await app.listen({ port, host });
 }
