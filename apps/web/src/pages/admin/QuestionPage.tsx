@@ -272,6 +272,7 @@ export function QuestionPage() {
                         onClick={() =>
                           void navigate(`/admin/questions/${q.id}/edit`)
                         }
+                        aria-label="编辑题目"
                       >
                         <Pencil className="size-4" />
                       </Button>

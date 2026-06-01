@@ -146,13 +146,18 @@ export function ExamPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => void navigate(`/admin/exams/${exam.id}`)}
+                      aria-label="查看详情"
                     >
                       <Eye className="size-4" />
                     </Button>
                     {exam.status === "draft" && (
                       <ConfirmDialog
                         trigger={
-                          <Button variant="ghost" size="icon">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="删除考试"
+                          >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         }

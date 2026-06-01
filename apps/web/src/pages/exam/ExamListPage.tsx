@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -133,7 +134,7 @@ export function ExamListPage() {
   const ended = exams.filter((e) => e.isEnded);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-6">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
       {available.length > 0 && (
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">可参加的考试</h2>
@@ -167,10 +168,11 @@ export function ExamListPage() {
       )}
 
       {exams.length === 0 && (
-        <div className="flex flex-col items-center gap-3 p-12 text-center">
-          <ClipboardList className="size-10 text-muted-foreground" />
-          <p className="text-muted-foreground">暂无可参加的考试</p>
-        </div>
+        <EmptyState
+          icon={<ClipboardList className="size-8" />}
+          title="暂无可参加的考试"
+          description="当前没有可用的考试。"
+        />
       )}
     </div>
   );

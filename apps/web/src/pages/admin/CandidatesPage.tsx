@@ -277,6 +277,7 @@ export function CandidatesPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => open(candidate)}
+                      aria-label="编辑考生"
                     >
                       <Pencil className="size-4" />
                     </Button>

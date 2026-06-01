@@ -147,6 +147,7 @@ export function UsersPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => open(user)}
+                      aria-label="编辑用户"
                     >
                       <Pencil className="size-4" />
                     </Button>

@@ -13,7 +13,9 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
-      <div className="text-muted-foreground">{icon}</div>
+      <div className="text-muted-foreground" aria-hidden="true">
+        {icon}
+      </div>
       <div>
         <h2 className="font-medium">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>

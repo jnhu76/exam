@@ -208,6 +208,7 @@ export function CandidateFieldsPage() {
                       variant="ghost"
                       disabled={index === 0}
                       onClick={() => void move(field, -1)}
+                      aria-label="上移"
                     >
                       <ArrowUp className="size-4" />
                     </Button>
@@ -216,6 +217,7 @@ export function CandidateFieldsPage() {
                       variant="ghost"
                       disabled={index === fields.length - 1}
                       onClick={() => void move(field, 1)}
+                      aria-label="下移"
                     >
                       <ArrowDown className="size-4" />
                     </Button>
@@ -223,6 +225,7 @@ export function CandidateFieldsPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => dialog(field)}
+                      aria-label="编辑字段"
                     >
                       <Pencil className="size-4" />
                     </Button>

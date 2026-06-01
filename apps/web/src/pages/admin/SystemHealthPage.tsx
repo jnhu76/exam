@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { SystemHealthResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -65,10 +67,19 @@ export function SystemHealthPage() {
     return <SystemHealthSkeleton />;
   }
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="系统健康" />
+        <ErrorState message={error} onRetry={loadHealth} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">系统健康</h1>
+        <PageHeader title="系统健康" />
         <div className="flex items-center gap-3">
           <span
             className={cn(
@@ -82,6 +93,7 @@ export function SystemHealthPage() {
           <Button
             variant="outline"
             size="sm"
+            aria-label="刷新系统健康数据"
             onClick={() => {
               setIsLoading(true);
               loadHealth();
@@ -91,8 +103,6 @@ export function SystemHealthPage() {
           </Button>
         </div>
       </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard

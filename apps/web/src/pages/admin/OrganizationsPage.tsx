@@ -132,6 +132,7 @@ export function OrganizationsPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => openDialog(org)}
+                      aria-label="编辑机构"
                     >
                       <Pencil className="size-4" />
                     </Button>

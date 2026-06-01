@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Users } from "lucide-react";
 
 interface ExamDetail {
   id: string;
@@ -227,7 +229,11 @@ export function ExamDetailPage() {
         </CardHeader>
         <CardContent>
           {exam.participants.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无报名候选人</p>
+            <EmptyState
+              icon={<Users className="size-8" />}
+              title="暂无报名候选人"
+              description="还没有候选人报名参加此考试。"
+            />
           ) : (
             <Table>
               <TableHeader>

@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import type { DashboardResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,18 +68,15 @@ export function DashboardPage() {
   if (error) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">仪表盘</h1>
-        <p className="text-sm text-destructive">{error}</p>
-        <Button onClick={loadDashboard} variant="outline">
-          重试
-        </Button>
+        <PageHeader title="仪表盘" />
+        <ErrorState message={error} onRetry={loadDashboard} />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">仪表盘</h1>
+      <PageHeader title="仪表盘" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard label="题目总数" value={data?.totalQuestions ?? 0} />
@@ -123,6 +122,7 @@ export function DashboardPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label={`查看考试 ${exam.title}`}
                       onClick={() => navigate(`/admin/exams/${exam.id}`)}
                     >
                       <Eye className="size-4" />

@@ -1,10 +1,11 @@
 import { Navigate, Outlet } from "react-router";
 import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
+import { LoadingState } from "@/components/shared/LoadingState";
 
 export function ExamLayout() {
   const { user, isLoading } = useAuth();
-  if (isLoading) return null;
+  if (isLoading) return <LoadingState />;
   if (!user || user.role !== "Candidate") {
     return <Navigate to="/login" replace />;
   }

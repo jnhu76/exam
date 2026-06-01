@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,7 @@ import {
   ExamConfigForm,
   type ExamConfigData,
 } from "@/components/exam/ExamConfigForm";
-import { Trash2 } from "lucide-react";
+import { BookOpen, Trash2 } from "lucide-react";
 
 interface CourseRow {
   id: string;
@@ -169,7 +170,7 @@ export function ExamCreatePage() {
     <div className="space-y-6">
       <PageHeader title="创建考试" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
           <ExamConfigForm
             courses={courses}
@@ -194,9 +195,11 @@ export function ExamCreatePage() {
           </div>
 
           {selectedQuestions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center border rounded-md border-dashed">
-              尚未选择题目
-            </p>
+            <EmptyState
+              icon={<BookOpen className="size-8" />}
+              title="尚未选择题目"
+              description="请点击「手动选题」按钮选择题目。"
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -224,6 +227,7 @@ export function ExamCreatePage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => removeQuestion(q.id)}
+                        aria-label="删除题目"
                       >
                         <Trash2 className="size-4" />
                       </Button>

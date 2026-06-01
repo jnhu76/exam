@@ -161,6 +161,7 @@ export function CoursePage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => openEdit(course)}
+                      aria-label="编辑课程"
                     >
                       <Pencil className="size-4" />
                     </Button>

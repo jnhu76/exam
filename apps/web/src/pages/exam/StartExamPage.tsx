@@ -186,7 +186,13 @@ export function StartExamPage() {
           <CardContent className="space-y-3 text-sm">
             <p>前方等待人数：{queueStatus.waitCount}</p>
             <p>预计等待：{queueStatus.estimatedWaitSeconds}秒</p>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-2 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuenow={Math.max(10, 100 / queueStatus.position)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div
                 className="h-full bg-primary transition-all"
                 style={{
@@ -205,7 +211,12 @@ export function StartExamPage() {
           onClick={() => void handleStart()}
           disabled={isStarting}
         >
-          {isStarting && <LoaderCircle className="mr-2 size-4 animate-spin" />}
+          {isStarting && (
+            <LoaderCircle
+              className="mr-2 size-4 animate-spin"
+              aria-hidden="true"
+            />
+          )}
           {isStarting ? "正在进入..." : "开始考试"}
         </Button>
       </div>
