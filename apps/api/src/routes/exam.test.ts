@@ -257,4 +257,32 @@ describe("exam routes", () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it("POST /api/exams/:id/publish works without body", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "No Body Publish",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${created.id}/publish`,
+      headers: { "content-type": "application/json" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("published");
+  });
 });

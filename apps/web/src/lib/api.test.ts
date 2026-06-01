@@ -30,7 +30,7 @@ describe("api client", () => {
       );
     });
 
-    it("sets Content-Type to application/json", async () => {
+    it("does not set Content-Type for GET requests", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({}), {
           headers: { "Content-Type": "application/json" },
@@ -43,7 +43,7 @@ describe("api client", () => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/health",
         expect.objectContaining({
-          headers: { "Content-Type": "application/json" },
+          headers: {},
         }),
       );
     });
@@ -117,6 +117,35 @@ describe("api client", () => {
           body: undefined,
         }),
       );
+    });
+
+    it("does not set Content-Type when POST body is undefined", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await api.post("/api/exams/1/publish");
+
+      const callArgs = fetchMock.mock.calls[0]![1] as RequestInit;
+      expect(callArgs.headers).not.toHaveProperty("Content-Type");
+      expect(callArgs.body).toBeUndefined();
+    });
+  });
+
+  describe("DELETE requests", () => {
+    it("does not set Content-Type header", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(null, { status: 204 }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await api.delete("/api/courses/1");
+
+      const callArgs = fetchMock.mock.calls[0]![1] as RequestInit;
+      expect(callArgs.headers).not.toHaveProperty("Content-Type");
     });
   });
 

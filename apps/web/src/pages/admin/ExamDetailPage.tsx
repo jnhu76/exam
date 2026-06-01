@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Users, Plus, Trash2 } from "lucide-react";
 
 interface ExamDetail {
   id: string;
@@ -58,12 +67,41 @@ const statusLabels: Record<string, string> = {
   archived: "已归档",
 };
 
+interface EnrollmentItem {
+  id: string;
+  examId: string;
+  candidateId: string;
+  candidateDisplayName: string;
+  candidateIdentity?: string;
+  status: string;
+  attemptCount: number;
+  finalScore: number | null;
+  finalPassed: boolean | null;
+}
+
+interface CandidateItem {
+  id: string;
+  userId: string;
+  name: string;
+  username: string;
+  fields: Record<string, unknown>;
+}
+
 export function ExamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [exam, setExam] = useState<ExamDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [candidates, setCandidates] = useState<CandidateItem[]>([]);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [addingEnrollment, setAddingEnrollment] = useState(false);
 
   const loadExam = useCallback(async () => {
     if (!id) return;
@@ -83,16 +121,92 @@ export function ExamDetailPage() {
     loadExam();
   }, [loadExam]);
 
-  async function handlePublish() {
+  const loadEnrollments = useCallback(async () => {
     if (!id) return;
-    await api.post(`/api/exams/${id}/publish`);
-    await loadExam();
+    try {
+      const data = await api.get<EnrollmentItem[]>(
+        `/api/exams/${id}/enrollments`,
+      );
+      setEnrollments(data);
+    } catch {
+      toast.error("加载考生列表失败");
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadEnrollments();
+  }, [loadEnrollments]);
+
+  async function handleOpenAddDialog() {
+    setAddDialogOpen(true);
+    try {
+      const data = await api.get<{
+        items: CandidateItem[];
+        total: number;
+      }>("/api/candidates?page=1&pageSize=100");
+      setCandidates(data.items);
+      setSelectedCandidateIds(new Set());
+    } catch {
+      toast.error("加载候选人列表失败");
+    }
+  }
+
+  async function handleAddEnrollments() {
+    if (!id || selectedCandidateIds.size === 0) return;
+    setAddingEnrollment(true);
+    try {
+      await api.post(`/api/exams/${id}/enrollments`, {
+        candidateIds: Array.from(selectedCandidateIds),
+      });
+      toast.success("已添加考生");
+      setAddDialogOpen(false);
+      await loadEnrollments();
+      await loadExam();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "添加考生失败");
+    } finally {
+      setAddingEnrollment(false);
+    }
+  }
+
+  async function handleRemoveEnrollment(enrollmentId: string) {
+    if (!id) return;
+    try {
+      await api.delete(`/api/exams/${id}/enrollments/${enrollmentId}`);
+      toast.success("已移除考生");
+      await loadEnrollments();
+      await loadExam();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "移除考生失败");
+    }
+  }
+
+  async function handlePublish() {
+    if (!id || publishing) return;
+    setPublishing(true);
+    try {
+      await api.post(`/api/exams/${id}/publish`);
+      toast.success("考试发布成功");
+      await loadExam();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "发布失败，请稍后重试");
+    } finally {
+      setPublishing(false);
+    }
   }
 
   async function handleArchive() {
-    if (!id) return;
-    await api.post(`/api/exams/${id}/archive`);
-    await loadExam();
+    if (!id || archiving) return;
+    setArchiving(true);
+    try {
+      await api.post(`/api/exams/${id}/archive`);
+      toast.success("考试已归档");
+      await loadExam();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "归档失败，请稍后重试");
+    } finally {
+      setArchiving(false);
+    }
   }
 
   if (isLoading) return <LoadingState />;
@@ -106,11 +220,20 @@ export function ExamDetailPage() {
         actions={
           <div className="flex gap-2">
             {exam.status === "draft" && (
-              <Button onClick={() => void handlePublish()}>发布考试</Button>
+              <Button
+                onClick={() => void handlePublish()}
+                disabled={publishing}
+              >
+                {publishing ? "发布中..." : "发布考试"}
+              </Button>
             )}
             {(exam.status === "published" || exam.status === "closed") && (
-              <Button variant="outline" onClick={() => void handleArchive()}>
-                归档
+              <Button
+                variant="outline"
+                onClick={() => void handleArchive()}
+                disabled={archiving}
+              >
+                {archiving ? "归档中..." : "归档"}
               </Button>
             )}
             <Button
@@ -224,15 +347,19 @@ export function ExamDetailPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">候选人列表</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">考生资格</CardTitle>
+          <Button size="sm" onClick={handleOpenAddDialog}>
+            <Plus className="size-4" />
+            添加考生
+          </Button>
         </CardHeader>
         <CardContent>
-          {exam.participants.length === 0 ? (
+          {enrollments.length === 0 ? (
             <EmptyState
               icon={<Users className="size-8" />}
-              title="暂无报名候选人"
-              description="还没有候选人报名参加此考试。"
+              title="暂无考生"
+              description="还没有为此考试分配考生。"
             />
           ) : (
             <Table>
@@ -241,20 +368,43 @@ export function ExamDetailPage() {
                   <TableHead>身份信息</TableHead>
                   <TableHead>姓名</TableHead>
                   <TableHead>状态</TableHead>
+                  <TableHead>尝试次数</TableHead>
                   <TableHead>成绩</TableHead>
+                  <TableHead className="w-16">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {exam.participants.map((participant) => (
-                  <TableRow key={participant.candidateId}>
+                {enrollments.map((enrollment) => (
+                  <TableRow key={enrollment.id}>
                     <TableCell>
-                      {Object.values(participant.fields)
-                        .map(String)
-                        .join(" / ") || participant.candidateId.slice(0, 8)}
+                      {enrollment.candidateIdentity ??
+                        enrollment.candidateId.slice(0, 8)}
                     </TableCell>
-                    <TableCell>{participant.name}</TableCell>
-                    <TableCell>{participant.status}</TableCell>
-                    <TableCell>{participant.score ?? "-"}</TableCell>
+                    <TableCell>{enrollment.candidateDisplayName}</TableCell>
+                    <TableCell>{enrollment.status}</TableCell>
+                    <TableCell>{enrollment.attemptCount}</TableCell>
+                    <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
+                    <TableCell>
+                      {enrollment.status === "assigned" && (
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="移除考生"
+                            >
+                              <Trash2 className="size-4 text-destructive" />
+                            </Button>
+                          }
+                          title="确认移除"
+                          description={`确定要移除「${enrollment.candidateDisplayName}」吗？`}
+                          destructive
+                          onConfirm={() =>
+                            void handleRemoveEnrollment(enrollment.id)
+                          }
+                        />
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -262,6 +412,64 @@ export function ExamDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>添加考生</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-2">
+            {candidates.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                暂无可用候选人，请先在候选人管理中创建。
+              </p>
+            ) : (
+              candidates.map((candidate) => (
+                <label
+                  key={candidate.id}
+                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedCandidateIds.has(candidate.id)}
+                    onChange={(e) => {
+                      setSelectedCandidateIds((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) {
+                          next.add(candidate.id);
+                        } else {
+                          next.delete(candidate.id);
+                        }
+                        return next;
+                      });
+                    }}
+                    className="size-4"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{candidate.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {candidate.username}
+                    </p>
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => void handleAddEnrollments()}
+              disabled={addingEnrollment || selectedCandidateIds.size === 0}
+            >
+              {addingEnrollment
+                ? "添加中..."
+                : `添加 (${selectedCandidateIds.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -93,4 +93,56 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe("PERMISSION_DENIED");
   });
+
+  it("PATCH /api/auth/me/password changes password for authenticated user", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: "/api/auth/me/password",
+      payload: {
+        currentPassword: "admin123",
+        newPassword: "newpass123",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode, `status ${res.statusCode}, body: ${res.body}`).toBe(
+      200,
+    );
+    expect(res.json().ok).toBe(true);
+
+    const loginRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: "admin",
+        password: "newpass123",
+      },
+    });
+    expect(loginRes.statusCode).toBe(200);
+  });
+
+  it("PATCH /api/auth/me/password rejects wrong current password", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: "/api/auth/me/password",
+      payload: {
+        currentPassword: "wrong-password",
+        newPassword: "another123",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("PATCH /api/auth/me/password requires authentication", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: "/api/auth/me/password",
+      payload: {
+        currentPassword: "admin123",
+        newPassword: "newpass123",
+      },
+    });
+    expect(res.statusCode).toBe(401);
+  });
 });

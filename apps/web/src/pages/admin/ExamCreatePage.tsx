@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -148,9 +149,14 @@ export function ExamCreatePage() {
         await api.post(`/api/exams/${exam.id}/publish`);
       }
 
+      if (!asDraft) {
+        toast.success("考试创建并发布成功");
+      } else {
+        toast.success("考试已保存为草稿");
+      }
       void navigate("/admin/exams");
     } catch {
-      // error handled by api client
+      toast.error("保存失败，请稍后重试");
     } finally {
       setSaving(false);
     }

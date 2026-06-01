@@ -57,3 +57,18 @@ export const LogoutResponseSchema = z.object({
   success: z.boolean(),
 });
 export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
+
+// ── Change Password ───────────────────────────────────────────────
+
+export const ChangePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(100),
+});
+export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
+
+export const ChangePasswordResponseSchema = z.object({
+  ok: z.literal(true),
+});
+export type ChangePasswordResponse = z.infer<
+  typeof ChangePasswordResponseSchema
+>;

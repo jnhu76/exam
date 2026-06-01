@@ -6,13 +6,14 @@ import {
   RegisterResponseSchema,
   MeResponseSchema,
   LogoutResponseSchema,
+  ChangePasswordRequestSchema,
 } from "@exam/contracts";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { PublicBrandingContext, RequestContext } from "@exam/domain";
-import { PermissionDeniedError } from "@exam/domain";
+import { PermissionDeniedError, ValidationError } from "@exam/domain";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
@@ -155,6 +156,52 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         organizationId: user.organizationId,
       });
       return reply.code(200).send(response);
+    },
+  );
+
+  fastify.patch(
+    "/me/password",
+    { preHandler: fastify.authenticate },
+    async (request: any, reply: any) => {
+      const parsed = ChangePasswordRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: parsed.error.issues.map((i) => i.message).join("; "),
+          },
+        });
+      }
+      const { currentPassword, newPassword } = parsed.data;
+      const ctx = request["ctx"] as RequestContext;
+      const targetCtx = {
+        ...ctx,
+        targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
+      };
+      const userRepo = createUserRepo(fastify.db);
+      const user = userRepo.findByOrganizationAndId(
+        targetCtx.organizationId,
+        targetCtx.actorId,
+      );
+      if (!user) {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+      }
+
+      const isValid = await verifyPassword(currentPassword, user.passwordHash);
+      if (!isValid) {
+        return reply.code(400).send({
+          error: {
+            code: "INVALID_PASSWORD",
+            message: "Current password is incorrect",
+          },
+        });
+      }
+
+      const newHash = await hashPassword(newPassword);
+      userRepo.update(targetCtx, user.id, { passwordHash: newHash });
+      return { ok: true as const };
     },
   );
 };

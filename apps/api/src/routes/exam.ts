@@ -367,6 +367,192 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(204).send();
     },
   );
+
+  fastify.get(
+    "/exams/:examId/enrollments",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
+      ],
+    },
+    async (request: any, reply: any) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { examId } = request.params as { examId: string };
+      const examRepo = createExamRepo(fastify.db);
+      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      if (!exam) {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+      }
+
+      const enrollmentRepo = createEnrollmentRepo(fastify.db);
+      const enrollments = enrollmentRepo
+        .list(ctx)
+        .filter((e) => e.examId === examId);
+      const candidateRepo = createCandidateRepo(fastify.db);
+      const userRepo = createUserRepo(fastify.db);
+
+      return enrollments.map((enrollment) => {
+        const candidate = candidateRepo.findById(ctx, enrollment.candidateId);
+        const user = candidate
+          ? userRepo.findById(ctx, candidate.userId)
+          : null;
+        return {
+          id: enrollment.id,
+          examId: enrollment.examId,
+          candidateId: enrollment.candidateId,
+          candidateDisplayName: user?.name ?? "-",
+          candidateIdentity:
+            Object.values(candidate?.fields ?? {})
+              .map(String)
+              .join(" / ") || undefined,
+          status: enrollment.status,
+          attemptCount: enrollment.attemptCount,
+          finalScore: enrollment.finalScore ?? null,
+          finalPassed: enrollment.finalPassed ?? null,
+        };
+      });
+    },
+  );
+
+  fastify.post(
+    "/exams/:examId/enrollments",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
+      ],
+    },
+    async (request: any, reply: any) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { examId } = request.params as { examId: string };
+      const { candidateIds } = request.body as { candidateIds: string[] };
+      if (!Array.isArray(candidateIds) || candidateIds.length === 0) {
+        return reply.code(400).send({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "candidateIds must be a non-empty array",
+          },
+        });
+      }
+
+      const examRepo = createExamRepo(fastify.db);
+      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      if (!exam) {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+      }
+
+      const enrollmentRepo = createEnrollmentRepo(fastify.db);
+      const candidateRepo = createCandidateRepo(fastify.db);
+      const userRepo = createUserRepo(fastify.db);
+      const existing = enrollmentRepo
+        .list(ctx)
+        .filter((e) => e.examId === examId);
+      const existingIds = new Set(existing.map((e) => e.candidateId));
+
+      let added = 0;
+      let skipped = 0;
+      const enrollments: unknown[] = [];
+
+      for (const candidateId of candidateIds) {
+        if (existingIds.has(candidateId)) {
+          skipped++;
+          continue;
+        }
+        const candidate = candidateRepo.findById(ctx, candidateId);
+        if (!candidate) {
+          skipped++;
+          continue;
+        }
+        const enrollment = enrollmentRepo.create(ctx, {
+          examId,
+          candidateId,
+          status: "assigned",
+          attemptCount: 0,
+        });
+        recordAudit(
+          fastify,
+          request,
+          ctx,
+          "enrollment.add",
+          "enrollment",
+          enrollment.id,
+          {
+            examId,
+            candidateId,
+          },
+        );
+        added++;
+        const user = userRepo.findById(ctx, candidate.userId);
+        enrollments.push({
+          id: enrollment.id,
+          examId: enrollment.examId,
+          candidateId: enrollment.candidateId,
+          candidateDisplayName: user?.name ?? "-",
+          status: enrollment.status,
+          attemptCount: enrollment.attemptCount,
+          finalScore: enrollment.finalScore ?? null,
+          finalPassed: enrollment.finalPassed ?? null,
+        });
+      }
+
+      return { added, skipped, enrollments };
+    },
+  );
+
+  fastify.delete(
+    "/exams/:examId/enrollments/:enrollmentId",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
+      ],
+    },
+    async (request: any, reply: any) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { examId, enrollmentId } = request.params as {
+        examId: string;
+        enrollmentId: string;
+      };
+      const enrollmentRepo = createEnrollmentRepo(fastify.db);
+      const enrollment = enrollmentRepo.findById(ctx, enrollmentId);
+      if (!enrollment || enrollment.examId !== examId) {
+        return reply.code(404).send({
+          error: {
+            code: "NOT_FOUND",
+            message: "Enrollment not found",
+          },
+        });
+      }
+      if (enrollment.status !== "assigned") {
+        return reply.code(409).send({
+          error: {
+            code: "CONFLICT",
+            message: "Cannot remove enrollment that has started",
+          },
+        });
+      }
+
+      enrollmentRepo.delete(ctx, enrollmentId);
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "enrollment.remove",
+        "enrollment",
+        enrollmentId,
+        {
+          examId,
+          candidateId: enrollment.candidateId,
+        },
+      );
+      return reply.code(204).send();
+    },
+  );
 };
 
 export default examRoutes;

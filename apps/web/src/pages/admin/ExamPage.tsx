@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -82,8 +83,13 @@ export function ExamPage() {
   }, [loadExams]);
 
   async function handleDelete(id: string) {
-    await api.delete(`/api/exams/${id}`);
-    await loadExams();
+    try {
+      await api.delete(`/api/exams/${id}`);
+      toast.success("考试已删除");
+      await loadExams();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "删除失败，请稍后重试");
+    }
   }
 
   if (isLoading) return <LoadingState />;

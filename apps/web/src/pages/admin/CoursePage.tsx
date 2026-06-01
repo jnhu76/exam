@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -103,17 +104,23 @@ export function CoursePage() {
         });
       }
       setDialogOpen(false);
+      toast.success(editingCourse ? "课程已更新" : "课程已创建");
       await loadCourses();
     } catch {
-      // error handled by api client
+      toast.error("保存失败，请稍后重试");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(id: string) {
-    await api.delete(`/api/courses/${id}`);
-    await loadCourses();
+    try {
+      await api.delete(`/api/courses/${id}`);
+      toast.success("课程已删除");
+      await loadCourses();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "删除失败，请稍后重试");
+    }
   }
 
   if (isLoading) return <LoadingState />;

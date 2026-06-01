@@ -20,11 +20,12 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
+    const hasBody = init?.body !== undefined;
     const response = await fetch(`${baseUrl}${path}`, {
       ...init,
       credentials: "include",
       headers: {
-        "Content-Type": "application/json",
+        ...(hasBody ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
       },
     });
