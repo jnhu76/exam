@@ -5,8 +5,15 @@ import {
   createSqliteDatabase,
   type SqliteDatabaseConnection,
 } from "./sqlite.js";
+import {
+  createPostgresDatabase,
+  isPostgresqlUrl,
+  type PostgresDatabaseConnection,
+} from "./postgres.js";
 
-export type DatabaseConnection = { kind: "sqlite" } & SqliteDatabaseConnection;
+export type DatabaseConnection =
+  | ({ kind: "sqlite" } & SqliteDatabaseConnection)
+  | ({ kind: "pg" } & PostgresDatabaseConnection);
 
 export function normalizeSqliteFilename(databaseUrl: string): string {
   return databaseUrl.startsWith("sqlite:")
@@ -29,6 +36,10 @@ export function resolveSqliteFilename(databaseUrl: string): string {
 export function createDatabase(
   databaseUrl = process.env.DATABASE_URL ?? "sqlite:./dev.db",
 ): DatabaseConnection {
+  if (isPostgresqlUrl(databaseUrl)) {
+    return createPostgresDatabase(databaseUrl);
+  }
+
   if (
     databaseUrl.startsWith("sqlite:") ||
     databaseUrl === ":memory:" ||
@@ -40,7 +51,5 @@ export function createDatabase(
     };
   }
 
-  throw new ValidationError(
-    "Only SQLite DATABASE_URL values are supported during Phase 1 bootstrap",
-  );
+  throw new ValidationError(`Unsupported DATABASE_URL format: ${databaseUrl}`);
 }

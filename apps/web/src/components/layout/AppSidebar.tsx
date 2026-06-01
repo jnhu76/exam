@@ -10,7 +10,9 @@ import {
   FileUp,
   Gauge,
   GraduationCap,
+  LayoutDashboard,
   LogOut,
+  Monitor,
   Settings,
   Tags,
   UserRoundCog,
@@ -29,6 +31,10 @@ interface AppSidebarProps {
 }
 
 const groups = [
+  {
+    label: "概览",
+    items: [{ label: "仪表盘", to: "/admin/dashboard", icon: LayoutDashboard }],
+  },
   {
     label: "题库",
     items: [
@@ -51,6 +57,7 @@ const managementItems = [
   { label: "考生管理", to: "/admin/candidates", icon: Users },
   { label: "平台设置", to: "/admin/settings", icon: Settings },
   { label: "考生字段", to: "/admin/candidate-fields", icon: Tags },
+  { label: "系统健康", to: "/admin/system", icon: Monitor },
 ];
 
 function SidebarLink({

@@ -9,3 +9,4 @@ export * from "./question.js";
 export * from "./exam.js";
 export * from "./attempt.js";
 export * from "./score.js";
+export * from "./system.js";

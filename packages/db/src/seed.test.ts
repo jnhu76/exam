@@ -5,9 +5,10 @@ import { seed } from "./seed.js";
 
 describe("seed idempotency", () => {
   it("does not throw on second run", async () => {
-    const { db } = createDatabase(":memory:");
-    migrateSqlite(db);
-    await seed(db);
-    await expect(seed(db)).resolves.toBeUndefined();
+    const conn = createDatabase(":memory:");
+    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
+    migrateSqlite(conn.db);
+    await seed(conn.db);
+    await expect(seed(conn.db)).resolves.toBeUndefined();
   });
 });

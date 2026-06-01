@@ -24,9 +24,11 @@ export function createSqliteDatabase(
   };
 }
 
-export type SqliteDatabase = BetterSQLite3Database<typeof sqliteSchema>;
+export { type SqliteDatabase } from "./types.js";
 
-export function migrateSqlite(db: SqliteDatabase): void {
+export function migrateSqlite(
+  db: BetterSQLite3Database<typeof sqliteSchema>,
+): void {
   migrate(db, {
     migrationsFolder: fileURLToPath(
       new URL("../migrations/sqlite", import.meta.url),

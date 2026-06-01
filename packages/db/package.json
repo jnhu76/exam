@@ -15,6 +15,9 @@
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
     "db:push": "drizzle-kit push --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
+    "db:generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts",
+    "db:migrate:postgres": "drizzle-kit migrate --config drizzle.postgres.config.ts",
+    "db:push:postgres": "drizzle-kit push --config drizzle.postgres.config.ts",
     "db:seed": "tsx src/seed.ts"
   },
   "devDependencies": {
@@ -29,6 +32,7 @@
     "@exam/domain": "workspace:*",
     "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
   }
 }

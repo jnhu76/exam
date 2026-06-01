@@ -1,5 +1,9 @@
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
+import fastifyStatic from "@fastify/static";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import cors from "./plugins/cors.js";
 import setupSecurity from "./plugins/security.js";
 import authPlugin from "./plugins/auth.js";
@@ -20,6 +24,7 @@ import examRoutes from "./routes/exam.js";
 import attemptRoutes from "./routes/attempts.js";
 import scoreRoutes from "./routes/scores.js";
 import { exportRoutes } from "./routes/export.js";
+import systemRoutes from "./routes/system.js";
 
 const port = Number(process.env.APP_PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -53,6 +58,21 @@ async function main() {
   await app.register(attemptRoutes, { prefix: "/api" });
   await app.register(scoreRoutes, { prefix: "/api" });
   await app.register(exportRoutes, { prefix: "/api" });
+  await app.register(systemRoutes, { prefix: "/api" });
+
+  const publicDir = resolve(
+    fileURLToPath(new URL("../public", import.meta.url)),
+  );
+  if (existsSync(publicDir)) {
+    await app.register(fastifyStatic, {
+      root: publicDir,
+      prefix: "/",
+      wildcard: false,
+    });
+    app.setNotFoundHandler((_req, reply) => {
+      reply.sendFile("index.html");
+    });
+  }
 
   await app.listen({ port, host });
 }

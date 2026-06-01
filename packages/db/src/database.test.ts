@@ -52,9 +52,9 @@ describe("database factory", () => {
     database.client.close();
   });
 
-  it("rejects non-SQLite database URLs during bootstrap", () => {
+  it("does not reject postgresql URLs", () => {
     expect(() =>
       createDatabase("postgresql://postgres:postgres@localhost:5432/exam"),
-    ).toThrow("Only SQLite");
+    ).not.toThrow("Only SQLite");
   });
 });

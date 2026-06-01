@@ -10,8 +10,12 @@ declare module "fastify" {
 }
 
 const dbPlugin: FastifyPluginAsync = async (fastify) => {
-  const { db } = createDatabase();
-  fastify.decorate("db", db);
+  const conn = createDatabase();
+  if (conn.kind === "sqlite") {
+    fastify.decorate("db", conn.db);
+  } else {
+    fastify.decorate("db", conn.db as unknown as SqliteDatabase);
+  }
 };
 
 export default fp(dbPlugin);
