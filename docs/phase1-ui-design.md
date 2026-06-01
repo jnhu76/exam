@@ -4,6 +4,8 @@
 > 用户界面文字全部中文。wireframe 中的业务数据仅为示例；产品标题、机构名、考试名、考生字段必须来自配置或业务数据。
 > 项目结构基于 pnpm workspace monorepo: `apps/web/`, `apps/api/`, `packages/`。
 
+注意：本文档中的 ASCII wireframe 只表达信息结构和布局关系，不代表最终视觉样式。实现时不得复刻线框图的黑色边框、裸表格、裸按钮。最终视觉必须使用 shadcn/ui 组件、Tailwind token、Card/Table/Dialog/Button 等设计系统组件。
+
 ---
 
 ## 1. Design Tokens
