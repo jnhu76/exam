@@ -278,7 +278,11 @@ export function QuestionPage() {
                       </Button>
                       <ConfirmDialog
                         trigger={
-                          <Button variant="ghost" size="icon">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="删除题目"
+                          >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         }

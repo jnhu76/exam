@@ -231,7 +231,11 @@ export function CandidateFieldsPage() {
                     </Button>
                     <ConfirmDialog
                       trigger={
-                        <Button size="icon" variant="ghost">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          aria-label="删除字段"
+                        >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
                       }

@@ -11,6 +11,7 @@ Phase 0-8 实现完成后，登录后访问 `/admin/*`（除 dashboard 外）所
 `apps/api/src/routes/auth.ts` 中 `setCookie` 未设置 `Path` 属性。根据 RFC 6265 Section 5.1.4，浏览器默认将 path 推导为请求 URI 的路径。`POST /api/auth/login` 的默认 path 为 `/api/auth`，导致 cookie 仅对 `/api/auth/*` 路径发送。
 
 **影响：**
+
 - `GET /api/auth/me` — ✅ 正常（path 匹配）
 - `GET /api/exams` — ❌ 不发送 cookie → 401
 - `GET /api/courses` — ❌ 同理
@@ -51,18 +52,18 @@ Phase 0-8 实现完成后，登录后访问 `/admin/*`（除 dashboard 外）所
 
 ## 修改文件清单
 
-| 文件 | 改动行 | 改动类型 |
-|------|--------|----------|
-| `apps/api/src/routes/auth.ts` | L112, L127 | 新增 `path: "/"` |
-| `apps/web/src/contexts/AuthContext.tsx` | L44 | 修正 `isLoading` 初始值 |
-| `apps/web/src/components/layout/AppSidebar.tsx` | L44, L54 | 修复/移除无效链接 |
+| 文件                                            | 改动行     | 改动类型                |
+| ----------------------------------------------- | ---------- | ----------------------- |
+| `apps/api/src/routes/auth.ts`                   | L112, L127 | 新增 `path: "/"`        |
+| `apps/web/src/contexts/AuthContext.tsx`         | L44        | 修正 `isLoading` 初始值 |
+| `apps/web/src/components/layout/AppSidebar.tsx` | L44, L54   | 修复/移除无效链接       |
 
 ## 验证结果
 
-| 检查项 | 结果 |
-|--------|------|
-| `pnpm typecheck` | ✅ 14/14 通过 |
-| `pnpm lint` | ✅ 通过 |
+| 检查项           | 结果            |
+| ---------------- | --------------- |
+| `pnpm typecheck` | ✅ 14/14 通过   |
+| `pnpm lint`      | ✅ 通过         |
 | `pnpm lint:copy` | ✅ 无硬编码文案 |
 | `pnpm lint:arch` | ✅ 架构检查通过 |
 
