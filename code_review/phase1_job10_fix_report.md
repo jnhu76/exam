@@ -11,16 +11,17 @@
 **Severity:** Accessibility bug
 **4 instances found across 4 pages**
 
-| File | Line | Button Context |
-|------|------|----------------|
-| `apps/web/src/pages/admin/CoursePage.tsx` | 170 | Delete course |
-| `apps/web/src/pages/admin/CandidateFieldsPage.tsx` | 234 | Delete field |
-| `apps/web/src/pages/admin/OrganizationsPage.tsx` | 141 | Delete organization |
-| `apps/web/src/pages/admin/QuestionPage.tsx` | 281 | Delete question |
+| File                                               | Line | Button Context      |
+| -------------------------------------------------- | ---- | ------------------- |
+| `apps/web/src/pages/admin/CoursePage.tsx`          | 170  | Delete course       |
+| `apps/web/src/pages/admin/CandidateFieldsPage.tsx` | 234  | Delete field        |
+| `apps/web/src/pages/admin/OrganizationsPage.tsx`   | 141  | Delete organization |
+| `apps/web/src/pages/admin/QuestionPage.tsx`        | 281  | Delete question     |
 
 **Pattern:** All 4 are icon-only `<Button variant="ghost" size="icon">` wrapped as `<ConfirmDialog trigger={...}>`. The trigger button lacks `aria-label`, making it inaccessible to screen readers.
 
 **Fix:** Added `aria-label` to each:
+
 - CoursePage: `aria-label="删除课程"`
 - CandidateFieldsPage: `aria-label="删除字段"`
 - OrganizationsPage: `aria-label="删除机构"`

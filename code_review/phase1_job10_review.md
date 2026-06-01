@@ -31,23 +31,23 @@ No performance impact. Single test file, no runtime overhead.
 
 ## Acceptance Criteria Checklist
 
-| # | Criterion | Status |
-|---|-----------|--------|
-| 1 | Consistent spacing (p-6, gap-4) | PASS |
-| 2 | Form label alignment | PASS |
-| 3 | Table consistency | PASS |
-| 4 | Dialog consistency | PASS |
-| 5 | EmptyState consistent | PASS |
-| 6 | LoadingState/Skeleton | PASS |
-| 7 | ErrorState consistent | PASS (LoginPage: inline alert acceptable) |
-| 8 | Color + icon dual indicators | PASS |
-| 9 | zh-CN strings, no scenario-specific | PASS |
-| 10 | Focus management | PASS |
-| 11 | Keyboard navigation | PASS |
-| 12 | 1280px+ responsive | PASS |
-| 13 | pnpm lint:copy | PASS |
-| 14 | pnpm typecheck | PASS |
-| 15 | pnpm verify | PASS |
+| #   | Criterion                           | Status                                    |
+| --- | ----------------------------------- | ----------------------------------------- |
+| 1   | Consistent spacing (p-6, gap-4)     | PASS                                      |
+| 2   | Form label alignment                | PASS                                      |
+| 3   | Table consistency                   | PASS                                      |
+| 4   | Dialog consistency                  | PASS                                      |
+| 5   | EmptyState consistent               | PASS                                      |
+| 6   | LoadingState/Skeleton               | PASS                                      |
+| 7   | ErrorState consistent               | PASS (LoginPage: inline alert acceptable) |
+| 8   | Color + icon dual indicators        | PASS                                      |
+| 9   | zh-CN strings, no scenario-specific | PASS                                      |
+| 10  | Focus management                    | PASS                                      |
+| 11  | Keyboard navigation                 | PASS                                      |
+| 12  | 1280px+ responsive                  | PASS                                      |
+| 13  | pnpm lint:copy                      | PASS                                      |
+| 14  | pnpm typecheck                      | PASS                                      |
+| 15  | pnpm verify                         | PASS                                      |
 
 ## Files Reviewed (18)
 
