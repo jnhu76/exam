@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   AttemptResultResponseSchema,
   AttemptScoreParamsSchema,
+  ScoreListQuerySchema,
+  ScoreListResponseSchema,
 } from "@exam/contracts";
 import type {
   Exam,
@@ -13,7 +15,7 @@ import { NotFoundError } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
-import { formatZodError } from "./helpers.js";
+import { formatZodError, ensureTargetOrg } from "./helpers.js";
 
 function findVisibleAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
@@ -62,6 +64,85 @@ function buildQuestionResults(
 }
 
 const scoreRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get(
+    "/exams/:id/scores",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
+      ],
+    },
+    async (request, reply) => {
+      const examId = (request.params as any).id;
+      const parsedQuery = ScoreListQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        return reply.code(400).send(formatZodError(parsedQuery.error));
+      }
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { page, pageSize, passFilter, sortBy, sortOrder } =
+        parsedQuery.data;
+
+      const examRepo = createExamRepo(fastify.db);
+      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      if (!exam) {
+        throw new NotFoundError("Exam not found");
+      }
+
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const offset = (page - 1) * pageSize;
+      const results = attemptRepo.listGradedByExam(ctx, examId, {
+        passFilter,
+        sortBy,
+        sortOrder,
+        limit: pageSize,
+        offset,
+      });
+      const total = attemptRepo.countGradedByExam(ctx, examId, { passFilter });
+
+      // 计算统计数据
+      const allGraded = attemptRepo.listGradedByExam(ctx, examId);
+      const scores = allGraded
+        .map((r) => r.attempt.score)
+        .filter((s): s is number => s != null);
+      const passed = allGraded.filter((r) => r.attempt.passed).length;
+      const averageScore = scores.length
+        ? scores.reduce((a, b) => a + b, 0) / scores.length
+        : 0;
+      const maxScore = scores.length ? Math.max(...scores) : 0;
+      const minScore = scores.length ? Math.min(...scores) : 0;
+      const passRate = scores.length ? passed / scores.length : 0;
+
+      const items = results.map(
+        ({ attempt, candidateProfile, candidateUser }) => ({
+          attemptId: attempt.id,
+          candidateId: attempt.candidateId,
+          candidateName: candidateUser.name,
+          candidateFields: candidateProfile.fields,
+          examId: attempt.examId,
+          examTitle: exam.title,
+          score: attempt.score,
+          passed: attempt.passed,
+          attemptNo: attempt.attemptNo,
+          submittedAt: attempt.submittedAt?.toISOString(),
+        }),
+      );
+
+      return ScoreListResponseSchema.parse({
+        items,
+        stats: {
+          averageScore,
+          maxScore,
+          minScore,
+          passRate,
+          totalGraded: scores.length,
+        },
+        total,
+        page,
+        pageSize,
+      });
+    },
+  );
+
   fastify.get(
     "/scores/attempts/:attemptId",
     {

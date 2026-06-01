@@ -19,6 +19,7 @@
     "@exam/db": "workspace:*",
     "@exam/domain": "workspace:*",
     "@exam/exam-engine": "workspace:*",
+    "@exam/import-export": "workspace:*",
     "@fastify/cookie": "^10.0.0",
     "@fastify/cors": "^11.0.1",
     "@fastify/jwt": "^8.0.1",

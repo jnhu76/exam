@@ -95,6 +95,24 @@ export const ScoreListQuerySchema = z.object({
 });
 export type ScoreListQuery = z.infer<typeof ScoreListQuerySchema>;
 
+export const ScoreListStatsSchema = z.object({
+  averageScore: z.number(),
+  maxScore: z.number(),
+  minScore: z.number(),
+  passRate: z.number(),
+  totalGraded: z.number().int(),
+});
+export type ScoreListStats = z.infer<typeof ScoreListStatsSchema>;
+
+export const ScoreListResponseSchema = z.object({
+  items: z.array(ScoreListItemSchema),
+  stats: ScoreListStatsSchema,
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+});
+export type ScoreListResponse = z.infer<typeof ScoreListResponseSchema>;
+
 // ── Export ────────────────────────────────────────────────────────
 
 export const ExportScoresRequestSchema = z.object({

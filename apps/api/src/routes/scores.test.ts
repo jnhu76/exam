@@ -334,3 +334,234 @@ describe("score routes", () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+describe("J8: score list routes", () => {
+  let ctx: TestContext;
+  let courseId: string;
+  let questionId: string;
+  let candidateProfileId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(scoreRoutes, { prefix: "" });
+    });
+    courseId = crypto.randomUUID();
+    questionId = crypto.randomUUID();
+    candidateProfileId = crypto.randomUUID();
+    ctx.db
+      .insert(sqliteSchema.courses)
+      .values({
+        id: courseId,
+        organizationId: ctx.org.id,
+        name: "Course",
+        code: "SCORE-LIST",
+        description: "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+    ctx.db
+      .insert(sqliteSchema.questions)
+      .values({
+        id: questionId,
+        organizationId: ctx.org.id,
+        courseId,
+        type: "single_choice",
+        content: "Choose A",
+        options: [
+          { id: "a", content: "A" },
+          { id: "b", content: "B" },
+        ],
+        standardAnswer: "a",
+        attachments: [],
+        score: 10,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+    ctx.db
+      .insert(sqliteSchema.candidateProfiles)
+      .values({
+        id: candidateProfileId,
+        organizationId: ctx.org.id,
+        userId: ctx.candidate.id,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+  });
+
+  afterAll(async () => {
+    await ctx.app.close();
+  });
+
+  async function createExamAndPublish(): Promise<string> {
+    const createResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Exam for Score List",
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600000).toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 6,
+        totalScore: 10,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createResponse.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    return examId;
+  }
+
+  async function createGradedAttemptForExam(
+    examId: string,
+    answerRight: boolean = true,
+    authToken: string = ctx.candidateToken,
+  ): Promise<string> {
+    const startResponse = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": authToken },
+    });
+    const attemptId = startResponse.json().id as string;
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${questionId}`,
+      payload: {
+        attemptId,
+        questionId,
+        answer: answerRight ? "a" : "b",
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": authToken },
+    });
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/submit`,
+      cookies: { "auth-token": authToken },
+    });
+
+    return attemptId;
+  }
+
+  it("J8-A-1: returns paginated score list for an exam", async () => {
+    const examId = await createExamAndPublish();
+    await createGradedAttemptForExam(examId, true);
+
+    // 现在测试新的score list接口
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    // 期望返回200和数据
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toHaveProperty("items");
+    expect(response.json().items).toHaveLength(1);
+    expect(response.json()).toHaveProperty("stats");
+    expect(response.json()).toHaveProperty("total", 1);
+  });
+
+  it("J8-A-2: filters by pass/fail status", async () => {
+    const examId = await createExamAndPublish();
+
+    // 需要另外的考生，先创建一个临时的
+    const tempCandidateId = crypto.randomUUID();
+    const tempUserId = crypto.randomUUID();
+    const now = new Date();
+
+    ctx.db
+      .insert(sqliteSchema.users)
+      .values({
+        id: tempUserId,
+        organizationId: ctx.org.id,
+        username: "temp-candidate-" + Date.now(),
+        passwordHash: "not-used",
+        name: "Temp Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    ctx.db
+      .insert(sqliteSchema.candidateProfiles)
+      .values({
+        id: tempCandidateId,
+        organizationId: ctx.org.id,
+        userId: tempUserId,
+        fields: {},
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+
+    const tempToken = signJWT({
+      actorId: tempUserId,
+      role: "Candidate",
+      organizationId: ctx.org.id,
+    });
+
+    // 创建一个及格和一个不及格的尝试
+    await createGradedAttemptForExam(examId, true); // passed
+    await createGradedAttemptForExam(examId, false, tempToken); // failed
+
+    // 测试过滤passed
+    const responsePassed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?passFilter=passed`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(responsePassed.statusCode).toBe(200);
+    expect(responsePassed.json().items.length).toBe(1);
+
+    // 测试过滤failed
+    const responseFailed = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?passFilter=failed`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(responseFailed.statusCode).toBe(200);
+    expect(responseFailed.json().items.length).toBe(1);
+  });
+});

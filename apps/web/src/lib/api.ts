@@ -53,6 +53,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  baseURL: baseUrl,
   get<T>(path: string): Promise<T> {
     return request<T>(path);
   },
