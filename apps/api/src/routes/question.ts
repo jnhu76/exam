@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from "fastify";
-import { ZodError } from "zod";
+import { z } from "zod";
 import {
   CreateQuestionRequestSchema,
   UpdateQuestionRequestSchema,
@@ -7,16 +7,12 @@ import {
 } from "@exam/contracts";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import type { RequestContext } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, formatZodError } from "./helpers.js";
 
-function formatZodError(error: ZodError) {
-  return {
-    error: {
-      code: "VALIDATION_ERROR",
-      message: error.issues.map((i) => i.message).join("; "),
-    },
-  };
-}
+const ImportBodySchema = z.object({
+  courseId: z.string().uuid(),
+  rows: z.array(z.record(z.unknown())).min(1),
+});
 
 const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -236,10 +232,11 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const body = request.body as {
-        courseId: string;
-        rows: Array<Record<string, unknown>>;
-      };
+      const parsed = ImportBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(parsed.error));
+      }
+      const body = parsed.data;
       const repo = createQuestionRepo(fastify.db);
 
       const details: Array<{

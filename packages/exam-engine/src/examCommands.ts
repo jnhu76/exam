@@ -1,4 +1,9 @@
-import type { Exam, ExamStatus, QuestionSnapshot } from "@exam/domain";
+import type {
+  Exam,
+  ExamStatus,
+  Question,
+  QuestionSnapshot,
+} from "@exam/domain";
 import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
 
 export interface ExamRepository {
@@ -23,7 +28,35 @@ function assertTransition(current: ExamStatus, target: ExamStatus): void {
   }
 }
 
-export function publishExam(repo: ExamRepository, examId: string): Exam {
+export function buildQuestionSnapshot(
+  questionIds: string[],
+  questions: Question[],
+): QuestionSnapshot[] {
+  const questionMap = new Map(questions.map((q) => [q.id, q]));
+  return questionIds.map((qid, index) => {
+    const q = questionMap.get(qid);
+    if (!q) {
+      throw new ValidationError(`Question ${qid} not found`);
+    }
+    return {
+      originalQuestionId: q.id,
+      type: q.type,
+      content: q.content,
+      attachments: q.attachments,
+      options: q.options.map((o) => ({ id: o.id, content: o.content })),
+      standardAnswer: q.standardAnswer,
+      score: q.score,
+      gradingRule: q.gradingRule,
+      order: index,
+    };
+  });
+}
+
+export function publishExam(
+  repo: ExamRepository,
+  examId: string,
+  questions: Question[],
+): Exam {
   const exam = repo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
@@ -41,22 +74,7 @@ export function publishExam(repo: ExamRepository, examId: string): Exam {
     throw new ValidationError("Duration must be positive");
   }
 
-  const questionSnapshot: QuestionSnapshot[] = exam.questionIds.map(
-    (qid, index) => ({
-      originalQuestionId: qid,
-      type: "single_choice" as const,
-      content: "",
-      attachments: [],
-      options: [],
-      standardAnswer: null,
-      score: 0,
-      gradingRule: {
-        multiSelectScoring: "all_correct_full" as const,
-        fillBlankMatchMode: "exact" as const,
-      },
-      order: index,
-    }),
-  );
+  const questionSnapshot = buildQuestionSnapshot(exam.questionIds, questions);
 
   return repo.update(examId, {
     status: "published",

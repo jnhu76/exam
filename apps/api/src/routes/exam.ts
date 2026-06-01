@@ -1,22 +1,15 @@
 import { FastifyPluginAsync } from "fastify";
-import { ZodError } from "zod";
 import {
   CreateExamRequestSchema,
   UpdateExamRequestSchema,
   PaginationParamsSchema,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
-import type { RequestContext, Exam } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
-
-function formatZodError(error: ZodError) {
-  return {
-    error: {
-      code: "VALIDATION_ERROR",
-      message: error.issues.map((i) => i.message).join("; "),
-    },
-  };
-}
+import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
+import { publishExam, type ExamRepository } from "@exam/exam-engine";
+import type { RequestContext, Exam, Question } from "@exam/domain";
+import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
+import { ensureTargetOrg, formatZodError } from "./helpers.js";
 
 function toExamResponse(exam: Exam) {
   return {
@@ -190,54 +183,46 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const repo = createExamRepo(fastify.db);
+      const examRepo = createExamRepo(fastify.db);
+      const questionRepo = createQuestionRepo(fastify.db);
 
-      const exam = repo.findById(ctx, id) as Exam | null;
+      const exam = examRepo.findById(ctx, id) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
       }
 
-      if (exam.status !== "draft") {
-        return reply.code(409).send({
-          error: {
-            code: "INVALID_STATE_TRANSITION",
-            message: "Can only publish draft exams",
-          },
-        });
+      const questions = exam.questionIds
+        .map((qid) => questionRepo.findById(ctx, qid))
+        .filter((q): q is NonNullable<typeof q> => q !== null) as Question[];
+
+      try {
+        const examRepoAdapter: ExamRepository = {
+          findById: (examId: string) =>
+            examRepo.findById(ctx, examId) as Exam | null,
+          update: (examId: string, data: Partial<Exam>) =>
+            examRepo.update(
+              ctx,
+              examId,
+              data as Record<string, unknown>,
+            ) as Exam | null,
+        };
+        const updated = publishExam(examRepoAdapter, id, questions);
+        return toExamResponse(updated);
+      } catch (err) {
+        if (err instanceof InvalidStateTransitionError) {
+          return reply.code(409).send({
+            error: { code: err.code, message: err.message },
+          });
+        }
+        if (err instanceof ValidationError) {
+          return reply.code(400).send({
+            error: { code: err.code, message: err.message },
+          });
+        }
+        throw err;
       }
-
-      if (exam.questionIds.length === 0) {
-        return reply.code(400).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Exam must have at least one question",
-          },
-        });
-      }
-
-      const questionSnapshot = exam.questionIds.map((qid, index) => ({
-        originalQuestionId: qid,
-        type: "single_choice" as const,
-        content: "",
-        attachments: [],
-        options: [],
-        standardAnswer: null,
-        score: 0,
-        gradingRule: {
-          multiSelectScoring: "all_correct_full" as const,
-          fillBlankMatchMode: "exact" as const,
-        },
-        order: index,
-      }));
-
-      const updated = repo.update(ctx, id, {
-        status: "published",
-        questionSnapshot,
-      }) as Exam | null;
-
-      return toExamResponse(updated!);
     },
   );
 

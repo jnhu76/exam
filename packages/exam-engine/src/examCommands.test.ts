@@ -4,9 +4,10 @@ import {
   openExam,
   closeExam,
   archiveExam,
+  buildQuestionSnapshot,
   type ExamRepository,
 } from "./examCommands.js";
-import type { Exam } from "@exam/domain";
+import type { Exam, Question } from "@exam/domain";
 import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
@@ -47,6 +48,34 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
   };
 }
 
+function makeQuestion(id: string, overrides: Partial<Question> = {}): Question {
+  return {
+    id,
+    organizationId: "org-1",
+    courseId: "course-1",
+    type: "single_choice",
+    content: `Question ${id}`,
+    options: [
+      { id: "a", content: "A" },
+      { id: "b", content: "B" },
+    ],
+    standardAnswer: "a",
+    attachments: [],
+    score: 10,
+    difficulty: 1,
+    tags: [],
+    gradingRule: {
+      multiSelectScoring: "all_correct_full",
+      fillBlankMatchMode: "exact",
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+const testQuestions = [makeQuestion("q1"), makeQuestion("q2")];
+
 function makeRepo(initial: Exam): ExamRepository {
   let current = { ...initial };
   return {
@@ -61,40 +90,66 @@ function makeRepo(initial: Exam): ExamRepository {
 }
 
 describe("examCommands", () => {
+  describe("buildQuestionSnapshot", () => {
+    it("creates snapshot from questions", () => {
+      const snapshot = buildQuestionSnapshot(["q1", "q2"], testQuestions);
+      expect(snapshot.length).toBe(2);
+      expect(snapshot[0]?.originalQuestionId).toBe("q1");
+      expect(snapshot[0]?.content).toBe("Question q1");
+      expect(snapshot[0]?.options).toEqual([
+        { id: "a", content: "A" },
+        { id: "b", content: "B" },
+      ]);
+    });
+
+    it("throws for missing question", () => {
+      expect(() =>
+        buildQuestionSnapshot(["q1", "missing"], testQuestions),
+      ).toThrow(ValidationError);
+    });
+  });
+
   describe("publishExam", () => {
     it("transitions draft → published", () => {
       const repo = makeRepo(makeExam());
-      const result = publishExam(repo, "exam-1");
+      const result = publishExam(repo, "exam-1", testQuestions);
       expect(result.status).toBe("published");
     });
 
-    it("captures questionSnapshot on publish", () => {
+    it("captures questionSnapshot with real data", () => {
       const repo = makeRepo(makeExam());
-      const result = publishExam(repo, "exam-1");
-      expect(result.questionSnapshot).toBeDefined();
+      const result = publishExam(repo, "exam-1", testQuestions);
       expect(result.questionSnapshot.length).toBe(2);
+      expect(result.questionSnapshot[0]?.content).toBe("Question q1");
+      expect(result.questionSnapshot[0]?.standardAnswer).toBe("a");
     });
 
     it("throws for non-existent exam", () => {
       const repo = makeRepo(makeExam());
-      expect(() => publishExam(repo, "nonexistent")).toThrow(ValidationError);
+      expect(() => publishExam(repo, "nonexistent", testQuestions)).toThrow(
+        ValidationError,
+      );
     });
 
     it("throws for invalid transition (published → published)", () => {
       const repo = makeRepo(makeExam({ status: "published" }));
-      expect(() => publishExam(repo, "exam-1")).toThrow(
+      expect(() => publishExam(repo, "exam-1", testQuestions)).toThrow(
         InvalidStateTransitionError,
       );
     });
 
     it("throws when no questions", () => {
       const repo = makeRepo(makeExam({ questionIds: [] }));
-      expect(() => publishExam(repo, "exam-1")).toThrow(ValidationError);
+      expect(() => publishExam(repo, "exam-1", testQuestions)).toThrow(
+        ValidationError,
+      );
     });
 
     it("throws when passingScore is 0", () => {
       const repo = makeRepo(makeExam({ passingScore: 0 }));
-      expect(() => publishExam(repo, "exam-1")).toThrow(ValidationError);
+      expect(() => publishExam(repo, "exam-1", testQuestions)).toThrow(
+        ValidationError,
+      );
     });
   });
 

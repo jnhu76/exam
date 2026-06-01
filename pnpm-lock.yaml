@@ -32,6 +32,9 @@ importers:
       '@exam/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@exam/exam-engine':
+        specifier: workspace:*
+        version: link:../../packages/exam-engine
       '@fastify/cookie':
         specifier: ^10.0.0
         version: 10.0.1
