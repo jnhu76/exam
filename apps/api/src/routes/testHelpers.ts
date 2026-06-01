@@ -6,6 +6,7 @@ import authPlugin from "../plugins/auth.js";
 import tenantPlugin from "../plugins/tenant.js";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import { setupErrorHandler } from "../plugins/errors.js";
+import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createSqliteDatabase } from "@exam/db/src/sqlite.js";
 import { migrateSqlite } from "@exam/db/src/sqlite.js";
@@ -13,6 +14,7 @@ import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
 import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 
 function createDbPlugin(db: SqliteDatabase) {
   return fp(async (fastify) => {
@@ -41,6 +43,7 @@ export async function buildTestApp(
   await seed(db, hashPassword);
 
   const app = Fastify();
+  setupSecurity(app);
   setupErrorHandler(app);
   await app.register(fastifyCookie);
   await app.register(createDbPlugin(db));
@@ -82,5 +85,44 @@ export async function buildTestApp(
     adminToken,
     teacherToken,
     candidateToken,
+  };
+}
+
+export async function createCandidateViaApi(
+  app: TestContext["app"],
+  adminToken: string,
+  username: string,
+  orgId: string,
+) {
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/candidates",
+    payload: {
+      username,
+      password: "password123",
+      name: `Candidate ${username}`,
+      fields: {},
+    },
+    cookies: { "auth-token": adminToken },
+  });
+  if (res.statusCode !== 201) {
+    throw new Error(
+      `createCandidateViaApi failed: ${res.statusCode} ${res.body}`,
+    );
+  }
+  const body = res.json() as {
+    id: string;
+    userId: string;
+    fields: Record<string, unknown>;
+  };
+  const token = signJWT({
+    actorId: body.userId,
+    role: "Candidate",
+    organizationId: orgId,
+  });
+  return {
+    candidateProfileId: body.id,
+    userId: body.userId,
+    token,
   };
 }

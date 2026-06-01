@@ -47,7 +47,7 @@ const groups = [
     label: "考试",
     items: [
       { label: "考试管理", to: "/admin/exams", icon: ClipboardList },
-      { label: "成绩查询", to: "/admin/exams", icon: Gauge },
+      { label: "成绩查询", to: "/admin/results", icon: Gauge },
     ],
   },
 ];

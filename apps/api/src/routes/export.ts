@@ -18,8 +18,8 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       ],
     },
     async (request, reply) => {
-      const examId = (request.params as any).id;
-      const ctx = ensureTargetOrg(request["ctx"] as any);
+      const { id: examId } = request.params as { id: string };
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
 
       const examRepo = createExamRepo(fastify.db);
       const exam = examRepo.findById(ctx, examId);
