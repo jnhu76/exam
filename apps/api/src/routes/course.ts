@@ -5,8 +5,10 @@ import {
   PaginationParamsSchema,
 } from "@exam/contracts";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
+import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
+import { recordAudit } from "./audit.js";
 
 const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -99,6 +101,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         code: data.code,
         description: data.description,
       });
+      recordAudit(fastify, request, ctx, "course.create", "course", course.id);
       return reply.code(201).send({
         id: course.id,
         organizationId: course.organizationId,
@@ -130,6 +133,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Course not found" } });
       }
+      recordAudit(fastify, request, ctx, "course.update", "course", id);
       return {
         id: updated.id,
         organizationId: updated.organizationId,
@@ -154,12 +158,25 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createCourseRepo(fastify.db);
+      if (
+        createQuestionRepo(fastify.db)
+          .list(ctx)
+          .some((q) => q.courseId === id)
+      ) {
+        return reply.code(409).send({
+          error: {
+            code: "CONFLICT",
+            message: "Course still contains questions",
+          },
+        });
+      }
       const deleted = repo.delete(ctx, id);
       if (!deleted) {
         return reply
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Course not found" } });
       }
+      recordAudit(fastify, request, ctx, "course.delete", "course", id);
       return reply.code(204).send();
     },
   );

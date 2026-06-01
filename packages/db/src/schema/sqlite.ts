@@ -52,19 +52,28 @@ export const organizationSettings = sqliteTable(
   ],
 );
 
-export const candidateFields = sqliteTable("candidate_fields", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  name: text("name").notNull(),
-  label: text("label").notNull(),
-  fieldType: text("field_type", {
-    enum: ["text", "number", "select"],
-  }).notNull(),
-  required: integer("required", { mode: "boolean" }).notNull(),
-  unique: integer("unique", { mode: "boolean" }).notNull(),
-  sortOrder: integer("sort_order").notNull(),
-  createdAt: createdAt(),
-});
+export const candidateFields = sqliteTable(
+  "candidate_fields",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    name: text("name").notNull(),
+    label: text("label").notNull(),
+    fieldType: text("field_type", {
+      enum: ["text", "number", "select"],
+    }).notNull(),
+    required: integer("required", { mode: "boolean" }).notNull(),
+    unique: integer("unique", { mode: "boolean" }).notNull(),
+    sortOrder: integer("sort_order").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex("candidate_fields_org_name_unique").on(
+      table.organizationId,
+      table.name,
+    ),
+  ],
+);
 
 export const users = sqliteTable(
   "users",
@@ -89,18 +98,27 @@ export const users = sqliteTable(
   ],
 );
 
-export const candidateProfiles = sqliteTable("candidate_profiles", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id),
-  fields: text("fields", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .notNull(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const candidateProfiles = sqliteTable(
+  "candidate_profiles",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    fields: text("fields", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("candidate_profiles_org_user_unique").on(
+      table.organizationId,
+      table.userId,
+    ),
+  ],
+);
 
 export const courses = sqliteTable(
   "courses",
@@ -195,68 +213,90 @@ export const exams = sqliteTable("exams", {
   updatedAt: updatedAt(),
 });
 
-export const examEnrollments = sqliteTable("exam_enrollments", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  examId: text("exam_id")
-    .notNull()
-    .references(() => exams.id),
-  candidateId: text("candidate_id")
-    .notNull()
-    .references(() => candidateProfiles.id),
-  status: text("status", {
-    enum: ["assigned", "started", "completed", "blocked"],
-  }).notNull(),
-  attemptCount: integer("attempt_count").notNull(),
-  finalScore: real("final_score"),
-  finalPassed: integer("final_passed", { mode: "boolean" }),
-  finalAttemptId: text("final_attempt_id"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const examEnrollments = sqliteTable(
+  "exam_enrollments",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidateProfiles.id),
+    status: text("status", {
+      enum: ["assigned", "started", "completed", "blocked"],
+    }).notNull(),
+    attemptCount: integer("attempt_count").notNull(),
+    finalScore: real("final_score"),
+    finalPassed: integer("final_passed", { mode: "boolean" }),
+    finalAttemptId: text("final_attempt_id"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("exam_enrollments_org_exam_candidate_unique").on(
+      table.organizationId,
+      table.examId,
+      table.candidateId,
+    ),
+  ],
+);
 
-export const examAttempts = sqliteTable("exam_attempts", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  examId: text("exam_id")
-    .notNull()
-    .references(() => exams.id),
-  enrollmentId: text("enrollment_id")
-    .notNull()
-    .references(() => examEnrollments.id),
-  candidateId: text("candidate_id")
-    .notNull()
-    .references(() => candidateProfiles.id),
-  attemptNo: integer("attempt_no").notNull(),
-  status: text("status", {
-    enum: [
-      "not_started",
-      "queued",
-      "in_progress",
-      "disrupted",
-      "submitted",
-      "grading",
-      "graded",
-      "voided",
-    ],
-  }).notNull(),
-  questionSnapshot: text("question_snapshot", { mode: "json" })
-    .$type<QuestionSnapshot[]>()
-    .notNull(),
-  answers: text("answers", { mode: "json" }).$type<AnswerRecord[]>().notNull(),
-  gradingResult: text("grading_result", { mode: "json" }).$type<
-    QuestionScoreResult[]
-  >(),
-  totalScore: real("total_score"),
-  passed: integer("passed", { mode: "boolean" }),
-  startedAt: integer("started_at", { mode: "timestamp_ms" }),
-  deadlineAt: integer("deadline_at", { mode: "timestamp_ms" }),
-  submittedAt: integer("submitted_at", { mode: "timestamp_ms" }),
-  gradedAt: integer("graded_at", { mode: "timestamp_ms" }),
-  lastActivityAt: integer("last_activity_at", { mode: "timestamp_ms" }),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const examAttempts = sqliteTable(
+  "exam_attempts",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id),
+    enrollmentId: text("enrollment_id")
+      .notNull()
+      .references(() => examEnrollments.id),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidateProfiles.id),
+    attemptNo: integer("attempt_no").notNull(),
+    status: text("status", {
+      enum: [
+        "not_started",
+        "queued",
+        "in_progress",
+        "disrupted",
+        "submitted",
+        "grading",
+        "graded",
+        "voided",
+      ],
+    }).notNull(),
+    questionSnapshot: text("question_snapshot", { mode: "json" })
+      .$type<QuestionSnapshot[]>()
+      .notNull(),
+    answers: text("answers", { mode: "json" })
+      .$type<AnswerRecord[]>()
+      .notNull(),
+    gradingResult: text("grading_result", { mode: "json" }).$type<
+      QuestionScoreResult[]
+    >(),
+    totalScore: real("total_score"),
+    passed: integer("passed", { mode: "boolean" }),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }),
+    deadlineAt: integer("deadline_at", { mode: "timestamp_ms" }),
+    submittedAt: integer("submitted_at", { mode: "timestamp_ms" }),
+    gradedAt: integer("graded_at", { mode: "timestamp_ms" }),
+    lastActivityAt: integer("last_activity_at", { mode: "timestamp_ms" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("exam_attempts_org_enrollment_attempt_unique").on(
+      table.organizationId,
+      table.enrollmentId,
+      table.attemptNo,
+    ),
+  ],
+);
 
 export const auditLogs = sqliteTable("audit_logs", {
   id: id(),

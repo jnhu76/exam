@@ -26,13 +26,13 @@ export const CreateUserRequestSchema = z.object({
   username: z.string().min(3).max(50),
   password: z.string().min(6).max(100),
   name: z.string().min(1).max(100),
-  role: RoleSchema.exclude(["SuperAdmin"]),
+  role: RoleSchema.exclude(["SuperAdmin", "Candidate"]),
 });
 export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
 
 export const UpdateUserRequestSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  role: RoleSchema.exclude(["SuperAdmin"]).optional(),
+  role: RoleSchema.exclude(["SuperAdmin", "Candidate"]).optional(),
   isActive: z.boolean().optional(),
 });
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;

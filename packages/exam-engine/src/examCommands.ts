@@ -73,8 +73,37 @@ export function publishExam(
   if (exam.durationMinutes <= 0) {
     throw new ValidationError("Duration must be positive");
   }
+  if (exam.timingMode !== "timed_window") {
+    throw new ValidationError("Phase 1 only supports timed_window exams");
+  }
+  if (exam.questionSelectionMode !== "manual") {
+    throw new ValidationError(
+      "Phase 1 only supports manual question selection",
+    );
+  }
+  if (
+    !["unlimited", "max_attempts", "pass_then_stop"].includes(exam.retakePolicy)
+  ) {
+    throw new ValidationError("Retake policy is not supported in Phase 1");
+  }
+  if (exam.openAt >= exam.closeAt) {
+    throw new ValidationError("Exam openAt must be before closeAt");
+  }
 
   const questionSnapshot = buildQuestionSnapshot(exam.questionIds, questions);
+  if (questions.some((question) => question.courseId !== exam.courseId)) {
+    throw new ValidationError("Exam questions must belong to its course");
+  }
+  const totalScore = questionSnapshot.reduce(
+    (sum, question) => sum + question.score,
+    0,
+  );
+  if (exam.totalScore !== totalScore) {
+    throw new ValidationError("Exam totalScore must match question scores");
+  }
+  if (exam.passingScore > totalScore) {
+    throw new ValidationError("Passing score cannot exceed total score");
+  }
 
   return repo.update(examId, {
     status: "published",

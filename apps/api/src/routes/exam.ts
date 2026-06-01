@@ -6,10 +6,20 @@ import {
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
-import { publishExam, type ExamRepository } from "@exam/exam-engine";
+import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
+import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
+import {
+  archiveExam,
+  publishExam,
+  type ExamRepository,
+} from "@exam/exam-engine";
 import type { RequestContext, Exam, Question } from "@exam/domain";
 import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
 import { ensureTargetOrg, formatZodError } from "./helpers.js";
+import { recordAudit } from "./audit.js";
 
 function toExamResponse(exam: Exam) {
   return {
@@ -36,6 +46,41 @@ function toExamResponse(exam: Exam) {
   };
 }
 
+function getExamParticipants(
+  db: SqliteDatabase,
+  ctx: RequestContext,
+  examId: string,
+) {
+  const enrollments = createEnrollmentRepo(db)
+    .list(ctx)
+    .filter((enrollment) => enrollment.examId === examId);
+  const candidateRepo = createCandidateRepo(db);
+  const userRepo = createUserRepo(db);
+  return enrollments.map((enrollment) => {
+    const candidate = candidateRepo.findById(ctx, enrollment.candidateId);
+    const user = candidate ? userRepo.findById(ctx, candidate.userId) : null;
+    return {
+      candidateId: enrollment.candidateId,
+      name: user?.name ?? "-",
+      fields: candidate?.fields ?? {},
+      status: enrollment.status,
+      score: enrollment.finalScore ?? null,
+      passed: enrollment.finalPassed ?? null,
+    };
+  });
+}
+
+function createExamRepoAdapter(
+  repo: ReturnType<typeof createExamRepo>,
+  ctx: RequestContext,
+): ExamRepository {
+  return {
+    findById: (examId) => repo.findById(ctx, examId) as Exam | null,
+    update: (examId, data) =>
+      repo.update(ctx, examId, data as Record<string, unknown>) as Exam | null,
+  };
+}
+
 const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
@@ -52,7 +97,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { items, total } = repo.listPaginated(ctx, page, pageSize);
 
       return {
-        items: items.map((e) => toExamResponse(e as Exam)),
+        items: items.map((e) => ({
+          ...toExamResponse(e as Exam),
+          participantCount: getExamParticipants(fastify.db, ctx, e.id).length,
+        })),
         total,
         page,
         pageSize,
@@ -79,7 +127,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
       }
-      return toExamResponse(exam);
+      const participants = getExamParticipants(fastify.db, ctx, exam.id);
+      return {
+        ...toExamResponse(exam),
+        stats: {
+          participantCount: participants.length,
+          completedCount: participants.filter(
+            (participant) => participant.status === "completed",
+          ).length,
+          passedCount: participants.filter(
+            (participant) => participant.passed === true,
+          ).length,
+        },
+        participants,
+      };
     },
   );
 
@@ -99,6 +160,25 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const data = parsed.data;
       const repo = createExamRepo(fastify.db);
+      const course = createCourseRepo(fastify.db).findById(ctx, data.courseId);
+      const questionRepo = createQuestionRepo(fastify.db);
+      if (!course) {
+        return reply.code(400).send({
+          error: { code: "VALIDATION_ERROR", message: "Course not found" },
+        });
+      }
+      if (
+        data.questionIds.some(
+          (id) => questionRepo.findById(ctx, id)?.courseId !== data.courseId,
+        )
+      ) {
+        return reply.code(400).send({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Questions must belong to the selected course",
+          },
+        });
+      }
 
       const exam = repo.create(ctx, {
         title: data.title,
@@ -119,6 +199,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         scoreStrategy: data.scoreStrategy,
         maxAttempts: data.maxAttempts,
       });
+      recordAudit(fastify, request, ctx, "exam.create", "exam", exam.id);
 
       return reply.code(201).send(toExamResponse(exam as Exam));
     },
@@ -157,6 +238,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
+      if (
+        data.questionIds?.some(
+          (questionId) =>
+            createQuestionRepo(fastify.db).findById(ctx, questionId)
+              ?.courseId !== existing.courseId,
+        )
+      ) {
+        return reply.code(400).send({
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Questions must belong to the selected course",
+          },
+        });
+      }
 
       const updateData: Record<string, unknown> = { ...data };
       if (data.openAt) updateData.openAt = new Date(data.openAt);
@@ -168,6 +263,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
       }
+      recordAudit(fastify, request, ctx, "exam.update", "exam", id);
       return toExamResponse(updated);
     },
   );
@@ -198,17 +294,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         .filter((q): q is NonNullable<typeof q> => q !== null) as Question[];
 
       try {
-        const examRepoAdapter: ExamRepository = {
-          findById: (examId: string) =>
-            examRepo.findById(ctx, examId) as Exam | null,
-          update: (examId: string, data: Partial<Exam>) =>
-            examRepo.update(
-              ctx,
-              examId,
-              data as Record<string, unknown>,
-            ) as Exam | null,
-        };
+        const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
         const updated = publishExam(examRepoAdapter, id, questions);
+        recordAudit(fastify, request, ctx, "exam.publish", "exam", id);
         return toExamResponse(updated);
       } catch (err) {
         if (err instanceof InvalidStateTransitionError) {
@@ -239,27 +327,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
 
-      const exam = repo.findById(ctx, id) as Exam | null;
-      if (!exam) {
-        return reply
-          .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
-      }
-
-      if (exam.status !== "published" && exam.status !== "closed") {
-        return reply.code(409).send({
-          error: {
-            code: "INVALID_STATE_TRANSITION",
-            message: "Can only archive published or closed exams",
-          },
-        });
-      }
-
-      const updated = repo.update(ctx, id, {
-        status: "archived",
-      }) as Exam | null;
-
-      return toExamResponse(updated!);
+      const archived = archiveExam(createExamRepoAdapter(repo, ctx), id);
+      recordAudit(fastify, request, ctx, "exam.archive", "exam", id);
+      return toExamResponse(archived);
     },
   );
 
@@ -293,6 +363,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       repo.delete(ctx, id);
+      recordAudit(fastify, request, ctx, "exam.delete", "exam", id);
       return reply.code(204).send();
     },
   );

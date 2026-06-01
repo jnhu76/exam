@@ -9,20 +9,13 @@ import { Label } from "@/components/ui/label";
 
 export function LoginPage() {
   const branding = useBranding();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, error } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    try {
-      await login(username, password);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
-    }
+    await login(username, password);
   };
 
   return (

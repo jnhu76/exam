@@ -3,8 +3,8 @@ import { z } from "zod";
 // ── Pagination ────────────────────────────────────────────────────
 
 export const PaginationParamsSchema = z.object({
-  page: z.number().int().min(1).default(1),
-  pageSize: z.number().int().min(1).max(100).default(20),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type PaginationParams = z.infer<typeof PaginationParamsSchema>;
 

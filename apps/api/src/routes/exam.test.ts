@@ -32,7 +32,7 @@ describe("exam routes", () => {
         type: "true_false",
         content: "Test question.",
         standardAnswer: true,
-        score: 10,
+        score: 100,
       },
       cookies: { "auth-token": ctx.adminToken },
     });

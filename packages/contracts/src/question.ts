@@ -41,6 +41,16 @@ function validateQuestionType(
   },
   ctx: z.RefinementCtx,
 ) {
+  const options = question.options ?? [];
+  const optionIds = options.map((option) => option.id);
+  if (new Set(optionIds).size !== optionIds.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "option ids must be unique",
+      path: ["options"],
+    });
+  }
+
   if (
     (question.type === "single_choice" ||
       question.type === "multiple_choice") &&
@@ -50,6 +60,33 @@ function validateQuestionType(
       code: z.ZodIssueCode.custom,
       message: "choice questions require at least two options",
       path: ["options"],
+    });
+  }
+
+  if (
+    question.type === "single_choice" &&
+    (typeof question.standardAnswer !== "string" ||
+      !optionIds.includes(question.standardAnswer))
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "single choice standardAnswer must reference an option",
+      path: ["standardAnswer"],
+    });
+  }
+
+  if (
+    question.type === "multiple_choice" &&
+    (!Array.isArray(question.standardAnswer) ||
+      question.standardAnswer.length === 0 ||
+      question.standardAnswer.some(
+        (answer) => typeof answer !== "string" || !optionIds.includes(answer),
+      ))
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "multiple choice standardAnswer must reference options",
+      path: ["standardAnswer"],
     });
   }
 
@@ -68,6 +105,18 @@ function validateQuestionType(
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "true/false questions require a boolean standardAnswer",
+      path: ["standardAnswer"],
+    });
+  }
+
+  if (
+    question.type === "fill_blank" &&
+    (typeof question.standardAnswer !== "string" ||
+      question.standardAnswer.trim() === "")
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "fill blank questions require a non-empty standardAnswer",
       path: ["standardAnswer"],
     });
   }
@@ -146,7 +195,8 @@ export type QuestionImportRow = z.infer<typeof QuestionImportRowSchema>;
 
 export const QuestionImportRequestSchema = z.object({
   courseId: z.string().uuid(),
-  rows: z.array(QuestionImportRowSchema).min(1),
+  rows: z.array(z.record(z.unknown())).min(1).max(500),
+  confirm: z.boolean().default(false),
 });
 export type QuestionImportRequest = z.infer<typeof QuestionImportRequestSchema>;
 

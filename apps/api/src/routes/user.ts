@@ -8,6 +8,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
+import { recordAudit } from "./audit.js";
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -63,6 +64,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         role: data.role,
         isActive: true,
       });
+      recordAudit(fastify, request, ctx, "user.create", "user", user.id);
       return reply.code(201).send({
         id: user.id,
         organizationId: user.organizationId,
@@ -95,6 +97,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "User not found" } });
       }
+      recordAudit(fastify, request, ctx, "user.update", "user", id);
       return {
         id: updated.id,
         organizationId: updated.organizationId,
@@ -126,6 +129,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "User not found" } });
       }
+      recordAudit(fastify, request, ctx, "user.delete", "user", id);
       return reply.code(204).send();
     },
   );

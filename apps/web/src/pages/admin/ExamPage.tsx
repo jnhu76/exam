@@ -28,6 +28,7 @@ interface ExamRow {
   passingScore: number;
   totalScore: number;
   questionIds: string[];
+  participantCount: number;
 }
 
 interface PaginatedResponse<T> {
@@ -115,6 +116,7 @@ export function ExamPage() {
               <TableHead>时间窗口</TableHead>
               <TableHead className="w-16">时长</TableHead>
               <TableHead className="w-16">题目数</TableHead>
+              <TableHead className="w-16">参与人数</TableHead>
               <TableHead className="w-16">及格分</TableHead>
               <TableHead className="w-24">操作</TableHead>
             </TableRow>
@@ -134,6 +136,7 @@ export function ExamPage() {
                 </TableCell>
                 <TableCell>{exam.durationMinutes}分钟</TableCell>
                 <TableCell>{exam.questionIds.length}</TableCell>
+                <TableCell>{exam.participantCount}</TableCell>
                 <TableCell>
                   {exam.passingScore}/{exam.totalScore}
                 </TableCell>

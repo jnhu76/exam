@@ -6,9 +6,11 @@ import { hashPassword } from "@exam/auth/src/password.js";
 const { db } = createDatabase();
 migrateSqlite(db);
 
-console.log("Seeding database...");
+process.stdout.write("Seeding database...\n");
 await seed(db, hashPassword);
-console.log("\nDone! Login credentials:");
-console.log("  Admin:     admin / admin123");
-console.log("  Teacher:   teacher / teacher123");
-console.log("  Candidate: candidate / candidate123");
+process.stdout.write(
+  "\nDone! Login credentials:\n" +
+    "  Admin:     admin / admin123\n" +
+    "  Teacher:   teacher / teacher123\n" +
+    "  Candidate: candidate / candidate123\n",
+);

@@ -7,9 +7,9 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint: TODO'",
-    "test": "echo 'test: TODO'",
-    "coverage": "echo 'coverage: TODO'"
+    "lint": "node ../../scripts/check-code-quality.mjs",
+    "test": "tsc --noEmit",
+    "coverage": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

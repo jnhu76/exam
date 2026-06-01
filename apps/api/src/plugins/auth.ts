@@ -1,11 +1,11 @@
-import { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { verifyJWT } from "@exam/auth/src/session.js";
-import { RequestContext } from "@exam/domain";
+import type { Role } from "@exam/domain";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
-  // 注册 JWT 插件
-  fastify.decorate("authenticate", async (request: any, reply: any) => {
+  fastify.decorate("authenticate", async (request, reply) => {
     try {
       const token = request.cookies["auth-token"];
       if (!token) {
@@ -16,15 +16,25 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       }
 
       const payload = verifyJWT(token);
+      const user = createUserRepo(fastify.db).findByOrganizationAndId(
+        payload.organizationId,
+        payload.actorId,
+      );
+      if (!user?.isActive) {
+        return reply.code(401).send({
+          message: "Unauthorized",
+          code: "UNAUTHORIZED",
+        });
+      }
 
-      request["ctx"] = {
+      request.ctx = {
         actorId: payload.actorId,
         organizationId: payload.organizationId,
-        role: payload.role,
-        permissions: [], // TODO: 实现权限管理
+        role: user.role,
+        permissions: [],
         sessionId: token,
-      } as RequestContext;
-    } catch (error) {
+      };
+    } catch {
       return reply.code(401).send({
         message: "Unauthorized",
         code: "UNAUTHORIZED",
@@ -32,9 +42,9 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  fastify.decorate("requireRole", (roles: string[]) => {
-    return async (request: any, reply: any) => {
-      const ctx = request["ctx"];
+  fastify.decorate("requireRole", (roles: Role[]) => {
+    return async (request, reply) => {
+      const ctx = request.ctx;
       if (!ctx) {
         return reply.code(401).send({
           message: "Unauthorized",

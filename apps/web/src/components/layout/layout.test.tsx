@@ -157,9 +157,11 @@ describe("layout shells", () => {
 
   it("renders ExamLayout with exam layout test id", () => {
     renderWithProviders(
-      <Routes>
-        <Route path="/exam/list" element={<ExamLayout />} />
-      </Routes>,
+      <AuthProvider initialUser={candidate}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamLayout />} />
+        </Routes>
+      </AuthProvider>,
       "/exam/list",
     );
     expect(screen.getByTestId("exam-layout")).toBeInTheDocument();
@@ -178,9 +180,11 @@ describe("layout shells", () => {
 
   it("ExamLayout does not render sidebar or login layout", () => {
     renderWithProviders(
-      <Routes>
-        <Route path="/exam/list" element={<ExamLayout />} />
-      </Routes>,
+      <AuthProvider initialUser={candidate}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamLayout />} />
+        </Routes>
+      </AuthProvider>,
       "/exam/list",
     );
     expect(screen.queryByTestId("app-sidebar")).not.toBeInTheDocument();

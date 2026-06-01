@@ -2,15 +2,17 @@ import { FastifyPluginAsync } from "fastify";
 import {
   BrandingQuerySchema,
   BrandingViewSchema,
+  OrganizationSettingsSchema,
   UpdateBrandingRequestSchema,
 } from "@exam/contracts";
 import { createSettingsRepo } from "@exam/db/src/repository/settingsRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import type { PublicBrandingContext, RequestContext } from "@exam/domain";
+import type { PublicBrandingContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
+import { recordAudit } from "./audit.js";
 
 const settingsRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/settings/branding", async (request: any) => {
+  fastify.get("/settings/branding", async (request) => {
     const query = BrandingQuerySchema.parse(request.query);
     const orgRepo = createOrganizationRepo(fastify.db);
     const settingsRepo = createSettingsRepo(fastify.db);
@@ -28,6 +30,27 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     return BrandingViewSchema.parse(branding);
   });
 
+  fastify.get(
+    "/admin/settings/branding",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireRole(["Admin", "SuperAdmin"]),
+      ],
+    },
+    async (request) => {
+      const settingsRepo = createSettingsRepo(fastify.db);
+      const settings = settingsRepo.get(ensureTargetOrg(request.ctx!));
+      return settings
+        ? OrganizationSettingsSchema.parse({
+            ...settings,
+            createdAt: settings.createdAt.toISOString(),
+            updatedAt: settings.updatedAt.toISOString(),
+          })
+        : {};
+    },
+  );
+
   fastify.patch(
     "/admin/settings/branding",
     {
@@ -36,8 +59,8 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const rawCtx = request["ctx"] as RequestContext;
+    async (request, reply) => {
+      const rawCtx = request.ctx!;
       const ctx = ensureTargetOrg(rawCtx);
       const data = UpdateBrandingRequestSchema.parse(request.body);
       const settingsRepo = createSettingsRepo(fastify.db);
@@ -50,6 +73,14 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "branding.update",
+        "organization",
+        ctx.targetOrganizationId!,
+      );
       return {
         id: settings.id,
         organizationId: settings.organizationId,

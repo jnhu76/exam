@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { Outlet } from "react-router";
+import { Navigate, Outlet } from "react-router";
 import { AppSidebar } from "./AppSidebar";
 import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
 
 export function AdminLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
-  if (!user) {
+  if (isLoading) {
     return null;
+  }
+  if (!user || user.role === "Candidate") {
+    return <Navigate to="/login" replace />;
   }
 
   return (

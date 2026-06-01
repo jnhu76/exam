@@ -6,6 +6,7 @@ import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
+import { setupErrorHandler } from "./plugins/errors.js";
 import authRoutes from "./routes/auth.js";
 import settingsRoutes from "./routes/settings.js";
 import organizationRoutes from "./routes/organization.js";
@@ -25,6 +26,7 @@ async function main() {
   await app.register(fastifyCookie);
   await app.register(cors);
   setupSecurity(app);
+  setupErrorHandler(app);
   await app.register(dbPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);
@@ -47,7 +49,7 @@ async function main() {
   await app.listen({ port, host });
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((err: unknown) => {
+  process.stderr.write(`${String(err)}\n`);
   process.exit(1);
 });

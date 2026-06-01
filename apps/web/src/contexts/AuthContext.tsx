@@ -33,9 +33,11 @@ function dashboardFor(user: SessionUser): string {
 export function AuthProvider({
   children,
   initialUser = null,
+  restoreSession = false,
 }: {
   children: ReactNode;
   initialUser?: SessionUser | null;
+  restoreSession?: boolean;
 }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(initialUser);
@@ -46,6 +48,26 @@ export function AuthProvider({
     setNavigate(navigate);
     return () => setNavigate(() => {});
   }, [navigate]);
+
+  useEffect(() => {
+    if (!restoreSession || initialUser) return;
+    let active = true;
+    setIsLoading(true);
+    api
+      .get<MeResponse>("/api/auth/me")
+      .then((nextUser) => {
+        if (active) setUser(nextUser);
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [initialUser, restoreSession]);
 
   async function login(username: string, password: string) {
     setIsLoading(true);

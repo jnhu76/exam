@@ -1,10 +1,19 @@
 import "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import type { RequestContext, Role } from "@exam/domain";
 
 declare module "fastify" {
+  interface FastifyRequest {
+    ctx?: RequestContext;
+  }
+
   interface FastifyInstance {
-    authenticate: (request: any, reply: any) => Promise<void>;
+    authenticate: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<void>;
     requireRole: (
-      roles: string[],
-    ) => (request: any, reply: any) => Promise<void>;
+      roles: Role[],
+    ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }

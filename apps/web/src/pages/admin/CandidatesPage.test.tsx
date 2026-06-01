@@ -7,19 +7,35 @@ import { CandidatesPage } from "./CandidatesPage";
 
 vi.mock("@/lib/api", () => ({
   api: {
-    get: vi.fn().mockResolvedValue({
-      items: [
-        {
-          id: "c1",
-          userId: "u1",
-          fields: { employeeId: "E001", name: "Candidate One" },
-        },
-      ],
-      total: 1,
-      page: 1,
-      pageSize: 20,
-      totalPages: 1,
-    }),
+    get: vi.fn().mockImplementation((path: string) =>
+      path === "/api/candidate-fields"
+        ? Promise.resolve([
+            {
+              id: "cf1",
+              name: "employeeId",
+              label: "编号",
+              fieldType: "text",
+              required: true,
+              sortOrder: 0,
+            },
+          ])
+        : Promise.resolve({
+            items: [
+              {
+                id: "c1",
+                userId: "u1",
+                username: "candidate1",
+                name: "Candidate One",
+                isActive: true,
+                fields: { employeeId: "E001" },
+              },
+            ],
+            total: 1,
+            page: 1,
+            pageSize: 20,
+            totalPages: 1,
+          }),
+    ),
     post: vi.fn().mockResolvedValue({
       id: "c2",
       userId: "u2",
@@ -59,7 +75,7 @@ describe("CandidatesPage", () => {
 
   it("renders candidate list", async () => {
     renderPage();
-    expect(await screen.findByText(/employeeId.*E001/)).toBeInTheDocument();
+    expect(await screen.findByText("E001")).toBeInTheDocument();
   });
 
   it("renders import button", async () => {

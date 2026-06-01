@@ -44,6 +44,7 @@ export function SettingsPage() {
         data,
       );
       setSettings(updated);
+      window.dispatchEvent(new Event("branding:refresh"));
     } catch {
       // error handled by toast
     } finally {

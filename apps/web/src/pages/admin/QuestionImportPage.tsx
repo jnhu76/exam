@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { FileUpload } from "@/components/shared/FileUpload";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -22,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertCircle, XCircle, Upload } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
 
 interface CourseRow {
   id: string;
@@ -64,8 +65,6 @@ const typeLabels: Record<string, string> = {
 
 export function QuestionImportPage() {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [selectedCourse, setSelectedCourse] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -73,6 +72,7 @@ export function QuestionImportPage() {
   const [parsedRows, setParsedRows] = useState<ImportRow[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
 
   const loadCourses = useCallback(async () => {
     setIsLoading(true);
@@ -94,18 +94,10 @@ export function QuestionImportPage() {
     loadCourses();
   }, [loadCourses]);
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const rows = parseCSV(text);
-      setParsedRows(rows);
-      setImportResult(null);
-    };
-    reader.readAsText(file);
+  function loadCsv(text: string) {
+    setParsedRows(parseCSV(text));
+    setImportResult(null);
+    setConfirmed(false);
   }
 
   function parseCSV(text: string): ImportRow[] {
@@ -170,15 +162,17 @@ export function QuestionImportPage() {
     return answer;
   }
 
-  async function handleImport() {
+  async function handleImport(confirm: boolean) {
     if (!selectedCourse || parsedRows.length === 0) return;
     setImporting(true);
     try {
       const result = await api.post<ImportResult>("/api/questions/import", {
         courseId: selectedCourse,
         rows: parsedRows,
+        confirm,
       });
       setImportResult(result);
+      setConfirmed(confirm);
     } catch {
       setError("导入失败");
     } finally {
@@ -232,17 +226,7 @@ export function QuestionImportPage() {
           下载模板
         </Button>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-          <Upload className="size-4" />
-          选择文件
-        </Button>
+        <FileUpload onText={loadCsv} />
       </div>
 
       {parsedRows.length > 0 && !importResult && (
@@ -281,8 +265,8 @@ export function QuestionImportPage() {
               ...还有 {parsedRows.length - 20} 条数据
             </p>
           )}
-          <Button onClick={() => void handleImport()} disabled={importing}>
-            {importing ? "导入中..." : "确认导入"}
+          <Button onClick={() => void handleImport(false)} disabled={importing}>
+            {importing ? "校验中..." : "校验导入数据"}
           </Button>
         </>
       )}
@@ -336,6 +320,14 @@ export function QuestionImportPage() {
           </Table>
 
           <div className="flex gap-3">
+            {!confirmed && importResult.errors === 0 && (
+              <Button
+                onClick={() => void handleImport(true)}
+                disabled={importing}
+              >
+                {importing ? "导入中..." : "确认导入"}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => void navigate("/admin/questions")}
@@ -347,6 +339,7 @@ export function QuestionImportPage() {
               onClick={() => {
                 setParsedRows([]);
                 setImportResult(null);
+                setConfirmed(false);
               }}
             >
               继续导入

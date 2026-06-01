@@ -3,6 +3,9 @@ import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
 import authPlugin from "../plugins/auth.js";
+import tenantPlugin from "../plugins/tenant.js";
+import rateLimitPlugin from "../plugins/rateLimit.js";
+import { setupErrorHandler } from "../plugins/errors.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createSqliteDatabase } from "@exam/db/src/sqlite.js";
 import { migrateSqlite } from "@exam/db/src/sqlite.js";
@@ -36,9 +39,12 @@ export async function buildTestApp(
   await seed(db, hashPassword);
 
   const app = Fastify();
+  setupErrorHandler(app);
   await app.register(fastifyCookie);
   await app.register(createDbPlugin(db));
   await app.register(authPlugin);
+  await app.register(tenantPlugin);
+  await app.register(rateLimitPlugin);
   await app.register(routePlugin, { prefix: opts?.prefix ?? "/api" });
   await app.ready();
 

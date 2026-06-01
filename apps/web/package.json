@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint: TODO'",
+    "lint": "node ../../scripts/check-code-quality.mjs",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "preview": "vite preview"

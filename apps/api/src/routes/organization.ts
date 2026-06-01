@@ -6,6 +6,7 @@ import {
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
+import { recordAudit } from "./audit.js";
 
 const organizationRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -35,6 +36,14 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       const data = CreateOrganizationRequestSchema.parse(request.body);
       const orgRepo = createOrganizationRepo(fastify.db);
       const org = orgRepo.create(ctx, data);
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "organization.create",
+        "organization",
+        org.id,
+      );
       return reply.code(201).send({
         ...org,
         createdAt: org.createdAt.toISOString(),
@@ -63,6 +72,14 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
           error: { code: "NOT_FOUND", message: "Organization not found" },
         });
       }
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "organization.update",
+        "organization",
+        id,
+      );
       return {
         ...updated,
         createdAt: updated.createdAt.toISOString(),
@@ -86,6 +103,14 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
           error: { code: "NOT_FOUND", message: "Organization not found" },
         });
       }
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "organization.delete",
+        "organization",
+        id,
+      );
       return reply.code(204).send();
     },
   );

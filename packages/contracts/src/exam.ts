@@ -24,6 +24,13 @@ const RetakePolicyEnum = z.enum([
   "weekly_limit",
   "pass_then_stop",
 ]);
+const Phase1TimingModeEnum = z.literal("timed_window");
+const Phase1QuestionSelectionModeEnum = z.literal("manual");
+const Phase1RetakePolicyEnum = z.enum([
+  "unlimited",
+  "max_attempts",
+  "pass_then_stop",
+]);
 
 const ControlFlagsSchema = z.object({
   shuffleQuestions: z.boolean().default(false),
@@ -66,16 +73,16 @@ export const CreateExamRequestSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),
   courseId: z.string().uuid(),
-  timingMode: TimingModeEnum.default("timed_window"),
+  timingMode: Phase1TimingModeEnum.default("timed_window"),
   durationMinutes: z.number().int().positive(),
   openAt: z.string().datetime(),
   closeAt: z.string().datetime(),
   passingScore: z.number().min(0),
   totalScore: z.number().positive(),
-  questionSelectionMode: QuestionSelectionModeEnum.default("manual"),
+  questionSelectionMode: Phase1QuestionSelectionModeEnum.default("manual"),
   questionIds: z.array(z.string().uuid()).default([]),
   controlFlags: ControlFlagsSchema.default({}),
-  retakePolicy: RetakePolicyEnum.default("unlimited"),
+  retakePolicy: Phase1RetakePolicyEnum.default("unlimited"),
   scoreStrategy: ScoreStrategyEnum.default("highest"),
   maxAttempts: z.number().int().min(1).default(1),
 });
@@ -84,7 +91,7 @@ export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
 export const UpdateExamRequestSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
-  timingMode: TimingModeEnum.optional(),
+  timingMode: Phase1TimingModeEnum.optional(),
   durationMinutes: z.number().int().positive().optional(),
   openAt: z.string().datetime().optional(),
   closeAt: z.string().datetime().optional(),
@@ -92,7 +99,7 @@ export const UpdateExamRequestSchema = z.object({
   totalScore: z.number().positive().optional(),
   questionIds: z.array(z.string().uuid()).optional(),
   controlFlags: ControlFlagsSchema.partial().optional(),
-  retakePolicy: RetakePolicyEnum.optional(),
+  retakePolicy: Phase1RetakePolicyEnum.optional(),
   scoreStrategy: ScoreStrategyEnum.optional(),
   maxAttempts: z.number().int().min(1).optional(),
 });

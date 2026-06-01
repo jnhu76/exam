@@ -51,8 +51,8 @@ export function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <BrandProvider>
-        <AuthProvider>
+      <BrandProvider loadRemote>
+        <AuthProvider restoreSession>
           <AppRoutes />
           <Toaster />
         </AuthProvider>

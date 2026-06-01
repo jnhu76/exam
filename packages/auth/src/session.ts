@@ -1,7 +1,16 @@
 import jwt from "jsonwebtoken";
 import type { RequestContext } from "@exam/domain";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "change-me-in-production";
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret) {
+    return secret;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET is required in production");
+  }
+  return "development-only-change-me";
+}
 
 export function signJWT(
   payload: Omit<
@@ -10,7 +19,7 @@ export function signJWT(
   >,
   options?: jwt.SignOptions,
 ): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: "24h",
     algorithm: "HS256",
     ...options,
@@ -20,7 +29,7 @@ export function signJWT(
 export function verifyJWT(
   token: string,
 ): Omit<RequestContext, "permissions" | "sessionId" | "targetOrganizationId"> {
-  return jwt.verify(token, JWT_SECRET, {
+  return jwt.verify(token, getJwtSecret(), {
     algorithms: ["HS256"],
   }) as Omit<
     RequestContext,

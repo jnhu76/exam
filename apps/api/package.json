@@ -6,9 +6,10 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint: TODO'",
+    "lint": "node ../../scripts/check-code-quality.mjs",
     "test": "vitest run",
-    "coverage": "echo 'coverage: TODO'",
+    "coverage": "vitest run --coverage",
+    "test:integration": "vitest run",
     "start": "node dist/server.js",
     "db:seed": "tsx src/seed.ts"
   },
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
+    "@vitest/coverage-v8": "^4.1.7",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vitest": "^4.1.7"

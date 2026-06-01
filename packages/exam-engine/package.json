@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint: TODO'",
+    "lint": "node ../../scripts/check-code-quality.mjs",
     "test": "vitest run",
     "coverage": "vitest run"
   },

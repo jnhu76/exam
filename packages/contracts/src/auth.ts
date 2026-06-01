@@ -4,6 +4,8 @@ import { RoleSchema } from "./user.js";
 // ── Register ──────────────────────────────────────────────────────
 
 export const RegisterRequestSchema = z.object({
+  organizationSlug: z.string().min(1).max(100),
+  bootstrapToken: z.string().min(1),
   username: z.string().min(3).max(50),
   password: z.string().min(6).max(100),
   name: z.string().min(1).max(100),
@@ -20,6 +22,7 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 // ── Login ─────────────────────────────────────────────────────────
 
 export const LoginRequestSchema = z.object({
+  organizationSlug: z.string().min(1).max(100).optional(),
   username: z.string(),
   password: z.string(),
 });

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export interface ExamConfigData {
   title: string;
@@ -27,6 +28,10 @@ export interface ExamConfigData {
     detectTabSwitch: boolean;
     disableCopyPaste: boolean;
     requireQueue: boolean;
+    batchSize: number;
+    batchInterval: number;
+    restrictIp: boolean;
+    requireLockdown: boolean;
     showResultImmediately: boolean;
   };
   retakePolicy: "unlimited" | "max_attempts" | "pass_then_stop";
@@ -54,6 +59,31 @@ export function ExamConfigForm({
       ...data,
       controlFlags: { ...data.controlFlags, ...partial },
     });
+  }
+
+  function applyPreset(preset: "open" | "standard" | "strict") {
+    updateFlags(
+      preset === "open"
+        ? {
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            restrictIp: false,
+            requireLockdown: false,
+          }
+        : preset === "standard"
+          ? {
+              detectTabSwitch: true,
+              disableCopyPaste: true,
+              restrictIp: false,
+              requireLockdown: false,
+            }
+          : {
+              detectTabSwitch: true,
+              disableCopyPaste: true,
+              restrictIp: true,
+              requireLockdown: true,
+            },
+    );
   }
 
   return (
@@ -237,6 +267,32 @@ export function ExamConfigForm({
           <CardTitle className="text-base">控制设置</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => applyPreset("open")}
+            >
+              开放模式
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => applyPreset("standard")}
+            >
+              标准模式
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => applyPreset("strict")}
+            >
+              严格模式
+            </Button>
+          </div>
           <div className="flex items-center gap-2">
             <Checkbox
               checked={data.controlFlags.shuffleQuestions}
@@ -288,6 +344,48 @@ export function ExamConfigForm({
               onCheckedChange={(v) => updateFlags({ requireQueue: v === true })}
             />
             <Label className="font-normal">排队入场（防流量峰值）</Label>
+          </div>
+          {data.controlFlags.requireQueue && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>每批人数</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={data.controlFlags.batchSize}
+                  onChange={(e) =>
+                    updateFlags({ batchSize: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div>
+                <Label>批次间隔（秒）</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={data.controlFlags.batchInterval}
+                  onChange={(e) =>
+                    updateFlags({ batchInterval: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={data.controlFlags.restrictIp}
+              onCheckedChange={(v) => updateFlags({ restrictIp: v === true })}
+            />
+            <Label className="font-normal">限制访问网络</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={data.controlFlags.requireLockdown}
+              onCheckedChange={(v) =>
+                updateFlags({ requireLockdown: v === true })
+              }
+            />
+            <Label className="font-normal">要求锁定环境</Label>
           </div>
         </CardContent>
       </Card>

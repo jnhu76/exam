@@ -1,18 +1,15 @@
 import { FastifyPluginAsync } from "fastify";
-import { z } from "zod";
 import {
   CreateQuestionRequestSchema,
+  QuestionImportRequestSchema,
   UpdateQuestionRequestSchema,
   PaginationParamsSchema,
 } from "@exam/contracts";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
+import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg, formatZodError } from "./helpers.js";
-
-const ImportBodySchema = z.object({
-  courseId: z.string().uuid(),
-  rows: z.array(z.record(z.unknown())).min(1),
-});
+import { recordAudit } from "./audit.js";
 
 const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -40,6 +37,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       if (query.difficulty) {
         filtered = filtered.filter(
           (q) => q.difficulty === Number(query.difficulty),
+        );
+      }
+      if (query.tags) {
+        const tags = query.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+        filtered = filtered.filter((q) =>
+          tags.every((tag) => q.tags.includes(tag)),
         );
       }
 
@@ -125,6 +131,11 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const data = parsed.data;
       const repo = createQuestionRepo(fastify.db);
+      if (!createCourseRepo(fastify.db).findById(ctx, data.courseId)) {
+        return reply.code(400).send({
+          error: { code: "VALIDATION_ERROR", message: "Course not found" },
+        });
+      }
 
       const question = repo.create(ctx, {
         courseId: data.courseId,
@@ -142,6 +153,14 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         tags: data.tags,
         gradingRule: data.gradingRule,
       });
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "question.create",
+        "question",
+        question.id,
+      );
 
       return reply.code(201).send({
         id: question.id,
@@ -175,12 +194,37 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateQuestionRequestSchema.parse(request.body);
       const repo = createQuestionRepo(fastify.db);
-      const updated = repo.update(ctx, id, data as Record<string, unknown>);
+      const existing = repo.findById(ctx, id);
+      if (!existing) {
+        return reply.code(404).send({
+          error: { code: "NOT_FOUND", message: "Question not found" },
+        });
+      }
+      const validated = CreateQuestionRequestSchema.parse({
+        ...existing,
+        ...data,
+      });
+      if (!createCourseRepo(fastify.db).findById(ctx, validated.courseId)) {
+        return reply.code(400).send({
+          error: { code: "VALIDATION_ERROR", message: "Course not found" },
+        });
+      }
+      const updated = repo.update(ctx, id, {
+        ...validated,
+        options: (validated.options ?? []).map((option) => ({
+          id: option.id,
+          content: option.content,
+          ...(option.isCorrect !== undefined
+            ? { isCorrect: option.isCorrect }
+            : {}),
+        })),
+      });
       if (!updated) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Question not found" },
         });
       }
+      recordAudit(fastify, request, ctx, "question.update", "question", id);
       return {
         id: updated.id,
         organizationId: updated.organizationId,
@@ -218,6 +262,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           error: { code: "NOT_FOUND", message: "Question not found" },
         });
       }
+      recordAudit(fastify, request, ctx, "question.delete", "question", id);
       return reply.code(204).send();
     },
   );
@@ -229,15 +274,21 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.authenticate,
         fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
       ],
+      config: { rateLimit: { max: 5, timeWindow: 60 * 1000 } },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const parsed = ImportBodySchema.safeParse(request.body);
+      const parsed = QuestionImportRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(parsed.error));
       }
       const body = parsed.data;
       const repo = createQuestionRepo(fastify.db);
+      if (!createCourseRepo(fastify.db).findById(ctx, body.courseId)) {
+        return reply.code(400).send({
+          error: { code: "VALIDATION_ERROR", message: "Course not found" },
+        });
+      }
 
       const details: Array<{
         row: number;
@@ -310,26 +361,39 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         const data = parsed.data;
-        repo.create(ctx, {
-          courseId: data.courseId,
-          type: data.type,
-          content: data.content,
-          options: (data.options ?? []).map((o) => ({
-            id: o.id,
-            content: o.content,
-            ...(o.isCorrect !== undefined ? { isCorrect: o.isCorrect } : {}),
-          })),
-          standardAnswer: data.standardAnswer,
-          attachments: data.attachments,
-          score: data.score,
-          difficulty: data.difficulty,
-          tags: data.tags,
-          gradingRule: data.gradingRule,
-        });
+        if (body.confirm) {
+          repo.create(ctx, {
+            courseId: data.courseId,
+            type: data.type,
+            content: data.content,
+            options: (data.options ?? []).map((o) => ({
+              id: o.id,
+              content: o.content,
+              ...(o.isCorrect !== undefined ? { isCorrect: o.isCorrect } : {}),
+            })),
+            standardAnswer: data.standardAnswer,
+            attachments: data.attachments,
+            score: data.score,
+            difficulty: data.difficulty,
+            tags: data.tags,
+            gradingRule: data.gradingRule,
+          });
+        }
         valid++;
         details.push({ row: i + 1, status: "valid" });
       }
 
+      if (body.confirm) {
+        recordAudit(
+          fastify,
+          request,
+          ctx,
+          "question.import",
+          "course",
+          body.courseId,
+          { total: body.rows.length, valid, errors },
+        );
+      }
       return reply.code(200).send({
         total: body.rows.length,
         valid,

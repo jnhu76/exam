@@ -61,7 +61,7 @@ function makeQuestion(id: string, overrides: Partial<Question> = {}): Question {
     ],
     standardAnswer: "a",
     attachments: [],
-    score: 10,
+    score: 50,
     difficulty: 1,
     tags: [],
     gradingRule: {
