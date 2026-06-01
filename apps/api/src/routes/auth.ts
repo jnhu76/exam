@@ -109,6 +109,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         secure: process.env.NODE_ENV === "production",
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
+        path: "/",
       });
 
       const response = LoginResponseSchema.parse({
@@ -124,7 +125,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   fastify.post("/logout", async (_request, reply) => {
-    reply.clearCookie("auth-token");
+    reply.clearCookie("auth-token", { path: "/" });
     return reply.code(200).send({ success: true });
   });
 

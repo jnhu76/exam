@@ -41,7 +41,7 @@ const groups = [
     label: "考试",
     items: [
       { label: "考试管理", to: "/admin/exams", icon: ClipboardList },
-      { label: "成绩查询", to: "/admin/scores", icon: Gauge },
+      { label: "成绩查询", to: "/admin/exams", icon: Gauge },
     ],
   },
 ];
@@ -51,7 +51,6 @@ const managementItems = [
   { label: "考生管理", to: "/admin/candidates", icon: Users },
   { label: "平台设置", to: "/admin/settings", icon: Settings },
   { label: "考生字段", to: "/admin/candidate-fields", icon: Tags },
-  { label: "系统状态", to: "/admin/system", icon: Gauge },
 ];
 
 function SidebarLink({

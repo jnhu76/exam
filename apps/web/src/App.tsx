@@ -31,6 +31,7 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="dashboard" element={<Navigate to="/admin/exams" replace />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="organizations" element={<OrganizationsPage />} />
         <Route path="candidate-fields" element={<CandidateFieldsPage />} />

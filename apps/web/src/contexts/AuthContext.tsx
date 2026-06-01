@@ -41,7 +41,7 @@ export function AuthProvider({
 }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(initialUser);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(restoreSession && !initialUser);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
