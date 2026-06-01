@@ -11,6 +11,10 @@ import { OrganizationsPage } from "@/pages/admin/OrganizationsPage";
 import { CandidateFieldsPage } from "@/pages/admin/CandidateFieldsPage";
 import { UsersPage } from "@/pages/admin/UsersPage";
 import { CandidatesPage } from "@/pages/admin/CandidatesPage";
+import { CoursePage } from "@/pages/admin/CoursePage";
+import { QuestionPage } from "@/pages/admin/QuestionPage";
+import { QuestionEditPage } from "@/pages/admin/QuestionEditPage";
+import { QuestionImportPage } from "@/pages/admin/QuestionImportPage";
 
 export function AppRoutes() {
   return (
@@ -23,6 +27,11 @@ export function AppRoutes() {
         <Route path="candidate-fields" element={<CandidateFieldsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="candidates" element={<CandidatesPage />} />
+        <Route path="courses" element={<CoursePage />} />
+        <Route path="questions" element={<QuestionPage />} />
+        <Route path="questions/new" element={<QuestionEditPage />} />
+        <Route path="questions/:id/edit" element={<QuestionEditPage />} />
+        <Route path="questions/import" element={<QuestionImportPage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
       <Route path="/exam" element={<ExamLayout />}>

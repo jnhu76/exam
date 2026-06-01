@@ -12,6 +12,8 @@ import organizationRoutes from "./routes/organization.js";
 import candidateFieldRoutes from "./routes/candidateField.js";
 import userRoutes from "./routes/user.js";
 import candidateRoutes from "./routes/candidate.js";
+import courseRoutes from "./routes/course.js";
+import questionRoutes from "./routes/question.js";
 
 const port = Number(process.env.APP_PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -37,6 +39,8 @@ async function main() {
   await app.register(candidateFieldRoutes, { prefix: "/api" });
   await app.register(userRoutes, { prefix: "/api" });
   await app.register(candidateRoutes, { prefix: "/api" });
+  await app.register(courseRoutes, { prefix: "/api" });
+  await app.register(questionRoutes, { prefix: "/api" });
 
   await app.listen({ port, host });
 }
