@@ -30,6 +30,16 @@ describe("routes", () => {
     expect(routes.admin.system).toBe("/admin/system");
   });
 
+  it("has admin results route separate from exams", () => {
+    expect(routes.admin.results).toBe("/admin/results");
+    expect(routes.admin.exams).toBe("/admin/exams");
+    expect(routes.admin.results).not.toBe(routes.admin.exams);
+  });
+
+  it("examScores returns correct path with id", () => {
+    expect(routes.admin.examScores("99")).toBe("/admin/exams/99/scores");
+  });
+
   it("has exam routes", () => {
     expect(routes.exam.list).toBe("/exam/list");
     expect(routes.exam.start).toBeInstanceOf(Function);

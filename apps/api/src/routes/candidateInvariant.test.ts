@@ -1,8 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildTestApp } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createExamViaApi,
+  publishExamViaApi,
+} from "./testHelpers.js";
 import authRoutes from "./auth.js";
 import candidateRoutes from "./candidate.js";
 import attemptRoutes from "./attempts.js";
+import examRoutes from "./exam.js";
+import courseRoutes from "./course.js";
+import questionRoutes from "./question.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
@@ -39,6 +46,9 @@ describe("candidate profile invariant", () => {
       await fastify.register(authRoutes, { prefix: "/auth" });
       await fastify.register(candidateRoutes);
       await fastify.register(attemptRoutes);
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(examRoutes);
     });
   });
 
@@ -116,5 +126,49 @@ describe("candidate profile invariant", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
+  });
+
+  it("Candidate without profile cannot start exam", async () => {
+    const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Profile Invariant Start Exam",
+      courseCode: "PI-START-101",
+      courseName: "Profile Invariant Start Course",
+      questionContent: "Is this a test?",
+      questionAnswer: true,
+      questionScore: 10,
+      durationMinutes: 60,
+      passingScore: 5,
+      totalScore: 10,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, examId);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(res.statusCode).not.toBe(201);
+  });
+
+  it("Candidate without profile cannot submit answers", async () => {
+    const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Profile Invariant Submit Exam",
+      courseCode: "PI-SUBMIT-101",
+      courseName: "Profile Invariant Submit Course",
+      questionContent: "Is this another test?",
+      questionAnswer: false,
+      questionScore: 10,
+      durationMinutes: 60,
+      passingScore: 5,
+      totalScore: 10,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, examId);
+
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(startRes.statusCode).not.toBe(201);
   });
 });
