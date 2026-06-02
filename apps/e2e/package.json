@@ -1,0 +1,16 @@
+{
+  "name": "@exam/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "vitest run",
+    "test:e2e:watch": "vitest"
+  },
+  "devDependencies": {
+    "@exam/auth": "workspace:*",
+    "@exam/db": "workspace:*",
+    "@exam/contracts": "workspace:*",
+    "@exam/api": "workspace:*",
+    "vitest": "^4.1.7"
+  }
+}

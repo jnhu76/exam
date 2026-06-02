@@ -82,6 +82,24 @@ importers:
         specifier: ^4.1.7
         version: 4.1.7(@types/node@22.19.19)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@6.4.2(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))
 
+  apps/e2e:
+    devDependencies:
+      '@exam/api':
+        specifier: workspace:*
+        version: link:../api
+      '@exam/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@exam/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@exam/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      vitest:
+        specifier: ^4.1.7
+        version: 4.1.7(@types/node@22.19.19)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@6.4.2(@types/node@22.19.19)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3))
+
   apps/web:
     dependencies:
       '@exam/contracts':
