@@ -18,24 +18,24 @@ All P0 bugs are fixed, exam lifecycle闭环 works end-to-end, architecture bound
 
 ### Phase 1.1 Stabilization (Job01-Job06)
 
-| Job | Description | Files |
-|-----|-------------|-------|
-| Job01 | API client empty-body fix + error handler 4xx preservation | `web/src/lib/api.ts`, `api/src/plugins/errors.ts`, `api/src/plugins/security.ts` |
-| Job02 | Loading/error states and toast feedback on destructive actions | `ExamDetailPage.tsx`, `ExamPage.tsx`, `CoursePage.tsx`, `ExamCreatePage.tsx` |
-| Job03 | Enrollment CRUD routes + UI | `api/src/routes/exam.ts`, `ExamDetailPage.tsx` |
-| Job04 | Exam route index redirect + header nav links | `ExamLayout.tsx`, `App.tsx` |
-| Job05 | Password change route + forms | `api/src/routes/auth.ts`, `SettingsPage.tsx`, `ExamSettingsPage.tsx`, `contracts/src/auth.ts` |
-| Job06 | Smoke test suite (8 tests) | `api/src/routes/smoke.test.ts` |
+| Job   | Description                                                    | Files                                                                                         |
+| ----- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Job01 | API client empty-body fix + error handler 4xx preservation     | `web/src/lib/api.ts`, `api/src/plugins/errors.ts`, `api/src/plugins/security.ts`              |
+| Job02 | Loading/error states and toast feedback on destructive actions | `ExamDetailPage.tsx`, `ExamPage.tsx`, `CoursePage.tsx`, `ExamCreatePage.tsx`                  |
+| Job03 | Enrollment CRUD routes + UI                                    | `api/src/routes/exam.ts`, `ExamDetailPage.tsx`                                                |
+| Job04 | Exam route index redirect + header nav links                   | `ExamLayout.tsx`, `App.tsx`                                                                   |
+| Job05 | Password change route + forms                                  | `api/src/routes/auth.ts`, `SettingsPage.tsx`, `ExamSettingsPage.tsx`, `contracts/src/auth.ts` |
+| Job06 | Smoke test suite (8 tests)                                     | `api/src/routes/smoke.test.ts`                                                                |
 
 ### Fix Pack (Tasks 1-4)
 
-| Task | Description | Files |
-|------|-------------|-------|
-| Task 1 | Candidate profile invariant + shared test helper | `testHelpers.ts`, `candidateInvariant.test.ts`, `smoke.test.ts` |
-| Task 2 | `/admin/results` route + `ResultsOverviewPage` | `App.tsx`, `routes.ts`, `ResultsOverviewPage.tsx`, `AppSidebar.tsx` |
-| Task 3 | `Link` → `NavLink` with active state in ExamLayout | `ExamLayout.tsx` |
-| Task 4 | CSV export integration tests | `export.test.ts` |
-| Review fix | `as any` cleanup in `export.ts` | `export.ts` |
+| Task       | Description                                        | Files                                                               |
+| ---------- | -------------------------------------------------- | ------------------------------------------------------------------- |
+| Task 1     | Candidate profile invariant + shared test helper   | `testHelpers.ts`, `candidateInvariant.test.ts`, `smoke.test.ts`     |
+| Task 2     | `/admin/results` route + `ResultsOverviewPage`     | `App.tsx`, `routes.ts`, `ResultsOverviewPage.tsx`, `AppSidebar.tsx` |
+| Task 3     | `Link` → `NavLink` with active state in ExamLayout | `ExamLayout.tsx`                                                    |
+| Task 4     | CSV export integration tests                       | `export.test.ts`                                                    |
+| Review fix | `as any` cleanup in `export.ts`                    | `export.ts`                                                         |
 
 ---
 
@@ -105,6 +105,7 @@ All P0 bugs are fixed, exam lifecycle闭环 works end-to-end, architecture bound
 **Severity:** Medium (non-blocking, fixed during review)
 
 **Before:**
+
 ```typescript
 // apps/api/src/routes/export.ts:21-22
 const examId = (request.params as any).id;
@@ -112,6 +113,7 @@ const ctx = ensureTargetOrg(request["ctx"] as any);
 ```
 
 **After:**
+
 ```typescript
 const { id: examId } = request.params as { id: string };
 const ctx = ensureTargetOrg(request["ctx"] as RequestContext);

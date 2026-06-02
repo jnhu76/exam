@@ -42,9 +42,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main, dev ]
+    branches: [main, dev]
 
 jobs:
   # 代码检查阶段
@@ -52,87 +52,87 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Format check
         run: npm run format:check
-        
+
       - name: Type check
         run: npm run typecheck
-        
+
       - name: Lint
         run: npm run lint
-        
+
   # 单元测试阶段
   unit-test:
     runs-on: ubuntu-latest
     needs: check
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Run unit tests
         run: npm run test
         env:
           CI: true
-          
+
   # 集成测试阶段
   integration-test:
     runs-on: ubuntu-latest
     needs: unit-test
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Run integration tests
         run: npm run test:integration
         env:
           CI: true
-          
+
   # 端到端测试阶段（Playwright）
   e2e-test:
     runs-on: ubuntu-latest
     needs: integration-test
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Install Playwright browsers
         run: npm run test:playwright:install
-        
+
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           CI: true
-          
+
   # 视觉回归测试阶段
   visual-test:
     runs-on: ubuntu-latest
@@ -140,39 +140,39 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Run visual regression tests
         run: npm run test:visual
         env:
           CI: true
-          
+
   # 部署阶段
   deploy:
     runs-on: ubuntu-latest
-    needs: [ e2e-test, visual-test ]
+    needs: [e2e-test, visual-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
-        
+
       - name: Build
         run: npm run build
-        
+
       - name: Deploy to production
         run: npm run deploy
 ```
@@ -200,7 +200,7 @@ check:
 # 单元测试阶段
 unit-test:
   stage: test
-  needs: [ check ]
+  needs: [check]
   script:
     - npm ci
     - npm run test
@@ -211,7 +211,7 @@ unit-test:
 # 集成测试阶段
 integration-test:
   stage: test
-  needs: [ unit-test ]
+  needs: [unit-test]
   script:
     - npm ci
     - npm run test:integration
@@ -222,7 +222,7 @@ integration-test:
 # 端到端测试阶段
 e2e-test:
   stage: test
-  needs: [ integration-test ]
+  needs: [integration-test]
   script:
     - npm ci
     - npm run test:playwright:install
@@ -234,7 +234,7 @@ e2e-test:
 # 视觉回归测试阶段
 visual-test:
   stage: test
-  needs: [ e2e-test ]
+  needs: [e2e-test]
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
   script:
@@ -247,7 +247,7 @@ visual-test:
 # 部署阶段
 deploy:
   stage: deploy
-  needs: [ e2e-test, visual-test ]
+  needs: [e2e-test, visual-test]
   rules:
     - if: $CI_COMMIT_BRANCH == 'main' && $CI_PIPELINE_SOURCE == 'push'
   script:
@@ -264,7 +264,7 @@ deploy:
 # GitHub Actions 配置
 - name: Generate Allure report
   run: npm run allure:generate
-  
+
 - name: Upload Allure report
   uses: actions/upload-artifact@v4
   with:
@@ -283,47 +283,47 @@ const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
 
 const sendSlackNotification = (testResult) => {
   const message = {
-    text: '测试结果通知',
+    text: "测试结果通知",
     attachments: [
       {
-        color: testResult.passed ? '#36a64f' : '#dc3545',
-        title: `测试结果: ${testResult.passed ? '通过' : '失败'}`,
+        color: testResult.passed ? "#36a64f" : "#dc3545",
+        title: `测试结果: ${testResult.passed ? "通过" : "失败"}`,
         fields: [
           {
-            title: '总测试数',
+            title: "总测试数",
             value: testResult.total,
-            short: true
+            short: true,
           },
           {
-            title: '通过数',
+            title: "通过数",
             value: testResult.passed,
-            short: true
+            short: true,
           },
           {
-            title: '失败数',
+            title: "失败数",
             value: testResult.failed,
-            short: true
+            short: true,
           },
           {
-            title: '跳过数',
+            title: "跳过数",
             value: testResult.skipped,
-            short: true
+            short: true,
           },
           {
-            title: '报告链接',
+            title: "报告链接",
             value: testResult.reportUrl,
-            short: false
-          }
+            short: false,
+          },
         ],
-        ts: Date.now() / 1000
-      }
-    ]
+        ts: Date.now() / 1000,
+      },
+    ],
   };
 
   fetch(slackWebhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(message)
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(message),
   });
 };
 ```
@@ -336,13 +336,13 @@ const sendSlackNotification = (testResult) => {
 # GitHub Actions 蓝绿部署配置
 - name: Deploy to blue environment
   run: npm run deploy:blue
-  
+
 - name: Run smoke tests on blue environment
   run: npm run test:smoke -- --environment blue
-  
+
 - name: Switch traffic to blue environment
   run: npm run deploy:switch
-  
+
 - name: Clean up green environment
   run: npm run deploy:cleanup:green
 ```
@@ -353,13 +353,13 @@ const sendSlackNotification = (testResult) => {
 # GitHub Actions 滚动部署配置
 - name: Deploy to staging
   run: npm run deploy:staging
-  
+
 - name: Run integration tests on staging
   run: npm run test:integration -- --environment staging
-  
+
 - name: Deploy to production
   run: npm run deploy:production
-  
+
 - name: Run health check
   run: npm run test:health
 ```

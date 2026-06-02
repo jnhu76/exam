@@ -93,26 +93,29 @@ npm run allure:open
 
 ```javascript
 // scripts/analyze-test-results.js
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const testResultFile = path.join(__dirname, '../coverage/coverage-summary.json');
+const testResultFile = path.join(
+  __dirname,
+  "../coverage/coverage-summary.json",
+);
 
 // 读取测试结果
-const testResults = JSON.parse(fs.readFileSync(testResultFile, 'utf8'));
+const testResults = JSON.parse(fs.readFileSync(testResultFile, "utf8"));
 
 // 分析测试结果
 const totalCoverage = testResults.total.lines.pct;
 const uncoveredFiles = Object.keys(testResults)
-  .filter(key => key !== 'total')
-  .filter(key => testResults[key].lines.pct < 80);
+  .filter((key) => key !== "total")
+  .filter((key) => testResults[key].lines.pct < 80);
 
 console.log(`整体测试覆盖率: ${totalCoverage}%`);
 console.log(`未覆盖 80% 测试的文件: ${uncoveredFiles.length} 个`);
 
 if (uncoveredFiles.length > 0) {
-  console.log('未覆盖的文件:');
-  uncoveredFiles.forEach(file => {
+  console.log("未覆盖的文件:");
+  uncoveredFiles.forEach((file) => {
     console.log(`  - ${file}: ${testResults[file].lines.pct}%`);
   });
 }
@@ -121,10 +124,13 @@ if (uncoveredFiles.length > 0) {
 const analysisResult = {
   totalCoverage,
   uncoveredFiles,
-  generatedAt: new Date().toISOString()
+  generatedAt: new Date().toISOString(),
 };
 
-fs.writeFileSync(path.join(__dirname, '../coverage/analysis-result.json'), JSON.stringify(analysisResult, null, 2));
+fs.writeFileSync(
+  path.join(__dirname, "../coverage/analysis-result.json"),
+  JSON.stringify(analysisResult, null, 2),
+);
 ```
 
 ## 问题识别与修复
@@ -181,51 +187,75 @@ fs.writeFileSync(path.join(__dirname, '../coverage/analysis-result.json'), JSON.
 
 ```javascript
 // scripts/generate-comprehensive-report.js
-const fs = require('fs');
-const path = require('path');
-const Mustache = require('mustache');
+const fs = require("fs");
+const path = require("path");
+const Mustache = require("mustache");
 
 // 读取分析结果
-const analysisResult = JSON.parse(fs.readFileSync(path.join(__dirname, '../coverage/analysis-result.json'), 'utf8'));
+const analysisResult = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "../coverage/analysis-result.json"),
+    "utf8",
+  ),
+);
 
 // 读取 Allure 报告数据
-const allureReportData = fs.readFileSync(path.join(__dirname, '../allure-report/data/test-cases.json'), 'utf8');
+const allureReportData = fs.readFileSync(
+  path.join(__dirname, "../allure-report/data/test-cases.json"),
+  "utf8",
+);
 
 // 生成 HTML 报告
-const template = fs.readFileSync(path.join(__dirname, 'templates/report-template.mustache'), 'utf8');
+const template = fs.readFileSync(
+  path.join(__dirname, "templates/report-template.mustache"),
+  "utf8",
+);
 const report = Mustache.render(template, {
   analysisResult,
-  allureReportData
+  allureReportData,
 });
 
 // 保存报告
-fs.writeFileSync(path.join(__dirname, '../reports/comprehensive-report.html'), report);
+fs.writeFileSync(
+  path.join(__dirname, "../reports/comprehensive-report.html"),
+  report,
+);
 ```
 
 ### 2. 问题报告
 
 ```javascript
 // scripts/generate-issue-report.js
-const fs = require('fs');
-const path = require('path');
-const { Octokit } = require('@octokit/rest');
+const fs = require("fs");
+const path = require("path");
+const { Octokit } = require("@octokit/rest");
 
 // 初始化 Octokit
 const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN
+  auth: process.env.GITHUB_TOKEN,
 });
 
 // 读取分析结果
-const analysisResult = JSON.parse(fs.readFileSync(path.join(__dirname, '../coverage/analysis-result.json'), 'utf8'));
+const analysisResult = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "../coverage/analysis-result.json"),
+    "utf8",
+  ),
+);
 
 // 读取失败测试数据
-const failedTests = JSON.parse(fs.readFileSync(path.join(__dirname, '../coverage/failed-tests.json'), 'utf8'));
+const failedTests = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "../coverage/failed-tests.json"),
+    "utf8",
+  ),
+);
 
 // 创建问题报告
 failedTests.forEach(async (test) => {
   const issue = await octokit.rest.issues.create({
-    owner: 'your-username',
-    repo: 'your-repo',
+    owner: "your-username",
+    repo: "your-repo",
     title: `[Test] ${test.title} 失败`,
     body: `
 测试失败: ${test.title}
@@ -235,9 +265,9 @@ failedTests.forEach(async (test) => {
 
 分析结果: ${analysisResult.totalCoverage}% 覆盖
 `,
-    labels: ['test', 'bug']
+    labels: ["test", "bug"],
   });
-  
+
   console.log(`创建问题: #${issue.data.number}`);
 });
 ```
@@ -267,19 +297,19 @@ failedTests.forEach(async (test) => {
 
 ## 总体覆盖率
 
-| 指标 | 覆盖率 |
-|------|--------|
-| 语句覆盖率 | 75.2% |
-| 分支覆盖率 | 68.9% |
-| 函数覆盖率 | 82.1% |
-| 文件覆盖率 | 78.5% |
+| 指标       | 覆盖率 |
+| ---------- | ------ |
+| 语句覆盖率 | 75.2%  |
+| 分支覆盖率 | 68.9%  |
+| 函数覆盖率 | 82.1%  |
+| 文件覆盖率 | 78.5%  |
 
 ## 未覆盖的文件
 
-| 文件 | 覆盖率 |
-|------|--------|
-| src/utils/date-helpers.ts | 45.2% |
-| src/components/ComplexComponent.tsx | 32.8% |
+| 文件                                | 覆盖率 |
+| ----------------------------------- | ------ |
+| src/utils/date-helpers.ts           | 45.2%  |
+| src/components/ComplexComponent.tsx | 32.8%  |
 
 ## 建议
 
@@ -294,10 +324,10 @@ failedTests.forEach(async (test) => {
 
 ## 失败的测试
 
-| 测试名称 | 文件 | 行号 | 错误信息 |
-|---------|------|------|---------|
-| 登录页面视觉测试 | src/__tests__/e2e/login.spec.ts | 15 | 截图差异超过阈值 |
-| 解析复杂题目 | src/__tests__/question-parser.spec.ts | 23 | 解析超时 |
+| 测试名称         | 文件                                  | 行号 | 错误信息         |
+| ---------------- | ------------------------------------- | ---- | ---------------- |
+| 登录页面视觉测试 | src/**tests**/e2e/login.spec.ts       | 15   | 截图差异超过阈值 |
+| 解析复杂题目     | src/**tests**/question-parser.spec.ts | 23   | 解析超时         |
 
 ## 修复建议
 

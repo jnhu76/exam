@@ -125,30 +125,28 @@ npm run test:smoke
 ## 示例测试用例
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { app } from '../src/app';
-import request from 'supertest';
+import { describe, it, expect } from "vitest";
+import { app } from "../src/app";
+import request from "supertest";
 
-describe('API 冒烟测试', () => {
-  it('应该能够访问健康检查接口', async () => {
-    const response = await request(app).get('/api/health');
+describe("API 冒烟测试", () => {
+  it("应该能够访问健康检查接口", async () => {
+    const response = await request(app).get("/api/health");
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: 'ok' });
+    expect(response.body).toEqual({ status: "ok" });
   });
 
-  it('应该能够获取考试列表', async () => {
-    const response = await request(app).get('/api/exams');
+  it("应该能够获取考试列表", async () => {
+    const response = await request(app).get("/api/exams");
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
   });
 
-  it('应该能够登录系统', async () => {
-    const response = await request(app)
-      .post('/api/auth/login')
-      .send({
-        username: 'admin',
-        password: 'password'
-      });
+  it("应该能够登录系统", async () => {
+    const response = await request(app).post("/api/auth/login").send({
+      username: "admin",
+      password: "password",
+    });
     expect(response.status).toBe(200);
     expect(response.body.token).toBeDefined();
   });

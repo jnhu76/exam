@@ -102,16 +102,19 @@ pnpm --filter @exam/web test -- --testPathPattern="integration"  # 仅集成测�
 
 ```typescript
 // fixtures/msw-handlers.ts - 定义 API mock
-import { http, HttpResponse } from 'msw';
-import { AUTH_API } from '@/lib/api-client';
+import { http, HttpResponse } from "msw";
+import { AUTH_API } from "@/lib/api-client";
 
 export const authHandlers = [
   http.post(`${AUTH_API}/login`, async ({ request }) => {
     const body = await request.json();
-    if (body.username === 'admin' && body.password === 'password') {
-      return HttpResponse.json({ token: 'mock-token', user: { role: 'admin' } });
+    if (body.username === "admin" && body.password === "password") {
+      return HttpResponse.json({
+        token: "mock-token",
+        user: { role: "admin" },
+      });
     }
-    return HttpResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    return HttpResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }),
 ];
 ```

@@ -52,53 +52,53 @@
 使用状态机定义考试状态：
 
 ```typescript
-import { createMachine } from 'xstate';
+import { createMachine } from "xstate";
 
 export const examStateMachine = createMachine({
-  id: 'exam',
-  initial: 'draft',
+  id: "exam",
+  initial: "draft",
   states: {
     draft: {
       on: {
-        PUBLISH: 'published',
-        DELETE: 'deleted'
-      }
+        PUBLISH: "published",
+        DELETE: "deleted",
+      },
     },
     published: {
       on: {
-        START: 'inProgress',
-        DELETE: 'deleted',
-        EDIT: 'draft'
-      }
+        START: "inProgress",
+        DELETE: "deleted",
+        EDIT: "draft",
+      },
     },
     inProgress: {
       on: {
-        SUBMIT: 'submitted',
-        INTERRUPT: 'disrupted',
-        TIMEOUT: 'timedOut'
-      }
+        SUBMIT: "submitted",
+        INTERRUPT: "disrupted",
+        TIMEOUT: "timedOut",
+      },
     },
     disrupted: {
       on: {
-        RECOVER: 'inProgress',
-        SUBMIT: 'submitted'
-      }
+        RECOVER: "inProgress",
+        SUBMIT: "submitted",
+      },
     },
     timedOut: {
-      type: 'final'
+      type: "final",
     },
     submitted: {
       on: {
-        GRADE: 'graded'
-      }
+        GRADE: "graded",
+      },
     },
     graded: {
-      type: 'final'
+      type: "final",
     },
     deleted: {
-      type: 'final'
-    }
-  }
+      type: "final",
+    },
+  },
 });
 ```
 

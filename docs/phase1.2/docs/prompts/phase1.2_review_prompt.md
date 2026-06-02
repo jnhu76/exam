@@ -98,7 +98,7 @@
 
 ### 代码审查反馈
 
-```markdown
+````markdown
 **问题**: 函数参数过多
 
 **位置**: `src/utils/date-helpers.ts:12`
@@ -109,7 +109,13 @@
 
 ```typescript
 // 重构前
-function calculateDate(year: number, month: number, day: number, hour: number, minute: number): Date {
+function calculateDate(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+): Date {
   // ...
 }
 
@@ -126,7 +132,9 @@ function calculateDate(params: DateParams): Date {
   // ...
 }
 ```
-```
+````
+
+````
 
 ### 文档审查反馈
 
@@ -178,7 +186,8 @@ export const authHandlers = [
     return HttpResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   }),
 ];
-```
+````
+
 ```
 
 ## 成功标准
@@ -194,3 +203,4 @@ export const authHandlers = [
 - 反馈要具体和可行
 - 审查要及时和有效
 - 沟通要友好和专业
+```

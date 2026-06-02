@@ -14,6 +14,7 @@
 ## 测试原理
 
 视觉回归测试通过比较页面截图来检测 UI 变化：
+
 1. 在基准版本上捕获页面截图
 2. 在新版本上捕获相同页面的截图
 3. 比较两幅截图的差异
@@ -61,28 +62,30 @@
 ### 使用 Playwright 进行视觉测试
 
 ```typescript
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-test('登录页面视觉测试', async ({ page }) => {
-  await page.goto('/login');
-  await expect(page).toHaveScreenshot('login-page.png', {
+test("登录页面视觉测试", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page).toHaveScreenshot("login-page.png", {
     maxDiffPixels: 100,
-    maxDiffPixelRatio: 0.1
+    maxDiffPixelRatio: 0.1,
   });
 });
 
-test('仪表盘页面视觉测试', async ({ page }) => {
-  await page.goto('/dashboard');
-  await expect(page).toHaveScreenshot('dashboard-page.png', {
+test("仪表盘页面视觉测试", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveScreenshot("dashboard-page.png", {
     mask: [
-      page.locator('.dynamic-content') // 忽略动态内容
-    ]
+      page.locator(".dynamic-content"), // 忽略动态内容
+    ],
   });
 });
 
-test('不同屏幕尺寸的视觉测试', async ({ page, viewportSize }) => {
-  await page.goto('/dashboard');
-  await expect(page).toHaveScreenshot(`dashboard-${viewportSize.width}x${viewportSize.height}.png`);
+test("不同屏幕尺寸的视觉测试", async ({ page, viewportSize }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveScreenshot(
+    `dashboard-${viewportSize.width}x${viewportSize.height}.png`,
+  );
 });
 ```
 
@@ -91,49 +94,49 @@ test('不同屏幕尺寸的视觉测试', async ({ page, viewportSize }) => {
 ```javascript
 // backstop.config.js
 module.exports = {
-  id: 'exam-platform-visual-test',
+  id: "exam-platform-visual-test",
   viewports: [
     {
-      label: 'desktop',
+      label: "desktop",
       width: 1440,
-      height: 900
+      height: 900,
     },
     {
-      label: 'mobile',
+      label: "mobile",
       width: 375,
-      height: 667
-    }
+      height: 667,
+    },
   ],
   scenarios: [
     {
-      label: 'login',
-      url: 'http://localhost:3000/login',
-      selectors: ['document'],
-      readyEvent: 'DOMContentLoaded',
-      delay: 500
+      label: "login",
+      url: "http://localhost:3000/login",
+      selectors: ["document"],
+      readyEvent: "DOMContentLoaded",
+      delay: 500,
     },
     {
-      label: 'dashboard',
-      url: 'http://localhost:3000/dashboard',
-      selectors: ['document'],
-      readyEvent: 'DOMContentLoaded',
+      label: "dashboard",
+      url: "http://localhost:3000/dashboard",
+      selectors: ["document"],
+      readyEvent: "DOMContentLoaded",
       delay: 500,
-      hideSelectors: ['.dynamic-content']
-    }
+      hideSelectors: [".dynamic-content"],
+    },
   ],
   paths: {
-    bitmaps_reference: 'backstop_data/bitmaps_reference',
-    bitmaps_test: 'backstop_data/bitmaps_test',
-    engine_scripts: 'backstop_data/engine_scripts',
-    html_report: 'backstop_data/html_report',
-    ci_report: 'backstop_data/ci_report'
+    bitmaps_reference: "backstop_data/bitmaps_reference",
+    bitmaps_test: "backstop_data/bitmaps_test",
+    engine_scripts: "backstop_data/engine_scripts",
+    html_report: "backstop_data/html_report",
+    ci_report: "backstop_data/ci_report",
   },
-  engine: 'puppeteer',
-  report: ['browser'],
+  engine: "puppeteer",
+  report: ["browser"],
   asyncCaptureLimit: 5,
   asyncCompareLimit: 50,
   debug: false,
-  debugWindow: false
+  debugWindow: false,
 };
 ```
 
@@ -141,7 +144,7 @@ module.exports = {
 
 ```typescript
 // .storybook/test-runner.ts
-import { TestRunnerConfig } from '@storybook/test-runner';
+import { TestRunnerConfig } from "@storybook/test-runner";
 
 const config: TestRunnerConfig = {
   async setup() {
@@ -153,9 +156,9 @@ const config: TestRunnerConfig = {
   async postRender(page, context) {
     // 渲染后的操作，例如截图
     await page.screenshot({
-      path: `screenshots/${context.storyId}.png`
+      path: `screenshots/${context.storyId}.png`,
     });
-  }
+  },
 };
 
 export default config;
@@ -166,12 +169,14 @@ export default config;
 ### 本地执行
 
 #### 使用 Playwright
+
 ```bash
 cd apps/web
 npm run test:visual
 ```
 
 #### 使用 BackstopJS
+
 ```bash
 cd apps/web
 npm run backstop:reference
@@ -180,6 +185,7 @@ npm run backstop:approve
 ```
 
 #### 使用 Storybook
+
 ```bash
 cd apps/web
 npm run storybook:test
@@ -188,6 +194,7 @@ npm run storybook:test
 ### CI/CD 执行
 
 视觉回归测试将在 CI/CD 流程中自动执行：
+
 1. 在基准分支（如 main）上运行并保存基准截图
 2. 在 PR 上运行并与基准截图比较
 3. 标记显著的差异
@@ -231,6 +238,7 @@ npm run storybook:test
 ## 示例报告
 
 视觉回归测试将生成详细的报告，包括：
+
 1. 截图对比
 2. 差异区域高亮
 3. 差异百分比

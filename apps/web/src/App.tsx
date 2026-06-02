@@ -22,7 +22,6 @@ import { ExamListPage } from "@/pages/exam/ExamListPage";
 import { StartExamPage } from "@/pages/exam/StartExamPage";
 import { TakeExamPage } from "@/pages/exam/TakeExamPage";
 import { ResultPage } from "@/pages/exam/ResultPage";
-import { ExamSettingsPage } from "@/pages/exam/ExamSettingsPage";
 import { ScoreListPage } from "@/pages/admin/ScoreListPage";
 import { ResultsOverviewPage } from "@/pages/admin/ResultsOverviewPage";
 import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
@@ -58,7 +57,6 @@ export function AppRoutes() {
       <Route path="/exam" element={<ExamLayout />}>
         <Route index element={<Navigate to="/exam/list" replace />} />
         <Route path="list" element={<ExamListPage />} />
-        <Route path="settings" element={<ExamSettingsPage />} />
         <Route path=":examId/start" element={<StartExamPage />} />
         <Route path=":attemptId/take" element={<TakeExamPage />} />
         <Route path=":attemptId/result" element={<ResultPage />} />

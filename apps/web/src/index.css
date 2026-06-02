@@ -12,10 +12,10 @@
   --color-secondary: oklch(0.9618 0 0);
   --color-secondary-foreground: oklch(0.2058 0 0);
   --color-muted: oklch(0.9618 0 0);
-  --color-muted-foreground: oklch(0.5510 0 0);
+  --color-muted-foreground: oklch(0.551 0 0);
   --color-accent: oklch(0.9618 0 0);
   --color-accent-foreground: oklch(0.2058 0 0);
-  --color-destructive: oklch(0.6310 0.2081 25.3312);
+  --color-destructive: oklch(0.631 0.2081 25.3312);
   --color-destructive-foreground: oklch(1 0 0);
   --color-border: oklch(0.9235 0 0);
   --color-input: oklch(0.9235 0 0);
@@ -26,7 +26,9 @@
   @apply border-border;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   @apply min-h-screen bg-background text-foreground;
 }
 

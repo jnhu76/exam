@@ -12,24 +12,24 @@ Phase 1.1 不是 Phase 2，也不是大重构。
 
 ### P0：阻断闭环的问题
 
-| 编号 | 问题 | 处理方式 |
-|---|---|---|
-| P0-1 | 无 body 请求带 `Content-Type: application/json`，Fastify 报 `FST_ERR_CTP_EMPTY_JSON_BODY` | 修 API client；后端错误处理保留 400 |
-| P0-2 | 发布考试后页面无反馈 / 状态不刷新 | publish 成功后 reload exam detail + toast + button state |
-| P0-3 | 考试详情页无法分配考生 | 补 Exam Enrollment 管理 |
-| P0-4 | Candidate 登录后没有“我的考试”入口 | 补 Candidate exams 页面和 start flow |
-| P0-5 | 草稿考试不能稳定发布 | 修状态机/API/前端调用链 |
-| P0-6 | 删除课程按钮无效 | 修 DELETE 请求与错误反馈 |
-| P0-7 | Phase 1 smoke test 不完整 | 加完整闭环 smoke test |
+| 编号 | 问题                                                                                      | 处理方式                                                 |
+| ---- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| P0-1 | 无 body 请求带 `Content-Type: application/json`，Fastify 报 `FST_ERR_CTP_EMPTY_JSON_BODY` | 修 API client；后端错误处理保留 400                      |
+| P0-2 | 发布考试后页面无反馈 / 状态不刷新                                                         | publish 成功后 reload exam detail + toast + button state |
+| P0-3 | 考试详情页无法分配考生                                                                    | 补 Exam Enrollment 管理                                  |
+| P0-4 | Candidate 登录后没有“我的考试”入口                                                        | 补 Candidate exams 页面和 start flow                     |
+| P0-5 | 草稿考试不能稳定发布                                                                      | 修状态机/API/前端调用链                                  |
+| P0-6 | 删除课程按钮无效                                                                          | 修 DELETE 请求与错误反馈                                 |
+| P0-7 | Phase 1 smoke test 不完整                                                                 | 加完整闭环 smoke test                                    |
 
 ### P1：可发布前应该补
 
-| 编号 | 问题 | 处理方式 |
-|---|---|---|
-| P1-1 | Admin / Teacher / Candidate 不能修改密码 | 补 `/api/me` 与 `/api/me/password` |
-| P1-2 | 错误提示不清楚 | 统一 error response + toast |
-| P1-3 | loading / success / failed 状态缺失 | 给发布、删除、保存、分配考生加操作反馈 |
-| P1-4 | 审计日志覆盖不足 | 发布、删除、分配考生、开始考试、交卷写 AuditLog |
+| 编号 | 问题                                     | 处理方式                                        |
+| ---- | ---------------------------------------- | ----------------------------------------------- |
+| P1-1 | Admin / Teacher / Candidate 不能修改密码 | 补 `/api/me` 与 `/api/me/password`              |
+| P1-2 | 错误提示不清楚                           | 统一 error response + toast                     |
+| P1-3 | loading / success / failed 状态缺失      | 给发布、删除、保存、分配考生加操作反馈          |
+| P1-4 | 审计日志覆盖不足                         | 发布、删除、分配考生、开始考试、交卷写 AuditLog |
 
 ## 3. Phase 1.1 可以做什么
 

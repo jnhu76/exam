@@ -66,6 +66,7 @@
 ### 边界值分析
 
 对每个字段的边界值进行测试：
+
 - 最小值
 - 最小值-1
 - 最小值+1
@@ -98,43 +99,45 @@ packages/contracts/src/__tests__/
 ## 测试示例
 
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
-import { createFaker } from '@faker-js/faker';
+import { describe, it, expect } from "vitest";
+import { z } from "zod";
+import { createFaker } from "@faker-js/faker";
 
 const faker = createFaker();
 
-describe('边界输入测试', () => {
-  it('应该拒绝空字符串作为用户名', async () => {
+describe("边界输入测试", () => {
+  it("应该拒绝空字符串作为用户名", async () => {
     const schema = z.object({
-      username: z.string().min(1, '用户名不能为空')
+      username: z.string().min(1, "用户名不能为空"),
     });
-    
-    await expect(schema.parseAsync({ username: '' })).rejects.toThrow();
+
+    await expect(schema.parseAsync({ username: "" })).rejects.toThrow();
   });
-  
-  it('应该拒绝过长的用户名', async () => {
+
+  it("应该拒绝过长的用户名", async () => {
     const schema = z.object({
-      username: z.string().max(50, '用户名不能超过50个字符')
+      username: z.string().max(50, "用户名不能超过50个字符"),
     });
-    
+
     const longUsername = faker.string.alpha(51);
-    await expect(schema.parseAsync({ username: longUsername })).rejects.toThrow();
+    await expect(
+      schema.parseAsync({ username: longUsername }),
+    ).rejects.toThrow();
   });
-  
-  it('应该拒绝小于0的年龄', async () => {
+
+  it("应该拒绝小于0的年龄", async () => {
     const schema = z.object({
-      age: z.number().min(0, '年龄不能小于0')
+      age: z.number().min(0, "年龄不能小于0"),
     });
-    
+
     await expect(schema.parseAsync({ age: -1 })).rejects.toThrow();
   });
-  
-  it('应该拒绝大于150的年龄', async () => {
+
+  it("应该拒绝大于150的年龄", async () => {
     const schema = z.object({
-      age: z.number().max(150, '年龄不能大于150')
+      age: z.number().max(150, "年龄不能大于150"),
     });
-    
+
     await expect(schema.parseAsync({ age: 151 })).rejects.toThrow();
   });
 });

@@ -67,12 +67,12 @@ Fuzz 测试通过向系统输入大量随机或半随机的数据流，观察系
 使用 fast-check 进行属性驱动的 fuzz 测试：
 
 ```typescript
-import { describe, it } from 'vitest';
-import { fastCheck } from 'fast-check';
-import { parseQuestion } from '../src/question-parser';
+import { describe, it } from "vitest";
+import { fastCheck } from "fast-check";
+import { parseQuestion } from "../src/question-parser";
 
-describe('题目解析 fuzz 测试', () => {
-  it('解析题目时不应该崩溃', () => {
+describe("题目解析 fuzz 测试", () => {
+  it("解析题目时不应该崩溃", () => {
     fastCheck(
       // 生成随机字符串作为题目内容
       (s: string) => {
@@ -80,10 +80,10 @@ describe('题目解析 fuzz 测试', () => {
           parseQuestion(s);
           return true;
         } catch (error) {
-          console.error('题目解析崩溃:', error, '输入:', s);
+          console.error("题目解析崩溃:", error, "输入:", s);
           return false;
         }
-      }
+      },
     );
   });
 });
@@ -94,37 +94,38 @@ describe('题目解析 fuzz 测试', () => {
 使用 @fuzz-lightyear/core 进行 API fuzz 测试：
 
 ```typescript
-import { describe, it } from 'vitest';
-import { FuzzLightyear, FuzzConfig } from '@fuzz-lightyear/core';
-import { app } from '../src/app';
+import { describe, it } from "vitest";
+import { FuzzLightyear, FuzzConfig } from "@fuzz-lightyear/core";
+import { app } from "../src/app";
 
 const fuzzer = new FuzzLightyear({
-  baseUrl: 'http://localhost:3000/api',
-  app
+  baseUrl: "http://localhost:3000/api",
+  app,
 });
 
-describe('API fuzz 测试', () => {
-  it('GET /exams 应该处理随机查询参数', () => {
-    fuzzer.fuzz('GET /exams', {
+describe("API fuzz 测试", () => {
+  it("GET /exams 应该处理随机查询参数", () => {
+    fuzzer.fuzz("GET /exams", {
       query: {
         // 生成随机查询参数
         page: () => Math.floor(Math.random() * 100),
         limit: () => Math.floor(Math.random() * 1000),
-        keyword: () => Math.random().toString(36).substring(7)
-      }
+        keyword: () => Math.random().toString(36).substring(7),
+      },
     });
   });
 
-  it('POST /exams 应该处理随机请求体', () => {
-    fuzzer.fuzz('POST /exams', {
+  it("POST /exams 应该处理随机请求体", () => {
+    fuzzer.fuzz("POST /exams", {
       body: {
         title: () => Math.random().toString(36).substring(7),
         description: () => Math.random().toString(36).substring(7),
         duration: () => Math.floor(Math.random() * 1000),
-        questions: () => Array(Math.floor(Math.random() * 10)).fill({
-          content: Math.random().toString(36).substring(7)
-        })
-      }
+        questions: () =>
+          Array(Math.floor(Math.random() * 10)).fill({
+            content: Math.random().toString(36).substring(7),
+          }),
+      },
     });
   });
 });
@@ -135,19 +136,19 @@ describe('API fuzz 测试', () => {
 测试文件解析和处理功能：
 
 ```typescript
-import { describe, it } from 'vitest';
-import { parseExcelFile } from '../src/import-export';
+import { describe, it } from "vitest";
+import { parseExcelFile } from "../src/import-export";
 
-describe('文件解析 fuzz 测试', () => {
-  it('解析 Excel 文件时不应该崩溃', () => {
+describe("文件解析 fuzz 测试", () => {
+  it("解析 Excel 文件时不应该崩溃", () => {
     // 生成随机 Excel 文件内容
     const randomContent = Math.random().toString(36).repeat(10000);
-    
+
     try {
       parseExcelFile(Buffer.from(randomContent));
       return true;
     } catch (error) {
-      console.error('Excel 解析崩溃:', error);
+      console.error("Excel 解析崩溃:", error);
       return false;
     }
   });

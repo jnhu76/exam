@@ -26,10 +26,10 @@ Same issue existed in `DialogContent` (dialog.tsx).
 
 Changed content z-index from `z-50` to `z-[51]` in both components. Overlay stays at `z-50`.
 
-| File | Line | Before | After |
-|------|------|--------|-------|
-| `apps/web/src/components/ui/alert-dialog.tsx` | 59 | `z-50` | `z-[51]` |
-| `apps/web/src/components/ui/dialog.tsx` | 64 | `z-50` | `z-[51]` |
+| File                                          | Line | Before | After    |
+| --------------------------------------------- | ---- | ------ | -------- |
+| `apps/web/src/components/ui/alert-dialog.tsx` | 59   | `z-50` | `z-[51]` |
+| `apps/web/src/components/ui/dialog.tsx`       | 64   | `z-50` | `z-[51]` |
 
 ## Verification
 

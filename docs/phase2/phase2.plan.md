@@ -34,14 +34,14 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 
 ### Jobs
 
-| Job | 名称 | 说明 |
-|---|---|---|
-| P2A-J1 | ExamRoom 管理 | 考场名称、容量、IP 段 |
-| P2A-J2 | IP 限制 | restrictIp + LAN IP range 检查 |
-| P2A-J3 | Attempt Heartbeat | candidate 定期上报 lastActivityAt |
-| P2A-J4 | disrupted 检测与恢复 | 心跳超时标记 disrupted，可恢复 |
-| P2A-J5 | Proctor Operations | 强制交卷、延长时间、标记违纪 |
-| P2A-J6 | AuditLog 扩展 | 监考操作全写入审计 |
+| Job    | 名称                 | 说明                              |
+| ------ | -------------------- | --------------------------------- |
+| P2A-J1 | ExamRoom 管理        | 考场名称、容量、IP 段             |
+| P2A-J2 | IP 限制              | restrictIp + LAN IP range 检查    |
+| P2A-J3 | Attempt Heartbeat    | candidate 定期上报 lastActivityAt |
+| P2A-J4 | disrupted 检测与恢复 | 心跳超时标记 disrupted，可恢复    |
+| P2A-J5 | Proctor Operations   | 强制交卷、延长时间、标记违纪      |
+| P2A-J6 | AuditLog 扩展        | 监考操作全写入审计                |
 
 ### 不做
 
@@ -57,14 +57,14 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 
 ### Jobs
 
-| Job | 名称 | 说明 |
-|---|---|---|
-| P2B-J1 | WebSocket Infrastructure | 连接、鉴权、organization scope |
-| P2B-J2 | Proctor Dashboard | 总览：在线、断线、异常、已交卷 |
-| P2B-J3 | Candidate Status Cards | 每个考生进度、剩余时间、连接状态 |
-| P2B-J4 | Event Stream | 断线、切屏、保存失败、交卷事件 |
-| P2B-J5 | Realtime Proctor Actions | 延时、强制交卷、标记违纪 |
-| P2B-J6 | Fallback Polling | WebSocket 断开时轮询降级 |
+| Job    | 名称                     | 说明                             |
+| ------ | ------------------------ | -------------------------------- |
+| P2B-J1 | WebSocket Infrastructure | 连接、鉴权、organization scope   |
+| P2B-J2 | Proctor Dashboard        | 总览：在线、断线、异常、已交卷   |
+| P2B-J3 | Candidate Status Cards   | 每个考生进度、剩余时间、连接状态 |
+| P2B-J4 | Event Stream             | 断线、切屏、保存失败、交卷事件   |
+| P2B-J5 | Realtime Proctor Actions | 延时、强制交卷、标记违纪         |
+| P2B-J6 | Fallback Polling         | WebSocket 断开时轮询降级         |
 
 ### 不做
 
@@ -82,15 +82,15 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 
 ### Jobs
 
-| Job | 名称 | 说明 |
-|---|---|---|
-| P2C-J1 | Random Paper Builder | 按题型、难度、标签抽题 |
-| P2C-J2 | Random Snapshot Freeze | 抽题后冻结 Question Snapshot |
-| P2C-J3 | timed_sync | 监考统一开考 |
-| P2C-J4 | deadline | 只有截止时间，不倒计时 |
-| P2C-J5 | untimed | 不限时练习/模拟 |
-| P2C-J6 | Retake Policies | daily_limit / weekly_limit |
-| P2C-J7 | Score Strategies | highest / latest / first 完整实现 |
+| Job    | 名称                   | 说明                              |
+| ------ | ---------------------- | --------------------------------- |
+| P2C-J1 | Random Paper Builder   | 按题型、难度、标签抽题            |
+| P2C-J2 | Random Snapshot Freeze | 抽题后冻结 Question Snapshot      |
+| P2C-J3 | timed_sync             | 监考统一开考                      |
+| P2C-J4 | deadline               | 只有截止时间，不倒计时            |
+| P2C-J5 | untimed                | 不限时练习/模拟                   |
+| P2C-J6 | Retake Policies        | daily_limit / weekly_limit        |
+| P2C-J7 | Score Strategies       | highest / latest / first 完整实现 |
 
 ### 核心原则
 
@@ -106,14 +106,14 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 
 ### Jobs
 
-| Job | 名称 | 说明 |
-|---|---|---|
-| P2D-J1 | Pass Gate API | 达标放行 API |
-| P2D-J2 | API Key / Service Token | 外部系统安全访问 |
-| P2D-J3 | Score PDF Export | 正式成绩单 PDF |
-| P2D-J4 | Attempt Detail Export | 答卷详情 PDF/Excel |
-| P2D-J5 | AuditLog Export | CSV / JSON |
-| P2D-J6 | CAS/OAuth Spike | 统一身份认证调研与最小接入 |
+| Job    | 名称                    | 说明                       |
+| ------ | ----------------------- | -------------------------- |
+| P2D-J1 | Pass Gate API           | 达标放行 API               |
+| P2D-J2 | API Key / Service Token | 外部系统安全访问           |
+| P2D-J3 | Score PDF Export        | 正式成绩单 PDF             |
+| P2D-J4 | Attempt Detail Export   | 答卷详情 PDF/Excel         |
+| P2D-J5 | AuditLog Export         | CSV / JSON                 |
+| P2D-J6 | CAS/OAuth Spike         | 统一身份认证调研与最小接入 |
 
 ## 6. Deferred
 
