@@ -1,0 +1,13 @@
+type,content,standardAnswer,score,difficulty,tags,gradingRule.fillBlankMatchMode
+fill_blank,中国的首都是____,北京,5,3,地理 基础,exact
+fill_blank,水的化学式是____,H2O,10,4,化学 基础,keyword
+fill_blank,地球上最大的海洋是____,太平洋,5,3,地理 基础,keyword
+fill_blank,HTTP 的默认端口是____,80,5,3,网络 基础,exact
+fill_blank,数据的组织结构有____、层次、网络三种模型,层次,10,4,数据库 基础,exact
+fill_blank,关系数据库中表之间的关联通过____实现,外键,5,3,数据库 基础,exact
+fill_blank,面向对象的三大特性是封装、继承和____,多态,5,3,面向对象 基础,exact
+fill_blank,JavaScript 中的 const 用于声明____,常量,10,3,JavaScript 基础,exact
+fill_blank,Node.js 中用于异步 I/O 的回调模式已被____ 取代,Promise,10,4,Node.js 基础,exact
+fill_blank,React 中用于管理组件状态的 Hook 是____,useState,10,3,React 基础,exact
+fill_blank,RESTful API 中 POST 用于____数据,创建,10,3,RESTful API 基础,exact
+fill_blank,JWT Token 存储在客户端的 ____ Cookie 中,HTTP-only,5,3,认证 基础,exact

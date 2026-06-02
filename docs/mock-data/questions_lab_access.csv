@@ -1,0 +1,11 @@
+type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring
+single_choice,实验室发生化学品泄漏时，首先应该做什么？,立即通知上级,立即清理,立即撤离,拍照取证,C,5,3,实验室安全,all_correct_full
+single_choice,进入实验室前，必须穿戴的防护装备是？,实验服,实验服和手套,实验服、手套和护目镜,实验服和护目镜,C,5,2,实验室安全,all_correct_full
+single_choice,实验室发生火灾时，应该使用哪种灭火器？,二氧化碳灭火器,泡沫灭火器,水基灭火器,干粉灭火器,A,5,3,实验室安全,all_correct_full
+single_choice,实验室废液应该倒入哪里？,水槽,废液收集桶,垃圾桶,下水道,B,5,2,实验室安全,all_correct_full
+single_choice,使用通风橱时，应该将拉门拉到什么位置？,完全关闭,完全打开,半开位置,任意位置,C,5,2,实验室安全,all_correct_full
+single_choice,实验室内禁止什么行为？,喝水,吃东西,使用手机,以上全部,D,5,2,实验室安全,all_correct_full
+single_choice,实验室内发现有人触电，首先应该？,立即用手拉开,立即切断电源,立即进行心肺复苏,立即呼叫医生,B,5,3,实验室安全,all_correct_full
+single_choice,实验室内使用离心机时，应该？,对称平衡放置,随意放置,单侧放置,堆叠放置,A,5,2,实验室安全,all_correct_full
+single_choice,实验室内使用加热设备时，应该？,随时离开,专人看管,远离观察,定时检查,B,5,3,实验室安全,all_correct_full
+single_choice,实验室内发现危险化学品泄漏，应该？,立即用抹布擦拭,立即通知实验室管理员,用沙土覆盖,用水冲洗,B,5,3,实验室安全,all_correct_full

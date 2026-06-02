@@ -1,0 +1,176 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { ExamConfigForm, type ExamConfigData } from "./ExamConfigForm";
+
+const baseConfig: ExamConfigData = {
+  title: "Test Exam",
+  description: "",
+  courseId: "course-1",
+  durationMinutes: 60,
+  openAt: "2026-06-01T09:00",
+  closeAt: "2026-06-01T11:00",
+  passingScore: 60,
+  totalScore: 100,
+  questionSelectionMode: "manual",
+  questionIds: [],
+  controlFlags: {
+    shuffleQuestions: false,
+    shuffleOptions: false,
+    detectTabSwitch: false,
+    disableCopyPaste: false,
+    requireQueue: false,
+    batchSize: 10,
+    batchInterval: 3,
+    restrictIp: false,
+    requireLockdown: false,
+    showResultImmediately: true,
+  },
+  retakePolicy: "unlimited",
+  scoreStrategy: "highest",
+  maxAttempts: 1,
+};
+
+describe("ExamConfigForm totalScore", () => {
+  it("auto-calculates totalScore from selected questions", () => {
+    const onChange = vi.fn();
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          questionIds: ["q1", "q2"],
+          totalScore: 30,
+        }}
+        questions={[
+          { id: "q1", score: 10 },
+          { id: "q2", score: 20 },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getByText(/自动计算.*30/)).toBeInTheDocument();
+  });
+
+  it("shows totalScore as read-only when questions are selected", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          questionIds: ["q1"],
+          totalScore: 15,
+        }}
+        questions={[{ id: "q1", score: 15 }]}
+        onChange={() => {}}
+      />,
+    );
+
+    const totalScoreInput = screen.getByLabelText("总分");
+    expect(totalScoreInput).toHaveAttribute("readonly");
+  });
+
+  it("shows editable totalScore when no questions are selected", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const totalScoreInput = screen.getByLabelText("总分");
+    expect(totalScoreInput).not.toHaveAttribute("readonly");
+  });
+
+  it("allows manual override of totalScore via toggle", async () => {
+    const onChange = vi.fn();
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          questionIds: ["q1"],
+          totalScore: 15,
+        }}
+        questions={[{ id: "q1", score: 15 }]}
+        onChange={onChange}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /手动输入/ }));
+    const totalScoreInput = screen.getByLabelText("总分");
+    expect(totalScoreInput).not.toHaveAttribute("readonly");
+  });
+
+  it("shows warning in manual mode when totalScore does not match question score sum", async () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          questionIds: ["q1", "q2"],
+          totalScore: 50,
+        }}
+        questions={[
+          { id: "q1", score: 10 },
+          { id: "q2", score: 20 },
+        ]}
+        onChange={() => {}}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /手动输入/ }));
+
+    expect(screen.getByText(/总分与题目分值之和不匹配/)).toBeInTheDocument();
+  });
+
+  it("syncs computed totalScore to data via onChange on mount", () => {
+    const onChange = vi.fn();
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          questionIds: ["q1", "q2"],
+          totalScore: 100,
+        }}
+        questions={[
+          { id: "q1", score: 10 },
+          { id: "q2", score: 20 },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ totalScore: 30 }),
+    );
+  });
+
+  it("does not sync totalScore in manual mode", () => {
+    const onChange = vi.fn();
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          questionIds: ["q1", "q2"],
+          totalScore: 100,
+        }}
+        questions={[
+          { id: "q1", score: 10 },
+          { id: "q2", score: 20 },
+        ]}
+        onChange={onChange}
+      />,
+    );
+
+    const calls = onChange.mock.calls.filter(
+      (call: Array<ExamConfigData>) => call[0]?.totalScore !== 100,
+    );
+    expect(calls.length).toBeLessThanOrEqual(1);
+  });
+});

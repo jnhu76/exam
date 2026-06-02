@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -10,6 +11,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+interface QuestionScore {
+  id: string;
+  score: number;
+}
 
 export interface ExamConfigData {
   title: string;
@@ -41,15 +47,37 @@ export interface ExamConfigData {
 
 interface ExamConfigFormProps {
   courses: Array<{ id: string; name: string }>;
+  questions?: QuestionScore[];
   data: ExamConfigData;
   onChange: (data: ExamConfigData) => void;
 }
 
 export function ExamConfigForm({
   courses,
+  questions = [],
   data,
   onChange,
 }: ExamConfigFormProps) {
+  const [manualTotalScore, setManualTotalScore] = useState(false);
+
+  const computedTotal = questions
+    .filter((q) => data.questionIds.includes(q.id))
+    .reduce((sum, q) => sum + q.score, 0);
+  const hasQuestions = data.questionIds.length > 0;
+  const showWarning =
+    hasQuestions && manualTotalScore && data.totalScore !== computedTotal;
+
+  useEffect(() => {
+    if (
+      hasQuestions &&
+      !manualTotalScore &&
+      computedTotal > 0 &&
+      data.totalScore !== computedTotal
+    ) {
+      onChange({ ...data, totalScore: computedTotal });
+    }
+  }, [computedTotal, hasQuestions, manualTotalScore]);
+
   function update(partial: Partial<ExamConfigData>) {
     onChange({ ...data, ...partial });
   }
@@ -177,13 +205,48 @@ export function ExamConfigForm({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>总分</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="totalScore">总分</Label>
+                {hasQuestions && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => {
+                      if (manualTotalScore) {
+                        setManualTotalScore(false);
+                        if (computedTotal > 0) {
+                          update({ totalScore: computedTotal });
+                        }
+                      } else {
+                        setManualTotalScore(true);
+                      }
+                    }}
+                  >
+                    {manualTotalScore ? "自动计算" : "手动输入"}
+                  </Button>
+                )}
+              </div>
               <Input
+                id="totalScore"
                 type="number"
                 value={data.totalScore}
                 onChange={(e) => update({ totalScore: Number(e.target.value) })}
                 min={1}
+                readOnly={hasQuestions && !manualTotalScore}
+                aria-label="总分"
               />
+              {hasQuestions && !manualTotalScore && (
+                <p className="text-xs text-muted-foreground">
+                  自动计算：{computedTotal} 分
+                </p>
+              )}
+              {showWarning && (
+                <p className="text-xs text-destructive">
+                  总分与题目分值之和不匹配（应为 {computedTotal}）
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>及格分</Label>

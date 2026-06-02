@@ -1,0 +1,95 @@
+type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring
+single_choice,下列哪个是质数？,2,3,5,7,A,5,3,数学 基础,all_correct_full
+single_choice,1+1=?,1,2,3,4,B,5,2,数学 基础,all_correct_full
+single_choice,一元等于多少分？,10,50,100,20,C,2,1,金融 基础,all_correct_full
+single_choice,下列哪个是偶数？,2,3,5,8,A,5,2,数学 基础,all_correct_full
+single_choice,程序的入口点是？,main,program,function,start,B,5,3,编程 基础,all_correct_full
+single_choice,HTTP 状态码 404 表示？,请求未找到,禁止访问,权限不足,服务器错误,A,5,3,网络 基础,all_correct_full
+single_choice,下列哪个不是关系型数据库？,MySQL,Oracle,Excel,HTML,D,5,3,数据库 基础,all_correct_full
+single_choice,下列哪个是前端框架？,React,Vue,Angular,Django,Ember,B,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是 CSS 预处理器？,SASS,LESS,PostCSS,Stylus,A,5,3,前端 基础,all_correct_full
+single_choice,地球是圆的吗？,是,否,不确定,不知道,A,10,1,常识 基础,all_correct_full
+single_choice,水是透明的吗？,是,否,不确定,不知道,A,10,1,常识 基础,all_correct_full
+single_choice,太阳从东边升起吗？,是,否,不确定,不知道,A,10,1,常识 基础,all_correct_full
+single_choice,月亮绕着地球公转吗？,是,否,不确定,不知道,B,10,2,常识 基础,all_correct_full
+single_choice,一年有 365 天吗？,是,否,不确定,不知道,A,10,1,常识 基础,all_correct_full
+single_choice,HTTP 是无状态协议吗？,是,否,不确定,不知道,A,5,2,网络 基础,all_correct_full
+single_choice,SQL 是关系型数据库吗？,是,否,不确定,不知道,A,5,3,数据库 基础,all_correct_full
+single_choice,JavaScript 是单线程的吗？,是,否,不确定,不知道,A,5,3,编程 基础,all_correct_full
+single_choice,React 使用 Virtual DOM 优化渲染性能吗？,是,否,不确定,不知道,A,5,3,前端 基础,all_correct_full
+single_choice,Node.js 适合 I/O 密集型应用吗？,是,否,不确定,不知道,A,5,3,Node.js 基础,all_correct_full
+single_choice,Three.js 是 WebGL 框架吗？,是,否,不确定,不知道,A,5,3,前端 基础,all_correct_full
+single_choice,Vite 支持 HMR (热模块替换)吗？,是,否,不确定,不知道,A,5,3,前端 基础,all_correct_full
+single_choice,PostgreSQL 支持 JSONB 类型吗？,是,否,不确定,不知道,A,5,3,数据库 基础,all_correct_full
+single_choice,JWT Token 比 Session Cookie 更安全吗？,是,否,不确定,不知道,B,5,3,认证 基础,all_correct_full
+single_choice,Redis 可以用作消息队列吗？,是,否,不确定,不知道,A,5,3,数据库 基础,all_correct_full
+single_choice,GraphQL 是 API 查询语言吗？,是,否,不确定,不知道,A,5,3,API 基础,all_correct_full
+single_choice,下列哪个是前端框架？,Vue,React,Django,Angular,C,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是后端框架？,Express,Vue,React,Django,B,5,3,后端 基础,all_correct_full
+single_choice,下列哪个是前端框架？,Angular,Django,Spring Boot,Laravel,B,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是后端框架？,Spring Boot,Vue,React,Angular,A,5,3,后端 基础,all_correct_full
+single_choice,下列哪个是前端框架？,React,Spring Boot,Django,Laravel,A,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是后端框架？,Django,Vue,React,Angular,A,5,3,后端 基础,all_correct_full
+single_choice,下列哪个是前端框架？,Vue,React,Angular,Django,D,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是后端框架？,Laravel,Vue,React,Angular,A,5,3,后端 基础,all_correct_full
+single_choice,下列哪个是前端框架？,React,Angular,Vue,Django,A,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是后端框架？,Express,Vue,React,Angular,B,5,3,后端 基础,all_correct_full
+single_choice,2+2=?,2,3,4,5,C,5,1,数学 基础,all_correct_full
+single_choice,3+3=?,4,5,6,7,C,5,1,数学 基础,all_correct_full
+single_choice,4+4=?,6,7,8,9,C,5,1,数学 基础,all_correct_full
+single_choice,5+5=?,8,9,10,11,C,5,1,数学 基础,all_correct_full
+single_choice,6+6=?,10,11,12,13,C,5,1,数学 基础,all_correct_full
+single_choice,7+7=?,12,13,14,15,C,5,1,数学 基础,all_correct_full
+single_choice,8+8=?,14,15,16,17,C,5,1,数学 基础,all_correct_full
+single_choice,9+9=?,16,17,18,19,C,5,1,数学 基础,all_correct_full
+single_choice,10+10=?,18,19,20,21,C,5,1,数学 基础,all_correct_full
+single_choice,11+11=?,20,21,22,23,C,5,1,数学 基础,all_correct_full
+single_choice,12+12=?,22,23,24,25,C,5,1,数学 基础,all_correct_full
+single_choice,13+13=?,24,25,26,27,C,5,1,数学 基础,all_correct_full
+single_choice,14+14=?,26,27,28,29,C,5,1,数学 基础,all_correct_full
+single_choice,15+15=?,28,29,30,31,C,5,1,数学 基础,all_correct_full
+single_choice,16+16=?,30,31,32,33,C,5,1,数学 基础,all_correct_full
+single_choice,17+17=?,32,33,34,35,C,5,1,数学 基础,all_correct_full
+single_choice,18+18=?,34,35,36,37,C,5,1,数学 基础,all_correct_full
+single_choice,19+19=?,36,37,38,39,C,5,1,数学 基础,all_correct_full
+single_choice,20+20=?,38,39,40,41,C,5,1,数学 基础,all_correct_full
+single_choice,HTTP 状态码 200 表示？,请求成功,重定向,客户端错误,服务器错误,A,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 301 表示？,请求成功,永久重定向,客户端错误,服务器错误,B,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 404 表示？,请求成功,重定向,资源未找到,服务器错误,C,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 500 表示？,请求成功,重定向,客户端错误,服务器内部错误,D,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 403 表示？,请求成功,禁止访问,客户端错误,服务器错误,B,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 201 表示？,已创建,重定向,客户端错误,服务器错误,A,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 302 表示？,已创建,临时重定向,客户端错误,服务器错误,B,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 400 表示？,已创建,重定向,错误请求,服务器错误,C,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 501 表示？,已创建,重定向,客户端错误,未实现,D,5,2,网络 基础,all_correct_full
+single_choice,HTTP 状态码 401 表示？,已创建,重定向,未授权,服务器错误,C,5,2,网络 基础,all_correct_full
+single_choice,TCP 端口 80 用于什么？,HTTP,HTTPS,FTP,SSH,A,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 443 用于什么？,HTTP,HTTPS,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 22 用于什么？,HTTP,HTTPS,FTP,SSH,D,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 21 用于什么？,HTTP,HTTPS,FTP,SSH,C,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 3306 用于什么？,HTTP,MySQL,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 5432 用于什么？,HTTP,PostgreSQL,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 27017 用于什么？,HTTP,MongoDB,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 6379 用于什么？,HTTP,Redis,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 5672 用于什么？,HTTP,RabbitMQ,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,TCP 端口 11211 用于什么？,HTTP,Memcached,FTP,SSH,B,5,3,网络 基础,all_correct_full
+single_choice,IPv4 地址有多少位？,32,64,128,256,A,5,3,网络 基础,all_correct_full
+single_choice,IPv6 地址有多少位？,32,64,128,256,C,5,3,网络 基础,all_correct_full
+single_choice,OSI 模型有多少层？,5,6,7,8,C,5,3,网络 基础,all_correct_full
+single_choice,TCP/IP 模型有多少层？,3,4,5,6,B,5,3,网络 基础,all_correct_full
+single_choice,DNS 协议使用什么端口？,53,80,443,22,A,5,3,网络 基础,all_correct_full
+single_choice,DHCP 协议使用什么端口？,67/68,53,80,443,A,5,3,网络 基础,all_correct_full
+single_choice,SMTP 协议使用什么端口？,25,80,443,110,A,5,3,网络 基础,all_correct_full
+single_choice,POP3 协议使用什么端口？,25,80,443,110,D,5,3,网络 基础,all_correct_full
+single_choice,IMAP 协议使用什么端口？,25,80,443,143,D,5,3,网络 基础,all_correct_full
+single_choice,HTTPS 使用什么端口？,80,443,8080,3000,B,5,3,网络 基础,all_correct_full
+single_choice,JavaScript 中的 typeof null 返回什么？,null,undefined,object,number,C,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 typeof undefined 返回什么？,null,undefined,object,number,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 NaN 等于 NaN 吗？,等于,不等于,不确定,不知道,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 [] == [] 是 true 吗？,是,否,不确定,不知道,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 {} == {} 是 true 吗？,是,否,不确定,不知道,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 1 + '1' 等于什么？,2,11,NaN,undefined,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 '1' - 1 等于什么？,0,1,11,NaN,A,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 0.1 + 0.2 等于 0.3 吗？,是,否,不确定,不知道,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 typeof function(){} 返回什么？,object,function,undefined,string,B,5,3,JavaScript 基础,all_correct_full
+single_choice,JavaScript 中的 typeof [] 返回什么？,object,array,undefined,string,A,5,3,JavaScript 基础,all_correct_full

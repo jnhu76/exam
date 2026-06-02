@@ -36,7 +36,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     if (!response.ok) {
-      throw new ApiError(response.status, `${response.status} Request failed`);
+      let message = `${response.status} Request failed`;
+      try {
+        const body = (await response.json()) as {
+          error?: { message?: string };
+          message?: string;
+        };
+        message = body.error?.message ?? body.message ?? message;
+      } catch {
+        // use default message
+      }
+      throw new ApiError(response.status, message);
     }
 
     if (response.status === 204) {

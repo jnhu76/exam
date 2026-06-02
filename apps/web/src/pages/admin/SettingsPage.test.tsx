@@ -60,4 +60,14 @@ describe("SettingsPage", () => {
       await screen.findByRole("button", { name: "保存设置" }),
     ).toBeInTheDocument();
   });
+
+  it("shows tabs for branding and security", async () => {
+    renderPage();
+    expect(
+      await screen.findByRole("tab", { name: "品牌设置" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "账号安全" }),
+    ).toBeInTheDocument();
+  });
 });

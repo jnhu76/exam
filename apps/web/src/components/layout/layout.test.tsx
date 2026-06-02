@@ -102,7 +102,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("管理")).not.toBeInTheDocument();
   });
 
-  it("always shows question bank group for all roles", () => {
+  it("shows question bank group for candidate role", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
     );
@@ -111,9 +111,40 @@ describe("AppSidebar role visibility", () => {
     expect(screen.getByText("题目管理")).toBeInTheDocument();
   });
 
-  it("always shows exam group for all roles", () => {
+  it("shows question bank group for admin role", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    expect(screen.getByText("题库")).toBeInTheDocument();
+    expect(screen.getByText("课程管理")).toBeInTheDocument();
+    expect(screen.getByText("题目管理")).toBeInTheDocument();
+  });
+
+  it("shows question bank group for teacher role", () => {
+    renderWithProviders(
+      <AppSidebar
+        user={{ ...admin, role: Role.Teacher }}
+        collapsed={false}
+        onLogout={() => {}}
+      />,
+    );
+    expect(screen.getByText("题库")).toBeInTheDocument();
+    expect(screen.getByText("课程管理")).toBeInTheDocument();
+    expect(screen.getByText("题目管理")).toBeInTheDocument();
+  });
+
+  it("shows exam group for candidate role", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
+    );
+    expect(screen.getByText("考试")).toBeInTheDocument();
+    expect(screen.getByText("考试管理")).toBeInTheDocument();
+    expect(screen.getByText("成绩查询")).toBeInTheDocument();
+  });
+
+  it("shows exam group for admin role", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
     );
     expect(screen.getByText("考试")).toBeInTheDocument();
     expect(screen.getByText("考试管理")).toBeInTheDocument();
@@ -141,6 +172,41 @@ describe("AppSidebar role visibility", () => {
       <AppSidebar user={admin} collapsed={true} onLogout={() => {}} />,
     );
     expect(screen.queryByText("管理员")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppSidebar nav links", () => {
+  it("考试管理 link points to /admin/exams", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    const link = screen.getByRole("link", { name: "考试管理" });
+    expect(link).toHaveAttribute("href", "/admin/exams");
+  });
+
+  it("成绩查询 link points to /admin/results", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    const link = screen.getByRole("link", { name: "成绩查询" });
+    expect(link).toHaveAttribute("href", "/admin/results");
+  });
+});
+
+describe("ExamLayout header navigation", () => {
+  it("uses NavLink for header navigation links", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={candidate}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamLayout />} />
+        </Routes>
+      </AuthProvider>,
+      "/exam/list",
+    );
+    const myExamLink = screen.getByRole("link", { name: "我的考试" });
+    expect(myExamLink).toHaveAttribute("href", "/exam/list");
+    const settingsLink = screen.getByRole("link", { name: "账号设置" });
+    expect(settingsLink).toHaveAttribute("href", "/exam/settings");
   });
 });
 

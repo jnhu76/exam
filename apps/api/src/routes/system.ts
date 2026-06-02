@@ -33,6 +33,13 @@ function getMemoryUsage(): number {
 const systemRoutes: FastifyPluginAsync = async (fastify) => {
   const anyDb = fastify.db as unknown as AnyDatabase;
 
+  fastify.get("/system/info", async () => {
+    return {
+      version: process.env.npm_package_version ?? "0.0.0",
+      uptime: process.uptime(),
+    };
+  });
+
   fastify.get("/system/health", {
     preHandler: [fastify.authenticate],
     handler: async () => {
