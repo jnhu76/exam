@@ -1,0 +1,10 @@
+type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring
+multiple_choice,哪些是质数？,2,3,5,7,B,C,10,4,数学 基础,all_correct_full
+multiple_choice,哪些是偶数？,2,4,6,8,A,D,8,4,数学 基础,all_correct_full
+multiple_choice,哪些是前端框架？,React,Vue,Angular,Django,Ember,A,B,10,5,前端 基础,all_correct_full
+multiple_choice,哪些是 CSS 预处理器？,SASS,LESS,PostCSS,Stylus,C,E,10,5,前端 基础,all_correct_full
+multiple_choice,哪些是质数？,2,3,5,7,A,C,D,10,3,数学 基础,all_correct_full
+multiple_choice,HTTP 状态码有哪些是成功的？,200,201,204,205,206,A,B,C,D,5,3,网络 基础,all_correct_full
+multiple_choice,哪些是关系型数据库？,MySQL,Oracle,PostgreSQL,MariaDB,SQLite,A,C,D,8,4,数据库 基础,all_correct_full
+multiple_choice,哪些属于函数式编程语言？,JavaScript,TypeScript,Haskell,Erlang,Lisp,B,E,10,5,编程 基础,all_correct_full
+multiple_choice,哪些属于 CSS 预处理器？,SASS,LESS,PostCSS,Stylus,MySass,C,F,10,5,前端 基础,all_correct_full

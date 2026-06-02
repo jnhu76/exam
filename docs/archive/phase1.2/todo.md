@@ -37,14 +37,6 @@
 - [x] ENH-6: Deferred to separate PR
 - [x] ENH-7: Deferred to Phase 2
 
-## Documentation & Cleanup
-
-- [x] DOC-1: Write human-readable API reference documentation
-- [x] DOC-2: Write CSV import/export format documentation
-- [x] DOC-3: Generate mock data for students, questions, exams
-- [x] DOC-4: Archive Phase 1/1.1/1.2 documents to organized structure
-- [x] DOC-5: Write operation manual for common workflows
-
 ## Checkpoints
 
 - [x] Checkpoint 1: P0 complete — all existing + new tests pass, pnpm verify green
