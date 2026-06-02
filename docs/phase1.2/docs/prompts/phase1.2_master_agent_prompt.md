@@ -68,7 +68,7 @@
 ### 技术工具
 
 - Vitest: 单元测试和集成测试
-- Playwright: E2E 交互测试
+- Vitest + Testing Library + MSW: E2E 交互测试（集成级，jsdom 环境，兼容 WSL）
 - Allure: 测试报告
 - GitHub Actions: CI/CD 流程
 

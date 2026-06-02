@@ -137,49 +137,47 @@ function calculateDate(params: DateParams): Date {
 
 **描述**: 该任务文档缺少测试工具配置的详细说明。
 
-**建议**: 添加 Playwright 的配置和使用说明。
+**建议**: 添加 MSW 的配置和使用说明。
 
-```yaml
-# playwright.config.ts
-import { defineConfig } from '@playwright/test';
+```typescript
+// apps/web/src/test/setup.ts - Vitest 测试设置
+import { expect, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import { server } from './msw-server';
+import '@testing-library/jest-dom';
 
-export default defineConfig({
-  testDir: './src/__tests__/e2e',
-  timeout: 30 * 1000,
-  expect: {
-    timeout: 5000
-  },
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
-  use: {
-    baseURL: 'http://localhost:3000',
-    trace: 'on-first-retry',
-  },
-
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-  ],
-
-  webServer: {
-    command: 'npm run build && npm run preview',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-  },
+afterEach(() => {
+  cleanup();
+  server.resetHandlers();
 });
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterAll(() => server.close());
+
+// apps/web/src/__tests__/integration/fixtures/msw-server.ts - MSW 服务端设置
+import { setupServer } from 'msw/node';
+import { authHandlers } from './msw-handlers';
+import { examHandlers } from './msw-handlers';
+import { candidateHandlers } from './msw-handlers';
+
+export const server = setupServer(
+  ...authHandlers,
+  ...examHandlers,
+  ...candidateHandlers,
+);
+
+// apps/web/src/__tests__/integration/fixtures/msw-handlers.ts - API 请求处理器示例
+import { http, HttpResponse } from 'msw';
+
+export const authHandlers = [
+  http.post(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, async ({ request }) => {
+    const body = await request.json();
+    if (body.username === 'admin' && body.password === 'password') {
+      return HttpResponse.json({ token: 'mock-jwt-token', user: { id: '1', role: 'admin', organizationId: 'org-1' } });
+    }
+    return HttpResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+  }),
+];
 ```
 ```
 
