@@ -31,65 +31,18 @@ describe("CSV export integration", () => {
       await fastify.register(exportRoutes);
     });
 
-    const courseRes = await ctx.app.inject({
-      method: "POST",
-      url: "/api/courses",
-      payload: { name: "Export Test Course", code: "EXP101", description: "" },
-      cookies: { "auth-token": ctx.adminToken },
+    examId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Export Test Exam",
+      courseCode: "EXP101",
+      courseName: "Export Test Course",
+      questionContent: "1+1=2?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
     });
-    if (courseRes.statusCode !== 201) {
-      throw new Error(
-        `Course creation failed: ${courseRes.statusCode} ${courseRes.body}`,
-      );
-    }
-    const courseId = courseRes.json().id;
-
-    const questionRes = await ctx.app.inject({
-      method: "POST",
-      url: "/api/questions",
-      payload: {
-        courseId,
-        type: "true_false",
-        content: "1+1=2?",
-        standardAnswer: true,
-        score: 100,
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    if (questionRes.statusCode !== 201) {
-      throw new Error(
-        `Question creation failed: ${questionRes.statusCode} ${questionRes.body}`,
-      );
-    }
-    const questionId = questionRes.json().id;
-
-    const examRes = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: {
-        title: "Export Test Exam",
-        courseId,
-        durationMinutes: 60,
-        openAt: new Date().toISOString(),
-        closeAt: new Date(Date.now() + 86400000).toISOString(),
-        passingScore: 60,
-        totalScore: 100,
-        questionIds: [questionId],
-      },
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    if (examRes.statusCode !== 201) {
-      throw new Error(
-        `Exam creation failed: ${examRes.statusCode} ${examRes.body}`,
-      );
-    }
-    examId = examRes.json().id;
-
-    await ctx.app.inject({
-      method: "POST",
-      url: `/api/exams/${examId}/publish`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, examId);
   });
 
   afterAll(async () => {
@@ -143,11 +96,7 @@ describe("CSV export integration", () => {
   });
 
   it("Content-Disposition header contains attachment and examId", async () => {
-    const res = await exportResultsCsvAsAdmin(
-      ctx.app,
-      ctx.adminToken,
-      examId,
-    );
+    const res = await exportResultsCsvAsAdmin(ctx.app, ctx.adminToken, examId);
     expect(res.headers["content-disposition"]).toContain("attachment");
     expect(res.headers["content-disposition"]).toContain(examId);
   });

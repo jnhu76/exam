@@ -214,9 +214,7 @@ export async function publishExamViaApi(
     cookies: { "auth-token": adminToken },
   });
   if (res.statusCode !== 200) {
-    throw new Error(
-      `publishExamViaApi failed: ${res.statusCode} ${res.body}`,
-    );
+    throw new Error(`publishExamViaApi failed: ${res.statusCode} ${res.body}`);
   }
   return res.json();
 }

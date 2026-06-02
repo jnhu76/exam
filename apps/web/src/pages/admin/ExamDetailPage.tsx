@@ -26,6 +26,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Users, Plus, Trash2 } from "lucide-react";
+import {
+  EnrollmentPicker,
+  type CandidateItem,
+} from "@/components/exam/EnrollmentPicker";
 
 interface ExamDetail {
   id: string;
@@ -79,14 +83,6 @@ interface EnrollmentItem {
   finalPassed: boolean | null;
 }
 
-interface CandidateItem {
-  id: string;
-  userId: string;
-  name: string;
-  username: string;
-  fields: Record<string, unknown>;
-}
-
 export function ExamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -98,10 +94,14 @@ export function ExamDetailPage() {
   const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
+  const [candidatePage, setCandidatePage] = useState(1);
+  const [candidateTotal, setCandidateTotal] = useState(0);
+  const [loadingMoreCandidates, setLoadingMoreCandidates] = useState(false);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<Set<string>>(
     new Set(),
   );
   const [addingEnrollment, setAddingEnrollment] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const loadExam = useCallback(async () => {
     if (!id) return;
@@ -139,15 +139,35 @@ export function ExamDetailPage() {
 
   async function handleOpenAddDialog() {
     setAddDialogOpen(true);
+    setCandidatePage(1);
     try {
       const data = await api.get<{
         items: CandidateItem[];
         total: number;
-      }>("/api/candidates?page=1&pageSize=100");
+      }>("/api/candidates?page=1&pageSize=50");
       setCandidates(data.items);
+      setCandidateTotal(data.total);
       setSelectedCandidateIds(new Set());
     } catch {
       toast.error("加载候选人列表失败");
+    }
+  }
+
+  async function handleLoadMoreCandidates() {
+    const nextPage = candidatePage + 1;
+    setLoadingMoreCandidates(true);
+    try {
+      const data = await api.get<{
+        items: CandidateItem[];
+        total: number;
+      }>(`/api/candidates?page=${nextPage}&pageSize=50`);
+      setCandidates((prev) => [...prev, ...data.items]);
+      setCandidateTotal(data.total);
+      setCandidatePage(nextPage);
+    } catch {
+      toast.error("加载更多候选人失败");
+    } finally {
+      setLoadingMoreCandidates(false);
     }
   }
 
@@ -183,13 +203,16 @@ export function ExamDetailPage() {
 
   async function handlePublish() {
     if (!id || publishing) return;
+    setPublishError(null);
     setPublishing(true);
     try {
       await api.post(`/api/exams/${id}/publish`);
       toast.success("考试发布成功");
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "发布失败，请稍后重试");
+      const msg = err instanceof Error ? err.message : "发布失败，请稍后重试";
+      setPublishError(msg);
+      toast.error(msg);
     } finally {
       setPublishing(false);
     }
@@ -245,6 +268,15 @@ export function ExamDetailPage() {
           </div>
         }
       />
+
+      {publishError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {publishError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
@@ -418,43 +450,23 @@ export function ExamDetailPage() {
           <DialogHeader>
             <DialogTitle>添加考生</DialogTitle>
           </DialogHeader>
-          <div className="max-h-80 overflow-y-auto space-y-2">
-            {candidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                暂无可用候选人，请先在候选人管理中创建。
-              </p>
-            ) : (
-              candidates.map((candidate) => (
-                <label
-                  key={candidate.id}
-                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedCandidateIds.has(candidate.id)}
-                    onChange={(e) => {
-                      setSelectedCandidateIds((prev) => {
-                        const next = new Set(prev);
-                        if (e.target.checked) {
-                          next.add(candidate.id);
-                        } else {
-                          next.delete(candidate.id);
-                        }
-                        return next;
-                      });
-                    }}
-                    className="size-4"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{candidate.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {candidate.username}
-                    </p>
-                  </div>
-                </label>
-              ))
-            )}
-          </div>
+          {candidates.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              暂无可用候选人，请先在候选人管理中创建。
+            </p>
+          ) : (
+            <EnrollmentPicker
+              candidates={candidates}
+              enrolledCandidateIds={
+                new Set(enrollments.map((e) => e.candidateId))
+              }
+              selectedIds={selectedCandidateIds}
+              onSelectionChange={setSelectedCandidateIds}
+              hasMore={candidates.length < candidateTotal}
+              onLoadMore={() => void handleLoadMoreCandidates()}
+              isLoadingMore={loadingMoreCandidates}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
               取消

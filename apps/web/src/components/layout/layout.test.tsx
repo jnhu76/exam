@@ -102,7 +102,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("管理")).not.toBeInTheDocument();
   });
 
-  it("always shows question bank group for all roles", () => {
+  it("shows question bank group for candidate role", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
     );
@@ -111,9 +111,40 @@ describe("AppSidebar role visibility", () => {
     expect(screen.getByText("题目管理")).toBeInTheDocument();
   });
 
-  it("always shows exam group for all roles", () => {
+  it("shows question bank group for admin role", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
+    );
+    expect(screen.getByText("题库")).toBeInTheDocument();
+    expect(screen.getByText("课程管理")).toBeInTheDocument();
+    expect(screen.getByText("题目管理")).toBeInTheDocument();
+  });
+
+  it("shows question bank group for teacher role", () => {
+    renderWithProviders(
+      <AppSidebar
+        user={{ ...admin, role: Role.Teacher }}
+        collapsed={false}
+        onLogout={() => {}}
+      />,
+    );
+    expect(screen.getByText("题库")).toBeInTheDocument();
+    expect(screen.getByText("课程管理")).toBeInTheDocument();
+    expect(screen.getByText("题目管理")).toBeInTheDocument();
+  });
+
+  it("shows exam group for candidate role", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
+    );
+    expect(screen.getByText("考试")).toBeInTheDocument();
+    expect(screen.getByText("考试管理")).toBeInTheDocument();
+    expect(screen.getByText("成绩查询")).toBeInTheDocument();
+  });
+
+  it("shows exam group for admin role", () => {
+    renderWithProviders(
+      <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
     );
     expect(screen.getByText("考试")).toBeInTheDocument();
     expect(screen.getByText("考试管理")).toBeInTheDocument();

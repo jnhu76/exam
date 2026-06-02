@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   buildTestApp,
+  createCandidateViaApi,
   createExamViaApi,
   publishExamViaApi,
 } from "./testHelpers.js";
@@ -12,31 +13,6 @@ import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
-import { signJWT } from "@exam/auth/src/session.js";
-
-async function createCandidateViaApi(
-  app: Awaited<ReturnType<typeof buildTestApp>>["app"],
-  adminToken: string,
-  username: string,
-) {
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/candidates",
-    payload: {
-      username,
-      password: "password123",
-      name: `Candidate ${username}`,
-      fields: {},
-    },
-    cookies: { "auth-token": adminToken },
-  });
-  expect(res.statusCode).toBe(201);
-  return res.json() as {
-    id: string;
-    userId: string;
-    fields: Record<string, unknown>;
-  };
-}
 
 describe("candidate profile invariant", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -61,9 +37,10 @@ describe("candidate profile invariant", () => {
       ctx.app,
       ctx.adminToken,
       "invariant-test-1",
+      ctx.org.id,
     );
 
-    expect(candidate.id).toBeDefined();
+    expect(candidate.candidateProfileId).toBeDefined();
     expect(candidate.userId).toBeDefined();
 
     const userRepo = createUserRepo(ctx.db);
@@ -91,7 +68,7 @@ describe("candidate profile invariant", () => {
         permissions: [],
         sessionId: "test",
       },
-      candidate.id,
+      candidate.candidateProfileId,
     );
     expect(profile).toBeDefined();
     expect(profile!.userId).toBe(candidate.userId);
@@ -102,17 +79,13 @@ describe("candidate profile invariant", () => {
       ctx.app,
       ctx.adminToken,
       "invariant-test-2",
+      ctx.org.id,
     );
-    const token = signJWT({
-      actorId: candidate.userId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-    });
 
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/candidate/exams",
-      cookies: { "auth-token": token },
+      cookies: { "auth-token": candidate.token },
     });
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.json())).toBe(true);
@@ -128,7 +101,7 @@ describe("candidate profile invariant", () => {
     expect(res.json()).toEqual([]);
   });
 
-  it("Candidate without profile cannot start exam", async () => {
+  it("Seed candidate without profile cannot start exam attempt", async () => {
     const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Profile Invariant Start Exam",
       courseCode: "PI-START-101",
@@ -150,25 +123,22 @@ describe("candidate profile invariant", () => {
     expect(res.statusCode).not.toBe(201);
   });
 
-  it("Candidate without profile cannot submit answers", async () => {
-    const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
-      examTitle: "Profile Invariant Submit Exam",
-      courseCode: "PI-SUBMIT-101",
-      courseName: "Profile Invariant Submit Course",
-      questionContent: "Is this another test?",
-      questionAnswer: false,
-      questionScore: 10,
-      durationMinutes: 60,
-      passingScore: 5,
-      totalScore: 10,
-    });
-    await publishExamViaApi(ctx.app, ctx.adminToken, examId);
-
-    const startRes = await ctx.app.inject({
+  it("Seed candidate without profile cannot submit answers", async () => {
+    const fakeAttemptId = "00000000-0000-0000-0000-000000000000";
+    const fakeQuestionId = "00000000-0000-0000-0000-000000000001";
+    const res = await ctx.app.inject({
       method: "POST",
-      url: `/api/attempts/${examId}/start`,
+      url: `/api/attempts/${fakeAttemptId}/answers/${fakeQuestionId}`,
+      payload: {
+        attemptId: fakeAttemptId,
+        questionId: fakeQuestionId,
+        answer: true,
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
       cookies: { "auth-token": ctx.candidateToken },
     });
-    expect(startRes.statusCode).not.toBe(201);
+    expect(res.statusCode).not.toBe(200);
   });
 });

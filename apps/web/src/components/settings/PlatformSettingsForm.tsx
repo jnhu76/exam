@@ -2,6 +2,27 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const TIMEZONE_OPTIONS = [
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Europe/London",
+  "Europe/Berlin",
+  "Europe/Moscow",
+  "America/New_York",
+  "America/Chicago",
+  "America/Los_Angeles",
+  "UTC",
+];
 
 export interface SettingsFormValues {
   productName?: string;
@@ -20,9 +41,12 @@ export function PlatformSettingsForm({
   onSave: (data: SettingsFormValues) => void;
   isLoading?: boolean;
 }) {
-  const { register, handleSubmit } = useForm<SettingsFormValues>({
-    defaultValues,
-  });
+  const { register, handleSubmit, setValue, watch } =
+    useForm<SettingsFormValues>({
+      defaultValues,
+    });
+
+  const timezoneValue = watch("timezone");
 
   return (
     <form onSubmit={handleSubmit(onSave)} className="max-w-xl space-y-4">
@@ -46,8 +70,22 @@ export function PlatformSettingsForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="timezone">默认时区</Label>
-        <Input id="timezone" {...register("timezone")} />
+        <Label>默认时区</Label>
+        <Select
+          value={timezoneValue}
+          onValueChange={(val) => setValue("timezone", val)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <SelectItem key={tz} value={tz}>
+                {tz}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <Button type="submit" disabled={isLoading}>
         {isLoading ? "保存中..." : "保存设置"}

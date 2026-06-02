@@ -4,6 +4,8 @@ import {
   createCandidateViaApi,
   createExamViaApi,
   publishExamViaApi,
+  submitExamAsCandidate,
+  exportResultsCsvAsAdmin,
 } from "./testHelpers.js";
 import authRoutes from "./auth.js";
 import candidateRoutes from "./candidate.js";
@@ -172,6 +174,29 @@ describe("permission boundary", () => {
         cookies: { "auth-token": ctx.teacherToken },
       });
       expect(res.statusCode).toBe(403);
+    });
+
+    it("GET /api/exams/:id/export/scores returns 200", async () => {
+      const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
+        examTitle: "Boundary Teacher Export Exam",
+        courseCode: "BT-EXPORT-101",
+        courseName: "Boundary Teacher Export Course",
+        questionContent: "Export boundary test?",
+        questionAnswer: true,
+        questionScore: 10,
+        durationMinutes: 60,
+        passingScore: 5,
+        totalScore: 10,
+      });
+      await publishExamViaApi(ctx.app, ctx.adminToken, examId);
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/exams/${examId}/export/scores`,
+        cookies: { "auth-token": ctx.teacherToken },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toContain("text/csv");
     });
   });
 

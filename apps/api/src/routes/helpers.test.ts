@@ -59,11 +59,7 @@ describe("test helpers — full lifecycle via helpers", () => {
   });
 
   it("publishExamViaApi transitions exam to published", async () => {
-    const updated = await publishExamViaApi(
-      ctx.app,
-      ctx.adminToken,
-      examId,
-    );
+    const updated = await publishExamViaApi(ctx.app, ctx.adminToken, examId);
     expect(updated.status).toBe("published");
   });
 
@@ -82,17 +78,12 @@ describe("test helpers — full lifecycle via helpers", () => {
   });
 
   it("exportResultsCsvAsAdmin returns valid CSV with data", async () => {
-    const csv = await exportResultsCsvAsAdmin(
-      ctx.app,
-      ctx.adminToken,
-      examId,
-    );
+    const csv = await exportResultsCsvAsAdmin(ctx.app, ctx.adminToken, examId);
 
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.headers["content-disposition"]).toContain("attachment");
 
-    const body =
-      typeof csv.body === "string" ? csv.body : csv.body.toString();
+    const body = typeof csv.body === "string" ? csv.body : csv.body.toString();
     expect(body).toContain("考生姓名");
     expect(body).toContain("成绩");
     expect(body).toContain("100");

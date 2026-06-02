@@ -73,11 +73,12 @@ describe("exam state machine transitions", () => {
   it("published exam cannot be republished", async () => {
     const examId = await createExam(ctx, "SM Republish");
 
-    await ctx.app.inject({
+    const firstRes = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/publish`,
       cookies: adminCookies(ctx.adminToken),
     });
+    expect(firstRes.statusCode).toBe(200);
 
     const res = await ctx.app.inject({
       method: "POST",
@@ -91,11 +92,12 @@ describe("exam state machine transitions", () => {
   it("published exam can be archived", async () => {
     const examId = await createExam(ctx, "SM Archive");
 
-    await ctx.app.inject({
+    const publishRes = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/publish`,
       cookies: adminCookies(ctx.adminToken),
     });
+    expect(publishRes.statusCode).toBe(200);
 
     const res = await ctx.app.inject({
       method: "POST",
@@ -110,16 +112,19 @@ describe("exam state machine transitions", () => {
   it("archived exam cannot be published", async () => {
     const examId = await createExam(ctx, "SM Archived Publish");
 
-    await ctx.app.inject({
+    const publishRes = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/publish`,
       cookies: adminCookies(ctx.adminToken),
     });
-    await ctx.app.inject({
+    expect(publishRes.statusCode).toBe(200);
+
+    const archiveRes = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/archive`,
       cookies: adminCookies(ctx.adminToken),
     });
+    expect(archiveRes.statusCode).toBe(200);
 
     const res = await ctx.app.inject({
       method: "POST",
@@ -145,11 +150,12 @@ describe("exam state machine transitions", () => {
   it("published exam cannot be deleted", async () => {
     const examId = await createExam(ctx, "SM Delete Published");
 
-    await ctx.app.inject({
+    const publishRes = await ctx.app.inject({
       method: "POST",
       url: `/api/exams/${examId}/publish`,
       cookies: adminCookies(ctx.adminToken),
     });
+    expect(publishRes.statusCode).toBe(200);
 
     const res = await ctx.app.inject({
       method: "DELETE",

@@ -54,8 +54,8 @@ export function CoursePage() {
   const [formDescription, setFormDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const loadCourses = useCallback(async () => {
-    setIsLoading(true);
+  const loadCourses = useCallback(async (opts?: { showLoading?: boolean }) => {
+    if (opts?.showLoading !== false) setIsLoading(true);
     setError(null);
     try {
       const data = await api.get<PaginatedResponse<CourseRow>>("/api/courses");
@@ -105,7 +105,7 @@ export function CoursePage() {
       }
       setDialogOpen(false);
       toast.success(editingCourse ? "课程已更新" : "课程已创建");
-      await loadCourses();
+      await loadCourses({ showLoading: false });
     } catch {
       toast.error("保存失败，请稍后重试");
     } finally {
@@ -117,7 +117,7 @@ export function CoursePage() {
     try {
       await api.delete(`/api/courses/${id}`);
       toast.success("课程已删除");
-      await loadCourses();
+      await loadCourses({ showLoading: false });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "删除失败，请稍后重试");
     }

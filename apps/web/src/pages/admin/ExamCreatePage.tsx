@@ -180,6 +180,7 @@ export function ExamCreatePage() {
         <div>
           <ExamConfigForm
             courses={courses}
+            questions={questions.map((q) => ({ id: q.id, score: q.score }))}
             data={config}
             onChange={setConfig}
           />
