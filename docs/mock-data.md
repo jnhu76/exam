@@ -11,6 +11,7 @@
 ### 默认字段配置 - 大学场景
 
 **字段配置** (`CandidateField`):
+
 ```
 [
   {
@@ -44,6 +45,7 @@
 ```
 
 **CSV 数据** (`candidates_default.csv`):
+
 ```csv
 学号,姓名,院系,年级
 20240001,张三,计算机系,2024级
@@ -61,6 +63,7 @@
 ### 自定义字段配置 - 企业场景
 
 **字段配置**:
+
 ```
 [
   {
@@ -94,6 +97,7 @@
 ```
 
 **CSV 数据** (`candidates_enterprise.csv`):
+
 ```csv
 工号,姓名,部门,职位
 EMP001,张三,研发部,工程师
@@ -113,6 +117,7 @@ EMP008,吴十,人事部,人事专员
 ### 单选题 (single_choice)
 
 **CSV 格式** (`questions_single_choice.csv`):
+
 ```csv
 type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring
 single_choice,下列哪个是质数？,2,3,5,7,B,5,3,数学 基础,all_correct_full
@@ -129,6 +134,7 @@ single_choice,下列哪个是 CSS 预处理器？,SASS,LESS,PostCSS,Stylus,C,5,3
 ### 多选题 (multiple_choice)
 
 **CSV 格式** (`questions_multiple_choice.csv`):
+
 ```csv
 type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring
 multiple_choice,哪些是质数？,2,3,5,7,"B,C",10,4,数学 基础,all_correct_full
@@ -145,6 +151,7 @@ multiple_choice,哪些属于 CSS 预处理器？,SASS,LESS,PostCSS,Stylus,MySass
 ### 填空题 (fill_blank)
 
 **CSV 格式** (`questions_fill_blank.csv`):
+
 ```csv
 type,content,standardAnswer,score,difficulty,tags,gradingRule.fillBlankMatchMode
 fill_blank,中国的首都是____,北京,5,3,地理 基础,exact,fillBlankCaseSensitive
@@ -164,6 +171,7 @@ fill_blank,JWT Token 存储在客户端的 ____ Cookie 中,HTTP-only,5,3,认证 
 ### 判断题 (true_false)
 
 **CSV 格式** (`questions_true_false.csv`):
+
 ```csv
 type,content,standardAnswer,score,difficulty,tags
 true_false,地球是圆的,true,10,2,常识 基础
@@ -191,6 +199,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 ### 基础考试 - 计算机基础
 
 **考试配置**:
+
 ```json
 {
   "title": "计算机基础考试",
@@ -202,9 +211,20 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
   "totalScore": 100,
   "questionSelectionMode": "manual",
   "questionIds": [
-    "q-tf-1", "q-tf-2", "q-tf-3", "q-tf-4", "q-tf-5",
-    "q-sc-1", "q-sc-2", "q-sc-3", "q-sc-4", "q-sc-5",
-    "q-mc-1", "q-mc-2", "q-mc-3", "q-mc-4"
+    "q-tf-1",
+    "q-tf-2",
+    "q-tf-3",
+    "q-tf-4",
+    "q-tf-5",
+    "q-sc-1",
+    "q-sc-2",
+    "q-sc-3",
+    "q-sc-4",
+    "q-sc-5",
+    "q-mc-1",
+    "q-mc-2",
+    "q-mc-3",
+    "q-mc-4"
   ],
   "controlFlags": {
     "shuffleQuestions": true,
@@ -225,6 +245,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 ```
 
 **题目详情**:
+
 ```json
 [
   {
@@ -399,6 +420,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 ### 随机测验 - Python 基础
 
 **考试配置**:
+
 ```json
 {
   "title": "Python 基础测验",
@@ -428,6 +450,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 ```
 
 **题目池** (100 题，随机抽取 50 题):
+
 ```json
 [
   {
@@ -501,6 +524,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 ### 开卷考试 - 综合测试
 
 **考试配置**:
+
 ```json
 {
   "title": "综合能力测试",
@@ -530,6 +554,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 ```
 
 **题目分布**:
+
 - 判断题: 20 题 (每题 2 分)
 - 单选题: 20 题 (每题 3 分)
 - 多选题: 10 题 (每题 5 分)
@@ -537,6 +562,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 - 总计: 200 分
 
 **题目数据** (从前面混合使用，示例):
+
 ```json
 {
   "id": "q-tf-1",
@@ -673,11 +699,11 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 
 1. 使用默认组织登录 (admin/admin123)
 2. 创建 "Python 基础" 课程
-5 道题 (50 道题)
-5. 创建考试 → 开启 `requireQueue` → `batchSize: 20`, `batchInterval: 30` 秒
-6. 导入 200 名考生
-7. 发布考试 → 添加所有考生
-8. 考生登录 → 查看排队状态 → 分批进入考试（每批 20 人）
+   5 道题 (50 道题)
+3. 创建考试 → 开启 `requireQueue` → `batchSize: 20`, `batchInterval: 30` 秒
+4. 导入 200 名考生
+5. 发布考试 → 添加所有考生
+6. 考生登录 → 查看排队状态 → 分批进入考试（每批 20 人）
 
 ### 场景 3: 企业内训 — 自定义字段
 
@@ -710,6 +736,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 **考试 ID**: `exam-math-basic`
 
 **CSV 输出** (`scores-exam-math-basic-1717252800000.csv`):
+
 ```
 考生姓名,学号,院系,年级,成绩,及格状态,尝试次数,提交时间
 张三,20240001,计算机系,2024级,95,及格,1,2024-06-01T10:05:00.000Z
@@ -723,6 +750,7 @@ true_false,GraphQL 是 API 查询语言,true,5,3,API 基础
 **考试 ID**: `exam-python-basic`
 
 **CSV 输出**:
+
 ```
 考生姓名,工号,部门,职位,成绩,及格状态,尝试次数,提交时间
 张三,EMP001,研发部,工程师,92,及格,2,2024-06-01T14:05:00.000Z

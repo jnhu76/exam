@@ -24,16 +24,16 @@ Content-Type: application/json
 ### API client 预期行为
 
 ```ts
-api.post(path)
-api.delete(path)
+api.post(path);
+api.delete(path);
 ```
 
 应该发送无 body 请求。
 
 ```ts
-api.post(path, data)
-api.patch(path, data)
-api.delete(path, data)
+api.post(path, data);
+api.patch(path, data);
+api.delete(path, data);
 ```
 
 只有 data 不是 `undefined` 时才设置 JSON header。
@@ -61,11 +61,11 @@ type PublishExamResponse = {
 ### Errors
 
 ```ts
-EXAM_NOT_FOUND
-EXAM_ALREADY_PUBLISHED
-EXAM_HAS_NO_QUESTIONS
-EXAM_INVALID_TIME_WINDOW
-FORBIDDEN
+EXAM_NOT_FOUND;
+EXAM_ALREADY_PUBLISHED;
+EXAM_HAS_NO_QUESTIONS;
+EXAM_INVALID_TIME_WINDOW;
+FORBIDDEN;
 ```
 
 ## 3. Exam Enrollment
@@ -137,7 +137,13 @@ type CandidateExamListItem = {
   examId: string;
   enrollmentId: string;
   title: string;
-  status: "available" | "not_open" | "closed" | "completed" | "blocked" | "in_progress";
+  status:
+    | "available"
+    | "not_open"
+    | "closed"
+    | "completed"
+    | "blocked"
+    | "in_progress";
   enrollmentStatus: "assigned" | "started" | "completed" | "blocked";
   startTime?: string | null;
   endTime?: string | null;

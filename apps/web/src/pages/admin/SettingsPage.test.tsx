@@ -66,8 +66,6 @@ describe("SettingsPage", () => {
     expect(
       await screen.findByRole("tab", { name: "品牌设置" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: "账号安全" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "账号安全" })).toBeInTheDocument();
   });
 });

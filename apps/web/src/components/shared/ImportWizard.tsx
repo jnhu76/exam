@@ -24,6 +24,7 @@ export function ImportWizard({
   onCsvChange,
   preview,
   summary,
+  warning,
   onConfirm,
 }: {
   open: boolean;
@@ -34,6 +35,7 @@ export function ImportWizard({
   onCsvChange: (csv: string) => void;
   preview: ImportPreviewRow[];
   summary?: string;
+  warning?: string;
   onConfirm: () => void;
 }) {
   const hasErrors = preview.some((row) => row.status === "error");
@@ -45,6 +47,7 @@ export function ImportWizard({
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{instructions}</p>
+          {warning && <p className="text-sm text-amber-600">{warning}</p>}
           <FileUpload onText={onCsvChange} />
           <Textarea
             rows={8}
@@ -52,9 +55,18 @@ export function ImportWizard({
             onChange={(e) => onCsvChange(e.target.value)}
           />
           {preview.length > 0 && (
-            <div className="max-h-48 overflow-auto rounded-md border p-3 text-sm">
+            <div className="max-h-48 overflow-auto rounded-md border p-3 text-sm space-y-0.5">
               {preview.map((row) => (
-                <p key={row.row}>
+                <p
+                  key={row.row}
+                  className={
+                    row.status === "error"
+                      ? "text-red-600"
+                      : row.status === "update"
+                        ? "text-amber-600"
+                        : "text-green-600"
+                  }
+                >
                   第 {row.row} 行：
                   {row.status === "create"
                     ? "新增"

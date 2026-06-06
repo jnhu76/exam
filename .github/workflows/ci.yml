@@ -47,5 +47,11 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: E2E / Smoke tests
+        run: pnpm test:e2e
+
+      - name: Coverage
+        run: pnpm coverage
+
       - name: Build
         run: pnpm build

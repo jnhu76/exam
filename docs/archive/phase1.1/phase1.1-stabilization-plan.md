@@ -56,14 +56,14 @@ Admin / Teacher 登录
 
 ## 3. Job 切分
 
-| Job | 文件 | 目标 |
-|---|---|---|
-| 1 | `phase1.1_job01_api_empty_body_and_error_handling.md` | 修 API client + 后端错误处理 |
-| 2 | `phase1.1_job02_exam_publish_refresh.md` | 修发布考试与详情页刷新 |
-| 3 | `phase1.1_job03_exam_enrollment.md` | 补考试考生资格管理 |
-| 4 | `phase1.1_job04_candidate_my_exams.md` | 补 Candidate 我的考试入口 |
-| 5 | `phase1.1_job05_account_settings_password.md` | 补账号自服务与修改密码 |
-| 6 | `phase1.1_job06_smoke_regression.md` | 补完整 smoke 与回归测试 |
+| Job | 文件                                                  | 目标                         |
+| --- | ----------------------------------------------------- | ---------------------------- |
+| 1   | `phase1.1_job01_api_empty_body_and_error_handling.md` | 修 API client + 后端错误处理 |
+| 2   | `phase1.1_job02_exam_publish_refresh.md`              | 修发布考试与详情页刷新       |
+| 3   | `phase1.1_job03_exam_enrollment.md`                   | 补考试考生资格管理           |
+| 4   | `phase1.1_job04_candidate_my_exams.md`                | 补 Candidate 我的考试入口    |
+| 5   | `phase1.1_job05_account_settings_password.md`         | 补账号自服务与修改密码       |
+| 6   | `phase1.1_job06_smoke_regression.md`                  | 补完整 smoke 与回归测试      |
 
 ## 4. 不变量
 

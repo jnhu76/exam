@@ -17,11 +17,11 @@
 
 ## Changes Under Review
 
-| Item | Description | File |
-|------|-------------|------|
-| F1a | E2E smoke test package | `apps/e2e/` (new) |
-| F1b | GET /system/info endpoint | `apps/api/src/routes/system.ts` |
-| F1c | Todo update | `docs/phase1.2/todo.md` |
+| Item | Description               | File                            |
+| ---- | ------------------------- | ------------------------------- |
+| F1a  | E2E smoke test package    | `apps/e2e/` (new)               |
+| F1b  | GET /system/info endpoint | `apps/api/src/routes/system.ts` |
+| F1c  | Todo update               | `docs/phase1.2/todo.md`         |
 
 ---
 
@@ -60,12 +60,12 @@
 
 ### Test Coverage (5 tests)
 
-| Suite | Tests | Coverage |
-|-------|-------|----------|
-| System info | 1 | New /system/info endpoint |
-| Health check | 1 | Unauthenticated health |
-| Auth flow | 2 | Login success + failure |
-| Full lifecycle | 1 | Complete exam path (9 API calls) |
+| Suite          | Tests | Coverage                         |
+| -------------- | ----- | -------------------------------- |
+| System info    | 1     | New /system/info endpoint        |
+| Health check   | 1     | Unauthenticated health           |
+| Auth flow      | 2     | Login success + failure          |
+| Full lifecycle | 1     | Complete exam path (9 API calls) |
 
 ---
 
@@ -96,54 +96,54 @@
 
 ### Critical — Zero Tests
 
-| Page | Lines | Risk |
-|------|-------|------|
-| `TakeExamPage` | 320 | **Highest risk** — answer save, timer, heartbeat, submission |
-| `ExamCreatePage` | 317 | Complex form — config + question selection + publish |
-| `StartExamPage` | 225 | Pre-exam instructions, countdown, queue |
-| `LoginPage` | 75 | Login form interaction, validation |
-| `QuestionPage` | 325 | Question bank listing, filtering |
-| `QuestionEditPage` | 150 | Question CRUD form |
-| `QuestionImportPage` | 352 | CSV/Excel import flow |
-| `ScoreListPage` | 332 | Score listing, filtering |
-| `AttemptDetailPage` | 200 | Individual attempt review |
-| `DashboardPage` | 161 | Admin stats |
-| `ExamPage` | 185 | Admin exam list |
-| `SystemHealthPage` | 193 | System monitoring |
+| Page                 | Lines | Risk                                                         |
+| -------------------- | ----- | ------------------------------------------------------------ |
+| `TakeExamPage`       | 320   | **Highest risk** — answer save, timer, heartbeat, submission |
+| `ExamCreatePage`     | 317   | Complex form — config + question selection + publish         |
+| `StartExamPage`      | 225   | Pre-exam instructions, countdown, queue                      |
+| `LoginPage`          | 75    | Login form interaction, validation                           |
+| `QuestionPage`       | 325   | Question bank listing, filtering                             |
+| `QuestionEditPage`   | 150   | Question CRUD form                                           |
+| `QuestionImportPage` | 352   | CSV/Excel import flow                                        |
+| `ScoreListPage`      | 332   | Score listing, filtering                                     |
+| `AttemptDetailPage`  | 200   | Individual attempt review                                    |
+| `DashboardPage`      | 161   | Admin stats                                                  |
+| `ExamPage`           | 185   | Admin exam list                                              |
+| `SystemHealthPage`   | 193   | System monitoring                                            |
 
 ### Adequate Coverage
 
-| Page/Component | Tests | Assessment |
-|----------------|-------|------------|
-| `EnrollmentPicker` | 14 | Thorough |
-| `ExamConfigForm` | 7 | Good |
-| `AuthContext` | 12 | Thorough |
-| `api` client | 15 | Thorough |
-| `CoursePage` | 1 | Good depth (delete flow) |
-| `SettingsPage` | 4 | Adequate |
-| `ResultPage` | 4 | Good |
+| Page/Component     | Tests | Assessment               |
+| ------------------ | ----- | ------------------------ |
+| `EnrollmentPicker` | 14    | Thorough                 |
+| `ExamConfigForm`   | 7     | Good                     |
+| `AuthContext`      | 12    | Thorough                 |
+| `api` client       | 15    | Thorough                 |
+| `CoursePage`       | 1     | Good depth (delete flow) |
+| `SettingsPage`     | 4     | Adequate                 |
+| `ResultPage`       | 4     | Good                     |
 
 ### Shallow Coverage (title + list only)
 
-| Page | Tests | Missing |
-|------|-------|---------|
-| `CandidatesPage` | 3 | CRUD, validation, pagination |
-| `UsersPage` | 3 | CRUD, role assignment |
-| `OrganizationsPage` | 3 | CRUD, settings |
-| `CandidateFieldsPage` | 3 | CRUD, reordering |
-| `ExamDetailPage` | 1 | Enrollment, stats, archive |
+| Page                  | Tests | Missing                      |
+| --------------------- | ----- | ---------------------------- |
+| `CandidatesPage`      | 3     | CRUD, validation, pagination |
+| `UsersPage`           | 3     | CRUD, role assignment        |
+| `OrganizationsPage`   | 3     | CRUD, settings               |
+| `CandidateFieldsPage` | 3     | CRUD, reordering             |
+| `ExamDetailPage`      | 1     | Enrollment, stats, archive   |
 
 ---
 
 ## Summary of Findings
 
-| ID | Severity | Description | Action |
-|----|----------|-------------|--------|
-| F1-R1 | Recommended | buildFullStackApp called 4 times — 4 separate DB instances | Share single app across describe blocks |
-| F1-R2 | **Recommended** | No frontend flow tests — 12 pages with zero coverage | Add critical path frontend tests (TakeExamPage, ExamCreatePage, LoginPage) |
-| F1-R3 | Optional | Route registration may drift from server.ts | Consider shared manifest |
-| F1-R4 | Optional | version returns "0.0.0" outside npm/pnpm | Consider build-time injection |
-| F1-R5 | Nit | /system/info response not Zod-validated | Add schema for consistency |
+| ID    | Severity        | Description                                                | Action                                                                     |
+| ----- | --------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
+| F1-R1 | Recommended     | buildFullStackApp called 4 times — 4 separate DB instances | Share single app across describe blocks                                    |
+| F1-R2 | **Recommended** | No frontend flow tests — 12 pages with zero coverage       | Add critical path frontend tests (TakeExamPage, ExamCreatePage, LoginPage) |
+| F1-R3 | Optional        | Route registration may drift from server.ts                | Consider shared manifest                                                   |
+| F1-R4 | Optional        | version returns "0.0.0" outside npm/pnpm                   | Consider build-time injection                                              |
+| F1-R5 | Nit             | /system/info response not Zod-validated                    | Add schema for consistency                                                 |
 
 ---
 

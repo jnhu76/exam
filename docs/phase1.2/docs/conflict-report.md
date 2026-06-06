@@ -7,12 +7,12 @@
 
 ## 冲突文件统计
 
-| 类型 | 数量 | 文件 |
-|-----|------|------|
-| Modify/Delete | 10 | 9 个 job 文件 + 1 个 plan 文件 |
-| Content | 2 | 2 个 prompt 文件 |
-| Auto-merge Failed | 1 | pnpm-lock.yaml |
-| **总计** | **13** | - |
+| 类型              | 数量   | 文件                           |
+| ----------------- | ------ | ------------------------------ |
+| Modify/Delete     | 10     | 9 个 job 文件 + 1 个 plan 文件 |
+| Content           | 2      | 2 个 prompt 文件               |
+| Auto-merge Failed | 1      | pnpm-lock.yaml                 |
+| **总计**          | **13** | -                              |
 
 ---
 
@@ -23,6 +23,7 @@
 **问题原因：** `fix/phase1.2-enhancements` 分支删除了这些文件，但 `dev` 分支修改了它们。
 
 **文件列表：**
+
 - `docs/phase1.2/docs/jobs/phase1.2_job01_e2e_interaction_testing.md`
 - `docs/phase1.2/docs/jobs/phase1.2_job02_state_temporal_testing.md`
 - `docs/phase1.2/docs/jobs/phase1.2_job03_boundary_input_testing.md`
@@ -35,6 +36,7 @@
 - `docs/phase1.2-plan.md`
 
 **建议解决方案：**
+
 - 保留 `dev` 分支版本（已更新为 Vitest + Testing Library + MSW 方案）
 - 这些文件记录了 Jobs 01-04 的完成情况，不应删除
 - 命令：`git add <文件>`（接受当前版本）
@@ -44,10 +46,12 @@
 #### 2.1 `docs/phase1.2/docs/prompts/phase1.2_master_agent_prompt.md`
 
 **冲突内容：**
+
 - `dev` 版本：简化版（105 行）
 - `fix` 版本：详细版（365 行）
 
 **关键差异：**
+
 ```diff
 <<<<<<< HEAD (dev)
 - ## 任务划分
@@ -64,12 +68,14 @@
 ```
 
 **建议解决方案：**
+
 - 保留 `fix` 版本（更详细，包含场景问题和验收标准）
 - 或：合并两版本，保留 dev 的工具栈描述
 
 #### 2.2 `docs/phase1.2/docs/prompts/phase1.2_review_prompt.md`
 
 **冲突内容：**
+
 - `dev` 版本：Playwright 示例代码（100行）
 - `fix` 版本：Playwright 示例代码
 
@@ -82,6 +88,7 @@
 **问题原因：** 依赖版本冲突
 
 **建议解决方案：**
+
 - 删除 `pnpm-lock.yaml`
 - 重新运行 `pnpm install` 生成新的 lock 文件
 
@@ -131,12 +138,12 @@ git commit -m "merge: integrate fix/phase1.2-enhancements to dev
 
 ## 冲突解决优先级
 
-| 优先级 | 冲突类型 | 建议 |
-|-------|---------|------|
-| P0 | Modify/Delete（10个 job 文件） | 保留 dev 版本 |
-| P0 | pnpm-lock.yaml | 重新生成 |
-| P1 | Content（master_agent_prompt） | 保留 fix 版本（更详细） |
-| P2 | Content（review_prompt） | 任一版本即可 |
+| 优先级 | 冲突类型                       | 建议                    |
+| ------ | ------------------------------ | ----------------------- |
+| P0     | Modify/Delete（10个 job 文件） | 保留 dev 版本           |
+| P0     | pnpm-lock.yaml                 | 重新生成                |
+| P1     | Content（master_agent_prompt） | 保留 fix 版本（更详细） |
+| P2     | Content（review_prompt）       | 任一版本即可            |
 
 ---
 
@@ -162,14 +169,14 @@ apps/e2e/
 
 ### 测试数量对比
 
-| 类型 | dev | +fix | 合并后 |
-|-----|-----|-----|--------|
-| API | 126 | +49 | 175 |
-| Integration | 10 | +5 | 15 |
-| Frontend | 0 | +27 | 27 |
-| Domain | 33 | 0 | 33 |
-| Contracts | 40 | 0 | 40 |
-| **总计** | **209** | **+81** | **290** |
+| 类型        | dev     | +fix    | 合并后  |
+| ----------- | ------- | ------- | ------- |
+| API         | 126     | +49     | 175     |
+| Integration | 10      | +5      | 15      |
+| Frontend    | 0       | +27     | 27      |
+| Domain      | 33      | 0       | 33      |
+| Contracts   | 40      | 0       | 40      |
+| **总计**    | **209** | **+81** | **290** |
 
 ---
 
@@ -189,6 +196,7 @@ apps/e2e/
 **可以安全合并。**
 
 所有冲突都是文档类冲突，代码文件无冲突。冲突解决后可以获得：
+
 - ✅ 全栈测试覆盖（290 个测试）
 - ✅ 多层级验证（API + Integration + Domain + Contracts + Frontend）
 - ✅ 权限边界、CSV 导出等重要功能测试
