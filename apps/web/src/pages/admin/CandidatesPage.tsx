@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import {
+  parseImportCsv,
+  detectDuplicate,
+  MAX_IMPORT_ROWS,
+} from "@/lib/candidateImport";
+import type { CandidateFieldConfig } from "@/lib/candidateImport";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -48,30 +54,6 @@ interface Page<T> {
   items: T[];
 }
 
-function parseCsvLine(line: string) {
-  const values: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') {
-        value += '"';
-        index += 1;
-      } else {
-        quoted = !quoted;
-      }
-    } else if (character === "," && !quoted) {
-      values.push(value.trim());
-      value = "";
-    } else {
-      value += character;
-    }
-  }
-  values.push(value.trim());
-  return values;
-}
-
 export function CandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
@@ -86,6 +68,7 @@ export function CandidatesPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [csv, setCsv] = useState("");
   const [importSummary, setImportSummary] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -116,6 +99,7 @@ export function CandidatesPage() {
         ]),
       ),
     );
+    setSaveError(null);
     setDialogOpen(true);
   }
   function payloadFields() {
@@ -131,20 +115,25 @@ export function CandidatesPage() {
   async function save() {
     if (!name.trim() || (!editing && (!username.trim() || password.length < 6)))
       return;
-    if (editing)
-      await api.patch(`/api/candidates/${editing.id}`, {
-        name,
-        fields: payloadFields(),
-      });
-    else
-      await api.post("/api/candidates", {
-        username,
-        password,
-        name,
-        fields: payloadFields(),
-      });
-    setDialogOpen(false);
-    await load();
+    setSaveError(null);
+    try {
+      if (editing)
+        await api.patch(`/api/candidates/${editing.id}`, {
+          name,
+          fields: payloadFields(),
+        });
+      else
+        await api.post("/api/candidates", {
+          username,
+          password,
+          name,
+          fields: payloadFields(),
+        });
+      setDialogOpen(false);
+      await load();
+    } catch {
+      setSaveError("保存失败，请重试");
+    }
   }
   async function toggle(candidate: Candidate) {
     await api.patch(`/api/candidates/${candidate.id}`, {
@@ -152,34 +141,25 @@ export function CandidatesPage() {
     });
     await load();
   }
+  function fieldConfigs(): CandidateFieldConfig[] {
+    return fields.map((f) => ({
+      name: f.name,
+      label: f.label,
+      fieldType: f.fieldType,
+      required: f.required,
+      unique: f.unique,
+    }));
+  }
   function importRows() {
-    const lines = csv.trim().split(/\r?\n/).filter(Boolean);
-    const headers = parseCsvLine(lines[0] ?? "").map((item) =>
-      item.replace(/^\uFEFF/, ""),
-    );
-    return lines.slice(1).map((line) => {
-      const columns = parseCsvLine(line);
-      const row = Object.fromEntries(
-        headers.map((header, index) => [header, columns[index] ?? ""]),
-      );
-      return {
-        username: row.username,
-        password: row.password,
-        name: row.name,
-        fields: Object.fromEntries(
-          fields.map((field) => [
-            field.name,
-            field.fieldType === "number" && row[field.name] !== ""
-              ? Number(row[field.name])
-              : (row[field.name] ?? ""),
-          ]),
-        ),
-      };
-    });
+    return parseImportCsv(csv, fieldConfigs()).rows;
+  }
+  function importTruncated(): boolean {
+    return parseImportCsv(csv, fieldConfigs()).truncated;
   }
   function previewRows(): ImportPreviewRow[] {
-    const identityField = fields.find((field) => field.unique);
-    return importRows().map((row, index) => {
+    const rows = importRows();
+    const seenUsernames = new Set<string>();
+    return rows.map((row, index) => {
       const missing = fields.find(
         (field) => field.required && !row.fields[field.name],
       );
@@ -190,13 +170,10 @@ export function CandidatesPage() {
           message: missing ? `${missing.label}不能为空` : "缺少用户名或姓名",
         };
       }
-      const exists =
-        identityField &&
-        candidates.some(
-          (candidate) =>
-            candidate.fields[identityField.name] ===
-            row.fields[identityField.name],
-        );
+      const inBatch = seenUsernames.has(row.username);
+      seenUsernames.add(row.username);
+      const existsInDb = detectDuplicate(row, fieldConfigs(), candidates);
+      const exists = existsInDb || inBatch;
       if (!exists && !row.password) {
         return {
           row: index + 2,
@@ -204,10 +181,15 @@ export function CandidatesPage() {
           message: "新增候选人需要初始密码",
         };
       }
+      const message = existsInDb
+        ? "已存在，重复导入将覆盖现有资料"
+        : inBatch
+          ? "本批次内重复用户名，将覆盖前一行"
+          : "将新增候选人";
       return {
         row: index + 2,
         status: exists ? "update" : "create",
-        message: exists ? "匹配现有身份，将更新资料" : "将新增候选人",
+        message,
       };
     });
   }
@@ -218,9 +200,14 @@ export function CandidatesPage() {
       errors: unknown[];
     }>("/api/candidates/import", { rows: importRows() });
     setImportSummary(
-      `新增 ${result.created} 条，更新 ${result.updated} 条，错误 ${result.errors.length} 条`,
+      `导入完成：新增 ${result.created} 条，更新 ${result.updated} 条，错误 ${result.errors.length} 条`,
     );
+    setCsv("");
     await load();
+    setTimeout(() => {
+      setImportOpen(false);
+      setImportSummary("");
+    }, 1500);
   }
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
@@ -234,7 +221,14 @@ export function CandidatesPage() {
               <Plus className="size-4" />
               新增考生
             </Button>
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportOpen(true);
+                setImportSummary("");
+                setCsv("");
+              }}
+            >
               <Upload className="size-4" />
               导入
             </Button>
@@ -343,6 +337,7 @@ export function CandidatesPage() {
               </div>
             ))}
           </div>
+          {saveError && <p className="text-sm text-red-600">{saveError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               取消
@@ -356,6 +351,11 @@ export function CandidatesPage() {
         onOpenChange={setImportOpen}
         title="导入考生"
         instructions="粘贴 CSV 内容。表头需包含 username、password、name 以及配置的身份字段。"
+        warning={
+          importTruncated()
+            ? `数据已截断为前 ${MAX_IMPORT_ROWS} 行，超出部分已忽略。`
+            : undefined
+        }
         csv={csv}
         onCsvChange={setCsv}
         preview={previewRows()}

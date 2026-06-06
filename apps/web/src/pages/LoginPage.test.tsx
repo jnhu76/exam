@@ -41,9 +41,7 @@ describe("LoginPage smoke", () => {
 
     expect(screen.getByLabelText("用户名")).toBeInTheDocument();
     expect(screen.getByLabelText("密码")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "登录" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
   });
 
   it("shows error message when login fails", async () => {
@@ -57,9 +55,7 @@ describe("LoginPage smoke", () => {
     await user.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "用户名或密码错误",
-      );
+      expect(screen.getByRole("alert")).toHaveTextContent("用户名或密码错误");
     });
   });
 
@@ -76,9 +72,7 @@ describe("LoginPage smoke", () => {
     await user.type(screen.getByLabelText("密码"), "admin123");
     await user.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(
-      screen.getByRole("button", { name: "登录中..." }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "登录中..." })).toBeDisabled();
 
     resolveLogin!({
       id: "u1",

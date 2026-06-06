@@ -14,9 +14,7 @@ import scoreRoutes from "@exam/api/src/routes/scores.js";
 import { exportRoutes } from "@exam/api/src/routes/export.js";
 import systemRoutes from "@exam/api/src/routes/system.js";
 import type { FastifyPluginAsync } from "fastify";
-import {
-  createCandidateViaApi,
-} from "@exam/api/src/routes/testHelpers.js";
+import { createCandidateViaApi } from "@exam/api/src/routes/testHelpers.js";
 
 async function buildFullStackApp(): Promise<TestContext> {
   const allRoutes: FastifyPluginAsync = async (fastify) => {
@@ -227,5 +225,49 @@ describe("Smoke — full exam lifecycle", () => {
     });
     expect(submitRes.statusCode).toBe(200);
     expect(submitRes.json().score).toBe(10);
+  });
+});
+
+describe("Smoke — candidate import", () => {
+  let ctx: TestContext;
+
+  beforeAll(async () => {
+    ctx = await buildFullStackApp();
+  });
+
+  afterAll(async () => {
+    await ctx.app.close();
+  });
+
+  it("imports new candidates then re-imports as update", async () => {
+    const username = `smoke-import-${Date.now()}`;
+    const res1 = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates/import",
+      payload: {
+        rows: [
+          { username, password: "123456", name: "Smoke Import", fields: {} },
+        ],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res1.statusCode).toBe(200);
+    expect(res1.json().created).toBe(1);
+    expect(res1.json().errors).toHaveLength(0);
+
+    const res2 = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates/import",
+      payload: {
+        rows: [
+          { username, password: "123456", name: "Smoke Updated", fields: {} },
+        ],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res2.statusCode).toBe(200);
+    expect(res2.json().created).toBe(0);
+    expect(res2.json().updated).toBe(1);
+    expect(res2.json().errors).toHaveLength(0);
   });
 });

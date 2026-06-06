@@ -56,6 +56,7 @@
 ## Files Created/Modified in Phase 1.2
 
 ### New Files
+
 - `apps/e2e/` — full-stack smoke test package (5 tests)
 - `apps/web/src/components/exam/EnrollmentPicker.tsx` — reusable enrollment picker
 - `apps/web/src/components/exam/ExamConfigForm.test.tsx` — totalScore behavior tests
@@ -69,6 +70,7 @@
 - `docs/phase1.2/enhancement.md` — enhancement spec
 
 ### Modified Files
+
 - `apps/api/src/routes/testHelpers.ts` — expanded helpers
 - `apps/api/src/routes/system.ts` — added GET /system/info endpoint
 - `apps/web/src/components/exam/ExamConfigForm.tsx` — auto-calc totalScore with useEffect sync

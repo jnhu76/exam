@@ -9,6 +9,7 @@ export function createUserRepo(db: SqliteDatabase) {
 
   return {
     ...repo,
+    // TODO: follow-up — refactor to accept ctx as first arg per AGENTS.md repo pattern
     findByOrganizationAndUsername(organizationId: string, username: string) {
       return (
         db
@@ -23,6 +24,7 @@ export function createUserRepo(db: SqliteDatabase) {
           .get() ?? null
       );
     },
+    // TODO: follow-up — refactor to accept ctx as first arg per AGENTS.md repo pattern
     findByOrganizationAndId(organizationId: string, id: string) {
       return (
         db

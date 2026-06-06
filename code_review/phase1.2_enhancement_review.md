@@ -239,22 +239,22 @@ All 305 tests pass (165 API + 140 Web). All three review findings have been addr
 
 ## Summary of Findings
 
-| ID  | Severity        | Description                                                                                          | Status     |
-| --- | --------------- | ---------------------------------------------------------------------------------------------------- | ---------- |
-| R1  | **Recommended** | `ExamConfigForm` auto-calc was cosmetic — `totalScore` not synced to `data.totalScore` via `onChange` | **Fixed**  |
-| R2  | Recommended     | EnrollmentPicker had no pagination — silently truncated at 100 candidates                            | **Fixed**  |
-| R3  | **Recommended** | Password change form duplicated in `SettingsPage.tsx` and `ExamSettingsPage.tsx`                     | **Fixed**  |
+| ID  | Severity        | Description                                                                                           | Status    |
+| --- | --------------- | ----------------------------------------------------------------------------------------------------- | --------- |
+| R1  | **Recommended** | `ExamConfigForm` auto-calc was cosmetic — `totalScore` not synced to `data.totalScore` via `onChange` | **Fixed** |
+| R2  | Recommended     | EnrollmentPicker had no pagination — silently truncated at 100 candidates                             | **Fixed** |
+| R3  | **Recommended** | Password change form duplicated in `SettingsPage.tsx` and `ExamSettingsPage.tsx`                      | **Fixed** |
 
 ---
 
 ## Issues Resolved in Follow-Up
 
-| Issue | File | Resolution |
-|-------|------|------------|
-| R1: totalScore not synced | `ExamConfigForm.tsx` | Added `useEffect` that calls `onChange({ ...data, totalScore: computedTotal })` when `hasQuestions && !manualTotalScore && computedTotal > 0 && data.totalScore !== computedTotal` |
-| R1: warning in auto mode | `ExamConfigForm.tsx` | Changed `showWarning` to only fire in `manualTotalScore` mode (auto mode now always syncs) |
-| R2: no pagination | `EnrollmentPicker.tsx`, `ExamDetailPage.tsx` | Added `hasMore`/`onLoadMore`/`isLoadingMore` props; `ExamDetailPage` tracks page/total, fetches 50 per page, appends on "加载更多" |
-| R3: duplicated password form | New `PasswordChangeForm.tsx`, updated `SettingsPage.tsx`, `ExamSettingsPage.tsx` | Extracted shared `PasswordChangeForm` component with `cardWrapper` prop; both pages use it |
+| Issue                        | File                                                                             | Resolution                                                                                                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1: totalScore not synced    | `ExamConfigForm.tsx`                                                             | Added `useEffect` that calls `onChange({ ...data, totalScore: computedTotal })` when `hasQuestions && !manualTotalScore && computedTotal > 0 && data.totalScore !== computedTotal` |
+| R1: warning in auto mode     | `ExamConfigForm.tsx`                                                             | Changed `showWarning` to only fire in `manualTotalScore` mode (auto mode now always syncs)                                                                                         |
+| R2: no pagination            | `EnrollmentPicker.tsx`, `ExamDetailPage.tsx`                                     | Added `hasMore`/`onLoadMore`/`isLoadingMore` props; `ExamDetailPage` tracks page/total, fetches 50 per page, appends on "加载更多"                                                 |
+| R3: duplicated password form | New `PasswordChangeForm.tsx`, updated `SettingsPage.tsx`, `ExamSettingsPage.tsx` | Extracted shared `PasswordChangeForm` component with `cardWrapper` prop; both pages use it                                                                                         |
 
 ---
 

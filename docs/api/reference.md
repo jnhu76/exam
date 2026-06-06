@@ -9,10 +9,12 @@
 **认证**: 大多数端点需要认证。认证通过 HTTP-only Cookie (`auth-token`) 实现，使用 JWT Token。
 
 **格式要求**:
+
 - Content-Type: `application/json`
 - Cookie: `auth-token=<jwt_token>` (HTTP-only, Secure, SameSite=strict)
 
 **通用响应结构**:
+
 ```json
 {
   "id": "uuid",
@@ -23,6 +25,7 @@
 ```
 
 **错误响应**:
+
 ```json
 {
   "error": {
@@ -41,6 +44,7 @@
 **权限**: 公开
 
 **请求体**:
+
 ```json
 {
   "organizationSlug": "default",
@@ -52,6 +56,7 @@
 ```
 
 **响应** (201):
+
 ```json
 {
   "id": "user-uuid",
@@ -68,6 +73,7 @@
 **速率限制**: 10 次/分钟/IP
 
 **请求体**:
+
 ```json
 {
   "organizationSlug": "default",
@@ -77,6 +83,7 @@
 ```
 
 **响应** (200):
+
 ```json
 {
   "id": "user-uuid",
@@ -98,6 +105,7 @@
 **请求体**: `{}`
 
 **响应** (200):
+
 ```json
 {
   "success": true
@@ -113,6 +121,7 @@
 **权限**: 需要认证
 
 **响应** (200):
+
 ```json
 {
   "id": "user-uuid",
@@ -130,6 +139,7 @@
 **权限**: 需要认证
 
 **请求体**:
+
 ```json
 {
   "currentPassword": "old-password",
@@ -138,6 +148,7 @@
 ```
 
 **响应** (200):
+
 ```json
 {
   "ok": true
@@ -153,11 +164,13 @@
 **权限**: Admin, SuperAdmin
 
 **查询参数**:
+
 - `page` (可选): 页码，默认 1
 - `pageSize` (可选): 每页数量，默认 20
 - `role` (可选): 过滤角色
 
 **响应** (200):
+
 ```json
 {
   "items": [
@@ -186,6 +199,7 @@
 **权限**: Admin, SuperAdmin
 
 **请求体**:
+
 ```json
 {
   "username": "teacher1",
@@ -208,6 +222,7 @@
 **查询参数**: 同 `/users`
 
 **响应** (200):
+
 ```json
 {
   "items": [
@@ -237,6 +252,7 @@
 **权限**: Admin, SuperAdmin
 
 **请求体**:
+
 ```json
 {
   "username": "student01",
@@ -260,6 +276,7 @@
 **速率限制**: 10 次/分钟
 
 **请求体**:
+
 ```json
 {
   "rows": [
@@ -282,6 +299,7 @@
 ```
 
 **响应** (200):
+
 ```json
 {
   "total": 2,
@@ -298,6 +316,7 @@
 **权限**: Admin, SuperAdmin
 
 **请求体**:
+
 ```json
 {
   "name": "张三(改名后)",
@@ -327,6 +346,7 @@
 **权限**: Admin, SuperAdmin
 
 **响应** (200):
+
 ```json
 {
   "items": [
@@ -359,6 +379,7 @@
 **权限**: Admin, SuperAdmin
 
 **响应** (200):
+
 ```json
 {
   "headers": ["学号", "姓名", "院系", "年级"],
@@ -373,6 +394,7 @@
 **权限**: Admin, SuperAdmin
 
 **请求体**:
+
 ```json
 {
   "name": "studentId",
@@ -397,6 +419,7 @@
 **查询参数**: 分页
 
 **响应** (200):
+
 ```json
 {
   "items": [
@@ -423,6 +446,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **请求体**:
+
 ```json
 {
   "name": "线性代数",
@@ -442,12 +466,14 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **查询参数**:
+
 - `page`, `pageSize`: 分页
 - `courseId`: 按课程过滤
 - `type`: 按类型过滤 (`single_choice`, `multiple_choice`, `fill_blank`, `true_false`)
 - `difficulty`: 按难度过滤 (1-5)
 
 **响应** (200):
+
 ```json
 {
   "items": [
@@ -478,6 +504,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **请求体**:
+
 ```json
 {
   "courseId": "course-uuid",
@@ -508,6 +535,7 @@
 **速率限制**: 5 次/分钟
 
 **请求体**:
+
 ```json
 {
   "courseId": "course-uuid",
@@ -536,6 +564,7 @@
 ```
 
 **响应** (200):
+
 ```json
 {
   "total": 2,
@@ -566,6 +595,7 @@
 **查询参数**: 分页
 
 **响应** (200):
+
 ```json
 {
   "items": [
@@ -620,6 +650,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **请求体**:
+
 ```json
 {
   "title": "期末能力测评",
@@ -650,6 +681,7 @@
 ```
 
 **响应** (201):
+
 ```json
 {
   "id": "exam-uuid",
@@ -664,6 +696,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **响应** (200):
+
 ```json
 {
   "id": "exam-uuid",
@@ -673,6 +706,7 @@
 ```
 
 **错误** (400):
+
 ```json
 {
   "error": {
@@ -689,6 +723,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **响应** (200):
+
 ```json
 {
   "id": "exam-uuid",
@@ -703,6 +738,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **响应** (200):
+
 ```json
 [
   {
@@ -726,6 +762,7 @@
 **权限**: Admin, SuperAdmin, Teacher
 
 **请求体**:
+
 ```json
 {
   "candidateIds": ["candidate-uuid1", "candidate-uuid2"]
@@ -743,6 +780,7 @@
 **权限**: Candidate
 
 **响应** (200):
+
 ```json
 [
   {
@@ -774,6 +812,7 @@
 **权限**: Candidate
 
 **响应** (200):
+
 ```json
 {
   "examId": "exam-uuid",
@@ -791,6 +830,7 @@
 **权限**: Candidate
 
 **响应** (201):
+
 ```json
 {
   "id": "attempt-uuid",
@@ -807,6 +847,7 @@
 **权限**: Candidate
 
 **响应** (200):
+
 ```json
 {
   "id": "attempt-uuid",
@@ -845,6 +886,7 @@
 **权限**: Candidate
 
 **请求体**:
+
 ```json
 {
   "attemptId": "attempt-uuid",
@@ -857,6 +899,7 @@
 ```
 
 **响应** (200):
+
 ```json
 {
   "accepted": true,
@@ -866,6 +909,7 @@
 ```
 
 **冲突响应** (200):
+
 ```json
 {
   "accepted": false,
@@ -884,6 +928,7 @@
 **权限**: Candidate
 
 **响应** (200):
+
 ```json
 {
   "id": "attempt-uuid",
@@ -916,6 +961,7 @@
 **Content-Disposition**: `attachment; filename="scores-<exam-id>-<timestamp>.csv"`
 
 **CSV 格式**:
+
 ```
 考生姓名,学号,院系,年级,成绩,及格状态,尝试次数,提交时间
 张三,20240001,计算机系,2024级,85,及格,1,2024-06-01T10:05:00.000Z
@@ -923,6 +969,7 @@
 ```
 
 **字段说明**:
+
 - `考生姓名`: Candidate 的 `name` 字段
 - `学号/院系/年级`: 组织配置的 CandidateField 字段
 - `成绩`: 最终得分（number）
@@ -939,6 +986,7 @@
 **权限**: 公开
 
 **响应** (200):
+
 ```json
 {
   "productName": "考试平台",
@@ -962,6 +1010,7 @@
 **权限**: Admin, SuperAdmin
 
 **请求体**:
+
 ```json
 {
   "productName": "新的考试平台",
@@ -982,6 +1031,7 @@
 **权限**: 公开
 
 **响应** (200):
+
 ```json
 {
   "version": "0.1.0",
@@ -996,6 +1046,7 @@
 **权限**: 需要认证
 
 **响应** (200):
+
 ```json
 {
   "cpu": 15,
@@ -1012,6 +1063,7 @@
 **权限**: 需要认证
 
 **响应** (200):
+
 ```json
 {
   "totalQuestions": 150,

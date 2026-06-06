@@ -228,6 +228,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = createCandidateFieldRepo(fastify.db).list(ctx);
 
+      const allCandidates = candidateRepo.list(ctx);
+      // TODO: optimize for large orgs — userRepo.list(ctx) loads all users into memory.
+      // Consider a role-scoped query or batch lookup when orgs exceed ~10k users.
+      const existingUsernames = new Set<string>();
+      const userIdMap = new Map<string, string>();
+      for (const user of userRepo.list(ctx)) {
+        existingUsernames.add(user.username);
+        userIdMap.set(user.username, user.id);
+      }
+
       let created = 0;
       let updated = 0;
       const errors: { row: number; message: string }[] = [];
@@ -235,31 +245,36 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       for (let i = 0; i < data.rows.length; i++) {
         try {
           const row = data.rows[i]!;
-          const username = row.username as string | undefined;
-          const password = row.password as string | undefined;
-          const name = row.name as string | undefined;
-          const fields = (row.fields as Record<string, unknown>) ?? {};
+          const username = row.username;
+          const password = row.password;
+          const name = row.name;
+          const fields = row.fields ?? {};
 
           if (!username || !name) {
-            errors.push({ row: i, message: "Missing required fields" });
+            errors.push({ row: i + 1, message: "缺少用户名或姓名" });
             continue;
           }
           validateCandidateFields(configuredFields, fields);
-          const existing = findByIdentity(
-            candidateRepo.list(ctx),
+          let existing = findByIdentity(
+            allCandidates,
             configuredFields,
             fields,
           );
+          if (!existing && existingUsernames.has(username)) {
+            const userId = userIdMap.get(username)!;
+            existing = candidateRepo.findByUserId(ctx, userId);
+          }
           if (existing) {
             candidateRepo.update(ctx, existing.id, { fields });
             userRepo.update(ctx, existing.userId, { name });
+            existingUsernames.add(username);
             updated++;
             continue;
           }
           if (!password) {
             errors.push({
-              row: i,
-              message: "Password is required for new candidates",
+              row: i + 1,
+              message: "新增考生需要初始密码",
             });
             continue;
           }
@@ -272,12 +287,18 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             role: "Candidate" as const,
             isActive: true,
           });
+          existingUsernames.add(username);
+          userIdMap.set(username, user.id);
 
-          candidateRepo.create(ctx, { userId: user.id, fields });
+          const candidate = candidateRepo.create(ctx, {
+            userId: user.id,
+            fields,
+          });
+          allCandidates.push(candidate);
           created++;
         } catch (err) {
           errors.push({
-            row: i,
+            row: i + 1,
             message: err instanceof Error ? err.message : "Unknown error",
           });
         }

@@ -31,6 +31,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Add `createExamViaApi`, `publishExamViaApi`, `submitExamAsCandidate`, `exportResultsCsvAsAdmin` to testHelpers.ts.
 
 **Acceptance criteria:**
+
 - [ ] `createExamViaApi` creates course + question + exam, returns examId
 - [ ] `publishExamViaApi` publishes an exam, returns updated exam
 - [ ] `submitExamAsCandidate` creates candidate, enrolls, starts, submits all answers
@@ -54,6 +55,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Expand `export.test.ts` to cover Content-Disposition, examId filtering, CSV escaping, and data-bearing export.
 
 **Acceptance criteria:**
+
 - [ ] Test Content-Disposition header contains `attachment`
 - [ ] Test Content-Type is `text/csv; charset=utf-8`
 - [ ] Test CSV headers are stable (考生姓名, 成绩, 及格状态, etc.)
@@ -75,6 +77,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Expand `candidateInvariant.test.ts` to cover no-profile rejection for exam start.
 
 **Acceptance criteria:**
+
 - [ ] Candidate without profile cannot start an exam (verified via API)
 - [ ] Candidate without profile cannot submit answers
 - [ ] Candidate with profile can do both
@@ -92,7 +95,8 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** New test file covering cross-role access for all critical endpoints.
 
 **Acceptance criteria:**
-- [ ] Candidate cannot access any /admin/* API (exams CRUD, scores, export, candidates)
+
+- [ ] Candidate cannot access any /admin/\* API (exams CRUD, scores, export, candidates)
 - [ ] Unauthenticated gets 401 on all protected endpoints
 - [ ] Teacher can access exams/scores/export but not users/candidates
 - [ ] Admin can access all management APIs
@@ -114,6 +118,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Add tests to `layout.test.tsx` verifying sidebar links point to correct routes and NavLink active behavior.
 
 **Acceptance criteria:**
+
 - [ ] "考试管理" link points to `/admin/exams`
 - [ ] "成绩查询" link points to `/admin/results`
 - [ ] NavLink is used (not plain Link)
@@ -132,6 +137,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Test that `/admin/results` renders ResultsOverviewPage, not ExamPage.
 
 **Acceptance criteria:**
+
 - [ ] `/admin/results` route exists in routes.ts
 - [ ] Route wiring in App.tsx maps correctly
 
@@ -152,6 +158,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Test all legal and illegal exam state transitions via API.
 
 **Acceptance criteria:**
+
 - [ ] draft → published (valid)
 - [ ] draft → archived (valid if not published)
 - [ ] published → archived (valid)
@@ -176,6 +183,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Test Zod schema boundaries for exam, question, candidate creation.
 
 **Acceptance criteria:**
+
 - [ ] Empty title rejected
 - [ ] Oversized title (>200 chars) rejected
 - [ ] Negative score rejected
@@ -200,6 +208,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 **Description:** Install Playwright, create config, write one smoke test covering admin login → exam list.
 
 **Acceptance criteria:**
+
 - [ ] `@playwright/test` installed in root
 - [ ] `playwright.config.ts` exists with minimal config
 - [ ] One smoke test: admin login, see dashboard
@@ -217,6 +226,7 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 ---
 
 ### Checkpoint: After Phase A-C (P0 complete)
+
 - [ ] All 227+ existing tests pass
 - [ ] New CSV export tests pass
 - [ ] Permission boundary tests pass
@@ -224,10 +234,12 @@ Phase 1.2 is a test-hardening pass over the existing Phase 1.1 codebase. No new 
 - [ ] `pnpm verify` passes
 
 ### Checkpoint: After Phase D-E (P1 complete)
+
 - [ ] State machine tests pass
 - [ ] Input validation tests pass
 
 ### Final Checkpoint: Phase F
+
 - [ ] Playwright smoke passes locally
 - [ ] CI updated
 - [ ] Review report written
@@ -244,8 +256,8 @@ F1 (parallel, no deps)
 
 ## Risks
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Playwright install large | Slow CI | Cache browser install, only run smoke |
-| Test pollution between files | Flaky | Use unique IDs via helpers |
-| Existing tests break | Regression | Run full suite after each phase |
+| Risk                         | Impact     | Mitigation                            |
+| ---------------------------- | ---------- | ------------------------------------- |
+| Playwright install large     | Slow CI    | Cache browser install, only run smoke |
+| Test pollution between files | Flaky      | Use unique IDs via helpers            |
+| Existing tests break         | Regression | Run full suite after each phase       |
