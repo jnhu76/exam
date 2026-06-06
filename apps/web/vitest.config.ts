@@ -16,5 +16,12 @@ export default defineConfig({
         url: "http://localhost:5173",
       },
     },
+    coverage: {
+      thresholds: {
+        lines: 50,
+        branches: 40,
+        functions: 40,
+      },
+    },
   },
 });

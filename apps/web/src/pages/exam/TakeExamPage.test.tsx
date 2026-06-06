@@ -73,10 +73,7 @@ function renderPage() {
               path="/exam/:examId/take/:attemptId"
               element={<TakeExamPage />}
             />
-            <Route
-              path="/exam/:attemptId/result"
-              element={<LocationProbe />}
-            />
+            <Route path="/exam/:attemptId/result" element={<LocationProbe />} />
             <Route path="/exam/list" element={<LocationProbe />} />
           </Routes>
         </BrandProvider>
@@ -153,9 +150,7 @@ describe("TakeExamPage smoke", () => {
     await user.click(screen.getByRole("button", { name: "交卷" }));
 
     const dialog = await screen.findByRole("dialog");
-    await user.click(
-      within(dialog).getByRole("button", { name: "确认交卷" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "确认交卷" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("current-path")).toHaveTextContent("/result");

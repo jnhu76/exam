@@ -23,20 +23,17 @@ P2 只占坑，不强行落地。
 当前系统已经暴露出以下关键问题：
 
 1. 初始 seed user 的角色可能是 Candidate，但没有 candidateProfile。
-
-   * 测试中不能依赖 seed candidate。
-   * 需要通过 Admin API 创建 Candidate，并获得 candidateProfile。
+   - 测试中不能依赖 seed candidate。
+   - 需要通过 Admin API 创建 Candidate，并获得 candidateProfile。
 
 2. Admin 路由需要保持清晰：
-
-   * `/admin/exams` 只用于考试管理。
-   * `/admin/results` 只用于成绩查询。
+   - `/admin/exams` 只用于考试管理。
+   - `/admin/results` 只用于成绩查询。
 
 3. Admin 导航需要正确：
-
-   * Header 和 Sidebar 应使用统一 nav 配置。
-   * 使用 React Router 的 NavLink 显示 active 状态。
-   * “成绩查询”必须指向 `/admin/results`。
+   - Header 和 Sidebar 应使用统一 nav 配置。
+   - 使用 React Router 的 NavLink 显示 active 状态。
+   - “成绩查询”必须指向 `/admin/results`。
 
 4. CSV 导出必须有 API 集成测试覆盖。
 
@@ -59,13 +56,13 @@ Admin 登录
 
 Phase 1.2 完成后，系统必须具备以下测试能力：
 
-* API 集成测试可以验证核心业务链路。
-* Playwright 冒烟测试可以验证主要 UI 流程。
-* Candidate/candidateProfile 不变量被测试覆盖。
-* Admin/Candidate 权限边界被测试覆盖。
-* `/admin/exams` 与 `/admin/results` 路由分离被测试覆盖。
-* CSV 导出被集成测试覆盖。
-* CI 可以稳定执行 P0 测试，不引入易碎、过慢、不可重复的测试。
+- API 集成测试可以验证核心业务链路。
+- Playwright 冒烟测试可以验证主要 UI 流程。
+- Candidate/candidateProfile 不变量被测试覆盖。
+- Admin/Candidate 权限边界被测试覆盖。
+- `/admin/exams` 与 `/admin/results` 路由分离被测试覆盖。
+- CSV 导出被集成测试覆盖。
+- CI 可以稳定执行 P0 测试，不引入易碎、过慢、不可重复的测试。
 
 ## 3. 测试优先级
 
@@ -119,16 +116,16 @@ P2 暂时不作为 Phase 1.2 阻断项。
 
 先检查：
 
-* `docs/SPEC.md`
-* Phase 1 plan
-* 当前路由配置
-* 当前测试目录
-* 当前 package scripts
-* 当前 CI 配置
-* 当前 API routes
-* 当前 seed 数据
-* 当前 Admin/Candidate 权限实现
-* 当前 CSV 导出实现
+- `docs/SPEC.md`
+- Phase 1 plan
+- 当前路由配置
+- 当前测试目录
+- 当前 package scripts
+- 当前 CI 配置
+- 当前 API routes
+- 当前 seed 数据
+- 当前 Admin/Candidate 权限实现
+- 当前 CSV 导出实现
 
 输出一份简短现状摘要：
 
@@ -161,10 +158,10 @@ exportResultsCsvAsAdmin
 
 要求：
 
-* 集成测试不得直接依赖 seed candidate 参加考试。
-* Candidate 必须通过 Admin API 创建。
-* helper 返回必要 id，例如 userId、candidateProfileId、examId、attemptId、resultId。
-* 每个测试使用唯一 email/title，避免测试之间互相污染。
+- 集成测试不得直接依赖 seed candidate 参加考试。
+- Candidate 必须通过 Admin API 创建。
+- helper 返回必要 id，例如 userId、candidateProfileId、examId、attemptId、resultId。
+- 每个测试使用唯一 email/title，避免测试之间互相污染。
 
 ### Step 3：补 API 集成测试
 
@@ -172,31 +169,31 @@ exportResultsCsvAsAdmin
 
 #### Candidate/candidateProfile
 
-* Admin 创建 Candidate 时必须创建 candidateProfile。
-* Candidate 登录后可以获取自己的 candidateProfile。
-* Candidate 没有 candidateProfile 时不能进入考试或提交考试。
-* 考试提交记录应绑定 candidateProfileId，而不是只依赖 userId。
+- Admin 创建 Candidate 时必须创建 candidateProfile。
+- Candidate 登录后可以获取自己的 candidateProfile。
+- Candidate 没有 candidateProfile 时不能进入考试或提交考试。
+- 考试提交记录应绑定 candidateProfileId，而不是只依赖 userId。
 
 #### 权限边界
 
-* 未登录用户不能访问 Admin API。
-* Candidate 不能访问 Admin API。
-* Admin 可以访问考试管理、成绩查询和 CSV 导出 API。
-* Candidate 只能访问自己的考试和提交相关 API。
+- 未登录用户不能访问 Admin API。
+- Candidate 不能访问 Admin API。
+- Admin 可以访问考试管理、成绩查询和 CSV 导出 API。
+- Candidate 只能访问自己的考试和提交相关 API。
 
 #### CSV 导出
 
 必须覆盖：
 
-* Admin 可以成功导出 CSV。
-* 返回 `Content-Type: text/csv`。
-* 返回 `Content-Disposition: attachment`。
-* CSV 包含稳定表头。
-* CSV 包含 candidate、exam、score、passed、submittedAt 等核心字段。
-* `examId` 筛选生效。
-* 空结果也返回合法 CSV。
-* 未登录用户返回 401。
-* Candidate 返回 403。
+- Admin 可以成功导出 CSV。
+- 返回 `Content-Type: text/csv`。
+- 返回 `Content-Disposition: attachment`。
+- CSV 包含稳定表头。
+- CSV 包含 candidate、exam、score、passed、submittedAt 等核心字段。
+- `examId` 筛选生效。
+- 空结果也返回合法 CSV。
+- 未登录用户返回 401。
+- Candidate 返回 403。
 
 ### Step 4：修复路由与导航测试
 
@@ -209,13 +206,13 @@ exportResultsCsvAsAdmin
 
 必须测试：
 
-* `/admin/exams` 显示考试管理页。
-* `/admin/results` 显示成绩查询页。
-* Sidebar 中“考试管理”链接指向 `/admin/exams`。
-* Sidebar 中“成绩查询”链接指向 `/admin/results`。
-* Header/Sidebar 使用 NavLink 或等价机制展示 active 状态。
-* 进入 `/admin/exams` 时只高亮“考试管理”。
-* 进入 `/admin/results` 时只高亮“成绩查询”。
+- `/admin/exams` 显示考试管理页。
+- `/admin/results` 显示成绩查询页。
+- Sidebar 中“考试管理”链接指向 `/admin/exams`。
+- Sidebar 中“成绩查询”链接指向 `/admin/results`。
+- Header/Sidebar 使用 NavLink 或等价机制展示 active 状态。
+- 进入 `/admin/exams` 时只高亮“考试管理”。
+- 进入 `/admin/results` 时只高亮“成绩查询”。
 
 ### Step 5：建立 Playwright 冒烟测试
 
@@ -239,11 +236,11 @@ Admin 登录
 
 要求：
 
-* 测试可重复运行。
-* 不依赖测试顺序。
-* 不依赖手工 seed candidate。
-* 使用独立测试数据。
-* CI 环境中允许降低并发，避免 flaky。
+- 测试可重复运行。
+- 不依赖测试顺序。
+- 不依赖手工 seed candidate。
+- 使用独立测试数据。
+- CI 环境中允许降低并发，避免 flaky。
 
 ### Step 6：状态时序测试
 
@@ -263,11 +260,11 @@ graded
 
 至少验证：
 
-* draft 可以编辑。
-* published 后关键字段不能随意修改。
-* closed 后 Candidate 不能提交。
-* graded 后 Admin 可以查询成绩。
-* 非法状态转换被拒绝。
+- draft 可以编辑。
+- published 后关键字段不能随意修改。
+- closed 后 Candidate 不能提交。
+- graded 后 Admin 可以查询成绩。
+- 非法状态转换被拒绝。
 
 ### Step 7：边界输入测试
 
@@ -275,15 +272,15 @@ graded
 
 包括：
 
-* 空标题。
-* 超长标题。
-* 空题目。
-* 选项数量不足。
-* 分数为负数。
-* 考试时间非法。
-* 无效 email。
-* 重复 candidate email。
-* CSV 字段包含逗号、换行、双引号、中文。
+- 空标题。
+- 超长标题。
+- 空题目。
+- 选项数量不足。
+- 分数为负数。
+- 考试时间非法。
+- 无效 email。
+- 重复 candidate email。
+- CSV 字段包含逗号、换行、双引号、中文。
 
 ### Step 8：CI 命令整理
 
@@ -307,16 +304,16 @@ pnpm test:smoke
 
 本阶段禁止：
 
-* 不要新增核心业务功能。
-* 不要重写认证系统。
-* 不要重写数据库层。
-* 不要直接让集成测试依赖 seed candidate。
-* 不要在测试中硬编码共享 email。
-* 不要引入大型新工具，除非项目已有基础。
-* 不要把 Fuzz 和视觉回归作为 P0 阻断项。
-* 不要为了测试而修改业务语义。
-* 不要让测试依赖执行顺序。
-* 不要只写 happy path，不测权限和错误路径。
+- 不要新增核心业务功能。
+- 不要重写认证系统。
+- 不要重写数据库层。
+- 不要直接让集成测试依赖 seed candidate。
+- 不要在测试中硬编码共享 email。
+- 不要引入大型新工具，除非项目已有基础。
+- 不要把 Fuzz 和视觉回归作为 P0 阻断项。
+- 不要为了测试而修改业务语义。
+- 不要让测试依赖执行顺序。
+- 不要只写 happy path，不测权限和错误路径。
 
 ## 6. 任务输出要求
 
@@ -354,12 +351,12 @@ pnpm test:smoke
 
 Phase 1.2 完成时必须满足：
 
-* P0 测试全部通过。
-* 核心链路自动化测试通过。
-* Candidate 测试不再依赖 seed candidate。
-* `/admin/exams` 和 `/admin/results` 路由彻底分离。
-* Admin 导航链接正确。
-* CSV 导出有 API 集成测试。
-* Admin/Candidate 权限测试覆盖核心接口。
-* 冒烟测试可以本地一条命令运行。
-* CI 不引入明显 flaky 或过慢测试。
+- P0 测试全部通过。
+- 核心链路自动化测试通过。
+- Candidate 测试不再依赖 seed candidate。
+- `/admin/exams` 和 `/admin/results` 路由彻底分离。
+- Admin 导航链接正确。
+- CSV 导出有 API 集成测试。
+- Admin/Candidate 权限测试覆盖核心接口。
+- 冒烟测试可以本地一条命令运行。
+- CI 不引入明显 flaky 或过慢测试。

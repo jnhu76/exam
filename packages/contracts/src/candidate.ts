@@ -71,7 +71,12 @@ export type UpdateCandidateFieldRequest = z.infer<
 
 // ── Candidate Import ──────────────────────────────────────────────
 
-export const CandidateImportRowSchema = z.record(z.unknown());
+export const CandidateImportRowSchema = z.strictObject({
+  username: z.string(),
+  password: z.string().optional(),
+  name: z.string(),
+  fields: z.record(z.unknown()).optional(),
+});
 export type CandidateImportRow = z.infer<typeof CandidateImportRowSchema>;
 
 export const CandidateImportRequestSchema = z.object({

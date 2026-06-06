@@ -27,6 +27,7 @@
 2. **Better error feedback:** Show the validation error from the server in a more prominent way — display what the expected total is vs what was submitted.
 
 **Files affected:**
+
 - `apps/web/src/components/exam/ExamConfigForm.tsx` — auto-calculate totalScore from questions
 - `apps/web/src/pages/admin/ExamCreatePage.tsx` — wire question selection to totalScore
 - `apps/web/src/pages/admin/ExamDetailPage.tsx` — show publish validation errors clearly
@@ -46,11 +47,13 @@
 **Root cause hypothesis:** After `handleDelete()` calls `loadCourses()`, the state update may cause the component to unmount/remount improperly, or there's a routing/re-render issue where the loading state doesn't properly reset. The `loadCourses()` function sets `isLoading = true` then fetches, but the component may be in an inconsistent state during re-render.
 
 **Fix:**
+
 - Debug the re-render cycle in `CoursePage.tsx`
 - Ensure `handleDelete` → `loadCourses` doesn't leave the component in a broken intermediate state
 - Possibly avoid `setIsLoading(true)` in `loadCourses` when called after delete (refresh case)
 
 **Files affected:**
+
 - `apps/web/src/pages/admin/CoursePage.tsx` — fix delete → reload cycle
 
 ---
@@ -70,6 +73,7 @@
 5. **Import from list** — allow pasting a list of candidate identifiers for bulk enrollment (stretch goal)
 
 **Files affected:**
+
 - `apps/web/src/pages/admin/ExamDetailPage.tsx` — redesign enrollment dialog
 
 ---
@@ -90,6 +94,7 @@
 2. Each tab is a separate section/component, not a separate route
 
 **Files affected:**
+
 - `apps/web/src/pages/admin/SettingsPage.tsx` — add Tabs layout
 - `apps/web/src/components/settings/PlatformSettingsForm.tsx` — become one tab
 
@@ -108,6 +113,7 @@
 3. Default to the server's timezone or `Asia/Shanghai` for LAN deployments
 
 **Files affected:**
+
 - `apps/web/src/components/settings/PlatformSettingsForm.tsx` — timezone select
 
 ---
@@ -118,13 +124,13 @@
 **Area:** Frontend (multiple pages)
 **Scope:** Affects:
 
-| Page | Batch operations needed |
-|------|------------------------|
+| Page                | Batch operations needed                          |
+| ------------------- | ------------------------------------------------ |
 | `/admin/candidates` | Batch delete, batch assign to exam, batch export |
-| `/admin/questions` | Batch delete, batch move to course, batch import |
-| `/admin/exams` | Batch archive, batch publish (with caution) |
-| `/admin/users` | Batch activate/deactivate |
-| Exam enrollment | Batch add, batch remove |
+| `/admin/questions`  | Batch delete, batch move to course, batch import |
+| `/admin/exams`      | Batch archive, batch publish (with caution)      |
+| `/admin/users`      | Batch activate/deactivate                        |
+| Exam enrollment     | Batch add, batch remove                          |
 
 **Implementation pattern:**
 
@@ -133,6 +139,7 @@
 3. Batch API endpoints where needed (some may already support arrays)
 
 **Files affected:**
+
 - Multiple admin pages: `CandidatesPage.tsx`, `CoursePage.tsx`, etc.
 - API routes may need batch endpoints
 
@@ -146,6 +153,7 @@
 This is a feature request, not a bug. Documenting for roadmap planning.
 
 **Requirements:**
+
 - Dashboard notification inbox for all users
 - Admin/Teacher can send messages to candidates (individual or broadcast)
 - Notification types: exam reminder, result published, system announcement
@@ -158,15 +166,15 @@ This is a feature request, not a bug. Documenting for roadmap planning.
 
 ## Implementation Priority
 
-| Priority | Issue | Effort | Impact |
-|----------|-------|--------|--------|
-| P0 | BUG-1: totalScore auto-calc | Small | Unblocks core workflow |
-| P1 | BUG-2: Course delete blank page | Small | Fixes broken UX |
-| P1 | ENH-3: Enrollment picker scale | Medium | Essential for real usage |
-| P2 | ENH-4: Settings tabs | Small | Better organization |
-| P2 | ENH-5: Timezone selector | Small | Better UX |
-| P2 | ENH-6: Batch operations | Large | Multi-page improvement |
-| Future | ENH-7: Notifications | Large | Phase 2 feature |
+| Priority | Issue                           | Effort | Impact                   |
+| -------- | ------------------------------- | ------ | ------------------------ |
+| P0       | BUG-1: totalScore auto-calc     | Small  | Unblocks core workflow   |
+| P1       | BUG-2: Course delete blank page | Small  | Fixes broken UX          |
+| P1       | ENH-3: Enrollment picker scale  | Medium | Essential for real usage |
+| P2       | ENH-4: Settings tabs            | Small  | Better organization      |
+| P2       | ENH-5: Timezone selector        | Small  | Better UX                |
+| P2       | ENH-6: Batch operations         | Large  | Multi-page improvement   |
+| Future   | ENH-7: Notifications            | Large  | Phase 2 feature          |
 
 ---
 

@@ -66,10 +66,7 @@ function renderPage() {
       >
         <BrandProvider>
           <Routes>
-            <Route
-              path="/admin/exams/new"
-              element={<ExamCreatePage />}
-            />
+            <Route path="/admin/exams/new" element={<ExamCreatePage />} />
             <Route
               path="/admin/exams"
               element={<div data-testid="exam-list" />}
@@ -86,9 +83,7 @@ describe("ExamCreatePage smoke", () => {
     renderPage();
 
     expect(await screen.findByText("创建考试")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("请输入考试名称"),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("请输入考试名称")).toBeInTheDocument();
     expect(screen.getByText("时间设置")).toBeInTheDocument();
   });
 
@@ -124,9 +119,7 @@ describe("ExamCreatePage smoke", () => {
     const addButtons = within(dialog).getAllByRole("button", { name: "添加" });
     await user.click(addButtons[0]!);
 
-    await user.click(
-      within(dialog).getByRole("button", { name: "关闭" }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: "关闭" }));
 
     await waitFor(() => {
       expect(screen.getByText("已选题目 (1)")).toBeInTheDocument();
@@ -145,10 +138,7 @@ describe("ExamCreatePage smoke", () => {
 
     expect(await screen.findByText("创建考试")).toBeInTheDocument();
 
-    await user.type(
-      screen.getByPlaceholderText("请输入考试名称"),
-      "Test Exam",
-    );
+    await user.type(screen.getByPlaceholderText("请输入考试名称"), "Test Exam");
     await user.click(screen.getByRole("button", { name: "保存草稿" }));
 
     await waitFor(() => {
