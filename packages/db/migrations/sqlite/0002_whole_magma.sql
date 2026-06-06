@@ -1,0 +1,1 @@
+ALTER TABLE `exams` ADD `total_score` real NOT NULL;

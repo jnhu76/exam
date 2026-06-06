@@ -1,11 +1,32 @@
 {
   "name": "exam",
   "private": true,
-  "workspaces": ["client", "server", "shared"],
+  "type": "module",
   "scripts": {
-    "dev": "bun run --filter './{client,server}' dev",
-    "dev:client": "bun run --filter client dev",
-    "dev:server": "bun run --filter server dev",
-    "build": "bun run --filter shared build && bun run --filter client build"
-  }
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "node scripts/check-code-quality.mjs",
+    "lint:copy": "node scripts/check-hardcoded-copy.mjs",
+    "lint:arch": "node scripts/check-architecture.mjs",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "coverage": "turbo coverage",
+    "db:generate": "pnpm --filter @exam/db db:generate",
+    "db:migrate": "pnpm --filter @exam/db db:migrate",
+    "db:push": "pnpm --filter @exam/db db:push",
+    "db:studio": "pnpm --filter @exam/db db:studio",
+    "db:seed": "pnpm --filter @exam/api db:seed",
+    "test:integration": "turbo test:integration",
+    "test:e2e": "turbo test:e2e",
+    "smoke": "turbo smoke",
+    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm test && pnpm coverage && pnpm build"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@11.1.2"
 }

@@ -1,0 +1,17 @@
+type,content,standardAnswer,score,difficulty,tags
+true_false,地球是圆的,true,10,2,常识 基础
+true_false,水是透明的,true,10,2,常识 基础
+true_false,太阳从东边升起,true,10,1,常识 基础
+true_false,月亮绕着地球公转,false,10,3,常识 基础
+true_false,一年有 365 天,true,10,1,常识 基础
+true_false,HTTP 是无状态协议,true,5,2,网络 基础
+true_false,SQL 是关系型数据库,true,5,3,数据库 基础
+true_false,JavaScript 是单线程的,true,5,3,编程 基础
+true_false,React 使用 Virtual DOM 优化渲染性能,true,5,3,前端 基础
+true_false,Node.js 适合 I/O 密集型应用,true,5,3,Node.js 基础
+true_false,Three.js 是 WebGL 框架,true,5,3,前端 基础
+true_false,Vite 支持 HMR (热模块替换),true,5,3,前端 基础
+true_false,PostgreSQL 支持 JSONB 类型,true,5,3,数据库 基础
+true_false,AuthenticationToken 比 Session Cookie 更安全,true,5,3,认证 基础
+true_false,Redis 可以用作消息队列,true,5,3,数据库 基础
+true_false,GraphQL 是 API 查询语言,true,5,3,API 基础

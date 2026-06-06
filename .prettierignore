@@ -1,0 +1,4 @@
+apps/web/src/components/ui/
+docs/SPEC.md
+pnpm-lock.yaml
+coverage/

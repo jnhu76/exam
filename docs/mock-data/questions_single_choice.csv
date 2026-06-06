@@ -1,0 +1,10 @@
+type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring
+single_choice,下列哪个是质数？,2,3,5,7,B,5,3,数学 基础,all_correct_full
+single_choice,1+1=?,1,2,3,4,B,5,2,数学 基础,all_correct_full
+single_choice,一元等于多少分？,10,50,100,20,A,2,1,金融 基础,all_correct_full
+single_choice,下列哪个是偶数？,2,3,5,8,A,5,2,数学 基础,all_correct_full
+single_choice,程序的入口点是？,main,program,function,start,B,5,3,编程 基础,all_correct_full
+single_choice,HTTP 状态码 404 表示？,请求未找到,禁止访问,权限不足,服务器错误,C,5,3,网络 基础,all_correct_full
+single_choice,下列哪个不是关系型数据库？,MySQL,Oracle,Excel,HTML,D,5,3,数据库 基础,all_correct_full
+single_choice,下列哪个是前端框架？,React,Vue,Angular,Django,Ember,A,5,3,前端 基础,all_correct_full
+single_choice,下列哪个是 CSS 预处理器？,SASS,LESS,PostCSS,Stylus,C,5,3,前端 基础,all_correct_full
