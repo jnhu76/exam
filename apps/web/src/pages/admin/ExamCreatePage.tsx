@@ -28,7 +28,6 @@ import {
   type ExamConfigData,
 } from "@/components/exam/ExamConfigForm";
 import { BookOpen, Trash2 } from "lucide-react";
-import { FieldError } from "@/components/shared/FieldError";
 
 interface CourseRow {
   id: string;
