@@ -10,17 +10,17 @@ All colors use oklch in Tailwind v4 `@theme` block. The palette is intentionally
 |-------|---------|-------------|
 | `--color-background` | Page background | `oklch(0.9857 0 0)` |
 | `--color-card` | Card/surface background | `oklch(1 0 0)` |
-| `--color-foreground` | Primary text | `oklch(0.20 0 0)` |
+| `--color-foreground` | Primary text | `oklch(0.2 0 0)` |
 | `--color-muted-foreground` | Secondary text | `oklch(0.551 0 0)` |
 | `--color-border` | Borders, dividers | `oklch(0.9235 0 0)` |
-| `--color-primary` | Primary actions, links | `oklch(0.50 0.16 255)` |
+| `--color-primary` | Primary actions, links | `oklch(0.5 0.16 255)` |
 | `--color-primary-foreground` | Text on primary bg | `oklch(1 0 0)` |
 | `--color-destructive` | Delete, fail, error | `oklch(0.631 0.2081 25.3312)` |
 | `--color-destructive-foreground` | Text on destructive bg | `oklch(1 0 0)` |
 | `--color-success` | Pass, completed, saved | `oklch(0.62 0.17 150)` |
 | `--color-success-foreground` | Text on success bg | `oklch(1 0 0)` |
 | `--color-warning` | Caution, partial | `oklch(0.78 0.14 75)` |
-| `--color-warning-foreground` | Text on warning bg | `oklch(0.20 0 0)` |
+| `--color-warning-foreground` | Text on warning bg | `oklch(0.2 0 0)` |
 
 ### Color Rules
 
@@ -32,7 +32,7 @@ All colors use oklch in Tailwind v4 `@theme` block. The palette is intentionally
 
 ### Theme Customization
 
-The primary color is `oklch(0.50 0.16 255)` — a darker, muted blue that feels administrative rather than SaaS-generic. Organizations can override `productName` and display settings via the Settings page, but the color theme remains consistent.
+The primary color is `oklch(0.5 0.16 255)` — a darker, muted blue that feels administrative rather than SaaS-generic. Organizations can override `productName` and display settings via the Settings page, but the color theme remains consistent.
 
 ## Typography
 
