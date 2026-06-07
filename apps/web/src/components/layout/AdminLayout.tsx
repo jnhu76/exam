@@ -20,6 +20,7 @@ const routeTitles: Record<string, string> = {
   "/admin/system": "系统健康",
   "/admin/organizations": "机构管理",
 };
+// TODO: sync routeTitles with App.tsx route definitions when routes change
 
 function getTopbarTitle(pathname: string): string {
   if (routeTitles[pathname]) return routeTitles[pathname];
