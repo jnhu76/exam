@@ -47,7 +47,7 @@ export function ImportWizard({
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{instructions}</p>
-          {warning && <p className="text-sm text-amber-600">{warning}</p>}
+          {warning && <p className="text-sm text-warning">{warning}</p>}
           <FileUpload onText={onCsvChange} />
           <Textarea
             rows={8}
@@ -61,10 +61,10 @@ export function ImportWizard({
                   key={row.row}
                   className={
                     row.status === "error"
-                      ? "text-red-600"
+                      ? "text-destructive"
                       : row.status === "update"
-                        ? "text-amber-600"
-                        : "text-green-600"
+                        ? "text-warning"
+                        : "text-success"
                   }
                 >
                   第 {row.row} 行：

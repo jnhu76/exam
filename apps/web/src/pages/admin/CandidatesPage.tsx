@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import {
   parseImportCsv,
@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Plus, Upload, Users } from "lucide-react";
+import { Pencil, Plus, Search, Upload, Users } from "lucide-react";
 
 interface Field {
   id: string;
@@ -69,6 +69,7 @@ export function CandidatesPage() {
   const [csv, setCsv] = useState("");
   const [importSummary, setImportSummary] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -86,6 +87,17 @@ export function CandidatesPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  const filteredCandidates = useMemo(
+    () =>
+      search
+        ? candidates.filter(
+            (c) =>
+              c.name.toLowerCase().includes(search.toLowerCase()) ||
+              c.username.toLowerCase().includes(search.toLowerCase()),
+          )
+        : candidates,
+    [candidates, search],
+  );
   function open(candidate?: Candidate) {
     setEditing(candidate ?? null);
     setUsername(candidate?.username ?? "");
@@ -235,59 +247,78 @@ export function CandidatesPage() {
           </div>
         }
       />
-      {candidates.length === 0 ? (
+      {filteredCandidates.length === 0 && search ? (
+        <EmptyState
+          icon={<Search className="size-8" />}
+          title="未找到匹配的考生"
+          description={`没有符合"${search}"的考生`}
+        />
+      ) : filteredCandidates.length === 0 ? (
         <EmptyState
           icon={<Users className="size-8" />}
           title="暂无考生"
           description="可以手动新增或通过 CSV 批量导入。"
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>用户名</TableHead>
-              <TableHead>姓名</TableHead>
-              {fields.map((field) => (
-                <TableHead key={field.id}>{field.label}</TableHead>
-              ))}
-              <TableHead>状态</TableHead>
-              <TableHead>操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {candidates.map((candidate) => (
-              <TableRow key={candidate.id}>
-                <TableCell>{candidate.username}</TableCell>
-                <TableCell>{candidate.name}</TableCell>
+        <>
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="搜索考生姓名或用户名..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>用户名</TableHead>
+                <TableHead>姓名</TableHead>
                 {fields.map((field) => (
-                  <TableCell key={field.id}>
-                    {String(candidate.fields[field.name] ?? "-")}
-                  </TableCell>
+                  <TableHead key={field.id}>{field.label}</TableHead>
                 ))}
-                <TableCell>{candidate.isActive ? "启用" : "禁用"}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => open(candidate)}
-                      aria-label="编辑考生"
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void toggle(candidate)}
-                    >
-                      {candidate.isActive ? "禁用" : "启用"}
-                    </Button>
-                  </div>
-                </TableCell>
+                <TableHead>状态</TableHead>
+                <TableHead>操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filteredCandidates.map((candidate) => (
+                <TableRow key={candidate.id}>
+                  <TableCell>{candidate.username}</TableCell>
+                  <TableCell>{candidate.name}</TableCell>
+                  {fields.map((field) => (
+                    <TableCell key={field.id}>
+                      {String(candidate.fields[field.name] ?? "-")}
+                    </TableCell>
+                  ))}
+                  <TableCell>{candidate.isActive ? "启用" : "禁用"}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => open(candidate)}
+                        aria-label="编辑考生"
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void toggle(candidate)}
+                      >
+                        {candidate.isActive ? "禁用" : "启用"}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -337,7 +368,7 @@ export function CandidatesPage() {
               </div>
             ))}
           </div>
-          {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               取消

@@ -7,6 +7,7 @@ import { StatsCard } from "@/components/shared/StatsCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,7 +18,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ClipboardList, Eye } from "lucide-react";
+import {
+  ClipboardList,
+  Eye,
+  BookOpen,
+  Users,
+  CalendarCheck,
+  Activity,
+} from "lucide-react";
 
 const statusLabels: Record<string, string> = {
   draft: "草稿",
@@ -27,16 +35,24 @@ const statusLabels: Record<string, string> = {
   archived: "已归档",
 };
 
-const statusVariant: Record<
-  string,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  draft: "outline",
-  published: "default",
-  open: "default",
-  closed: "secondary",
-  archived: "outline",
-};
+function StatusBadge({ status }: { status: string }) {
+  const label = statusLabels[status] ?? status;
+  if (status === "open")
+    return (
+      <Badge className="bg-success/10 text-success hover:bg-success/20">
+        {label}
+      </Badge>
+    );
+  if (status === "published")
+    return (
+      <Badge className="bg-primary/10 text-primary hover:bg-primary/20">
+        {label}
+      </Badge>
+    );
+  if (status === "closed") return <Badge variant="secondary">{label}</Badge>;
+  if (status === "archived") return <Badge variant="outline">{label}</Badge>;
+  return <Badge variant="outline">{label}</Badge>;
+}
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -79,61 +95,79 @@ export function DashboardPage() {
       <PageHeader title="仪表盘" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard label="题目总数" value={data?.totalQuestions ?? 0} />
-        <StatsCard label="考试进行中" value={data?.activeExams ?? 0} />
-        <StatsCard label="考生总数" value={data?.totalCandidates ?? 0} />
-        <StatsCard label="今日考试" value={data?.todayExams ?? 0} />
+        <StatsCard
+          label="题目总数"
+          value={data?.totalQuestions ?? 0}
+          icon={<BookOpen className="size-5" />}
+        />
+        <StatsCard
+          label="考试进行中"
+          value={data?.activeExams ?? 0}
+          icon={<Activity className="size-5" />}
+        />
+        <StatsCard
+          label="考生总数"
+          value={data?.totalCandidates ?? 0}
+          icon={<Users className="size-5" />}
+        />
+        <StatsCard
+          label="今日考试"
+          value={data?.todayExams ?? 0}
+          icon={<CalendarCheck className="size-5" />}
+        />
       </div>
 
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">近期考试</h2>
-        {!data?.recentExams || data.recentExams.length === 0 ? (
-          <EmptyState
-            icon={<ClipboardList className="size-10" />}
-            title="暂无考试"
-            description="还没有创建任何考试"
-            action={
-              <Button onClick={() => navigate("/admin/exams/new")}>
-                创建考试
-              </Button>
-            }
-          />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>考试名称</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>参加人数</TableHead>
-                <TableHead>操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.recentExams.map((exam) => (
-                <TableRow key={exam.id}>
-                  <TableCell className="font-medium">{exam.title}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariant[exam.status] ?? "outline"}>
-                      {statusLabels[exam.status] ?? exam.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{exam.participantCount}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`查看考试 ${exam.title}`}
-                      onClick={() => navigate(`/admin/exams/${exam.id}`)}
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                  </TableCell>
+      <Card className="shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">近期考试</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!data?.recentExams || data.recentExams.length === 0 ? (
+            <EmptyState
+              icon={<ClipboardList className="size-10" />}
+              title="暂无考试"
+              description="还没有创建任何考试"
+              action={
+                <Button onClick={() => navigate("/admin/exams/new")}>
+                  创建考试
+                </Button>
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>考试名称</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>参加人数</TableHead>
+                  <TableHead className="w-16">操作</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+              </TableHeader>
+              <TableBody>
+                {data.recentExams.map((exam) => (
+                  <TableRow key={exam.id}>
+                    <TableCell className="font-medium">{exam.title}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={exam.status} />
+                    </TableCell>
+                    <TableCell>{exam.participantCount}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`查看考试 ${exam.title}`}
+                        onClick={() => navigate(`/admin/exams/${exam.id}`)}
+                      >
+                        <Eye className="size-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
