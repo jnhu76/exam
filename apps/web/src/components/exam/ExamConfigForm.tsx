@@ -11,6 +11,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { FieldError } from "@/components/shared/FieldError";
 
 interface QuestionScore {
   id: string;
@@ -66,6 +67,11 @@ export function ExamConfigForm({
   const hasQuestions = data.questionIds.length > 0;
   const showWarning =
     hasQuestions && manualTotalScore && data.totalScore !== computedTotal;
+  const timeError =
+    data.openAt && data.closeAt
+      ? new Date(data.closeAt) <= new Date(data.openAt)
+      : false;
+  const scoreError = data.totalScore > 0 && data.passingScore > data.totalScore;
 
   useEffect(() => {
     if (
@@ -181,6 +187,11 @@ export function ExamConfigForm({
               />
             </div>
           </div>
+          {timeError && (
+            <p role="alert" className="text-xs text-destructive">
+              结束时间必须晚于开始时间
+            </p>
+          )}
           <div className="space-y-2">
             <Label>考试时长（分钟）</Label>
             <Input
@@ -260,6 +271,11 @@ export function ExamConfigForm({
               />
             </div>
           </div>
+          {scoreError && (
+            <p role="alert" className="text-xs text-destructive">
+              及格分不能超过总分（{data.passingScore} &gt; {data.totalScore}）
+            </p>
+          )}
         </CardContent>
       </Card>
 

@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Pencil, Plus, Search, Upload, Users } from "lucide-react";
+import { FieldError } from "@/components/shared/FieldError";
 
 interface Field {
   id: string;
@@ -70,6 +71,7 @@ export function CandidatesPage() {
   const [importSummary, setImportSummary] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -112,6 +114,7 @@ export function CandidatesPage() {
       ),
     );
     setSaveError(null);
+    setFieldErrors({});
     setDialogOpen(true);
   }
   function payloadFields() {
@@ -124,9 +127,18 @@ export function CandidatesPage() {
       ]),
     );
   }
+  function validate() {
+    const errors: Record<string, string> = {};
+    if (!name.trim()) errors.name = "请输入姓名";
+    if (!editing) {
+      if (!username.trim()) errors.username = "请输入用户名";
+      if (password.length < 6) errors.password = "密码至少6位";
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
   async function save() {
-    if (!name.trim() || (!editing && (!username.trim() || password.length < 6)))
-      return;
+    if (!validate()) return;
     setSaveError(null);
     try {
       if (editing)
@@ -332,22 +344,34 @@ export function CandidatesPage() {
                   <Label>用户名</Label>
                   <Input
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (fieldErrors.username) setFieldErrors((prev) => ({ ...prev, username: "" }));
+                    }}
                   />
+                  <FieldError>{fieldErrors.username}</FieldError>
                 </div>
                 <div>
                   <Label>初始密码</Label>
                   <Input
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: "" }));
+                    }}
                   />
+                  <FieldError>{fieldErrors.password}</FieldError>
                 </div>
               </>
             )}
             <div>
               <Label>姓名</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input value={name} onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
+              }} />
+              <FieldError>{fieldErrors.name}</FieldError>
             </div>
             {fields.map((field) => (
               <div key={field.id}>

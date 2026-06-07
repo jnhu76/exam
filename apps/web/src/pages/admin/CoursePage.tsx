@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { BookOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { FieldError } from "@/components/shared/FieldError";
 
 interface CourseRow {
   id: string;
@@ -53,6 +54,7 @@ export function CoursePage() {
   const [formCode, setFormCode] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const loadCourses = useCallback(async (opts?: { showLoading?: boolean }) => {
     if (opts?.showLoading !== false) setIsLoading(true);
@@ -76,6 +78,7 @@ export function CoursePage() {
     setFormName("");
     setFormCode("");
     setFormDescription("");
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
@@ -84,10 +87,20 @@ export function CoursePage() {
     setFormName(course.name);
     setFormCode(course.code);
     setFormDescription(course.description);
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
+  function validate() {
+    const errors: Record<string, string> = {};
+    if (!formName.trim()) errors.name = "请输入课程名称";
+    if (!formCode.trim()) errors.code = "请输入课程代码";
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   async function handleSave() {
+    if (!validate()) return;
     setSaving(true);
     try {
       if (editingCourse) {
@@ -206,18 +219,26 @@ export function CoursePage() {
               <Input
                 id="course-name"
                 value={formName}
-                onChange={(e) => setFormName(e.target.value)}
+                onChange={(e) => {
+                  setFormName(e.target.value);
+                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
+                }}
                 placeholder="请输入课程名称"
               />
+              <FieldError>{fieldErrors.name}</FieldError>
             </div>
             <div className="space-y-2">
               <Label htmlFor="course-code">课程代码</Label>
               <Input
                 id="course-code"
                 value={formCode}
-                onChange={(e) => setFormCode(e.target.value)}
+                onChange={(e) => {
+                  setFormCode(e.target.value);
+                  if (fieldErrors.code) setFieldErrors((prev) => ({ ...prev, code: "" }));
+                }}
                 placeholder="请输入课程代码"
               />
+              <FieldError>{fieldErrors.code}</FieldError>
             </div>
             <div className="space-y-2">
               <Label htmlFor="course-desc">描述</Label>
