@@ -1,7 +1,7 @@
 # Job ID: J01
 # Branch: feat/ui-foundation
-# Status: todo
-# Owner:
+# Status: done
+# Owner: agent
 # Last Updated: 2026-06-07
 
 ## Goal
@@ -69,14 +69,14 @@ Establish the visual foundation: finalize design tokens in CSS, configure the sy
 
 ## Acceptance Criteria
 
-- [ ] Color tokens updated per `02-design-tokens.md`
-- [ ] Success and warning tokens added
-- [ ] Font stack declared with Chinese-friendly system fonts
-- [ ] EmptyState component exists and renders
-- [ ] ErrorState component exists and renders
-- [ ] All existing tests pass
-- [ ] `pnpm verify` passes
-- [ ] No visual regressions (existing pages still functional)
+- [x] Color tokens updated per `02-design-tokens.md`
+- [x] Success and warning tokens added
+- [x] Font stack declared with Chinese-friendly system fonts
+- [x] EmptyState component exists and renders
+- [x] ErrorState component exists and renders
+- [x] All existing tests pass
+- [x] `pnpm verify` passes
+- [x] No visual regressions (existing pages still functional)
 
 ## Verification Commands
 
@@ -86,6 +86,24 @@ pnpm --filter web typecheck
 pnpm test
 pnpm verify
 ```
+
+## Verification Results
+
+- `pnpm verify` passes (format:check, lint, lint:copy, lint:arch, typecheck, test, coverage, build)
+- 186 web tests pass, 361+ total tests pass
+- Build succeeds (51.90 kB CSS, 572.37 kB JS)
+- Token changes:
+  - Primary: `oklch(0.6432 0.2045 264.6062)` → `oklch(0.5 0.16 255)` (darker, muted blue)
+  - Foreground: `oklch(0.1455 0 0)` → `oklch(0.2 0 0)` (softened near-black)
+  - Added: `--color-success: oklch(0.62 0.17 150)`
+  - Added: `--color-warning: oklch(0.78 0.14 75)`
+  - Font stack: system fonts with PingFang SC, Microsoft YaHei, Noto Sans SC
+
+## Modified Files
+
+- `apps/web/src/index.css` — tokens + font stack
+- `docs/ui/02-design-tokens.md` — finalized oklch values
+- `docs/ui/jobs/J01-ui-foundation.md` — status update
 
 ## Risks
 

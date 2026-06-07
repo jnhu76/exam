@@ -6,30 +6,33 @@ All colors use oklch in Tailwind v4 `@theme` block. The palette is intentionally
 
 ### Semantic Tokens
 
-| Token | Purpose | Suggested oklch |
-|-------|---------|-----------------|
-| `--color-background` | Page background | Very light gray, ~0.98 lightness |
-| `--color-card` | Card/surface background | White or near-white |
-| `--color-foreground` | Primary text | Near-black, ~0.20 lightness (not pure black) |
-| `--color-muted-foreground` | Secondary text | Gray, ~0.55 lightness |
-| `--color-border` | Borders, dividers | Light gray, ~0.90 lightness |
-| `--color-primary` | Primary actions, links | Deliberate blue (not default shadcn blue) |
-| `--color-primary-foreground` | Text on primary bg | White |
-| `--color-destructive` | Delete, fail, error | Red |
-| `--color-success` | Pass, completed, saved | Green (to be defined) |
-| `--color-warning` | Caution, partial | Amber (to be defined) |
+| Token | Purpose | oklch Value |
+|-------|---------|-------------|
+| `--color-background` | Page background | `oklch(0.9857 0 0)` |
+| `--color-card` | Card/surface background | `oklch(1 0 0)` |
+| `--color-foreground` | Primary text | `oklch(0.20 0 0)` |
+| `--color-muted-foreground` | Secondary text | `oklch(0.551 0 0)` |
+| `--color-border` | Borders, dividers | `oklch(0.9235 0 0)` |
+| `--color-primary` | Primary actions, links | `oklch(0.50 0.16 255)` |
+| `--color-primary-foreground` | Text on primary bg | `oklch(1 0 0)` |
+| `--color-destructive` | Delete, fail, error | `oklch(0.631 0.2081 25.3312)` |
+| `--color-destructive-foreground` | Text on destructive bg | `oklch(1 0 0)` |
+| `--color-success` | Pass, completed, saved | `oklch(0.62 0.17 150)` |
+| `--color-success-foreground` | Text on success bg | `oklch(1 0 0)` |
+| `--color-warning` | Caution, partial | `oklch(0.78 0.14 75)` |
+| `--color-warning-foreground` | Text on warning bg | `oklch(0.20 0 0)` |
 
 ### Color Rules
 
-- No large areas of `#000000`. Primary text uses near-black (oklch ~0.20).
+- No large areas of `#000000`. Primary text uses near-black (oklch 0.20).
 - Icons default to `muted-foreground` gray, not black.
 - Active/selected states use `primary` color.
 - Destructive actions (delete, fail) use `destructive` red.
-- Success/warning tokens must be added to `@theme` — currently missing.
+- Success uses `success` green. Warning uses `warning` amber.
 
 ### Theme Customization
 
-The primary color is intentionally neutral for a multi-tenant platform. J01 will finalize the exact oklch values. Organizations can override `productName` and display settings via the Settings page, but the color theme remains consistent.
+The primary color is `oklch(0.50 0.16 255)` — a darker, muted blue that feels administrative rather than SaaS-generic. Organizations can override `productName` and display settings via the Settings page, but the color theme remains consistent.
 
 ## Typography
 
