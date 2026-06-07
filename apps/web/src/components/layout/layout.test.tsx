@@ -92,7 +92,9 @@ describe("AppSidebar role visibility", () => {
       />,
     );
     expect(screen.queryByText("平台设置")).not.toBeInTheDocument();
-    expect(screen.queryByText("管理")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("管理", { selector: "p" }),
+    ).not.toBeInTheDocument();
   });
 
   it("hides management section for Candidate role", () => {
@@ -156,7 +158,9 @@ describe("AppSidebar role visibility", () => {
       <AppSidebar user={admin} collapsed={true} onLogout={() => {}} />,
     );
     expect(screen.queryByText("题库")).not.toBeInTheDocument();
-    expect(screen.queryByText("管理")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("管理", { selector: "p" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("退出")).not.toBeInTheDocument();
   });
 

@@ -1,7 +1,7 @@
 # Job ID: J02
 # Branch: feat/ui-shell-layout
-# Status: todo
-# Owner:
+# Status: done
+# Owner: agent
 # Last Updated: 2026-06-07
 
 ## Goal
@@ -81,15 +81,15 @@ Refactor AppSidebar, topbar area, and AdminLayout to match `docs/ui/04-layout-na
 
 ## Acceptance Criteria
 
-- [ ] Sidebar active state is visually distinct (primary bg + text)
-- [ ] Sidebar has grouped navigation with labels
-- [ ] Topbar does not repeat brand name
-- [ ] Topbar shows page title
-- [ ] Layout dimensions match spec (w-56, h-14, p-6)
-- [ ] ExamLayout has minimal header
-- [ ] ConfirmDialog exists (if was missing)
-- [ ] All existing tests pass
-- [ ] `pnpm verify` passes
+- [x] Sidebar active state is visually distinct (primary bg + text)
+- [x] Sidebar has grouped navigation with labels
+- [x] Topbar does not repeat brand name
+- [x] Topbar shows page title
+- [x] Layout dimensions match spec (w-56, h-14, p-6)
+- [x] ExamLayout has minimal header
+- [x] ConfirmDialog exists (already existed)
+- [x] All existing tests pass
+- [x] `pnpm verify` passes
 
 ## Verification Commands
 
@@ -98,6 +98,28 @@ pnpm --filter web typecheck
 pnpm test
 pnpm verify
 ```
+
+## Verification Results
+
+- `pnpm verify` passes
+- 186 web tests pass (2 test assertions updated for avatar text collision)
+- Build succeeds (52.19 kB CSS, 577.99 kB JS)
+- Sidebar: active state `bg-primary/10 text-primary`, group labels `uppercase tracking-wider`,
+  bottom user area with Avatar + name + logout
+- AdminLayout: topbar shows route-based page title instead of brand name,
+  background changed to `bg-background`
+- ExamLayout: added Avatar with initials, active nav links use `text-primary`
+- PageHeader: added optional `description` prop per spec
+- ConfirmDialog: already existed, no changes needed
+
+## Modified Files
+
+- `apps/web/src/components/layout/AppSidebar.tsx` — active state, group labels, avatar, separators
+- `apps/web/src/components/layout/AdminLayout.tsx` — remove brand, add page title
+- `apps/web/src/components/layout/ExamLayout.tsx` — avatar, token update
+- `apps/web/src/components/shared/PageHeader.tsx` — add description prop
+- `apps/web/src/components/layout/layout.test.tsx` — fix avatar text collision in assertions
+- `docs/ui/jobs/J02-ui-shell-layout.md` — status update
 
 ## Risks
 

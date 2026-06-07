@@ -19,7 +19,9 @@ import {
   Users,
 } from "lucide-react";
 import { NavLink } from "react-router";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { BrandHeader } from "./BrandHeader";
 
@@ -74,8 +76,8 @@ function SidebarLink({
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
-          "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm hover:bg-accent",
-          isActive && "bg-accent font-medium",
+          "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+          isActive && "bg-primary/10 font-medium text-primary",
         )
       }
     >
@@ -103,15 +105,17 @@ export function AppSidebar({
     [user.role],
   );
 
+  const initials = user.name.slice(0, 2);
+
   return (
     <aside
       data-testid="app-sidebar"
       className={cn(
-        "flex min-h-screen shrink-0 flex-col border-r bg-card p-2 transition-[width]",
+        "flex min-h-screen shrink-0 flex-col border-r bg-card transition-[width]",
         collapsed ? "w-14" : "w-56",
       )}
     >
-      <div className="flex min-h-12 items-center justify-between px-2">
+      <div className="flex min-h-14 items-center justify-between px-2">
         <BrandHeader compact={collapsed} />
         {onCollapse && !collapsed && (
           <Button
@@ -121,7 +125,7 @@ export function AppSidebar({
             aria-label="折叠侧栏"
             onClick={onCollapse}
           >
-            <ChevronLeft aria-hidden="true" />
+            <ChevronLeft className="size-4" aria-hidden="true" />
           </Button>
         )}
       </div>
@@ -131,21 +135,23 @@ export function AppSidebar({
           type="button"
           variant="ghost"
           size="icon"
+          className="mx-auto"
           aria-label="展开侧栏"
           onClick={onCollapse}
         >
-          <ChevronRight aria-hidden="true" />
+          <ChevronRight className="size-4" aria-hidden="true" />
         </Button>
       )}
 
-      <nav className="flex-1 space-y-4 py-4">
-        {groups.map((group) => (
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
+        {groups.map((group, gi) => (
           <section key={group.label}>
             {!collapsed && (
-              <p className="px-3 pb-1 text-xs text-muted-foreground">
+              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">
                 {group.label}
               </p>
             )}
+            {gi > 0 && collapsed && <Separator className="my-2" />}
             {group.items.map((item) => (
               <SidebarLink key={item.to} collapsed={collapsed} item={item} />
             ))}
@@ -154,8 +160,11 @@ export function AppSidebar({
         {showManagement && (
           <section>
             {!collapsed && (
-              <p className="px-3 pb-1 text-xs text-muted-foreground">管理</p>
+              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">
+                管理
+              </p>
             )}
+            {collapsed && <Separator className="my-2" />}
             {management.map((item) => (
               <SidebarLink key={item.to} collapsed={collapsed} item={item} />
             ))}
@@ -163,19 +172,32 @@ export function AppSidebar({
         )}
       </nav>
 
-      <div className="border-t pt-2">
-        {!collapsed && (
-          <p className="truncate px-3 py-2 text-sm">{user.name}</p>
-        )}
+      <Separator />
+
+      <div className="p-2">
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            collapsed ? "justify-center" : "px-1",
+          )}
+        >
+          <Avatar className="size-8">
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+          {!collapsed && (
+            <span className="flex-1 truncate text-sm">{user.name}</span>
+          )}
+        </div>
         <Button
           type="button"
           variant="ghost"
-          className="w-full justify-start"
+          size="sm"
+          className="mt-1 w-full justify-center"
           aria-label="退出登录"
           onClick={onLogout}
         >
-          <LogOut aria-hidden="true" />
-          {!collapsed && <span>退出</span>}
+          <LogOut className="size-4" aria-hidden="true" />
+          {!collapsed && <span className="ml-2">退出</span>}
         </Button>
       </div>
     </aside>
