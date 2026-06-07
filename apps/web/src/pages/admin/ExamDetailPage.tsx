@@ -279,7 +279,7 @@ export function ExamDetailPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               状态
@@ -289,7 +289,7 @@ export function ExamDetailPage() {
             <Badge>{statusLabels[exam.status] ?? exam.status}</Badge>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               考试时长
@@ -299,7 +299,7 @@ export function ExamDetailPage() {
             <p className="text-2xl font-bold">{exam.durationMinutes}分钟</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               及格分
@@ -311,7 +311,7 @@ export function ExamDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               题目数量
@@ -323,7 +323,7 @@ export function ExamDetailPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">考试配置</CardTitle>
         </CardHeader>
@@ -346,7 +346,7 @@ export function ExamDetailPage() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               参与人数
@@ -356,7 +356,7 @@ export function ExamDetailPage() {
             <p className="text-2xl font-bold">{exam.stats.participantCount}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               已完成
@@ -366,7 +366,7 @@ export function ExamDetailPage() {
             <p className="text-2xl font-bold">{exam.stats.completedCount}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               已通过
@@ -378,7 +378,7 @@ export function ExamDetailPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">考生资格</CardTitle>
           <Button size="sm" onClick={handleOpenAddDialog}>

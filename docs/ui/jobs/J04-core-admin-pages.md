@@ -1,7 +1,7 @@
 # Job ID: J04
 # Branch: feat/ui-core-admin-pages
-# Status: todo
-# Owner:
+# Status: done
+# Owner: agent
 # Last Updated: 2026-06-07
 
 ## Goal
@@ -87,15 +87,26 @@ For each page:
 
 ## Acceptance Criteria
 
-- [ ] All 12 admin page groups refactored
-- [ ] Every page has PageHeader with title + actions
-- [ ] Tables follow J03 pattern
-- [ ] Forms have consistent spacing and error display
-- [ ] Status badges use semantic colors
-- [ ] All three states handled on list pages
-- [ ] No hardcoded scenario-specific text
-- [ ] All existing tests pass
-- [ ] `pnpm verify` passes
+- [x] All 12 admin page groups refactored
+- [x] Every page has PageHeader with title + actions
+- [x] Tables follow J03 pattern
+- [x] Forms have consistent spacing and error display
+- [x] Status badges use semantic colors
+- [x] All three states handled on list pages
+- [x] No hardcoded scenario-specific text
+- [x] All existing tests pass
+- [x] `pnpm verify` passes
+
+## Changes Applied
+
+| Page | Changes |
+|------|---------|
+| SystemHealthPage | `text-green-600`/`text-yellow-600`/`text-red-600` → `text-success`/`text-warning`/`text-destructive`; removed icon-based status display; `shadow-sm` on MetricCard |
+| QuestionImportPage | `text-green-500`/`text-yellow-500`/`text-red-500` → `text-success`/`text-warning`/`text-destructive` for status icons |
+| ScoreListPage | Pass/fail badges use `bg-success/10 text-success` / `bg-destructive/10 text-destructive`; `shadow-sm` on all Cards |
+| ExamDetailPage | `shadow-sm` on all Cards (stat cards, config card, stats grid, enrollments card) |
+
+Pages with no changes needed (already followed patterns): ExamPage, ExamCreatePage, QuestionPage, QuestionEditPage, UsersPage, OrganizationsPage, SettingsPage, CandidateFieldsPage, CoursePage
 
 ## Verification Commands
 
