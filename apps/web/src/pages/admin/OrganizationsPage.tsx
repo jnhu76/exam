@@ -181,7 +181,8 @@ export function OrganizationsPage() {
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
-                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
+                  if (fieldErrors.name)
+                    setFieldErrors((prev) => ({ ...prev, name: "" }));
                 }}
               />
               <FieldError>{fieldErrors.name}</FieldError>
@@ -192,7 +193,8 @@ export function OrganizationsPage() {
                 value={displayName}
                 onChange={(e) => {
                   setDisplayName(e.target.value);
-                  if (fieldErrors.displayName) setFieldErrors((prev) => ({ ...prev, displayName: "" }));
+                  if (fieldErrors.displayName)
+                    setFieldErrors((prev) => ({ ...prev, displayName: "" }));
                 }}
               />
               <FieldError>{fieldErrors.displayName}</FieldError>
@@ -204,7 +206,8 @@ export function OrganizationsPage() {
                 disabled={!!editing}
                 onChange={(e) => {
                   setSlug(e.target.value);
-                  if (fieldErrors.slug) setFieldErrors((prev) => ({ ...prev, slug: "" }));
+                  if (fieldErrors.slug)
+                    setFieldErrors((prev) => ({ ...prev, slug: "" }));
                 }}
               />
             </div>

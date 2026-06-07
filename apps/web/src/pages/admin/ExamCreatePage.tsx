@@ -136,7 +136,11 @@ export function ExamCreatePage() {
     const errors: Record<string, string> = {};
     if (!config.title.trim()) errors.title = "请输入考试名称";
     if (!config.courseId) errors.courseId = "请选择课程";
-    if (config.openAt && config.closeAt && new Date(config.closeAt) <= new Date(config.openAt)) {
+    if (
+      config.openAt &&
+      config.closeAt &&
+      new Date(config.closeAt) <= new Date(config.openAt)
+    ) {
       errors.time = "结束时间必须晚于开始时间";
     }
     if (config.passingScore > config.totalScore) {

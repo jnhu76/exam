@@ -54,7 +54,8 @@ export function LoginPage() {
                 value={username}
                 onChange={(e) => {
                   setUsername(e.target.value);
-                  if (fieldErrors.username) setFieldErrors((prev) => ({ ...prev, username: "" }));
+                  if (fieldErrors.username)
+                    setFieldErrors((prev) => ({ ...prev, username: "" }));
                 }}
                 disabled={isLoading}
               />
@@ -69,7 +70,8 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: "" }));
+                  if (fieldErrors.password)
+                    setFieldErrors((prev) => ({ ...prev, password: "" }));
                 }}
                 disabled={isLoading}
               />

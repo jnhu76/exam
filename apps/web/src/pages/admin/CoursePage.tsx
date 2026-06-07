@@ -221,7 +221,8 @@ export function CoursePage() {
                 value={formName}
                 onChange={(e) => {
                   setFormName(e.target.value);
-                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
+                  if (fieldErrors.name)
+                    setFieldErrors((prev) => ({ ...prev, name: "" }));
                 }}
                 placeholder="请输入课程名称"
               />
@@ -234,7 +235,8 @@ export function CoursePage() {
                 value={formCode}
                 onChange={(e) => {
                   setFormCode(e.target.value);
-                  if (fieldErrors.code) setFieldErrors((prev) => ({ ...prev, code: "" }));
+                  if (fieldErrors.code)
+                    setFieldErrors((prev) => ({ ...prev, code: "" }));
                 }}
                 placeholder="请输入课程代码"
               />

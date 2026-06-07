@@ -193,7 +193,8 @@ export function UsersPage() {
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
-                      if (fieldErrors.username) setFieldErrors((prev) => ({ ...prev, username: "" }));
+                      if (fieldErrors.username)
+                        setFieldErrors((prev) => ({ ...prev, username: "" }));
                     }}
                   />
                   <FieldError>{fieldErrors.username}</FieldError>
@@ -205,7 +206,8 @@ export function UsersPage() {
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: "" }));
+                      if (fieldErrors.password)
+                        setFieldErrors((prev) => ({ ...prev, password: "" }));
                     }}
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
@@ -218,7 +220,8 @@ export function UsersPage() {
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
-                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
+                  if (fieldErrors.name)
+                    setFieldErrors((prev) => ({ ...prev, name: "" }));
                 }}
               />
               <FieldError>{fieldErrors.name}</FieldError>

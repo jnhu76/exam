@@ -346,7 +346,8 @@ export function CandidatesPage() {
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
-                      if (fieldErrors.username) setFieldErrors((prev) => ({ ...prev, username: "" }));
+                      if (fieldErrors.username)
+                        setFieldErrors((prev) => ({ ...prev, username: "" }));
                     }}
                   />
                   <FieldError>{fieldErrors.username}</FieldError>
@@ -358,7 +359,8 @@ export function CandidatesPage() {
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
-                      if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: "" }));
+                      if (fieldErrors.password)
+                        setFieldErrors((prev) => ({ ...prev, password: "" }));
                     }}
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
@@ -367,10 +369,14 @@ export function CandidatesPage() {
             )}
             <div>
               <Label>姓名</Label>
-              <Input value={name} onChange={(e) => {
-                setName(e.target.value);
-                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: "" }));
-              }} />
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (fieldErrors.name)
+                    setFieldErrors((prev) => ({ ...prev, name: "" }));
+                }}
+              />
               <FieldError>{fieldErrors.name}</FieldError>
             </div>
             {fields.map((field) => (
