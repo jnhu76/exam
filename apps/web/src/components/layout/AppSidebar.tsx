@@ -41,14 +41,14 @@ const groups = [
     label: "题库",
     items: [
       { label: "课程管理", to: "/admin/courses", icon: GraduationCap },
-      { label: "题目管理", to: "/admin/questions", icon: BookOpen },
+      { label: "题目管理", to: "/admin/questions", icon: BookOpen, end: true },
       { label: "题目导入", to: "/admin/questions/import", icon: FileUp },
     ],
   },
   {
     label: "考试",
     items: [
-      { label: "考试管理", to: "/admin/exams", icon: ClipboardList },
+      { label: "考试管理", to: "/admin/exams", icon: ClipboardList, end: true },
       { label: "成绩查询", to: "/admin/results", icon: Gauge },
     ],
   },
@@ -67,12 +67,13 @@ function SidebarLink({
   item,
 }: {
   collapsed: boolean;
-  item: { label: string; to: string; icon: typeof BookOpen };
+  item: { label: string; to: string; icon: typeof BookOpen; end?: boolean };
 }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
+      end={item.end}
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
