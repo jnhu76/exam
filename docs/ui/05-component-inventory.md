@@ -50,10 +50,12 @@ All in `apps/web/src/components/ui/`. Do not hand-edit.
 | ImportWizard | `components/shared/ImportWizard.tsx` | Generic import dialog (upload→preview→confirm) | ✅ | Token update | J03 |
 | PageHeader | `components/shared/PageHeader.tsx` | Page title + action area | ✅ | Verify tokens | J02 |
 | StatsCard | `components/shared/StatsCard.tsx` | Dashboard statistics card | ✅ | Token update | J03 |
-| EmptyState | (needs check) | Empty state placeholder | ❓ | Create if missing | J01 |
-| ErrorState | (needs check) | Error state with retry | ❓ | Create if missing | J01 |
-| ConfirmDialog | (needs check) | Confirmation dialog wrapper | ❓ | Create if missing | J02 |
-| ConnectionIndicator | (needs check) | Connection status indicator | ❓ | Create if needed | J05 |
+| EmptyState | `components/shared/EmptyState.tsx` | Empty state placeholder with icon, title, description | ✅ | Token update (border-dashed, spacing) | J01 |
+| ErrorState | `components/shared/ErrorState.tsx` | Error state with retry button | ✅ | Token update | J01 |
+| LoadingState | `components/shared/LoadingState.tsx` | Spinner with label, aria-busy | ✅ | Token update | J01 |
+| ConfirmDialog | `components/shared/ConfirmDialog.tsx` | AlertDialog wrapper with destructive variant | ✅ | Token update | J02 |
+| ConnectionIndicator | `components/shared/ConnectionIndicator.tsx` | Connection status dot + label (connected/degraded/offline) | ✅ | Use success/warning/destructive tokens instead of hardcoded colors | J05 |
+| FileUpload | `components/shared/FileUpload.tsx` | CSV file upload button (hidden input trigger) | ✅ | Token update | J03 |
 
 ### Question
 
@@ -69,11 +71,13 @@ All in `apps/web/src/components/ui/`. Do not hand-edit.
 | QuestionNav | `components/exam/QuestionNav.tsx` | Answer page left panel question navigation | ✅ | State colors, layout | J05 |
 | ExamTimer | `components/exam/ExamTimer.tsx` | Countdown display | ✅ | Color for <5min | J05 |
 | SaveIndicator | `components/exam/SaveIndicator.tsx` | Answer save status | ✅ | Token update | J05 |
-| SingleChoiceInput | `components/exam/` | Single choice answer | ✅ | Token update | J05 |
-| MultipleChoiceInput | `components/exam/` | Multiple choice answer | ✅ | Token update | J05 |
-| FillBlankInput | `components/exam/` | Fill blank answer | ✅ | Token update | J05 |
-| TrueFalseInput | `components/exam/` | True/false answer | ✅ | Token update | J05 |
-| ExamConfigForm | `components/exam/` | Exam configuration form | ✅ | Token update | J04 |
+| SingleChoiceInput | `components/exam/SingleChoiceInput.tsx` | Single choice answer | ✅ | Token update | J05 |
+| MultipleChoiceInput | `components/exam/MultipleChoiceInput.tsx` | Multiple choice answer | ✅ | Token update | J05 |
+| FillBlankInput | `components/exam/FillBlankInput.tsx` | Fill blank answer | ✅ | Token update | J05 |
+| TrueFalseInput | `components/exam/TrueFalseInput.tsx` | True/false answer | ✅ | Token update | J05 |
+| ExamConfigForm | `components/exam/ExamConfigForm.tsx` | Exam configuration form | ✅ | Token update | J04 |
+| QuestionRenderer | `components/exam/QuestionRenderer.tsx` | Renders question by type during exam | ✅ | Token update | J05 |
+| EnrollmentPicker | `components/exam/EnrollmentPicker.tsx` | Exam enrollment candidate picker | ✅ | Token update | J04 |
 
 ### Settings
 
@@ -85,8 +89,4 @@ All in `apps/web/src/components/ui/`. Do not hand-edit.
 
 | Component | Purpose | Job |
 |-----------|---------|-----|
-| EmptyState | Standardized empty state with icon, message, CTA | J01 |
-| ErrorState | Error state with message and retry | J01 |
-| ConfirmDialog | AlertDialog wrapper with consistent styling | J02 |
-| FileUpload | Drag-and-drop file upload for imports | J04 |
-| StatusBadge | Pass/fail/pending status badges | J03 |
+| StatusBadge | Pass/fail/pending status badges with semantic colors | J03 |

@@ -2,24 +2,28 @@
 
 @theme inline {
   --color-background: oklch(0.9857 0 0);
-  --color-foreground: oklch(0.1455 0 0);
+  --color-foreground: oklch(0.2 0 0);
   --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.1455 0 0);
+  --color-card-foreground: oklch(0.2 0 0);
   --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.1455 0 0);
-  --color-primary: oklch(0.6432 0.2045 264.6062);
+  --color-popover-foreground: oklch(0.2 0 0);
+  --color-primary: oklch(0.5 0.16 255);
   --color-primary-foreground: oklch(1 0 0);
   --color-secondary: oklch(0.9618 0 0);
-  --color-secondary-foreground: oklch(0.2058 0 0);
+  --color-secondary-foreground: oklch(0.2 0 0);
   --color-muted: oklch(0.9618 0 0);
   --color-muted-foreground: oklch(0.551 0 0);
   --color-accent: oklch(0.9618 0 0);
-  --color-accent-foreground: oklch(0.2058 0 0);
+  --color-accent-foreground: oklch(0.2 0 0);
   --color-destructive: oklch(0.631 0.2081 25.3312);
   --color-destructive-foreground: oklch(1 0 0);
+  --color-success: oklch(0.62 0.17 150);
+  --color-success-foreground: oklch(1 0 0);
+  --color-warning: oklch(0.78 0.14 75);
+  --color-warning-foreground: oklch(0.2 0 0);
   --color-border: oklch(0.9235 0 0);
   --color-input: oklch(0.9235 0 0);
-  --color-ring: oklch(0.6432 0.2045 264.6062);
+  --color-ring: oklch(0.5 0.16 255);
 }
 
 * {
@@ -34,4 +38,7 @@ body,
 
 body {
   @apply antialiased;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", sans-serif;
 }

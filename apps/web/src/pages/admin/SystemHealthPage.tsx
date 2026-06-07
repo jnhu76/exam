@@ -11,14 +11,12 @@ import { Activity, Database, HardDrive, RefreshCw } from "lucide-react";
 
 type HealthStatus = SystemHealthResponse["status"];
 
-const statusConfig: Record<
-  HealthStatus,
-  { label: string; color: string; icon: string }
-> = {
-  ok: { label: "正常", color: "text-green-600", icon: "✓" },
-  degraded: { label: "警告", color: "text-yellow-600", icon: "⚠" },
-  critical: { label: "严重", color: "text-red-600", icon: "✗" },
-};
+const statusConfig: Record<HealthStatus, { label: string; className: string }> =
+  {
+    ok: { label: "正常", className: "text-success" },
+    degraded: { label: "警告", className: "text-warning" },
+    critical: { label: "严重", className: "text-destructive" },
+  };
 
 const REFRESH_INTERVAL_MS = 10_000;
 
@@ -84,10 +82,9 @@ export function SystemHealthPage() {
           <span
             className={cn(
               "flex items-center gap-1 text-sm font-medium",
-              statusView.color,
+              statusView.className,
             )}
           >
-            <span aria-hidden="true">{statusView.icon}</span>
             {statusView.label}
           </span>
           <Button
@@ -146,7 +143,7 @@ function MetricCard({
 }) {
   const config = statusConfig[status];
   return (
-    <Card>
+    <Card className="shadow-sm">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           {icon}
@@ -161,10 +158,9 @@ function MetricCard({
         <p
           className={cn(
             "mt-1 flex items-center gap-1 text-xs font-medium",
-            config.color,
+            config.className,
           )}
         >
-          <span aria-hidden="true">{config.icon}</span>
           {config.label}
         </p>
       </CardContent>

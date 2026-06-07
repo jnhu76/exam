@@ -29,7 +29,7 @@ export function ExamTimer({
 
   return (
     <span
-      className={`font-mono text-lg font-bold ${isLow ? "text-red-600" : ""}`}
+      className={`font-mono text-lg font-bold ${isLow ? "text-destructive" : ""}`}
     >
       {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
     </span>

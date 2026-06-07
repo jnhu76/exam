@@ -30,7 +30,7 @@ export function SaveIndicator({
 
   if (effectiveStatus === "saved") {
     return (
-      <span className="inline-flex items-center gap-1 text-sm text-green-600">
+      <span className="inline-flex items-center gap-1 text-sm text-success">
         <CircleCheck className="size-4" aria-hidden="true" />
         已保存
       </span>
@@ -38,7 +38,7 @@ export function SaveIndicator({
   }
 
   return (
-    <span className="inline-flex items-center gap-1 text-sm text-red-600">
+    <span className="inline-flex items-center gap-1 text-sm text-destructive">
       <TriangleAlert className="size-4" aria-hidden="true" />
       保存失败
     </span>

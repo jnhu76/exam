@@ -47,7 +47,7 @@ function ExamCard({
   onResult: (attemptId: string) => void;
 }) {
   return (
-    <Card>
+    <Card className="shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{exam.title}</CardTitle>

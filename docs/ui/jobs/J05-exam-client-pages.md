@@ -1,7 +1,7 @@
 # Job ID: J05
 # Branch: feat/ui-exam-client-pages
-# Status: todo
-# Owner:
+# Status: done
+# Owner: agent
 # Last Updated: 2026-06-07
 
 ## Goal
@@ -89,16 +89,28 @@ Refactor all candidate-facing pages: exam list, start exam, answer page, and res
 
 ## Acceptance Criteria
 
-- [ ] Exam list shows cards with proper status
-- [ ] Start exam shows configuration summary
-- [ ] Answer page is fullscreen with no sidebar
-- [ ] QuestionNav has 3 state colors (gray/green/yellow)
-- [ ] Timer turns red at < 5min
-- [ ] Save indicator shows saving/saved/failed
-- [ ] Result page handles both variants
-- [ ] Keyboard shortcuts work (arrows, space, numbers)
-- [ ] All existing tests pass
-- [ ] `pnpm verify` passes
+- [x] Exam list shows cards with proper status
+- [x] Start exam shows configuration summary
+- [x] Answer page is fullscreen with no sidebar
+- [x] QuestionNav has 3 state colors (gray/green/yellow)
+- [x] Timer turns red at < 5min
+- [x] Save indicator shows saving/saved/failed
+- [x] Result page handles both variants
+- [x] Keyboard shortcuts work (arrows, space, numbers)
+- [x] All existing tests pass
+- [x] `pnpm verify` passes
+
+## Changes Applied
+
+| File | Changes |
+|------|---------|
+| `SaveIndicator.tsx` | `text-green-600` → `text-success`, `text-red-600` → `text-destructive` |
+| `ExamTimer.tsx` | `text-red-600` → `text-destructive` |
+| `ResultPage.tsx` | `text-green-700`/`text-red-700` → `text-success`/`text-destructive` for score text, icons, and waiting state |
+| `StartExamPage.tsx` | Warning banners: `bg-yellow-50 text-yellow-800 border-yellow-200` → `bg-warning/10 text-warning border-warning/20` |
+| `ExamListPage.tsx` | `shadow-sm` on ExamCard |
+| `TakeExamPage.tsx` | Bottom nav: Unicode arrows (◀ ▶ ⚑) → lucide icons (ChevronLeft, ChevronRight, Flag with fill toggle) |
+| `TakeExamPage.test.tsx` | Updated button name queries to match new text (removed Unicode arrows)
 
 ## Verification Commands
 

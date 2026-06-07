@@ -275,15 +275,15 @@ export function QuestionImportPage() {
         <div className="space-y-4">
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1">
-              <CheckCircle2 className="size-4 text-green-500" />
+              <CheckCircle2 className="size-4 text-success" />
               有效：{importResult.valid}
             </span>
             <span className="flex items-center gap-1">
-              <AlertCircle className="size-4 text-yellow-500" />
+              <AlertCircle className="size-4 text-warning" />
               警告：{importResult.warnings}
             </span>
             <span className="flex items-center gap-1">
-              <XCircle className="size-4 text-red-500" />
+              <XCircle className="size-4 text-destructive" />
               错误：{importResult.errors}
             </span>
           </div>
@@ -302,13 +302,13 @@ export function QuestionImportPage() {
                   <TableCell>{d.row}</TableCell>
                   <TableCell>
                     {d.status === "valid" && (
-                      <CheckCircle2 className="size-4 text-green-500" />
+                      <CheckCircle2 className="size-4 text-success" />
                     )}
                     {d.status === "warning" && (
-                      <AlertCircle className="size-4 text-yellow-500" />
+                      <AlertCircle className="size-4 text-warning" />
                     )}
                     {d.status === "error" && (
-                      <XCircle className="size-4 text-red-500" />
+                      <XCircle className="size-4 text-destructive" />
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">

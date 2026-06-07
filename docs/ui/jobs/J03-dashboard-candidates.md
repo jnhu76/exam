@@ -1,7 +1,7 @@
 # Job ID: J03
 # Branch: feat/ui-dashboard-candidates
-# Status: todo
-# Owner:
+# Status: done
+# Owner: agent
 # Last Updated: 2026-06-07
 
 ## Goal
@@ -85,15 +85,33 @@ Refactor the Dashboard and Candidate Management pages as the visual reference fo
 
 ## Acceptance Criteria
 
-- [ ] Dashboard has 4 stat cards with consistent styling
-- [ ] Dashboard has recent exams table with proper styling
-- [ ] Candidates page has PageHeader + action buttons
-- [ ] Candidates table has consistent column styling
-- [ ] ImportWizard uses correct tokens
-- [ ] All three states (loading/empty/error) work on both pages
-- [ ] Shared patterns documented for J04 reference
-- [ ] All existing tests pass
-- [ ] `pnpm verify` passes
+- [x] Dashboard has 4 stat cards with consistent styling
+- [x] Dashboard has recent exams table with proper styling
+- [x] Candidates page has PageHeader + action buttons
+- [x] Candidates table has consistent column styling
+- [x] ImportWizard uses correct tokens
+- [x] All three states (loading/empty/error) work on both pages
+- [x] Shared patterns documented for J04 reference
+- [x] All existing tests pass
+- [x] `pnpm verify` passes
+
+## Shared Patterns (for J04 reference)
+
+1. **StatsCard**: Use `shadow-sm`, optional `icon` in `bg-primary/10` circle
+2. **StatusBadge**: Use semantic colors via custom `className` props (`bg-success/10 text-success`, `bg-primary/10 text-primary`)
+3. **Table**: Wrap in `Card` with `CardHeader`/`CardTitle` for sections, use `CardContent` for the table
+4. **Filter bar**: Search input with icon prefix (`Search` icon, `pl-9` padding)
+5. **ImportWizard**: Use `text-destructive`, `text-warning`, `text-success` instead of hardcoded colors
+6. **EmptyState**: Use `Search` icon + descriptive message when filter returns no results
+7. **PageHeader**: Already uses `text-2xl font-semibold` title + right-aligned `actions`
+
+## Modified Files
+
+- `apps/web/src/components/shared/StatsCard.tsx` — added optional `icon` prop, `shadow-sm`, horizontal layout
+- `apps/web/src/pages/admin/DashboardPage.tsx` — icons on stats cards, StatusBadge component, table wrapped in Card
+- `apps/web/src/pages/admin/CandidatesPage.tsx` — search filter, hardcoded colors → semantic tokens
+- `apps/web/src/components/shared/ImportWizard.tsx` — hardcoded colors → semantic tokens
+- `docs/ui/jobs/J03-dashboard-candidates.md` — status update
 
 ## Verification Commands
 

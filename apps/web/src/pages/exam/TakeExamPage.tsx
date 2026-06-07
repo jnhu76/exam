@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight, Flag } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ExamTimer } from "@/components/exam/ExamTimer";
@@ -268,10 +269,19 @@ export function TakeExamPage() {
             onClick={handlePrev}
             disabled={currentIndex === 0}
           >
-            ◀ 上一题
+            <ChevronLeft className="size-4" />
+            上一题
           </Button>
           <Button variant="outline" size="sm" onClick={toggleFlag}>
-            {questionStates[currentIndex] === "flagged" ? "取消标记" : "⚑ 标记"}
+            <Flag
+              className="size-4"
+              fill={
+                questionStates[currentIndex] === "flagged"
+                  ? "currentColor"
+                  : "none"
+              }
+            />
+            {questionStates[currentIndex] === "flagged" ? "取消标记" : "标记"}
           </Button>
           <Button
             variant="outline"
@@ -279,7 +289,8 @@ export function TakeExamPage() {
             onClick={handleNext}
             disabled={currentIndex === attempt.questionSnapshot.length - 1}
           >
-            下一题 ▶
+            下一题
+            <ChevronRight className="size-4" />
           </Button>
         </div>
       </footer>

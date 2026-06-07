@@ -130,7 +130,7 @@ export function ScoreListPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               平均分
@@ -142,7 +142,7 @@ export function ScoreListPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               最高分
@@ -152,7 +152,7 @@ export function ScoreListPage() {
             <p className="text-2xl font-bold">{scores.stats.maxScore}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               最低分
@@ -162,7 +162,7 @@ export function ScoreListPage() {
             <p className="text-2xl font-bold">{scores.stats.minScore}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               及格率
@@ -174,7 +174,7 @@ export function ScoreListPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               已评分
@@ -187,7 +187,7 @@ export function ScoreListPage() {
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="shadow-sm">
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <Tabs
@@ -213,7 +213,7 @@ export function ScoreListPage() {
       </Card>
 
       {/* Scores Table */}
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">成绩列表</CardTitle>
         </CardHeader>
@@ -251,7 +251,11 @@ export function ScoreListPage() {
                       <TableCell className="font-bold">{item.score}</TableCell>
                       <TableCell>
                         <Badge
-                          variant={item.passed ? "default" : "destructive"}
+                          className={
+                            item.passed
+                              ? "bg-success/10 text-success hover:bg-success/20"
+                              : "bg-destructive/10 text-destructive hover:bg-destructive/20"
+                          }
                         >
                           {item.passed ? "及格" : "不及格"}
                         </Badge>
