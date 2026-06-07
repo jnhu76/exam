@@ -100,8 +100,8 @@ export function ResultPage() {
               <p
                 className={
                   result.passed
-                    ? "font-medium text-green-700"
-                    : "font-medium text-red-700"
+                    ? "font-medium text-success"
+                    : "font-medium text-destructive"
                 }
               >
                 {result.passed ? "已通过" : "未通过"}
@@ -136,12 +136,12 @@ export function ResultPage() {
                           {question.correct ? (
                             <CheckCircle2
                               aria-label="回答正确"
-                              className="size-4 text-green-700"
+                              className="size-4 text-success"
                             />
                           ) : (
                             <XCircle
                               aria-label="回答错误"
-                              className="size-4 text-red-700"
+                              className="size-4 text-destructive"
                             />
                           )}
                           <AnswerText
@@ -169,7 +169,7 @@ export function ResultPage() {
       ) : (
         <Card>
           <CardContent className="py-10 text-center">
-            <CheckCircle2 className="mx-auto mb-3 size-10 text-green-700" />
+            <CheckCircle2 className="mx-auto mb-3 size-10 text-success" />
             <p className="text-lg font-medium">已交卷，等待成绩公布</p>
           </CardContent>
         </Card>

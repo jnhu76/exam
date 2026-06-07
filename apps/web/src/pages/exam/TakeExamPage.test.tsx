@@ -111,13 +111,13 @@ describe("TakeExamPage smoke", () => {
 
     expect(await screen.findByText("地球是圆的")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "下一题 ▶" }));
+    await user.click(screen.getByRole("button", { name: "下一题" }));
 
     await waitFor(() => {
       expect(screen.getByText("水是透明的")).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: "◀ 上一题" }));
+    await user.click(screen.getByRole("button", { name: "上一题" }));
 
     await waitFor(() => {
       expect(screen.getByText("地球是圆的")).toBeInTheDocument();

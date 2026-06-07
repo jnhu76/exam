@@ -154,14 +154,14 @@ export function StartExamPage() {
           </div>
 
           {exam.controlFlags.detectTabSwitch && (
-            <div className="flex items-center gap-2 rounded-md bg-yellow-50 p-2 text-yellow-800">
+            <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
               <AlertTriangle className="size-4 shrink-0" />
               <span>考试期间将检测切屏行为</span>
             </div>
           )}
 
           {exam.controlFlags.disableCopyPaste && (
-            <div className="flex items-center gap-2 rounded-md bg-yellow-50 p-2 text-yellow-800">
+            <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
               <AlertTriangle className="size-4 shrink-0" />
               <span>考试期间禁止复制粘贴</span>
             </div>
@@ -169,7 +169,7 @@ export function StartExamPage() {
         </CardContent>
       </Card>
 
-      <div className="rounded-md border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+      <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
         <AlertTriangle className="mr-2 inline size-4" />
         开始后倒计时立即启动，中途不可暂停
       </div>
