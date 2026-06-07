@@ -1,6 +1,7 @@
 # Current UI Audit
 
 > Audited: 2026-06-07
+> Verified: 2026-06-07 (J00 codebase verification)
 
 ## Tech Stack
 
@@ -38,6 +39,20 @@ skeleton, sonner, switch, table, tabs, textarea, tooltip, avatar
 - `QuestionNav.tsx` — exam question navigation sidebar
 - `ExamTimer.tsx` — countdown display
 - `SaveIndicator.tsx` — answer save status
+- `QuestionRenderer.tsx` — renders question by type during exam
+- `EnrollmentPicker.tsx` — exam enrollment candidate picker
+- `EmptyState.tsx` — standardized empty state with icon, title, description, action
+- `ErrorState.tsx` — error state with CircleAlert icon and retry button
+- `LoadingState.tsx` — spinner with label and aria-busy
+- `ConfirmDialog.tsx` — AlertDialog wrapper with destructive variant
+- `ConnectionIndicator.tsx` — connection status dot + label
+- `FileUpload.tsx` — CSV file upload trigger
+- `PageHeader.tsx` — page title + action area
+- `StatsCard.tsx` — dashboard statistics card
+
+### Missing components (not yet created)
+
+- `StatusBadge` — pass/fail/pending status badges with semantic colors (J03)
 
 ## Current CSS Theme
 
@@ -63,6 +78,19 @@ Tailwind v4 with inline `@theme` block using oklch colors:
 | 8 | Pages look like default component assembly, not a unified product | High |
 | 9 | No `success` or `warning` semantic color tokens defined | Medium |
 | 10 | Chinese font stack not explicitly configured — depends on browser default | Medium |
+| 11 | ConnectionIndicator uses hardcoded `bg-green-500`/`bg-yellow-500`/`bg-red-500` instead of semantic tokens | Low |
+| 12 | Missing pages in migration plan: CoursePage, AttemptDetailPage, ResultsOverviewPage, QuestionImportPage, ExamSettingsPage | Low |
+
+## J00 Verification Findings
+
+Codebase verification on 2026-06-07 confirmed:
+
+- All 24 shadcn/ui components listed are present in `components/ui/`
+- EmptyState, ErrorState, LoadingState, ConfirmDialog, ConnectionIndicator, FileUpload all exist (were previously marked as unknown)
+- QuestionRenderer and EnrollmentPicker exist but were not in the original component inventory
+- 5 pages were missing from the migration plan (now added)
+- `index.css` uses oklch values matching the audit record — default shadcn blue confirmed
+- No font-family declaration found in `index.css`
 
 ## Font Configuration
 

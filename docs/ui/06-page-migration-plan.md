@@ -13,6 +13,7 @@ Pages are ordered by visual impact and dependency: high-traffic pages first, adm
 | Dashboard | `/admin/dashboard` | Built | Default blue, no visual hierarchy | J03 | todo |
 | Candidate Management | `/admin/candidates` | Built | Generic table, no spacing standard | J03 | todo |
 | Candidate Import | dialog | Built | Functional, needs token update | J03 | todo |
+| Course Management | `/admin/courses` | Built | Simple CRUD table | J03 | todo |
 
 ### Tier 2: Core Admin (J04)
 
@@ -21,9 +22,12 @@ Pages are ordered by visual impact and dependency: high-traffic pages first, adm
 | Exam Management | `/admin/exams` | Built | Default component look | J04 | todo |
 | Exam Create | `/admin/exams/new` | Built | Long form, needs section styling | J04 | todo |
 | Exam Detail | `/admin/exams/:id` | Built | Token update | J04 | todo |
+| Attempt Detail | `/admin/attempts/:id` | Built | Token update | J04 | todo |
+| Results Overview | `/admin/exams/:id/results` | Built | Stats + table layout | J04 | todo |
+| Score List | `/admin/exams/:id/scores` | Built | Dynamic columns, stats bar | J04 | todo |
 | Question Management | `/admin/questions` | Built | Table + filter styling | J04 | todo |
 | Question Create/Edit | `/admin/questions/new`, `/:id/edit` | Built | Form + preview layout | J04 | todo |
-| Score Management | `/admin/exams/:id/scores` | Built | Dynamic columns, stats bar | J04 | todo |
+| Question Import | `/admin/questions/import` | Built | File upload + preview | J04 | todo |
 | User Management | `/admin/users` | Built | Simple CRUD table | J04 | todo |
 | Organization Management | `/admin/organizations` | Built | SuperAdmin only, simple CRUD | J04 | todo |
 | Platform Settings | `/admin/settings` | Built | Form layout | J04 | todo |
@@ -38,6 +42,7 @@ Pages are ordered by visual impact and dependency: high-traffic pages first, adm
 | Exam Start | `/exam/:id/start` | Built | Info summary, queue UI | J05 | todo |
 | Exam Take | `/exam/:id/take` | Built | Question nav, timer, save status | J05 | todo |
 | Exam Result | `/exam/:id/result` | Built | Score display, answer review | J05 | todo |
+| Exam Settings | `/exam/:id/settings` | Built | Candidate exam settings | J05 | todo |
 
 ### Tier 4: QA (J06)
 
