@@ -61,6 +61,7 @@ export function ExamCreatePage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [config, setConfig] = useState<ExamConfigData>({
     title: "",
     description: "",
@@ -132,6 +133,24 @@ export function ExamCreatePage() {
   }
 
   async function handleSave(asDraft: boolean) {
+    const errors: Record<string, string> = {};
+    if (!config.title.trim()) errors.title = "请输入考试名称";
+    if (!config.courseId) errors.courseId = "请选择课程";
+    if (
+      config.openAt &&
+      config.closeAt &&
+      new Date(config.closeAt) <= new Date(config.openAt)
+    ) {
+      errors.time = "结束时间必须晚于开始时间";
+    }
+    if (config.passingScore > config.totalScore) {
+      errors.score = "及格分不能超过总分";
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error("请修正表单中的错误");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {

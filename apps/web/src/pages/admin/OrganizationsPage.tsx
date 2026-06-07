@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
+import { FieldError } from "@/components/shared/FieldError";
 
 interface OrgRow {
   id: string;
@@ -42,6 +43,7 @@ export function OrganizationsPage() {
   const [displayName, setDisplayName] = useState("");
   const [slug, setSlug] = useState("");
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const loadOrgs = useCallback(async () => {
     setIsLoading(true);
@@ -62,12 +64,21 @@ export function OrganizationsPage() {
     setName(org?.name ?? "");
     setDisplayName(org?.displayName ?? "");
     setSlug(org?.slug ?? "");
+    setFieldErrors({});
     setDialogOpen(true);
   }
 
+  function validate() {
+    const errors: Record<string, string> = {};
+    if (!name.trim()) errors.name = "请输入名称";
+    if (!displayName.trim()) errors.displayName = "请输入显示名";
+    if (!editing && !slug.trim()) errors.slug = "请输入标识";
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   async function save() {
-    if (!name.trim() || !displayName.trim() || (!editing && !slug.trim()))
-      return;
+    if (!validate()) return;
     setSaving(true);
     try {
       if (editing) {
@@ -166,21 +177,38 @@ export function OrganizationsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>名称</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (fieldErrors.name)
+                    setFieldErrors((prev) => ({ ...prev, name: "" }));
+                }}
+              />
+              <FieldError>{fieldErrors.name}</FieldError>
             </div>
             <div className="space-y-2">
               <Label>显示名</Label>
               <Input
                 value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
+                onChange={(e) => {
+                  setDisplayName(e.target.value);
+                  if (fieldErrors.displayName)
+                    setFieldErrors((prev) => ({ ...prev, displayName: "" }));
+                }}
               />
+              <FieldError>{fieldErrors.displayName}</FieldError>
             </div>
             <div className="space-y-2">
               <Label>标识</Label>
               <Input
                 value={slug}
                 disabled={!!editing}
-                onChange={(e) => setSlug(e.target.value)}
+                onChange={(e) => {
+                  setSlug(e.target.value);
+                  if (fieldErrors.slug)
+                    setFieldErrors((prev) => ({ ...prev, slug: "" }));
+                }}
               />
             </div>
           </div>
