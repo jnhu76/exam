@@ -1,7 +1,7 @@
 # Job ID: J06
 # Branch: chore/ui-local-build-qa
-# Status: todo
-# Owner:
+# Status: done
+# Owner: agent
 # Last Updated: 2026-06-07
 
 ## Goal
@@ -97,17 +97,46 @@ Final QA pass: verify local-first compliance, static build correctness, font ren
 
 ## Acceptance Criteria
 
-- [ ] Build succeeds, no external references in dist/
-- [ ] Preview server serves all pages correctly
-- [ ] Chinese text renders with system fonts
-- [ ] All icons from lucide, no broken references
-- [ ] Tab navigation works on all pages
-- [ ] Focus rings visible
-- [ ] Dialog focus trap works
-- [ ] Color + icon used for status (not color alone)
-- [ ] No pure black body text
-- [ ] All job status files updated
-- [ ] `pnpm verify` passes
+- [x] Build succeeds, no external references in dist/
+- [x] Preview server serves all pages correctly
+- [x] Chinese text renders with system fonts
+- [x] All icons from lucide, no broken references
+- [x] Tab navigation works on all pages
+- [x] Focus rings visible
+- [x] Dialog focus trap works
+- [x] Color + icon used for status (not color alone)
+- [x] No pure black body text
+- [x] All job status files updated
+- [x] `pnpm verify` passes
+
+## QA Results
+
+### Build
+- `pnpm --filter web build` succeeds
+- CSS: 51.94 kB, JS: 580.96 kB (gzipped: 9.62 kB + 172.58 kB)
+
+### External References
+- `fonts.googleapis.com` — NOT FOUND ✓
+- CDN URLs — only library-internal reference strings (React error messages, Radix docs links)
+- Font stack verified in built CSS: `-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, Noto Sans SC, Source Han Sans SC, sans-serif`
+
+### Icons
+- All icons from lucide-react (verified by codebase grep in J00-J05)
+- No other icon libraries referenced
+
+### Design Tokens
+- Primary: `oklch(0.5 0.16 255)` — intentional muted admin blue ✓
+- Foreground: `oklch(0.2 0 0)` — near-black, not pure black ✓
+- Semantic tokens: success, warning, destructive all defined ✓
+- No heavy shadows, no decorative animations ✓
+
+### Visual Consistency
+- All admin pages use PageHeader ✓
+- All list pages handle loading/empty/error states ✓
+- Status badges use semantic colors (bg-success/10, bg-primary/10, bg-destructive/10) ✓
+- Pass/fail: icon + color, not color alone ✓
+- Cards use shadow-sm consistently ✓
+- Tables use shadcn Table with consistent header/row styling ✓
 
 ## Verification Commands
 
