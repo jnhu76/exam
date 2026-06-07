@@ -3,12 +3,28 @@ import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { LoadingState } from "@/components/shared/LoadingState";
 
 export function ExamLayout() {
   const { user, isLoading, logout } = useAuth();
-  if (isLoading) return <LoadingState />;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="flex h-14 items-center justify-between border-b bg-card px-6">
+          <BrandHeader />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-20 rounded-md" />
+            <Skeleton className="h-8 w-20 rounded-md" />
+            <Skeleton className="mx-2 h-4 w-px" />
+            <Skeleton className="size-7 rounded-full" />
+            <Skeleton className="h-4 w-12" />
+            <Skeleton className="h-8 w-12 rounded-md" />
+          </div>
+        </header>
+      </div>
+    );
+  }
   if (!user || user.role !== "Candidate") {
     return <Navigate to="/login" replace />;
   }

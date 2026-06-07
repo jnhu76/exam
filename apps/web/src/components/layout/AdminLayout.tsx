@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { AppSidebar } from "./AppSidebar";
 import { useAuth } from "@/hooks/useAuth";
-import { LoadingState } from "@/components/shared/LoadingState";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const routeTitles: Record<string, string> = {
   "/admin/dashboard": "仪表盘",
@@ -36,7 +36,25 @@ export function AdminLayout() {
   const location = useLocation();
 
   if (isLoading) {
-    return <LoadingState />;
+    return (
+      <div className="flex min-h-screen bg-background">
+        <div className="flex w-56 shrink-0 flex-col border-r bg-card">
+          <div className="p-2">
+            <Skeleton className="h-5 w-16" />
+          </div>
+        </div>
+        <div className="min-w-0 flex-1">
+          <header className="flex h-14 items-center border-b bg-card px-6">
+            <Skeleton className="h-4 w-24" />
+          </header>
+          <main className="space-y-4 p-6">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-32 w-full rounded-lg" />
+            <Skeleton className="h-32 w-full rounded-lg" />
+          </main>
+        </div>
+      </div>
+    );
   }
   if (!user || user.role === "Candidate") {
     return <Navigate to="/login" replace />;

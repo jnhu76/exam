@@ -116,33 +116,32 @@ export function AppSidebar({
         collapsed ? "w-14" : "w-56",
       )}
     >
-      <div className="flex min-h-14 items-center justify-between px-2">
+      <div className="flex min-h-14 items-center px-2">
         <BrandHeader compact={collapsed} />
         {onCollapse && !collapsed && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
+            className="ml-auto"
             aria-label="折叠侧栏"
             onClick={onCollapse}
           >
             <ChevronLeft className="size-4" aria-hidden="true" />
           </Button>
         )}
+        {onCollapse && collapsed && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="展开侧栏"
+            onClick={onCollapse}
+          >
+            <ChevronRight className="size-4" aria-hidden="true" />
+          </Button>
+        )}
       </div>
-
-      {collapsed && onCollapse && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="mx-auto"
-          aria-label="展开侧栏"
-          onClick={onCollapse}
-        >
-          <ChevronRight className="size-4" aria-hidden="true" />
-        </Button>
-      )}
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
         {groups.map((group, gi) => (
