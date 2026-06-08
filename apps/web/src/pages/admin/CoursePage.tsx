@@ -211,22 +211,16 @@ export function CoursePage() {
                   <TableCell>{course.code}</TableCell>
                   <TableCell className="max-w-[360px]">
                     {course.description ? (
-                      course.description.length > 60 ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="block cursor-help truncate">
-                              {course.description}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="block cursor-default line-clamp-2 whitespace-pre-wrap break-words">
                             {course.description}
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <span className="line-clamp-2 whitespace-pre-wrap break-words">
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
                           {course.description}
-                        </span>
-                      )
+                        </TooltipContent>
+                      </Tooltip>
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}

@@ -2,7 +2,7 @@
 
 ## Full Data Flow
 
-```
+```text
 Organization ──→ OrganizationSettings
              ──→ CandidateFields ──→ CandidateProfile
              ──→ Users ──→ CandidateProfile

@@ -125,8 +125,11 @@ export function StartExamPage() {
       setIsStarting(true);
       try {
         await pollQueue();
-      } catch {
+      } catch (err) {
         setIsStarting(false);
+        const msg = err instanceof ApiError ? err.message : "排队失败，请重试";
+        setError(msg);
+        toast.error(msg);
       }
       return;
     }

@@ -121,7 +121,7 @@ Source of truth: codebase inspection. No guessing.
 
 ## 2. Key Database Relations
 
-```
+```text
 organizations (slug unique)
   └── organizationSettings (organizationId unique)
   └── candidateFields (organizationId + name unique)

@@ -134,6 +134,11 @@ export function CandidatesPage() {
       if (!username.trim()) errors.username = "请输入用户名";
       if (password.length < 6) errors.password = "密码至少6位";
     }
+    for (const field of fields) {
+      if (field.required && !(values[field.name] ?? "").toString().trim()) {
+        errors[`field:${field.name}`] = "此字段为必填项";
+      }
+    }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
