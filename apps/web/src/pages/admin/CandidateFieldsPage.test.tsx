@@ -1,35 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { CandidateFieldsPage } from "./CandidateFieldsPage";
 
-const apiGet = vi.fn().mockResolvedValue([
-  {
-    id: "cf1",
-    name: "employeeId",
-    label: "工号",
-    fieldType: "text",
-    required: true,
-    unique: true,
-    sortOrder: 0,
-  },
-]);
-
-const apiPost = vi.fn().mockResolvedValue({
-  id: "cf2",
-  name: "department",
-  label: "部门",
-  fieldType: "text",
-  required: false,
-  unique: false,
-  sortOrder: 1,
-});
-
-const apiDelete = vi.fn().mockResolvedValue(undefined);
-const apiPatch = vi.fn().mockResolvedValue(undefined);
+const apiGet = vi.fn();
+const apiPost = vi.fn();
+const apiDelete = vi.fn();
+const apiPatch = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -40,6 +20,27 @@ vi.mock("@/lib/api", () => ({
   },
   setNavigate: () => {},
 }));
+
+const mockFields = [
+  {
+    id: "cf1",
+    name: "employeeId",
+    label: "工号",
+    fieldType: "text",
+    required: true,
+    unique: true,
+    sortOrder: 0,
+  },
+  {
+    id: "cf2",
+    name: "department",
+    label: "部门",
+    fieldType: "select",
+    required: false,
+    unique: false,
+    sortOrder: 1,
+  },
+];
 
 function renderPage() {
   return render(
@@ -66,37 +67,224 @@ function renderPage() {
   );
 }
 
+function dialogInput(dialog: HTMLElement, index: number) {
+  return dialog.querySelectorAll("input")[index]!;
+}
+
 describe("CandidateFieldsPage", () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    apiDelete.mockReset();
+    apiPatch.mockReset();
+    apiGet.mockResolvedValue([...mockFields]);
+    apiPost.mockResolvedValue({ id: "cf3" });
+    apiPatch.mockResolvedValue(undefined);
+    apiDelete.mockResolvedValue(undefined);
+  });
+
   it("renders page title", async () => {
     renderPage();
     expect(await screen.findByText("考生字段配置")).toBeInTheDocument();
   });
 
-  it("renders candidate field list", async () => {
+  it("renders field list with columns", async () => {
     renderPage();
     expect(await screen.findByText("employeeId")).toBeInTheDocument();
+    expect(screen.getByText("工号")).toBeInTheDocument();
+    expect(screen.getByText("文本")).toBeInTheDocument();
+    expect(screen.getAllByText("是").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders add field button", async () => {
+  it("renders second field correctly", async () => {
+    renderPage();
+    expect(await screen.findByText("department")).toBeInTheDocument();
+    expect(screen.getByText("选项")).toBeInTheDocument();
+  });
+
+  it("renders add field and download template buttons", async () => {
     renderPage();
     expect(
-      await screen.findByRole("button", { name: "添加字段" }),
+      await screen.findByRole("button", { name: /添加字段/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /下载模板/ }),
     ).toBeInTheDocument();
   });
 
-  it("allows switching field type when adding a field", async () => {
+  it("opens create dialog", async () => {
     const user = userEvent.setup();
     renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
 
-    await user.click(await screen.findByRole("button", { name: "添加字段" }));
+  it("saves a new field", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "phone");
+    await user.type(inputs[1]!, "手机号");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(apiPost).toHaveBeenCalledWith("/api/candidate-fields", {
+      name: "phone",
+      label: "手机号",
+      fieldType: "text",
+      required: false,
+      unique: false,
+      sortOrder: 2,
+    });
+  });
 
-    const select = screen.getByLabelText("字段类型");
-    expect(select).toHaveValue("text");
+  it("does not save when name and label are empty", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(apiPost).not.toHaveBeenCalled();
+  });
 
-    await user.selectOptions(select, "number");
-    expect(select).toHaveValue("number");
+  it("opens edit dialog with field data", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const editButtons = await screen.findAllByLabelText("编辑字段");
+    await user.click(editButtons[0]!);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("编辑字段")).toBeInTheDocument();
+    expect(screen.getByText(/不可修改/)).toBeInTheDocument();
+    const inputs = dialog.querySelectorAll("input");
+    expect(inputs[0]!).toHaveValue("工号");
+  });
 
-    await user.selectOptions(select, "select");
-    expect(select).toHaveValue("select");
+  it("saves edited field", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const editButtons = await screen.findAllByLabelText("编辑字段");
+    await user.click(editButtons[0]!);
+    const dialog = await screen.findByRole("dialog");
+    const labelInput = dialog.querySelectorAll("input")[0]!;
+    await user.clear(labelInput);
+    await user.type(labelInput, "员工编号");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(apiPatch).toHaveBeenCalledWith("/api/candidate-fields/cf1", {
+      label: "员工编号",
+      required: true,
+      unique: true,
+      sortOrder: 0,
+    });
+  });
+
+  it("deletes a field after confirmation", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("employeeId");
+    const deleteButtons = screen.getAllByLabelText("删除字段");
+    await user.click(deleteButtons[0]!);
+    const alertDialog = await screen.findByRole("alertdialog");
+    const confirmBtn = within(alertDialog).getByRole("button", {
+      name: "确认",
+    });
+    await user.click(confirmBtn);
+    expect(apiDelete).toHaveBeenCalledWith("/api/candidate-fields/cf1");
+  });
+
+  it("moves a field up", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("department");
+    const upButtons = screen.getAllByLabelText("上移");
+    await user.click(upButtons[1]!);
+    expect(apiPatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("moves a field down", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("employeeId");
+    const downButtons = screen.getAllByLabelText("下移");
+    await user.click(downButtons[0]!);
+    expect(apiPatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("first up button and last down button are disabled", async () => {
+    renderPage();
+    await screen.findByText("employeeId");
+    const upButtons = screen.getAllByLabelText("上移");
+    const downButtons = screen.getAllByLabelText("下移");
+    expect(upButtons[0]!).toBeDisabled();
+    expect(downButtons[downButtons.length - 1]!).toBeDisabled();
+  });
+
+  it("cancels dialog", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const cancelBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "取消")!;
+    await user.click(cancelBtn);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows error state when loading fails", async () => {
+    apiGet.mockRejectedValue(new Error("fail"));
+    renderPage();
+    expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
+  });
+
+  it("shows empty state when no fields", async () => {
+    apiGet.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText("暂无候选人字段")).toBeInTheDocument();
+  });
+
+  it("downloads template", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path.includes("template"))
+        return Promise.resolve({ headers: ["username", "name", "employeeId"] });
+      return Promise.resolve([...mockFields]);
+    });
+    renderPage();
+    await screen.findByText("employeeId");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /下载模板/ }));
+    expect(apiGet).toHaveBeenCalledWith("/api/candidate-fields/template");
+  });
+
+  it("toggles required and unique checkboxes in dialog", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "test");
+    await user.type(inputs[1]!, "Test");
+    const checkboxes = within(dialog).getAllByRole("checkbox");
+    await user.click(checkboxes[0]!);
+    await user.click(checkboxes[1]!);
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(apiPost).toHaveBeenCalledWith(
+      "/api/candidate-fields",
+      expect.objectContaining({ required: true, unique: true }),
+    );
   });
 });
