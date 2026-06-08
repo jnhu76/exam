@@ -174,3 +174,126 @@ describe("ExamConfigForm totalScore", () => {
     expect(calls.length).toBeLessThanOrEqual(1);
   });
 });
+
+describe("ExamConfigForm fields", () => {
+  it("renders title, duration fields", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("考试名称")).toBeInTheDocument();
+    expect(screen.getByText("考试时长（分钟）")).toBeInTheDocument();
+  });
+
+  it("calls onChange when title input is typed", async () => {
+    const onChange = vi.fn();
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByPlaceholderText("请输入考试名称");
+    await userEvent.type(input, "A");
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it("shows time error when closeAt is before openAt", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          openAt: "2026-06-01T11:00",
+          closeAt: "2026-06-01T09:00",
+        }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/结束时间必须晚于开始时间/)).toBeInTheDocument();
+  });
+
+  it("shows score error when passingScore > totalScore", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          passingScore: 120,
+          totalScore: 100,
+        }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/及格分不能超过总分/)).toBeInTheDocument();
+  });
+
+  it("renders preset buttons", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("开放模式")).toBeInTheDocument();
+    expect(screen.getByText("标准模式")).toBeInTheDocument();
+    expect(screen.getByText("严格模式")).toBeInTheDocument();
+  });
+
+  it("applies strict preset on click", async () => {
+    const onChange = vi.fn();
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByText("严格模式"));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        controlFlags: expect.objectContaining({
+          detectTabSwitch: true,
+          disableCopyPaste: true,
+          restrictIp: true,
+          requireLockdown: true,
+        }),
+      }),
+    );
+  });
+
+  it("renders retake policy section", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getAllByText("重考策略").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders max attempts field", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("最大尝试次数")).toBeInTheDocument();
+  });
+});

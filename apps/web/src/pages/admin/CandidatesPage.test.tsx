@@ -38,20 +38,33 @@ vi.mock("@/lib/api", () => ({
                 isActive: true,
                 fields: { employeeId: "E001" },
               },
+              {
+                id: "c2",
+                userId: "u2",
+                username: "candidate2",
+                name: "Candidate Two",
+                isActive: false,
+                fields: { employeeId: "E002" },
+              },
             ],
-            total: 1,
+            total: 2,
             page: 1,
             pageSize: 20,
             totalPages: 1,
           }),
     ),
     post: vi.fn().mockResolvedValue({
-      id: "c2",
-      userId: "u2",
-      fields: { employeeId: "E002" },
+      id: "c3",
+      userId: "u3",
+      fields: { employeeId: "E003" },
     }),
+    patch: vi.fn().mockResolvedValue({ ok: true }),
   },
   setNavigate: () => {},
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 function renderPage() {
@@ -111,5 +124,36 @@ describe("CandidatesPage", () => {
       "type",
       "text",
     );
+  });
+
+  it("shows candidate names in the table", async () => {
+    renderPage();
+    expect(await screen.findByText("Candidate One")).toBeInTheDocument();
+    expect(screen.getByText("Candidate Two")).toBeInTheDocument();
+  });
+
+  it("toggles candidate active status", async () => {
+    const { api } = await import("@/lib/api");
+    renderPage();
+    await screen.findByText("candidate1");
+    const toggleBtn = screen.getByRole("button", { name: "禁用" });
+    await userEvent.setup().click(toggleBtn);
+    expect(api.patch).toHaveBeenCalledWith(
+      "/api/candidates/c1",
+      expect.objectContaining({ isActive: false }),
+    );
+  });
+
+  it("opens import dialog", async () => {
+    renderPage();
+    await screen.findByText("candidate1");
+    await userEvent.setup().click(screen.getByRole("button", { name: "导入" }));
+    expect(screen.getByText("导入考生")).toBeInTheDocument();
+  });
+
+  it("renders dynamic field columns in table", async () => {
+    renderPage();
+    expect(await screen.findByText("编号")).toBeInTheDocument();
+    expect(screen.getByText("部门")).toBeInTheDocument();
   });
 });

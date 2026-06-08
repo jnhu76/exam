@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import {
   parseImportCsv,
   detectDuplicate,
@@ -165,10 +166,14 @@ export function CandidatesPage() {
     }
   }
   async function toggle(candidate: Candidate) {
-    await api.patch(`/api/candidates/${candidate.id}`, {
-      isActive: !candidate.isActive,
-    });
-    await load();
+    try {
+      await api.patch(`/api/candidates/${candidate.id}`, {
+        isActive: !candidate.isActive,
+      });
+      await load();
+    } catch {
+      toast.error("操作失败，请重试");
+    }
   }
   function fieldConfigs(): CandidateFieldConfig[] {
     return fields.map((f) => ({
@@ -223,16 +228,21 @@ export function CandidatesPage() {
     });
   }
   async function importCsv() {
-    const result = await api.post<{
-      created: number;
-      updated: number;
-      errors: unknown[];
-    }>("/api/candidates/import", { rows: importRows() });
-    setImportSummary(
-      `导入完成：新增 ${result.created} 条，更新 ${result.updated} 条，错误 ${result.errors.length} 条`,
-    );
-    setCsv("");
-    await load();
+    try {
+      const result = await api.post<{
+        created: number;
+        updated: number;
+        errors: unknown[];
+      }>("/api/candidates/import", { rows: importRows() });
+      setImportSummary(
+        `导入完成：新增 ${result.created} 条，更新 ${result.updated} 条，错误 ${result.errors.length} 条`,
+      );
+      setCsv("");
+      await load();
+    } catch {
+      toast.error("导入失败，请重试");
+      return;
+    }
     setTimeout(() => {
       setImportOpen(false);
       setImportSummary("");

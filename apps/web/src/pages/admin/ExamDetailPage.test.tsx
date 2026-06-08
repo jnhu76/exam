@@ -94,4 +94,65 @@ describe("ExamDetailPage publish validation error", () => {
       ).toBeInTheDocument();
     });
   });
+
+  it("renders exam info and stats cards", async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/enrollments")) return Promise.resolve([]);
+      return Promise.resolve({ ...mockDraftExam });
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("期末能力测评")).toBeInTheDocument();
+    expect(screen.getByText("60分钟")).toBeInTheDocument();
+  });
+
+  it("renders empty enrollment state", async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/enrollments")) return Promise.resolve([]);
+      return Promise.resolve({ ...mockDraftExam });
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("暂无考生")).toBeInTheDocument();
+  });
+
+  it("renders enrollments when present", async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/enrollments"))
+        return Promise.resolve([
+          {
+            id: "enr-1",
+            examId: "exam-1",
+            candidateId: "c1",
+            candidateDisplayName: "张三",
+            status: "assigned",
+            attemptCount: 0,
+            finalScore: null,
+            finalPassed: null,
+          },
+        ]);
+      return Promise.resolve({
+        ...mockDraftExam,
+        stats: { participantCount: 1, completedCount: 0, passedCount: 0 },
+      });
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("期末能力测评")).toBeInTheDocument();
+    expect(await screen.findByText("张三")).toBeInTheDocument();
+  });
+
+  it("shows back button", async () => {
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/enrollments")) return Promise.resolve([]);
+      return Promise.resolve({ ...mockDraftExam });
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("返回列表")).toBeInTheDocument();
+  });
 });

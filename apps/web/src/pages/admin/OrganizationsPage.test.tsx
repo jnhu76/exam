@@ -71,4 +71,54 @@ describe("OrganizationsPage", () => {
       await screen.findByRole("button", { name: "新增机构" }),
     ).toBeInTheDocument();
   });
+
+  it("opens create dialog", async () => {
+    renderPage();
+    await screen.findByText("org-one");
+    const { userEvent } = await import("@testing-library/user-event");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /新增机构/ }));
+    expect(screen.getAllByText("名称").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("creates a new organization", async () => {
+    const { api } = await import("@/lib/api");
+    renderPage();
+    await screen.findByText("org-one");
+    const { userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "新增机构" }));
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0]!, "New Org");
+    await user.type(inputs[1]!, "New Org Display");
+    await user.type(inputs[2]!, "new-org");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    expect(api.post).toHaveBeenCalledWith("/api/organizations", {
+      name: "New Org",
+      displayName: "New Org Display",
+      slug: "new-org",
+    });
+  });
+
+  it("opens edit dialog", async () => {
+    renderPage();
+    await screen.findByText("org-one");
+    const editButtons = screen.getAllByLabelText("编辑机构");
+    const { userEvent } = await import("@testing-library/user-event");
+    await userEvent.setup().click(editButtons[0]!);
+    expect(screen.getByText("编辑机构")).toBeInTheDocument();
+  });
+
+  it("deletes an organization after confirmation", async () => {
+    const { api } = await import("@/lib/api");
+    renderPage();
+    await screen.findByText("org-one");
+    const deleteButtons = screen.getAllByLabelText("删除机构");
+    const { userEvent } = await import("@testing-library/user-event");
+    await userEvent.setup().click(deleteButtons[0]!);
+    const confirmBtn = screen.getByRole("button", { name: "确认" });
+    await userEvent.setup().click(confirmBtn);
+    expect(api.delete).toHaveBeenCalledWith("/api/organizations/org1");
+  });
 });

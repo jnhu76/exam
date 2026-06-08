@@ -141,4 +141,118 @@ describe("StartExamPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始考试" })).toBeDisabled();
   });
+
+  it("shows already-passed blocking reason", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "安全培训考核 A",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 1,
+      canStartNewAttempt: false,
+      blockingReason: "already_passed",
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText("本场考试已通过，无需再次参加。"),
+    ).toBeInTheDocument();
+  });
+
+  it("starts a new attempt when canStartNewAttempt is true", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Open Exam",
+      durationMinutes: 30,
+      passingScore: 50,
+      totalScore: 100,
+      questionCount: 5,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 2,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+    });
+    apiPost.mockResolvedValueOnce({
+      id: "new-att",
+      status: "in_progress",
+      examId: "exam-1",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Open Exam")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "开始考试" }));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith("/api/attempts/exam-1/start");
+    });
+  });
+
+  it("shows exam info card", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Math Exam",
+      durationMinutes: 90,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 20,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 1,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Math Exam")).toBeInTheDocument();
+    expect(screen.getByText("90分钟")).toBeInTheDocument();
+    expect(screen.getByText("20题")).toBeInTheDocument();
+  });
+
+  it("shows error state on load failure", async () => {
+    apiGet.mockRejectedValueOnce(new Error("Network error"));
+
+    renderPage();
+
+    expect(await screen.findByText("加载考试信息失败")).toBeInTheDocument();
+  });
 });
