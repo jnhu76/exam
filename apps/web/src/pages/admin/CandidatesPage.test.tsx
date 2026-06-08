@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -14,9 +15,17 @@ vi.mock("@/lib/api", () => ({
               id: "cf1",
               name: "employeeId",
               label: "编号",
-              fieldType: "text",
+              fieldType: "number",
               required: true,
               sortOrder: 0,
+            },
+            {
+              id: "cf2",
+              name: "department",
+              label: "部门",
+              fieldType: "select",
+              required: false,
+              sortOrder: 1,
             },
           ])
         : Promise.resolve({
@@ -83,5 +92,24 @@ describe("CandidatesPage", () => {
     expect(
       await screen.findByRole("button", { name: "导入" }),
     ).toBeInTheDocument();
+  });
+
+  it("opens create dialog with blank credentials and type-based dynamic fields", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "新增考生" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText(/用户名/)).toHaveValue("");
+    expect(within(dialog).getByLabelText(/初始密码/)).toHaveValue("");
+    expect(within(dialog).getByLabelText(/编号/)).toHaveAttribute(
+      "type",
+      "number",
+    );
+    expect(within(dialog).getByLabelText("部门")).toHaveAttribute(
+      "type",
+      "text",
+    );
   });
 });

@@ -34,6 +34,7 @@ const EXCLUDE_PATTERNS = [
   /\.spec\./,
   /\.stories\./,
   /seed\/demo\//,
+  /(^|\/)demo-seed(\/|$|\.)/,
   /docs\//,
   /node_modules\//,
   /dist\//,

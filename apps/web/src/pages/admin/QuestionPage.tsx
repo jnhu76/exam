@@ -24,7 +24,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BookOpen, FileUp, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  FileUp,
+  LoaderCircle,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 interface QuestionRow {
   id: string;
@@ -68,7 +76,8 @@ export function QuestionPage() {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [courses, setCourses] = useState<CourseRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isTableLoading, setIsTableLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filterCourse, setFilterCourse] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
@@ -78,37 +87,61 @@ export function QuestionPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
+  const loadCourses = useCallback(async () => {
+    try {
+      const cData = await api.get<PaginatedResponse<CourseRow>>("/api/courses");
+      setCourses(cData.items);
+    } catch {
+      // courses are optional context — table can still render
+    }
+  }, []);
+
+  const loadQuestions = useCallback(async () => {
+    setIsTableLoading(true);
     setError(null);
     try {
-      const [qData, cData] = await Promise.all([
-        api.get<PaginatedResponse<QuestionRow>>(
-          `/api/questions?page=${page}&pageSize=20${
-            filterCourse === "all" ? "" : `&courseId=${filterCourse}`
-          }${filterType === "all" ? "" : `&type=${filterType}`}${
-            filterDifficulty === "all" ? "" : `&difficulty=${filterDifficulty}`
-          }${filterTags.trim() ? `&tags=${encodeURIComponent(filterTags)}` : ""}`,
-        ),
-        api.get<PaginatedResponse<CourseRow>>("/api/courses"),
-      ]);
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("pageSize", "20");
+      if (filterCourse !== "all") params.set("courseId", filterCourse);
+      if (filterType !== "all") params.set("type", filterType);
+      if (filterDifficulty !== "all")
+        params.set("difficulty", filterDifficulty);
+      if (filterTags.trim()) params.set("tags", filterTags.trim());
+      const qData = await api.get<PaginatedResponse<QuestionRow>>(
+        `/api/questions?${params.toString()}`,
+      );
       setQuestions(qData.items);
       setTotalPages(qData.totalPages);
-      setCourses(cData.items);
     } catch {
       setError("加载题目列表失败");
     } finally {
-      setIsLoading(false);
+      setIsTableLoading(false);
     }
   }, [filterCourse, filterDifficulty, filterTags, filterType, page]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let cancelled = false;
+    async function init() {
+      await loadCourses();
+      if (!cancelled) setIsInitialLoading(false);
+    }
+    void init();
+    return () => {
+      cancelled = true;
+    };
+    // initial mount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (isInitialLoading) return;
+    void loadQuestions();
+  }, [loadQuestions, isInitialLoading]);
 
   async function handleDelete(id: string) {
     await api.delete(`/api/questions/${id}`);
-    await loadData();
+    await loadQuestions();
   }
 
   const filtered = questions.filter((q) => {
@@ -119,8 +152,24 @@ export function QuestionPage() {
 
   const courseMap = new Map(courses.map((c) => [c.id, c.name]));
 
-  if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadData} />;
+  function clearFilters() {
+    setFilterCourse("all");
+    setFilterType("all");
+    setFilterDifficulty("all");
+    setFilterTags("");
+    setSearch("");
+    setPage(1);
+  }
+
+  const hasActiveFilter =
+    filterCourse !== "all" ||
+    filterType !== "all" ||
+    filterDifficulty !== "all" ||
+    filterTags.trim() !== "" ||
+    search.trim() !== "";
+
+  if (isInitialLoading) return <LoadingState />;
+  if (error) return <ErrorState message={error} onRetry={loadQuestions} />;
 
   return (
     <div className="space-y-6">
@@ -219,6 +268,28 @@ export function QuestionPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+
+        {hasActiveFilter && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            aria-label="清空筛选"
+          >
+            <RotateCcw className="size-4" />
+            清空筛选
+          </Button>
+        )}
+
+        {isTableLoading && (
+          <span
+            className="ml-auto inline-flex items-center gap-2 text-sm text-muted-foreground"
+            aria-live="polite"
+          >
+            <LoaderCircle className="size-4 animate-spin" />
+            加载中…
+          </span>
+        )}
       </div>
 
       {filtered.length === 0 ? (

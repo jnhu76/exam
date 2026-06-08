@@ -117,4 +117,25 @@ describe("CoursePage delete", () => {
     expect(await screen.findByText("英语")).toBeInTheDocument();
     expect(screen.queryByText("数学")).not.toBeInTheDocument();
   });
+
+  it("uses textarea for description and supports searching by description", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("数学")).toBeInTheDocument();
+
+    await user.type(
+      screen.getByPlaceholderText("搜索课程名称、代码或描述..."),
+      "高等",
+    );
+    expect(screen.getByText("数学")).toBeInTheDocument();
+    expect(screen.queryByText("英语")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "新增课程" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("描述")).toHaveProperty(
+      "tagName",
+      "TEXTAREA",
+    );
+  });
 });

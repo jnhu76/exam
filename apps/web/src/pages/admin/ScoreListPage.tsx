@@ -83,8 +83,9 @@ export function ScoreListPage() {
         `/api/exams/${id}/scores?${params.toString()}`,
       );
       setScores(data);
-    } catch {
-      setError("加载成绩列表失败");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "加载成绩列表失败";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -95,7 +96,23 @@ export function ScoreListPage() {
   }, [loadScores]);
 
   if (isLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadScores} />;
+  if (error)
+    return (
+      <ErrorState
+        message={error}
+        onRetry={loadScores}
+        extraAction={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void navigate("/admin/results")}
+          >
+            返回成绩查询
+          </Button>
+        }
+      />
+    );
   if (!scores) return null;
 
   return (

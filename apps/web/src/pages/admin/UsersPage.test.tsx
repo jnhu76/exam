@@ -10,6 +10,13 @@ vi.mock("@/lib/api", () => ({
     get: vi.fn().mockResolvedValue({
       items: [
         {
+          id: "u0",
+          username: "superadmin",
+          name: "Super Admin",
+          role: "SuperAdmin",
+          isActive: true,
+        },
+        {
           id: "u1",
           username: "teacher1",
           name: "Teacher One",
@@ -71,12 +78,20 @@ describe("UsersPage", () => {
 
   it("renders user list", async () => {
     renderPage();
-    expect(await screen.findByText("teacher1")).toBeInTheDocument();
+    expect(await screen.findByText("superadmin")).toBeInTheDocument();
+    expect(screen.getByText("超级管理员")).toBeInTheDocument();
+    expect(screen.getByText("teacher1")).toBeInTheDocument();
     expect(screen.getByText("proctor1")).toBeInTheDocument();
+  });
+
+  it("renders superadmin role badge", async () => {
+    renderPage();
+    expect(await screen.findByText("超级管理员")).toBeInTheDocument();
   });
 
   it("renders add user button", async () => {
     renderPage();
+    expect(await screen.findByText("teacher1")).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "新增用户" }),
     ).toBeInTheDocument();

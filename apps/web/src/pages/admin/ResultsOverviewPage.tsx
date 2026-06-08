@@ -17,6 +17,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
 
 interface ExamRow {
@@ -27,7 +33,9 @@ interface ExamRow {
   closeAt: string;
   passingScore: number;
   totalScore: number;
-  attemptCount: number;
+  gradedAttemptCount: number;
+  canViewScores: boolean;
+  scoreViewDisabledReason: string | null;
 }
 
 export function ResultsOverviewPage() {
@@ -41,13 +49,14 @@ export function ResultsOverviewPage() {
     setError(null);
     try {
       const data = await api.get<{ items: ExamRow[] }>("/api/exams");
-      const gradable = data.items.filter(
+      const visible = data.items.filter(
         (e) =>
           e.status === "published" ||
+          e.status === "open" ||
           e.status === "closed" ||
           e.status === "archived",
       );
-      setExams(gradable);
+      setExams(visible);
     } catch {
       setError("加载考试列表失败");
     } finally {
@@ -62,59 +71,65 @@ export function ResultsOverviewPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
 
-  return (
-    <div className="space-y-6">
-      <PageHeader title="成绩查询" />
+  function statusLabel(status: string) {
+    switch (status) {
+      case "published":
+        return "已发布";
+      case "open":
+        return "进行中";
+      case "closed":
+        return "已结束";
+      case "archived":
+        return "已归档";
+      default:
+        return status;
+    }
+  }
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">可查询成绩的考试</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {exams.length === 0 ? (
-            <EmptyState
-              icon={<Gauge className="size-12" />}
-              title="暂无可查询的考试"
-              description="已发布或已结束的考试将显示在此处"
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>考试名称</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>考试时间</TableHead>
-                  <TableHead>考试人次</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {exams.map((exam) => (
-                  <TableRow key={exam.id}>
-                    <TableCell className="font-medium">{exam.title}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          exam.status === "published" ? "default" : "secondary"
-                        }
-                      >
-                        {exam.status === "published"
-                          ? "进行中"
-                          : exam.status === "closed"
-                            ? "已结束"
-                            : "已归档"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {exam.openAt
-                        ? new Date(exam.openAt).toLocaleString()
-                        : "-"}
-                    </TableCell>
-                    <TableCell>{exam.attemptCount ?? 0}</TableCell>
-                    <TableCell>
+  function gradable(exam: ExamRow) {
+    return exam.canViewScores;
+  }
+
+  function gradableReason(exam: ExamRow) {
+    return exam.scoreViewDisabledReason ?? "";
+  }
+
+  return (
+    <TooltipProvider>
+      <div className="space-y-6">
+        <PageHeader title="成绩查询" />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">成绩管理</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {exams.length === 0 ? (
+              <EmptyState
+                icon={<Gauge className="size-12" />}
+                title="暂无相关考试"
+                description="已结束、已归档或进行中的考试将显示在此处"
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>考试名称</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>考试时间</TableHead>
+                    <TableHead>已评分</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {exams.map((exam) => {
+                    const canView = gradable(exam);
+                    const reason = gradableReason(exam);
+                    const viewButton = (
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={!canView}
                         onClick={() =>
                           void navigate(routes.admin.examScores(exam.id))
                         }
@@ -122,14 +137,52 @@ export function ResultsOverviewPage() {
                         <Eye className="size-4 mr-1" />
                         查看成绩
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                    );
+                    return (
+                      <TableRow key={exam.id}>
+                        <TableCell className="font-medium">
+                          {exam.title}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              exam.status === "open"
+                                ? "default"
+                                : exam.status === "published"
+                                  ? "default"
+                                  : "secondary"
+                            }
+                          >
+                            {statusLabel(exam.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {exam.openAt
+                            ? new Date(exam.openAt).toLocaleString()
+                            : "-"}
+                        </TableCell>
+                        <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
+                        <TableCell>
+                          {canView ? (
+                            viewButton
+                          ) : (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span tabIndex={0}>{viewButton}</span>
+                              </TooltipTrigger>
+                              <TooltipContent>{reason}</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 }

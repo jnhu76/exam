@@ -13,6 +13,7 @@ describe("attempt routes", () => {
   let examId: string;
   let courseId: string;
   let questionId: string;
+  let fillBlankQuestionId: string;
   let candidateProfileId: string;
 
   beforeAll(async () => {
@@ -23,6 +24,7 @@ describe("attempt routes", () => {
 
     courseId = crypto.randomUUID();
     questionId = crypto.randomUUID();
+    fillBlankQuestionId = crypto.randomUUID();
     candidateProfileId = crypto.randomUUID();
 
     ctx.db
@@ -52,6 +54,29 @@ describe("attempt routes", () => {
           { id: "c", content: "3" },
         ],
         standardAnswer: "b",
+        attachments: [],
+        score: 100,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .run();
+
+    ctx.db
+      .insert(sqliteSchema.questions)
+      .values({
+        id: fillBlankQuestionId,
+        organizationId: ctx.org.id,
+        courseId,
+        type: "fill_blank",
+        content: "安全出口标识的颜色是____色",
+        options: [],
+        standardAnswer: "绿",
         attachments: [],
         score: 100,
         difficulty: 1,
@@ -171,6 +196,164 @@ describe("attempt routes", () => {
         url: `/api/attempts/${examId}/start`,
       });
       expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe("GET /candidate/exams/:examId", () => {
+    it("returns active attempt metadata without creating a new attempt", async () => {
+      const examResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Resume Exam",
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionSelectionMode: "manual",
+          questionIds: [questionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "max_attempts",
+          scoreStrategy: "highest",
+          maxAttempts: 1,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const resumeExamId = examResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${resumeExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const startResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${resumeExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startResponse.json().id as string;
+
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const beforeList = createAttemptRepo(ctx.db).findByExamAndCandidate(
+        candidateCtx,
+        resumeExamId,
+        candidateProfileId,
+      );
+
+      const detailResponse = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/exams/${resumeExamId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json()).toMatchObject({
+        id: resumeExamId,
+        currentAttempts: 1,
+        maxAttempts: 1,
+        activeAttemptId: attemptId,
+        canStartNewAttempt: false,
+      });
+
+      const afterList = createAttemptRepo(ctx.db).findByExamAndCandidate(
+        candidateCtx,
+        resumeExamId,
+        candidateProfileId,
+      );
+      expect(afterList).toHaveLength(beforeList.length);
+    });
+
+    it("returns max-attempt blocking reason after all attempts are used", async () => {
+      const examResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Blocked Exam",
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionSelectionMode: "manual",
+          questionIds: [questionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "max_attempts",
+          scoreStrategy: "highest",
+          maxAttempts: 1,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const blockedExamId = examResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${blockedExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const startResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${blockedExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      const detailResponse = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/exams/${blockedExamId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(detailResponse.statusCode).toBe(200);
+      expect(detailResponse.json()).toMatchObject({
+        currentAttempts: 1,
+        maxAttempts: 1,
+        canStartNewAttempt: false,
+        blockingReason: "max_attempts_reached",
+      });
     });
   });
 
@@ -580,6 +763,106 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(409);
+    });
+  });
+
+  describe("fill_blank attempt flow", () => {
+    it("loads, saves, submits, and grades a fill_blank answer", async () => {
+      const examResponse = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Fill Blank Flow Exam",
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionSelectionMode: "manual",
+          questionIds: [fillBlankQuestionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "unlimited",
+          scoreStrategy: "highest",
+          maxAttempts: 3,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const fillBlankExamId = examResponse.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${fillBlankExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const startResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${fillBlankExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startResponse.json().id as string;
+
+      expect(startResponse.statusCode).toBe(201);
+      expect(startResponse.json().questionSnapshot[0]).toMatchObject({
+        type: "fill_blank",
+        content: "安全出口标识的颜色是____色",
+      });
+
+      const loadResponse = await ctx.app.inject({
+        method: "GET",
+        url: `/api/attempts/${attemptId}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(loadResponse.statusCode).toBe(200);
+      expect(loadResponse.json().questionSnapshot[0].type).toBe("fill_blank");
+
+      const saveResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${fillBlankQuestionId}`,
+        payload: {
+          attemptId,
+          questionId: fillBlankQuestionId,
+          answer: "绿",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(saveResponse.statusCode).toBe(200);
+      expect(saveResponse.json()).toMatchObject({
+        accepted: true,
+        serverVersion: 1,
+      });
+
+      const submitResponse = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(submitResponse.statusCode).toBe(200);
+      expect(submitResponse.json()).toMatchObject({
+        status: "graded",
+        score: 100,
+        passed: true,
+      });
     });
   });
 

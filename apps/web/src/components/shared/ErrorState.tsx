@@ -1,12 +1,15 @@
 import { CircleAlert } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 export function ErrorState({
   message,
   onRetry,
+  extraAction,
 }: {
   message: string;
   onRetry?: () => void;
+  extraAction?: ReactNode;
 }) {
   return (
     <div
@@ -15,11 +18,14 @@ export function ErrorState({
     >
       <CircleAlert className="size-8 text-destructive" aria-hidden="true" />
       <p className="text-sm text-muted-foreground">{message}</p>
-      {onRetry && (
-        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-          重试
-        </Button>
-      )}
+      <div className="flex gap-2">
+        {onRetry && (
+          <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+            重试
+          </Button>
+        )}
+        {extraAction}
+      </div>
     </div>
   );
 }

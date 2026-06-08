@@ -17,6 +17,29 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { formatZodError, ensureTargetOrg } from "./helpers.js";
 
+function normalizeScalarQueryValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function normalizeScoreListQuery(query: unknown) {
+  if (typeof query !== "object" || query === null) {
+    return {};
+  }
+
+  const raw = query as Record<string, unknown>;
+  return {
+    page: normalizeScalarQueryValue(raw.page),
+    pageSize: normalizeScalarQueryValue(raw.pageSize),
+    passFilter: normalizeScalarQueryValue(raw.passFilter),
+    search: normalizeScalarQueryValue(raw.search),
+    sortBy: normalizeScalarQueryValue(raw.sortBy),
+    sortOrder: normalizeScalarQueryValue(raw.sortOrder),
+  };
+}
+
 function findVisibleAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
@@ -63,6 +86,29 @@ function buildQuestionResults(
   });
 }
 
+function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
+  const examEnded =
+    exam.status === "closed" ||
+    exam.status === "archived" ||
+    now >= exam.closeAt;
+
+  if (!examEnded) {
+    return {
+      allowed: false,
+      message: "Exam is not finished yet",
+    };
+  }
+
+  if (gradedCount === 0) {
+    return {
+      allowed: false,
+      message: "No graded attempts available yet",
+    };
+  }
+
+  return { allowed: true, message: null };
+}
+
 const scoreRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id/scores",
@@ -74,7 +120,9 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const examId = (request.params as any).id;
-      const parsedQuery = ScoreListQuerySchema.safeParse(request.query);
+      const parsedQuery = ScoreListQuerySchema.safeParse(
+        normalizeScoreListQuery(request.query),
+      );
       if (!parsedQuery.success) {
         return reply.code(400).send(formatZodError(parsedQuery.error));
       }
@@ -89,6 +137,18 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
+      const gradedCount = attemptRepo.countGradedByExam(ctx, examId, {
+        passFilter: "all",
+      });
+      const access = canOpenScoreList(exam, gradedCount, new Date());
+      if (!access.allowed) {
+        return reply.code(409).send({
+          error: {
+            code: "INVALID_STATE_TRANSITION",
+            message: access.message,
+          },
+        });
+      }
       const offset = (page - 1) * pageSize;
       const [results, total, stats] = await Promise.all([
         Promise.resolve(
