@@ -11,7 +11,9 @@
     "coverage": "vitest run --coverage",
     "test:integration": "vitest run",
     "start": "node dist/server.js",
-    "db:seed": "tsx src/seed.ts"
+    "db:seed": "tsx src/seed.ts",
+    "db:seed:demo": "tsx src/demo-seed.ts",
+    "db:seed:demo:verify": "tsx src/demo-seed-verify.ts"
   },
   "dependencies": {
     "@exam/auth": "workspace:*",

@@ -10,6 +10,12 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Table,
   TableBody,
   TableCell,
@@ -30,6 +36,8 @@ interface ExamRow {
   totalScore: number;
   questionIds: string[];
   participantCount: number;
+  canDelete: boolean;
+  deleteDisabledReason: string | null;
 }
 
 interface PaginatedResponse<T> {
@@ -96,90 +104,108 @@ export function ExamPage() {
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="考试管理"
-        actions={
-          <Button onClick={() => void navigate("/admin/exams/new")}>
-            <Plus className="size-4" />
-            创建考试
-          </Button>
-        }
-      />
-
-      {exams.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList className="size-8" />}
-          title="暂无考试"
-          description="还没有创建任何考试，点击上方按钮创建。"
+    <TooltipProvider>
+      <div className="space-y-6">
+        <PageHeader
+          title="考试管理"
+          actions={
+            <Button onClick={() => void navigate("/admin/exams/new")}>
+              <Plus className="size-4" />
+              创建考试
+            </Button>
+          }
         />
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>考试名称</TableHead>
-              <TableHead className="w-20">状态</TableHead>
-              <TableHead>时间窗口</TableHead>
-              <TableHead className="w-16">时长</TableHead>
-              <TableHead className="w-16">题目数</TableHead>
-              <TableHead className="w-16">参与人数</TableHead>
-              <TableHead className="w-16">及格分</TableHead>
-              <TableHead className="w-24">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {exams.map((exam) => (
-              <TableRow key={exam.id}>
-                <TableCell className="font-medium">{exam.title}</TableCell>
-                <TableCell>
-                  <Badge variant={statusVariant[exam.status] ?? "outline"}>
-                    {statusLabels[exam.status] ?? exam.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {new Date(exam.openAt).toLocaleDateString()} -{" "}
-                  {new Date(exam.closeAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>{exam.durationMinutes}分钟</TableCell>
-                <TableCell>{exam.questionIds.length}</TableCell>
-                <TableCell>{exam.participantCount}</TableCell>
-                <TableCell>
-                  {exam.passingScore}/{exam.totalScore}
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => void navigate(`/admin/exams/${exam.id}`)}
-                      aria-label="查看详情"
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                    {exam.status === "draft" && (
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="删除考试"
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        }
-                        title="确认删除"
-                        description={`确定要删除考试「${exam.title}」吗？`}
-                        destructive
-                        onConfirm={() => void handleDelete(exam.id)}
-                      />
-                    )}
-                  </div>
-                </TableCell>
+
+        {exams.length === 0 ? (
+          <EmptyState
+            icon={<ClipboardList className="size-8" />}
+            title="暂无考试"
+            description="还没有创建任何考试，点击上方按钮创建。"
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>考试名称</TableHead>
+                <TableHead className="w-20">状态</TableHead>
+                <TableHead>时间窗口</TableHead>
+                <TableHead className="w-16">时长</TableHead>
+                <TableHead className="w-16">题目数</TableHead>
+                <TableHead className="w-16">参与人数</TableHead>
+                <TableHead className="w-16">及格分</TableHead>
+                <TableHead className="w-32">操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </div>
+            </TableHeader>
+            <TableBody>
+              {exams.map((exam) => {
+                const deleteButton = (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="删除考试"
+                    disabled={!exam.canDelete}
+                  >
+                    <Trash2 className="size-4 text-destructive" />
+                  </Button>
+                );
+
+                return (
+                  <TableRow key={exam.id}>
+                    <TableCell className="font-medium">{exam.title}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariant[exam.status] ?? "outline"}>
+                        {statusLabels[exam.status] ?? exam.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(exam.openAt).toLocaleDateString()} -{" "}
+                      {new Date(exam.closeAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{exam.durationMinutes}分钟</TableCell>
+                    <TableCell>{exam.questionIds.length}</TableCell>
+                    <TableCell>{exam.participantCount}</TableCell>
+                    <TableCell>
+                      {exam.passingScore}/{exam.totalScore}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void navigate(`/admin/exams/${exam.id}`)
+                          }
+                          aria-label="查看详情"
+                        >
+                          <Eye className="size-4" />
+                        </Button>
+                        {exam.canDelete ? (
+                          <ConfirmDialog
+                            trigger={deleteButton}
+                            title="确认删除"
+                            description={`确定要删除考试「${exam.title}」吗？`}
+                            destructive
+                            onConfirm={() => void handleDelete(exam.id)}
+                          />
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>{deleteButton}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {exam.deleteDisabledReason ?? "当前不可删除"}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

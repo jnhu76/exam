@@ -283,15 +283,20 @@ export function TakeExamPage() {
             />
             {questionStates[currentIndex] === "flagged" ? "取消标记" : "标记"}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNext}
-            disabled={currentIndex === attempt.questionSnapshot.length - 1}
-          >
-            下一题
-            <ChevronRight className="size-4" />
-          </Button>
+          {currentIndex === attempt.questionSnapshot.length - 1 ? (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setShowSubmitDialog(true)}
+            >
+              提交考试
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={handleNext}>
+              下一题
+              <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </footer>
 

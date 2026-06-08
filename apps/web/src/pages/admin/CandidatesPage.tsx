@@ -340,8 +340,10 @@ export function CandidatesPage() {
           <div className="space-y-4 py-4">
             {!editing && (
               <>
-                <div>
-                  <Label>用户名</Label>
+                <div className="space-y-2">
+                  <Label>
+                    用户名 <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     value={username}
                     onChange={(e) => {
@@ -352,8 +354,10 @@ export function CandidatesPage() {
                   />
                   <FieldError>{fieldErrors.username}</FieldError>
                 </div>
-                <div>
-                  <Label>初始密码</Label>
+                <div className="space-y-2">
+                  <Label>
+                    初始密码 <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     type="password"
                     value={password}
@@ -362,13 +366,16 @@ export function CandidatesPage() {
                       if (fieldErrors.password)
                         setFieldErrors((prev) => ({ ...prev, password: "" }));
                     }}
+                    placeholder="至少 6 位"
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
                 </div>
               </>
             )}
-            <div>
-              <Label>姓名</Label>
+            <div className="space-y-2">
+              <Label>
+                姓名 <span className="text-destructive">*</span>
+              </Label>
               <Input
                 value={name}
                 onChange={(e) => {
@@ -380,10 +387,12 @@ export function CandidatesPage() {
               <FieldError>{fieldErrors.name}</FieldError>
             </div>
             {fields.map((field) => (
-              <div key={field.id}>
+              <div key={field.id} className="space-y-2">
                 <Label>
                   {field.label}
-                  {field.required ? " *" : ""}
+                  {field.required && (
+                    <span className="ml-1 text-destructive">*</span>
+                  )}
                 </Label>
                 <Input
                   type={field.fieldType === "number" ? "number" : "text"}
@@ -395,6 +404,7 @@ export function CandidatesPage() {
                     }))
                   }
                 />
+                <FieldError>{fieldErrors[`field:${field.name}`]}</FieldError>
               </div>
             ))}
           </div>

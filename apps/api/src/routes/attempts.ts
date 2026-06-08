@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
+  CandidateExamDetailResponseSchema,
   HeartbeatRequestSchema,
   LoadAttemptParamsSchema,
   LoadAttemptResponseSchema,
@@ -11,7 +12,12 @@ import {
   StartAttemptRequestSchema,
   SubmitAttemptRequestSchema,
 } from "@exam/contracts";
-import type { RequestContext, ExamAttempt, Exam } from "@exam/domain";
+import type {
+  RequestContext,
+  ExamAttempt,
+  Exam,
+  ExamEnrollment,
+} from "@exam/domain";
 import type { AnswerRecord } from "@exam/domain";
 import { NotFoundError, ValidationError } from "@exam/domain";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -260,6 +266,79 @@ function getOwnedAttempt(
   return attempt;
 }
 
+function normalizeEnrollment(
+  enrollment: ReturnType<
+    ReturnType<typeof createEnrollmentRepo>["findByExamAndCandidate"]
+  >,
+): ExamEnrollment | null {
+  if (!enrollment) {
+    return null;
+  }
+
+  return {
+    id: enrollment.id,
+    organizationId: enrollment.organizationId,
+    examId: enrollment.examId,
+    candidateId: enrollment.candidateId,
+    status: enrollment.status,
+    attemptCount: enrollment.attemptCount,
+    createdAt: enrollment.createdAt,
+    updatedAt: enrollment.updatedAt,
+    ...(enrollment.finalScore == null
+      ? {}
+      : { finalScore: enrollment.finalScore }),
+    ...(enrollment.finalPassed == null
+      ? {}
+      : { finalPassed: enrollment.finalPassed }),
+    ...(enrollment.finalAttemptId == null
+      ? {}
+      : { finalAttemptId: enrollment.finalAttemptId }),
+  };
+}
+
+function buildCandidateExamDetail(
+  exam: Exam,
+  enrollment: ExamEnrollment | null,
+  activeAttempt: ExamAttempt | null,
+) {
+  const currentAttempts = enrollment?.attemptCount ?? 0;
+  const canStartNewAttempt =
+    activeAttempt === null &&
+    !(
+      exam.retakePolicy === "max_attempts" &&
+      currentAttempts >= exam.maxAttempts
+    ) &&
+    !(
+      exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true
+    );
+
+  const blockingReason =
+    activeAttempt !== null
+      ? undefined
+      : exam.retakePolicy === "max_attempts" &&
+          currentAttempts >= exam.maxAttempts
+        ? "max_attempts_reached"
+        : exam.retakePolicy === "pass_then_stop" &&
+            enrollment?.finalPassed === true
+          ? "already_passed"
+          : undefined;
+
+  return CandidateExamDetailResponseSchema.parse({
+    id: exam.id,
+    title: exam.title,
+    durationMinutes: exam.durationMinutes,
+    passingScore: exam.passingScore,
+    totalScore: exam.totalScore,
+    questionCount: exam.questionSnapshot.length,
+    controlFlags: exam.controlFlags,
+    maxAttempts: exam.maxAttempts,
+    currentAttempts,
+    ...(activeAttempt ? { activeAttemptId: activeAttempt.id } : {}),
+    canStartNewAttempt,
+    ...(blockingReason ? { blockingReason } : {}),
+  });
+}
+
 const attemptRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate/exams",
@@ -328,28 +407,30 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const candidateProfile = getCandidateProfile(fastify, ctx);
-      const enrollment = createEnrollmentRepo(
-        fastify.db,
-      ).findByExamAndCandidate(ctx, parsed.data.examId, candidateProfile.id);
       const exam = createExamRepo(fastify.db).findById(
         ctx,
         parsed.data.examId,
       ) as Exam | null;
-      if (!exam || !enrollment) {
+      if (!exam) {
         throw new NotFoundError("Exam not found");
       }
 
-      return {
-        id: exam.id,
-        title: exam.title,
-        durationMinutes: exam.durationMinutes,
-        passingScore: exam.passingScore,
-        totalScore: exam.totalScore,
-        questionCount: exam.questionSnapshot.length,
-        controlFlags: exam.controlFlags,
-        maxAttempts: exam.maxAttempts,
-        currentAttempts: enrollment.attemptCount,
-      };
+      const enrollment = normalizeEnrollment(
+        createEnrollmentRepo(fastify.db).findByExamAndCandidate(
+          ctx,
+          parsed.data.examId,
+          candidateProfile.id,
+        ),
+      );
+      const activeAttempt = createAttemptRepo(
+        fastify.db,
+      ).findActiveByExamAndCandidate(
+        ctx,
+        parsed.data.examId,
+        candidateProfile.id,
+      ) as ExamAttempt | null;
+
+      return buildCandidateExamDetail(exam, enrollment, activeAttempt);
     },
   );
 

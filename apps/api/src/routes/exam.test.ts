@@ -76,6 +76,8 @@ describe("exam routes", () => {
     const body = res.json();
     expect(body).toHaveProperty("items");
     expect(body.items.length).toBeGreaterThanOrEqual(1);
+    expect(body.items[0]).toHaveProperty("canDelete");
+    expect(body.items[0]).toHaveProperty("canViewScores");
   });
 
   it("GET /api/exams/:id returns exam detail", async () => {

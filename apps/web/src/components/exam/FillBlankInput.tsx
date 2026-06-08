@@ -1,29 +1,57 @@
 export function FillBlankInput({
+  content,
   blanks,
   value,
   onChange,
 }: {
+  content: string;
   blanks: { id: string; content: string }[];
-  value: Record<string, string>;
+  value: Record<string, string> | string;
   onChange: (answer: unknown) => void;
 }) {
+  const normalizedBlanks =
+    blanks.length > 0
+      ? blanks
+      : Array.from({
+          length: Math.max(1, content.split("____").length - 1),
+        }).map((_, index) => ({
+          id: `blank-${index + 1}`,
+          content: `第${index + 1}空`,
+        }));
+
+  const recordValue: Record<string, string> =
+    typeof value === "string" ? {} : value;
+  const isSingleBlank = normalizedBlanks.length === 1;
+  const singleBlankId = normalizedBlanks[0]?.id;
+  const singleValue =
+    typeof value === "string"
+      ? value
+      : singleBlankId
+        ? (recordValue[singleBlankId] ?? "")
+        : "";
+
   function handleChange(id: string, text: string) {
-    onChange({ ...value, [id]: text });
+    if (isSingleBlank) {
+      onChange(text);
+      return;
+    }
+    onChange({ ...recordValue, [id]: text });
   }
 
   return (
     <div className="space-y-4">
-      {blanks.map((blank, i) => (
+      {normalizedBlanks.map((blank, i) => (
         <div key={blank.id} className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">
             第{i + 1}空:
           </span>
           <input
             type="text"
-            value={value[blank.id] ?? ""}
+            value={isSingleBlank ? singleValue : (recordValue[blank.id] ?? "")}
             onChange={(e) => handleChange(blank.id, e.target.value)}
-            className="flex-1 rounded-md border px-3 py-2 text-sm"
+            className="flex-1 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             placeholder="请输入答案"
+            aria-label={`第${i + 1}空答案`}
           />
         </div>
       ))}

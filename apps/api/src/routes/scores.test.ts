@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp } from "./testHelpers.js";
@@ -74,6 +75,23 @@ describe("score routes", () => {
   afterAll(async () => {
     await ctx.app.close();
   });
+
+  function adminRequestContext() {
+    return {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+  }
+
+  function markExamClosed(examId: string) {
+    createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+      closeAt: new Date(Date.now() - 1000),
+    });
+  }
 
   async function createGradedAttempt(showResultImmediately: boolean) {
     const createResponse = await ctx.app.inject({
@@ -404,6 +422,23 @@ describe("J8: score list routes", () => {
     await ctx.app.close();
   });
 
+  function adminRequestContext() {
+    return {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+  }
+
+  function markExamClosed(examId: string) {
+    createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+      closeAt: new Date(Date.now() - 1000),
+    });
+  }
+
   async function createExamAndPublish(): Promise<string> {
     const createResponse = await ctx.app.inject({
       method: "POST",
@@ -451,6 +486,7 @@ describe("J8: score list routes", () => {
     examId: string,
     answerRight: boolean = true,
     authToken: string = ctx.candidateToken,
+    closeExamAfterGrading: boolean = true,
   ): Promise<string> {
     const startResponse = await ctx.app.inject({
       method: "POST",
@@ -478,6 +514,9 @@ describe("J8: score list routes", () => {
       url: `/api/attempts/${attemptId}/submit`,
       cookies: { "auth-token": authToken },
     });
+    if (closeExamAfterGrading) {
+      markExamClosed(examId);
+    }
 
     return attemptId;
   }
@@ -499,6 +538,76 @@ describe("J8: score list routes", () => {
     expect(response.json().items).toHaveLength(1);
     expect(response.json()).toHaveProperty("stats");
     expect(response.json()).toHaveProperty("total", 1);
+  });
+
+  it("J8-A-1b: coerces numeric query params without removing validation", async () => {
+    const examId = await createExamAndPublish();
+    await createGradedAttemptForExam(examId, true);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?page=1&pageSize=10&passFilter=all`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      total: 1,
+    });
+  });
+
+  it("J8-A-1c: rejects score list access before exam ends", async () => {
+    const createResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Open Exam Score Guard",
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600000).toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 6,
+        totalScore: 10,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createResponse.json().id as string;
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?page=1&passFilter=all`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toMatch(/not finished yet/i);
   });
 
   it("J8-A-2: filters by pass/fail status", async () => {
@@ -543,8 +652,9 @@ describe("J8: score list routes", () => {
     });
 
     // 创建一个及格和一个不及格的尝试
-    await createGradedAttemptForExam(examId, true); // passed
-    await createGradedAttemptForExam(examId, false, tempToken); // failed
+    await createGradedAttemptForExam(examId, true, ctx.candidateToken, false); // passed
+    await createGradedAttemptForExam(examId, false, tempToken, false); // failed
+    markExamClosed(examId);
 
     // 测试过滤passed
     const responsePassed = await ctx.app.inject({

@@ -33,8 +33,9 @@ export function QuestionRenderer({
     case "fill_blank":
       return (
         <FillBlankInput
-          blanks={question.options}
-          value={(answer as Record<string, string>) ?? {}}
+          content={question.content}
+          blanks={Array.isArray(question.options) ? question.options : []}
+          value={(answer as Record<string, string> | string | undefined) ?? {}}
           onChange={onChange}
         />
       );
