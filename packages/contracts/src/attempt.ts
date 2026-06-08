@@ -166,3 +166,32 @@ export const QueueStatusResponseSchema = z.object({
   estimatedWaitSeconds: z.number().int().min(0),
 });
 export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;
+
+export const CandidateExamDetailResponseSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  durationMinutes: z.number().int().positive(),
+  passingScore: z.number(),
+  totalScore: z.number(),
+  questionCount: z.number().int().min(0),
+  controlFlags: z.object({
+    shuffleQuestions: z.boolean(),
+    shuffleOptions: z.boolean(),
+    detectTabSwitch: z.boolean(),
+    disableCopyPaste: z.boolean(),
+    requireQueue: z.boolean(),
+    batchSize: z.number().int().positive(),
+    batchInterval: z.number().int().positive(),
+    restrictIp: z.boolean(),
+    requireLockdown: z.boolean(),
+    showResultImmediately: z.boolean(),
+  }),
+  maxAttempts: z.number().int().positive(),
+  currentAttempts: z.number().int().min(0),
+  activeAttemptId: z.string().uuid().optional(),
+  canStartNewAttempt: z.boolean(),
+  blockingReason: z.enum(["max_attempts_reached", "already_passed"]).optional(),
+});
+export type CandidateExamDetailResponse = z.infer<
+  typeof CandidateExamDetailResponseSchema
+>;

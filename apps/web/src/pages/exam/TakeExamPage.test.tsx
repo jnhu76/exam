@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
@@ -81,6 +81,14 @@ function renderPage() {
     </MemoryRouter>,
   );
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+  apiGet.mockReset();
+  apiPost.mockReset();
+  apiGet.mockResolvedValue(mockAttempt);
+  apiPost.mockResolvedValue({ ok: true });
+});
 
 describe("TakeExamPage smoke", () => {
   it("loads attempt and renders question content", async () => {
@@ -163,5 +171,40 @@ describe("TakeExamPage smoke", () => {
     expect(await screen.findByText(/已答 0/)).toBeInTheDocument();
     expect(screen.getByText(/未答 2/)).toBeInTheDocument();
     expect(screen.getByText(/共 2 题/)).toBeInTheDocument();
+  });
+
+  it("renders fill_blank input and saves the answer", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "安全出口标识的颜色是____色",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    renderPage();
+
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "绿");
+
+    await waitFor(
+      () => {
+        expect(apiPost).toHaveBeenCalledWith(
+          "/api/attempts/att-1/answers/q1",
+          expect.objectContaining({
+            attemptId: "att-1",
+            questionId: "q1",
+            answer: "绿",
+          }),
+        );
+      },
+      { timeout: 3000 },
+    );
   });
 });

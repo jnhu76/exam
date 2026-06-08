@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
-import { api } from "@/lib/api";
+import { toast } from "sonner";
+import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -13,27 +14,7 @@ import {
   Shield,
   LoaderCircle,
 } from "lucide-react";
-
-interface ExamDetail {
-  id: string;
-  title: string;
-  durationMinutes: number;
-  passingScore: number;
-  totalScore: number;
-  questionCount: number;
-  controlFlags: {
-    shuffleQuestions: boolean;
-    shuffleOptions: boolean;
-    detectTabSwitch: boolean;
-    disableCopyPaste: boolean;
-    showResultImmediately: boolean;
-    requireQueue: boolean;
-    batchSize: number;
-    batchInterval: number;
-  };
-  maxAttempts: number;
-  currentAttempts: number;
-}
+import type { CandidateExamDetailResponse } from "@exam/contracts";
 
 interface AttemptResponse {
   id: string;
@@ -52,7 +33,7 @@ interface QueueStatus {
 export function StartExamPage() {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
-  const [exam, setExam] = useState<ExamDetail | null>(null);
+  const [exam, setExam] = useState<CandidateExamDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +44,9 @@ export function StartExamPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.get<ExamDetail>(`/api/candidate/exams/${examId}`);
+      const data = await api.get<CandidateExamDetailResponse>(
+        `/api/candidate/exams/${examId}`,
+      );
       setExam(data);
     } catch {
       setError("加载考试信息失败");
@@ -79,12 +62,29 @@ export function StartExamPage() {
   const enterExam = useCallback(async () => {
     if (!examId) return;
     setIsStarting(true);
+    setError(null);
     try {
       const attempt = await api.post<AttemptResponse>(
         `/api/attempts/${examId}/start`,
       );
       navigate(routes.exam.take(attempt.id));
-    } catch {
+    } catch (err) {
+      let message = "无法开始考试，请稍后重试";
+      if (err instanceof ApiError) {
+        if (/Maximum attempt count reached/i.test(err.message)) {
+          message = "已达到最大考试次数，无法再次开始考试。";
+        } else if (/Already passed/i.test(err.message)) {
+          message = "本场考试已通过，无需再次参加。";
+        } else if (/not open|outside exam open window/i.test(err.message)) {
+          message = "考试当前不在开放时间内。";
+        } else if (/Wait for queue admission/i.test(err.message)) {
+          message = "当前仍在排队中，请等待准入后继续。";
+        } else if (err.message) {
+          message = err.message;
+        }
+      }
+      setError(message);
+      toast.error(message);
       setIsStarting(false);
     }
   }, [examId, navigate]);
@@ -105,6 +105,22 @@ export function StartExamPage() {
   }, [pollQueue, queueStatus?.status]);
 
   async function handleStart() {
+    if (!exam) return;
+    if (exam.activeAttemptId) {
+      navigate(routes.exam.take(exam.activeAttemptId));
+      return;
+    }
+    if (!exam.canStartNewAttempt) {
+      const message =
+        exam.blockingReason === "max_attempts_reached"
+          ? "已达到最大考试次数，无法再次开始考试。"
+          : exam.blockingReason === "already_passed"
+            ? "本场考试已通过，无需再次参加。"
+            : "当前无法开始考试。";
+      setError(message);
+      toast.error(message);
+      return;
+    }
     if (exam?.controlFlags.requireQueue) {
       setIsStarting(true);
       try {
@@ -118,9 +134,21 @@ export function StartExamPage() {
   }
 
   if (isLoading) return <LoadingState />;
-  if (error || !exam) {
+  if (!exam) {
     return <ErrorState message={error ?? "考试不存在"} onRetry={loadExam} />;
   }
+
+  const limitReached = exam.blockingReason === "max_attempts_reached";
+  const alreadyPassed = exam.blockingReason === "already_passed";
+  const hasActiveAttempt = Boolean(exam.activeAttemptId);
+  const actionLabel = hasActiveAttempt ? "继续考试" : "开始考试";
+  const inlineMessage = hasActiveAttempt
+    ? "检测到未完成的考试记录，将继续上次进度。"
+    : limitReached
+      ? "已达到最大考试次数，无法再次开始考试。"
+      : alreadyPassed
+        ? "本场考试已通过，无需再次参加。"
+        : error;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 p-6">
@@ -178,6 +206,18 @@ export function StartExamPage() {
         已考 {exam.currentAttempts}/{exam.maxAttempts} 次
       </div>
 
+      {inlineMessage && (
+        <div
+          className={`rounded-md border p-3 text-sm ${
+            hasActiveAttempt
+              ? "border-primary/30 bg-primary/10 text-primary"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          }`}
+        >
+          {inlineMessage}
+        </div>
+      )}
+
       {queueStatus?.status === "waiting" && (
         <Card>
           <CardHeader>
@@ -209,7 +249,9 @@ export function StartExamPage() {
         <Button
           size="lg"
           onClick={() => void handleStart()}
-          disabled={isStarting}
+          disabled={
+            isStarting || (!hasActiveAttempt && !exam.canStartNewAttempt)
+          }
         >
           {isStarting && (
             <LoaderCircle
@@ -217,7 +259,7 @@ export function StartExamPage() {
               aria-hidden="true"
             />
           )}
-          {isStarting ? "正在进入..." : "开始考试"}
+          {isStarting ? "正在进入..." : actionLabel}
         </Button>
       </div>
     </div>

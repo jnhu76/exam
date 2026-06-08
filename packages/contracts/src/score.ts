@@ -84,8 +84,8 @@ export const ScoreListItemSchema = z.object({
 export type ScoreListItem = z.infer<typeof ScoreListItemSchema>;
 
 export const ScoreListQuerySchema = z.object({
-  page: z.number().int().min(1).default(1),
-  pageSize: z.number().int().min(1).max(100).default(20),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
   passFilter: z.enum(["all", "passed", "failed"]).default("all"),
   search: z.string().optional(),
   sortBy: z

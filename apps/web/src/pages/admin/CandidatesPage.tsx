@@ -340,9 +340,12 @@ export function CandidatesPage() {
           <div className="space-y-4 py-4">
             {!editing && (
               <>
-                <div>
-                  <Label>用户名</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="candidate-username">
+                    用户名 <span className="text-destructive">*</span>
+                  </Label>
                   <Input
+                    id="candidate-username"
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
@@ -352,9 +355,12 @@ export function CandidatesPage() {
                   />
                   <FieldError>{fieldErrors.username}</FieldError>
                 </div>
-                <div>
-                  <Label>初始密码</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="candidate-password">
+                    初始密码 <span className="text-destructive">*</span>
+                  </Label>
                   <Input
+                    id="candidate-password"
                     type="password"
                     value={password}
                     onChange={(e) => {
@@ -362,14 +368,18 @@ export function CandidatesPage() {
                       if (fieldErrors.password)
                         setFieldErrors((prev) => ({ ...prev, password: "" }));
                     }}
+                    placeholder="至少 6 位"
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
                 </div>
               </>
             )}
-            <div>
-              <Label>姓名</Label>
+            <div className="space-y-2">
+              <Label htmlFor="candidate-name">
+                姓名 <span className="text-destructive">*</span>
+              </Label>
               <Input
+                id="candidate-name"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -380,12 +390,15 @@ export function CandidatesPage() {
               <FieldError>{fieldErrors.name}</FieldError>
             </div>
             {fields.map((field) => (
-              <div key={field.id}>
-                <Label>
+              <div key={field.id} className="space-y-2">
+                <Label htmlFor={`candidate-field-${field.name}`}>
                   {field.label}
-                  {field.required ? " *" : ""}
+                  {field.required && (
+                    <span className="ml-1 text-destructive">*</span>
+                  )}
                 </Label>
                 <Input
+                  id={`candidate-field-${field.name}`}
                   type={field.fieldType === "number" ? "number" : "text"}
                   value={values[field.name] ?? ""}
                   onChange={(e) =>
@@ -395,6 +408,7 @@ export function CandidatesPage() {
                     }))
                   }
                 />
+                <FieldError>{fieldErrors[`field:${field.name}`]}</FieldError>
               </div>
             ))}
           </div>

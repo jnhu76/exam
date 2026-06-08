@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import {
   buildTestApp,
   createCandidateViaApi,
@@ -37,6 +38,23 @@ describe("permission boundary", () => {
   afterAll(async () => {
     await ctx.app.close();
   });
+
+  function adminRequestContext() {
+    return {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+  }
+
+  function markExamClosed(examId: string) {
+    createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+      closeAt: new Date(Date.now() - 1000),
+    });
+  }
 
   describe("unauthenticated gets 401 on all protected endpoints", () => {
     it("GET /api/exams returns 401", async () => {
@@ -158,6 +176,14 @@ describe("permission boundary", () => {
         totalScore: 10,
       });
       await publishExamViaApi(ctx.app, ctx.adminToken, examId);
+      await submitExamAsCandidate(
+        ctx.app,
+        ctx.adminToken,
+        ctx.org.id,
+        examId,
+        "boundary-score-candidate",
+      );
+      markExamClosed(examId);
 
       const res = await ctx.app.inject({
         method: "GET",

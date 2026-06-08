@@ -24,7 +24,9 @@ describe("QuestionNav", () => {
     expect(screen.getByText("○")).toBeInTheDocument();
     expect(screen.getByText("●")).toBeInTheDocument();
     expect(screen.getByText("◉")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "第 2 题" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "第 2 题，已作答" }),
+    );
     expect(onSelect).toHaveBeenCalledWith(1);
   });
 

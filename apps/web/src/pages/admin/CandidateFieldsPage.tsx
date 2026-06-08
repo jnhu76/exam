@@ -17,13 +17,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -50,6 +43,15 @@ interface Field {
   unique: boolean;
   sortOrder: number;
 }
+
+const FIELD_TYPE_OPTIONS: Array<{
+  value: Field["fieldType"];
+  label: string;
+}> = [
+  { value: "text", label: "文本" },
+  { value: "number", label: "数字" },
+  { value: "select", label: "选项" },
+];
 
 export function CandidateFieldsPage() {
   const [fields, setFields] = useState<Field[]>([]);
@@ -89,15 +91,23 @@ export function CandidateFieldsPage() {
   }
   async function save() {
     if (!name.trim() || !label.trim()) return;
-    const data = {
-      label,
-      fieldType,
-      required,
-      unique,
-      sortOrder: editing?.sortOrder ?? fields.length,
-    };
-    if (editing) await api.patch(`/api/candidate-fields/${editing.id}`, data);
-    else await api.post("/api/candidate-fields", { ...data, name });
+    if (editing) {
+      await api.patch(`/api/candidate-fields/${editing.id}`, {
+        label,
+        required,
+        unique,
+        sortOrder: editing.sortOrder,
+      });
+    } else {
+      await api.post("/api/candidate-fields", {
+        name,
+        label,
+        fieldType,
+        required,
+        unique,
+        sortOrder: fields.length,
+      });
+    }
     setOpen(false);
     await load();
   }
@@ -197,7 +207,13 @@ export function CandidateFieldsPage() {
               >
                 <TableCell>{field.name}</TableCell>
                 <TableCell>{field.label}</TableCell>
-                <TableCell>{field.fieldType}</TableCell>
+                <TableCell>
+                  {field.fieldType === "text"
+                    ? "文本"
+                    : field.fieldType === "number"
+                      ? "数字"
+                      : "选项"}
+                </TableCell>
                 <TableCell>{field.required ? "是" : "否"}</TableCell>
                 <TableCell>{field.unique ? "是" : "否"}</TableCell>
                 <TableCell>{field.sortOrder}</TableCell>
@@ -269,21 +285,29 @@ export function CandidateFieldsPage() {
             </div>
             <div className="space-y-2">
               <Label>类型</Label>
-              <Select
-                value={fieldType}
-                onValueChange={(value) =>
-                  setFieldType(value as Field["fieldType"])
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">文本</SelectItem>
-                  <SelectItem value="number">数字</SelectItem>
-                  <SelectItem value="select">选项</SelectItem>
-                </SelectContent>
-              </Select>
+              {editing ? (
+                <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {FIELD_TYPE_OPTIONS.find(
+                    (option) => option.value === fieldType,
+                  )?.label ?? fieldType}
+                  <span className="ml-2 text-xs">（创建后不可修改）</span>
+                </div>
+              ) : (
+                <select
+                  value={fieldType}
+                  onChange={(event) =>
+                    setFieldType(event.target.value as Field["fieldType"])
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  aria-label="字段类型"
+                >
+                  {FIELD_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <label className="flex gap-2">
               <Checkbox

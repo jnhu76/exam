@@ -10,6 +10,7 @@ import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
 import {
   archiveExam,
@@ -81,6 +82,46 @@ function createExamRepoAdapter(
   };
 }
 
+function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
+  const examEnded =
+    exam.status === "closed" ||
+    exam.status === "archived" ||
+    now >= exam.closeAt;
+
+  if (!examEnded) {
+    return {
+      canViewScores: false,
+      scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
+    };
+  }
+
+  if (gradedAttemptCount === 0) {
+    return {
+      canViewScores: false,
+      scoreViewDisabledReason: "暂无成绩数据",
+    };
+  }
+
+  return {
+    canViewScores: true,
+    scoreViewDisabledReason: null,
+  };
+}
+
+function getDeleteMeta(exam: Exam) {
+  if (exam.status === "draft") {
+    return {
+      canDelete: true,
+      deleteDisabledReason: null,
+    };
+  }
+
+  return {
+    canDelete: false,
+    deleteDisabledReason: "仅草稿状态的考试允许删除",
+  };
+}
+
 const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
@@ -95,12 +136,29 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createExamRepo(fastify.db);
       const { items, total } = repo.listPaginated(ctx, page, pageSize);
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const now = new Date();
 
       return {
-        items: items.map((e) => ({
-          ...toExamResponse(e as Exam),
-          participantCount: getExamParticipants(fastify.db, ctx, e.id).length,
-        })),
+        items: items.map((e) => {
+          const exam = e as Exam;
+          const participantCount = getExamParticipants(
+            fastify.db,
+            ctx,
+            exam.id,
+          ).length;
+          const gradedAttemptCount = attemptRepo.countGradedByExam(
+            ctx,
+            exam.id,
+          );
+          return {
+            ...toExamResponse(exam),
+            participantCount,
+            gradedAttemptCount,
+            ...getScoreViewMeta(exam, gradedAttemptCount, now),
+            ...getDeleteMeta(exam),
+          };
+        }),
         total,
         page,
         pageSize,

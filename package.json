@@ -18,6 +18,8 @@
     "db:push": "pnpm --filter @exam/db db:push",
     "db:studio": "pnpm --filter @exam/db db:studio",
     "db:seed": "pnpm --filter @exam/api db:seed",
+    "db:seed:demo": "pnpm --filter @exam/api db:seed:demo",
+    "db:seed:demo:verify": "pnpm --filter @exam/api db:seed:demo:verify",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
     "smoke": "turbo smoke",

@@ -25,18 +25,37 @@ export function QuestionNav({
         const state = states[i] ?? "unanswered";
         const isCurrent = i === currentIndex;
 
-        let bgColor = "bg-muted text-muted-foreground";
-        if (state === "answered") bgColor = "bg-green-100 text-green-800";
-        if (state === "flagged") bgColor = "bg-yellow-100 text-yellow-800";
+        let bgColor =
+          "border border-border bg-background text-muted-foreground hover:bg-muted";
+        let stateLabel = "未作答";
+        if (state === "answered") {
+          bgColor =
+            "border border-green-500 bg-green-500 text-white hover:bg-green-600";
+          stateLabel = "已作答";
+        }
+        if (state === "flagged") {
+          bgColor =
+            "border border-amber-500 bg-amber-100 text-amber-900 hover:bg-amber-200";
+          stateLabel = "已标记";
+        }
+        if (isCurrent) {
+          bgColor +=
+            " ring-2 ring-primary ring-offset-2 ring-offset-background font-semibold";
+        }
         const symbol =
           state === "answered" ? "●" : state === "flagged" ? "◉" : "○";
+        const ariaLabel = isCurrent
+          ? `第 ${i + 1} 题，${stateLabel}，当前题`
+          : `第 ${i + 1} 题，${stateLabel}`;
 
         return (
           <button
             key={q.id}
-            className={`flex h-9 w-9 items-center justify-center rounded text-sm ${bgColor} ${isCurrent ? "ring-2 ring-primary" : ""}`}
+            type="button"
+            className={`flex h-9 w-9 items-center justify-center rounded text-sm transition-colors ${bgColor}`}
             onClick={() => onSelect(i)}
-            aria-label={`第 ${i + 1} 题`}
+            aria-label={ariaLabel}
+            aria-current={isCurrent ? "true" : undefined}
           >
             <span className="sr-only">{symbol}</span>
             {i + 1}

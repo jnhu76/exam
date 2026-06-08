@@ -278,6 +278,30 @@ describe("attemptCommands", () => {
       expect(result.id).toBe("attempt-1");
     });
 
+    it("returns existing in_progress attempt even after max attempts are exhausted", () => {
+      const exam = makeExam({
+        retakePolicy: "max_attempts",
+        maxAttempts: 1,
+      });
+      const enrollment = makeEnrollment({ attemptCount: 1 });
+      const existingAttempt = makeAttempt();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([existingAttempt]);
+
+      const result = startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.id).toBe("attempt-1");
+      expect(result.attemptNo).toBe(1);
+    });
+
     it("throws ExamNotOpenError when exam is not open", () => {
       const exam = makeExam({ status: "draft" });
       const examRepo = { findById: () => exam, update: () => exam };

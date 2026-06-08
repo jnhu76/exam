@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -37,18 +38,22 @@ interface UserRow {
   id: string;
   username: string;
   name: string;
-  role: "Admin" | "Teacher" | "Proctor" | "Candidate";
+  role: "SuperAdmin" | "Admin" | "Teacher" | "Proctor" | "Candidate";
   isActive: boolean;
 }
 interface Page<T> {
   items: T[];
 }
-const roleLabels = {
+const roleLabels: Record<string, string> = {
+  SuperAdmin: "超级管理员",
   Admin: "管理员",
   Teacher: "教师",
   Proctor: "监考员",
   Candidate: "候选人",
 };
+
+type EditableRole = "Admin" | "Teacher" | "Proctor";
+const EDITABLE_ROLES: EditableRole[] = ["Admin", "Teacher", "Proctor"];
 
 export function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -59,7 +64,7 @@ export function UsersPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"Admin" | "Teacher" | "Proctor">("Teacher");
+  const [role, setRole] = useState<EditableRole>("Teacher");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const loadUsers = useCallback(async () => {
@@ -85,8 +90,8 @@ export function UsersPage() {
     setPassword("");
     setName(user?.name ?? "");
     setRole(
-      user?.role === "Admin" || user?.role === "Proctor"
-        ? user.role
+      user && (EDITABLE_ROLES as readonly string[]).includes(user.role)
+        ? (user.role as EditableRole)
         : "Teacher",
     );
     setFieldErrors({});
@@ -106,14 +111,29 @@ export function UsersPage() {
 
   async function save() {
     if (!validate()) return;
-    if (editing) await api.patch(`/api/users/${editing.id}`, { name, role });
-    else await api.post("/api/users", { username, password, name, role });
-    setDialogOpen(false);
-    await loadUsers();
+    try {
+      if (editing) {
+        const payload: { name: string; role?: EditableRole } = { name };
+        if (editing.role !== "SuperAdmin") payload.role = role;
+        await api.patch(`/api/users/${editing.id}`, payload);
+      } else {
+        await api.post("/api/users", { username, password, name, role });
+      }
+      setDialogOpen(false);
+      await loadUsers();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "保存失败";
+      toast.error(message);
+    }
   }
   async function toggle(user: UserRow) {
-    await api.patch(`/api/users/${user.id}`, { isActive: !user.isActive });
-    await loadUsers();
+    try {
+      await api.patch(`/api/users/${user.id}`, { isActive: !user.isActive });
+      await loadUsers();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "操作失败";
+      toast.error(message);
+    }
   }
 
   if (isLoading) return <LoadingState />;
@@ -152,7 +172,9 @@ export function UsersPage() {
                 <TableCell>{user.username}</TableCell>
                 <TableCell>{user.name}</TableCell>
                 <TableCell>
-                  <Badge variant="outline">{roleLabels[user.role]}</Badge>
+                  <Badge variant="outline">
+                    {roleLabels[user.role] ?? user.role}
+                  </Badge>
                 </TableCell>
                 <TableCell>{user.isActive ? "启用" : "禁用"}</TableCell>
                 <TableCell>
@@ -165,13 +187,15 @@ export function UsersPage() {
                     >
                       <Pencil className="size-4" />
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void toggle(user)}
-                    >
-                      {user.isActive ? "禁用" : "启用"}
-                    </Button>
+                    {user.role !== "SuperAdmin" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void toggle(user)}
+                      >
+                        {user.isActive ? "禁用" : "启用"}
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -228,19 +252,25 @@ export function UsersPage() {
             </div>
             <div className="space-y-2">
               <Label>角色</Label>
-              <Select
-                value={role}
-                onValueChange={(value) => setRole(value as typeof role)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Admin">管理员</SelectItem>
-                  <SelectItem value="Teacher">教师</SelectItem>
-                  <SelectItem value="Proctor">监考员</SelectItem>
-                </SelectContent>
-              </Select>
+              {editing?.role === "SuperAdmin" ? (
+                <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  超级管理员（不可修改）
+                </div>
+              ) : (
+                <Select
+                  value={role}
+                  onValueChange={(value) => setRole(value as EditableRole)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Admin">管理员</SelectItem>
+                    <SelectItem value="Teacher">教师</SelectItem>
+                    <SelectItem value="Proctor">监考员</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
           <DialogFooter>
