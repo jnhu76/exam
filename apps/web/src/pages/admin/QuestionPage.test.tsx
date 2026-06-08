@@ -78,7 +78,7 @@ describe("QuestionPage", () => {
       renderPage();
 
       expect(await screen.findByText("题目管理")).toBeInTheDocument();
-      expect(screen.getByText("题目一内容")).toBeInTheDocument();
+      expect(await screen.findByText("题目一内容")).toBeInTheDocument();
 
       const pendingQuestions = new Promise(() => {});
       apiGet.mockImplementationOnce(() => pendingQuestions);
