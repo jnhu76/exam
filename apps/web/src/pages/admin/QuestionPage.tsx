@@ -123,7 +123,7 @@ export function QuestionPage() {
   useEffect(() => {
     let cancelled = false;
     async function init() {
-      await Promise.all([loadCourses(), loadQuestions()]);
+      await loadCourses();
       if (!cancelled) setIsInitialLoading(false);
     }
     void init();

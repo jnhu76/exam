@@ -663,7 +663,7 @@ export async function seedDemo(
       .get();
     if (existing) {
       db.update(sqliteSchema.exams)
-        .set({ ...data, updatedAt: ts() })
+        .set({ ...data, createdAt: existing.createdAt, updatedAt: ts() })
         .where(eq(sqliteSchema.exams.id, existing.id))
         .run();
       return existing.id;

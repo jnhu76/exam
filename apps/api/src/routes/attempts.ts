@@ -415,13 +415,13 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Exam not found");
       }
 
-      const enrollment = normalizeEnrollment(
-        createEnrollmentRepo(fastify.db).findByExamAndCandidate(
-          ctx,
-          parsed.data.examId,
-          candidateProfile.id,
-        ),
-      );
+      const rawEnrollment = createEnrollmentRepo(
+        fastify.db,
+      ).findByExamAndCandidate(ctx, parsed.data.examId, candidateProfile.id);
+      if (!rawEnrollment) {
+        throw new NotFoundError("Enrollment not found");
+      }
+      const enrollment = normalizeEnrollment(rawEnrollment);
       const activeAttempt = createAttemptRepo(
         fastify.db,
       ).findActiveByExamAndCandidate(

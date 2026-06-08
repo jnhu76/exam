@@ -101,14 +101,14 @@ export function ResultsOverviewPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">可查询成绩的考试</CardTitle>
+            <CardTitle className="text-base">成绩管理</CardTitle>
           </CardHeader>
           <CardContent>
             {exams.length === 0 ? (
               <EmptyState
                 icon={<Gauge className="size-12" />}
-                title="暂无可查询的考试"
-                description="已结束或已归档的考试将显示在此处"
+                title="暂无相关考试"
+                description="已结束、已归档或进行中的考试将显示在此处"
               />
             ) : (
               <Table>

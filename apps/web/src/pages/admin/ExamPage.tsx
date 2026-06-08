@@ -190,7 +190,9 @@ export function ExamPage() {
                         ) : (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span tabIndex={0}>{deleteButton}</span>
+                              <span tabIndex={0} aria-label="删除考试">
+                                {deleteButton}
+                              </span>
                             </TooltipTrigger>
                             <TooltipContent>
                               {exam.deleteDisabledReason ?? "当前不可删除"}

@@ -333,17 +333,19 @@ export function verifyDemoSeed(db: SqliteDatabase, ids: DemoIds): string[] {
       .from(sqliteSchema.candidateProfiles)
       .where(eq(sqliteSchema.candidateProfiles.id, enrollment.candidateId))
       .get();
-    if (profile) {
-      const user = db
-        .select()
-        .from(sqliteSchema.users)
-        .where(eq(sqliteSchema.users.id, profile.userId))
-        .get();
-      assert(
-        user?.role === "Candidate",
-        `Enrollment ${enrollment.id} belongs to non-Candidate user '${user?.username}' (role: ${user?.role})`,
-      );
-    }
+    assert(
+      profile !== undefined,
+      `Enrollment ${enrollment.id} references missing candidateProfile for candidateId='${enrollment.candidateId}'`,
+    );
+    const user = db
+      .select()
+      .from(sqliteSchema.users)
+      .where(eq(sqliteSchema.users.id, profile!.userId))
+      .get();
+    assert(
+      user?.role === "Candidate",
+      `Enrollment ${enrollment.id} belongs to non-Candidate user '${user?.username}' (role: ${user?.role})`,
+    );
   }
 
   // 15. Graded attempts have grading detail
@@ -397,7 +399,9 @@ export function verifyDemoSeed(db: SqliteDatabase, ids: DemoIds): string[] {
         `In-progress attempt has no questionSnapshot`,
       );
       assert(
-        attempt?.deadlineAt !== null && attempt!.deadlineAt!.getTime() > now,
+        attempt != null &&
+          attempt.deadlineAt != null &&
+          attempt.deadlineAt.getTime() > now,
         `In-progress attempt deadlineAt should be in the future`,
       );
     }
