@@ -341,10 +341,11 @@ export function CandidatesPage() {
             {!editing && (
               <>
                 <div className="space-y-2">
-                  <Label>
+                  <Label htmlFor="candidate-username">
                     用户名 <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="candidate-username"
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value);
@@ -355,10 +356,11 @@ export function CandidatesPage() {
                   <FieldError>{fieldErrors.username}</FieldError>
                 </div>
                 <div className="space-y-2">
-                  <Label>
+                  <Label htmlFor="candidate-password">
                     初始密码 <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="candidate-password"
                     type="password"
                     value={password}
                     onChange={(e) => {
@@ -373,10 +375,11 @@ export function CandidatesPage() {
               </>
             )}
             <div className="space-y-2">
-              <Label>
+              <Label htmlFor="candidate-name">
                 姓名 <span className="text-destructive">*</span>
               </Label>
               <Input
+                id="candidate-name"
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -388,13 +391,14 @@ export function CandidatesPage() {
             </div>
             {fields.map((field) => (
               <div key={field.id} className="space-y-2">
-                <Label>
+                <Label htmlFor={`candidate-field-${field.name}`}>
                   {field.label}
                   {field.required && (
                     <span className="ml-1 text-destructive">*</span>
                   )}
                 </Label>
                 <Input
+                  id={`candidate-field-${field.name}`}
                   type={field.fieldType === "number" ? "number" : "text"}
                   value={values[field.name] ?? ""}
                   onChange={(e) =>

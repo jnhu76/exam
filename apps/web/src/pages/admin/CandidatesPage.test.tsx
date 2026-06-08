@@ -103,7 +103,7 @@ describe("CandidatesPage", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByLabelText(/用户名/)).toHaveValue("");
     expect(within(dialog).getByLabelText(/初始密码/)).toHaveValue("");
-    expect(within(dialog).getByLabelText("编号")).toHaveAttribute(
+    expect(within(dialog).getByLabelText(/编号/)).toHaveAttribute(
       "type",
       "number",
     );
