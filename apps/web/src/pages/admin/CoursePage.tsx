@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -211,16 +211,7 @@ export function CoursePage() {
                   <TableCell>{course.code}</TableCell>
                   <TableCell className="max-w-[360px]">
                     {course.description ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="block cursor-default line-clamp-2 whitespace-pre-wrap break-words">
-                            {course.description}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
-                          {course.description}
-                        </TooltipContent>
-                      </Tooltip>
+                      <TruncatedCell text={course.description} />
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
@@ -317,5 +308,36 @@ export function CoursePage() {
         </Dialog>
       </div>
     </TooltipProvider>
+  );
+}
+
+function TruncatedCell({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [truncated, setTruncated] = useState(false);
+
+  useEffect(() => {
+    if (ref.current) {
+      setTruncated(ref.current.scrollHeight > ref.current.clientHeight);
+    }
+  }, [text]);
+
+  const span = (
+    <span
+      ref={ref}
+      className="block cursor-default line-clamp-2 whitespace-pre-wrap break-words"
+    >
+      {text}
+    </span>
+  );
+
+  if (!truncated) return span;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{span}</TooltipTrigger>
+      <TooltipContent className="max-w-md whitespace-pre-wrap break-words">
+        {text}
+      </TooltipContent>
+    </Tooltip>
   );
 }
