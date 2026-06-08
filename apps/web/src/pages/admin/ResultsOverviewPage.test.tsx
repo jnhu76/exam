@@ -5,46 +5,48 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ResultsOverviewPage } from "./ResultsOverviewPage";
 
-const apiGet = vi.fn().mockResolvedValue({
-  items: [
-    {
-      id: "exam-open",
-      title: "未结束考试",
-      status: "published",
-      openAt: new Date().toISOString(),
-      closeAt: new Date(Date.now() + 3600000).toISOString(),
-      passingScore: 60,
-      totalScore: 100,
-      gradedAttemptCount: 2,
-      canViewScores: false,
-      scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
-    },
-    {
-      id: "exam-empty",
-      title: "暂无成绩考试",
-      status: "closed",
-      openAt: new Date(Date.now() - 86400000).toISOString(),
-      closeAt: new Date(Date.now() - 3600000).toISOString(),
-      passingScore: 60,
-      totalScore: 100,
-      gradedAttemptCount: 0,
-      canViewScores: false,
-      scoreViewDisabledReason: "暂无成绩数据",
-    },
-    {
-      id: "exam-graded",
-      title: "已出分考试",
-      status: "closed",
-      openAt: new Date(Date.now() - 86400000).toISOString(),
-      closeAt: new Date(Date.now() - 3600000).toISOString(),
-      passingScore: 60,
-      totalScore: 100,
-      gradedAttemptCount: 3,
-      canViewScores: true,
-      scoreViewDisabledReason: null,
-    },
-  ],
-});
+const { apiGet } = vi.hoisted(() => ({
+  apiGet: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: "exam-open",
+        title: "未结束考试",
+        status: "published",
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 3600000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        gradedAttemptCount: 2,
+        canViewScores: false,
+        scoreViewDisabledReason: "考试尚未结束，暂不能查看成绩",
+      },
+      {
+        id: "exam-empty",
+        title: "暂无成绩考试",
+        status: "closed",
+        openAt: new Date(Date.now() - 86400000).toISOString(),
+        closeAt: new Date(Date.now() - 3600000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        gradedAttemptCount: 0,
+        canViewScores: false,
+        scoreViewDisabledReason: "暂无成绩数据",
+      },
+      {
+        id: "exam-graded",
+        title: "已出分考试",
+        status: "closed",
+        openAt: new Date(Date.now() - 86400000).toISOString(),
+        closeAt: new Date(Date.now() - 3600000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        gradedAttemptCount: 3,
+        canViewScores: true,
+        scoreViewDisabledReason: null,
+      },
+    ],
+  }),
+}));
 
 vi.mock("@/lib/api", () => ({
   api: {

@@ -6,9 +6,11 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { UsersPage } from "./UsersPage";
 
-const apiGet = vi.fn();
-const apiPost = vi.fn();
-const apiPatch = vi.fn();
+const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
+  apiPatch: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -116,7 +118,7 @@ describe("UsersPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("opens create dialog with blank fields", async () => {
+  it("renders add user button and create dialog opens", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /新增用户/ }));

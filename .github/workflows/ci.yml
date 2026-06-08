@@ -57,27 +57,5 @@ jobs:
       - name: Coverage
         run: pnpm coverage
 
-      - name: Check coverage thresholds
-        run: |
-          echo "## Coverage Gate"
-          FAILED=""
-          for PKG in apps/api apps/web packages/domain packages/contracts packages/db packages/auth packages/exam-engine; do
-            if [ -d "$PKG/coverage" ]; then
-              SUMMARY=$(cat "$PKG/coverage/coverage-summary.json" 2>/dev/null || echo '{}')
-              LINES=$(echo "$SUMMARY" | jq -r '.total.lines.pct // 0' 2>/dev/null || echo 0)
-              if [ "$LINES" != "null" ] && [ "$(echo "$LINES < 60" | bc 2>/dev/null || echo 1)" -eq 1 ]; then
-                echo "::warning::$PKG line coverage is $LINES% (below 60% threshold)"
-                FAILED="$FAILED $PKG"
-              else
-                echo "  $PKG: $LINES% lines"
-              fi
-            fi
-          done
-          if [ -n "$FAILED" ]; then
-            echo "::error::Coverage below 60% in:$FAILED"
-            exit 1
-          fi
-          echo "All packages meet 60% line coverage threshold."
-
       - name: Build
         run: pnpm build

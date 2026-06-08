@@ -6,9 +6,11 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { CandidatesPage } from "./CandidatesPage";
 
-const apiGet = vi.fn();
-const apiPost = vi.fn();
-const apiPatch = vi.fn();
+const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
+  apiPatch: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({
   api: {

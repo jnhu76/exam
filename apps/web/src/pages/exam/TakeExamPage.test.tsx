@@ -6,37 +6,41 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
 
-const mockAttempt = {
-  id: "att-1",
-  examId: "exam-1",
-  status: "in_progress",
-  score: null,
-  deadlineAt: new Date(Date.now() + 3600000).toISOString(),
-  questionSnapshot: [
-    {
-      originalQuestionId: "q1",
-      type: "true_false",
-      content: "地球是圆的",
-      score: 10,
-      options: null,
-      standardAnswer: true,
-    },
-    {
-      originalQuestionId: "q2",
-      type: "true_false",
-      content: "水是透明的",
-      score: 15,
-      options: null,
-      standardAnswer: true,
-    },
-  ],
-  answers: [],
-  startedAt: new Date().toISOString(),
-  submittedAt: null,
-};
-
-const apiGet = vi.fn().mockResolvedValue(mockAttempt);
-const apiPost = vi.fn().mockResolvedValue({ ok: true });
+const { apiGet, apiPost, mockAttempt } = vi.hoisted(() => {
+  const mockAttempt = {
+    id: "att-1",
+    examId: "exam-1",
+    status: "in_progress",
+    score: null,
+    deadlineAt: new Date(Date.now() + 3600000).toISOString(),
+    questionSnapshot: [
+      {
+        originalQuestionId: "q1",
+        type: "true_false",
+        content: "地球是圆的",
+        score: 10,
+        options: null,
+        standardAnswer: true,
+      },
+      {
+        originalQuestionId: "q2",
+        type: "true_false",
+        content: "水是透明的",
+        score: 15,
+        options: null,
+        standardAnswer: true,
+      },
+    ],
+    answers: [],
+    startedAt: new Date().toISOString(),
+    submittedAt: null,
+  };
+  return {
+    apiGet: vi.fn().mockResolvedValue(mockAttempt),
+    apiPost: vi.fn().mockResolvedValue({ ok: true }),
+    mockAttempt,
+  };
+});
 
 vi.mock("@/lib/api", () => ({
   api: {
