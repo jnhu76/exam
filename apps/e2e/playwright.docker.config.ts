@@ -8,7 +8,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: "list",
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: "http://host.docker.internal:5173",
     headless: true,
     actionTimeout: 10_000,
     navigationTimeout: 15_000,
@@ -31,20 +31,6 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         storageState: "src/e2e/.auth/admin.json",
       },
-    },
-  ],
-  webServer: [
-    {
-      command: "pnpm --filter @exam/api dev",
-      port: 3000,
-      reuseExistingServer: true,
-      timeout: 15_000,
-    },
-    {
-      command: "pnpm --filter @exam/web dev",
-      port: 5173,
-      reuseExistingServer: true,
-      timeout: 15_000,
     },
   ],
 });

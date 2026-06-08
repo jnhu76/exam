@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: ["host.docker.internal"],
     proxy: {
       "/api": {
         target: "http://localhost:3000",
