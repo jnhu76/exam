@@ -6,11 +6,17 @@ import type {
 } from "@exam/domain";
 import {
   ExamNotOpenError,
+  ExamTimeExpiredError,
   InvalidStateTransitionError,
   ValidationError,
 } from "@exam/domain";
 import { calculateDeadlineAt } from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
+import {
+  transition,
+  isTransitionOk,
+  type AttemptCommand,
+} from "./attemptStateMachine.js";
 
 export interface AttemptRepository {
   findById(attemptId: string): ExamAttempt | null;
@@ -131,7 +137,16 @@ export function submitAttempt(
     throw new ValidationError("Attempt not found");
   }
 
-  if (attempt.status !== "in_progress" && attempt.status !== "disrupted") {
+  const guards = attempt.deadlineAt
+    ? { deadlineAt: attempt.deadlineAt, now }
+    : { now };
+
+  const result = transition(attempt.status, "submit" as AttemptCommand, guards);
+
+  if (!isTransitionOk(result)) {
+    if (result.reason === "DEADLINE_EXCEEDED") {
+      throw new ExamTimeExpiredError("Attempt deadline exceeded");
+    }
     throw new InvalidStateTransitionError(
       `Cannot submit attempt in ${attempt.status} state`,
     );
@@ -152,7 +167,8 @@ export function markDisrupted(
     throw new ValidationError("Attempt not found");
   }
 
-  if (attempt.status !== "in_progress") {
+  const result = transition(attempt.status, "disrupt" as AttemptCommand);
+  if (!isTransitionOk(result)) {
     throw new InvalidStateTransitionError(
       `Cannot mark disrupted from ${attempt.status} state`,
     );
@@ -172,7 +188,8 @@ export function restoreAttempt(
     throw new ValidationError("Attempt not found");
   }
 
-  if (attempt.status !== "disrupted") {
+  const result = transition(attempt.status, "restore" as AttemptCommand);
+  if (!isTransitionOk(result)) {
     throw new InvalidStateTransitionError(
       `Cannot restore attempt from ${attempt.status} state`,
     );

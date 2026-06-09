@@ -9,6 +9,8 @@ export interface AnswerState {
   attemptStatus: AttemptStatus;
   answers: AnswerRecord[];
   clientSeqMap: Map<string, AnswerRecord>;
+  deadlineAt?: Date;
+  now?: Date;
 }
 
 export interface ProcessSaveResult extends SaveAnswerResponse {
@@ -39,6 +41,19 @@ export function processSaveAnswer(
       serverVersion: 0,
       savedAt: new Date().toISOString(),
       conflict: { reason: "SUBMITTED" },
+    };
+  }
+
+  if (
+    state.deadlineAt &&
+    state.now &&
+    state.now.getTime() > state.deadlineAt.getTime()
+  ) {
+    return {
+      accepted: false,
+      serverVersion: 0,
+      savedAt: new Date().toISOString(),
+      conflict: { reason: "DEADLINE_EXCEEDED" },
     };
   }
 

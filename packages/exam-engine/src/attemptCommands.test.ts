@@ -14,7 +14,11 @@ import type {
   QuestionSnapshot,
   RequestContext,
 } from "@exam/domain";
-import { ExamNotOpenError, ValidationError } from "@exam/domain";
+import {
+  ExamNotOpenError,
+  ExamTimeExpiredError,
+  ValidationError,
+} from "@exam/domain";
 
 function makeSnapshot(): QuestionSnapshot[] {
   return [
@@ -468,19 +472,15 @@ describe("attemptCommands", () => {
       );
     });
 
-    it("accepts late submission (past deadline) but notes timeout", () => {
+    it("rejects late submission (past deadline) with ExamTimeExpiredError", () => {
       const attempt = makeAttempt({
         deadlineAt: new Date("2025-01-01T09:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
 
-      const result = submitAttempt(
-        attRepo,
-        "attempt-1",
-        new Date("2025-01-01T11:00:00Z"),
-      );
-
-      expect(result.status).toBe("submitted");
+      expect(() =>
+        submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T11:00:00Z")),
+      ).toThrow(ExamTimeExpiredError);
     });
   });
 

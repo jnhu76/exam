@@ -130,6 +130,43 @@ describe("answerProtocol", () => {
       expect(result.conflict?.reason).toBe("ATTEMPT_CLOSED");
     });
 
+    it("rejects save when deadline is exceeded", () => {
+      const state = makeState({
+        attemptStatus: "in_progress",
+        deadlineAt: new Date("2025-01-01T10:00:00Z"),
+        now: new Date("2025-01-01T10:00:01Z"),
+      });
+      const request = makeRequest();
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("DEADLINE_EXCEEDED");
+    });
+
+    it("allows save when now equals deadline exactly", () => {
+      const deadline = new Date("2025-01-01T10:00:00Z");
+      const state = makeState({
+        attemptStatus: "in_progress",
+        deadlineAt: deadline,
+        now: deadline,
+      });
+      const request = makeRequest({ baseVersion: 0 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(true);
+    });
+
+    it("allows save when deadline guards are not provided", () => {
+      const state = makeState({ attemptStatus: "in_progress" });
+      const request = makeRequest({ baseVersion: 0 });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(true);
+    });
+
     it("stores new answer record on accepted result", () => {
       const state = makeState();
       const request = makeRequest({ baseVersion: 0 });
