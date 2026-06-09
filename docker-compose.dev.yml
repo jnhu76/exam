@@ -4,7 +4,7 @@ services:
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: sqlite:./data/dev.db
+      DATABASE_URL: ${DATABASE_URL:-sqlite:./data/dev.db}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
       NODE_ENV: development
       APP_PORT: 3000
@@ -13,6 +13,10 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-}
     volumes:
       - sqlite-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
     healthcheck:
       test:
         [
@@ -30,9 +34,68 @@ services:
     networks:
       - exam-net
     restart: unless-stopped
+    profiles:
+      - sqlite
+
+  app-pg:
+    build: .
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://exam:exam@db:5432/exam
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
+      NODE_ENV: development
+      APP_PORT: 3000
+      HOST: 0.0.0.0
+      COOKIE_SECURE: "false"
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/api/system/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - exam-net
+    restart: unless-stopped
+    profiles:
+      - postgres
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "${PG_PORT:-15432}:5432"
+    environment:
+      POSTGRES_USER: exam
+      POSTGRES_PASSWORD: exam
+      POSTGRES_DB: exam
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - exam-net
+    restart: unless-stopped
+    profiles:
+      - postgres
 
 volumes:
   sqlite-data:
+  pgdata:
 
 networks:
   exam-net:

@@ -22,8 +22,10 @@ export function createPostgresDatabase(
   return { kind: "pg", sql, db };
 }
 
-export function migratePostgres(db: PostgresJsDatabase<typeof pgSchema>): void {
-  migrate(db, {
+export async function migratePostgres(
+  db: PostgresJsDatabase<typeof pgSchema>,
+): Promise<void> {
+  await migrate(db, {
     migrationsFolder: fileURLToPath(
       new URL("../migrations/postgres", import.meta.url),
     ),
