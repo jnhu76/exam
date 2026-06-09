@@ -129,6 +129,7 @@ export const ConflictReason = {
   StaleVersion: "STALE_VERSION",
   Submitted: "SUBMITTED",
   AttemptClosed: "ATTEMPT_CLOSED",
+  DeadlineExceeded: "DEADLINE_EXCEEDED",
 } as const;
 export type ConflictReason =
   (typeof ConflictReason)[keyof typeof ConflictReason];

@@ -9,6 +9,11 @@ import type {
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
+import {
+  transition,
+  isTransitionOk,
+  type AttemptCommand,
+} from "./attemptStateMachine.js";
 
 function shouldSelectAttempt(
   strategy: ScoreStrategy,
@@ -39,7 +44,9 @@ export function gradeAttempt(
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
-  if (attempt.status !== "submitted") {
+
+  const tr = transition(attempt.status, "grade" as AttemptCommand);
+  if (!isTransitionOk(tr)) {
     throw new InvalidStateTransitionError(
       `Cannot grade attempt in ${attempt.status} state`,
     );
