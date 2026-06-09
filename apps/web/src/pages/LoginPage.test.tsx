@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LoginPage } from "./LoginPage";
 
-const apiPost = vi.fn();
+const { apiPost } = vi.hoisted(() => ({
+  apiPost: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({
   api: { post: (...args: unknown[]) => apiPost(...args), get: vi.fn() },

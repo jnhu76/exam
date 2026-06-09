@@ -6,39 +6,41 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamCreatePage } from "./ExamCreatePage";
 
-const mockCourses = [{ id: "c1", name: "数学", code: "MATH101" }];
-const mockQuestions = [
-  {
-    id: "q1",
-    type: "true_false",
-    content: "2+2=4",
-    score: 10,
-    courseId: "c1",
-    standardAnswer: true,
-    createdAt: "2026-01-01",
-    updatedAt: "2026-01-01",
-  },
-  {
-    id: "q2",
-    type: "single_choice",
-    content: "Capital of France?",
-    score: 15,
-    courseId: "c1",
-    standardAnswer: "Paris",
-    createdAt: "2026-01-01",
-    updatedAt: "2026-01-01",
-  },
-];
-
-const apiGet = vi.fn().mockImplementation((path: string) => {
-  if (path.includes("/api/courses"))
-    return Promise.resolve({ items: mockCourses, total: 1 });
-  if (path.includes("/api/questions"))
-    return Promise.resolve({ items: mockQuestions, total: 2 });
-  return Promise.resolve({});
+const { apiGet, apiPost } = vi.hoisted(() => {
+  const mockCourses = [{ id: "c1", name: "数学", code: "MATH101" }];
+  const mockQuestions = [
+    {
+      id: "q1",
+      type: "true_false",
+      content: "2+2=4",
+      score: 10,
+      courseId: "c1",
+      standardAnswer: true,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+    },
+    {
+      id: "q2",
+      type: "single_choice",
+      content: "Capital of France?",
+      score: 15,
+      courseId: "c1",
+      standardAnswer: "Paris",
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+    },
+  ];
+  return {
+    apiGet: vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/api/courses"))
+        return Promise.resolve({ items: mockCourses, total: 1 });
+      if (path.includes("/api/questions"))
+        return Promise.resolve({ items: mockQuestions, total: 2 });
+      return Promise.resolve({});
+    }),
+    apiPost: vi.fn().mockResolvedValue({ id: "exam-1" }),
+  };
 });
-
-const apiPost = vi.fn().mockResolvedValue({ id: "exam-1" });
 
 vi.mock("@/lib/api", () => ({
   api: {

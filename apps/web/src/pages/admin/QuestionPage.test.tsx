@@ -6,38 +6,40 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { QuestionPage } from "./QuestionPage";
 
-const apiGet = vi.fn().mockImplementation((path: string) => {
-  if (path.startsWith("/api/courses")) {
+const { apiGet } = vi.hoisted(() => ({
+  apiGet: vi.fn().mockImplementation((path: string) => {
+    if (path.startsWith("/api/courses")) {
+      return Promise.resolve({
+        items: [
+          { id: "course-1", name: "课程一", code: "C1" },
+          { id: "course-2", name: "课程二", code: "C2" },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      });
+    }
+
     return Promise.resolve({
       items: [
-        { id: "course-1", name: "课程一", code: "C1" },
-        { id: "course-2", name: "课程二", code: "C2" },
+        {
+          id: "q1",
+          courseId: "course-1",
+          type: "single_choice",
+          content: "题目一内容",
+          score: 10,
+          difficulty: 1,
+          tags: ["tag1"],
+        },
       ],
-      total: 2,
+      total: 1,
       page: 1,
       pageSize: 20,
-      totalPages: 1,
+      totalPages: 2,
     });
-  }
-
-  return Promise.resolve({
-    items: [
-      {
-        id: "q1",
-        courseId: "course-1",
-        type: "single_choice",
-        content: "题目一内容",
-        score: 10,
-        difficulty: 1,
-        tags: ["tag1"],
-      },
-    ],
-    total: 1,
-    page: 1,
-    pageSize: 20,
-    totalPages: 2,
-  });
-});
+  }),
+}));
 
 vi.mock("@/lib/api", () => ({
   api: {

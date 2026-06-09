@@ -5,42 +5,44 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamPage } from "./ExamPage";
 
-const apiGet = vi.fn().mockResolvedValue({
-  items: [
-    {
-      id: "draft-exam",
-      title: "Draft Exam",
-      status: "draft",
-      openAt: new Date().toISOString(),
-      closeAt: new Date(Date.now() + 3600000).toISOString(),
-      durationMinutes: 60,
-      passingScore: 60,
-      totalScore: 100,
-      questionIds: ["q1"],
-      participantCount: 0,
-      canDelete: true,
-      deleteDisabledReason: null,
-    },
-    {
-      id: "published-exam",
-      title: "Published Exam",
-      status: "published",
-      openAt: new Date().toISOString(),
-      closeAt: new Date(Date.now() + 3600000).toISOString(),
-      durationMinutes: 60,
-      passingScore: 60,
-      totalScore: 100,
-      questionIds: ["q1"],
-      participantCount: 2,
-      canDelete: false,
-      deleteDisabledReason: "仅草稿状态的考试允许删除",
-    },
-  ],
-  total: 2,
-  page: 1,
-  pageSize: 20,
-  totalPages: 1,
-});
+const { apiGet } = vi.hoisted(() => ({
+  apiGet: vi.fn().mockResolvedValue({
+    items: [
+      {
+        id: "draft-exam",
+        title: "Draft Exam",
+        status: "draft",
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 3600000).toISOString(),
+        durationMinutes: 60,
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: ["q1"],
+        participantCount: 0,
+        canDelete: true,
+        deleteDisabledReason: null,
+      },
+      {
+        id: "published-exam",
+        title: "Published Exam",
+        status: "published",
+        openAt: new Date().toISOString(),
+        closeAt: new Date(Date.now() + 3600000).toISOString(),
+        durationMinutes: 60,
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: ["q1"],
+        participantCount: 2,
+        canDelete: false,
+        deleteDisabledReason: "仅草稿状态的考试允许删除",
+      },
+    ],
+    total: 2,
+    page: 1,
+    pageSize: 20,
+    totalPages: 1,
+  }),
+}));
 
 vi.mock("@/lib/api", () => ({
   api: {

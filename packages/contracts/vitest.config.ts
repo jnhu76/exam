@@ -4,5 +4,12 @@ export default defineConfig({
   test: {
     environment: "node",
     exclude: ["dist/**", "node_modules/**"],
+    coverage: {
+      thresholds: {
+        lines: 60,
+        branches: 50,
+        functions: 60,
+      },
+    },
   },
 });

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Flag } from "lucide-react";
@@ -152,6 +153,7 @@ export function TakeExamPage() {
       navigate(routes.exam.result(attemptId));
     } catch {
       setIsSubmitting(false);
+      toast.error("提交失败，请重试");
     }
   }, [attemptId, navigate]);
   const handleTimeout = useCallback(() => {

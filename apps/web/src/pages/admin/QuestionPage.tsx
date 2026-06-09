@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -140,8 +141,12 @@ export function QuestionPage() {
   }, [loadQuestions, isInitialLoading]);
 
   async function handleDelete(id: string) {
-    await api.delete(`/api/questions/${id}`);
-    await loadQuestions();
+    try {
+      await api.delete(`/api/questions/${id}`);
+      await loadQuestions();
+    } catch {
+      toast.error("删除题目失败，请重试");
+    }
   }
 
   const filtered = questions.filter((q) => {

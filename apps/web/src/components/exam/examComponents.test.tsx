@@ -4,9 +4,53 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExamTimer } from "./ExamTimer";
 import { QuestionNav } from "./QuestionNav";
 import { TrueFalseInput } from "./TrueFalseInput";
+import { QuestionRenderer } from "./QuestionRenderer";
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("QuestionRenderer", () => {
+  it("renders fallback for unknown question type", () => {
+    render(
+      <QuestionRenderer
+        question={
+          {
+            type: "unknown_type",
+            content: "test",
+            options: [],
+          } as never
+        }
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/不支持的题目类型/)).toBeInTheDocument();
+  });
+
+  it("renders true_false question", () => {
+    render(
+      <QuestionRenderer
+        question={{
+          type: "true_false",
+          content: "Is 1+1=2?",
+          options: [],
+          attachments: [],
+          score: 10,
+          order: 0,
+          originalQuestionId: "q1",
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+        }}
+        answer={undefined}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("正确")).toBeInTheDocument();
+    expect(screen.getByText("错误")).toBeInTheDocument();
+  });
 });
 
 describe("QuestionNav", () => {

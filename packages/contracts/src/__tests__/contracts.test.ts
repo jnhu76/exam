@@ -1,0 +1,330 @@
+import { describe, it, expect } from "vitest";
+import {
+  LoginRequestSchema,
+  RegisterRequestSchema,
+  ChangePasswordRequestSchema,
+} from "../auth.js";
+import {
+  CreateCourseRequestSchema,
+  UpdateCourseRequestSchema,
+} from "../course.js";
+import { CreateExamRequestSchema, ExamSchema } from "../exam.js";
+import {
+  CreateQuestionRequestSchema,
+  QuestionImportRowSchema,
+} from "../question.js";
+import {
+  ScoreListQuerySchema,
+  SaveAnswerRequestSchema,
+  SaveAnswerResponseSchema,
+  CandidateExamDetailResponseSchema,
+} from "../index.js";
+
+describe("auth contracts", () => {
+  it("LoginRequestSchema accepts valid login", () => {
+    const result = LoginRequestSchema.safeParse({
+      username: "admin",
+      password: "admin123",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("LoginRequestSchema accepts optional organizationSlug", () => {
+    const result = LoginRequestSchema.safeParse({
+      username: "admin",
+      password: "admin123",
+      organizationSlug: "default",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("RegisterRequestSchema rejects short password", () => {
+    const result = RegisterRequestSchema.safeParse({
+      organizationSlug: "default",
+      bootstrapToken: "token",
+      username: "admin",
+      password: "123",
+      name: "Admin",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("ChangePasswordRequestSchema validates", () => {
+    const result = ChangePasswordRequestSchema.safeParse({
+      currentPassword: "old",
+      newPassword: "newpass123",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("course contracts", () => {
+  it("CreateCourseRequestSchema accepts valid course", () => {
+    const result = CreateCourseRequestSchema.safeParse({
+      name: "Math 101",
+      code: "MATH101",
+      description: "Basic math",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateCourseRequestSchema defaults empty description", () => {
+    const result = CreateCourseRequestSchema.parse({
+      name: "Math 101",
+      code: "MATH101",
+    });
+    expect(result.description).toBe("");
+  });
+
+  it("UpdateCourseRequestSchema accepts partial update", () => {
+    const result = UpdateCourseRequestSchema.safeParse({ name: "New Name" });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateCourseRequestSchema rejects empty name", () => {
+    const result = CreateCourseRequestSchema.safeParse({
+      name: "",
+      code: "MATH101",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("exam contracts", () => {
+  const validExam = {
+    title: "Test Exam",
+    courseId: "550e8400-e29b-41d4-a716-446655440000",
+    durationMinutes: 60,
+    openAt: new Date().toISOString(),
+    closeAt: new Date(Date.now() + 86400000).toISOString(),
+    passingScore: 60,
+    totalScore: 100,
+  };
+
+  it("CreateExamRequestSchema accepts valid exam", () => {
+    const result = CreateExamRequestSchema.safeParse(validExam);
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema defaults timed_window mode", () => {
+    const result = CreateExamRequestSchema.parse(validExam);
+    expect(result.timingMode).toBe("timed_window");
+  });
+
+  it("CreateExamRequestSchema defaults manual selection", () => {
+    const result = CreateExamRequestSchema.parse(validExam);
+    expect(result.questionSelectionMode).toBe("manual");
+  });
+
+  it("CreateExamRequestSchema rejects invalid timingMode", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      timingMode: "untimed",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateExamRequestSchema rejects negative passingScore", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      passingScore: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("question contracts", () => {
+  it("CreateQuestionRequestSchema accepts true_false", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "true_false",
+      content: "Is 1+1=2?",
+      standardAnswer: true,
+      score: 10,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateQuestionRequestSchema accepts fill_blank with ____", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "fill_blank",
+      content: "The answer is ____",
+      standardAnswer: "42",
+      score: 10,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateQuestionRequestSchema rejects fill_blank without ____", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "fill_blank",
+      content: "No placeholder",
+      standardAnswer: "42",
+      score: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateQuestionRequestSchema accepts single_choice with valid standardAnswer", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "single_choice",
+      content: "Pick one",
+      options: [
+        { id: "A", content: "Option A" },
+        { id: "B", content: "Option B" },
+      ],
+      standardAnswer: "A",
+      score: 10,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateQuestionRequestSchema rejects single_choice with invalid standardAnswer", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "single_choice",
+      content: "Pick one",
+      options: [
+        { id: "A", content: "Option A" },
+        { id: "B", content: "Option B" },
+      ],
+      standardAnswer: "C",
+      score: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateQuestionRequestSchema rejects choice with < 2 options", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "single_choice",
+      content: "Pick one",
+      options: [{ id: "A", content: "Only one" }],
+      standardAnswer: "A",
+      score: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateQuestionRequestSchema accepts multiple_choice", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "multiple_choice",
+      content: "Pick many",
+      options: [
+        { id: "A", content: "Option A" },
+        { id: "B", content: "Option B" },
+        { id: "C", content: "Option C" },
+      ],
+      standardAnswer: ["A", "B"],
+      score: 10,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateQuestionRequestSchema rejects duplicate option ids", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "single_choice",
+      content: "Pick one",
+      options: [
+        { id: "A", content: "First A" },
+        { id: "A", content: "Second A" },
+      ],
+      standardAnswer: "A",
+      score: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("QuestionImportRowSchema parses basic row", () => {
+    const result = QuestionImportRowSchema.safeParse({
+      type: "true_false",
+      content: "Is true?",
+      standardAnswer: true,
+      score: 5,
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("score contracts", () => {
+  it("ScoreListQuerySchema coerces and defaults", () => {
+    const result = ScoreListQuerySchema.parse({
+      page: "1",
+      passFilter: "all",
+    });
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(20);
+    expect(result.sortBy).toBe("submittedAt");
+    expect(result.sortOrder).toBe("desc");
+  });
+
+  it("ScoreListQuerySchema rejects page=0", () => {
+    const result = ScoreListQuerySchema.safeParse({ page: 0 });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("attempt contracts", () => {
+  it("SaveAnswerRequestSchema validates", () => {
+    const result = SaveAnswerRequestSchema.safeParse({
+      attemptId: "550e8400-e29b-41d4-a716-446655440000",
+      questionId: "550e8400-e29b-41d4-a716-446655440001",
+      answer: true,
+      clientSeq: 1,
+      clientSavedAt: new Date().toISOString(),
+      baseVersion: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("SaveAnswerResponseSchema validates accepted", () => {
+    const result = SaveAnswerResponseSchema.safeParse({
+      accepted: true,
+      serverVersion: 1,
+      savedAt: new Date().toISOString(),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("SaveAnswerResponseSchema validates conflict", () => {
+    const result = SaveAnswerResponseSchema.safeParse({
+      accepted: false,
+      serverVersion: 2,
+      savedAt: new Date().toISOString(),
+      conflict: { reason: "STALE_VERSION" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CandidateExamDetailResponseSchema validates", () => {
+    const result = CandidateExamDetailResponseSchema.safeParse({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      title: "Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 2,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+    });
+    expect(result.success).toBe(true);
+  });
+});

@@ -46,5 +46,11 @@ export function QuestionRenderer({
           onChange={onChange}
         />
       );
+    default:
+      return (
+        <p className="text-sm text-destructive">
+          不支持的题目类型: {question.type}
+        </p>
+      );
   }
 }

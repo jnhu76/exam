@@ -22,7 +22,7 @@ This starts:
 
 The web dev server proxies `/api/*` requests to the API server automatically.
 
-### Test Users (from seed)
+### Test Users (basic seed)
 
 By default, `pnpm db:seed` creates the following test users:
 
@@ -54,6 +54,43 @@ SEED_CANDIDATE_USERNAME="candidate"
 SEED_CANDIDATE_PASSWORD="candidate123"
 SEED_CANDIDATE_NAME="Candidate"
 ```
+
+### Demo Seed
+
+The demo seed creates a rich dataset for full-flow manual testing. It includes 8 users, 3 courses, 10 questions (all 4 types), 5 exams in various statuses, enrollments, and graded attempts.
+
+```bash
+# Fresh demo seed (deletes and recreates dev.db)
+rm -f dev.db && pnpm db:seed:demo
+
+# Re-run on existing database (idempotent)
+pnpm db:seed:demo
+
+# Verify seed data integrity
+pnpm db:seed:demo:verify
+```
+
+#### Demo Accounts
+
+| Username | Password | Role | Purpose |
+|---|---|---|---|
+| `superadmin` | `admin123` | SuperAdmin | Organization management, all admin features |
+| `admin` | `admin123` | Admin | All admin features except org management |
+| `teacher1` | `teacher123` | Teacher | Course/question/exam management |
+| `teacher2` | `teacher123` | Teacher | Teacher permission checks |
+| `candidate1` | `candidate123` | Candidate | In-progress exam, retake history |
+| `candidate2` | `candidate123` | Candidate | Assigned but not started |
+| `candidate3` | `candidate123` | Candidate | Disrupted/recovery case |
+| `candidate4` | `candidate123` | Candidate | Graded result case |
+
+#### Demo Data
+
+- **3 courses**: SAFETY-101, SKILL-201, EMPTY-001 (empty course)
+- **10 questions**: All 4 types (single_choice, multiple_choice, true_false, fill_blank)
+- **5 exams**: open, draft, published (future), closed, strict mode
+- **Enrollments + attempts**: Pre-created states for all candidate flows (in_progress, disrupted, graded, not-started)
+
+See `docs/dev/demo-seed-test-guide.md` for detailed test flows and verification checklists.
 
 ## Deployment Modes
 
@@ -150,7 +187,9 @@ docker compose -f docker-compose.dev.yml down
 | `pnpm dev`               | Start all services in dev mode (hot reload)                 |
 | `pnpm --filter web dev`  | Start only the web frontend                                 |
 | `pnpm --filter api dev`  | Start only the API server                                   |
-| `pnpm db:seed`           | Seed SQLite database with test users                        |
+| `pnpm db:seed`           | Seed SQLite database with basic test users                |
+| `pnpm db:seed:demo`      | Seed rich demo dataset (8 users, 5 exams, graded attempts) |
+| `pnpm db:seed:demo:verify` | Verify demo seed data integrity                          |
 | `pnpm db:push`           | Push schema changes to database                             |
 | `pnpm db:migrate`        | Run database migrations                                     |
 | `pnpm db:studio`         | Open Drizzle Studio                                         |
@@ -182,6 +221,18 @@ packages/
 - **Backend**: Fastify, TypeScript, Zod validation
 - **Database**: SQLite (dev) / PostgreSQL (prod) via Drizzle ORM
 - **Monorepo**: pnpm workspaces + Turborepo
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| `docs/SPEC.md` | Full product specification |
+| `docs/code-quality.md` | Code quality rules and conventions |
+| `docs/dev/demo-seed-plan.md` | Demo seed dataset plan (accounts, courses, exams) |
+| `docs/dev/demo-seed-contract.md` | Enum values, entity fields, lifecycle rules, data relations |
+| `docs/dev/demo-seed-test-guide.md` | Step-by-step manual test guide for demo seed |
+| `docs/dev/exam-data-chain.md` | Entity relationships and data flow documentation |
+| `docs/dev/manual-test-bugs.md` | Known bugs from manual testing |
 
 ## Environment Variables
 

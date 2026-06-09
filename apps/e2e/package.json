@@ -4,13 +4,16 @@
   "type": "module",
   "scripts": {
     "test:e2e": "vitest run",
-    "test:e2e:watch": "vitest"
+    "test:e2e:watch": "vitest",
+    "test:e2e:browser": "playwright test --config playwright.config.ts",
+    "test:e2e:browser:docker": "docker run --rm --add-host host.docker.internal:host-gateway -v $(pwd):/tests -w /tests mcr.microsoft.com/playwright:v1.52.0-noble bash -c 'npx playwright test --config playwright.docker.config.ts --reporter=line'"
   },
   "devDependencies": {
-    "@exam/auth": "workspace:*",
-    "@exam/db": "workspace:*",
-    "@exam/contracts": "workspace:*",
     "@exam/api": "workspace:*",
+    "@exam/auth": "workspace:*",
+    "@exam/contracts": "workspace:*",
+    "@exam/db": "workspace:*",
+    "@playwright/test": "^1.60.0",
     "vitest": "^4.1.7"
   }
 }
