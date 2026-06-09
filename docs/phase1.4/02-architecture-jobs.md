@@ -12,7 +12,7 @@
 
 ### Background
 
-所有 repository 强类型为 `SqliteDatabase`。`baseRepo.ts` 引用 `AnySQLiteColumn` 和 `SQLiteUpdateSetSource`。7 处 `as unknown as` + 3 处 `as any`。`systemStatsRepo.ts` 是唯一双方言 repo（用运行时 `isSqlite()` 分支，维护成本随 repo 数量线性增长）。
+所有 repository 强类型为 `SqliteDatabase`。`baseRepo.ts` 引用 `AnySQLiteColumn` 和 `SQLiteUpdateSetSource`。7 处 `as unknown as` + 4 处 `as any`。`systemStatsRepo.ts` 是唯一双方言 repo（用运行时 `isSqlite()` 分支，维护成本随 repo 数量线性增长）。
 
 需要验证：Drizzle async API 是否同时支持 `better-sqlite3`（同步库）和 `postgres-js`（异步），以及统一路径是否可行。
 
