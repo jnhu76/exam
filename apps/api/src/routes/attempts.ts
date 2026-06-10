@@ -159,9 +159,14 @@ function createExamRepoAdapter(
   ctx: RequestContext,
 ): ExamRepository {
   return {
-    findById: (examId) => repo.findById(ctx, examId) as Exam | null,
-    update: (examId, data) =>
-      repo.update(ctx, examId, data as Record<string, unknown>) as Exam | null,
+    findById: async (examId) =>
+      (await repo.findById(ctx, examId)) as Exam | null,
+    update: async (examId, data) =>
+      (await repo.update(
+        ctx,
+        examId,
+        data as Record<string, unknown>,
+      )) as Exam | null,
   };
 }
 
@@ -170,26 +175,30 @@ function createAttemptRepoAdapter(
   ctx: RequestContext,
 ): AttemptRepoInterface {
   return {
-    findById: (id) => repo.findById(ctx, id) as ExamAttempt | null,
-    findActiveByEnrollment: (enrollmentId) =>
-      repo.findActiveByEnrollment(ctx, enrollmentId) as ExamAttempt | null,
-    findByEnrollmentAndAttemptNo: (enrollmentId, attemptNo) =>
-      repo.findByEnrollmentAndAttemptNo(
+    findById: async (id) =>
+      (await repo.findById(ctx, id)) as ExamAttempt | null,
+    findActiveByEnrollment: async (enrollmentId) =>
+      (await repo.findActiveByEnrollment(
+        ctx,
+        enrollmentId,
+      )) as ExamAttempt | null,
+    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) =>
+      (await repo.findByEnrollmentAndAttemptNo(
         ctx,
         enrollmentId,
         attemptNo,
-      ) as ExamAttempt | null,
-    create: (input) =>
-      repo.create(
+      )) as ExamAttempt | null,
+    create: async (input) =>
+      (await repo.create(
         ctx,
         input as Parameters<typeof repo.create>[1],
-      ) as ExamAttempt,
-    update: (id, data) =>
-      repo.update(
+      )) as ExamAttempt,
+    update: async (id, data) =>
+      (await repo.update(
         ctx,
         id,
         data as Parameters<typeof repo.update>[2],
-      ) as ExamAttempt | null,
+      )) as ExamAttempt | null,
   };
 }
 
@@ -198,19 +207,21 @@ function createEnrollmentRepoAdapter(
   ctx: RequestContext,
 ): EnrollmentRepository {
   return {
-    findByExamAndCandidate: (examId, candidateId) =>
-      repo.findByExamAndCandidate(ctx, examId, candidateId) as
+    findByExamAndCandidate: async (examId, candidateId) =>
+      (await repo.findByExamAndCandidate(ctx, examId, candidateId)) as
         | import("@exam/domain").ExamEnrollment
         | null,
-    create: (input) =>
-      repo.create(
+    create: async (input) =>
+      (await repo.create(
         ctx,
         input as Parameters<typeof repo.create>[1],
-      ) as import("@exam/domain").ExamEnrollment,
-    update: (id, data) =>
-      repo.update(ctx, id, data as Parameters<typeof repo.update>[2]) as
-        | import("@exam/domain").ExamEnrollment
-        | null,
+      )) as import("@exam/domain").ExamEnrollment,
+    update: async (id, data) =>
+      (await repo.update(
+        ctx,
+        id,
+        data as Parameters<typeof repo.update>[2],
+      )) as import("@exam/domain").ExamEnrollment | null,
   };
 }
 
@@ -235,11 +246,11 @@ function buildClientSeqMap(answers: StoredAnswer[]): Map<string, AnswerRecord> {
   return map;
 }
 
-function getCandidateProfile(
+async function getCandidateProfile(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
 ) {
-  const candidateProfile = createCandidateRepo(fastify.db).findByUserId(
+  const candidateProfile = await createCandidateRepo(fastify.db).findByUserId(
     ctx,
     ctx.actorId,
   );
@@ -249,17 +260,17 @@ function getCandidateProfile(
   return candidateProfile;
 }
 
-function getOwnedAttempt(
+async function getOwnedAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
   attemptId: string,
 ) {
-  const candidateProfile = getCandidateProfile(fastify, ctx);
-  const attempt = createAttemptRepo(fastify.db).findByIdAndCandidate(
+  const candidateProfile = await getCandidateProfile(fastify, ctx);
+  const attempt = (await createAttemptRepo(fastify.db).findByIdAndCandidate(
     ctx,
     attemptId,
     candidateProfile.id,
-  ) as ExamAttempt | null;
+  )) as ExamAttempt | null;
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
   }
@@ -267,8 +278,10 @@ function getOwnedAttempt(
 }
 
 function normalizeEnrollment(
-  enrollment: ReturnType<
-    ReturnType<typeof createEnrollmentRepo>["findByExamAndCandidate"]
+  enrollment: Awaited<
+    ReturnType<
+      ReturnType<typeof createEnrollmentRepo>["findByExamAndCandidate"]
+    >
   >,
 ): ExamEnrollment | null {
   if (!enrollment) {
@@ -348,13 +361,16 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request) => {
       const ctx = request["ctx"] as RequestContext;
       const candidateRepo = createCandidateRepo(fastify.db);
-      const candidateProfile = candidateRepo.findByUserId(ctx, ctx.actorId);
+      const candidateProfile = await candidateRepo.findByUserId(
+        ctx,
+        ctx.actorId,
+      );
       if (!candidateProfile) {
         return [];
       }
 
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollments = enrollmentRepo.findByCandidate(
+      const enrollments = await enrollmentRepo.findByCandidate(
         ctx,
         candidateProfile.id,
       );
@@ -362,9 +378,12 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const examRepo = createExamRepo(fastify.db);
       const now = new Date();
 
-      return enrollments
-        .map((enrollment) => {
-          const exam = examRepo.findById(ctx, enrollment.examId) as Exam | null;
+      return Promise.all(
+        enrollments.map(async (enrollment) => {
+          const exam = (await examRepo.findById(
+            ctx,
+            enrollment.examId,
+          )) as Exam | null;
           if (!exam) return null;
 
           const isAvailable =
@@ -390,8 +409,12 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             isAvailable,
             isEnded,
           };
-        })
-        .filter((exam): exam is NonNullable<typeof exam> => exam !== null);
+        }),
+      ).then((results) =>
+        results.filter(
+          (exam): exam is NonNullable<typeof exam> => exam !== null,
+        ),
+      );
     },
   );
 
@@ -406,29 +429,29 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send(formatZodError(parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
-      const candidateProfile = getCandidateProfile(fastify, ctx);
-      const exam = createExamRepo(fastify.db).findById(
+      const candidateProfile = await getCandidateProfile(fastify, ctx);
+      const exam = (await createExamRepo(fastify.db).findById(
         ctx,
         parsed.data.examId,
-      ) as Exam | null;
+      )) as Exam | null;
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
 
-      const rawEnrollment = createEnrollmentRepo(
+      const rawEnrollment = await createEnrollmentRepo(
         fastify.db,
       ).findByExamAndCandidate(ctx, parsed.data.examId, candidateProfile.id);
       if (!rawEnrollment) {
         throw new NotFoundError("Enrollment not found");
       }
       const enrollment = normalizeEnrollment(rawEnrollment);
-      const activeAttempt = createAttemptRepo(
+      const activeAttempt = (await createAttemptRepo(
         fastify.db,
       ).findActiveByExamAndCandidate(
         ctx,
         parsed.data.examId,
         candidateProfile.id,
-      ) as ExamAttempt | null;
+      )) as ExamAttempt | null;
 
       return buildCandidateExamDetail(exam, enrollment, activeAttempt);
     },
@@ -445,11 +468,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send(formatZodError(parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
-      const candidateProfile = getCandidateProfile(fastify, ctx);
-      const exam = createExamRepo(fastify.db).findById(
+      const candidateProfile = await getCandidateProfile(fastify, ctx);
+      const exam = (await createExamRepo(fastify.db).findById(
         ctx,
         parsed.data.examId,
-      ) as Exam | null;
+      )) as Exam | null;
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
@@ -477,10 +500,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const enrRepoAdapter = createEnrollmentRepoAdapter(enrollmentRepo, ctx);
       const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
 
-      const candidateProfile = getCandidateProfile(fastify, ctx);
+      const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
 
-      const activeAttempt = attemptRepo.findActiveByExamAndCandidate(
+      const activeAttempt = await attemptRepo.findActiveByExamAndCandidate(
         ctx,
         examId,
         candidateId,
@@ -491,7 +514,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
@@ -507,7 +530,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const attempt = startAttempt(
+      const attempt = await startAttempt(
         examRepoAdapter,
         enrRepoAdapter,
         attRepoAdapter,
@@ -549,7 +572,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send(formatZodError(parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
-      const attempt = getOwnedAttempt(fastify, ctx, parsed.data.id);
+      const attempt = await getOwnedAttempt(fastify, ctx, parsed.data.id);
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt),
       );
@@ -583,7 +606,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      const attempt = getOwnedAttempt(fastify, ctx, attemptId);
+      const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
       if (
         !attempt.questionSnapshot.some(
           (question) => question.originalQuestionId === questionId,
@@ -638,7 +661,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           .filter((a) => a.questionId !== questionId)
           .concat([storedNewAnswer]);
 
-        attemptRepo.update(ctx, attemptId, {
+        await attemptRepo.update(ctx, attemptId, {
           answers: newAnswers,
           lastActivityAt: new Date(),
         } as Parameters<typeof attemptRepo.update>[2]);
@@ -674,21 +697,24 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
-      getOwnedAttempt(fastify, ctx, attemptId);
+      await getOwnedAttempt(fastify, ctx, attemptId);
       const attemptRepo = createAttemptRepo(fastify.db);
       const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
       const examRepo = createExamRepo(fastify.db);
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
 
-      submitAttempt(attRepoAdapter, attemptId, new Date());
-      gradeAttempt(
+      await submitAttempt(attRepoAdapter, attemptId, new Date());
+      await gradeAttempt(
         createExamRepoAdapter(examRepo, ctx),
         createEnrollmentRepoAdapter(enrollmentRepo, ctx),
         attRepoAdapter,
         attemptId,
         new Date(),
       );
-      const attempt = attemptRepo.findById(ctx, attemptId) as ExamAttempt;
+      const attempt = await attemptRepo.findById(ctx, attemptId);
+      if (!attempt) {
+        throw new NotFoundError("Attempt not found after grading");
+      }
       recordAudit(
         fastify,
         request,
@@ -699,7 +725,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt),
+        toCandidateAttemptResponse(attempt as ExamAttempt),
       );
     },
   );
@@ -717,7 +743,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
       const attemptRepo = createAttemptRepo(fastify.db);
-      const attempt = getOwnedAttempt(fastify, ctx, attemptId);
+      const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
       if (attempt.status !== "in_progress") {
         return reply.code(409).send({
           error: {
@@ -727,7 +753,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      attemptRepo.update(ctx, attemptId, {
+      await attemptRepo.update(ctx, attemptId, {
         lastActivityAt: new Date(),
       } as Parameters<typeof attemptRepo.update>[2]);
 
@@ -747,14 +773,14 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
-      getOwnedAttempt(fastify, ctx, attemptId);
+      await getOwnedAttempt(fastify, ctx, attemptId);
       const examRepo = createExamRepo(fastify.db);
       const attemptRepo = createAttemptRepo(fastify.db);
 
       const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
       const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
 
-      const attempt = restoreAttempt(
+      const attempt = await restoreAttempt(
         examRepoAdapter,
         attRepoAdapter,
         attemptId,

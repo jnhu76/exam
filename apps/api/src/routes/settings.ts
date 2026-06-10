@@ -17,12 +17,12 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     const orgRepo = createOrganizationRepo(fastify.db);
     const settingsRepo = createSettingsRepo(fastify.db);
 
-    const org = orgRepo.resolveBrandingTenant(
+    const org = await orgRepo.resolveBrandingTenant(
       { purpose: "public_branding" } as PublicBrandingContext,
       query.organizationSlug,
     );
 
-    const branding = settingsRepo.getPublicBranding({
+    const branding = await settingsRepo.getPublicBranding({
       purpose: "public_branding",
       organizationId: org.id,
     });
@@ -40,7 +40,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request) => {
       const settingsRepo = createSettingsRepo(fastify.db);
-      const settings = settingsRepo.get(ensureTargetOrg(request.ctx!));
+      const settings = await settingsRepo.get(ensureTargetOrg(request.ctx!));
       return settings
         ? OrganizationSettingsSchema.parse({
             ...settings,
@@ -64,7 +64,10 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(rawCtx);
       const data = UpdateBrandingRequestSchema.parse(request.body);
       const settingsRepo = createSettingsRepo(fastify.db);
-      const settings = settingsRepo.upsert(ctx, data as Record<string, string>);
+      const settings = await settingsRepo.upsert(
+        ctx,
+        data as Record<string, string>,
+      );
       if (!settings) {
         return reply.code(500).send({
           error: {

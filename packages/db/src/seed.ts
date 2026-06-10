@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { AnyDatabase, SqliteDatabase } from "./types.js";
+import type { AnyDatabase } from "./types.js";
+import { isSqlite } from "./types.js";
 import { sqliteSchema } from "./schema/sqlite.js";
 import dotenv from "dotenv";
 
@@ -9,12 +10,7 @@ dotenv.config();
 export type HashFunction = (password: string) => string | Promise<string>;
 
 function defaultHash(password: string): string {
-  // Fallback for tests — not for production use
   return `$scrypt$${Buffer.from(password).toString("base64")}`;
-}
-
-function isSqlite(db: AnyDatabase): boolean {
-  return "pragma" in db || "all" in db;
 }
 
 export async function seed(
@@ -26,11 +22,10 @@ export async function seed(
       "seed() only supports SQLite databases. Use migrations for PostgreSQL.",
     );
   }
-  const sqliteDb = db as unknown as SqliteDatabase;
   const timestamp = new Date();
 
   const slug = "default";
-  const existingOrg = sqliteDb
+  const existingOrg = db
     .select()
     .from(sqliteSchema.organizations)
     .where(eq(sqliteSchema.organizations.slug, slug))
@@ -51,7 +46,7 @@ export async function seed(
   };
 
   if (!existingOrg) {
-    sqliteDb.insert(sqliteSchema.organizations).values(org).run();
+    db.insert(sqliteSchema.organizations).values(org).run();
   }
 
   const users = [
@@ -95,7 +90,7 @@ export async function seed(
   ];
 
   for (const user of users) {
-    const existing = sqliteDb
+    const existing = db
       .select()
       .from(sqliteSchema.users)
       .where(
@@ -106,7 +101,7 @@ export async function seed(
       )
       .get();
     if (!existing) {
-      sqliteDb.insert(sqliteSchema.users).values(user).run();
+      db.insert(sqliteSchema.users).values(user).run();
     }
   }
 }

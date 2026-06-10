@@ -1,6 +1,7 @@
 export * from "./schema/sqlite.js";
 export * from "./database.js";
 export * from "./sqlite.js";
+export * from "./types.js";
 export * from "./repository/baseRepo.js";
 export * from "./repository/attemptRepo.js";
 export * from "./repository/auditLogRepo.js";

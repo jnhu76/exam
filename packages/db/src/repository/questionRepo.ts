@@ -1,7 +1,12 @@
-import type { SqliteDatabase } from "../sqlite.js";
-import { questions } from "../schema/sqlite.js";
-import { createTenantCrudRepo } from "./baseRepo.js";
+import type { AnyDatabase } from "../types.js";
+import { isSqlite } from "../types.js";
+import { questions as sqliteQuestions } from "../schema/sqlite.js";
+import { questions as pgQuestions } from "../schema/pg.js";
+import { createAsyncTenantCrudRepo } from "./baseRepo.js";
 
-export function createQuestionRepo(db: SqliteDatabase) {
-  return createTenantCrudRepo(db, questions);
+export function createQuestionRepo(db: AnyDatabase) {
+  return createAsyncTenantCrudRepo(db, {
+    sqlite: sqliteQuestions,
+    pg: pgQuestions,
+  });
 }

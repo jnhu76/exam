@@ -24,7 +24,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createQuestionRepo(fastify.db);
-      const all = repo.list(ctx);
+      const all = await repo.list(ctx);
 
       const query = request.query as Record<string, string | undefined>;
       let filtered = all;
@@ -90,7 +90,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createQuestionRepo(fastify.db);
-      const question = repo.findById(ctx, id);
+      const question = await repo.findById(ctx, id);
       if (!question) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Question not found" },
@@ -131,13 +131,13 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const data = parsed.data;
       const repo = createQuestionRepo(fastify.db);
-      if (!createCourseRepo(fastify.db).findById(ctx, data.courseId)) {
+      if (!(await createCourseRepo(fastify.db).findById(ctx, data.courseId))) {
         return reply.code(400).send({
           error: { code: "VALIDATION_ERROR", message: "Course not found" },
         });
       }
 
-      const question = repo.create(ctx, {
+      const question = await repo.create(ctx, {
         courseId: data.courseId,
         type: data.type,
         content: data.content,
@@ -194,7 +194,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateQuestionRequestSchema.parse(request.body);
       const repo = createQuestionRepo(fastify.db);
-      const existing = repo.findById(ctx, id);
+      const existing = await repo.findById(ctx, id);
       if (!existing) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Question not found" },
@@ -204,12 +204,14 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         ...existing,
         ...data,
       });
-      if (!createCourseRepo(fastify.db).findById(ctx, validated.courseId)) {
+      if (
+        !(await createCourseRepo(fastify.db).findById(ctx, validated.courseId))
+      ) {
         return reply.code(400).send({
           error: { code: "VALIDATION_ERROR", message: "Course not found" },
         });
       }
-      const updated = repo.update(ctx, id, {
+      const updated = await repo.update(ctx, id, {
         ...validated,
         options: (validated.options ?? []).map((option) => ({
           id: option.id,
@@ -256,7 +258,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createQuestionRepo(fastify.db);
-      const deleted = repo.delete(ctx, id);
+      const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Question not found" },
@@ -284,7 +286,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const body = parsed.data;
       const repo = createQuestionRepo(fastify.db);
-      if (!createCourseRepo(fastify.db).findById(ctx, body.courseId)) {
+      if (!(await createCourseRepo(fastify.db).findById(ctx, body.courseId))) {
         return reply.code(400).send({
           error: { code: "VALIDATION_ERROR", message: "Course not found" },
         });
@@ -362,7 +364,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
 
         const data = parsed.data;
         if (body.confirm) {
-          repo.create(ctx, {
+          await repo.create(ctx, {
             courseId: data.courseId,
             type: data.type,
             content: data.content,

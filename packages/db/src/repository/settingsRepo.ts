@@ -4,10 +4,18 @@ import type {
   PublicBrandingContext,
   RequestContext,
 } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
+import { NotFoundError, ValidationError } from "@exam/domain";
 import { eq } from "drizzle-orm";
-import type { SqliteDatabase } from "../sqlite.js";
-import { organizations, organizationSettings } from "../schema/sqlite.js";
+import type { AnyDatabase, PostgresDatabase } from "../types.js";
+import { isSqlite } from "../types.js";
+import {
+  organizations as sqliteOrgs,
+  organizationSettings as sqliteSettings,
+} from "../schema/sqlite.js";
+import {
+  organizations as pgOrgs,
+  organizationSettings as pgSettings,
+} from "../schema/pg.js";
 import { now, resolveOrganizationId } from "./baseRepo.js";
 
 type BrandingUpdate = {
@@ -18,20 +26,27 @@ type BrandingUpdate = {
   timezone?: string;
 };
 
-export function createSettingsRepo(db: SqliteDatabase) {
+export function createSettingsRepo(db: AnyDatabase) {
   return {
-    get(ctx: RequestContext) {
-      return (
-        db
-          .select()
-          .from(organizationSettings)
-          .where(
-            eq(organizationSettings.organizationId, resolveOrganizationId(ctx)),
-          )
-          .get() ?? null
-      );
+    async get(ctx: RequestContext) {
+      if (isSqlite(db)) {
+        return (
+          db
+            .select()
+            .from(sqliteSettings)
+            .where(
+              eq(sqliteSettings.organizationId, resolveOrganizationId(ctx)),
+            )
+            .get() ?? null
+        );
+      }
+      const rows = await (db as PostgresDatabase)
+        .select()
+        .from(pgSettings)
+        .where(eq(pgSettings.organizationId, resolveOrganizationId(ctx)));
+      return rows[0] ?? null;
     },
-    upsert(ctx: RequestContext, input: BrandingUpdate) {
+    async upsert(ctx: RequestContext, input: BrandingUpdate) {
       const tenantId = resolveOrganizationId(ctx);
       const timestamp = now();
       const settings = {
@@ -42,51 +57,92 @@ export function createSettingsRepo(db: SqliteDatabase) {
         updatedAt: timestamp,
       };
 
-      db.insert(organizationSettings)
+      if (isSqlite(db)) {
+        db.insert(sqliteSettings)
+          .values(settings)
+          .onConflictDoUpdate({
+            target: sqliteSettings.organizationId,
+            set: { ...input, updatedAt: timestamp },
+          })
+          .run();
+
+        return db
+          .select()
+          .from(sqliteSettings)
+          .where(eq(sqliteSettings.organizationId, tenantId))
+          .get();
+      }
+      await (db as PostgresDatabase)
+        .insert(pgSettings)
         .values(settings)
         .onConflictDoUpdate({
-          target: organizationSettings.organizationId,
+          target: pgSettings.organizationId,
           set: { ...input, updatedAt: timestamp },
-        })
-        .run();
+        });
 
-      return db
+      const rows = await (db as PostgresDatabase)
         .select()
-        .from(organizationSettings)
-        .where(eq(organizationSettings.organizationId, tenantId))
-        .get();
+        .from(pgSettings)
+        .where(eq(pgSettings.organizationId, tenantId));
+      return rows[0] ?? null;
     },
-    delete(ctx: RequestContext) {
-      return (
-        db
-          .delete(organizationSettings)
-          .where(
-            eq(organizationSettings.organizationId, resolveOrganizationId(ctx)),
-          )
-          .run().changes > 0
-      );
+    async delete(ctx: RequestContext) {
+      if (isSqlite(db)) {
+        return (
+          db
+            .delete(sqliteSettings)
+            .where(
+              eq(sqliteSettings.organizationId, resolveOrganizationId(ctx)),
+            )
+            .run().changes > 0
+        );
+      }
+      const result = await (db as PostgresDatabase)
+        .delete(pgSettings)
+        .where(eq(pgSettings.organizationId, resolveOrganizationId(ctx)));
+      return (result.count ?? 0) > 0;
     },
-    getPublicBranding(ctx: PublicBrandingContext): BrandingView {
+    async getPublicBranding(ctx: PublicBrandingContext): Promise<BrandingView> {
       if (!ctx.organizationId) {
         throw new ValidationError(
           "Public branding lookup requires organizationId",
         );
       }
 
-      const organization = db
-        .select()
-        .from(organizations)
-        .where(eq(organizations.id, ctx.organizationId))
-        .get();
-      if (!organization) {
-        throw new ValidationError("Branding organization not found");
-      }
+      let organization: typeof sqliteOrgs.$inferSelect | null;
+      let settings: typeof sqliteSettings.$inferSelect | null;
 
-      const settings = db
-        .select()
-        .from(organizationSettings)
-        .where(eq(organizationSettings.organizationId, organization.id))
-        .get();
+      if (isSqlite(db)) {
+        organization =
+          db
+            .select()
+            .from(sqliteOrgs)
+            .where(eq(sqliteOrgs.id, ctx.organizationId))
+            .get() ?? null;
+        if (!organization) {
+          throw new NotFoundError("Branding organization not found");
+        }
+        settings =
+          db
+            .select()
+            .from(sqliteSettings)
+            .where(eq(sqliteSettings.organizationId, organization.id))
+            .get() ?? null;
+      } else {
+        const orgRows = await (db as PostgresDatabase)
+          .select()
+          .from(pgOrgs)
+          .where(eq(pgOrgs.id, ctx.organizationId));
+        organization = orgRows[0] ?? null;
+        if (!organization) {
+          throw new NotFoundError("Branding organization not found");
+        }
+        const settingsRows = await (db as PostgresDatabase)
+          .select()
+          .from(pgSettings)
+          .where(eq(pgSettings.organizationId, organization.id));
+        settings = settingsRows[0] ?? null;
+      }
 
       return {
         productName: settings?.productName ?? "LAN Exam Platform",

@@ -6,6 +6,7 @@ import type {
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
+import { InvalidStateTransitionError } from "@exam/domain";
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -138,11 +139,11 @@ function makeRepos(
 }
 
 describe("gradeAttempt", () => {
-  it("persists question results and marks a passing attempt graded", () => {
+  it("persists question results and marks a passing attempt graded", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
     const gradedAt = new Date("2026-06-01T12:00:00Z");
 
-    const result = gradeAttempt(
+    const result = await gradeAttempt(
       repos.examRepo,
       repos.enrollmentRepo,
       repos.attemptRepo,
@@ -167,14 +168,14 @@ describe("gradeAttempt", () => {
     });
   });
 
-  it("rejects attempts that are not submitted", () => {
+  it("rejects attempts that are not submitted", async () => {
     const repos = makeRepos(
       makeExam(),
       makeAttempt({ status: "in_progress" }),
       makeEnrollment(),
     );
 
-    expect(() =>
+    await expect(
       gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
@@ -182,7 +183,7 @@ describe("gradeAttempt", () => {
         "attempt-1",
         new Date(),
       ),
-    ).toThrow();
+    ).rejects.toThrow(InvalidStateTransitionError);
   });
 
   it.each([
@@ -191,7 +192,7 @@ describe("gradeAttempt", () => {
     ["first", 8, 8, "previous-attempt"],
   ] as const)(
     "applies %s score strategy",
-    (scoreStrategy, previousScore, expectedScore, expectedAttemptId) => {
+    async (scoreStrategy, previousScore, expectedScore, expectedAttemptId) => {
       const repos = makeRepos(
         makeExam(scoreStrategy),
         makeAttempt(),
@@ -202,7 +203,7 @@ describe("gradeAttempt", () => {
         }),
       );
 
-      gradeAttempt(
+      await gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
@@ -214,4 +215,119 @@ describe("gradeAttempt", () => {
       expect(repos.getEnrollment().finalAttemptId).toBe(expectedAttemptId);
     },
   );
+
+  it("throws ValidationError when marking attempt as grading fails", async () => {
+    const exam = makeExam();
+    const attempt = makeAttempt();
+    const enrollment = makeEnrollment();
+    const gradingAttempt = { ...attempt, status: "grading" as const };
+    const examRepo: ExamRepository = {
+      findById: () => exam,
+      update: () => exam,
+    };
+    const attemptRepo: AttemptRepository = {
+      findById: () => attempt,
+      findActiveByEnrollment: () => null,
+      findByEnrollmentAndAttemptNo: () => null,
+      create: () => attempt,
+      update: () => gradingAttempt,
+    };
+    const enrollmentRepo: EnrollmentRepository = {
+      findByExamAndCandidate: () => enrollment,
+      create: () => enrollment,
+      update: () => enrollment,
+    };
+
+    const failingAttemptRepo: AttemptRepository = {
+      ...attemptRepo,
+      update: () => null,
+    };
+
+    await expect(
+      gradeAttempt(
+        examRepo,
+        enrollmentRepo,
+        failingAttemptRepo,
+        "attempt-1",
+        new Date(),
+      ),
+    ).rejects.toThrow("Failed to update attempt status to grading");
+  });
+
+  it("throws ValidationError when writing graded result fails", async () => {
+    const exam = makeExam();
+    const attempt = makeAttempt();
+    const enrollment = makeEnrollment();
+    const gradingAttempt = { ...attempt, status: "grading" as const };
+    let callCount = 0;
+    const examRepo: ExamRepository = {
+      findById: () => exam,
+      update: () => exam,
+    };
+    const attemptRepo: AttemptRepository = {
+      findById: () => attempt,
+      findActiveByEnrollment: () => null,
+      findByEnrollmentAndAttemptNo: () => null,
+      create: () => attempt,
+      update: () => {
+        callCount++;
+        if (callCount === 1) return gradingAttempt;
+        return null;
+      },
+    };
+    const enrollmentRepo: EnrollmentRepository = {
+      findByExamAndCandidate: () => enrollment,
+      create: () => enrollment,
+      update: () => enrollment,
+    };
+
+    await expect(
+      gradeAttempt(
+        examRepo,
+        enrollmentRepo,
+        attemptRepo,
+        "attempt-1",
+        new Date(),
+      ),
+    ).rejects.toThrow("Failed to persist graded results");
+  });
+
+  it("throws ValidationError when updating enrollment result fails", async () => {
+    const exam = makeExam();
+    const attempt = makeAttempt();
+    const enrollment = makeEnrollment();
+    const gradingAttempt = { ...attempt, status: "grading" as const };
+    const gradedAttempt = { ...attempt, status: "graded" as const };
+    let attemptCallCount = 0;
+    const examRepo: ExamRepository = {
+      findById: () => exam,
+      update: () => exam,
+    };
+    const attemptRepo: AttemptRepository = {
+      findById: () => attempt,
+      findActiveByEnrollment: () => null,
+      findByEnrollmentAndAttemptNo: () => null,
+      create: () => attempt,
+      update: () => {
+        attemptCallCount++;
+        if (attemptCallCount === 1) return gradingAttempt;
+        return gradedAttempt;
+      },
+    };
+    const enrollmentRepo: EnrollmentRepository = {
+      findByExamAndCandidate: () => enrollment,
+      create: () => enrollment,
+      update: () => null,
+    };
+
+    await expect(
+      gradeAttempt(
+        examRepo,
+        enrollmentRepo,
+        attemptRepo,
+        "attempt-1",
+        new Date(),
+      ),
+    ).rejects.toThrow("Failed to update enrollment");
+  });
 });

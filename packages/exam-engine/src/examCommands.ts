@@ -7,8 +7,11 @@ import type {
 import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
 
 export interface ExamRepository {
-  findById(examId: string): Exam | null;
-  update(examId: string, data: Partial<Exam>): Exam | null;
+  findById(examId: string): Promise<Exam | null> | Exam | null;
+  update(
+    examId: string,
+    data: Partial<Exam>,
+  ): Promise<Exam | null> | Exam | null;
 }
 
 const VALID_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
@@ -52,12 +55,12 @@ export function buildQuestionSnapshot(
   });
 }
 
-export function publishExam(
+export async function publishExam(
   repo: ExamRepository,
   examId: string,
   questions: Question[],
-): Exam {
-  const exam = repo.findById(examId);
+): Promise<Exam> {
+  const exam = await repo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
@@ -105,41 +108,58 @@ export function publishExam(
     throw new ValidationError("Passing score cannot exceed total score");
   }
 
-  return repo.update(examId, {
+  const updated = await repo.update(examId, {
     status: "published",
     questionSnapshot,
-  })!;
+  });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }
 
-export function openExam(repo: ExamRepository, examId: string): Exam {
-  const exam = repo.findById(examId);
+export async function openExam(
+  repo: ExamRepository,
+  examId: string,
+): Promise<Exam> {
+  const exam = await repo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
 
   assertTransition(exam.status, "open");
 
-  return repo.update(examId, { status: "open" })!;
+  const updated = await repo.update(examId, { status: "open" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }
 
-export function closeExam(repo: ExamRepository, examId: string): Exam {
-  const exam = repo.findById(examId);
+export async function closeExam(
+  repo: ExamRepository,
+  examId: string,
+): Promise<Exam> {
+  const exam = await repo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
 
   assertTransition(exam.status, "closed");
 
-  return repo.update(examId, { status: "closed" })!;
+  const updated = await repo.update(examId, { status: "closed" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }
 
-export function archiveExam(repo: ExamRepository, examId: string): Exam {
-  const exam = repo.findById(examId);
+export async function archiveExam(
+  repo: ExamRepository,
+  examId: string,
+): Promise<Exam> {
+  const exam = await repo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
 
   assertTransition(exam.status, "archived");
 
-  return repo.update(examId, { status: "archived" })!;
+  const updated = await repo.update(examId, { status: "archived" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }

@@ -22,22 +22,20 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
 
       const examRepo = createExamRepo(fastify.db);
-      const exam = examRepo.findById(ctx, examId);
+      const exam = await examRepo.findById(ctx, examId);
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      const results = attemptRepo.listGradedByExam(ctx, examId);
+      const results = await attemptRepo.listGradedByExam(ctx, examId);
 
-      // Get candidate fields
       const candidateFieldRepo = createCandidateFieldRepo(fastify.db);
-      const fields = candidateFieldRepo
-        .list(ctx)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const fields = (await candidateFieldRepo.list(ctx)).sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      );
       const fieldNames = fields.map((f) => f.name);
 
-      // Build headers
       const headers = [
         "考生姓名",
         ...fieldNames,
@@ -47,7 +45,6 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
         "提交时间",
       ];
 
-      // Build rows
       const rows = results.map((r) => ({
         考生姓名: r.candidateUser.name,
         ...fieldNames.reduce(
@@ -63,19 +60,16 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
         提交时间: r.attempt.submittedAt?.toISOString() ?? "",
       }));
 
-      // Generate CSV
       const csv = generateCSV(headers, rows);
 
-      // Set headers for download
       reply.header("Content-Type", "text/csv; charset=utf-8");
       reply.header(
         "Content-Disposition",
         `attachment; filename="scores-${examId}-${Date.now()}.csv"`,
       );
 
-      // Write audit log
       const auditRepo = createAuditLogRepo(fastify.db);
-      auditRepo.create(ctx, {
+      await auditRepo.create(ctx, {
         actorId: ctx.actorId,
         action: "export_scores",
         targetType: "exam",

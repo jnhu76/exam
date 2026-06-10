@@ -21,7 +21,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const repo = createCandidateFieldRepo(fastify.db);
-      const fields = repo.list(ctx);
+      const fields = await repo.list(ctx);
       return fields.map((f) => ({
         ...f,
         createdAt: f.createdAt.toISOString(),
@@ -41,7 +41,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateCandidateFieldRequestSchema.parse(request.body);
       const repo = createCandidateFieldRepo(fastify.db);
-      if (data.unique && repo.list(ctx).some((field) => field.unique)) {
+      if (data.unique && (await repo.list(ctx)).some((field) => field.unique)) {
         return reply.code(409).send({
           error: {
             code: "CONFLICT",
@@ -49,7 +49,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
-      const field = repo.create(ctx, data);
+      const field = await repo.create(ctx, data);
       recordAudit(
         fastify,
         request,
@@ -80,7 +80,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createCandidateFieldRepo(fastify.db);
       if (
         data.unique &&
-        repo.list(ctx).some((field) => field.unique && field.id !== id)
+        (await repo.list(ctx)).some((field) => field.unique && field.id !== id)
       ) {
         return reply.code(409).send({
           error: {
@@ -89,7 +89,11 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
-      const updated = repo.update(ctx, id, data as Record<string, unknown>);
+      const updated = await repo.update(
+        ctx,
+        id,
+        data as Record<string, unknown>,
+      );
       if (!updated) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Candidate field not found" },
@@ -119,8 +123,11 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createCandidateFieldRepo(fastify.db);
-      const field = repo.findById(ctx, id);
-      if (field?.unique && createCandidateRepo(fastify.db).count(ctx) > 0) {
+      const field = await repo.findById(ctx, id);
+      if (
+        field?.unique &&
+        (await createCandidateRepo(fastify.db).count(ctx)) > 0
+      ) {
         return reply.code(409).send({
           error: {
             code: "CONFLICT",
@@ -128,7 +135,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
-      const deleted = repo.delete(ctx, id);
+      const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Candidate field not found" },
@@ -156,9 +163,9 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
-      const fields = createCandidateFieldRepo(fastify.db)
-        .list(ctx)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const fields = (
+        await createCandidateFieldRepo(fastify.db).list(ctx)
+      ).sort((a, b) => a.sortOrder - b.sortOrder);
       return {
         headers: [
           "username",

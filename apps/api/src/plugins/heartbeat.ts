@@ -18,12 +18,12 @@ export interface ScanResult {
   markedCount: number;
 }
 
-export function scanForDisruptedAttempts(
+export async function scanForDisruptedAttempts(
   activeAttempts: DisruptedCandidate[],
   now: Date,
   heartbeatTimeoutMs: number,
-  onDisrupted: (attemptId: string) => void,
-): ScanResult {
+  onDisrupted: (attemptId: string) => Promise<void>,
+): Promise<ScanResult> {
   let markedCount = 0;
 
   for (const attempt of activeAttempts) {
@@ -32,7 +32,7 @@ export function scanForDisruptedAttempts(
 
     const elapsed = now.getTime() - attempt.lastActivityAt.getTime();
     if (elapsed >= heartbeatTimeoutMs) {
-      onDisrupted(attempt.id);
+      await onDisrupted(attempt.id);
       markedCount++;
     }
   }
@@ -61,48 +61,65 @@ function createAttemptRepoAdapter(
   ctx: RequestContext,
 ): AttemptRepository {
   return {
-    findById: (id) => repo.findById(ctx, id) as ExamAttempt | null,
-    findActiveByEnrollment: (enrollmentId) =>
-      repo.findActiveByEnrollment(ctx, enrollmentId) as ExamAttempt | null,
-    findByEnrollmentAndAttemptNo: (enrollmentId, attemptNo) =>
-      repo.findByEnrollmentAndAttemptNo(
+    findById: async (id) =>
+      (await repo.findById(ctx, id)) as ExamAttempt | null,
+    findActiveByEnrollment: async (enrollmentId) =>
+      (await repo.findActiveByEnrollment(
+        ctx,
+        enrollmentId,
+      )) as ExamAttempt | null,
+    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) =>
+      (await repo.findByEnrollmentAndAttemptNo(
         ctx,
         enrollmentId,
         attemptNo,
-      ) as ExamAttempt | null,
-    create: (input) =>
-      repo.create(
+      )) as ExamAttempt | null,
+    create: async (input) =>
+      (await repo.create(
         ctx,
         input as Parameters<typeof repo.create>[1],
-      ) as ExamAttempt,
-    update: (id, data) =>
-      repo.update(
+      )) as ExamAttempt,
+    update: async (id, data) =>
+      (await repo.update(
         ctx,
         id,
         data as Parameters<typeof repo.update>[2],
-      ) as ExamAttempt | null,
+      )) as ExamAttempt | null,
   };
 }
 
-export function scanDatabaseForDisruptedAttempts(
+export async function scanDatabaseForDisruptedAttempts(
   fastify: Parameters<FastifyPluginAsync>[0],
   now = new Date(),
   heartbeatTimeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS,
-): ScanResult {
+): Promise<ScanResult> {
   const organizationRepo = createOrganizationRepo(fastify.db);
-  const organizations = organizationRepo.list(createSystemContext("system"));
+  const organizations = await organizationRepo.list(
+    createSystemContext("system"),
+  );
   let markedCount = 0;
 
   for (const organization of organizations) {
     const ctx = createSystemContext(organization.id);
     const attemptRepo = createAttemptRepo(fastify.db);
-    const attempts = attemptRepo.listInProgress(ctx);
-    const result = scanForDisruptedAttempts(
+    const attempts = await attemptRepo.listInProgress(ctx);
+    const result = await scanForDisruptedAttempts(
       attempts,
       now,
       heartbeatTimeoutMs,
-      (attemptId) =>
-        markDisrupted(createAttemptRepoAdapter(attemptRepo, ctx), attemptId),
+      async (attemptId) => {
+        try {
+          await markDisrupted(
+            createAttemptRepoAdapter(attemptRepo, ctx),
+            attemptId,
+          );
+        } catch (err) {
+          fastify.log.error(
+            { err, attemptId, organizationId: organization.id },
+            "Failed to mark stale attempt as disrupted",
+          );
+        }
+      },
     );
     markedCount += result.markedCount;
   }
@@ -120,17 +137,26 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
     DEFAULT_HEARTBEAT_TIMEOUT_MS,
   );
 
-  const interval = setInterval(() => {
-    const result = scanDatabaseForDisruptedAttempts(
-      fastify,
-      new Date(),
-      heartbeatTimeoutMs,
-    );
-    if (result.markedCount > 0) {
-      fastify.log.info(
-        { markedCount: result.markedCount },
-        "Marked stale exam attempts as disrupted",
+  let scanRunning = false;
+  const interval = setInterval(async () => {
+    if (scanRunning) return;
+    scanRunning = true;
+    try {
+      const result = await scanDatabaseForDisruptedAttempts(
+        fastify,
+        new Date(),
+        heartbeatTimeoutMs,
       );
+      if (result.markedCount > 0) {
+        fastify.log.info(
+          { markedCount: result.markedCount },
+          "Marked stale exam attempts as disrupted",
+        );
+      }
+    } catch (err) {
+      fastify.log.error({ err }, "Error scanning for disrupted attempts");
+    } finally {
+      scanRunning = false;
     }
   }, scanIntervalMs);
   interval.unref();

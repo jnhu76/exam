@@ -31,7 +31,7 @@ function getMemoryUsage(): number {
 }
 
 const systemRoutes: FastifyPluginAsync = async (fastify) => {
-  const anyDb = fastify.db as unknown as AnyDatabase;
+  const anyDb = fastify.db;
 
   fastify.get("/system/info", async () => {
     return {

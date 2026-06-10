@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
-import type { SqliteDatabase } from "./types.js";
+import type { AnyDatabase, SqliteDatabase } from "./types.js";
+import { isSqlite } from "./types.js";
 import { sqliteSchema } from "./schema/sqlite.js";
 import type {
   QuestionSnapshot,
@@ -83,9 +84,15 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
 }
 
 export async function seedDemo(
-  db: SqliteDatabase,
+  _db: AnyDatabase,
   hashFn: HashFunction,
 ): Promise<DemoIds> {
+  if (!isSqlite(_db)) {
+    throw new Error(
+      "seedDemo() only supports SQLite databases. Use migrations for PostgreSQL.",
+    );
+  }
+  const db: SqliteDatabase = _db;
   const now = Date.now();
   const ids: DemoIds = {
     orgId: "",

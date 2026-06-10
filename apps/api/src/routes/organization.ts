@@ -17,7 +17,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const orgRepo = createOrganizationRepo(fastify.db);
-      const orgs = orgRepo.list(ctx);
+      const orgs = await orgRepo.list(ctx);
       return orgs.map((o) => ({
         ...o,
         createdAt: o.createdAt.toISOString(),
@@ -35,7 +35,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateOrganizationRequestSchema.parse(request.body);
       const orgRepo = createOrganizationRepo(fastify.db);
-      const org = orgRepo.create(ctx, data);
+      const org = await orgRepo.create(ctx, data);
       recordAudit(
         fastify,
         request,
@@ -62,7 +62,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateOrganizationRequestSchema.parse(request.body);
       const orgRepo = createOrganizationRepo(fastify.db);
-      const updated = orgRepo.update(
+      const updated = await orgRepo.update(
         ctx,
         id,
         data as Partial<{ name: string; displayName: string; slug: string }>,
@@ -97,7 +97,7 @@ const organizationRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const orgRepo = createOrganizationRepo(fastify.db);
-      const deleted = orgRepo.delete(ctx, id);
+      const deleted = await orgRepo.delete(ctx, id);
       if (!deleted) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Organization not found" },

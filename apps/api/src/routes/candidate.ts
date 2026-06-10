@@ -15,8 +15,8 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 
 function validateCandidateFields(
-  configuredFields: ReturnType<
-    ReturnType<typeof createCandidateFieldRepo>["list"]
+  configuredFields: Awaited<
+    ReturnType<ReturnType<typeof createCandidateFieldRepo>["list"]>
   >,
   fields: Record<string, unknown>,
 ): void {
@@ -56,9 +56,11 @@ function validateCandidateFields(
 }
 
 function findByIdentity(
-  candidates: ReturnType<ReturnType<typeof createCandidateRepo>["list"]>,
-  configuredFields: ReturnType<
-    ReturnType<typeof createCandidateFieldRepo>["list"]
+  candidates: Awaited<
+    ReturnType<ReturnType<typeof createCandidateRepo>["list"]>
+  >,
+  configuredFields: Awaited<
+    ReturnType<ReturnType<typeof createCandidateFieldRepo>["list"]>
   >,
   fields: Record<string, unknown>,
 ) {
@@ -86,11 +88,11 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
-      const { items, total } = repo.listPaginated(ctx, page, pageSize);
+      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
 
-      return {
-        items: items.map((c) => {
-          const user = userRepo.findById(ctx, c.userId);
+      const itemsWithUsers = await Promise.all(
+        items.map(async (c) => {
+          const user = await userRepo.findById(ctx, c.userId);
           return {
             ...c,
             name: user?.name ?? "",
@@ -100,6 +102,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             updatedAt: c.updatedAt.toISOString(),
           };
         }),
+      );
+      return {
+        items: itemsWithUsers,
         total,
         page,
         pageSize,
@@ -121,16 +126,22 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const data = CreateCandidateRequestSchema.parse(request.body);
       const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
-      const configuredFields = createCandidateFieldRepo(fastify.db).list(ctx);
+      const configuredFields = await createCandidateFieldRepo(fastify.db).list(
+        ctx,
+      );
       validateCandidateFields(configuredFields, data.fields);
       if (
-        findByIdentity(candidateRepo.list(ctx), configuredFields, data.fields)
+        findByIdentity(
+          await candidateRepo.list(ctx),
+          configuredFields,
+          data.fields,
+        )
       ) {
         throw new ValidationError("Candidate identity already exists");
       }
 
       const passwordHash = await hashPassword(data.password);
-      const user = userRepo.create(ctx, {
+      const user = await userRepo.create(ctx, {
         username: data.username,
         passwordHash,
         name: data.name,
@@ -138,7 +149,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         isActive: true,
       });
 
-      const candidate = candidateRepo.create(ctx, {
+      const candidate = await candidateRepo.create(ctx, {
         userId: user.id,
         fields: data.fields,
       });
@@ -172,32 +183,39 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateCandidateRequestSchema.parse(request.body);
       const candidateRepo = createCandidateRepo(fastify.db);
-      const candidate = candidateRepo.findById(ctx, id);
+      const candidate = await candidateRepo.findById(ctx, id);
       if (!candidate) {
         return reply.code(404).send({
           error: { code: "NOT_FOUND", message: "Candidate not found" },
         });
       }
       if (data.fields) {
-        const configuredFields = createCandidateFieldRepo(fastify.db).list(ctx);
+        const configuredFields = await createCandidateFieldRepo(
+          fastify.db,
+        ).list(ctx);
         validateCandidateFields(configuredFields, data.fields);
         const duplicate = findByIdentity(
-          candidateRepo.list(ctx),
+          await candidateRepo.list(ctx),
           configuredFields,
           data.fields,
         );
         if (duplicate && duplicate.id !== id) {
           throw new ValidationError("Candidate identity already exists");
         }
-        candidateRepo.update(ctx, id, { fields: data.fields });
+        await candidateRepo.update(ctx, id, { fields: data.fields });
       }
       if (data.name !== undefined || data.isActive !== undefined) {
-        createUserRepo(fastify.db).update(ctx, candidate.userId, {
+        await createUserRepo(fastify.db).update(ctx, candidate.userId, {
           ...(data.name !== undefined ? { name: data.name } : {}),
           ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         });
       }
-      const updated = candidateRepo.findById(ctx, id)!;
+      const updated = await candidateRepo.findById(ctx, id);
+      if (!updated) {
+        return reply.code(404).send({
+          error: { code: "NOT_FOUND", message: "Candidate not found" },
+        });
+      }
       recordAudit(fastify, request, ctx, "candidate.update", "candidate", id);
       return {
         ...updated,
@@ -226,14 +244,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const data = CandidateImportRequestSchema.parse(request.body);
       const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
-      const configuredFields = createCandidateFieldRepo(fastify.db).list(ctx);
+      const configuredFields = await createCandidateFieldRepo(fastify.db).list(
+        ctx,
+      );
 
-      const allCandidates = candidateRepo.list(ctx);
+      const allCandidates = await candidateRepo.list(ctx);
       // TODO: optimize for large orgs — userRepo.list(ctx) loads all users into memory.
       // Consider a role-scoped query or batch lookup when orgs exceed ~10k users.
       const existingUsernames = new Set<string>();
       const userIdMap = new Map<string, string>();
-      for (const user of userRepo.list(ctx)) {
+      for (const user of await userRepo.list(ctx)) {
         existingUsernames.add(user.username);
         userIdMap.set(user.username, user.id);
       }
@@ -262,12 +282,13 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           );
           if (!existing && existingUsernames.has(username)) {
             const userId = userIdMap.get(username)!;
-            existing = candidateRepo.findByUserId(ctx, userId);
+            existing = await candidateRepo.findByUserId(ctx, userId);
           }
           if (existing) {
-            candidateRepo.update(ctx, existing.id, { fields });
-            userRepo.update(ctx, existing.userId, { name });
+            await candidateRepo.update(ctx, existing.id, { fields });
+            await userRepo.update(ctx, existing.userId, { name });
             existingUsernames.add(username);
+            userIdMap.set(username, existing.userId);
             updated++;
             continue;
           }
@@ -280,7 +301,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           const passwordHash = await hashPassword(password);
-          const user = userRepo.create(ctx, {
+          const user = await userRepo.create(ctx, {
             username,
             passwordHash,
             name,
@@ -290,7 +311,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           existingUsernames.add(username);
           userIdMap.set(username, user.id);
 
-          const candidate = candidateRepo.create(ctx, {
+          const candidate = await candidateRepo.create(ctx, {
             userId: user.id,
             fields,
           });

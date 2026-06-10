@@ -163,7 +163,7 @@ Critical
 
 ### Explicit Non-goals
 
-- 不修改路由层逻辑
+- 不修改路由层业务逻辑（仅做 `await` 适配）
 - 不修改 domain / contracts
 - 不拆 `attempt_answers` 表
 
@@ -171,6 +171,7 @@ Critical
 
 - `packages/db/src/repository/*.ts` — 所有 13 个 repo
 - `packages/db/src/seed.ts`, `demo-seed.ts` — 适配
+- `packages/exam-engine/src/` — 接口签名 async 适配
 - `apps/api/src/plugins/db.ts` — 消除 `as unknown as SqliteDatabase`
 
 ### Forbidden Changes

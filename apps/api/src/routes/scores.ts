@@ -40,25 +40,25 @@ function normalizeScoreListQuery(query: unknown) {
   };
 }
 
-function findVisibleAttempt(
+async function findVisibleAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
   attemptId: string,
 ) {
   const attemptRepo = createAttemptRepo(fastify.db);
   if (ctx.role !== "Candidate") {
-    return attemptRepo.findById(ctx, attemptId) as ExamAttempt | null;
+    return (await attemptRepo.findById(ctx, attemptId)) as ExamAttempt | null;
   }
-  const candidate = createCandidateRepo(fastify.db).findByUserId(
+  const candidate = await createCandidateRepo(fastify.db).findByUserId(
     ctx,
     ctx.actorId,
   );
   return candidate
-    ? (attemptRepo.findByIdAndCandidate(
+    ? ((await attemptRepo.findByIdAndCandidate(
         ctx,
         attemptId,
         candidate.id,
-      ) as ExamAttempt | null)
+      )) as ExamAttempt | null)
     : null;
 }
 
@@ -131,13 +131,13 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         parsedQuery.data;
 
       const examRepo = createExamRepo(fastify.db);
-      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      const gradedCount = attemptRepo.countGradedByExam(ctx, examId, {
+      const gradedCount = await attemptRepo.countGradedByExam(ctx, examId, {
         passFilter: "all",
       });
       const access = canOpenScoreList(exam, gradedCount, new Date());
@@ -151,19 +151,15 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const offset = (page - 1) * pageSize;
       const [results, total, stats] = await Promise.all([
-        Promise.resolve(
-          attemptRepo.listGradedByExam(ctx, examId, {
-            passFilter,
-            sortBy,
-            sortOrder,
-            limit: pageSize,
-            offset,
-          }),
-        ),
-        Promise.resolve(
-          attemptRepo.countGradedByExam(ctx, examId, { passFilter }),
-        ),
-        Promise.resolve(attemptRepo.getGradedStats(ctx, examId)),
+        attemptRepo.listGradedByExam(ctx, examId, {
+          passFilter,
+          sortBy,
+          sortOrder,
+          limit: pageSize,
+          offset,
+        }),
+        attemptRepo.countGradedByExam(ctx, examId, { passFilter }),
+        attemptRepo.getGradedStats(ctx, examId),
       ]);
 
       const items = results.map(
@@ -205,14 +201,18 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send(formatZodError(parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
-      const attempt = findVisibleAttempt(fastify, ctx, parsed.data.attemptId);
+      const attempt = await findVisibleAttempt(
+        fastify,
+        ctx,
+        parsed.data.attemptId,
+      );
       if (!attempt) {
         throw new NotFoundError("Attempt not found");
       }
-      const exam = createExamRepo(fastify.db).findById(
+      const exam = (await createExamRepo(fastify.db).findById(
         ctx,
         attempt.examId,
-      ) as Exam | null;
+      )) as Exam | null;
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }

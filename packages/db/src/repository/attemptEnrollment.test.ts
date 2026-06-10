@@ -5,9 +5,6 @@ import { createSqliteDatabase, migrateSqlite } from "../sqlite.js";
 import { sqliteSchema } from "../schema/sqlite.js";
 import { createAttemptRepo } from "./attemptRepo.js";
 import { createEnrollmentRepo } from "./enrollmentRepo.js";
-import { createExamRepo } from "./examRepo.js";
-import { createCourseRepo } from "./courseRepo.js";
-import { createCandidateRepo } from "./candidateRepo.js";
 
 function createContext(orgId: string): RequestContext {
   return {
@@ -27,7 +24,7 @@ describe("attemptRepo custom methods", () => {
   let ctx: RequestContext;
   let enrollmentId: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = createSqliteDatabase(":memory:");
     migrateSqlite(db.db);
     attemptRepo = createAttemptRepo(db.db);
@@ -124,7 +121,7 @@ describe("attemptRepo custom methods", () => {
       })
       .run();
 
-    const enr = enrollmentRepo.create(ctx, {
+    const enr = await enrollmentRepo.create(ctx, {
       examId: "exam-1",
       candidateId: "cand-1",
       status: "started",
@@ -133,8 +130,8 @@ describe("attemptRepo custom methods", () => {
     enrollmentId = enr.id;
   });
 
-  it("findActiveByEnrollment returns in_progress attempt", () => {
-    attemptRepo.create(ctx, {
+  it("findActiveByEnrollment returns in_progress attempt", async () => {
+    await attemptRepo.create(ctx, {
       examId: "exam-1",
       enrollmentId,
       candidateId: "cand-1",
@@ -147,13 +144,13 @@ describe("attemptRepo custom methods", () => {
       lastActivityAt: new Date(),
     });
 
-    const found = attemptRepo.findActiveByEnrollment(ctx, enrollmentId);
+    const found = await attemptRepo.findActiveByEnrollment(ctx, enrollmentId);
     expect(found).toBeDefined();
     expect(found!.status).toBe("in_progress");
   });
 
-  it("findActiveByEnrollment returns null when no active attempt", () => {
-    attemptRepo.create(ctx, {
+  it("findActiveByEnrollment returns null when no active attempt", async () => {
+    await attemptRepo.create(ctx, {
       examId: "exam-1",
       enrollmentId,
       candidateId: "cand-1",
@@ -163,12 +160,12 @@ describe("attemptRepo custom methods", () => {
       answers: [],
     });
 
-    const found = attemptRepo.findActiveByEnrollment(ctx, enrollmentId);
+    const found = await attemptRepo.findActiveByEnrollment(ctx, enrollmentId);
     expect(found).toBeNull();
   });
 
-  it("findByEnrollmentAndAttemptNo returns correct attempt", () => {
-    attemptRepo.create(ctx, {
+  it("findByEnrollmentAndAttemptNo returns correct attempt", async () => {
+    await attemptRepo.create(ctx, {
       examId: "exam-1",
       enrollmentId,
       candidateId: "cand-1",
@@ -178,7 +175,7 @@ describe("attemptRepo custom methods", () => {
       answers: [],
     });
 
-    const found = attemptRepo.findByEnrollmentAndAttemptNo(
+    const found = await attemptRepo.findByEnrollmentAndAttemptNo(
       ctx,
       enrollmentId,
       1,
@@ -187,8 +184,8 @@ describe("attemptRepo custom methods", () => {
     expect(found!.attemptNo).toBe(1);
   });
 
-  it("findByExamAndCandidate returns attempts for exam+candidate", () => {
-    attemptRepo.create(ctx, {
+  it("findByExamAndCandidate returns attempts for exam+candidate", async () => {
+    await attemptRepo.create(ctx, {
       examId: "exam-1",
       enrollmentId,
       candidateId: "cand-1",
@@ -198,7 +195,11 @@ describe("attemptRepo custom methods", () => {
       answers: [],
     });
 
-    const found = attemptRepo.findByExamAndCandidate(ctx, "exam-1", "cand-1");
+    const found = await attemptRepo.findByExamAndCandidate(
+      ctx,
+      "exam-1",
+      "cand-1",
+    );
     expect(found.length).toBe(1);
     expect(found[0]!.attemptNo).toBe(1);
   });
@@ -306,15 +307,15 @@ describe("enrollmentRepo custom methods", () => {
       .run();
   });
 
-  it("findByExamAndCandidate returns enrollment", () => {
-    enrollmentRepo.create(ctx, {
+  it("findByExamAndCandidate returns enrollment", async () => {
+    await enrollmentRepo.create(ctx, {
       examId: "exam-1",
       candidateId: "cand-1",
       status: "assigned",
       attemptCount: 0,
     });
 
-    const found = enrollmentRepo.findByExamAndCandidate(
+    const found = await enrollmentRepo.findByExamAndCandidate(
       ctx,
       "exam-1",
       "cand-1",
@@ -323,8 +324,8 @@ describe("enrollmentRepo custom methods", () => {
     expect(found!.candidateId).toBe("cand-1");
   });
 
-  it("findByExamAndCandidate returns null when not found", () => {
-    const found = enrollmentRepo.findByExamAndCandidate(
+  it("findByExamAndCandidate returns null when not found", async () => {
+    const found = await enrollmentRepo.findByExamAndCandidate(
       ctx,
       "exam-1",
       "cand-1",
@@ -332,15 +333,15 @@ describe("enrollmentRepo custom methods", () => {
     expect(found).toBeNull();
   });
 
-  it("findByCandidate returns all enrollments for candidate", () => {
-    enrollmentRepo.create(ctx, {
+  it("findByCandidate returns all enrollments for candidate", async () => {
+    await enrollmentRepo.create(ctx, {
       examId: "exam-1",
       candidateId: "cand-1",
       status: "assigned",
       attemptCount: 0,
     });
 
-    const found = enrollmentRepo.findByCandidate(ctx, "cand-1");
+    const found = await enrollmentRepo.findByCandidate(ctx, "cand-1");
     expect(found.length).toBe(1);
   });
 });

@@ -19,7 +19,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
     const data = RegisterRequestSchema.parse(request.body);
     const userRepo = createUserRepo(fastify.db);
-    const org = createOrganizationRepo(fastify.db).resolveBrandingTenant(
+    const org = await createOrganizationRepo(fastify.db).resolveBrandingTenant(
       { purpose: "public_branding" } as PublicBrandingContext,
       data.organizationSlug,
     );
@@ -30,8 +30,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       throw new PermissionDeniedError("Bootstrap registration is disabled");
     }
 
-    const existingUser = userRepo.findByOrganizationAndUsername(
-      org.id,
+    const bootstrapCtx = {
+      organizationId: org.id,
+      actorId: "bootstrap",
+      role: "Admin" as const,
+      permissions: [],
+    };
+    const existingUser = await userRepo.findByOrganizationAndUsername(
+      bootstrapCtx,
       data.username,
     );
     if (existingUser) {
@@ -49,7 +55,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       permissions: [],
       sessionId: "bootstrap",
     };
-    const user = userRepo.create(ctx, {
+    const user = await userRepo.create(ctx, {
       username: data.username,
       name: data.name,
       passwordHash: await hashPassword(data.password),
@@ -72,13 +78,21 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
       const userRepo = createUserRepo(fastify.db);
-      const org = createOrganizationRepo(fastify.db).resolveBrandingTenant(
+      const org = await createOrganizationRepo(
+        fastify.db,
+      ).resolveBrandingTenant(
         { purpose: "public_branding" } as PublicBrandingContext,
         data.organizationSlug,
       );
 
-      const user = userRepo.findByOrganizationAndUsername(
-        org.id,
+      const anonCtx = {
+        organizationId: org.id,
+        actorId: "anonymous",
+        role: "Candidate" as const,
+        permissions: [],
+      };
+      const user = await userRepo.findByOrganizationAndUsername(
+        anonCtx,
         data.username,
       );
       if (!user?.isActive) {
@@ -136,10 +150,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const userRepo = createUserRepo(fastify.db);
       const ctx = request.ctx!;
-      const user = userRepo.findByOrganizationAndId(
-        ctx.organizationId,
-        ctx.actorId,
-      );
+      const user = await userRepo.findByOrganizationAndId(ctx, ctx.actorId);
 
       if (!user) {
         return reply.code(404).send({
@@ -179,8 +190,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
       };
       const userRepo = createUserRepo(fastify.db);
-      const user = userRepo.findByOrganizationAndId(
-        targetCtx.organizationId,
+      const user = await userRepo.findByOrganizationAndId(
+        targetCtx,
         targetCtx.actorId,
       );
       if (!user) {
@@ -200,7 +211,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(newPassword);
-      userRepo.update(targetCtx, user.id, { passwordHash: newHash });
+      const updated = await userRepo.update(targetCtx, user.id, {
+        passwordHash: newHash,
+      });
+      if (!updated) {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+      }
       return { ok: true as const };
     },
   );

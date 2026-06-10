@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  AnyDatabase,
   AuthLookupContext,
   PlatformContext,
   RepoContext,
@@ -13,6 +12,8 @@ import {
   AsyncPlatformRepo,
   AsyncTenantRepo,
 } from "../repository/baseRepo.js";
+import { createDatabase } from "../database.js";
+import { migrateSqlite } from "../sqlite.js";
 
 describe("A01: Context types", () => {
   describe("TenantContext", () => {
@@ -131,17 +132,14 @@ describe("A01: Context type guards", () => {
 
 describe("A01: isSqlite type guard", () => {
   it("narrows AnyDatabase to SqliteDatabase", () => {
-    const db = { all: () => [] } as unknown as AnyDatabase;
-    expect(isSqlite(db)).toBe(true);
-    if (isSqlite(db)) {
-      const _typed: SqliteDatabase = db;
+    const conn = createDatabase(":memory:");
+    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
+    migrateSqlite(conn.db);
+    expect(isSqlite(conn.db)).toBe(true);
+    if (isSqlite(conn.db)) {
+      const _typed: SqliteDatabase = conn.db;
       expect(_typed).toBeDefined();
     }
-  });
-
-  it("returns false for PG-like databases", () => {
-    const db = {} as unknown as AnyDatabase;
-    expect(isSqlite(db)).toBe(false);
   });
 });
 

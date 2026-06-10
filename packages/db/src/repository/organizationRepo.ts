@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { PublicBrandingContext, RequestContext } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
 import { eq } from "drizzle-orm";
-import type { SqliteDatabase } from "../sqlite.js";
-import { organizations } from "../schema/sqlite.js";
+import type { AnyDatabase, PostgresDatabase } from "../types.js";
+import { isSqlite } from "../types.js";
+import { organizations as sqliteOrgs } from "../schema/sqlite.js";
+import { organizations as pgOrgs } from "../schema/pg.js";
 import { now } from "./baseRepo.js";
 
-export function createOrganizationRepo(db: SqliteDatabase) {
+export function createOrganizationRepo(db: AnyDatabase) {
   return {
-    create(
+    async create(
       _ctx: RequestContext,
       input: { name: string; displayName: string; slug: string },
     ) {
@@ -19,47 +21,84 @@ export function createOrganizationRepo(db: SqliteDatabase) {
         createdAt: timestamp,
         updatedAt: timestamp,
       };
-      db.insert(organizations).values(organization).run();
+      if (isSqlite(db)) {
+        db.insert(sqliteOrgs).values(organization).run();
+      } else {
+        await (db as PostgresDatabase).insert(pgOrgs).values(organization);
+      }
       return organization;
     },
-    findById(_ctx: RequestContext, id: string) {
-      return (
-        db.select().from(organizations).where(eq(organizations.id, id)).get() ??
-        null
-      );
+    async findById(_ctx: RequestContext, id: string) {
+      if (isSqlite(db)) {
+        return (
+          db.select().from(sqliteOrgs).where(eq(sqliteOrgs.id, id)).get() ??
+          null
+        );
+      }
+      const rows = await (db as PostgresDatabase)
+        .select()
+        .from(pgOrgs)
+        .where(eq(pgOrgs.id, id));
+      return rows[0] ?? null;
     },
-    list(_ctx: RequestContext) {
-      return db.select().from(organizations).all();
+    async list(_ctx: RequestContext) {
+      if (isSqlite(db)) {
+        return db.select().from(sqliteOrgs).all();
+      }
+      return (db as PostgresDatabase).select().from(pgOrgs);
     },
-    update(
+    async update(
       _ctx: RequestContext,
       id: string,
       input: Partial<{ name: string; displayName: string; slug: string }>,
     ) {
-      db.update(organizations)
-        .set({ ...input, updatedAt: now() })
-        .where(eq(organizations.id, id))
-        .run();
-      return (
-        db.select().from(organizations).where(eq(organizations.id, id)).get() ??
-        null
-      );
+      const changes = { ...input, updatedAt: now() };
+      if (isSqlite(db)) {
+        db.update(sqliteOrgs).set(changes).where(eq(sqliteOrgs.id, id)).run();
+        return (
+          db.select().from(sqliteOrgs).where(eq(sqliteOrgs.id, id)).get() ??
+          null
+        );
+      }
+      await (db as PostgresDatabase)
+        .update(pgOrgs)
+        .set(changes)
+        .where(eq(pgOrgs.id, id));
+      const rows = await (db as PostgresDatabase)
+        .select()
+        .from(pgOrgs)
+        .where(eq(pgOrgs.id, id));
+      return rows[0] ?? null;
     },
-    delete(_ctx: RequestContext, id: string) {
-      return (
-        db.delete(organizations).where(eq(organizations.id, id)).run().changes >
-        0
-      );
+    async delete(_ctx: RequestContext, id: string) {
+      if (isSqlite(db)) {
+        return (
+          db.delete(sqliteOrgs).where(eq(sqliteOrgs.id, id)).run().changes > 0
+        );
+      }
+      const result = await (db as PostgresDatabase)
+        .delete(pgOrgs)
+        .where(eq(pgOrgs.id, id));
+      return (result.count ?? 0) > 0;
     },
-    resolveBrandingTenant(_ctx: PublicBrandingContext, slug?: string) {
-      const organization = slug
-        ? db
-            .select()
-            .from(organizations)
-            .where(eq(organizations.slug, slug))
-            .get()
-        : db.select().from(organizations).limit(1).get();
+    async resolveBrandingTenant(_ctx: PublicBrandingContext, slug?: string) {
+      if (isSqlite(db)) {
+        const organization = slug
+          ? db.select().from(sqliteOrgs).where(eq(sqliteOrgs.slug, slug)).get()
+          : db.select().from(sqliteOrgs).limit(1).get();
 
+        if (!organization) {
+          throw new NotFoundError("Branding organization not found");
+        }
+        return organization;
+      }
+      const rows = slug
+        ? await (db as PostgresDatabase)
+            .select()
+            .from(pgOrgs)
+            .where(eq(pgOrgs.slug, slug))
+        : await (db as PostgresDatabase).select().from(pgOrgs).limit(1);
+      const organization = rows[0];
       if (!organization) {
         throw new NotFoundError("Branding organization not found");
       }

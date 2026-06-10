@@ -1,27 +1,53 @@
-import type { SqliteDatabase } from "../sqlite.js";
-import { candidateProfiles } from "../schema/sqlite.js";
-import { createTenantCrudRepo } from "./baseRepo.js";
+import type { AnyDatabase, PostgresDatabase } from "../types.js";
+import { isSqlite } from "../types.js";
+import { candidateProfiles as sqliteCandidateProfiles } from "../schema/sqlite.js";
+import { candidateProfiles as pgCandidateProfiles } from "../schema/pg.js";
+import {
+  createAsyncTenantCrudRepo,
+  resolveOptionalOrganizationId,
+} from "./baseRepo.js";
+import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 
-export function createCandidateRepo(db: SqliteDatabase) {
-  const repo = createTenantCrudRepo(db, candidateProfiles);
+export function createCandidateRepo(db: AnyDatabase) {
+  const repo = createAsyncTenantCrudRepo(db, {
+    sqlite: sqliteCandidateProfiles,
+    pg: pgCandidateProfiles,
+  });
 
   return {
     ...repo,
-    findByUserId(ctx: RequestContext, userId: string) {
-      const orgId = ctx.targetOrganizationId ?? ctx.organizationId;
+    async findByUserId(ctx: TenantContext | RequestContext, userId: string) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      if (isSqlite(db)) {
+        return (
+          (db
+            .select()
+            .from(sqliteCandidateProfiles)
+            .where(
+              and(
+                eq(sqliteCandidateProfiles.organizationId, orgId),
+                eq(sqliteCandidateProfiles.userId, userId),
+              ),
+            )
+            .get() as
+            | typeof sqliteCandidateProfiles.$inferSelect
+            | undefined) ?? null
+        );
+      }
+      const rows = await (db as PostgresDatabase)
+        .select()
+        .from(pgCandidateProfiles)
+        .where(
+          and(
+            eq(pgCandidateProfiles.organizationId, orgId),
+            eq(pgCandidateProfiles.userId, userId),
+          ),
+        );
       return (
-        (db
-          .select()
-          .from(candidateProfiles)
-          .where(
-            and(
-              eq(candidateProfiles.organizationId, orgId),
-              eq(candidateProfiles.userId, userId),
-            ),
-          )
-          .get() as typeof candidateProfiles.$inferSelect | undefined) ?? null
+        (rows[0] as typeof sqliteCandidateProfiles.$inferSelect | undefined) ??
+        null
       );
     },
   };
