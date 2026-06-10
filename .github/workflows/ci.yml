@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Verify
+  verify-sqlite:
+    name: Verify (SQLite)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -45,6 +45,9 @@ jobs:
       - name: Lint copy
         run: pnpm lint:copy
 
+      - name: Lint architecture
+        run: pnpm lint:arch
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -56,6 +59,60 @@ jobs:
 
       - name: Coverage
         run: pnpm coverage
+
+      - name: Build
+        run: pnpm build
+
+  verify-pg:
+    name: Verify (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: exam
+          POSTGRES_PASSWORD: exam
+          POSTGRES_DB: exam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U exam -d exam_test"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_test
+      JWT_SECRET: ci-test-secret-for-postgresql-job
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint architecture
+        run: pnpm lint:arch
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
 
       - name: Build
         run: pnpm build
