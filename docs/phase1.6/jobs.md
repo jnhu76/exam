@@ -260,7 +260,7 @@
 
 ### Parallelizable
 
-- P1.6-S03a-1、P1.6-S03a-2、P1.6-S03a-3 可以并行开始（如果逻辑允许）
+- P1.6-S03a-1、P1.6-S03a-3 可与 S03a-2 并行开发，但 S03a-3 的 saveAnswers/submit 集成及合并必须在 S03a-2（saveAnswers transaction boundary）完成并通过测试后进行；CI 对 submit 流程变更应强制此顺序
 - P1.6-S03a-4 必须在 S03a-2、S03a-3 完成后执行
 - P1.6-S03a-5 必须在所有 S03a job 完成后执行
 

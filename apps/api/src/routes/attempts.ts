@@ -606,20 +606,28 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
-      if (
-        !attempt.questionSnapshot.some(
-          (question) => question.originalQuestionId === questionId,
-        )
-      ) {
-        throw new ValidationError("Question is not part of this attempt");
-      }
-
       const result = await executeInTransaction(fastify.db, async (tx) => {
         const txRepo = createAttemptRepo(tx);
+        const candidateProfile = await createCandidateRepo(tx).findByUserId(
+          ctx,
+          ctx.actorId,
+        );
+        if (!candidateProfile) {
+          throw new NotFoundError("Candidate profile not found");
+        }
         const lockedAttempt = await txRepo.findByIdForUpdate(ctx, attemptId);
-        if (!lockedAttempt) {
+        if (
+          !lockedAttempt ||
+          lockedAttempt.candidateId !== candidateProfile.id
+        ) {
           throw new NotFoundError("Attempt not found");
+        }
+        if (
+          !lockedAttempt.questionSnapshot.some(
+            (question) => question.originalQuestionId === questionId,
+          )
+        ) {
+          throw new ValidationError("Question is not part of this attempt");
         }
 
         const storedAnswers = normalizeAnswers(
