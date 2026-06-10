@@ -4,7 +4,7 @@ import type {
   PublicBrandingContext,
   RequestContext,
 } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
+import { NotFoundError, ValidationError } from "@exam/domain";
 import { eq } from "drizzle-orm";
 import type { AnyDatabase, PostgresDatabase } from "../types.js";
 import { isSqlite } from "../types.js";
@@ -120,7 +120,7 @@ export function createSettingsRepo(db: AnyDatabase) {
             .where(eq(sqliteOrgs.id, ctx.organizationId))
             .get() ?? null;
         if (!organization) {
-          throw new ValidationError("Branding organization not found");
+          throw new NotFoundError("Branding organization not found");
         }
         settings =
           db
@@ -135,7 +135,7 @@ export function createSettingsRepo(db: AnyDatabase) {
           .where(eq(pgOrgs.id, ctx.organizationId));
         organization = orgRows[0] ?? null;
         if (!organization) {
-          throw new ValidationError("Branding organization not found");
+          throw new NotFoundError("Branding organization not found");
         }
         const settingsRows = await (db as PostgresDatabase)
           .select()

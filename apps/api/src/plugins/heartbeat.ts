@@ -108,10 +108,17 @@ export async function scanDatabaseForDisruptedAttempts(
       now,
       heartbeatTimeoutMs,
       async (attemptId) => {
-        await markDisrupted(
-          createAttemptRepoAdapter(attemptRepo, ctx),
-          attemptId,
-        );
+        try {
+          await markDisrupted(
+            createAttemptRepoAdapter(attemptRepo, ctx),
+            attemptId,
+          );
+        } catch (err) {
+          fastify.log.error(
+            { err, attemptId, organizationId: organization.id },
+            "Failed to mark stale attempt as disrupted",
+          );
+        }
       },
     );
     markedCount += result.markedCount;

@@ -179,6 +179,7 @@ export function createAsyncTenantCrudRepo(
           .select()
           .from(tables.sqlite)
           .where(eq(tables.sqlite.organizationId, oid))
+          .orderBy(tables.sqlite.createdAt, tables.sqlite.id)
           .limit(pageSize)
           .offset(offset)
           .all() as Select[];
@@ -193,6 +194,7 @@ export function createAsyncTenantCrudRepo(
         .select()
         .from(tables.pg)
         .where(eq(tables.pg.organizationId, oid))
+        .orderBy(tables.pg.createdAt, tables.pg.id)
         .limit(pageSize)
         .offset(offset)) as Select[];
       const total = (

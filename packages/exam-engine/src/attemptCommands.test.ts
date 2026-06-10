@@ -488,6 +488,21 @@ describe("attemptCommands", () => {
         submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T11:00:00Z")),
       ).rejects.toThrow(ExamTimeExpiredError);
     });
+
+    it("throws ValidationError when submit update returns null", async () => {
+      const attempt = makeAttempt();
+      const attRepo: AttemptRepository = {
+        findById: () => attempt,
+        findActiveByEnrollment: () => null,
+        findByEnrollmentAndAttemptNo: () => null,
+        create: () => attempt,
+        update: () => null,
+      };
+
+      await expect(
+        submitAttempt(attRepo, "attempt-1", fixedNow),
+      ).rejects.toThrow(ValidationError);
+    });
   });
 
   describe("markDisrupted", () => {
