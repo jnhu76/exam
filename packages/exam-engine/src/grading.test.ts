@@ -6,7 +6,7 @@ import type {
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
-import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
+import { InvalidStateTransitionError } from "@exam/domain";
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -251,7 +251,7 @@ describe("gradeAttempt", () => {
         "attempt-1",
         new Date(),
       ),
-    ).rejects.toThrow(ValidationError);
+    ).rejects.toThrow("Failed to update attempt status to grading");
   });
 
   it("throws ValidationError when writing graded result fails", async () => {
@@ -289,7 +289,7 @@ describe("gradeAttempt", () => {
         "attempt-1",
         new Date(),
       ),
-    ).rejects.toThrow(ValidationError);
+    ).rejects.toThrow("Failed to persist graded results");
   });
 
   it("throws ValidationError when updating enrollment result fails", async () => {
@@ -328,6 +328,6 @@ describe("gradeAttempt", () => {
         "attempt-1",
         new Date(),
       ),
-    ).rejects.toThrow(ValidationError);
+    ).rejects.toThrow("Failed to update enrollment");
   });
 });
