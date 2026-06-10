@@ -346,7 +346,7 @@ Medium
 
 ### Scope
 
-- `docs/phase1.4/adr-redis-mq.md`
+- `docs/phase1.4/adr/adr-redis-mq.md`
 
 ### Explicit Non-goals
 
@@ -361,7 +361,7 @@ Medium
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/adr-redis-mq.md`
+- `docs/phase1.4/adr/adr-redis-mq.md`
 
 ### Dependencies
 
