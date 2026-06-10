@@ -110,7 +110,7 @@ describe("Smoke — organization management", () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/organizations",
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().length).toBeGreaterThanOrEqual(1);
@@ -125,7 +125,7 @@ describe("Smoke — organization management", () => {
         displayName: "Smoke Organization",
         slug: "smoke-org",
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(createRes.statusCode).toBe(201);
     const orgId = createRes.json().id;
@@ -134,7 +134,7 @@ describe("Smoke — organization management", () => {
       method: "PATCH",
       url: `/api/organizations/${orgId}`,
       payload: { displayName: "Updated Org" },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(updateRes.statusCode).toBe(200);
     expect(updateRes.json().displayName).toBe("Updated Org");
@@ -142,7 +142,7 @@ describe("Smoke — organization management", () => {
     const deleteRes = await ctx.app.inject({
       method: "DELETE",
       url: `/api/organizations/${orgId}`,
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(deleteRes.statusCode).toBe(204);
   });

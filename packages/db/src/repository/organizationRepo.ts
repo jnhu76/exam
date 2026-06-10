@@ -85,24 +85,41 @@ export function createOrganizationRepo(db: AnyDatabase) {
       if (isSqlite(db)) {
         const organization = slug
           ? db.select().from(sqliteOrgs).where(eq(sqliteOrgs.slug, slug)).get()
-          : db.select().from(sqliteOrgs).limit(1).get();
+          : null;
+
+        if (!organization && !slug) {
+          const all = db.select().from(sqliteOrgs).all();
+          if (all.length === 1) return all[0]!;
+          throw new NotFoundError(
+            all.length === 0
+              ? "No organization found"
+              : "Multiple organizations exist; organizationSlug is required",
+          );
+        }
 
         if (!organization) {
           throw new NotFoundError("Branding organization not found");
         }
         return organization;
       }
-      const rows = slug
-        ? await (db as PostgresDatabase)
-            .select()
-            .from(pgOrgs)
-            .where(eq(pgOrgs.slug, slug))
-        : await (db as PostgresDatabase).select().from(pgOrgs).limit(1);
-      const organization = rows[0];
-      if (!organization) {
-        throw new NotFoundError("Branding organization not found");
+      if (slug) {
+        const rows = await (db as PostgresDatabase)
+          .select()
+          .from(pgOrgs)
+          .where(eq(pgOrgs.slug, slug));
+        const organization = rows[0];
+        if (!organization) {
+          throw new NotFoundError("Branding organization not found");
+        }
+        return organization;
       }
-      return organization;
+      const all = await (db as PostgresDatabase).select().from(pgOrgs);
+      if (all.length === 1) return all[0]!;
+      throw new NotFoundError(
+        all.length === 0
+          ? "No organization found"
+          : "Multiple organizations exist; organizationSlug is required",
+      );
     },
   };
 }

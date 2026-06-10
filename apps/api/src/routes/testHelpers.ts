@@ -15,6 +15,7 @@ import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
 import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { randomUUID } from "node:crypto";
 
 function createDbPlugin(db: SqliteDatabase) {
   return fp(async (fastify) => {
@@ -29,9 +30,11 @@ export interface TestContext {
   admin: typeof sqliteSchema.users.$inferSelect;
   teacher: typeof sqliteSchema.users.$inferSelect;
   candidate: typeof sqliteSchema.users.$inferSelect;
+  superAdmin: typeof sqliteSchema.users.$inferSelect;
   adminToken: string;
   teacherToken: string;
   candidateToken: string;
+  superAdminToken: string;
 }
 
 export async function buildTestApp(
@@ -54,10 +57,29 @@ export async function buildTestApp(
   await app.ready();
 
   const org = db.select().from(sqliteSchema.organizations).get()!;
-  const users = db.select().from(sqliteSchema.users).all();
-  const admin = users.find((u) => u.role === "SuperAdmin")!;
+  let users = db.select().from(sqliteSchema.users).all();
+  const superAdmin = users.find((u) => u.role === "SuperAdmin")!;
   const teacher = users.find((u) => u.role === "Teacher")!;
   const candidate = users.find((u) => u.role === "Candidate")!;
+
+  const now = new Date();
+  const adminUserId = randomUUID();
+  await db
+    .insert(sqliteSchema.users)
+    .values({
+      id: adminUserId,
+      organizationId: org.id,
+      username: "test-admin",
+      passwordHash: await hashPassword("admin123"),
+      name: "Test Admin",
+      role: "Admin",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  users = db.select().from(sqliteSchema.users).all();
+  const admin = users.find((u) => u.id === adminUserId)!;
 
   const adminToken = signJWT({
     actorId: admin.id,
@@ -75,6 +97,12 @@ export async function buildTestApp(
     organizationId: candidate.organizationId,
   });
 
+  const superAdminToken = signJWT({
+    actorId: superAdmin.id,
+    role: superAdmin.role,
+    organizationId: superAdmin.organizationId,
+  });
+
   return {
     app,
     db,
@@ -82,9 +110,11 @@ export async function buildTestApp(
     admin,
     teacher,
     candidate,
+    superAdmin,
     adminToken,
     teacherToken,
     candidateToken,
+    superAdminToken,
   };
 }
 
