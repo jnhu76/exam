@@ -115,7 +115,49 @@ function createUnifiedRepo(db: AnyDatabase) {
 | Can we avoid `as unknown as`? | **Yes.** TypeScript discriminated union narrowing via `isSqlite(db)` type guard. |
 | Can we avoid code duplication? | **Mostly.** Shared logic outside branches, only query execution differs. |
 
+## Repository Contract (A01)
+
+### Context Types
+
+Three context types govern repo method signatures:
+
+| Type | Fields | Used By |
+|------|--------|---------|
+| `TenantContext` | `organizationId`, `actorId`, `role`, `permissions`, `targetOrganizationId?` | exam, question, candidate, course, enrollment, attempt, auditLog, candidateField |
+| `PlatformContext` | `actorId`, `role`, `permissions`, `targetOrganizationId?` | organization, systemStats, settings |
+| `AuthLookupContext` | `purpose: "auth_lookup"` | login lookup, branding resolve, slug resolve |
+
+### Type Guards
+
+- `isSqlite(db: AnyDatabase): db is SqliteDatabase` — dialect detection via `"all" in db`
+- `isTenantContext(ctx: RepoContext): ctx is TenantContext`
+- `isPlatformContext(ctx: RepoContext): ctx is PlatformContext`
+
+### Async Repo Interfaces
+
+Generic interfaces defined in `baseRepo.ts`:
+
+- `AsyncTenantRepo<Select, CreateInput, UpdateInput>` — CRUD with tenant isolation
+- `AsyncPlatformRepo<Select, CreateInput, UpdateInput>` — CRUD without tenant isolation
+- `AsyncAuthLookupRepo<Select>` — read-only lookup
+
+All methods return `Promise`. A02 implementations will satisfy these interfaces.
+
+### Migration from RequestContext
+
+`TenantContext` is a subset of `RequestContext` (omits `sessionId`). A02 will adapt route handlers to construct `TenantContext` from `RequestContext`. The existing `createTenantCrudRepo(db, table)` (sync, SQLite-only) remains until A02 replaces it.
+
+### Organization ID Resolution
+
+Two strategies preserved:
+
+1. **`resolveOrganizationId(ctx)`** (strict) — throws `ValidationError` if SuperAdmin has no `targetOrganizationId`
+2. **`resolveOptionalOrganizationId(ctx)`** (lenient) — falls back to `ctx.organizationId`
+
+Custom query methods in `attemptRepo`, `candidateRepo`, `enrollmentRepo` currently use the lenient inline pattern (`ctx.targetOrganizationId ?? ctx.organizationId`). A02 will standardize these to use `resolveOptionalOrganizationId`.
+
 ## Related
 
 - `packages/db/src/spike/dual-dialect.test.ts` — spike test (12/12 pass)
+- `packages/db/src/__tests__/context-types.test.ts` — A01 context type tests
 - `docs/phase1.4/02-architecture-jobs.md` — A00, A01, A02 job cards
