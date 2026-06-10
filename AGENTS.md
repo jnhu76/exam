@@ -56,9 +56,98 @@ pnpm build
 pnpm verify
 ```
 
+## MCP / External Research Rules
+
+MCP tools are for agent-side research, verification, and codebase navigation only. They must not introduce runtime cloud dependencies into the product. The exam platform itself must remain LAN/on-premise and offline-capable.
+
+### Required MCP Usage
+
+Before modifying files, the agent must use available MCP/search tools when the task involves any of the following:
+
+- Docker, Docker Compose, multi-stage builds, image size, cache behavior, or runtime entrypoints
+- pnpm workspace behavior, `pnpm deploy`, lockfile issues, package filters, or workspace symlinks
+- Node.js ESM/CJS resolution, `package.json` `exports`, `main`, `type`, or module resolution errors
+- TypeScript build configuration, tsconfig output, test files leaking into `dist`, or declaration/map generation
+- Vite, React, Tailwind, shadcn/ui, Fastify, Drizzle, Zod, argon2/bcrypt, better-sqlite3, PostgreSQL, or SQLite behavior
+- CI, GitHub Actions, lint/test/build failures, dependency upgrades, or package manager changes
+- Any error message that the agent cannot fully explain from the current repository evidence
+
+### MCP Tool Priority
+
+Use tools in this order:
+
+1. **Local repository search / filesystem tools**
+   Inspect the actual project files first: `package.json`, `pnpm-workspace.yaml`, Dockerfile, compose files, entrypoints, tsconfig files, source imports, generated `dist`, and relevant docs.
+
+2. **Context7 or official documentation search**
+   Use this for framework/tool behavior. Prefer official docs over memory.
+
+3. **GitHub code search / gh_grep**
+   Use this only for implementation examples and patterns. Do not copy external code blindly.
+
+4. **General web search**
+   Use only when official docs and repo evidence are insufficient.
+
+### Mandatory Research Workflow
+
+For Docker, pnpm, Node module resolution, CI, dependency, or build-system problems, do not edit first. The agent must first produce:
+
+1. Current error symptom
+2. Root-cause hypothesis
+3. Repository evidence
+4. Official documentation or MCP search finding, when applicable
+5. Minimal proposed change
+6. Verification commands
+7. Expected success signal
+
+Only after this analysis should files be modified.
+
+### No Guessing Rules
+
+The agent must not:
+
+- Guess Docker, pnpm, Node ESM, or package manager behavior from memory when MCP/search tools are available.
+- Hand-write workspace dependency closure in Dockerfile unless `pnpm deploy` or the package manager solution has been proven unsuitable.
+- Use fragile one-line shell pipelines that hide failure causes.
+- Use `tail`, `grep`, or `|| true` in a way that masks the real error during diagnosis.
+- Treat external GitHub examples as authoritative over this repository or `docs/SPEC.md`.
+- Add cloud services, CDN usage, external APIs, telemetry, or online-only behavior to the product runtime.
+
+### If MCP Is Unavailable
+
+If MCP/search tools are unavailable, the agent must say so explicitly and continue using local repository evidence only. It must not pretend that official behavior has been verified.
+
+### Verification Requirements for Build / Docker Changes
+
+For Docker, pnpm workspace, or runtime image changes, verification must include:
+
+```bash
+docker build -t exam-app:latest .
+docker run --rm --entrypoint sh exam-app:latest -lc 'pwd; find /app -maxdepth 3 -type d | sort | head -100'
+docker run --rm --entrypoint sh exam-app:latest -lc 'node -e "console.log(require.resolve(\"@exam/db/package.json\"))"'
+docker compose up -d --build
+docker compose logs app --tail=100
+```
+
+If the entrypoint path changes, also verify the actual runtime files:
+
+```bash
+docker run --rm --entrypoint sh exam-app:latest -lc 'test -f /app/dist/server.js && test -f /app/dist/scripts/migrate.js'
+```
+
+For image-size work, verification must include:
+
+```bash
+docker image inspect exam-app:latest --format '{{.Size}}'
+docker history exam-app:latest
+docker run --rm --entrypoint sh exam-app:latest -lc 'du -sh /app /app/node_modules 2>/dev/null || true'
+```
+
+Do not mix image-size inspection and application smoke tests into one fragile command.
+
 ## Project Structure
 
-```
+```txt
 apps/
   web/src/
     components/ui/       # shadcn/ui components (generated, do not hand-edit)
@@ -157,6 +246,7 @@ docs/                    # design documents
 - **No duplicate DTOs** — import from `@exam/domain` or `@exam/contracts`, never redefine
 - **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
 - **AI coding rules** — see `docs/code-quality.md` §17
+- **Research before toolchain changes** — Docker, pnpm, Node module resolution, CI, package manager, and build-system changes require MCP/doc search + local repo verification before editing. Do not guess.
 
 Every Job completion requires:
 
