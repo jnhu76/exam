@@ -9,6 +9,37 @@
 - [ ] **Repo 统一重构**：`userRepo.findByOrganizationAndUsername` 和 `findByOrganizationAndId` 不接收 `ctx`，违反 AGENTS.md "所有 repo 方法必须接收 ctx" 规则。当前导入循环已改用预加载 Set 规避，但其他调用点仍使用旧签名。需统一改为 `findByUsername(ctx, username)` 模式并更新所有调用方。
 - [ ] **前端 detectDuplicate 防御性加固**：当前依赖后端 `validateCandidateFields` 强制恰好一个 unique 字段。如果后续放宽此约束，前端应遍历所有 unique 字段而非只取第一个。低优先级，待 CandidateField 规则变更时再处理。
 
+## Phase 1.4 — Architecture Upgrade
+
+> 详细范围：`docs/phase1.4/phase1.4-bridge-plan.md`
+> 
+> A01/A02 已完成，PR 已合并至 master。
+
+### A01 — Database Context Types
+
+- [x] Define `AppContext` type with `db: AnyDatabase` field.
+- [x] Create `withContext()` helper that wraps Fastify request into `AppContext`.
+- [x] Update all repo methods to receive `ctx` as first parameter.
+- [x] Verify all routes call repos with context through Fastify.
+
+### A02 — Async Dual-Dialect Repository
+
+- [x] Migrate all repos to async with `Promise<T>` return types.
+- [x] Remove all `sync` repository calls.
+- [x] Migrate all repos to dual-dialect (SQLite + PostgreSQL).
+- [x] Fix null safety, error handling, dialect correctness across API and engine.
+- [x] Address CodeRabbit review findings: `NotFoundError` semantics, stable pagination ordering, heartbeat resilience.
+- [x] Add regression tests for `attemptRepo.update()` and `enrollmentRepo.update()` null-update paths.
+
+### A03 — Heartbeat / Timer Migration
+
+- [ ] Migrate server-side timer and heartbeat system to async dual-dialect.
+- [ ] Ensure heartbeat scan handles single-attempt-per-candidate correctly with async repos.
+
+### A04 — Frontend API Client Adaptation
+
+- [ ] Adapt frontend API client for async repository responses (no breaking changes expected at API contract level).
+
 ## Job 8 Confirmed Execution Nodes
 
 > Detailed scope: `docs/jobs/phase1_job8.md`

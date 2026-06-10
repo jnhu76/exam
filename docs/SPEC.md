@@ -12,7 +12,7 @@
 
 部署在校园/机构内网（LAN），服务多种考试场景：实验室准入考试、学院考试、培训确认测验、闭卷期末考试等。核心链路——
 
-```
+```txt
 机构/租户 → 题库 → 组卷 → 考试执行 → 答案保存 → 自动批改 → 出分 → 达标放行
 ```
 
@@ -174,6 +174,7 @@ ExamEnrollment {
 ```
 
 Enrollment 职责：
+
 - 表达"某考生被允许参加某考试"的资格
 - 跟踪该考生的考试次数（用于 retakePolicy 判断）
 - 按 scoreStrategy 从多次 ExamAttempt 中选择最终认定成绩
@@ -207,12 +208,14 @@ remainingSeconds = deadlineAt - serverNow
 ```
 
 **CandidateField（考生字段模板）**：
+
 - 每个 Organization 可自定义 N 个考生字段
 - 每个字段可配置：名称、类型（text/number/select）、是否必填、是否作为唯一标识
 - 考生导入模板根据字段定义动态生成
 - 成绩导出时按该机构的字段输出对应列
 
 **标识规则**：
+
 - 系统内部 ID 统一用 UUID
 - 用户可见的"考号/学号/工号"是机构自定义的唯一标识字段
 - 标识可以是数字、字母、混合（如 `s2024001`、`b2024001`、`2024010001`）
@@ -323,6 +326,7 @@ Organization (机构/租户)
 ```
 
 租户隔离规则：
+
 - 数据库层面：所有表都有 `organizationId` 字段，查询时强制过滤
 - 一个 Candidate 可以属于多个 Organization
 - 树形层级中，上级 Organization 的 Admin 可查看下级数据 [Phase 3]
@@ -357,6 +361,7 @@ RequestContext {
 ```
 
 规则：
+
 - 没有 RequestContext，不能访问业务数据
 - 没有 organizationId，不能查询租户数据
 - Route 层禁止直接访问 db
@@ -380,6 +385,7 @@ db.select().from(question).where(eq(question.id, id))
 ### 3.2 RBAC Guard：权限底座
 
 规则：
+
 - 权限判断不散落在 route handler 里
 - 每个 API endpoint 必须声明 requiredPermission
 - Teacher / Proctor / Admin 的权限边界必须由中间件统一检查
@@ -421,6 +427,7 @@ voidAttempt(ctx, attemptId, reason)
 ### 3.4 Server Time Authority：服务端权威计时
 
 规则：
+
 - 客户端只负责显示倒计时
 - 服务端保存 startedAt、deadlineAt、submittedAt
 - remainingSeconds 由服务端时间计算
@@ -471,6 +478,7 @@ SaveAnswerResponse {
 ```
 
 规则：
+
 - 同一个 clientSeq 重放必须幂等
 - 旧版本不能覆盖新版本
 - submitted / graded 状态不允许再保存答案
@@ -589,12 +597,14 @@ AuditLog {
 | 手动录入 | 单题创建 | Web 端表单，支持预览 |
 
 导入流程：
+
 1. 上传文件 → 服务端解析校验 → 预览（展示识别出的题目，标记异常行）
 2. Teacher 确认 → 批量写入 QuestionBank
 3. 校验规则：题型必填、选择题必须有选项和标准答案、分值 > 0
 4. 重复检测：基于题干相似度标记，不阻断
 
 **题目内容**：
+
 - 题干支持文字 + 图片引用（图片 URL）
 - Phase 1 不做 LaTeX / 公式编辑器，纯文本 + 图片
 - 简答题/论文/画图等主观题型留 Phase 2
@@ -625,6 +635,7 @@ Teacher 新建 Exam → 选择 Course
 | CAS/OAuth | 统一身份认证自动拉取 [Phase 2] |
 
 导入流程：
+
 1. Admin 配置本机构的 CandidateField（定义有哪些字段、哪些必填、哪个是唯一标识）
 2. 下载导入模板（列头 = 已定义的字段名）
 3. 填写上传 → 校验（必填项、唯一标识重复检测）
@@ -659,6 +670,7 @@ Teacher 新建 Exam → 选择 Course
 ```
 
 核心交互：
+
 - 题号导航栏：颜色标记状态（已答/未答/已标记），可点击跳转
 - 标记功能：对不确定的题打标记，交卷前可查看标记列表
 - 自动保存：每次选择/输入后按 Answer Save Protocol 保存（§3.5），已保存题目标记 ✓
@@ -711,6 +723,7 @@ Proctor 点击"开考"
 | 填空 | 精确匹配或关键词匹配（可配置模糊度） |
 
 **Phase 2：AI 辅助**
+
 - 短答题 / 简答题：本地部署 LLM 语义批改
 - AI 批改结果可被 Teacher 覆盖
 - 不依赖外部 API
@@ -736,6 +749,7 @@ Proctor 点击"开考"
 | 达标证明（单人） | - | - | ✅ | - | - |
 
 导出原则：
+
 - 成绩单列头按该机构的 CandidateField 动态生成（不是固定输出"学号"）
 - 所有导出操作写入 AuditLog
 - 导出文件名含时间戳和考试名称
@@ -823,6 +837,7 @@ exam/
 ```
 
 **依赖规则**：
+
 - `domain` 不能依赖 `fastify`
 - `contracts` 不能依赖 `fastify`
 - `exam-engine` 不能依赖 `fastify`
@@ -840,12 +855,14 @@ exam/
 | **极限** | CPU>90% 或 内存>95% 或 DB>2s | 仅核心考试 API、答案攒批(最多延迟10s)、非考试请求限流 |
 
 关键原则：
+
 - 降级不丢数据——答案仍然保证持久化，只是攒批写入
 - 回弹要缓——必须先经过省电模式稳定一段时间
 - 考生端无感——答题界面不受影响
 - 三档通过 `.env` 配置阈值
 
 **实时通信策略**：
+
 - Phase 1：轮询优先（答案保存走 HTTP API，不依赖 WebSocket）
 - Phase 2：WebSocket 增强（监考面板、实时状态推送）
 
@@ -874,6 +891,7 @@ services:
 ```
 
 通过 `.env` 配置切换：
+
 - `DATABASE_URL` 指向 PostgreSQL 或 SQLite 文件路径
 - `DEGRADATION_THRESHOLDS` 调整降级阈值
 - `AUTH_MODE` 选择认证方式（local / cas / oauth）
