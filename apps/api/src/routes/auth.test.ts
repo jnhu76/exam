@@ -114,7 +114,7 @@ describe("auth routes", () => {
       url: "/api/auth/login",
       payload: {
         organizationSlug: "default",
-        username: "admin",
+        username: ctx.admin.username,
         password: "newpass123",
       },
     });

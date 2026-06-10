@@ -1,24 +1,25 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { verifyJWT } from "@exam/auth/src/session.js";
 import type { Role } from "@exam/domain";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
-  fastify.decorate("authenticate", async (request, reply) => {
+  const authenticateFn = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => {
     let token: string | undefined;
     try {
       token = request.cookies["auth-token"];
       if (!token) {
         return reply.code(401).send({
-          message: "Unauthorized",
-          code: "UNAUTHORIZED",
+          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
         });
       }
     } catch {
       return reply.code(401).send({
-        message: "Unauthorized",
-        code: "UNAUTHORIZED",
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
       });
     }
 
@@ -27,8 +28,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       payload = verifyJWT(token);
     } catch {
       return reply.code(401).send({
-        message: "Unauthorized",
-        code: "UNAUTHORIZED",
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
       });
     }
 
@@ -52,15 +52,16 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         "Database error during authentication",
       );
       return reply.code(500).send({
-        message: "Internal server error",
-        code: "INTERNAL_SERVER_ERROR",
+        error: {
+          message: "Internal server error",
+          code: "INTERNAL_SERVER_ERROR",
+        },
       });
     }
 
     if (!user?.isActive) {
       return reply.code(401).send({
-        message: "Unauthorized",
-        code: "UNAUTHORIZED",
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
       });
     }
 
@@ -71,22 +72,23 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       permissions: [],
       sessionId: token,
     };
-  });
+  };
+
+  Object.assign(authenticateFn, { _isAuthenticate: true });
+  fastify.decorate("authenticate", authenticateFn);
 
   fastify.decorate("requireRole", (roles: Role[]) => {
     return async (request, reply) => {
       const ctx = request.ctx;
       if (!ctx) {
         return reply.code(401).send({
-          message: "Unauthorized",
-          code: "UNAUTHORIZED",
+          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
         });
       }
 
       if (!roles.includes(ctx.role)) {
         return reply.code(403).send({
-          message: "Forbidden",
-          code: "FORBIDDEN",
+          error: { message: "Forbidden", code: "FORBIDDEN" },
         });
       }
     };

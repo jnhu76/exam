@@ -17,7 +17,7 @@ describe("organization routes", () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/organizations",
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -42,7 +42,7 @@ describe("organization routes", () => {
       method: "POST",
       url: "/api/organizations",
       payload: { name: "Test Org", displayName: "Test Org Display", slug },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -55,7 +55,7 @@ describe("organization routes", () => {
       method: "PATCH",
       url: `/api/organizations/${ctx.org.id}`,
       payload: { displayName: "Updated Name" },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -71,13 +71,13 @@ describe("organization routes", () => {
         displayName: "ToDelete",
         slug: `to-delete-${Date.now()}`,
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     const created = createRes.json();
     const delRes = await ctx.app.inject({
       method: "DELETE",
       url: `/api/organizations/${created.id}`,
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(delRes.statusCode).toBe(204);
   });
