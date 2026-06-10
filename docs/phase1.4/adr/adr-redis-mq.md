@@ -48,7 +48,7 @@ Phase 1 runs entirely on SQLite/PostgreSQL with no external infrastructure. Phas
 
 No external MQ (RabbitMQ, Kafka, etc.) in Phase 2. Use a lightweight in-process queue with Redis as durable backing:
 
-```
+```text
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │ API Handler  │────▶│ Task Queue   │────▶│ Worker      │
 │ (Fastify)    │     │ (BullMQ or   │     │ (same proc) │
