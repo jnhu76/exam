@@ -268,7 +268,7 @@ AttemptAlreadyStartedError  — 409
 AttemptClosedError          — 409
 AnswerVersionConflictError  — 409 stale version
 ExamNotOpenError            — 409
-ExamTimeExpiredError        — 409
+AttemptDeadlineExceededError — 409 (was ExamTimeExpiredError)
 ```
 
 ### Fastify Error Handler

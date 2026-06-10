@@ -6,7 +6,7 @@ import type {
 } from "@exam/domain";
 import {
   ExamNotOpenError,
-  ExamTimeExpiredError,
+  AttemptDeadlineExceededError,
   InvalidStateTransitionError,
   ValidationError,
 } from "@exam/domain";
@@ -156,7 +156,7 @@ export async function submitAttempt(
 
   if (!isTransitionOk(result)) {
     if (result.reason === "DEADLINE_EXCEEDED") {
-      throw new ExamTimeExpiredError("Attempt deadline exceeded");
+      throw new AttemptDeadlineExceededError("Attempt deadline exceeded");
     }
     throw new InvalidStateTransitionError(
       `Cannot submit attempt in ${attempt.status} state`,
