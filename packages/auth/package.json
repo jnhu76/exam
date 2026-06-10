@@ -2,8 +2,12 @@
   "name": "@exam/auth",
   "version": "0.0.0",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./src/*": "./dist/*"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

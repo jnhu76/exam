@@ -173,9 +173,9 @@ docker compose -f docker-compose.dev.yml down
 
 | File                      | Purpose                                                        |
 | ------------------------- | -------------------------------------------------------------- |
-| `Dockerfile`              | Multi-stage build: build → production runner (node:lts-alpine) |
+| `Dockerfile`              | Multi-stage build: base → builder → production runner        |
 | `docker-compose.yml`      | Production: app + PostgreSQL                                   |
-| `docker-compose.dev.yml`  | Development: app + SQLite                                      |
+| `docker-compose.dev.yml`  | Development: app + SQLite (or PostgreSQL via profile)          |
 | `docker-compose.test.yml` | Local testing: PostgreSQL only (for host-based `pnpm dev`)     |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                     |
 | `.env.example`            | Environment variable template                                  |
