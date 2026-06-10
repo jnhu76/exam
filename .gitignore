@@ -8,3 +8,5 @@ dist
 *.db-shm
 *.db-wal
 coverage/
+.opencode/skills/
+.claude/skills/
