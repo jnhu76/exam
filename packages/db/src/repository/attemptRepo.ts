@@ -231,18 +231,33 @@ export function createAttemptRepo(db: AnyDatabase) {
       } = {},
     ) {
       const orgId = resolveOptionalOrganizationId(ctx);
-      const baseWhere = and(
+      const sqliteBaseWhere = and(
         eq(sqliteAttempts.organizationId, orgId),
         eq(sqliteAttempts.examId, examId),
         eq(sqliteAttempts.status, "graded"),
         isNotNull(sqliteAttempts.score),
       );
+      const pgBaseWhere = and(
+        eq(pgAttempts.organizationId, orgId),
+        eq(pgAttempts.examId, examId),
+        eq(pgAttempts.status, "graded"),
+        isNotNull(pgAttempts.score),
+      );
 
-      let finalWhere = baseWhere;
+      let sqliteFinalWhere = sqliteBaseWhere;
+      let pgFinalWhere = pgBaseWhere;
       if (options.passFilter === "passed") {
-        finalWhere = and(baseWhere, eq(sqliteAttempts.passed, true));
+        sqliteFinalWhere = and(
+          sqliteBaseWhere,
+          eq(sqliteAttempts.passed, true),
+        );
+        pgFinalWhere = and(pgBaseWhere, eq(pgAttempts.passed, true));
       } else if (options.passFilter === "failed") {
-        finalWhere = and(baseWhere, eq(sqliteAttempts.passed, false));
+        sqliteFinalWhere = and(
+          sqliteBaseWhere,
+          eq(sqliteAttempts.passed, false),
+        );
+        pgFinalWhere = and(pgBaseWhere, eq(pgAttempts.passed, false));
       }
 
       type GradedRow = {
@@ -264,7 +279,7 @@ export function createAttemptRepo(db: AnyDatabase) {
             eq(sqliteAttempts.candidateId, sqliteCandidates.id),
           )
           .innerJoin(sqliteUsers, eq(sqliteCandidates.userId, sqliteUsers.id))
-          .where(finalWhere)
+          .where(sqliteFinalWhere)
           .all() as GradedRow[];
 
         return sortAndPaginateGraded(allResults, options);
@@ -279,17 +294,23 @@ export function createAttemptRepo(db: AnyDatabase) {
         .from(pgAttempts)
         .innerJoin(pgCandidates, eq(pgAttempts.candidateId, pgCandidates.id))
         .innerJoin(pgUsers, eq(pgCandidates.userId, pgUsers.id))
-        .where(finalWhere)) as GradedRow[];
+        .where(pgFinalWhere)) as GradedRow[];
 
       return sortAndPaginateGraded(allResults, options);
     },
     async getGradedStats(ctx: TenantContext | RequestContext, examId: string) {
       const orgId = resolveOptionalOrganizationId(ctx);
-      const baseWhere = and(
+      const sqliteBaseWhere = and(
         eq(sqliteAttempts.organizationId, orgId),
         eq(sqliteAttempts.examId, examId),
         eq(sqliteAttempts.status, "graded"),
         isNotNull(sqliteAttempts.score),
+      );
+      const pgBaseWhere = and(
+        eq(pgAttempts.organizationId, orgId),
+        eq(pgAttempts.examId, examId),
+        eq(pgAttempts.status, "graded"),
+        isNotNull(pgAttempts.score),
       );
 
       type StatsRow = {
@@ -312,7 +333,7 @@ export function createAttemptRepo(db: AnyDatabase) {
             >`sum(case when ${sqliteAttempts.passed} = 1 then 1 else 0 end)`,
           })
           .from(sqliteAttempts)
-          .where(baseWhere)
+          .where(sqliteBaseWhere)
           .get() as StatsRow;
         return buildStats(result);
       }
@@ -327,7 +348,7 @@ export function createAttemptRepo(db: AnyDatabase) {
           >`sum(case when ${pgAttempts.passed} = true then 1 else 0 end)`,
         })
         .from(pgAttempts)
-        .where(baseWhere);
+        .where(pgBaseWhere);
       return buildStats(rows[0] as StatsRow);
     },
     async countGradedByExam(
@@ -338,32 +359,47 @@ export function createAttemptRepo(db: AnyDatabase) {
       } = {},
     ) {
       const orgId = resolveOptionalOrganizationId(ctx);
-      const baseWhere = and(
+      const sqliteBaseWhere = and(
         eq(sqliteAttempts.organizationId, orgId),
         eq(sqliteAttempts.examId, examId),
         eq(sqliteAttempts.status, "graded"),
         isNotNull(sqliteAttempts.score),
       );
+      const pgBaseWhere = and(
+        eq(pgAttempts.organizationId, orgId),
+        eq(pgAttempts.examId, examId),
+        eq(pgAttempts.status, "graded"),
+        isNotNull(pgAttempts.score),
+      );
 
-      let finalWhere = baseWhere;
+      let sqliteFinalWhere = sqliteBaseWhere;
+      let pgFinalWhere = pgBaseWhere;
       if (options.passFilter === "passed") {
-        finalWhere = and(baseWhere, eq(sqliteAttempts.passed, true));
+        sqliteFinalWhere = and(
+          sqliteBaseWhere,
+          eq(sqliteAttempts.passed, true),
+        );
+        pgFinalWhere = and(pgBaseWhere, eq(pgAttempts.passed, true));
       } else if (options.passFilter === "failed") {
-        finalWhere = and(baseWhere, eq(sqliteAttempts.passed, false));
+        sqliteFinalWhere = and(
+          sqliteBaseWhere,
+          eq(sqliteAttempts.passed, false),
+        );
+        pgFinalWhere = and(pgBaseWhere, eq(pgAttempts.passed, false));
       }
 
       if (isSqlite(db)) {
         const result = db
           .select({ count: sql<number>`count(*)` })
           .from(sqliteAttempts)
-          .where(finalWhere)
+          .where(sqliteFinalWhere)
           .get() as { count: number };
         return result.count;
       }
       const rows = await (db as PostgresDatabase)
         .select({ count: sql<number>`count(*)` })
         .from(pgAttempts)
-        .where(finalWhere);
+        .where(pgFinalWhere);
       return (rows[0] as { count: number }).count;
     },
   };

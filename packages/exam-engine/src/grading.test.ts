@@ -6,6 +6,7 @@ import type {
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
+import { InvalidStateTransitionError } from "@exam/domain";
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -182,7 +183,7 @@ describe("gradeAttempt", () => {
         "attempt-1",
         new Date(),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(InvalidStateTransitionError);
   });
 
   it.each([

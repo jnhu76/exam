@@ -51,31 +51,59 @@ async function getExamParticipants(
   db: AnyDatabase,
   ctx: RequestContext,
   examId: string,
+  preFetchedEnrollments?: Awaited<
+    ReturnType<ReturnType<typeof createEnrollmentRepo>["list"]>
+  >,
 ) {
-  const enrollments = (await createEnrollmentRepo(db).list(ctx)).filter(
+  const allEnrollments =
+    preFetchedEnrollments ?? (await createEnrollmentRepo(db).list(ctx));
+  const enrollments = allEnrollments.filter(
     (enrollment) => enrollment.examId === examId,
   );
   const candidateRepo = createCandidateRepo(db);
   const userRepo = createUserRepo(db);
-  return Promise.all(
-    enrollments.map(async (enrollment) => {
-      const candidate = await candidateRepo.findById(
-        ctx,
-        enrollment.candidateId,
-      );
-      const user = candidate
-        ? await userRepo.findById(ctx, candidate.userId)
-        : null;
-      return {
-        candidateId: enrollment.candidateId,
-        name: user?.name ?? "-",
-        fields: candidate?.fields ?? {},
-        status: enrollment.status,
-        score: enrollment.finalScore ?? null,
-        passed: enrollment.finalPassed ?? null,
-      };
-    }),
+  const candidateIds = [...new Set(enrollments.map((e) => e.candidateId))];
+  const candidateMap = new Map(
+    (
+      await Promise.all(
+        candidateIds.map(async (cid) => {
+          const c = await candidateRepo.findById(ctx, cid);
+          return c ? [cid, c] : null;
+        }),
+      )
+    ).filter(Boolean) as [
+      string,
+      NonNullable<Awaited<ReturnType<typeof candidateRepo.findById>>>,
+    ][],
   );
+  const userIds = [
+    ...new Set([...candidateMap.values()].map((c) => c.userId).filter(Boolean)),
+  ];
+  const userMap = new Map(
+    (
+      await Promise.all(
+        userIds.map(async (uid) => {
+          const u = await userRepo.findById(ctx, uid);
+          return u ? [uid, u] : null;
+        }),
+      )
+    ).filter(Boolean) as [
+      string,
+      NonNullable<Awaited<ReturnType<typeof userRepo.findById>>>,
+    ][],
+  );
+  return enrollments.map((enrollment) => {
+    const candidate = candidateMap.get(enrollment.candidateId);
+    const user = candidate ? userMap.get(candidate.userId) : null;
+    return {
+      candidateId: enrollment.candidateId,
+      name: user?.name ?? "-",
+      fields: candidate?.fields ?? {},
+      status: enrollment.status,
+      score: enrollment.finalScore ?? null,
+      passed: enrollment.finalPassed ?? null,
+    };
+  });
 }
 
 function createExamRepoAdapter(
@@ -148,6 +176,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createExamRepo(fastify.db);
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
       const attemptRepo = createAttemptRepo(fastify.db);
+      const allEnrollments = await createEnrollmentRepo(fastify.db).list(ctx);
       const now = new Date();
 
       return {
@@ -158,6 +187,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               fastify.db,
               ctx,
               exam.id,
+              allEnrollments,
             );
             const gradedAttemptCount = await attemptRepo.countGradedByExam(
               ctx,

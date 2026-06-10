@@ -17,6 +17,7 @@ import type {
 import {
   ExamNotOpenError,
   ExamTimeExpiredError,
+  InvalidStateTransitionError,
   ValidationError,
 } from "@exam/domain";
 
@@ -466,7 +467,7 @@ describe("attemptCommands", () => {
 
       await expect(
         submitAttempt(attRepo, "attempt-1", fixedNow),
-      ).rejects.toThrow();
+      ).rejects.toThrow(InvalidStateTransitionError);
     });
 
     it("throws ValidationError for non-existent attempt", async () => {
@@ -503,7 +504,9 @@ describe("attemptCommands", () => {
       const attempt = makeAttempt({ status: "submitted" });
       const attRepo = makeAttemptRepo([attempt]);
 
-      await expect(markDisrupted(attRepo, "attempt-1")).rejects.toThrow();
+      await expect(markDisrupted(attRepo, "attempt-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
     });
   });
 
@@ -549,7 +552,7 @@ describe("attemptCommands", () => {
 
       await expect(
         restoreAttempt(examRepo, attRepo, "attempt-1", fixedNow),
-      ).rejects.toThrow();
+      ).rejects.toThrow(InvalidStateTransitionError);
     });
 
     it("throws for non-existent attempt", async () => {

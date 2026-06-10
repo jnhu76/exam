@@ -63,7 +63,12 @@ export async function gradeAttempt(
     throw new ValidationError("Enrollment not found");
   }
 
-  await attemptRepo.update(attemptId, { status: "grading" });
+  const gradingUpdate = await attemptRepo.update(attemptId, {
+    status: "grading",
+  });
+  if (!gradingUpdate) {
+    throw new ValidationError("Failed to update attempt status to grading");
+  }
   const result = gradeAnswers(
     attempt.id,
     attempt.questionSnapshot,
@@ -71,20 +76,23 @@ export async function gradeAttempt(
     exam.passingScore,
     now,
   );
-  await attemptRepo.update(attemptId, {
+  const gradedUpdate = await attemptRepo.update(attemptId, {
     status: "graded",
     gradingResult: result.questionResults,
     score: result.totalScore,
     passed: result.passed,
     gradedAt: result.gradedAt,
   });
+  if (!gradedUpdate) {
+    throw new ValidationError("Failed to persist graded results");
+  }
 
   const selected = shouldSelectAttempt(
     exam.scoreStrategy,
     enrollment,
     result.totalScore,
   );
-  await enrollmentRepo.update(enrollment.id, {
+  const enrollmentUpdate = await enrollmentRepo.update(enrollment.id, {
     status: "completed",
     ...(selected
       ? {
@@ -94,6 +102,9 @@ export async function gradeAttempt(
         }
       : {}),
   });
+  if (!enrollmentUpdate) {
+    throw new ValidationError("Failed to update enrollment");
+  }
 
   return result;
 }

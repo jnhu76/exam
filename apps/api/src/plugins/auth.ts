@@ -6,17 +6,37 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorate("authenticate", async (request, reply) => {
+    let token: string | undefined;
     try {
-      const token = request.cookies["auth-token"];
+      token = request.cookies["auth-token"];
       if (!token) {
         return reply.code(401).send({
           message: "Unauthorized",
           code: "UNAUTHORIZED",
         });
       }
+    } catch {
+      return reply.code(401).send({
+        message: "Unauthorized",
+        code: "UNAUTHORIZED",
+      });
+    }
 
-      const payload = verifyJWT(token);
-      const user = await createUserRepo(fastify.db).findByOrganizationAndId(
+    let payload: Awaited<ReturnType<typeof verifyJWT>>;
+    try {
+      payload = verifyJWT(token);
+    } catch {
+      return reply.code(401).send({
+        message: "Unauthorized",
+        code: "UNAUTHORIZED",
+      });
+    }
+
+    let user: Awaited<
+      ReturnType<ReturnType<typeof createUserRepo>["findByOrganizationAndId"]>
+    >;
+    try {
+      user = await createUserRepo(fastify.db).findByOrganizationAndId(
         {
           actorId: payload.actorId,
           organizationId: payload.organizationId,
@@ -26,26 +46,31 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         },
         payload.actorId,
       );
-      if (!user?.isActive) {
-        return reply.code(401).send({
-          message: "Unauthorized",
-          code: "UNAUTHORIZED",
-        });
-      }
+    } catch (err) {
+      fastify.log.error(
+        { err, actorId: payload.actorId },
+        "Database error during authentication",
+      );
+      return reply.code(500).send({
+        message: "Internal server error",
+        code: "INTERNAL_SERVER_ERROR",
+      });
+    }
 
-      request.ctx = {
-        actorId: payload.actorId,
-        organizationId: payload.organizationId,
-        role: user.role,
-        permissions: [],
-        sessionId: token,
-      };
-    } catch {
+    if (!user?.isActive) {
       return reply.code(401).send({
         message: "Unauthorized",
         code: "UNAUTHORIZED",
       });
     }
+
+    request.ctx = {
+      actorId: payload.actorId,
+      organizationId: payload.organizationId,
+      role: user.role,
+      permissions: [],
+      sessionId: token,
+    };
   });
 
   fastify.decorate("requireRole", (roles: Role[]) => {

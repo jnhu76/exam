@@ -130,17 +130,26 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
     DEFAULT_HEARTBEAT_TIMEOUT_MS,
   );
 
+  let scanRunning = false;
   const interval = setInterval(async () => {
-    const result = await scanDatabaseForDisruptedAttempts(
-      fastify,
-      new Date(),
-      heartbeatTimeoutMs,
-    );
-    if (result.markedCount > 0) {
-      fastify.log.info(
-        { markedCount: result.markedCount },
-        "Marked stale exam attempts as disrupted",
+    if (scanRunning) return;
+    scanRunning = true;
+    try {
+      const result = await scanDatabaseForDisruptedAttempts(
+        fastify,
+        new Date(),
+        heartbeatTimeoutMs,
       );
+      if (result.markedCount > 0) {
+        fastify.log.info(
+          { markedCount: result.markedCount },
+          "Marked stale exam attempts as disrupted",
+        );
+      }
+    } catch (err) {
+      fastify.log.error({ err }, "Error scanning for disrupted attempts");
+    } finally {
+      scanRunning = false;
     }
   }, scanIntervalMs);
   interval.unref();

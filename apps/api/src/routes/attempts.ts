@@ -711,10 +711,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         attemptId,
         new Date(),
       );
-      const attempt = (await attemptRepo.findById(
-        ctx,
-        attemptId,
-      )) as ExamAttempt;
+      const attempt = await attemptRepo.findById(ctx, attemptId);
+      if (!attempt) {
+        throw new NotFoundError("Attempt not found after grading");
+      }
       recordAudit(
         fastify,
         request,
@@ -725,7 +725,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt),
+        toCandidateAttemptResponse(attempt as ExamAttempt),
       );
     },
   );

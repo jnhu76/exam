@@ -210,7 +210,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         });
       }
-      const updated = (await candidateRepo.findById(ctx, id))!;
+      const updated = await candidateRepo.findById(ctx, id);
+      if (!updated) {
+        return reply.code(404).send({
+          error: { code: "NOT_FOUND", message: "Candidate not found" },
+        });
+      }
       recordAudit(fastify, request, ctx, "candidate.update", "candidate", id);
       return {
         ...updated,

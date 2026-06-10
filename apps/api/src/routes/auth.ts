@@ -211,7 +211,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(newPassword);
-      await userRepo.update(targetCtx, user.id, { passwordHash: newHash });
+      const updated = await userRepo.update(targetCtx, user.id, {
+        passwordHash: newHash,
+      });
+      if (!updated) {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+      }
       return { ok: true as const };
     },
   );
