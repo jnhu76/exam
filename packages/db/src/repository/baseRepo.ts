@@ -3,20 +3,19 @@ import type { RequestContext } from "@exam/domain";
 import { ValidationError } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update";
-import type { SqliteDatabase } from "../sqlite.js";
+import type { PgUpdateSetSource } from "drizzle-orm/pg-core/query-builders/update";
+import type { SqliteDatabase } from "../types.js";
+import type { PostgresDatabase } from "../types.js";
+import type { AnyDatabase } from "../types.js";
+import { isSqlite } from "../types.js";
 import type {
   AuthLookupContext,
   PlatformContext,
   TenantContext,
 } from "../types.js";
 
-/**
- * Resolves the organization ID for repository operations.
- * For SuperAdmin role, requires targetOrganizationId to be set.
- * @param ctx - The context containing organization information
- * @returns The organization ID to use for repository operations
- */
 export function resolveOrganizationId(
   ctx: TenantContext | RequestContext,
 ): string {
@@ -32,12 +31,6 @@ export function resolveOrganizationId(
   return ctx.organizationId;
 }
 
-/**
- * Resolves the organization ID for optional organization filtering.
- * For SuperAdmin role, uses targetOrganizationId if set, otherwise falls back to organizationId.
- * @param ctx - The context containing organization information
- * @returns The organization ID to use for repository operations
- */
 export function resolveOptionalOrganizationId(
   ctx: TenantContext | RequestContext,
 ): string {
@@ -47,184 +40,230 @@ export function resolveOptionalOrganizationId(
   return ctx.organizationId;
 }
 
-/**
- * Returns the current timestamp as a Date object.
- * @returns The current date and time
- */
 export function now(): Date {
   return new Date();
 }
 
-type TenantTable = AnySQLiteTable & {
+type SQLiteTenantTable = AnySQLiteTable & {
   id: AnySQLiteColumn;
   organizationId: AnySQLiteColumn;
   createdAt: AnySQLiteColumn;
   updatedAt?: AnySQLiteColumn;
 };
 
-/**
- * Creates a CRUD repository factory for tenant-scoped tables.
- * @param db - The SQLite database instance
- * @param table - The table schema to create a repository for
- * @returns An object with CRUD operations scoped to the organization
- */
-export function createTenantCrudRepo<TTable extends TenantTable>(
-  db: SqliteDatabase,
-  table: TTable,
+type PGTenantTable = PgTable & {
+  id: AnyPgColumn;
+  organizationId: AnyPgColumn;
+  createdAt: AnyPgColumn;
+  updatedAt?: AnyPgColumn;
+};
+
+export interface TenantTablePair {
+  sqlite: SQLiteTenantTable;
+  pg: PGTenantTable;
+}
+
+export function createAsyncTenantCrudRepo(
+  db: AnyDatabase,
+  tables: TenantTablePair,
 ) {
-  type Insert = TTable["$inferInsert"];
-  type Select = TTable["$inferSelect"];
+  type SqliteSelect = (typeof tables.sqlite)["$inferSelect"];
+  type SqliteInsert = (typeof tables.sqlite)["$inferInsert"];
+  type PgInsert = (typeof tables.pg)["$inferInsert"];
+
+  type Select = SqliteSelect;
   type ManagedColumn = "id" | "organizationId" | "createdAt" | "updatedAt";
-  type CreateInput = Omit<Insert, ManagedColumn>;
+  type CreateInput = Omit<SqliteInsert, ManagedColumn>;
   type UpdateInput = Partial<CreateInput>;
 
-  /**
-   * Finds an entity by ID within the current organization.
-   * @param ctx - The request context
-   * @param entityId - The entity ID to find
-   * @returns The entity if found, null otherwise
-   */
-  function findById(ctx: RequestContext, entityId: string): Select | null {
-    return (
-      (db
-        .select()
-        .from(table)
-        .where(
-          and(
-            eq(table.organizationId, resolveOrganizationId(ctx)),
-            eq(table.id, entityId),
-          ),
-        )
-        .get() as Select | undefined) ?? null
-    );
+  const orgId = (ctx: TenantContext | RequestContext) =>
+    resolveOrganizationId(ctx);
+
+  async function findById(
+    ctx: TenantContext | RequestContext,
+    entityId: string,
+  ): Promise<Select | null> {
+    if (isSqlite(db)) {
+      return (
+        (db
+          .select()
+          .from(tables.sqlite)
+          .where(
+            and(
+              eq(tables.sqlite.organizationId, orgId(ctx)),
+              eq(tables.sqlite.id, entityId),
+            ),
+          )
+          .get() as Select | undefined) ?? null
+      );
+    }
+    const rows = await (db as PostgresDatabase)
+      .select()
+      .from(tables.pg)
+      .where(
+        and(
+          eq(tables.pg.organizationId, orgId(ctx)),
+          eq(tables.pg.id, entityId),
+        ),
+      );
+    return (rows[0] as Select | undefined) ?? null;
   }
 
   return {
-    /**
-     * Creates a new entity in the repository.
-     * @param ctx - The request context
-     * @param input - The data to create the entity with
-     * @returns The created entity with system fields populated
-     */
-    create(ctx: RequestContext, input: CreateInput): Select {
+    async create(
+      ctx: TenantContext | RequestContext,
+      input: CreateInput,
+    ): Promise<Select> {
+      const id = randomUUID();
       const timestamp = now();
-      const row = {
-        id: randomUUID(),
-        organizationId: resolveOrganizationId(ctx),
+      const managed = {
+        id,
+        organizationId: orgId(ctx),
         createdAt: timestamp,
-        ...("updatedAt" in table ? { updatedAt: timestamp } : {}),
-        ...input,
-      } as Insert;
-      db.insert(table).values(row).run();
-      return row as Select;
+        ...("updatedAt" in tables.sqlite ? { updatedAt: timestamp } : {}),
+      };
+
+      if (isSqlite(db)) {
+        const row = { ...managed, ...input } as SqliteInsert;
+        db.insert(tables.sqlite).values(row).run();
+      } else {
+        const row = { ...managed, ...input } as PgInsert;
+        await (db as PostgresDatabase).insert(tables.pg).values(row);
+      }
+
+      const created = await findById(ctx, id);
+      if (!created) {
+        throw new Error("Failed to read back created entity");
+      }
+      return created;
     },
     findById,
-    /**
-     * Lists all entities within the current organization.
-     * @param ctx - The request context
-     * @returns Array of all entities in the organization
-     */
-    list(ctx: RequestContext): Select[] {
-      return db
+    async list(ctx: TenantContext | RequestContext): Promise<Select[]> {
+      if (isSqlite(db)) {
+        return db
+          .select()
+          .from(tables.sqlite)
+          .where(eq(tables.sqlite.organizationId, orgId(ctx)))
+          .all() as Select[];
+      }
+      return (await (db as PostgresDatabase)
         .select()
-        .from(table)
-        .where(eq(table.organizationId, resolveOrganizationId(ctx)))
-        .all() as Select[];
+        .from(tables.pg)
+        .where(eq(tables.pg.organizationId, orgId(ctx)))) as Select[];
     },
-    /**
-     * Counts the number of entities within the current organization.
-     * @param ctx - The request context
-     * @returns The count of entities in the organization
-     */
-    count(ctx: RequestContext): number {
-      const orgId = resolveOrganizationId(ctx);
-      const result = db
-        .select({ count: table.id })
-        .from(table)
-        .where(eq(table.organizationId, orgId))
-        .all();
-      return result.length;
+    async count(ctx: TenantContext | RequestContext): Promise<number> {
+      const oid = orgId(ctx);
+      if (isSqlite(db)) {
+        return db
+          .select({ id: tables.sqlite.id })
+          .from(tables.sqlite)
+          .where(eq(tables.sqlite.organizationId, oid))
+          .all().length;
+      }
+      return (
+        await (db as PostgresDatabase)
+          .select({ id: tables.pg.id })
+          .from(tables.pg)
+          .where(eq(tables.pg.organizationId, oid))
+      ).length;
     },
-    /**
-     * Lists entities with pagination within the current organization.
-     * @param ctx - The request context
-     * @param page - The page number (1-indexed)
-     * @param pageSize - The number of items per page
-     * @returns Object containing the items and total count
-     */
-    listPaginated(
-      ctx: RequestContext,
+    async listPaginated(
+      ctx: TenantContext | RequestContext,
       page: number,
       pageSize: number,
-    ): { items: Select[]; total: number } {
-      const orgId = resolveOrganizationId(ctx);
+    ): Promise<{ items: Select[]; total: number }> {
+      const oid = orgId(ctx);
       const offset = (page - 1) * pageSize;
-      const items = db
+      if (isSqlite(db)) {
+        const items = db
+          .select()
+          .from(tables.sqlite)
+          .where(eq(tables.sqlite.organizationId, oid))
+          .limit(pageSize)
+          .offset(offset)
+          .all() as Select[];
+        const total = db
+          .select({ id: tables.sqlite.id })
+          .from(tables.sqlite)
+          .where(eq(tables.sqlite.organizationId, oid))
+          .all().length;
+        return { items, total };
+      }
+      const items = (await (db as PostgresDatabase)
         .select()
-        .from(table)
-        .where(eq(table.organizationId, orgId))
+        .from(tables.pg)
+        .where(eq(tables.pg.organizationId, oid))
         .limit(pageSize)
-        .offset(offset)
-        .all() as Select[];
-      const result = db
-        .select({ count: table.id })
-        .from(table)
-        .where(eq(table.organizationId, orgId))
-        .all();
-      return { items, total: result.length };
+        .offset(offset)) as Select[];
+      const total = (
+        await (db as PostgresDatabase)
+          .select({ id: tables.pg.id })
+          .from(tables.pg)
+          .where(eq(tables.pg.organizationId, oid))
+      ).length;
+      return { items, total };
     },
-    /**
-     * Updates an existing entity within the current organization.
-     * @param ctx - The request context
-     * @param entityId - The ID of the entity to update
-     * @param input - The data to update
-     * @returns The updated entity if found, null otherwise
-     */
-    update(
-      ctx: RequestContext,
+    async update(
+      ctx: TenantContext | RequestContext,
       entityId: string,
       input: UpdateInput,
-    ): Select | null {
+    ): Promise<Select | null> {
       const changes = {
         ...input,
-        ...("updatedAt" in table ? { updatedAt: now() } : {}),
-      } as SQLiteUpdateSetSource<TTable>;
-      db.update(table)
-        .set(changes)
-        .where(
-          and(
-            eq(table.organizationId, resolveOrganizationId(ctx)),
-            eq(table.id, entityId),
-          ),
-        )
-        .run();
+        ...("updatedAt" in tables.sqlite ? { updatedAt: now() } : {}),
+      };
+      if (isSqlite(db)) {
+        db.update(tables.sqlite)
+          .set(changes as SQLiteUpdateSetSource<typeof tables.sqlite>)
+          .where(
+            and(
+              eq(tables.sqlite.organizationId, orgId(ctx)),
+              eq(tables.sqlite.id, entityId),
+            ),
+          )
+          .run();
+      } else {
+        await (db as PostgresDatabase)
+          .update(tables.pg)
+          .set(changes as PgUpdateSetSource<typeof tables.pg>)
+          .where(
+            and(
+              eq(tables.pg.organizationId, orgId(ctx)),
+              eq(tables.pg.id, entityId),
+            ),
+          );
+      }
       return findById(ctx, entityId);
     },
-    /**
-     * Deletes an entity within the current organization.
-     * @param ctx - The request context
-     * @param entityId - The ID of the entity to delete
-     * @returns true if the entity was deleted, false otherwise
-     */
-    delete(ctx: RequestContext, entityId: string): boolean {
-      const result = db
-        .delete(table)
+    async delete(
+      ctx: TenantContext | RequestContext,
+      entityId: string,
+    ): Promise<boolean> {
+      if (isSqlite(db)) {
+        const result = db
+          .delete(tables.sqlite)
+          .where(
+            and(
+              eq(tables.sqlite.organizationId, orgId(ctx)),
+              eq(tables.sqlite.id, entityId),
+            ),
+          )
+          .run();
+        return result.changes > 0;
+      }
+      await (db as PostgresDatabase)
+        .delete(tables.pg)
         .where(
           and(
-            eq(table.organizationId, resolveOrganizationId(ctx)),
-            eq(table.id, entityId),
+            eq(tables.pg.organizationId, orgId(ctx)),
+            eq(tables.pg.id, entityId),
           ),
-        )
-        .run();
-      return result.changes > 0;
+        );
+      return true;
     },
   };
 }
 
-/**
- * Async repository contract for tenant-scoped entities.
- * Provides CRUD operations with promise-based API for tenant-level data.
- */
 export interface AsyncTenantRepo<Select, CreateInput, UpdateInput> {
   create(ctx: TenantContext, input: CreateInput): Promise<Select>;
   findById(ctx: TenantContext, id: string): Promise<Select | null>;
@@ -237,10 +276,6 @@ export interface AsyncTenantRepo<Select, CreateInput, UpdateInput> {
   delete(ctx: TenantContext, id: string): Promise<boolean>;
 }
 
-/**
- * Async repository contract for platform-scoped entities.
- * Provides CRUD operations with promise-based API for platform-wide data.
- */
 export interface AsyncPlatformRepo<Select, CreateInput, UpdateInput> {
   create(ctx: PlatformContext, input: CreateInput): Promise<Select>;
   findById(ctx: PlatformContext, id: string): Promise<Select | null>;
@@ -253,10 +288,6 @@ export interface AsyncPlatformRepo<Select, CreateInput, UpdateInput> {
   delete(ctx: PlatformContext, id: string): Promise<boolean>;
 }
 
-/**
- * Async repository contract for authentication lookup operations.
- * Provides read-only operations for cross-tenant authentication lookups.
- */
 export interface AsyncAuthLookupRepo<Select> {
   findById(ctx: AuthLookupContext, id: string): Promise<Select | null>;
 }

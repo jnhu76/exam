@@ -1,21 +1,17 @@
-import { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import { createDatabase } from "@exam/db/src/database.js";
-import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
+import type { AnyDatabase } from "@exam/db/src/types.js";
 
 declare module "fastify" {
   interface FastifyInstance {
-    db: SqliteDatabase;
+    db: AnyDatabase;
   }
 }
 
 const dbPlugin: FastifyPluginAsync = async (fastify) => {
   const conn = createDatabase();
-  if (conn.kind === "sqlite") {
-    fastify.decorate("db", conn.db);
-  } else {
-    fastify.decorate("db", conn.db as unknown as SqliteDatabase);
-  }
+  fastify.decorate<AnyDatabase>("db", conn.db);
 };
 
 export default fp(dbPlugin);

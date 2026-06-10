@@ -110,102 +110,102 @@ describe("examCommands", () => {
   });
 
   describe("publishExam", () => {
-    it("transitions draft → published", () => {
+    it("transitions draft → published", async () => {
       const repo = makeRepo(makeExam());
-      const result = publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(repo, "exam-1", testQuestions);
       expect(result.status).toBe("published");
     });
 
-    it("captures questionSnapshot with real data", () => {
+    it("captures questionSnapshot with real data", async () => {
       const repo = makeRepo(makeExam());
-      const result = publishExam(repo, "exam-1", testQuestions);
+      const result = await publishExam(repo, "exam-1", testQuestions);
       expect(result.questionSnapshot.length).toBe(2);
       expect(result.questionSnapshot[0]?.content).toBe("Question q1");
       expect(result.questionSnapshot[0]?.standardAnswer).toBe("a");
     });
 
-    it("throws for non-existent exam", () => {
+    it("throws for non-existent exam", async () => {
       const repo = makeRepo(makeExam());
-      expect(() => publishExam(repo, "nonexistent", testQuestions)).toThrow(
-        ValidationError,
-      );
+      await expect(
+        publishExam(repo, "nonexistent", testQuestions),
+      ).rejects.toThrow(ValidationError);
     });
 
-    it("throws for invalid transition (published → published)", () => {
+    it("throws for invalid transition (published → published)", async () => {
       const repo = makeRepo(makeExam({ status: "published" }));
-      expect(() => publishExam(repo, "exam-1", testQuestions)).toThrow(
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
         InvalidStateTransitionError,
       );
     });
 
-    it("throws when no questions", () => {
+    it("throws when no questions", async () => {
       const repo = makeRepo(makeExam({ questionIds: [] }));
-      expect(() => publishExam(repo, "exam-1", testQuestions)).toThrow(
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
         ValidationError,
       );
     });
 
-    it("throws when passingScore is 0", () => {
+    it("throws when passingScore is 0", async () => {
       const repo = makeRepo(makeExam({ passingScore: 0 }));
-      expect(() => publishExam(repo, "exam-1", testQuestions)).toThrow(
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
         ValidationError,
       );
     });
   });
 
   describe("openExam", () => {
-    it("transitions published → open", () => {
+    it("transitions published → open", async () => {
       const repo = makeRepo(makeExam({ status: "published" }));
-      const result = openExam(repo, "exam-1");
+      const result = await openExam(repo, "exam-1");
       expect(result.status).toBe("open");
     });
 
-    it("throws for draft → open", () => {
+    it("throws for draft → open", async () => {
       const repo = makeRepo(makeExam({ status: "draft" }));
-      expect(() => openExam(repo, "exam-1")).toThrow(
+      await expect(openExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
       );
     });
   });
 
   describe("closeExam", () => {
-    it("transitions open → closed", () => {
+    it("transitions open → closed", async () => {
       const repo = makeRepo(makeExam({ status: "open" }));
-      const result = closeExam(repo, "exam-1");
+      const result = await closeExam(repo, "exam-1");
       expect(result.status).toBe("closed");
     });
 
-    it("throws for published → closed", () => {
+    it("throws for published → closed", async () => {
       const repo = makeRepo(makeExam({ status: "published" }));
-      expect(() => closeExam(repo, "exam-1")).toThrow(
+      await expect(closeExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
       );
     });
   });
 
   describe("archiveExam", () => {
-    it("transitions closed → archived", () => {
+    it("transitions closed → archived", async () => {
       const repo = makeRepo(makeExam({ status: "closed" }));
-      const result = archiveExam(repo, "exam-1");
+      const result = await archiveExam(repo, "exam-1");
       expect(result.status).toBe("archived");
     });
 
-    it("transitions published → archived", () => {
+    it("transitions published → archived", async () => {
       const repo = makeRepo(makeExam({ status: "published" }));
-      const result = archiveExam(repo, "exam-1");
+      const result = await archiveExam(repo, "exam-1");
       expect(result.status).toBe("archived");
     });
 
-    it("throws for draft → archived", () => {
+    it("throws for draft → archived", async () => {
       const repo = makeRepo(makeExam({ status: "draft" }));
-      expect(() => archiveExam(repo, "exam-1")).toThrow(
+      await expect(archiveExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
       );
     });
 
-    it("throws for open → archived", () => {
+    it("throws for open → archived", async () => {
       const repo = makeRepo(makeExam({ status: "open" }));
-      expect(() => archiveExam(repo, "exam-1")).toThrow(
+      await expect(archiveExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
       );
     });

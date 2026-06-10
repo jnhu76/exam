@@ -23,7 +23,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCourseRepo(fastify.db);
-      const { items, total } = repo.listPaginated(ctx, page, pageSize);
+      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
 
       return {
         items: items.map((c) => ({
@@ -55,7 +55,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createCourseRepo(fastify.db);
-      const course = repo.findById(ctx, id);
+      const course = await repo.findById(ctx, id);
       if (!course) {
         return reply
           .code(404)
@@ -86,7 +86,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const data = CreateCourseRequestSchema.parse(request.body);
       const repo = createCourseRepo(fastify.db);
 
-      const existing = repo.list(ctx);
+      const existing = await repo.list(ctx);
       if (existing.some((c) => c.code === data.code)) {
         return reply.code(409).send({
           error: {
@@ -96,7 +96,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const course = repo.create(ctx, {
+      const course = await repo.create(ctx, {
         name: data.name,
         code: data.code,
         description: data.description,
@@ -127,7 +127,11 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateCourseRequestSchema.parse(request.body);
       const repo = createCourseRepo(fastify.db);
-      const updated = repo.update(ctx, id, data as Record<string, unknown>);
+      const updated = await repo.update(
+        ctx,
+        id,
+        data as Record<string, unknown>,
+      );
       if (!updated) {
         return reply
           .code(404)
@@ -158,11 +162,8 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createCourseRepo(fastify.db);
-      if (
-        createQuestionRepo(fastify.db)
-          .list(ctx)
-          .some((q) => q.courseId === id)
-      ) {
+      const questions = await createQuestionRepo(fastify.db).list(ctx);
+      if (questions.some((q) => q.courseId === id)) {
         return reply.code(409).send({
           error: {
             code: "CONFLICT",
@@ -170,7 +171,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
-      const deleted = repo.delete(ctx, id);
+      const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply
           .code(404)

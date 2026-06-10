@@ -33,14 +33,14 @@ function shouldSelectAttempt(
   }
 }
 
-export function gradeAttempt(
+export async function gradeAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   attemptId: string,
   now: Date,
-): ScoreResult {
-  const attempt = attemptRepo.findById(attemptId);
+): Promise<ScoreResult> {
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
@@ -51,11 +51,11 @@ export function gradeAttempt(
       `Cannot grade attempt in ${attempt.status} state`,
     );
   }
-  const exam = examRepo.findById(attempt.examId);
+  const exam = await examRepo.findById(attempt.examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
-  const enrollment = enrollmentRepo.findByExamAndCandidate(
+  const enrollment = await enrollmentRepo.findByExamAndCandidate(
     attempt.examId,
     attempt.candidateId,
   );
@@ -63,7 +63,7 @@ export function gradeAttempt(
     throw new ValidationError("Enrollment not found");
   }
 
-  attemptRepo.update(attemptId, { status: "grading" });
+  await attemptRepo.update(attemptId, { status: "grading" });
   const result = gradeAnswers(
     attempt.id,
     attempt.questionSnapshot,
@@ -71,7 +71,7 @@ export function gradeAttempt(
     exam.passingScore,
     now,
   );
-  attemptRepo.update(attemptId, {
+  await attemptRepo.update(attemptId, {
     status: "graded",
     gradingResult: result.questionResults,
     score: result.totalScore,
@@ -84,7 +84,7 @@ export function gradeAttempt(
     enrollment,
     result.totalScore,
   );
-  enrollmentRepo.update(enrollment.id, {
+  await enrollmentRepo.update(enrollment.id, {
     status: "completed",
     ...(selected
       ? {

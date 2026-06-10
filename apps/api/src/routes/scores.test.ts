@@ -88,7 +88,7 @@ describe("score routes", () => {
   }
 
   function markExamClosed(examId: string) {
-    createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+    return createExamRepo(ctx.db).update(adminRequestContext(), examId, {
       closeAt: new Date(Date.now() - 1000),
     });
   }
@@ -196,11 +196,11 @@ describe("score routes", () => {
       permissions: [] as import("@exam/domain").Permission[],
       sessionId: "test",
     };
-    const storedAttempt = createAttemptRepo(ctx.db).findById(
+    const storedAttempt = await createAttemptRepo(ctx.db).findById(
       requestContext,
       attemptId,
     );
-    const storedEnrollment = createEnrollmentRepo(
+    const storedEnrollment = await createEnrollmentRepo(
       ctx.db,
     ).findByExamAndCandidate(
       requestContext,
@@ -271,7 +271,7 @@ describe("score routes", () => {
       permissions: [] as import("@exam/domain").Permission[],
       sessionId: "test",
     };
-    createAttemptRepo(ctx.db).update(requestContext, attemptId, {
+    await createAttemptRepo(ctx.db).update(requestContext, attemptId, {
       status: "in_progress",
     });
 
@@ -433,8 +433,8 @@ describe("J8: score list routes", () => {
     };
   }
 
-  function markExamClosed(examId: string) {
-    createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+  async function markExamClosed(examId: string) {
+    await createExamRepo(ctx.db).update(adminRequestContext(), examId, {
       closeAt: new Date(Date.now() - 1000),
     });
   }
@@ -515,7 +515,7 @@ describe("J8: score list routes", () => {
       cookies: { "auth-token": authToken },
     });
     if (closeExamAfterGrading) {
-      markExamClosed(examId);
+      await markExamClosed(examId);
     }
 
     return attemptId;
@@ -654,7 +654,7 @@ describe("J8: score list routes", () => {
     // 创建一个及格和一个不及格的尝试
     await createGradedAttemptForExam(examId, true, ctx.candidateToken, false); // passed
     await createGradedAttemptForExam(examId, false, tempToken, false); // failed
-    markExamClosed(examId);
+    await markExamClosed(examId);
 
     // 测试过滤passed
     const responsePassed = await ctx.app.inject({

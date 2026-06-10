@@ -1,8 +1,8 @@
 import type { RequestContext } from "@exam/domain";
 import { and, eq, gte } from "drizzle-orm";
-import type { AnyDatabase } from "../types.js";
+import type { AnyDatabase, PostgresDatabase } from "../types.js";
 import type { SqliteDatabase } from "../types.js";
-import type { PostgresDatabase } from "../types.js";
+import { isSqlite } from "../types.js";
 import { sqliteSchema } from "../schema/sqlite.js";
 import { pgSchema } from "../schema/pg.js";
 
@@ -31,17 +31,13 @@ function getOrgId(ctx: RequestContext): string {
   return ctx.organizationId;
 }
 
-function isSqlite(db: AnyDatabase): boolean {
-  return "pragma" in db || "all" in db;
-}
-
 export function createSystemStatsRepo(db: AnyDatabase) {
   return {
     async getDashboardStats(ctx: RequestContext): Promise<DashboardStats> {
       const orgId = getOrgId(ctx);
 
       if (isSqlite(db)) {
-        const s = db as unknown as SqliteDatabase;
+        const s = db as SqliteDatabase;
         const totalQuestions = s
           .select({ id: sqliteSchema.questions.id })
           .from(sqliteSchema.questions)
@@ -85,13 +81,12 @@ export function createSystemStatsRepo(db: AnyDatabase) {
         return { totalQuestions, activeExams, totalCandidates, todayAttempts };
       }
 
-      const p = db as unknown as PostgresDatabase;
+      const p = db as PostgresDatabase;
       const totalQuestions = (
         await p
           .select({ id: pgSchema.questions.id })
           .from(pgSchema.questions)
           .where(eq(pgSchema.questions.organizationId, orgId))
-          .execute()
       ).length;
 
       const activeExams = (
@@ -104,7 +99,6 @@ export function createSystemStatsRepo(db: AnyDatabase) {
               eq(pgSchema.exams.status, "open"),
             ),
           )
-          .execute()
       ).length;
 
       const totalCandidates = (
@@ -112,7 +106,6 @@ export function createSystemStatsRepo(db: AnyDatabase) {
           .select({ id: pgSchema.candidateProfiles.id })
           .from(pgSchema.candidateProfiles)
           .where(eq(pgSchema.candidateProfiles.organizationId, orgId))
-          .execute()
       ).length;
 
       const now = new Date();
@@ -131,7 +124,6 @@ export function createSystemStatsRepo(db: AnyDatabase) {
               gte(pgSchema.examAttempts.startedAt, startOfDay),
             ),
           )
-          .execute()
       ).length;
 
       return { totalQuestions, activeExams, totalCandidates, todayAttempts };
@@ -141,7 +133,7 @@ export function createSystemStatsRepo(db: AnyDatabase) {
       const orgId = getOrgId(ctx);
 
       if (isSqlite(db)) {
-        const s = db as unknown as SqliteDatabase;
+        const s = db as SqliteDatabase;
         return s
           .select({
             id: sqliteSchema.exams.id,
@@ -155,7 +147,7 @@ export function createSystemStatsRepo(db: AnyDatabase) {
           .map((exam) => ({ ...exam, participantCount: 0 }));
       }
 
-      const p = db as unknown as PostgresDatabase;
+      const p = db as PostgresDatabase;
       const rows = await p
         .select({
           id: pgSchema.exams.id,
@@ -164,26 +156,24 @@ export function createSystemStatsRepo(db: AnyDatabase) {
         })
         .from(pgSchema.exams)
         .where(eq(pgSchema.exams.organizationId, orgId))
-        .limit(10)
-        .execute();
+        .limit(10);
       return rows.map((exam) => ({ ...exam, participantCount: 0 }));
     },
 
     async pingDb(): Promise<number> {
       const start = performance.now();
       if (isSqlite(db)) {
-        const s = db as unknown as SqliteDatabase;
+        const s = db as SqliteDatabase;
         s.select({ id: sqliteSchema.organizations.id })
           .from(sqliteSchema.organizations)
           .limit(1)
           .get();
       } else {
-        const p = db as unknown as PostgresDatabase;
+        const p = db as PostgresDatabase;
         await p
           .select({ id: pgSchema.organizations.id })
           .from(pgSchema.organizations)
-          .limit(1)
-          .execute();
+          .limit(1);
       }
       return Math.round((performance.now() - start) * 100) / 100;
     },

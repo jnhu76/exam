@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { RequestContext } from "@exam/domain";
+import type { AnyDatabase } from "@exam/db";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 
-export function recordAudit(
+export async function recordAudit(
   fastify: FastifyInstance,
   request: FastifyRequest,
   ctx: RequestContext,
@@ -10,8 +11,8 @@ export function recordAudit(
   targetType: string,
   targetId: string,
   metadata: Record<string, unknown> = {},
-): void {
-  createAuditLogRepo(fastify.db).create(ctx, {
+): Promise<void> {
+  await createAuditLogRepo(fastify.db as AnyDatabase).create(ctx, {
     actorId: ctx.actorId,
     action,
     targetType,

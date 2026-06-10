@@ -45,13 +45,13 @@ describe("repository tenant isolation", () => {
     questionRepo = createQuestionRepo(database.db);
   });
 
-  it("keeps tenant-scoped course queries isolated", () => {
-    const alpha = organizationRepo.create(rootContext, {
+  it("keeps tenant-scoped course queries isolated", async () => {
+    const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: "alpha",
     });
-    const beta = organizationRepo.create(rootContext, {
+    const beta = await organizationRepo.create(rootContext, {
       name: "beta",
       displayName: "Beta",
       slug: "beta",
@@ -59,70 +59,72 @@ describe("repository tenant isolation", () => {
     const alphaContext = createContext(alpha.id);
     const betaContext = createContext(beta.id);
 
-    const course = courseRepo.create(alphaContext, {
+    const course = await courseRepo.create(alphaContext, {
       name: "Safety",
       code: "SAFE",
       description: "",
     });
 
-    expect(courseRepo.findById(alphaContext, course.id)).toMatchObject({
+    expect(await courseRepo.findById(alphaContext, course.id)).toMatchObject({
       id: course.id,
       organizationId: alpha.id,
     });
-    expect(courseRepo.findById(betaContext, course.id)).toBeNull();
-    expect(courseRepo.list(betaContext)).toEqual([]);
+    expect(await courseRepo.findById(betaContext, course.id)).toBeNull();
+    expect(await courseRepo.list(betaContext)).toEqual([]);
   });
 
-  it("updates and deletes tenant records without crossing tenant boundaries", () => {
-    const alpha = organizationRepo.create(rootContext, {
+  it("updates and deletes tenant records without crossing tenant boundaries", async () => {
+    const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: "alpha",
     });
-    const beta = organizationRepo.create(rootContext, {
+    const beta = await organizationRepo.create(rootContext, {
       name: "beta",
       displayName: "Beta",
       slug: "beta",
     });
     const alphaContext = createContext(alpha.id);
     const betaContext = createContext(beta.id);
-    const course = courseRepo.create(alphaContext, {
+    const course = await courseRepo.create(alphaContext, {
       name: "Safety",
       code: "SAFE",
       description: "",
     });
 
     expect(
-      courseRepo.update(betaContext, course.id, { name: "Wrong tenant" }),
+      await courseRepo.update(betaContext, course.id, { name: "Wrong tenant" }),
     ).toBeNull();
-    expect(courseRepo.delete(betaContext, course.id)).toBe(false);
+    expect(await courseRepo.delete(betaContext, course.id)).toBe(false);
 
     expect(
-      courseRepo.update(alphaContext, course.id, { name: "Safety updated" }),
+      await courseRepo.update(alphaContext, course.id, {
+        name: "Safety updated",
+      }),
     ).toMatchObject({ id: course.id, name: "Safety updated" });
-    expect(courseRepo.delete(alphaContext, course.id)).toBe(true);
-    expect(courseRepo.findById(alphaContext, course.id)).toBeNull();
+    expect(await courseRepo.delete(alphaContext, course.id)).toBe(true);
+    expect(await courseRepo.findById(alphaContext, course.id)).toBeNull();
   });
 
-  it("requires SuperAdmin to select a target tenant explicitly", () => {
-    const alpha = organizationRepo.create(rootContext, {
+  it("requires SuperAdmin to select a target tenant explicitly", async () => {
+    const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: "alpha",
     });
     const superAdminContext = createContext(alpha.id, "SuperAdmin");
 
-    expect(() =>
+    await expect(
       courseRepo.create(superAdminContext, {
         name: "Safety",
         code: "SAFE",
         description: "",
       }),
-    ).toThrow("targetOrganizationId");
+    ).rejects.toThrow("targetOrganizationId");
 
     const targetedContext = createContext(alpha.id, "SuperAdmin", alpha.id);
     expect(
-      courseRepo.create(targetedContext, {
+      await courseRepo.create(targetedContext, {
         name: "Safety",
         code: "SAFE",
         description: "",
@@ -130,25 +132,25 @@ describe("repository tenant isolation", () => {
     ).toMatchObject({ organizationId: alpha.id });
   });
 
-  it("filters question lookups by organizationId", () => {
-    const alpha = organizationRepo.create(rootContext, {
+  it("filters question lookups by organizationId", async () => {
+    const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: "alpha",
     });
-    const beta = organizationRepo.create(rootContext, {
+    const beta = await organizationRepo.create(rootContext, {
       name: "beta",
       displayName: "Beta",
       slug: "beta",
     });
     const alphaContext = createContext(alpha.id);
     const betaContext = createContext(beta.id);
-    const course = courseRepo.create(alphaContext, {
+    const course = await courseRepo.create(alphaContext, {
       name: "Safety",
       code: "SAFE",
       description: "",
     });
-    const question = questionRepo.create(alphaContext, {
+    const question = await questionRepo.create(alphaContext, {
       courseId: course.id,
       type: "true_false",
       content: "Is this statement correct?",
@@ -164,32 +166,34 @@ describe("repository tenant isolation", () => {
       },
     });
 
-    expect(questionRepo.findById(alphaContext, question.id)).toMatchObject({
+    expect(
+      await questionRepo.findById(alphaContext, question.id),
+    ).toMatchObject({
       id: question.id,
       organizationId: alpha.id,
     });
-    expect(questionRepo.findById(betaContext, question.id)).toBeNull();
+    expect(await questionRepo.findById(betaContext, question.id)).toBeNull();
   });
 
-  it("returns only public branding fields before login", () => {
-    const alpha = organizationRepo.create(rootContext, {
+  it("returns only public branding fields before login", async () => {
+    const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: "alpha",
     });
     const alphaContext = createContext(alpha.id);
 
-    settingsRepo.upsert(alphaContext, {
+    await settingsRepo.upsert(alphaContext, {
       productName: "LAN Exam",
       productSubtitle: "Internal assessment",
       timezone: "Asia/Shanghai",
     });
 
-    const tenant = organizationRepo.resolveBrandingTenant(
+    const tenant = await organizationRepo.resolveBrandingTenant(
       publicBrandingContext,
       "alpha",
     );
-    const branding = settingsRepo.getPublicBranding({
+    const branding = await settingsRepo.getPublicBranding({
       purpose: "public_branding",
       organizationId: tenant.id,
     });

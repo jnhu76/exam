@@ -44,7 +44,7 @@ describe("candidate profile invariant", () => {
     expect(candidate.userId).toBeDefined();
 
     const userRepo = createUserRepo(ctx.db);
-    const user = userRepo.findById(
+    const user = await userRepo.findById(
       {
         actorId: ctx.admin.id,
         organizationId: ctx.org.id,
@@ -59,7 +59,7 @@ describe("candidate profile invariant", () => {
     expect(user!.role).toBe("Candidate");
 
     const candidateRepo = createCandidateRepo(ctx.db);
-    const profile = candidateRepo.findById(
+    const profile = await candidateRepo.findById(
       {
         actorId: ctx.admin.id,
         organizationId: ctx.org.id,

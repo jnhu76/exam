@@ -138,11 +138,11 @@ function makeRepos(
 }
 
 describe("gradeAttempt", () => {
-  it("persists question results and marks a passing attempt graded", () => {
+  it("persists question results and marks a passing attempt graded", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
     const gradedAt = new Date("2026-06-01T12:00:00Z");
 
-    const result = gradeAttempt(
+    const result = await gradeAttempt(
       repos.examRepo,
       repos.enrollmentRepo,
       repos.attemptRepo,
@@ -167,14 +167,14 @@ describe("gradeAttempt", () => {
     });
   });
 
-  it("rejects attempts that are not submitted", () => {
+  it("rejects attempts that are not submitted", async () => {
     const repos = makeRepos(
       makeExam(),
       makeAttempt({ status: "in_progress" }),
       makeEnrollment(),
     );
 
-    expect(() =>
+    await expect(
       gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
@@ -182,7 +182,7 @@ describe("gradeAttempt", () => {
         "attempt-1",
         new Date(),
       ),
-    ).toThrow();
+    ).rejects.toThrow();
   });
 
   it.each([
@@ -191,7 +191,7 @@ describe("gradeAttempt", () => {
     ["first", 8, 8, "previous-attempt"],
   ] as const)(
     "applies %s score strategy",
-    (scoreStrategy, previousScore, expectedScore, expectedAttemptId) => {
+    async (scoreStrategy, previousScore, expectedScore, expectedAttemptId) => {
       const repos = makeRepos(
         makeExam(scoreStrategy),
         makeAttempt(),
@@ -202,7 +202,7 @@ describe("gradeAttempt", () => {
         }),
       );
 
-      gradeAttempt(
+      await gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,

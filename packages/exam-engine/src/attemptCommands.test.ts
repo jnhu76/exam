@@ -214,14 +214,14 @@ const fixedStart = new Date("2025-01-01T10:30:00Z");
 
 describe("attemptCommands", () => {
   describe("startAttempt", () => {
-    it("creates new attempt for candidate with enrollment", () => {
+    it("creates new attempt for candidate with enrollment", async () => {
       const exam = makeExam();
       const enrollment = makeEnrollment();
       const examRepo = { findById: () => exam, update: () => exam };
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
-      const result = startAttempt(
+      const result = await startAttempt(
         examRepo,
         enrRepo,
         attRepo,
@@ -240,13 +240,13 @@ describe("attemptCommands", () => {
       expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
     });
 
-    it("creates enrollment if none exists", () => {
+    it("creates enrollment if none exists", async () => {
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      const result = startAttempt(
+      const result = await startAttempt(
         examRepo,
         enrRepo,
         attRepo,
@@ -257,12 +257,15 @@ describe("attemptCommands", () => {
 
       expect(result).toBeDefined();
       expect(result.candidateId).toBe("cand-1");
-      const newEnrollment = enrRepo.findByExamAndCandidate("exam-1", "cand-1");
+      const newEnrollment = await enrRepo.findByExamAndCandidate(
+        "exam-1",
+        "cand-1",
+      );
       expect(newEnrollment).toBeDefined();
       expect(newEnrollment!.status).toBe("started");
     });
 
-    it("returns existing in_progress attempt instead of creating new", () => {
+    it("returns existing in_progress attempt instead of creating new", async () => {
       const exam = makeExam();
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const existingAttempt = makeAttempt();
@@ -270,7 +273,7 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([existingAttempt]);
 
-      const result = startAttempt(
+      const result = await startAttempt(
         examRepo,
         enrRepo,
         attRepo,
@@ -282,7 +285,7 @@ describe("attemptCommands", () => {
       expect(result.id).toBe("attempt-1");
     });
 
-    it("returns existing in_progress attempt even after max attempts are exhausted", () => {
+    it("returns existing in_progress attempt even after max attempts are exhausted", async () => {
       const exam = makeExam({
         retakePolicy: "max_attempts",
         maxAttempts: 1,
@@ -293,7 +296,7 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([existingAttempt]);
 
-      const result = startAttempt(
+      const result = await startAttempt(
         examRepo,
         enrRepo,
         attRepo,
@@ -306,34 +309,34 @@ describe("attemptCommands", () => {
       expect(result.attemptNo).toBe(1);
     });
 
-    it("throws ExamNotOpenError when exam is not open", () => {
+    it("throws ExamNotOpenError when exam is not open", async () => {
       const exam = makeExam({ status: "draft" });
       const examRepo = { findById: () => exam, update: () => exam };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
-      ).toThrow(ExamNotOpenError);
+      ).rejects.toThrow(ExamNotOpenError);
     });
 
-    it("throws ExamNotOpenError when exam is closed", () => {
+    it("throws ExamNotOpenError when exam is closed", async () => {
       const exam = makeExam({ status: "closed" });
       const examRepo = { findById: () => exam, update: () => exam };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
-      ).toThrow(ExamNotOpenError);
+      ).rejects.toThrow(ExamNotOpenError);
     });
 
-    it("throws ValidationError when exam not found", () => {
+    it("throws ValidationError when exam not found", async () => {
       const examRepo = { findById: () => null, update: () => null };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         startAttempt(
           examRepo,
           enrRepo,
@@ -342,10 +345,10 @@ describe("attemptCommands", () => {
           "cand-1",
           fixedNow,
         ),
-      ).toThrow(ValidationError);
+      ).rejects.toThrow(ValidationError);
     });
 
-    it("throws ExamNotOpenError when current time is before openAt", () => {
+    it("throws ExamNotOpenError when current time is before openAt", async () => {
       const exam = makeExam({
         openAt: new Date("2025-01-01T12:00:00Z"),
         closeAt: new Date("2025-01-01T14:00:00Z"),
@@ -354,7 +357,7 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         startAttempt(
           examRepo,
           enrRepo,
@@ -363,10 +366,10 @@ describe("attemptCommands", () => {
           "cand-1",
           new Date("2025-01-01T11:00:00Z"),
         ),
-      ).toThrow(ExamNotOpenError);
+      ).rejects.toThrow(ExamNotOpenError);
     });
 
-    it("throws ExamNotOpenError when current time is after closeAt", () => {
+    it("throws ExamNotOpenError when current time is after closeAt", async () => {
       const exam = makeExam({
         openAt: new Date("2025-01-01T09:00:00Z"),
         closeAt: new Date("2025-01-01T10:00:00Z"),
@@ -375,7 +378,7 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         startAttempt(
           examRepo,
           enrRepo,
@@ -384,10 +387,10 @@ describe("attemptCommands", () => {
           "cand-1",
           new Date("2025-01-01T10:30:00Z"),
         ),
-      ).toThrow(ExamNotOpenError);
+      ).rejects.toThrow(ExamNotOpenError);
     });
 
-    it("throws ValidationError when max attempts reached", () => {
+    it("throws ValidationError when max attempts reached", async () => {
       const exam = makeExam({
         retakePolicy: "max_attempts",
         maxAttempts: 1,
@@ -397,12 +400,12 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
-      ).toThrow(ValidationError);
+      ).rejects.toThrow(ValidationError);
     });
 
-    it("increments attempt number for subsequent attempts", () => {
+    it("increments attempt number for subsequent attempts", async () => {
       const exam = makeExam();
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const prevAttempt = makeAttempt({
@@ -413,7 +416,7 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo([prevAttempt]);
 
-      const result = startAttempt(
+      const result = await startAttempt(
         examRepo,
         enrRepo,
         attRepo,
@@ -425,7 +428,7 @@ describe("attemptCommands", () => {
       expect(result.attemptNo).toBe(2);
     });
 
-    it("copies questionSnapshot from published exam", () => {
+    it("copies questionSnapshot from published exam", async () => {
       const snapshot = makeSnapshot();
       const exam = makeExam({ questionSnapshot: snapshot });
       const enrollment = makeEnrollment();
@@ -433,7 +436,7 @@ describe("attemptCommands", () => {
       const enrRepo = makeEnrollmentRepo([enrollment]);
       const attRepo = makeAttemptRepo();
 
-      const result = startAttempt(
+      const result = await startAttempt(
         examRepo,
         enrRepo,
         attRepo,
@@ -447,63 +450,65 @@ describe("attemptCommands", () => {
   });
 
   describe("submitAttempt", () => {
-    it("transitions in_progress → submitted", () => {
+    it("transitions in_progress → submitted", async () => {
       const attempt = makeAttempt();
       const attRepo = makeAttemptRepo([attempt]);
 
-      const result = submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
 
       expect(result.status).toBe("submitted");
       expect(result.submittedAt).toEqual(fixedNow);
     });
 
-    it("throws InvalidStateTransitionError for submitted attempt", () => {
+    it("throws InvalidStateTransitionError for submitted attempt", async () => {
       const attempt = makeAttempt({ status: "submitted" });
       const attRepo = makeAttemptRepo([attempt]);
 
-      expect(() => submitAttempt(attRepo, "attempt-1", fixedNow)).toThrow();
+      await expect(
+        submitAttempt(attRepo, "attempt-1", fixedNow),
+      ).rejects.toThrow();
     });
 
-    it("throws ValidationError for non-existent attempt", () => {
+    it("throws ValidationError for non-existent attempt", async () => {
       const attRepo = makeAttemptRepo();
 
-      expect(() => submitAttempt(attRepo, "nonexistent", fixedNow)).toThrow(
-        ValidationError,
-      );
+      await expect(
+        submitAttempt(attRepo, "nonexistent", fixedNow),
+      ).rejects.toThrow(ValidationError);
     });
 
-    it("rejects late submission (past deadline) with ExamTimeExpiredError", () => {
+    it("rejects late submission (past deadline) with ExamTimeExpiredError", async () => {
       const attempt = makeAttempt({
         deadlineAt: new Date("2025-01-01T09:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
 
-      expect(() =>
+      await expect(
         submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T11:00:00Z")),
-      ).toThrow(ExamTimeExpiredError);
+      ).rejects.toThrow(ExamTimeExpiredError);
     });
   });
 
   describe("markDisrupted", () => {
-    it("transitions in_progress → disrupted", () => {
+    it("transitions in_progress → disrupted", async () => {
       const attempt = makeAttempt();
       const attRepo = makeAttemptRepo([attempt]);
 
-      const result = markDisrupted(attRepo, "attempt-1");
+      const result = await markDisrupted(attRepo, "attempt-1");
 
       expect(result.status).toBe("disrupted");
     });
 
-    it("throws for non in_progress attempt", () => {
+    it("throws for non in_progress attempt", async () => {
       const attempt = makeAttempt({ status: "submitted" });
       const attRepo = makeAttemptRepo([attempt]);
 
-      expect(() => markDisrupted(attRepo, "attempt-1")).toThrow();
+      await expect(markDisrupted(attRepo, "attempt-1")).rejects.toThrow();
     });
   });
 
   describe("restoreAttempt", () => {
-    it("transitions disrupted → in_progress and preserves answers + remaining time", () => {
+    it("transitions disrupted → in_progress and preserves answers + remaining time", async () => {
       const attempt = makeAttempt({
         status: "disrupted",
         answers: [
@@ -522,7 +527,12 @@ describe("attemptCommands", () => {
       const attRepo = makeAttemptRepo([attempt]);
 
       const restoreNow = new Date("2025-01-01T10:30:00Z");
-      const result = restoreAttempt(examRepo, attRepo, "attempt-1", restoreNow);
+      const result = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        restoreNow,
+      );
 
       expect(result.status).toBe("in_progress");
       expect(result.answers).toHaveLength(1);
@@ -531,28 +541,28 @@ describe("attemptCommands", () => {
       expect(result.lastActivityAt).toEqual(restoreNow);
     });
 
-    it("throws for non disrupted attempt", () => {
+    it("throws for non disrupted attempt", async () => {
       const attempt = makeAttempt({ status: "in_progress" });
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
       const attRepo = makeAttemptRepo([attempt]);
 
-      expect(() =>
+      await expect(
         restoreAttempt(examRepo, attRepo, "attempt-1", fixedNow),
-      ).toThrow();
+      ).rejects.toThrow();
     });
 
-    it("throws for non-existent attempt", () => {
+    it("throws for non-existent attempt", async () => {
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
       const attRepo = makeAttemptRepo();
 
-      expect(() =>
+      await expect(
         restoreAttempt(examRepo, attRepo, "nonexistent", fixedNow),
-      ).toThrow(ValidationError);
+      ).rejects.toThrow(ValidationError);
     });
 
-    it("keeps the original deadline while restoring a disrupted attempt", () => {
+    it("keeps the original deadline while restoring a disrupted attempt", async () => {
       const attempt = makeAttempt({
         status: "disrupted",
         startedAt: new Date("2025-01-01T10:00:00Z"),
@@ -564,7 +574,12 @@ describe("attemptCommands", () => {
       const attRepo = makeAttemptRepo([attempt]);
 
       const restoreNow = new Date("2025-01-01T10:30:00Z");
-      const result = restoreAttempt(examRepo, attRepo, "attempt-1", restoreNow);
+      const result = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        restoreNow,
+      );
 
       expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:00:00Z"));
     });

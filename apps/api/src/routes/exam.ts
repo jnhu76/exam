@@ -11,7 +11,7 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
+import type { AnyDatabase } from "@exam/db/src/types.js";
 import {
   archiveExam,
   publishExam,
@@ -47,28 +47,35 @@ function toExamResponse(exam: Exam) {
   };
 }
 
-function getExamParticipants(
-  db: SqliteDatabase,
+async function getExamParticipants(
+  db: AnyDatabase,
   ctx: RequestContext,
   examId: string,
 ) {
-  const enrollments = createEnrollmentRepo(db)
-    .list(ctx)
-    .filter((enrollment) => enrollment.examId === examId);
+  const enrollments = (await createEnrollmentRepo(db).list(ctx)).filter(
+    (enrollment) => enrollment.examId === examId,
+  );
   const candidateRepo = createCandidateRepo(db);
   const userRepo = createUserRepo(db);
-  return enrollments.map((enrollment) => {
-    const candidate = candidateRepo.findById(ctx, enrollment.candidateId);
-    const user = candidate ? userRepo.findById(ctx, candidate.userId) : null;
-    return {
-      candidateId: enrollment.candidateId,
-      name: user?.name ?? "-",
-      fields: candidate?.fields ?? {},
-      status: enrollment.status,
-      score: enrollment.finalScore ?? null,
-      passed: enrollment.finalPassed ?? null,
-    };
-  });
+  return Promise.all(
+    enrollments.map(async (enrollment) => {
+      const candidate = await candidateRepo.findById(
+        ctx,
+        enrollment.candidateId,
+      );
+      const user = candidate
+        ? await userRepo.findById(ctx, candidate.userId)
+        : null;
+      return {
+        candidateId: enrollment.candidateId,
+        name: user?.name ?? "-",
+        fields: candidate?.fields ?? {},
+        status: enrollment.status,
+        score: enrollment.finalScore ?? null,
+        passed: enrollment.finalPassed ?? null,
+      };
+    }),
+  );
 }
 
 function createExamRepoAdapter(
@@ -76,9 +83,13 @@ function createExamRepoAdapter(
   ctx: RequestContext,
 ): ExamRepository {
   return {
-    findById: (examId) => repo.findById(ctx, examId) as Exam | null,
+    findById: (examId) => repo.findById(ctx, examId) as Promise<Exam | null>,
     update: (examId, data) =>
-      repo.update(ctx, examId, data as Record<string, unknown>) as Exam | null,
+      repo.update(
+        ctx,
+        examId,
+        data as Record<string, unknown>,
+      ) as Promise<Exam | null>,
   };
 }
 
@@ -135,30 +146,32 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createExamRepo(fastify.db);
-      const { items, total } = repo.listPaginated(ctx, page, pageSize);
+      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
       const attemptRepo = createAttemptRepo(fastify.db);
       const now = new Date();
 
       return {
-        items: items.map((e) => {
-          const exam = e as Exam;
-          const participantCount = getExamParticipants(
-            fastify.db,
-            ctx,
-            exam.id,
-          ).length;
-          const gradedAttemptCount = attemptRepo.countGradedByExam(
-            ctx,
-            exam.id,
-          );
-          return {
-            ...toExamResponse(exam),
-            participantCount,
-            gradedAttemptCount,
-            ...getScoreViewMeta(exam, gradedAttemptCount, now),
-            ...getDeleteMeta(exam),
-          };
-        }),
+        items: await Promise.all(
+          items.map(async (e) => {
+            const exam = e as Exam;
+            const participants = await getExamParticipants(
+              fastify.db,
+              ctx,
+              exam.id,
+            );
+            const gradedAttemptCount = await attemptRepo.countGradedByExam(
+              ctx,
+              exam.id,
+            );
+            return {
+              ...toExamResponse(exam),
+              participantCount: participants.length,
+              gradedAttemptCount,
+              ...getScoreViewMeta(exam, gradedAttemptCount, now),
+              ...getDeleteMeta(exam),
+            };
+          }),
+        ),
         total,
         page,
         pageSize,
@@ -179,13 +192,13 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
-      const exam = repo.findById(ctx, id) as Exam | null;
+      const exam = (await repo.findById(ctx, id)) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
       }
-      const participants = getExamParticipants(fastify.db, ctx, exam.id);
+      const participants = await getExamParticipants(fastify.db, ctx, exam.id);
       return {
         ...toExamResponse(exam),
         stats: {
@@ -218,18 +231,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const data = parsed.data;
       const repo = createExamRepo(fastify.db);
-      const course = createCourseRepo(fastify.db).findById(ctx, data.courseId);
+      const course = await createCourseRepo(fastify.db).findById(
+        ctx,
+        data.courseId,
+      );
       const questionRepo = createQuestionRepo(fastify.db);
       if (!course) {
         return reply.code(400).send({
           error: { code: "VALIDATION_ERROR", message: "Course not found" },
         });
       }
-      if (
-        data.questionIds.some(
-          (id) => questionRepo.findById(ctx, id)?.courseId !== data.courseId,
-        )
-      ) {
+      const questionChecks = await Promise.all(
+        data.questionIds.map((id) => questionRepo.findById(ctx, id)),
+      );
+      if (questionChecks.some((q) => q?.courseId !== data.courseId)) {
         return reply.code(400).send({
           error: {
             code: "VALIDATION_ERROR",
@@ -238,7 +253,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const exam = repo.create(ctx, {
+      const exam = await repo.create(ctx, {
         title: data.title,
         description: data.description,
         courseId: data.courseId,
@@ -281,7 +296,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const data = parsed.data;
       const repo = createExamRepo(fastify.db);
 
-      const existing = repo.findById(ctx, id) as Exam | null;
+      const existing = (await repo.findById(ctx, id)) as Exam | null;
       if (!existing) {
         return reply
           .code(404)
@@ -296,26 +311,27 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           },
         });
       }
-      if (
-        data.questionIds?.some(
-          (questionId) =>
-            createQuestionRepo(fastify.db).findById(ctx, questionId)
-              ?.courseId !== existing.courseId,
-        )
-      ) {
-        return reply.code(400).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Questions must belong to the selected course",
-          },
-        });
+      if (data.questionIds) {
+        const questionChecks = await Promise.all(
+          data.questionIds.map((questionId) =>
+            createQuestionRepo(fastify.db).findById(ctx, questionId),
+          ),
+        );
+        if (questionChecks.some((q) => q?.courseId !== existing.courseId)) {
+          return reply.code(400).send({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "Questions must belong to the selected course",
+            },
+          });
+        }
       }
 
       const updateData: Record<string, unknown> = { ...data };
       if (data.openAt) updateData.openAt = new Date(data.openAt);
       if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
 
-      const updated = repo.update(ctx, id, updateData) as Exam | null;
+      const updated = (await repo.update(ctx, id, updateData)) as Exam | null;
       if (!updated) {
         return reply
           .code(404)
@@ -340,20 +356,22 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const examRepo = createExamRepo(fastify.db);
       const questionRepo = createQuestionRepo(fastify.db);
 
-      const exam = examRepo.findById(ctx, id) as Exam | null;
+      const exam = (await examRepo.findById(ctx, id)) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
       }
 
-      const questions = exam.questionIds
-        .map((qid) => questionRepo.findById(ctx, qid))
-        .filter((q): q is NonNullable<typeof q> => q !== null) as Question[];
+      const questions = (
+        await Promise.all(
+          exam.questionIds.map((qid) => questionRepo.findById(ctx, qid)),
+        )
+      ).filter((q): q is NonNullable<typeof q> => q !== null) as Question[];
 
       try {
         const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
-        const updated = publishExam(examRepoAdapter, id, questions);
+        const updated = await publishExam(examRepoAdapter, id, questions);
         recordAudit(fastify, request, ctx, "exam.publish", "exam", id);
         return toExamResponse(updated);
       } catch (err) {
@@ -385,7 +403,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
 
-      const archived = archiveExam(createExamRepoAdapter(repo, ctx), id);
+      const archived = await archiveExam(createExamRepoAdapter(repo, ctx), id);
       recordAudit(fastify, request, ctx, "exam.archive", "exam", id);
       return toExamResponse(archived);
     },
@@ -404,7 +422,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
 
-      const exam = repo.findById(ctx, id) as Exam | null;
+      const exam = (await repo.findById(ctx, id)) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
@@ -420,7 +438,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      repo.delete(ctx, id);
+      await repo.delete(ctx, id);
       recordAudit(fastify, request, ctx, "exam.delete", "exam", id);
       return reply.code(204).send();
     },
@@ -438,7 +456,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
       const examRepo = createExamRepo(fastify.db);
-      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
@@ -446,32 +464,37 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollments = enrollmentRepo
-        .list(ctx)
-        .filter((e) => e.examId === examId);
+      const enrollments = (await enrollmentRepo.list(ctx)).filter(
+        (e) => e.examId === examId,
+      );
       const candidateRepo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
 
-      return enrollments.map((enrollment) => {
-        const candidate = candidateRepo.findById(ctx, enrollment.candidateId);
-        const user = candidate
-          ? userRepo.findById(ctx, candidate.userId)
-          : null;
-        return {
-          id: enrollment.id,
-          examId: enrollment.examId,
-          candidateId: enrollment.candidateId,
-          candidateDisplayName: user?.name ?? "-",
-          candidateIdentity:
-            Object.values(candidate?.fields ?? {})
-              .map(String)
-              .join(" / ") || undefined,
-          status: enrollment.status,
-          attemptCount: enrollment.attemptCount,
-          finalScore: enrollment.finalScore ?? null,
-          finalPassed: enrollment.finalPassed ?? null,
-        };
-      });
+      return Promise.all(
+        enrollments.map(async (enrollment) => {
+          const candidate = await candidateRepo.findById(
+            ctx,
+            enrollment.candidateId,
+          );
+          const user = candidate
+            ? await userRepo.findById(ctx, candidate.userId)
+            : null;
+          return {
+            id: enrollment.id,
+            examId: enrollment.examId,
+            candidateId: enrollment.candidateId,
+            candidateDisplayName: user?.name ?? "-",
+            candidateIdentity:
+              Object.values(candidate?.fields ?? {})
+                .map(String)
+                .join(" / ") || undefined,
+            status: enrollment.status,
+            attemptCount: enrollment.attemptCount,
+            finalScore: enrollment.finalScore ?? null,
+            finalPassed: enrollment.finalPassed ?? null,
+          };
+        }),
+      );
     },
   );
 
@@ -497,7 +520,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const examRepo = createExamRepo(fastify.db);
-      const exam = examRepo.findById(ctx, examId) as Exam | null;
+      const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
@@ -507,9 +530,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
-      const existing = enrollmentRepo
-        .list(ctx)
-        .filter((e) => e.examId === examId);
+      const existing = (await enrollmentRepo.list(ctx)).filter(
+        (e) => e.examId === examId,
+      );
       const existingIds = new Set(existing.map((e) => e.candidateId));
 
       let added = 0;
@@ -521,12 +544,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           skipped++;
           continue;
         }
-        const candidate = candidateRepo.findById(ctx, candidateId);
+        const candidate = await candidateRepo.findById(ctx, candidateId);
         if (!candidate) {
           skipped++;
           continue;
         }
-        const enrollment = enrollmentRepo.create(ctx, {
+        const enrollment = await enrollmentRepo.create(ctx, {
           examId,
           candidateId,
           status: "assigned",
@@ -545,7 +568,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           },
         );
         added++;
-        const user = userRepo.findById(ctx, candidate.userId);
+        const user = await userRepo.findById(ctx, candidate.userId);
         enrollments.push({
           id: enrollment.id,
           examId: enrollment.examId,
@@ -577,7 +600,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         enrollmentId: string;
       };
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollment = enrollmentRepo.findById(ctx, enrollmentId);
+      const enrollment = await enrollmentRepo.findById(ctx, enrollmentId);
       if (!enrollment || enrollment.examId !== examId) {
         return reply.code(404).send({
           error: {
@@ -595,7 +618,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      enrollmentRepo.delete(ctx, enrollmentId);
+      await enrollmentRepo.delete(ctx, enrollmentId);
       recordAudit(
         fastify,
         request,

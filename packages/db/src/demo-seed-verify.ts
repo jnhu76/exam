@@ -1,5 +1,6 @@
 import { eq, and } from "drizzle-orm";
-import type { SqliteDatabase } from "./types.js";
+import type { AnyDatabase, SqliteDatabase } from "./types.js";
+import { isSqlite } from "./types.js";
 import { sqliteSchema } from "./schema/sqlite.js";
 
 interface DemoIds {
@@ -14,7 +15,11 @@ interface DemoIds {
   attempts: Record<string, string>;
 }
 
-export function verifyDemoSeed(db: SqliteDatabase, ids: DemoIds): string[] {
+export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
+  if (!isSqlite(_db)) {
+    return ["verifyDemoSeed() only supports SQLite databases"];
+  }
+  const db: SqliteDatabase = _db;
   const errors: string[] = [];
   const now = Date.now();
 

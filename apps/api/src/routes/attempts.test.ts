@@ -257,7 +257,7 @@ describe("attempt routes", () => {
         sessionId: "test",
         targetOrganizationId: ctx.org.id,
       };
-      const beforeList = createAttemptRepo(ctx.db).findByExamAndCandidate(
+      const beforeList = await createAttemptRepo(ctx.db).findByExamAndCandidate(
         candidateCtx,
         resumeExamId,
         candidateProfileId,
@@ -278,7 +278,7 @@ describe("attempt routes", () => {
         canStartNewAttempt: false,
       });
 
-      const afterList = createAttemptRepo(ctx.db).findByExamAndCandidate(
+      const afterList = await createAttemptRepo(ctx.db).findByExamAndCandidate(
         candidateCtx,
         resumeExamId,
         candidateProfileId,
@@ -929,8 +929,8 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(200);
     });
 
-    it("marks stale attempts as disrupted during the background scan", () => {
-      const result = scanDatabaseForDisruptedAttempts(
+    it("marks stale attempts as disrupted during the background scan", async () => {
+      const result = await scanDatabaseForDisruptedAttempts(
         ctx.app,
         new Date(Date.now() + 61_000),
         60_000,
@@ -943,7 +943,7 @@ describe("attempt routes", () => {
         sessionId: "test",
         targetOrganizationId: ctx.org.id,
       };
-      const attempt = createAttemptRepo(ctx.db).findById(
+      const attempt = await createAttemptRepo(ctx.db).findById(
         candidateCtx,
         attemptId,
       );
@@ -1014,7 +1014,7 @@ describe("attempt routes", () => {
         sessionId: "test",
         targetOrganizationId: ctx.org.id,
       };
-      attemptRepo.update(candidateCtx, attemptId, {
+      await attemptRepo.update(candidateCtx, attemptId, {
         status: "disrupted",
       });
     });

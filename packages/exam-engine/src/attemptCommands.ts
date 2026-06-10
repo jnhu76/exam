@@ -19,47 +19,52 @@ import {
 } from "./attemptStateMachine.js";
 
 export interface AttemptRepository {
-  findById(attemptId: string): ExamAttempt | null;
-  findActiveByEnrollment(enrollmentId: string): ExamAttempt | null;
+  findById(attemptId: string): Promise<ExamAttempt | null> | ExamAttempt | null;
+  findActiveByEnrollment(
+    enrollmentId: string,
+  ): Promise<ExamAttempt | null> | ExamAttempt | null;
   findByEnrollmentAndAttemptNo(
     enrollmentId: string,
     attemptNo: number,
-  ): ExamAttempt | null;
+  ): Promise<ExamAttempt | null> | ExamAttempt | null;
   create(
     input: Omit<ExamAttempt, "id" | "createdAt" | "updatedAt"> & {
       id?: string;
     },
-  ): ExamAttempt;
-  update(attemptId: string, data: Partial<ExamAttempt>): ExamAttempt | null;
+  ): Promise<ExamAttempt> | ExamAttempt;
+  update(
+    attemptId: string,
+    data: Partial<ExamAttempt>,
+  ): Promise<ExamAttempt | null> | ExamAttempt | null;
 }
 
 export interface EnrollmentRepository {
   findByExamAndCandidate(
     examId: string,
     candidateId: string,
-  ): ExamEnrollment | null;
+  ): Promise<ExamEnrollment | null> | ExamEnrollment | null;
   create(
     input: Omit<ExamEnrollment, "id" | "createdAt" | "updatedAt"> & {
       id?: string;
     },
-  ): ExamEnrollment;
+  ): Promise<ExamEnrollment> | ExamEnrollment;
   update(
     enrollmentId: string,
     data: Partial<ExamEnrollment>,
-  ): ExamEnrollment | null;
+  ): Promise<ExamEnrollment | null> | ExamEnrollment | null;
 }
 
 const OPEN_STATUSES: Set<string> = new Set(["published", "open"]);
 
-export function startAttempt(
+export async function startAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   examId: string,
   candidateId: string,
   now: Date,
-): ExamAttempt {
-  const exam = examRepo.findById(examId);
+): Promise<ExamAttempt> {
+  const exam = await examRepo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
@@ -72,9 +77,12 @@ export function startAttempt(
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
-  let enrollment = enrollmentRepo.findByExamAndCandidate(examId, candidateId);
+  let enrollment = await enrollmentRepo.findByExamAndCandidate(
+    examId,
+    candidateId,
+  );
   if (!enrollment) {
-    enrollment = enrollmentRepo.create({
+    enrollment = await enrollmentRepo.create({
       organizationId: exam.organizationId,
       examId,
       candidateId,
@@ -83,7 +91,7 @@ export function startAttempt(
     });
   }
 
-  const activeAttempt = attemptRepo.findActiveByEnrollment(enrollment.id);
+  const activeAttempt = await attemptRepo.findActiveByEnrollment(enrollment.id);
   if (activeAttempt) {
     return activeAttempt;
   }
@@ -105,7 +113,7 @@ export function startAttempt(
   const attemptNo = enrollment.attemptCount + 1;
   const deadlineAt = calculateDeadlineAt(now, exam.durationMinutes);
 
-  const attempt = attemptRepo.create({
+  const attempt = await attemptRepo.create({
     organizationId: exam.organizationId,
     examId,
     enrollmentId: enrollment.id,
@@ -119,7 +127,7 @@ export function startAttempt(
     lastActivityAt: now,
   });
 
-  enrollmentRepo.update(enrollment.id, {
+  await enrollmentRepo.update(enrollment.id, {
     status: "started",
     attemptCount: attemptNo,
   });
@@ -127,12 +135,12 @@ export function startAttempt(
   return attempt;
 }
 
-export function submitAttempt(
+export async function submitAttempt(
   attemptRepo: AttemptRepository,
   attemptId: string,
   now: Date,
-): ExamAttempt {
-  const attempt = attemptRepo.findById(attemptId);
+): Promise<ExamAttempt> {
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
@@ -152,17 +160,17 @@ export function submitAttempt(
     );
   }
 
-  return attemptRepo.update(attemptId, {
+  return (await attemptRepo.update(attemptId, {
     status: "submitted",
     submittedAt: now,
-  })!;
+  }))!;
 }
 
-export function markDisrupted(
+export async function markDisrupted(
   attemptRepo: AttemptRepository,
   attemptId: string,
-): ExamAttempt {
-  const attempt = attemptRepo.findById(attemptId);
+): Promise<ExamAttempt> {
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
@@ -174,16 +182,16 @@ export function markDisrupted(
     );
   }
 
-  return attemptRepo.update(attemptId, { status: "disrupted" })!;
+  return (await attemptRepo.update(attemptId, { status: "disrupted" }))!;
 }
 
-export function restoreAttempt(
+export async function restoreAttempt(
   examRepo: ExamRepository,
   attemptRepo: AttemptRepository,
   attemptId: string,
   now: Date,
-): ExamAttempt {
-  const attempt = attemptRepo.findById(attemptId);
+): Promise<ExamAttempt> {
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
@@ -195,7 +203,7 @@ export function restoreAttempt(
     );
   }
 
-  const exam = examRepo.findById(attempt.examId);
+  const exam = await examRepo.findById(attempt.examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
   }
@@ -205,5 +213,5 @@ export function restoreAttempt(
     lastActivityAt: now,
   };
 
-  return attemptRepo.update(attemptId, updateData)!;
+  return (await attemptRepo.update(attemptId, updateData))!;
 }

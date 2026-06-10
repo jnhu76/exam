@@ -3,12 +3,12 @@ import { scanForDisruptedAttempts } from "./heartbeat.js";
 
 describe("heartbeat plugin", () => {
   describe("scanForDisruptedAttempts", () => {
-    it("marks attempts as disrupted when heartbeat timeout exceeded", () => {
+    it("marks attempts as disrupted when heartbeat timeout exceeded", async () => {
       const now = new Date("2025-01-01T11:00:00Z");
       const timeoutMs = 60_000;
       const markedIds: string[] = [];
 
-      const scanResult = scanForDisruptedAttempts(
+      const scanResult = await scanForDisruptedAttempts(
         [
           {
             id: "att-1",
@@ -28,7 +28,7 @@ describe("heartbeat plugin", () => {
         ],
         now,
         timeoutMs,
-        (id) => {
+        async (id) => {
           markedIds.push(id);
         },
       );
@@ -39,11 +39,11 @@ describe("heartbeat plugin", () => {
       expect(markedIds).not.toContain("att-2");
     });
 
-    it("returns 0 when no attempts need marking", () => {
+    it("returns 0 when no attempts need marking", async () => {
       const now = new Date("2025-01-01T11:00:00Z");
       const timeoutMs = 60_000;
 
-      const scanResult = scanForDisruptedAttempts(
+      const scanResult = await scanForDisruptedAttempts(
         [
           {
             id: "att-1",
@@ -53,18 +53,18 @@ describe("heartbeat plugin", () => {
         ],
         now,
         timeoutMs,
-        () => {},
+        async () => {},
       );
 
       expect(scanResult.markedCount).toBe(0);
     });
 
-    it("skips non in_progress attempts", () => {
+    it("skips non in_progress attempts", async () => {
       const now = new Date("2025-01-01T11:00:00Z");
       const timeoutMs = 60_000;
       const markedIds: string[] = [];
 
-      const scanResult = scanForDisruptedAttempts(
+      const scanResult = await scanForDisruptedAttempts(
         [
           {
             id: "att-1",
@@ -79,7 +79,7 @@ describe("heartbeat plugin", () => {
         ],
         now,
         timeoutMs,
-        (id) => {
+        async (id) => {
           markedIds.push(id);
         },
       );

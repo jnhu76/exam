@@ -16,8 +16,14 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       }
 
       const payload = verifyJWT(token);
-      const user = createUserRepo(fastify.db).findByOrganizationAndId(
-        payload.organizationId,
+      const user = await createUserRepo(fastify.db).findByOrganizationAndId(
+        {
+          actorId: payload.actorId,
+          organizationId: payload.organizationId,
+          role: payload.role,
+          permissions: [],
+          sessionId: "",
+        },
         payload.actorId,
       );
       if (!user?.isActive) {

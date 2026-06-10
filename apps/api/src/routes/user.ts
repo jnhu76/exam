@@ -23,7 +23,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
-      const { items, total } = repo.listPaginated(ctx, page, pageSize);
+      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
 
       return {
         items: items.map((u) => ({
@@ -57,7 +57,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const data = CreateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
       const passwordHash = await hashPassword(data.password);
-      const user = repo.create(ctx, {
+      const user = await repo.create(ctx, {
         username: data.username,
         passwordHash,
         name: data.name,
@@ -91,7 +91,11 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
-      const updated = repo.update(ctx, id, data as Record<string, unknown>);
+      const updated = await repo.update(
+        ctx,
+        id,
+        data as Record<string, unknown>,
+      );
       if (!updated) {
         return reply
           .code(404)
@@ -123,7 +127,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createUserRepo(fastify.db);
-      const deleted = repo.delete(ctx, id);
+      const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply
           .code(404)
