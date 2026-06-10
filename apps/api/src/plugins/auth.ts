@@ -12,14 +12,12 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       token = request.cookies["auth-token"];
       if (!token) {
         return reply.code(401).send({
-          message: "Unauthorized",
-          code: "UNAUTHORIZED",
+          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
         });
       }
     } catch {
       return reply.code(401).send({
-        message: "Unauthorized",
-        code: "UNAUTHORIZED",
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
       });
     }
 
@@ -28,8 +26,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       payload = verifyJWT(token);
     } catch {
       return reply.code(401).send({
-        message: "Unauthorized",
-        code: "UNAUTHORIZED",
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
       });
     }
 
@@ -53,15 +50,16 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         "Database error during authentication",
       );
       return reply.code(500).send({
-        message: "Internal server error",
-        code: "INTERNAL_SERVER_ERROR",
+        error: {
+          message: "Internal server error",
+          code: "INTERNAL_SERVER_ERROR",
+        },
       });
     }
 
     if (!user?.isActive) {
       return reply.code(401).send({
-        message: "Unauthorized",
-        code: "UNAUTHORIZED",
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
       });
     }
 
@@ -96,15 +94,13 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       const ctx = request.ctx;
       if (!ctx) {
         return reply.code(401).send({
-          message: "Unauthorized",
-          code: "UNAUTHORIZED",
+          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
         });
       }
 
       if (!roles.includes(ctx.role)) {
         return reply.code(403).send({
-          message: "Forbidden",
-          code: "FORBIDDEN",
+          error: { message: "Forbidden", code: "FORBIDDEN" },
         });
       }
     };
