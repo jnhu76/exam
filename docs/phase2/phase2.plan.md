@@ -2,17 +2,22 @@
 
 ## 0. Phase 2 Entry Criteria
 
-Phase 2 只能在 Phase 1.1 完成后启动。
+Phase 2 只能在 Phase 1.5 + Phase 1.6 完成后启动。
 
 进入 Phase 2 前必须满足：
 
 ```txt
-[ ] Phase 1.1 P0 bug 清零
-[ ] 发布考试、分配考生、Candidate 考试、交卷、批改、成绩导出闭环通过
-[ ] smoke test 通过
-[ ] 无 Fastify empty JSON body 500
-[ ] 考试状态机没有绕过 command function
-[ ] organizationId 隔离仍然有效
+[ ] Phase 1.5 完成（PostgreSQL-only database convergence）
+[ ] Phase 1.6 完成（Exam protocol hardening on PG-only foundation）
+[ ] Dev / test / CI / production 数据库基线统一为 PostgreSQL
+[ ] SQLite 不再作为 repository/API/transaction correctness backend
+[ ] PG migrations clean
+[ ] PG integration tests pass
+[ ] S03a save + submit concurrency test pass
+[ ] Deadline protocol test pass
+[ ] Phase1.3 P0 student submit regression pass
+[ ] pnpm test 通过
+[ ] pnpm test:pg 或等价命令通过
 ```
 
 ## 1. Phase 2 总目标

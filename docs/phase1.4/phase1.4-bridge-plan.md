@@ -161,6 +161,18 @@ Phase2 计划 4 个 Track，25 个 Job：
 - 实现 dark mode
 - 拆 `attempt_answers` 表
 
+## Deferred To Phase1.5
+
+| 功能 | Phase1.5 Job | 说明 |
+|------|-------------|------|
+| PostgreSQL-only database convergence | P1.5-A01-A05 | 统一 dev / test / CI / production 为 PostgreSQL，移除 SQLite 作为 correctness backend |
+
+## Deferred To Phase1.6
+
+| 功能 | Phase1.6 Job | 说明 |
+|------|-------------|------|
+| S03a 事务硬化 | P1.6-S03a-2-S03a-5 | saveAnswers + submitAttempt attempt-level serialization，PG concurrency tests |
+
 ## Deferred To Phase2
 
 | 功能 | Phase2 Track | 说明 |
