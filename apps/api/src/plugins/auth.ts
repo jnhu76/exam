@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { verifyJWT } from "@exam/auth/src/session.js";
-import type { Role } from "@exam/domain";
+import type { Role, Permission } from "@exam/domain";
+import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
@@ -69,13 +70,30 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       actorId: payload.actorId,
       organizationId: payload.organizationId,
       role: user.role,
-      permissions: [],
+      permissions: getPermissionsForRole(user.role as Role) as Permission[],
       sessionId: token,
     };
   };
 
   Object.assign(authenticateFn, { _isAuthenticate: true });
   fastify.decorate("authenticate", authenticateFn);
+
+  fastify.decorate("requirePermission", (permission: Permission) => {
+    return async (request, reply) => {
+      const ctx = request.ctx;
+      if (!ctx) {
+        return reply.code(401).send({
+          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
+        });
+      }
+
+      if (!ctx.permissions.includes(permission)) {
+        return reply.code(403).send({
+          error: { message: "Forbidden", code: "FORBIDDEN" },
+        });
+      }
+    };
+  });
 
   fastify.decorate("requireRole", (roles: Role[]) => {
     return async (request, reply) => {

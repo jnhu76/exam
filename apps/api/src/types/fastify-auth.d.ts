@@ -1,6 +1,6 @@
 import "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { RequestContext, Role } from "@exam/domain";
+import type { Permission, RequestContext, Role } from "@exam/domain";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -14,6 +14,9 @@ declare module "fastify" {
     ) => Promise<void>;
     requireRole: (
       roles: Role[],
+    ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    requirePermission: (
+      permission: Permission,
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
