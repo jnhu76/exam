@@ -41,10 +41,10 @@
 
 ### Acceptance Criteria
 
-- [ ] ADR 文档产出，明确选定方案及理由
-- [ ] 验证 repo 在 SQLite 和 PG 下的 list/getById/create 均通过
-- [ ] 方案明确回答：是否统一到 async API
-- [ ] 方案明确回答：现有 sync 调用点的迁移策略
+- [x] ADR 文档产出，明确选定方案及理由
+- [x] 验证 repo 在 SQLite 和 PG 下的 list/getById/create 均通过
+- [x] 方案明确回答：是否统一到 async API
+- [x] 方案明确回答：现有 sync 调用点的迁移策略
 
 ### Required Tests
 
@@ -113,10 +113,10 @@ Critical
 
 ### Acceptance Criteria
 
-- [ ] 三类 Context 类型定义完成，TypeScript strict mode 通过
-- [ ] `baseRepo.ts` 工厂方法签名使用新 Context 类型
-- [ ] 现有调用方编译通过（可暂时用 adapter）
-- [ ] `pnpm typecheck` 通过
+- [x] 三类 Context 类型定义完成，TypeScript strict mode 通过
+- [x] `baseRepo.ts` 工厂方法签名使用新 Context 类型
+- [x] 现有调用方编译通过（可暂时用 adapter）
+- [x] `pnpm typecheck` 通过
 
 ### Required Tests
 
@@ -183,11 +183,11 @@ Critical
 
 ### Acceptance Criteria
 
-- [ ] `grep -r "as unknown as" packages/db/src/` 返回空
-- [ ] `grep -r "as any" packages/db/src/repository/` 返回空
-- [ ] 所有 repo 方法第一个参数是 Context 类型
-- [ ] `pnpm typecheck` 通过
-- [ ] `pnpm test` 在 SQLite 下全部通过
+- [x] `grep -r "as unknown as" packages/db/src/` 返回空
+- [x] `grep -r "as any" packages/db/src/repository/` 返回空
+- [x] 所有 repo 方法第一个参数是 Context 类型
+- [x] `pnpm typecheck` 通过
+- [x] `pnpm test` 在 SQLite 下全部通过
 
 ### Required Tests
 
@@ -253,11 +253,11 @@ Critical
 
 ### Acceptance Criteria
 
-- [ ] `docker-compose up --build` 成功启动
-- [ ] 容器内 migration 自动执行成功
-- [ ] 未设 `JWT_SECRET` 时拒绝启动
-- [ ] 手动 smoke test：完整考试闭环
-- [ ] `docker-compose -f docker-compose.dev.yml up` 使用 SQLite 正常
+- [x] `docker-compose up --build` 成功启动
+- [x] 容器内 migration 自动执行成功
+- [x] 未设 `JWT_SECRET` 时拒绝启动
+- [x] 手动 smoke test：完整考试闭环
+- [x] `docker-compose -f docker-compose.dev.yml up` 使用 SQLite 正常
 
 ### Required Tests
 
@@ -312,10 +312,10 @@ CI 增加 PostgreSQL service container job。
 
 ### Acceptance Criteria
 
-- [ ] CI 有 SQLite + PG 两个独立 job
-- [ ] PG job 用 PostgreSQL 16 service container
-- [ ] 两个 job 都 pass 才允许 merge
-- [ ] `pnpm lint:arch` 作为独立 CI step
+- [x] CI 有 SQLite + PG 两个独立 job
+- [x] PG job 用 PostgreSQL 16 service container
+- [x] 两个 job 都 pass 才允许 merge
+- [x] `pnpm lint:arch` 作为独立 CI step
 
 ### Required Tests
 
@@ -356,9 +356,9 @@ Medium
 
 ### Acceptance Criteria
 
-- [ ] 明确每类数据归属（answers → DB sync, heartbeat → Redis, PDF → MQ, realtime → Redis pub/sub）
-- [ ] 明确 Phase2 引入顺序
-- [ ] 明确禁止答案保存走 MQ
+- [x] 明确每类数据归属（answers → DB sync, heartbeat → Redis, PDF → MQ, realtime → Redis pub/sub）
+- [x] 明确 Phase2 引入顺序
+- [x] 明确禁止答案保存走 MQ
 
 ### Required Docs / Screenshots
 

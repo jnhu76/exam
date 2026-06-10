@@ -13,7 +13,13 @@
 
 > 详细范围：`docs/phase1.4/phase1.4-bridge-plan.md`
 > 
-> A01/A02 已完成，PR 已合并至 master。
+> A00-A05 全部完成，PR 已合并至 master。
+
+### A00 — DB Reality Check Spike
+
+- [x] Create experimental `AnyDatabase` interface definition
+- [x] Validate courseRepo in SQLite and PG environments
+- [x] Produce ADR document with technical conclusions
 
 ### A01 — Database Context Types
 
@@ -31,14 +37,23 @@
 - [x] Address CodeRabbit review findings: `NotFoundError` semantics, stable pagination ordering, heartbeat resilience.
 - [x] Add regression tests for `attemptRepo.update()` and `enrollmentRepo.update()` null-update paths.
 
-### A03 — Heartbeat / Timer Migration
+### A03 — Docker + PostgreSQL Smoke Test
 
-- [ ] Migrate server-side timer and heartbeat system to async dual-dialect.
-- [ ] Ensure heartbeat scan handles single-attempt-per-candidate correctly with async repos.
+- [x] Fix Dockerfile COPY paths, pin pnpm version
+- [x] Require JWT_SECRET (no default value)
+- [x] Align PostgreSQL version to 16 in test compose
+- [x] Fix migration paths in entrypoint
 
-### A04 — Frontend API Client Adaptation
+### A04 — CI PostgreSQL Gate
 
-- [ ] Adapt frontend API client for async repository responses (no breaking changes expected at API contract level).
+- [x] Add PostgreSQL service container job to CI
+- [x] Add `pnpm lint:arch` as independent CI step
+- [x] Ensure both SQLite and PG jobs must pass for merge
+
+### A05 — Redis / MQ ADR
+
+- [x] Produce ADR document for Phase 2 technology selection
+- [x] Define data classification and implementation roadmap
 
 ## Job 8 Confirmed Execution Nodes
 
