@@ -19,7 +19,9 @@ function isSqlite(db: AnyDatabase): db is SqliteDatabase {
 }
 
 const PG_URL =
-  process.env.PG_TEST_URL ?? "postgresql://exam:exam@localhost:15432/exam";
+  process.env.DATABASE_URL ??
+  process.env.PG_TEST_URL ??
+  "postgresql://exam:exam@localhost:5432/exam";
 
 const ctx: RequestContext = {
   actorId: "actor-1",
