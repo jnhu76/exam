@@ -127,10 +127,13 @@ export async function startAttempt(
     lastActivityAt: now,
   });
 
-  await enrollmentRepo.update(enrollment.id, {
+  const updatedEnrollment = await enrollmentRepo.update(enrollment.id, {
     status: "started",
     attemptCount: attemptNo,
   });
+  if (!updatedEnrollment) {
+    throw new ValidationError("Enrollment not found after update");
+  }
 
   return attempt;
 }
@@ -160,10 +163,12 @@ export async function submitAttempt(
     );
   }
 
-  return (await attemptRepo.update(attemptId, {
+  const submitted = await attemptRepo.update(attemptId, {
     status: "submitted",
     submittedAt: now,
-  }))!;
+  });
+  if (!submitted) throw new ValidationError("Attempt not found after update");
+  return submitted;
 }
 
 export async function markDisrupted(
@@ -182,7 +187,11 @@ export async function markDisrupted(
     );
   }
 
-  return (await attemptRepo.update(attemptId, { status: "disrupted" }))!;
+  const disrupted = await attemptRepo.update(attemptId, {
+    status: "disrupted",
+  });
+  if (!disrupted) throw new ValidationError("Attempt not found after update");
+  return disrupted;
 }
 
 export async function restoreAttempt(
@@ -213,5 +222,7 @@ export async function restoreAttempt(
     lastActivityAt: now,
   };
 
-  return (await attemptRepo.update(attemptId, updateData))!;
+  const restored = await attemptRepo.update(attemptId, updateData);
+  if (!restored) throw new ValidationError("Attempt not found after update");
+  return restored;
 }

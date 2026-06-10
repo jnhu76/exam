@@ -108,10 +108,12 @@ export async function publishExam(
     throw new ValidationError("Passing score cannot exceed total score");
   }
 
-  return (await repo.update(examId, {
+  const updated = await repo.update(examId, {
     status: "published",
     questionSnapshot,
-  }))!;
+  });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }
 
 export async function openExam(
@@ -125,7 +127,9 @@ export async function openExam(
 
   assertTransition(exam.status, "open");
 
-  return (await repo.update(examId, { status: "open" }))!;
+  const updated = await repo.update(examId, { status: "open" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }
 
 export async function closeExam(
@@ -139,7 +143,9 @@ export async function closeExam(
 
   assertTransition(exam.status, "closed");
 
-  return (await repo.update(examId, { status: "closed" }))!;
+  const updated = await repo.update(examId, { status: "closed" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }
 
 export async function archiveExam(
@@ -153,5 +159,7 @@ export async function archiveExam(
 
   assertTransition(exam.status, "archived");
 
-  return (await repo.update(examId, { status: "archived" }))!;
+  const updated = await repo.update(examId, { status: "archived" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
 }

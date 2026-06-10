@@ -283,6 +283,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             await candidateRepo.update(ctx, existing.id, { fields });
             await userRepo.update(ctx, existing.userId, { name });
             existingUsernames.add(username);
+            userIdMap.set(username, existing.userId);
             updated++;
             continue;
           }

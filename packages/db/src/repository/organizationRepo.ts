@@ -76,8 +76,10 @@ export function createOrganizationRepo(db: AnyDatabase) {
           db.delete(sqliteOrgs).where(eq(sqliteOrgs.id, id)).run().changes > 0
         );
       }
-      await (db as PostgresDatabase).delete(pgOrgs).where(eq(pgOrgs.id, id));
-      return true;
+      const result = await (db as PostgresDatabase)
+        .delete(pgOrgs)
+        .where(eq(pgOrgs.id, id));
+      return (result.count ?? 0) > 0;
     },
     async resolveBrandingTenant(_ctx: PublicBrandingContext, slug?: string) {
       if (isSqlite(db)) {

@@ -97,10 +97,10 @@ export function createSettingsRepo(db: AnyDatabase) {
             .run().changes > 0
         );
       }
-      await (db as PostgresDatabase)
+      const result = await (db as PostgresDatabase)
         .delete(pgSettings)
         .where(eq(pgSettings.organizationId, resolveOrganizationId(ctx)));
-      return true;
+      return (result.count ?? 0) > 0;
     },
     async getPublicBranding(ctx: PublicBrandingContext): Promise<BrandingView> {
       if (!ctx.organizationId) {

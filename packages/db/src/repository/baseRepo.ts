@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
+import { NotFoundError, ValidationError } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
@@ -133,7 +133,7 @@ export function createAsyncTenantCrudRepo(
 
       const created = await findById(ctx, id);
       if (!created) {
-        throw new Error("Failed to read back created entity");
+        throw new NotFoundError("Failed to read back created entity");
       }
       return created;
     },
@@ -251,7 +251,7 @@ export function createAsyncTenantCrudRepo(
           .run();
         return result.changes > 0;
       }
-      await (db as PostgresDatabase)
+      const result = await (db as PostgresDatabase)
         .delete(tables.pg)
         .where(
           and(
@@ -259,7 +259,7 @@ export function createAsyncTenantCrudRepo(
             eq(tables.pg.id, entityId),
           ),
         );
-      return true;
+      return (result.count ?? 0) > 0;
     },
   };
 }
