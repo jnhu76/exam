@@ -6,7 +6,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -267,15 +267,9 @@ export function ScoreListPage() {
                       </TableCell>
                       <TableCell className="font-bold">{item.score}</TableCell>
                       <TableCell>
-                        <Badge
-                          className={
-                            item.passed
-                              ? "bg-success/10 text-success hover:bg-success/20"
-                              : "bg-destructive/10 text-destructive hover:bg-destructive/20"
-                          }
-                        >
-                          {item.passed ? "及格" : "不及格"}
-                        </Badge>
+                        <StatusBadge
+                          status={item.passed ? "passed" : "not_passed"}
+                        />
                       </TableCell>
                       <TableCell>
                         {item.submittedAt

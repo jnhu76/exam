@@ -6,6 +6,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -137,12 +138,10 @@ export function AttemptDetailPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">状态</p>
-              <Badge
-                variant={result.passed ? "default" : "destructive"}
-                className="text-sm mt-1"
-              >
-                {result.passed ? "及格" : "不及格"}
-              </Badge>
+              <StatusBadge
+                status={result.passed ? "passed" : "not_passed"}
+                className="mt-1"
+              />
             </div>
           </div>
         </CardContent>

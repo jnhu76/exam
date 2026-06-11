@@ -1,20 +1,26 @@
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function ErrorState({
   message,
   onRetry,
   extraAction,
+  className,
 }: {
   message: string;
   onRetry?: () => void;
   extraAction?: ReactNode;
+  className?: string;
 }) {
   return (
     <div
       role="alert"
-      className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-destructive/30 p-8 text-center"
+      className={cn(
+        "flex flex-col items-center gap-3 rounded-lg border border-dashed border-destructive/30 p-8 text-center",
+        className,
+      )}
     >
       <CircleAlert className="size-8 text-destructive" aria-hidden="true" />
       <p className="text-sm text-muted-foreground">{message}</p>

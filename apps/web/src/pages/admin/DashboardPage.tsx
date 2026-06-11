@@ -9,7 +9,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Table,
   TableBody,
@@ -28,15 +28,6 @@ import {
   PlusCircle,
   Upload,
 } from "lucide-react";
-import { STATUS_LABELS, STATUS_VARIANT } from "@/lib/constants";
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <Badge variant={STATUS_VARIANT[status] ?? "outline"}>
-      {STATUS_LABELS[status] ?? status}
-    </Badge>
-  );
-}
 
 export function DashboardPage() {
   const navigate = useNavigate();

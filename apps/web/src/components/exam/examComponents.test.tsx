@@ -99,6 +99,20 @@ describe("TrueFalseInput", () => {
     await userEvent.click(screen.getByRole("radio", { name: "正确" }));
     expect(onChange).toHaveBeenCalledWith(true);
   });
+
+  it("highlights selected option", () => {
+    const onChange = vi.fn();
+    render(<TrueFalseInput value={true} onChange={onChange} />);
+    const correctRadio = screen.getByRole("radio", { name: "正确" });
+    expect(correctRadio).toBeChecked();
+  });
+
+  it("highlights false option when selected", () => {
+    const onChange = vi.fn();
+    render(<TrueFalseInput value={false} onChange={onChange} />);
+    const wrongRadio = screen.getByRole("radio", { name: "错误" });
+    expect(wrongRadio).toBeChecked();
+  });
 });
 
 describe("ExamTimer", () => {

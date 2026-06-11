@@ -7,16 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getStatusMeta } from "@/lib/statusMeta";
 import { Activity, Database, HardDrive, RefreshCw } from "lucide-react";
 
 type HealthStatus = SystemHealthResponse["status"];
-
-const statusConfig: Record<HealthStatus, { label: string; className: string }> =
-  {
-    ok: { label: "正常", className: "text-success" },
-    degraded: { label: "警告", className: "text-warning" },
-    critical: { label: "严重", className: "text-destructive" },
-  };
 
 const REFRESH_INTERVAL_MS = 10_000;
 
@@ -59,7 +53,8 @@ export function SystemHealthPage() {
   }, [loadHealth]);
 
   const overallStatus: HealthStatus = data?.status ?? "ok";
-  const statusView = statusConfig[overallStatus];
+  const statusView = getStatusMeta(overallStatus);
+  const StatusIcon = statusView.icon;
 
   if (isLoading) {
     return <SystemHealthSkeleton />;
@@ -82,9 +77,12 @@ export function SystemHealthPage() {
           <span
             className={cn(
               "flex items-center gap-1 text-sm font-medium",
-              statusView.className,
+              statusView.tone === "success" && "text-success",
+              statusView.tone === "warning" && "text-warning",
+              statusView.tone === "destructive" && "text-destructive",
             )}
           >
+            <StatusIcon className="size-3.5" aria-hidden="true" />
             {statusView.label}
           </span>
           <Button
@@ -141,7 +139,8 @@ function MetricCard({
   status: HealthStatus;
   icon: React.ReactNode;
 }) {
-  const config = statusConfig[status];
+  const meta = getStatusMeta(status);
+  const MetricIcon = meta.icon;
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
@@ -158,10 +157,13 @@ function MetricCard({
         <p
           className={cn(
             "mt-1 flex items-center gap-1 text-xs font-medium",
-            config.className,
+            meta.tone === "success" && "text-success",
+            meta.tone === "warning" && "text-warning",
+            meta.tone === "destructive" && "text-destructive",
           )}
         >
-          {config.label}
+          <MetricIcon className="size-3" aria-hidden="true" />
+          {meta.label}
         </p>
       </CardContent>
     </Card>

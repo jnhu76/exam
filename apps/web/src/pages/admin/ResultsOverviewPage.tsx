@@ -6,8 +6,8 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -24,7 +24,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
-import { STATUS_LABELS } from "@/lib/constants";
 
 interface ExamRow {
   id: string;
@@ -130,17 +129,7 @@ export function ResultsOverviewPage() {
                           {exam.title}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={
-                              exam.status === "open"
-                                ? "default"
-                                : exam.status === "published"
-                                  ? "default"
-                                  : "secondary"
-                            }
-                          >
-                            {STATUS_LABELS[exam.status] ?? exam.status}
-                          </Badge>
+                          <StatusBadge status={exam.status} />
                         </TableCell>
                         <TableCell>
                           {exam.openAt

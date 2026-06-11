@@ -1,18 +1,27 @@
+import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export function EmptyState({
-  icon,
+  icon = <Inbox className="size-8" />,
   title,
   description,
   action,
+  className,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   title: string;
   description: string;
   action?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
+    <div
+      className={cn(
+        "flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center",
+        className,
+      )}
+    >
       <div className="text-muted-foreground" aria-hidden="true">
         {icon}
       </div>

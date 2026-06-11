@@ -94,6 +94,11 @@
 | LoadingState | `LoadingState.tsx` | 加载状态 |
 | ErrorBoundary | `ErrorBoundary.tsx` | 错误边界 |
 | ConfirmDialog | `ConfirmDialog.tsx` | 确认对话框 |
+| StatusBadge | `StatusBadge.tsx` | 状态徽章 |
+| PageSection | `PageSection.tsx` | 页面区块 |
+| FormSection | `FormSection.tsx` | 表单区块 |
+| DataToolbar | `DataToolbar.tsx` | 数据工具栏 |
+| DataTableShell | `DataTableShell.tsx` | 数据表格壳 |
 | StatsCard | `StatsCard.tsx` | 统计卡片 |
 | ConnectionIndicator | `ConnectionIndicator.tsx` | 连接指示器 |
 | FieldError | `FieldError.tsx` | 字段错误 |
@@ -101,19 +106,7 @@
 | FileUpload | `FileUpload.tsx` | 文件上传 |
 | ImportWizard | `ImportWizard.tsx` | 导入向导 |
 
-### 3.2 推荐组件
-
-以下组件**应该**添加到 `components/shared/`：
-
-| 组件 | 用途 |
-|------|------|
-| StatusBadge | 状态徽章 |
-| PageSection | 页面区块 |
-| FormSection | 表单区块 |
-| DataToolbar | 数据工具栏 |
-| DataTableShell | 数据表格壳 |
-
-### 3.3 使用规则
+### 3.2 使用规则
 
 - 组件必须可跨页面复用
 - 组件必须使用项目定义的 design tokens
