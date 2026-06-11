@@ -613,21 +613,21 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           ctx.actorId,
         );
         if (!candidateProfile) {
-          throw new NotFoundError("Candidate profile not found");
+          throw new NotFoundError("候选人资料不存在");
         }
         const lockedAttempt = await txRepo.findByIdForUpdate(ctx, attemptId);
         if (
           !lockedAttempt ||
           lockedAttempt.candidateId !== candidateProfile.id
         ) {
-          throw new NotFoundError("Attempt not found");
+          throw new NotFoundError("尝试不存在");
         }
         if (
           !lockedAttempt.questionSnapshot.some(
             (question) => question.originalQuestionId === questionId,
           )
         ) {
-          throw new ValidationError("Question is not part of this attempt");
+          throw new ValidationError("问题不在此尝试中");
         }
 
         const storedAnswers = normalizeAnswers(
