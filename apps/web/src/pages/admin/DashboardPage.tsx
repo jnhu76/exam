@@ -26,25 +26,14 @@ import {
   CalendarCheck,
   Activity,
 } from "lucide-react";
-import { STATUS_LABELS } from "@/lib/constants";
+import { STATUS_LABELS, STATUS_VARIANT } from "@/lib/constants";
 
 function StatusBadge({ status }: { status: string }) {
-  const label = STATUS_LABELS[status] ?? status;
-  if (status === "open")
-    return (
-      <Badge className="bg-success/10 text-success hover:bg-success/20">
-        {label}
-      </Badge>
-    );
-  if (status === "published")
-    return (
-      <Badge className="bg-primary/10 text-primary hover:bg-primary/20">
-        {label}
-      </Badge>
-    );
-  if (status === "closed") return <Badge variant="secondary">{label}</Badge>;
-  if (status === "archived") return <Badge variant="outline">{label}</Badge>;
-  return <Badge variant="outline">{label}</Badge>;
+  return (
+    <Badge variant={STATUS_VARIANT[status] ?? "outline"}>
+      {STATUS_LABELS[status] ?? status}
+    </Badge>
+  );
 }
 
 export function DashboardPage() {

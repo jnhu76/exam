@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrandProvider, useBranding } from "./BrandProvider";
 
 function BrandingDisplay() {
@@ -13,15 +13,19 @@ function BrandingDisplay() {
 }
 
 describe("BrandProvider", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("provides fallback branding when no value is given", () => {
     render(
       <BrandProvider>
         <BrandingDisplay />
       </BrandProvider>,
     );
-    expect(screen.getByTestId("name").textContent).toBe("Assessment Platform");
+    expect(screen.getByTestId("name").textContent).toBe("考试平台");
     expect(screen.getByTestId("subtitle").textContent).toBe(
-      "Internal Assessment & Access Control",
+      "内部考核与准入控制",
     );
   });
 
@@ -61,8 +65,6 @@ describe("BrandProvider", () => {
       expect(screen.getByTestId("name").textContent).toBe("Remote");
     });
     expect(screen.getByTestId("subtitle").textContent).toBe("Remote Sub");
-
-    vi.unstubAllGlobals();
   });
 
   it("falls back to provided value on fetch failure", async () => {
@@ -81,7 +83,5 @@ describe("BrandProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("name").textContent).toBe("Fallback");
     });
-
-    vi.unstubAllGlobals();
   });
 });

@@ -1,3 +1,39 @@
+export type ExamStatus = "draft" | "published" | "open" | "closed" | "archived";
+
+export type QuestionType =
+  | "single_choice"
+  | "multiple_choice"
+  | "fill_blank"
+  | "true_false";
+
+export type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
+
+export function isExamStatus(key: string): key is ExamStatus {
+  return key in STATUS_LABELS;
+}
+
+export function isQuestionType(key: string): key is QuestionType {
+  return key in TYPE_LABELS;
+}
+
+export function getStatusLabel(key: string): string | undefined {
+  return STATUS_LABELS[key];
+}
+
+export function getStatusVariant(key: string): BadgeVariant | undefined {
+  return STATUS_VARIANT[key];
+}
+
+export function getTypeLabel(key: string): string | undefined {
+  return TYPE_LABELS[key];
+}
+
+export function getTypeVariant(
+  key: string,
+): "default" | "secondary" | "outline" | undefined {
+  return TYPE_VARIANT[key];
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   draft: "草稿",
   published: "已发布",

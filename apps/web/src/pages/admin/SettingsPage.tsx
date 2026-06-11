@@ -41,7 +41,7 @@ export function SettingsPage() {
 
   async function handleSave(data: SettingsData) {
     const filtered = Object.fromEntries(
-      Object.entries(data).filter(([, v]) => v !== undefined && v !== ""),
+      Object.entries(data).map(([k, v]) => [k, v === "" ? null : v]),
     );
     setIsSaving(true);
     try {
@@ -72,7 +72,11 @@ export function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <PlatformSettingsForm onSave={handleSave} isLoading={isSaving} />
+          <PlatformSettingsForm
+            initialValues={settings ?? undefined}
+            onSave={handleSave}
+            isLoading={isSaving}
+          />
         </CardContent>
       </Card>
       <Card>

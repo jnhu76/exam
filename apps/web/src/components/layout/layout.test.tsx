@@ -49,7 +49,7 @@ function renderWithProviders(ui: React.ReactElement, route = "/") {
 describe("branding", () => {
   it("provides generic fallback branding", () => {
     renderWithProviders(<BrandingProbe />);
-    expect(screen.getByText("Assessment Platform")).toBeInTheDocument();
+    expect(screen.getByText("考试平台")).toBeInTheDocument();
   });
 
   it("exposes product subtitle in branding", () => {
@@ -59,9 +59,7 @@ describe("branding", () => {
       </Routes>,
       "/login",
     );
-    expect(
-      screen.getByText("Internal Assessment & Access Control"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("内部考核与准入控制")).toBeInTheDocument();
   });
 });
 

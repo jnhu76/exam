@@ -48,10 +48,10 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("平台与机构设置")).toBeInTheDocument();
   });
 
-  it("renders product name field", async () => {
+  it("renders product name field with loaded value", async () => {
     renderPage();
     const input = await screen.findByLabelText("产品标题");
-    expect(input).toBeInTheDocument();
+    expect(input).toHaveValue("Test Platform");
   });
 
   it("renders save button", async () => {

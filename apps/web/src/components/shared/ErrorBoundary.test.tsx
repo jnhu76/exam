@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ErrorBoundary } from "./ErrorBoundary";
 
@@ -60,8 +59,16 @@ describe("ErrorBoundary", () => {
     vi.restoreAllMocks();
   });
 
-  it("invokes handleReset which calls window.location.reload", () => {
+  it("handleReset calls window.location.reload", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
+    const reloadSpy = vi.fn();
+    vi.stubGlobal(
+      "location",
+      Object.defineProperty({}, "reload", {
+        value: reloadSpy,
+        writable: true,
+      }),
+    );
 
     render(
       <ErrorBoundary>
@@ -70,8 +77,9 @@ describe("ErrorBoundary", () => {
     );
 
     const button = screen.getByRole("button", { name: /重新加载/ });
-    expect(button).toBeInTheDocument();
+    button.click();
 
+    expect(reloadSpy).toHaveBeenCalled();
     vi.restoreAllMocks();
   });
 });

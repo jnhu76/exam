@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,16 +34,24 @@ export interface SettingsFormValues {
 }
 
 export function PlatformSettingsForm({
+  initialValues,
   onSave,
   isLoading,
 }: {
+  initialValues?: SettingsFormValues;
   onSave: (data: SettingsFormValues) => void;
   isLoading?: boolean;
 }) {
-  const { register, handleSubmit, setValue, watch } =
+  const { register, handleSubmit, setValue, watch, reset } =
     useForm<SettingsFormValues>({
       defaultValues: {},
     });
+
+  useEffect(() => {
+    if (initialValues) {
+      reset(initialValues);
+    }
+  }, [initialValues, reset]);
 
   const timezoneValue = watch("timezone");
 
