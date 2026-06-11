@@ -107,7 +107,7 @@ Phase1.7 不做 full：
 ### P1.7-S05-lite: CSV Injection + Security Headers + CSRF Origin Check
 
 **做（baseline）**:
-- [ ] CSV injection escape（`=` `+` `-` `@` `\t` `\r` 前缀 `' `）
+- [ ] CSV injection escape（`=` `+` `-` `@` `\t` `\r` 前缀 `'`）
 - [ ] security headers（CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy）
 - [ ] production CSP 不含 `unsafe-eval`
 - [ ] HSTS 只在 secure/HTTPS 配置下启用

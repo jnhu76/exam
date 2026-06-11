@@ -27,6 +27,7 @@ Phase2 可以安全地假设以下 Phase1.7 baseline 已完成：
 
 - [ ] tenant guard
 - [ ] RBAC
+- [ ] 考试协议（S03a + S03b）
 - [ ] audit baseline（login/logout/audit-logs API）
 - [ ] CSV / security header baseline
 - [ ] account / session baseline（JWT secret fallback removed, cookie secure, dummy verify）
@@ -34,12 +35,16 @@ Phase2 可以安全地假设以下 Phase1.7 baseline 已完成：
 
 ### Phase2 不负责提前实现 Phase1.7 full 内容
 
-以下安全内容仍属于 Phase2 或 Phase1.8，不是 Phase2 Entry Criteria：
+以下安全内容仍属于 Phase2 或 Phase1.8，不是 Phase2 Entry Criteria（与 `Phase2 Security Scope` 章节完整列表对齐）：
 
-- [ ] sessionVersion full revocation（logout 后旧 JWT 服务端失效、password change 后旧 token 全部失效）
+- [ ] sessionVersion full revocation
+- [ ] logout 后旧 JWT 服务端失效
+- [ ] password change 后旧 token 全部失效
+- [ ] force reset 后旧 token 全部失效
 - [ ] 5 次失败锁定 15 分钟
 - [ ] mustChangePassword
 - [ ] 首次登录强制改密
+- [ ] 最后 SuperAdmin 不被永久锁死
 - [ ] Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
 
 ## 1. Phase 2 总目标
@@ -169,6 +174,7 @@ Phase2 或 Phase1.8 负责的 full 安全内容（Phase1.7 baseline 之上的加
 [ ] mustChangePassword
 [ ] 首次登录强制改密
 [ ] 最后 SuperAdmin 不被永久锁死
+[ ] Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
 ```
 
 ---
