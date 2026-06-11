@@ -2,23 +2,50 @@
 
 ## 0. Phase 2 Entry Criteria
 
-Phase 2 只能在 Phase 1.5 + Phase 1.6 完成后启动。
+Phase 2 只能在 Phase 1.4 + Phase 1.5 + Phase 1.6 + Phase 1.7 完成后启动。
 
 进入 Phase 2 前必须满足：
 
 ```txt
-[ ] Phase 1.5 完成（PostgreSQL-only database convergence）
-[ ] Phase 1.6 完成（Exam protocol hardening on PG-only foundation）
-[ ] Dev / test / CI / production 数据库基线统一为 PostgreSQL
-[ ] SQLite 不再作为 repository/API/transaction correctness backend
+[ ] Phase1.4 UI Jobs U01-U04 complete
+[ ] Phase1.5 PostgreSQL-only convergence complete
+[ ] Phase1.6 PostgreSQL correctness hardening complete
+[ ] Phase1.7 security baseline complete
+[ ] S03b submit flush complete
+[ ] S01 tenant isolation complete
+[ ] S02 RBAC matrix complete
+[ ] S03a server-side exam protocol complete
+[ ] PG seed stable
 [ ] PG migrations clean
 [ ] PG integration tests pass
-[ ] S03a save + submit concurrency test pass
-[ ] Deadline protocol test pass
-[ ] Phase1.3 P0 student submit regression pass
-[ ] pnpm test 通过
-[ ] pnpm test:pg 或等价命令通过
+[ ] pnpm verify pass
 ```
+
+### Phase2 依赖 Phase1.7 的 baseline
+
+Phase2 可以安全地假设以下 Phase1.7 baseline 已完成：
+
+- [ ] tenant guard
+- [ ] RBAC
+- [ ] 考试协议（S03a + S03b）
+- [ ] audit baseline（login/logout/audit-logs API）
+- [ ] CSV / security header baseline
+- [ ] account / session baseline（JWT secret fallback removed, cookie secure, dummy verify）
+- [ ] password baseline（最小长度 8，config 驱动）
+
+### Phase2 不负责提前实现 Phase1.7 full 内容
+
+以下安全内容仍属于 Phase2 或 Phase1.8，不是 Phase2 Entry Criteria（与 `Phase2 Security Scope` 章节完整列表对齐）：
+
+- [ ] sessionVersion full revocation
+- [ ] logout 后旧 JWT 服务端失效
+- [ ] password change 后旧 token 全部失效
+- [ ] force reset 后旧 token 全部失效
+- [ ] 5 次失败锁定 15 分钟
+- [ ] mustChangePassword
+- [ ] 首次登录强制改密
+- [ ] 最后 SuperAdmin 不被永久锁死
+- [ ] Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
 
 ## 1. Phase 2 总目标
 
@@ -120,7 +147,39 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 | P2D-J5 | AuditLog Export         | CSV / JSON                 |
 | P2D-J6 | CAS/OAuth Spike         | 统一身份认证调研与最小接入 |
 
-## 6. Deferred
+## 6. Phase2 Security Scope
+
+Phase2 自己负责的安全内容（不依赖 Phase1.7 提前完成）：
+
+```txt
+[ ] Proctor operation audit
+[ ] force submit permission
+[ ] extend time permission
+[ ] mark misconduct permission
+[ ] WebSocket auth
+[ ] WebSocket organization scope
+[ ] service token / API key security
+[ ] export access control
+[ ] integration audit
+```
+
+Phase2 或 Phase1.8 负责的 full 安全内容（Phase1.7 baseline 之上的加固）：
+
+```txt
+[ ] sessionVersion full revocation
+[ ] logout 后旧 JWT 服务端失效
+[ ] password change 后旧 token 全部失效
+[ ] force reset 后旧 token 全部失效
+[ ] 5 次失败锁定 15 分钟
+[ ] mustChangePassword
+[ ] 首次登录强制改密
+[ ] 最后 SuperAdmin 不被永久锁死
+[ ] Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
+```
+
+---
+
+## 8. Deferred
 
 以下暂缓到 Phase 3 或独立 Spike：
 
@@ -134,7 +193,7 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 - 移动端适配
 ```
 
-## 7. Phase 2 推荐执行顺序
+## 9. Phase 2 推荐执行顺序
 
 ```txt
 Phase 2A-J1 → J2 → J3 → J4 → J5 → J6
@@ -146,7 +205,7 @@ Phase 2C-J1 → J2 → J3/J4/J5 → J6/J7
 Phase 2D-J1 → J2 → J3/J4/J5 → J6
 ```
 
-## 8. Phase 2 Code Quality Gate
+## 10. Phase 2 Code Quality Gate
 
 每个 Phase 2 job 必须检查：
 

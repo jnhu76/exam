@@ -10,7 +10,7 @@ Phase1.4-S03a 被拆分为三部分：
 
 1. **Phase1.4**: Deadline policy / error code / initial deadline check / basic submit idempotency
 2. **Phase1.5**: PostgreSQL-only database convergence / remove SQLite as correctness backend / PG integration test foundation
-3. **Phase1.6**: Complete S03a transaction hardening / saveAnswers + submitAttempt attempt-level serialization / PG concurrency tests
+3. **Phase1.6**: PostgreSQL correctness hardening / saveAnswers + submitAttempt attempt-level serialization / PG concurrency tests
 
 ## 拆分原因
 
@@ -28,7 +28,7 @@ Phase1.4-S03a 实现过程中暴露了一个更底层的问题：
 因此决定：
 
 1. 在 Phase2 前增加 **Phase1.5: PostgreSQL-only Database Convergence**
-2. 将 S03a 中依赖 PG 事务/并发的部分延后到 **Phase1.6: Exam Protocol Hardening on PG-only Foundation**
+2. 将 S03a 中依赖 PG 事务/并发的部分延后到 **Phase1.6: PostgreSQL Correctness Hardening**
 3. SQLite 不再作为数据库行为正确性的测试后端
 4. Pure unit tests 使用 fake repository / in-memory object，而不是 SQLite
 5. PostgreSQL 作为 dev / test / CI / production 的唯一数据库运行时

@@ -5,6 +5,7 @@
 **前置**: Phase1–1.3 基础考试闭环已完成，Phase1.3 安全计划未执行
 **定位**: Phase1 收口层，不是 Phase2 提前开工
 **核心原则**: 只修基础，不堆功能；只做样板，不全站重写
+**重要状态（2026-06-11）**: Phase1.4 当前状态为 partial closeout。S01/S02/S03a 和 U01-U04 仍归属 Phase1.4。S03b-S09 已迁移到 Phase1.7。数据库收敛工作（原 A00-A04）已迁移到 Phase1.5/1.6。
 
 ---
 
@@ -110,11 +111,18 @@ Phase2 计划 4 个 Track，25 个 Job：
 
 ## What Must Be Hardened Before Phase2
 
-1. **PostgreSQL 必须作为一等公民可用** — Phase2 的 WebSocket、PDF worker、外部集成都需要 PG
-2. **多租户隔离必须真实生效** — Phase2 的 proctor、导出、集成全部涉及组织边界
-3. **RBAC 必须真实生效** — Phase2 新增 Proctor 角色，必须在现有 RBAC 框架上扩展
-4. **考试协议必须服务端闭环** — Phase2 的自动提交、延时、强制交卷都依赖 deadline 强制执行
-5. **CI 必须覆盖 PG** — Phase2 的每个 PR 都必须验证 PG 不回归
+Phase2 启动前必须完成：
+
+1. **Phase1.4 UI Jobs U01-U04 complete** — 建立产品基准
+2. **Phase1.5 PostgreSQL-only convergence complete** — PG 作为唯一数据库运行时
+3. **Phase1.6 PostgreSQL correctness hardening complete** — 事务和并发验证
+4. **Phase1.7 security baseline complete** — S03b + S04-lite + S05-lite + S06-lite + S07-lite + S08-lite + S09-lite
+5. **S01 多租户隔离真实生效** — Phase2 的 proctor、导出、集成全部涉及组织边界
+6. **S02 RBAC 必须真实生效** — Phase2 新增 Proctor 角色，必须在现有 RBAC 框架上扩展
+7. **S03a 考试协议服务端闭环** — deadline 强制执行、事务保护
+8. **CI 必须覆盖 PG** — Phase2 的每个 PR 都必须验证 PG 不回归
+
+Phase1.4 不再负责完成所有安全 Job。S03b-S09 已迁移到 Phase1.7。
 
 ---
 
@@ -165,13 +173,34 @@ Phase2 计划 4 个 Track，25 个 Job：
 
 | 功能 | Phase1.5 Job | 说明 |
 |------|-------------|------|
-| PostgreSQL-only database convergence | P1.5-A01-A05 | 统一 dev / test / CI / production 为 PostgreSQL，移除 SQLite 作为 correctness backend |
+| PostgreSQL-only database convergence | P1.5-J1-J7 | 统一 dev / test / CI / production 为 PostgreSQL，移除 SQLite 作为 correctness backend |
+| PG Test Harness | P1.5-J2 | 建立 PG 测试基础设施 |
+| Migration Convergence | P1.5-J3 | migration 收敛到 PG-only |
+| Seed Convergence | P1.5-J4 | 稳定 PG seed |
+| Repository Dialect Removal | P1.5-J5 | 清理 repo 双方言分支 |
+| CI PG Switch | P1.5-J6 | CI 切换到 PG |
 
 ## Deferred To Phase1.6
 
 | 功能 | Phase1.6 Job | 说明 |
 |------|-------------|------|
-| S03a 事务硬化 | P1.6-S03a-2-S03a-5 | saveAnswers + submitAttempt attempt-level serialization，PG concurrency tests |
+| Transaction Correctness | P1.6-J1 | saveAnswers + submitAttempt PG transaction boundary |
+| Concurrency Tests | P1.6-J2 | PG 并发 save + submit 测试 |
+| S03a PG Verification | P1.6-J3 | 在 PG-only 基础上验证 S03a |
+| Migration/Seed Regression | P1.6-J4 | migration reset + seed reset 稳定性 |
+| CI Gate | P1.6-J5 | CI 中 PG integration gate 稳定 |
+
+## Deferred To Phase1.7
+
+| 功能 | Phase1.7 Job | 说明 |
+|------|-------------|------|
+| S03b Client Submit Flush Protocol | P1.7-S03b | 考试协议前端半部分，必须在 Phase2 前完成 |
+| S04 Auth Session Security | P1.7-S04-lite | baseline：JWT secret, cookie secure, dummy verify |
+| S05 CSV Injection + Security Headers | P1.7-S05-lite | baseline：CSV escape, CSP, HSTS, Origin |
+| S06 Audit Log Completion | P1.7-S06-lite | baseline：login/logout/audit-logs API |
+| S07 Password Policy + Account Security | P1.7-S07-lite | baseline：min length 8, config policy |
+| S08 Red-Team Security Test Suite | P1.7-S08-lite | baseline suite，不要求 full S04/S07 |
+| S09 Phase1.3 Security Validation | P1.7-S09-lite | Phase1.7 baseline validation |
 
 ## Deferred To Phase2
 
@@ -271,20 +300,29 @@ Phase2 计划 4 个 Track，25 个 Job：
 | P1.4-A04 | CI PostgreSQL Gate | Medium | 1d | A02 | Yes | 尽早加入 CI |
 | P1.4-A05 | Redis / MQ ADR | Low | 0.5d | - | Yes | 纯文档 |
 
-## Security Jobs
+## Security Jobs (Phase1.4)
 
 | Job ID | Name | Risk | Duration | Depends On | Parallel | Notes |
 |--------|------|------|----------|------------|----------|-------|
-| P1.4-S01 | Multi-Tenant Isolation (tenant guard) | Critical | 2d | A02 | No | 实现真实 tenant plugin |
-| P1.4-S02 | RBAC Permission Matrix | High | 2d | A02, S01 | No | 激活权限，不含 Proctor 路由 |
-| P1.4-S03a | Server-side Exam Protocol | High | 1.5d | A02 | No | Deadline 强制 409 + 事务保护 |
-| P1.4-S03b | Client Submit Flush Protocol | High | 1d | S03a | No | 前端 flush + 确认 UI |
-| P1.4-S04 | Auth Session Security | Medium | 1.5d | A02 | Yes | sessionVersion + timing-safe |
-| P1.4-S05 | CSV Injection + Security Headers | Medium | 1d | - | Yes | CSV + CSP + HSTS + Origin |
-| P1.4-S06 | Audit Log Completion | Medium | 1d | S01, S02 | Yes | 补齐事件 + 查询 API |
-| P1.4-S07 | Password Policy + Account Security | Medium | 1d | A02 | Yes | 长度 + 锁定 + 首次改密 |
-| P1.4-S08 | Red-Team Security Test Suite | High | 2d | S01-S07 | No | 覆盖 Phase1.3 全部场景 |
-| P1.4-S09 | Phase1.3 Security Validation | High | 1d | S08 | No | 最终验收 |
+| P1.4-S01 | Multi-Tenant Isolation (tenant guard) | Critical | 2d | - | No | 实现真实 tenant plugin |
+| P1.4-S02 | RBAC Permission Matrix | High | 2d | S01 | No | 激活权限，不含 Proctor 路由 |
+| P1.4-S03a | Server-side Exam Protocol | High | 1.5d | - | No | Deadline 强制 409 + 基础事务保护 |
+
+## Security Jobs (Deferred to Phase1.7)
+
+以下安全 Job 已迁移到 Phase1.7，在 `docs/phase1.7/security-completion-plan.md` 中重新编排为 baseline/lite 版本：
+
+| Job ID | Name | 新归属 | 说明 |
+|--------|------|--------|------|
+| P1.4-S03b | Client Submit Flush Protocol | **Phase1.7-S03b** | 前端 flush + 确认 UI |
+| P1.4-S04 | Auth Session Security | **Phase1.7-S04-lite** | baseline：JWT secret, cookie secure, dummy verify |
+| P1.4-S05 | CSV Injection + Security Headers | **Phase1.7-S05-lite** | baseline：CSV escape, CSP, HSTS, Origin |
+| P1.4-S06 | Audit Log Completion | **Phase1.7-S06-lite** | baseline：login/logout/audit-logs API |
+| P1.4-S07 | Password Policy + Account Security | **Phase1.7-S07-lite** | baseline：min length 8, config policy |
+| P1.4-S08 | Red-Team Security Test Suite | **Phase1.7-S08-lite** | baseline suite，不要求 full S04/S07 |
+| P1.4-S09 | Phase1.3 Security Validation | **Phase1.7-S09-lite** | Phase1.7 baseline validation |
+
+> 原始 Job Cards 的历史背景保留在本文档下方和 `03-security-jobs.md` 中，仅供追溯。
 
 ## UI Jobs
 
@@ -295,21 +333,34 @@ Phase2 计划 4 个 Track，25 个 Job：
 | P1.4-U03 | Exam Detail Sample | Medium | 1.5d | U01 | Yes | 样板页 + screenshot review |
 | P1.4-U04 | Take Exam Sample | Medium | 1.5d | U01 | Yes | 样板页，不含 submit flush |
 
+## Architecture Jobs (Deferred to Phase1.5/1.6)
+
+原 A00-A05 已迁移到 Phase1.5/1.6，详见 `docs/phase1.5/postgresql-only-convergence.md` 和 `docs/phase1.6/postgresql-correctness-hardening.md`。
+
 ## Validation Jobs
 
 | Job ID | Name | Risk | Duration | Depends On | Parallel | Notes |
 |--------|------|------|----------|------------|----------|-------|
-| P1.4-V01 | Phase2 Entry Gate Check | High | 0.5d | All | No | 最终门禁 |
+| P1.4-V01 | Phase2 Entry Gate Check | High | 0.5d | All | No | 最终门禁（移至 Phase1.7 S09-lite 后执行） |
 
-**Total: 20 Jobs, estimated 12-14 working days on critical path**
+**Total Phase1.4 Jobs: 8 (S01-S03a + U01-U04 + V01)**
+**Phase1.4 critical path: S01(2) → S02(2) = 4 days**
+**全阶段 critical path 见 `05-dependency-graph.md`**
 
 ---
 
 # Job Cards — Architecture
 
+> **重要更新（2026-06-11）**：A00-A05 已迁移到 Phase1.5/1.6。
+> 当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 和 `docs/phase1.6/postgresql-correctness-hardening.md` 为准。
+> 本文档保留历史背景，仅供追溯。
+
 ---
 
 ## P1.4-A00: DB Reality Check Spike
+
+> **状态：已迁移到 Phase1.5 (P1.5-J1)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -381,6 +432,9 @@ Critical — 方案选错会导致 A01-A02 全部返工
 ---
 
 ## P1.4-A01: DB Context / Repository Contract Design
+
+> **状态：已迁移到 Phase1.5 (P1.5-J5)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -458,6 +512,9 @@ Critical
 ---
 
 ## P1.4-A02: Repository 双方言迁移
+
+> **状态：已迁移到 Phase1.5 (P1.5-J5)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -545,6 +602,9 @@ Critical
 
 ## P1.4-A03: Docker + PostgreSQL Smoke Test
 
+> **状态：已迁移到 Phase1.5 (P1.5-J2/J6)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+
 ### Purpose
 
 让 `docker-compose up --build` 使用 PostgreSQL 完成完整考试闭环。
@@ -622,6 +682,9 @@ High
 
 ## P1.4-A04: CI PostgreSQL Gate
 
+> **状态：已迁移到 Phase1.5 (P1.5-J6)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+
 ### Purpose
 
 CI 增加 PostgreSQL service container job，确保每次 PR 都验证 PG 路径。
@@ -652,6 +715,9 @@ Medium
 ---
 
 ## P1.4-A05: Redis / MQ ADR
+
+> **状态：已迁移到 Phase1.5 (P1.5-J7)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -967,6 +1033,9 @@ High
 
 ## P1.4-S03b: Client Submit Flush Protocol
 
+> **状态：已迁移到 Phase1.7 (P1.7-S03b)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+
 ### Purpose
 
 确保考生交卷前所有 pending answers 已发送到服务器并获得确认。
@@ -1044,6 +1113,10 @@ High
 ---
 
 ## P1.4-S04: Auth Session Security
+
+> **状态：已迁移到 Phase1.7 (P1.7-S04-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中拆分为 baseline/lite 版本，full 版本 deferred 到 Phase2/1.8。
 
 ### Purpose
 
@@ -1142,6 +1215,9 @@ Medium
 
 ## P1.4-S05: CSV Injection + Security Headers + CSRF Origin Check
 
+> **状态：已迁移到 Phase1.7 (P1.7-S05-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+
 ### Purpose
 
 修复 CSV 公式注入、补齐安全 Header、增加 CSRF Origin/Referer 校验。
@@ -1233,6 +1309,10 @@ Medium
 
 ## P1.4-S06: Audit Log Completion
 
+> **状态：已迁移到 Phase1.7 (P1.7-S06-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中完成 baseline，Proctor operation audit 留到 Phase2。
+
 ### Purpose
 
 补齐缺失的审计事件，增加审计日志查询 API。
@@ -1276,6 +1356,10 @@ Medium
 ---
 
 ## P1.4-S07: Password Policy + Account Security
+
+> **状态：已迁移到 Phase1.7 (P1.7-S07-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中拆分为 baseline/lite 版本（最小长度 8 + config 策略），full 版本 deferred 到 Phase2/1.8。
 
 ### Purpose
 
@@ -1321,6 +1405,10 @@ Medium
 
 ## P1.4-S08: Red-Team Security Test Suite
 
+> **状态：已迁移到 Phase1.7 (P1.7-S08-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中改为 red-team baseline suite，不要求覆盖 full S04/S07。
+
 ### Purpose
 
 创建自动化安全测试套件，覆盖 Phase1.3 安全清单的全部场景。
@@ -1359,6 +1447,10 @@ High
 ---
 
 ## P1.4-S09: Phase1.3 Security Validation
+
+> **状态：已迁移到 Phase1.7 (P1.7-S09-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中改为 Phase1.7 security baseline validation，不是 Phase1.3 全量复测。
 
 ### Purpose
 
@@ -1590,35 +1682,38 @@ High
 
 # Dependency Graph
 
+> **更新（2026-06-11）**：A00-A05 已迁移到 Phase1.5，S03b-S09 已迁移到 Phase1.7。
+> 详见 `docs/phase1.4/05-dependency-graph.md` 获取完整跨阶段依赖图。
+
 ```
-Wave 0 (Spike + Contract)
-  A00 (0.5d) → A01 (1d) → A02 (2d) → A03 (1d)
-                                         → A04 (1d, parallel with security)
-  A05 (0.5d, any time)
+Phase1.4
+  S01 (2d) → S02 (2d)
+  S03a (1.5d)
+  U01 (1d) → U02 (1.5d) ── parallel
+           → U03 (1.5d) ── parallel
+           → U04 (1.5d) ── parallel
 
-Wave 1 (Security boundary, serial after A02)
-  A02 → S01 (2d) → S02 (2d)
-  A02 → S03a (1.5d) → S03b (1d)
+Phase1.5 (after Phase1.4)
+  J1 (0.5d) → J5 (2d) → J6 (1d)
+  J2 (1d) ── parallel
+  J3 (1d) ── parallel
+  J4 (1d) ── parallel
 
-Wave 2 (Security hardening, parallel)
-  A02 → S04 (1.5d) — parallel
-  S01 + S02 → S06 (1d) — parallel
-              S05 (1d) — parallel (after basic API plugin stable)
-              S07 (1d) — parallel
+Phase1.6 (after Phase1.5)
+  J1 (2d) → J2 (2d)
 
-Wave 3 (UI, parallel with Wave 1-2)
-  U01 (1d) → U02 (1.5d) — parallel
-           → U03 (1.5d) — parallel
-           → U04 (1.5d) — parallel
-  Note: U04 does visual baseline only. S03b owns submit flush.
-
-Wave 4 (Validation, last)
-  S01-S07 + A04 → S08 (2d) → S09 (1d) → V01 (0.5d)
+Phase1.7 (after Phase1.6)
+  S03b (1d) ── parallel
+  S04-lite (1d) ── parallel
+  S05-lite (1d) ── parallel
+  S06-lite (1d) ── parallel
+  S07-lite (1d) ── parallel
+  S08-lite (2d) → S09-lite (1d)
 ```
 
-**Critical path**: A00(0.5) → A01(1) → A02(2) → S01(2) → S02(2) → S08(2) → S09(1) → V01(0.5) = **11 days**
+**Critical path**: S01(2) → S02(2) → Phase1.5(J5:2) → Phase1.6(J2:2) → Phase1.7(S08:2→S09:1) = **~11 days**
 
-With parallel execution: **~12-14 working days total**.
+With parallel execution: **~15-16 working days total** (含 Phase1.4 UI 并行)
 
 ---
 
@@ -1626,40 +1721,40 @@ With parallel execution: **~12-14 working days total**.
 
 Phase2 can start only if:
 
-- [ ] `docker-compose up --build` 使用 PostgreSQL，完成完整考试闭环
-- [ ] `pnpm --filter api dev` 使用 SQLite，完成完整考试闭环
-- [ ] SQLite test suite: `pnpm test` 全部通过
-- [ ] PostgreSQL CI job: passes (A04 completed)
-- [ ] `grep -r "as unknown as" packages/db/src/` 返回空
-- [ ] `grep -r "as any" packages/db/src/repository/` 返回空
-- [ ] Tenant isolation: A 组织无法读写 B 组织数据
-- [ ] Tenant isolation: SuperAdmin 不带 targetOrg → 400
-- [ ] RBAC: Candidate 调用管理 API → 403
-- [ ] RBAC: Teacher 调用 SuperAdmin API → 403
-- [ ] RBAC: Proctor 调用管理 API → 403
-- [ ] Exam protocol: 超时提交 → 409 ATTEMPT_DEADLINE_EXCEEDED
-- [ ] Exam protocol: 答案保存在 PG 下有事务保护
-- [ ] Exam protocol: 前端 submit flush 正常工作
-- [ ] Auth: 未设 JWT_SECRET → 拒绝启动
-- [ ] Auth: Logout 后旧 JWT 失效（sessionVersion）
-- [ ] Auth: Timing-safe 登录（dummy verify）
-- [ ] CSV: `=CMD(...)` → `'=CMD(...)`
-- [ ] Security headers: CSP, HSTS (HTTPS), X-Frame-Options, Permissions-Policy
-- [ ] CSRF: Origin/Referer 校验生效（production；dev/test bypass allowed）
-- [ ] CSP: production 不含 `unsafe-eval`
-- [ ] Audit: login.success/failure/logout/password.change 有审计
-- [ ] Audit: SuperAdmin 跨组织操作有审计
-- [ ] Audit: 审计日志查询 API 可用
-- [ ] Password: 最小长度 8
-- [ ] Password: 5 次失败锁定
-- [ ] Password: 首次登录强制改密
-- [ ] Phase1.3 安全清单 P0/P1/P2 全部通过
-- [ ] Admin Dashboard screenshot accepted
-- [ ] Exam Detail screenshot accepted
-- [ ] Take Exam screenshot accepted
-- [ ] Redis / MQ ADR accepted
-- [ ] No Phase2 functionality was implemented early
-- [ ] `pnpm verify` passes
+- [ ] Phase1.4 UI Jobs U01-U04 complete
+- [ ] Phase1.5 PostgreSQL-only convergence complete
+- [ ] Phase1.6 PostgreSQL correctness hardening complete
+- [ ] Phase1.7 security baseline complete
+- [ ] S03b submit flush complete
+- [ ] S01 tenant isolation complete
+- [ ] S02 RBAC matrix complete
+- [ ] S03a server-side exam protocol complete
+- [ ] PG seed stable
+- [ ] PG migrations clean
+- [ ] PG integration tests pass
+- [ ] `pnpm verify` pass
+
+### Phase2 依赖 Phase1.7 的 baseline
+
+Phase2 可以安全地假设以下 Phase1.7 baseline 已完成：
+
+- [ ] tenant guard
+- [ ] RBAC
+- [ ] audit baseline（login/logout/audit-logs API）
+- [ ] CSV / security header baseline
+- [ ] account / session baseline（JWT secret fallback removed, cookie secure, dummy verify）
+- [ ] password baseline（最小长度 8，config 驱动）
+
+### Phase2 Entry Gate 不再要求以下内容
+
+以下 full 安全内容不属于 Phase2 Entry Criteria，将在 Phase2 或 Phase1.8 中完成：
+
+- [ ] ~~sessionVersion full revocation（logout 后旧 JWT 服务端失效）~~ → Phase2/1.8
+- [ ] ~~password change 后旧 token 全部失效~~ → Phase2/1.8
+- [ ] ~~5 次失败锁定 15 分钟~~ → Phase2/1.8
+- [ ] ~~mustChangePassword~~ → Phase2/1.8
+- [ ] ~~首次登录强制改密~~ → Phase2/1.8
+- [ ] ~~Phase1.3 P0/P1/P2 全量通过~~ → 改为 Phase1.7 S09-lite baseline validation
 
 ---
 
@@ -1726,37 +1821,35 @@ Phase2 can start only if:
 
 # Minimum Viable Phase1.4 (P0 Set)
 
-如果时间不够，以下是最小必须集：
+**重要更新（2026-06-11）**：Phase1.4 当前状态为 partial closeout。原 A00-A05 已迁移到 Phase1.5，原 S03b-S09 已迁移到 Phase1.7。
 
-**P0 Immediate（架构关键路径）**：
+Phase1.4 的最小必须集：
 
-| Job | 原因 |
-|-----|------|
-| A00 → A01 → A02 | PostgreSQL 不可用阻塞一切 |
-| A03 | 生产部署不可用 |
-
-**P0 Before Phase2（安全 + 验证）**：
+**P0 Phase1.4 必须完成**：
 
 | Job | 原因 |
 |-----|------|
-| A04 (CI PG Gate) | Phase2 Entry Gate 要求 CI PG job 通过；早期可手动跑 PG 测试，但 CI gate 必须在 Phase2 前完成 |
 | S01 | 多租户隔离是空壳 |
 | S02 | 权限系统不生效 |
-| S03a | 考试协议不闭环（服务端） |
-| S03b | 可能丢最后一笔答案（前端） |
-| S04 | JWT secret 可预测 + logout 不失效 |
-| S08 | 没有安全测试无法确认安全 |
-| V01 | 最终门禁 |
+| S03a | 考试协议服务端不闭环 |
+| U01 | 设计系统基准，支撑后续 UI |
+| U02 | Dashboard 样板页 |
+| U03 | Exam Detail 样板页 |
+| U04 | Take Exam 样板页 |
 
-**可以延后到 Phase2 之前的**：
+**P0 最小集预估**: ~6 个工作日
 
-| Job | 原因 |
-|-----|------|
-| A05 (Redis ADR) | 纯文档 |
-| S05 (CSV + Headers) | 重要但不阻塞 Phase2 |
-| S06 (Audit) | Phase2 也有审计扩展 |
-| S07 (Password Policy) | 重要但不阻塞 Phase2 |
-| U01-U04 (UI) | 不阻塞功能但影响产品体验 |
+**不再属于 Phase1.4 的 Job**：
 
-**P0 最小集预估**: ~9 个工作日
+| Job | 新归属 | 原因 |
+|-----|--------|------|
+| A00-A05 | Phase1.5 | PostgreSQL-only convergence 独立成阶段 |
+| S03b | Phase1.7 | 考试协议前端半部分，在 PG-only 后完成 |
+| S04-S09 | Phase1.7 | 安全 Job 重新编排为 baseline/lite，避免破坏 seed/登录态 |
+
+详见：
+- `docs/phase1.5/postgresql-only-convergence.md`
+- `docs/phase1.6/postgresql-correctness-hardening.md`
+- `docs/phase1.7/security-completion-plan.md`
+- `docs/phase1.4/phase1.4-closeout-and-deferral.md`
 
