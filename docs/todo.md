@@ -210,6 +210,10 @@
 
 - [ ] Phase1.7 安全基线验证
 
+### V01 — Phase2 Entry Gate Check
+
+- [ ] Phase1.7 全部完成后执行最终门禁，验证 Phase 2 Entry Criteria 全部满足
+
 ## Phase 2 — Exam Operation / Proctor Panel / Exam Flexibility / Integration Export
 
 > 详细范围：`docs/phase2/phase2.plan.md`
