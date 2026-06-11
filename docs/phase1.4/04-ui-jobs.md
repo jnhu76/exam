@@ -34,6 +34,8 @@
 - 不引入新 UI 框架
 - 不做全站重写
 - 不引入图表库 / 动画库
+- **不允许修改业务 API 调用语义**
+- **不允许重写页面数据流**
 
 ### Allowed Changes
 
@@ -110,6 +112,7 @@ Medium
 - 不新增后端筛选 API
 - 不引入图表库
 - 不引入动画库
+- **依赖稳定 seed 数据，但 seed 收敛归 Phase1.5/1.6**
 
 ### Allowed Changes
 
@@ -174,6 +177,9 @@ Medium
 
 - 不实现完整审计日志 UI
 - 不增加新 API 调用
+- **操作日志 Tab 可以 placeholder**
+- **不得调用尚未实现的 audit API**
+- **完整 AuditLog UI 不属于 U03**
 
 ### Allowed Changes
 
@@ -235,6 +241,11 @@ Medium
 ### Explicit Non-goals
 
 - **不实现 submit flush**（S03b owns this）
+- **不修改 answer save protocol**
+- **不修改 submit API protocol**
+- **不修改 attempt status state machine**
+- **不新增 deadline 行为**
+- **S03b 才负责 submit flush**
 - 不引入动画库
 - 不做全屏模式
 - 不做 Proctor 行为

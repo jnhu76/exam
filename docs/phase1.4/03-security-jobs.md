@@ -5,6 +5,21 @@
 
 ---
 
+## 重要状态更新（2026-06-11）
+
+经最新决策，Phase1.4 的当前状态为 **partial closeout**：
+
+- **S01 / S02 / S03a 仍归属 Phase1.4**（已完成或基础完成）
+- **S03b / S04 / S05 / S06 / S07 / S08 / S09 已迁移到 Phase1.7**
+
+这些 Job 的历史背景、Scope、Acceptance Criteria 等详细内容在本文档中**保留**，仅供追溯。当前执行以 `docs/phase1.7/security-completion-plan.md` 为准，其中 S04-S09 被重新编排为 baseline/lite 版本。
+
+Phase1.7 定位：**Security Completion / Account & Browser Security Baseline**
+
+---
+
+---
+
 ## P1.4-S01: Multi-Tenant Isolation / Tenant Guard
 
 ### Purpose
@@ -298,6 +313,9 @@ High
 
 ## P1.4-S03b: Client Submit Flush Protocol
 
+> **状态：已迁移到 Phase1.7 (P1.7-S03b)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+
 ### Purpose
 
 确保考生交卷前所有 pending answers 已发送到服务器并获得确认。
@@ -367,6 +385,10 @@ High
 ---
 
 ## P1.4-S04: Auth Session Security
+
+> **状态：已迁移到 Phase1.7 (P1.7-S04-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中拆分为 baseline/lite 版本，full 版本（sessionVersion full revocation 等）deferred 到 Phase2/1.8。
 
 ### Purpose
 
@@ -453,6 +475,9 @@ Medium
 
 ## P1.4-S05: CSV Injection + Security Headers + CSRF Origin Check
 
+> **状态：已迁移到 Phase1.7 (P1.7-S05-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+
 ### Purpose
 
 CSV 注入修复 + 安全 Header + Origin/Referer CSRF 校验。
@@ -531,6 +556,10 @@ Medium
 
 ## P1.4-S06: Audit Log Completion
 
+> **状态：已迁移到 Phase1.7 (P1.7-S06-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中完成 baseline（login/logout/audit-logs API），Proctor operation audit 留到 Phase2。
+
 ### Purpose
 
 补齐审计事件，增加查询 API。
@@ -596,6 +625,10 @@ Medium
 
 ## P1.4-S07: Password Policy + Account Security
 
+> **状态：已迁移到 Phase1.7 (P1.7-S07-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中拆分为 baseline/lite 版本（最小长度 8 + config 策略），full 版本（锁定、mustChangePassword 等）deferred 到 Phase2/1.8。
+
 ### Purpose
 
 密码强度 + 账户锁定 + 首次改密。
@@ -660,6 +693,10 @@ Medium
 
 ## P1.4-S08: Red-Team Security Test Suite
 
+> **状态：已迁移到 Phase1.7 (P1.7-S08-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中改为 red-team baseline suite，不要求覆盖 full S04/S07。
+
 ### Purpose
 
 自动化安全测试覆盖 Phase1.3 全部场景。
@@ -719,6 +756,10 @@ High
 ---
 
 ## P1.4-S09: Phase1.3 Security Validation
+
+> **状态：已迁移到 Phase1.7 (P1.7-S09-lite)**
+> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> Phase1.7 中改为 Phase1.7 security baseline validation，不是 Phase1.3 全量复测。
 
 ### Purpose
 
