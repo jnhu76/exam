@@ -187,10 +187,29 @@ High
 
 - `submitAttempt()` 不拒绝超时提交（违反 SPEC 3.4）
 - 答案保存无事务保护（PG 并发丢数据）
+- `ExamTimeExpiredError` error code `EXAM_TIME_EXPIRED` 语义不准确，需改为 `ATTEMPT_DEADLINE_EXCEEDED`
+
+### Database Policy (PG-only Transaction)
+
+S03a 的事务保护以 PostgreSQL 为权威后端：
+
+- **生产**：PG `SELECT ... FOR UPDATE` 行级锁 + `db.transaction()` 保证并发安全
+- **事务路由**：`saveAnswers`、`submitAttempt` 的 read→validate→write 在单个事务内完成
+- **双方言策略**：
+  - PG：`executeInTransaction()` 调用 `db.transaction()`，`findByIdForUpdate()` 使用 `.for("update")`
+  - SQLite：`executeInTransaction()` 直接调 `fn(db)` 不包事务（单线程无需），`findByIdForUpdate()` 做 regular select
+- **现有测试全绿**：SQLite 下事务保护透传，所有 route-level tests 正常通过
+- **Phase 1.5/1.6 负责**：建立 PG test helper，验证并发行为，最终移除 SQLite
 
 ### Scope
 
-1. **Deadline 固定策略**（不模糊）：
+1. **Error code 重命名**：
+
+   - `ExamTimeExpiredError` → `AttemptDeadlineExceededError`
+   - Error code `EXAM_TIME_EXPIRED` → `ATTEMPT_DEADLINE_EXCEEDED`
+   - 保留 re-export alias `ExamTimeExpiredError` 供外部兼容
+
+2. **Deadline 固定策略**（不模糊）：
 
 ```
 now <= deadlineAt → 允许 submit
@@ -203,9 +222,16 @@ now > deadlineAt → 409 ATTEMPT_DEADLINE_EXCEEDED
 
 Phase2 才做：自动提交、超时标记、监考员延时、override、late policy
 
-2. **答案保存事务保护**：SQLite `db.transaction()` / PG `db.transaction()`
+3. **答案保存事务保护**：
+   - `saveAnswers` route：整个 read→validate→compute→write 包在 `executeInTransaction()` 内
+   - 使用 `attemptRepo.findByIdForUpdate()` (PG: `SELECT ... FOR UPDATE`) 锁定 attempt 行
+   - 防止并发 save + submit 导致数据损坏
 
-3. **submit 幂等确认**：graded 状态下 save 被拒绝（已实现）
+4. **submit 事务保护**：
+   - `submitAttempt` route：deadline check + status update 包在 `executeInTransaction()` 内
+   - `gradeAttempt` 在事务外执行（不持有锁做业务计算）
+
+5. **submit 幂等确认**：graded 状态下 save 被拒绝（已实现）
 
 ### Explicit Non-goals
 
@@ -215,33 +241,42 @@ Phase2 才做：自动提交、超时标记、监考员延时、override、late 
 - 不拆 attempt_answers 表
 - 不实现多标签页会话锁
 - 不做前端 submit flush（S03b）
+- 不建立 PG test helper（Phase 1.5 负责）
+- 不修改 answer save versioning / idempotency 逻辑
 
 ### Allowed Changes
 
+- `packages/domain/src/errors.ts`（重命名 + re-export alias）
 - `packages/exam-engine/src/attemptCommands.ts`
 - `apps/api/src/routes/attempts.ts`
 - `packages/contracts/src/attempt.ts`
-- `packages/domain/src/errors.ts`
+- `packages/db/src/types.ts`（`executeInTransaction()` helper）
+- `packages/db/src/repository/attemptRepo.ts`（`findByIdForUpdate()`）
+- `apps/api/src/routes/*.test.ts`（skip PG-only tests）
 
 ### Forbidden Changes
 
 - 禁止 deadline 策略留模糊空间（不接受 "409 或标记"）
 - 禁止把 deadline 检查放到前端
 - 禁止修改 answer save versioning / idempotency 逻辑
+- 禁止为 SQLite 写 transaction workaround（以 PG 行为为准）
 
 ### Acceptance Criteria
 
 - [ ] `now > deadlineAt` 时 submit → 409 ATTEMPT_DEADLINE_EXCEEDED
 - [ ] `now <= deadlineAt` 时 submit 正常
-- [ ] 答案保存在 SQLite/PG 下有事务保护
-- [ ] 并发 save + submit 不导致数据损坏
-- [ ] `pnpm test` 全部通过
+- [ ] Error code 为 `ATTEMPT_DEADLINE_EXCEEDED`（非 `EXAM_TIME_EXPIRED`）
+- [ ] `saveAnswers` route 使用 `executeInTransaction()` + `findByIdForUpdate()` 事务保护
+- [ ] `submitAttempt` route deadline check + status update 在事务内
+- [ ] `executeInTransaction()`：PG 包 `db.transaction()`，SQLite 透传 `fn(db)`
+- [ ] `findByIdForUpdate()`：PG 用 `FOR UPDATE`，SQLite 做 regular select
+- [ ] `pnpm verify` 通过（SQLite + PG 双方言全绿）
 
 ### Required Tests
 
-- `attemptCommands.test.ts`：超时提交 → 409
-- `attempts.test.ts`：PG 并发事务测试
+- `attemptCommands.test.ts`：超时提交 → 409 ATTEMPT_DEADLINE_EXCEEDED
 - Phase1.3 P0 考生提交场景复测
+- Phase 1.5/1.6 新增 PG 并发事务测试
 
 ### Required Docs / Screenshots
 

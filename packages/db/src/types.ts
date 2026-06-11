@@ -43,3 +43,15 @@ export function isTenantContext(ctx: RepoContext): ctx is TenantContext {
 export function isPlatformContext(ctx: RepoContext): ctx is PlatformContext {
   return !("organizationId" in ctx) && "actorId" in ctx;
 }
+
+export async function executeInTransaction<T>(
+  db: AnyDatabase,
+  fn: (tx: AnyDatabase) => Promise<T>,
+): Promise<T> {
+  if (isSqlite(db)) {
+    return fn(db);
+  }
+  return (db as PostgresDatabase).transaction(async (tx) => {
+    return fn(tx as unknown as AnyDatabase);
+  });
+}

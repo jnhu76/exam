@@ -22,6 +22,7 @@ import type { AnswerRecord } from "@exam/domain";
 import { NotFoundError, ValidationError } from "@exam/domain";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import {
@@ -605,67 +606,88 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const attemptRepo = createAttemptRepo(fastify.db);
-      const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
-      if (
-        !attempt.questionSnapshot.some(
-          (question) => question.originalQuestionId === questionId,
-        )
-      ) {
-        throw new ValidationError("Question is not part of this attempt");
-      }
-
-      const storedAnswers = normalizeAnswers(attempt.answers as StoredAnswer[]);
-      const clientSeqMap = buildClientSeqMap(storedAnswers);
-
-      const result = processSaveAnswer(
-        {
-          attemptStatus: attempt.status,
-          answers: attempt.answers,
-          clientSeqMap,
-        },
-        {
-          attemptId,
-          questionId,
-          answer: body.answer,
-          clientSeq: body.clientSeq,
-          clientSavedAt: body.clientSavedAt,
-          baseVersion: body.baseVersion,
-        },
-      );
-
-      if (result.accepted && result.newAnswer) {
-        const previousAnswer = storedAnswers.find(
-          (answer) => answer.questionId === questionId,
+      const result = await executeInTransaction(fastify.db, async (tx) => {
+        const txRepo = createAttemptRepo(tx);
+        const candidateProfile = await createCandidateRepo(tx).findByUserId(
+          ctx,
+          ctx.actorId,
         );
-        const previousReceipt =
-          previousAnswer?.clientSeq === undefined
-            ? []
-            : [
-                {
-                  clientSeq: previousAnswer.clientSeq,
-                  answer: previousAnswer.answer,
-                  version: previousAnswer.version,
-                  savedAt: previousAnswer.savedAt,
-                },
-              ];
-        const storedNewAnswer: NormalizedStoredAnswer = {
-          ...result.newAnswer,
-          clientSeq: body.clientSeq,
-          clientSeqHistory: [
-            ...(previousAnswer?.clientSeqHistory ?? []),
-            ...previousReceipt,
-          ],
-        };
-        const newAnswers = storedAnswers
-          .filter((a) => a.questionId !== questionId)
-          .concat([storedNewAnswer]);
+        if (!candidateProfile) {
+          throw new NotFoundError("候选人资料不存在");
+        }
+        const lockedAttempt = await txRepo.findByIdForUpdate(ctx, attemptId);
+        if (
+          !lockedAttempt ||
+          lockedAttempt.candidateId !== candidateProfile.id
+        ) {
+          throw new NotFoundError("尝试不存在");
+        }
+        if (
+          !lockedAttempt.questionSnapshot.some(
+            (question) => question.originalQuestionId === questionId,
+          )
+        ) {
+          throw new ValidationError("问题不在此尝试中");
+        }
 
-        await attemptRepo.update(ctx, attemptId, {
-          answers: newAnswers,
-          lastActivityAt: new Date(),
-        } as Parameters<typeof attemptRepo.update>[2]);
+        const storedAnswers = normalizeAnswers(
+          lockedAttempt.answers as StoredAnswer[],
+        );
+        const clientSeqMap = buildClientSeqMap(storedAnswers);
 
+        const saveResult = processSaveAnswer(
+          {
+            attemptStatus: lockedAttempt.status,
+            answers: lockedAttempt.answers,
+            clientSeqMap,
+          },
+          {
+            attemptId,
+            questionId,
+            answer: body.answer,
+            clientSeq: body.clientSeq,
+            clientSavedAt: body.clientSavedAt,
+            baseVersion: body.baseVersion,
+          },
+        );
+
+        if (saveResult.accepted && saveResult.newAnswer) {
+          const previousAnswer = storedAnswers.find(
+            (answer) => answer.questionId === questionId,
+          );
+          const previousReceipt =
+            previousAnswer?.clientSeq === undefined
+              ? []
+              : [
+                  {
+                    clientSeq: previousAnswer.clientSeq,
+                    answer: previousAnswer.answer,
+                    version: previousAnswer.version,
+                    savedAt: previousAnswer.savedAt,
+                  },
+                ];
+          const storedNewAnswer: NormalizedStoredAnswer = {
+            ...saveResult.newAnswer,
+            clientSeq: body.clientSeq,
+            clientSeqHistory: [
+              ...(previousAnswer?.clientSeqHistory ?? []),
+              ...previousReceipt,
+            ],
+          };
+          const newAnswers = storedAnswers
+            .filter((a) => a.questionId !== questionId)
+            .concat([storedNewAnswer]);
+
+          await txRepo.update(ctx, attemptId, {
+            answers: newAnswers,
+            lastActivityAt: new Date(),
+          } as Parameters<typeof txRepo.update>[2]);
+        }
+
+        return saveResult;
+      });
+
+      if (result.accepted) {
         recordAudit(
           fastify,
           request,
@@ -697,13 +719,37 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
-      await getOwnedAttempt(fastify, ctx, attemptId);
+
+      await executeInTransaction(fastify.db, async (tx) => {
+        const txAttemptRepo = createAttemptRepo(tx);
+        const candidateProfile = await createCandidateRepo(tx).findByUserId(
+          ctx,
+          ctx.actorId,
+        );
+        if (!candidateProfile) {
+          throw new NotFoundError("Candidate profile not found");
+        }
+        const attempt = (await txAttemptRepo.findByIdAndCandidate(
+          ctx,
+          attemptId,
+          candidateProfile.id,
+        )) as ExamAttempt | null;
+        if (!attempt) {
+          throw new NotFoundError("Attempt not found");
+        }
+
+        await submitAttempt(
+          createAttemptRepoAdapter(txAttemptRepo, ctx),
+          attemptId,
+          new Date(),
+        );
+      });
+
       const attemptRepo = createAttemptRepo(fastify.db);
       const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
       const examRepo = createExamRepo(fastify.db);
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
 
-      await submitAttempt(attRepoAdapter, attemptId, new Date());
       await gradeAttempt(
         createExamRepoAdapter(examRepo, ctx),
         createEnrollmentRepoAdapter(enrollmentRepo, ctx),

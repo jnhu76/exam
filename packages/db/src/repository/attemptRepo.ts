@@ -14,6 +14,7 @@ import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
 } from "./baseRepo.js";
+import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
@@ -30,6 +31,37 @@ export function createAttemptRepo(db: AnyDatabase) {
 
   return {
     ...repo,
+    async findByIdForUpdate(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ): Promise<AttemptSelect | null> {
+      const orgId = resolveOrganizationId(ctx);
+      if (isSqlite(db)) {
+        return (
+          (db
+            .select()
+            .from(sqliteAttempts)
+            .where(
+              and(
+                eq(sqliteAttempts.organizationId, orgId),
+                eq(sqliteAttempts.id, attemptId),
+              ),
+            )
+            .get() as AttemptSelect | undefined) ?? null
+        );
+      }
+      const rows = await (db as PostgresDatabase)
+        .select()
+        .from(pgAttempts)
+        .for("update")
+        .where(
+          and(
+            eq(pgAttempts.organizationId, orgId),
+            eq(pgAttempts.id, attemptId),
+          ),
+        );
+      return (rows[0] as AttemptSelect | undefined) ?? null;
+    },
     async findActiveByEnrollment(
       ctx: TenantContext | RequestContext,
       enrollmentId: string,

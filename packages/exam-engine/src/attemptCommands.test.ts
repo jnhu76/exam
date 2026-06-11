@@ -16,7 +16,7 @@ import type {
 } from "@exam/domain";
 import {
   ExamNotOpenError,
-  ExamTimeExpiredError,
+  AttemptDeadlineExceededError,
   InvalidStateTransitionError,
   ValidationError,
 } from "@exam/domain";
@@ -478,7 +478,7 @@ describe("attemptCommands", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it("rejects late submission (past deadline) with ExamTimeExpiredError", async () => {
+    it("rejects late submission (past deadline) with AttemptDeadlineExceededError", async () => {
       const attempt = makeAttempt({
         deadlineAt: new Date("2025-01-01T09:00:00Z"),
       });
@@ -486,7 +486,7 @@ describe("attemptCommands", () => {
 
       await expect(
         submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T11:00:00Z")),
-      ).rejects.toThrow(ExamTimeExpiredError);
+      ).rejects.toThrow(AttemptDeadlineExceededError);
     });
 
     it("throws ValidationError when submit update returns null", async () => {
