@@ -266,3 +266,105 @@ Every Job completion requires:
 - DB repository: `packages/db/src/repository/<entity>Repo.ts` — each repo method takes ctx as first arg
 - All user-facing strings in Chinese (zh-CN), code and comments in English
 - No comments in code unless asked
+
+---
+
+## Current Roadmap Authority
+
+- **Phase2 has not started.**
+- **Current work is Phase1.4 UI Foundation Reset.**
+- **UI Reset is a pre-Phase2 foundation task.**
+- **Phase2 can only start after Phase1.4 + Phase1.5 + Phase1.6 + Phase1.7 entry criteria are complete.**
+- **Phase plans control implementation schedule.**
+- **SPEC invariant principles still win over implementation details.**
+
+---
+
+## Phase1.4 UI Foundation Reset
+
+### Purpose
+
+Phase1.4 UI Foundation Reset is a **UI foundation stabilization task**. It is NOT:
+
+- A visual beautification task
+- A Phase2 implementation task
+- A full site rewrite
+
+### Problems Being Solved
+
+1. Title remains loading forever
+2. Direct refresh shows blank page
+3. Sidebar/nav/collapse instability
+4. Logo slot and collapse icon conflict
+5. No stable BrandMark / logo fallback
+6. Scattered CSS / Tailwind status colors
+7. Inconsistent page loading/error states
+8. Admin Console vs Exam Runtime layout boundary unclear
+9. SVG/icon usage inconsistent
+
+### Documentation Reference
+
+All UI foundation rules are defined in `docs/ui/`:
+
+- `docs/ui/00-ui-constitution.md` — UI constitution and invariant principles
+- `docs/ui/01-design-tokens.md` — CSS variables and Tailwind tokens
+- `docs/ui/02-layout-system.md` — Shell, sidebar, topbar, and layout rules
+- `docs/ui/03-component-boundaries.md` — Component layer boundaries
+- `docs/ui/04-state-grammar.md` — Status grammar and集中 management
+- `docs/ui/05-page-templates.md` — Page templates (list, detail, form, exam runtime)
+- `docs/ui/06-accessibility-rules.md` — Accessibility rules
+- `docs/ui/07-ui-bug-inventory.md` — Known UI bugs
+- `docs/ui/08-migration-plan.md` — PR migration plan
+- `docs/ui/09-phase2-readiness.md` — Phase2 documentation readiness
+
+### Migration Plan
+
+See `docs/ui/08-migration-plan.md` for PR拆分:
+
+- PR 1: Documentation convergence only
+- PR 2: Route refresh / title loading / ErrorBoundary / App bootstrap
+- PR 3: Sidebar / BrandMark / navigation collapse rebuild
+- PR 4: Design tokens / CSS cleanup / status grammar implementation
+- PR 5: Shared components implementation
+- PR 6: One admin list page migration
+- PR 7: One admin detail/settings page migration
+- PR 8: Exam runtime shell migration
+- PR 9: UI consistency pass
+
+---
+
+## Phase2-Ready, Not Phase2-Implemented
+
+### Allowed in Documentation
+
+- Shared status grammar
+- Page templates (AdminShell / ExamShell rules)
+- Future proctor panel template documentation
+- Future export/integration template documentation
+
+### Forbidden During UI Reset
+
+Do NOT implement or expose:
+
+- Real ExamRoom management
+- Real IP range enforcement UI
+- Real proctor WebSocket dashboard
+- Real candidate live status cards
+- Real force-submit / extend-time / misconduct actions
+- Real random paper builder
+- Real timed_sync / deadline / untimed workflows
+- Real Pass Gate API UI
+- Real API key / service token management
+- Real PDF export workflow
+- Real Electron lockdown UI
+- Real AI grading UI
+- Real adaptive degradation UI
+
+### Phase2 Modules (Documentation Only)
+
+| Module | Scope |
+|--------|-------|
+| Phase2A Exam Operation | Detail page + right-side status panel + audit timeline |
+| Phase2B Proctor Panel | Dashboard page + status cards + event stream + action confirmation |
+| Phase2C Exam Flexibility | Form sections + rule builder + snapshot preview |
+| Phase2D Integration Export | Settings page + key management table + export job status |
