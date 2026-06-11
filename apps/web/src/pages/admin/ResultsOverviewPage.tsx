@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
+import { STATUS_LABELS } from "@/lib/constants";
 
 interface ExamRow {
   id: string;
@@ -70,21 +71,6 @@ export function ResultsOverviewPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
-
-  function statusLabel(status: string) {
-    switch (status) {
-      case "published":
-        return "已发布";
-      case "open":
-        return "进行中";
-      case "closed":
-        return "已结束";
-      case "archived":
-        return "已归档";
-      default:
-        return status;
-    }
-  }
 
   function gradable(exam: ExamRow) {
     return exam.canViewScores;
@@ -153,7 +139,7 @@ export function ResultsOverviewPage() {
                                   : "secondary"
                             }
                           >
-                            {statusLabel(exam.status)}
+                            {STATUS_LABELS[exam.status] ?? exam.status}
                           </Badge>
                         </TableCell>
                         <TableCell>

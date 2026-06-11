@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -27,10 +28,18 @@ export function BrandProvider({
   loadRemote?: boolean;
   organizationDisplayName?: string;
 }) {
-  const initialValue =
-    organizationDisplayName && value === fallbackBranding
-      ? { ...value, productName: organizationDisplayName }
-      : value;
+  const initialValue = useMemo(() => {
+    if (organizationDisplayName && value === fallbackBranding) {
+      return { ...value, productName: organizationDisplayName };
+    }
+    if (
+      organizationDisplayName &&
+      value.productName === fallbackBranding.productName
+    ) {
+      return { ...value, productName: organizationDisplayName };
+    }
+    return value;
+  }, [organizationDisplayName, value]);
   const [branding, setBranding] = useState(initialValue);
   const refresh = useCallback(async () => {
     if (!loadRemote) return;
