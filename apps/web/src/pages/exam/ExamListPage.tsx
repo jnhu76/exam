@@ -59,7 +59,7 @@ function ExamCard({
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Clock className="size-3.5" />
@@ -134,9 +134,9 @@ export function ExamListPage() {
   const ended = exams.filter((e) => e.isEnded);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl flex flex-col gap-6 p-6">
       {available.length > 0 && (
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">可参加的考试</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {available.map((exam) => (
@@ -152,7 +152,7 @@ export function ExamListPage() {
       )}
 
       {ended.length > 0 && (
-        <section className="space-y-4">
+        <section className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">已结束</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {ended.map((exam) => (

@@ -116,7 +116,7 @@ export function ScoreListPage() {
   if (!scores) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title={`${scores.items[0]?.examTitle || "考试"} - 成绩管理`}
         actions={
@@ -242,7 +242,7 @@ export function ScoreListPage() {
               description="该考试暂未有已评分的答卷"
             />
           ) : (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               <Table>
                 <TableHeader>
                   <TableRow>

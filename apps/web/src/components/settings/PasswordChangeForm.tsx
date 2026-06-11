@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 export function PasswordChangeForm({
   cardWrapper = true,
@@ -40,42 +41,44 @@ export function PasswordChangeForm({
   }
 
   const form = (
-    <form className="max-w-sm space-y-4" onSubmit={handleSubmit}>
-      <div className="space-y-2">
-        <Label htmlFor="current-password">当前密码</Label>
-        <Input
-          id="current-password"
-          type="password"
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          required
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="new-password">新密码</Label>
-        <Input
-          id="new-password"
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          required
-          minLength={6}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="confirm-password">确认新密码</Label>
-        <Input
-          id="confirm-password"
-          type="password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-          minLength={6}
-        />
-      </div>
-      <Button type="submit" disabled={changing}>
-        {changing ? "修改中..." : "修改密码"}
-      </Button>
+    <form className="max-w-sm" onSubmit={handleSubmit}>
+      <FieldGroup>
+        <Field>
+          <Label htmlFor="current-password">当前密码</Label>
+          <Input
+            id="current-password"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+        </Field>
+        <Field>
+          <Label htmlFor="new-password">新密码</Label>
+          <Input
+            id="new-password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+        </Field>
+        <Field>
+          <Label htmlFor="confirm-password">确认新密码</Label>
+          <Input
+            id="confirm-password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+        </Field>
+        <Button type="submit" disabled={changing}>
+          {changing ? "修改中..." : "修改密码"}
+        </Button>
+      </FieldGroup>
     </form>
   );
 

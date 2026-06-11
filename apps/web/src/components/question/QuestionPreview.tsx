@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 interface QuestionPreviewProps {
   type: string;
@@ -24,7 +25,7 @@ export function QuestionPreview({
           考生视角预览
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         <p className="text-sm">{content || "（题目内容为空）"}</p>
 
         {(type === "single_choice" || type === "true_false") && (
@@ -44,7 +45,7 @@ export function QuestionPreview({
         )}
 
         {type === "multiple_choice" && (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {options.map((opt) => (
               <div key={opt.id} className="flex items-center gap-2">
                 <Checkbox disabled id={`preview-${opt.id}`} />
@@ -60,7 +61,7 @@ export function QuestionPreview({
         )}
 
         {type === "fill_blank" && (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {content.split("____").map((part, i, arr) => (
               <span key={i}>
                 {part}
@@ -72,7 +73,8 @@ export function QuestionPreview({
           </div>
         )}
 
-        <div className="pt-2 border-t text-xs text-muted-foreground">
+        <Separator />
+        <div className="pt-2 text-xs text-muted-foreground">
           <p>
             标准答案：
             {type === "true_false"

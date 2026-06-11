@@ -96,7 +96,7 @@ export function ResultsOverviewPage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <PageHeader title="成绩查询" />
 
         <Card>
@@ -134,7 +134,7 @@ export function ResultsOverviewPage() {
                           void navigate(routes.admin.examScores(exam.id))
                         }
                       >
-                        <Eye className="size-4 mr-1" />
+                        <Eye data-icon="inline-start" />
                         查看成绩
                       </Button>
                     );

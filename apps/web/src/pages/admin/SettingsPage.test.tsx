@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
+import { api } from "@/lib/api";
 import { SettingsPage } from "./SettingsPage";
 
 vi.mock("@/lib/api", () => ({
@@ -65,5 +67,26 @@ describe("SettingsPage", () => {
     renderPage();
     expect(await screen.findByText("品牌设置")).toBeInTheDocument();
     expect(screen.getByText("账号安全")).toBeInTheDocument();
+  });
+
+  it("strips empty strings from save payload", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const input = await screen.findByLabelText("产品标题");
+    await user.clear(input);
+
+    const button = await screen.findByRole("button", { name: "保存设置" });
+    await user.click(button);
+
+    await vi.waitFor(() => {
+      expect(api.patch).toHaveBeenCalled();
+    });
+
+    const patchCall = vi.mocked(api.patch).mock.calls[0];
+    expect(patchCall).toBeDefined();
+    const payload = patchCall![1] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("productName");
+    expect(payload.productSubtitle).toBe("Test Subtitle");
   });
 });

@@ -164,7 +164,7 @@ export function QuestionPage() {
   if (error) return <ErrorState message={error} onRetry={loadQuestions} />;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="题目管理"
         actions={
@@ -173,11 +173,11 @@ export function QuestionPage() {
               variant="outline"
               onClick={() => void navigate("/admin/questions/import")}
             >
-              <FileUp className="size-4" />
+              <FileUp data-icon="inline-start" />
               导入题目
             </Button>
             <Button onClick={() => void navigate("/admin/questions/new")}>
-              <Plus className="size-4" />
+              <Plus data-icon="inline-start" />
               新增题目
             </Button>
           </div>
@@ -268,7 +268,7 @@ export function QuestionPage() {
             onClick={clearFilters}
             aria-label="清空筛选"
           >
-            <RotateCcw className="size-4" />
+            <RotateCcw data-icon="inline-start" />
             清空筛选
           </Button>
         )}
@@ -337,7 +337,7 @@ export function QuestionPage() {
                         }
                         aria-label="编辑题目"
                       >
-                        <Pencil className="size-4" />
+                        <Pencil />
                       </Button>
                       <ConfirmDialog
                         trigger={
@@ -346,7 +346,7 @@ export function QuestionPage() {
                             size="icon"
                             aria-label="删除题目"
                           >
-                            <Trash2 className="size-4 text-destructive" />
+                            <Trash2 className="text-destructive" />
                           </Button>
                         }
                         title="确认删除"

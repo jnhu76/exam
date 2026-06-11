@@ -6,6 +6,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Flag } from "lucide-react";
 import { routes } from "@/lib/routes";
+import { Separator } from "@/components/ui/separator";
 import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ExamTimer } from "@/components/exam/ExamTimer";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
@@ -259,7 +260,8 @@ export function TakeExamPage() {
         </main>
       </div>
 
-      <footer className="flex items-center justify-between border-t px-4 py-2">
+      <Separator />
+      <footer className="flex items-center justify-between px-4 py-2">
         <div className="text-sm text-muted-foreground">
           已答 {answeredCount} / 未答 {unansweredCount} / 标记 {flaggedCount} /
           共 {attempt.questionSnapshot.length}
@@ -271,12 +273,12 @@ export function TakeExamPage() {
             onClick={handlePrev}
             disabled={currentIndex === 0}
           >
-            <ChevronLeft className="size-4" />
+            <ChevronLeft data-icon="inline-start" />
             上一题
           </Button>
           <Button variant="outline" size="sm" onClick={toggleFlag}>
             <Flag
-              className="size-4"
+              data-icon="inline-start"
               fill={
                 questionStates[currentIndex] === "flagged"
                   ? "currentColor"
@@ -296,7 +298,7 @@ export function TakeExamPage() {
           ) : (
             <Button variant="outline" size="sm" onClick={handleNext}>
               下一题
-              <ChevronRight className="size-4" />
+              <ChevronRight data-icon="inline-end" />
             </Button>
           )}
         </div>
@@ -307,7 +309,7 @@ export function TakeExamPage() {
           <DialogHeader>
             <DialogTitle>确认交卷</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 text-sm">
+          <div className="flex flex-col gap-2 text-sm">
             {unansweredCount > 0 && (
               <p>
                 还有 <strong>{unansweredCount}</strong> 题未作答

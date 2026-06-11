@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 interface Option {
   id: string;
@@ -112,9 +113,9 @@ export function QuestionForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+        <Field>
           <Label>所属课程</Label>
           <Select
             value={form.courseId}
@@ -131,9 +132,9 @@ export function QuestionForm({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </Field>
 
-        <div className="space-y-2">
+        <Field>
           <Label>题目类型</Label>
           <Select
             value={form.type}
@@ -169,10 +170,10 @@ export function QuestionForm({
               <SelectItem value="true_false">判断题</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </Field>
       </div>
 
-      <div className="space-y-2">
+      <Field>
         <Label>题目内容</Label>
         {form.type === "fill_blank" ? (
           <Textarea
@@ -189,12 +190,12 @@ export function QuestionForm({
             rows={3}
           />
         )}
-      </div>
+      </Field>
 
       {(form.type === "single_choice" ||
         form.type === "multiple_choice" ||
         form.type === "true_false") && (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <Label>选项</Label>
             {form.type !== "true_false" && (
@@ -209,7 +210,7 @@ export function QuestionForm({
               </Button>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {form.options.map((opt, i) => (
               <div key={opt.id} className="flex items-center gap-2">
                 {form.type === "single_choice" || form.type === "true_false" ? (
@@ -249,7 +250,7 @@ export function QuestionForm({
                     size="icon"
                     onClick={() => removeOption(i)}
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 />
                   </Button>
                 )}
               </div>
@@ -259,7 +260,7 @@ export function QuestionForm({
       )}
 
       {form.type === "fill_blank" && (
-        <div className="space-y-2">
+        <Field>
           <Label>标准答案</Label>
           <Input
             value={
@@ -271,11 +272,11 @@ export function QuestionForm({
           <p className="text-xs text-muted-foreground">
             多个可接受答案用 | 分隔，如：原子|atom
           </p>
-        </div>
+        </Field>
       )}
 
       <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-2">
+        <Field>
           <Label>分值</Label>
           <Input
             type="number"
@@ -283,8 +284,8 @@ export function QuestionForm({
             onChange={(e) => update({ score: Number(e.target.value) })}
             min={1}
           />
-        </div>
-        <div className="space-y-2">
+        </Field>
+        <Field>
           <Label>难度 (1-5)</Label>
           <Select
             value={String(form.difficulty)}
@@ -301,8 +302,8 @@ export function QuestionForm({
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
+        </Field>
+        <Field>
           <Label>标签</Label>
           <Input
             value={form.tags.join(",")}
@@ -316,11 +317,11 @@ export function QuestionForm({
             }
             placeholder="用逗号分隔"
           />
-        </div>
+        </Field>
       </div>
 
       {form.type === "multiple_choice" && (
-        <div className="space-y-2">
+        <Field>
           <Label>多选评分策略</Label>
           <Select
             value={form.gradingRule.multiSelectScoring}
@@ -341,11 +342,11 @@ export function QuestionForm({
               <SelectItem value="partial_half">部分正确半分</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </Field>
       )}
 
       {form.type === "fill_blank" && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <Label>填空匹配模式</Label>
           <Select
             value={form.gradingRule.fillBlankMatchMode}

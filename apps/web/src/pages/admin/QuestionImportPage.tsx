@@ -196,11 +196,11 @@ export function QuestionImportPage() {
   if (error) return <ErrorState message={error} onRetry={loadCourses} />;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader title="导入题目" />
 
       <div className="flex items-end gap-4">
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label>目标课程</Label>
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
             <SelectTrigger className="w-[200px]">
@@ -266,7 +266,7 @@ export function QuestionImportPage() {
       )}
 
       {importResult && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="size-4 text-success" />

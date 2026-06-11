@@ -143,7 +143,7 @@ export function AppSidebar({
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2">
+      <nav className="flex-1 flex flex-col gap-1 overflow-y-auto px-2 py-2">
         {groups.map((group, gi) => (
           <section key={group.label}>
             {!collapsed && (

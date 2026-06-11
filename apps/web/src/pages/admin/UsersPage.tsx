@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -139,12 +140,12 @@ export function UsersPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="用户管理"
         actions={
           <Button onClick={() => open()}>
-            <Plus className="size-4" />
+            <Plus data-icon="inline-start" />
             新增用户
           </Button>
         }
@@ -185,7 +186,7 @@ export function UsersPage() {
                       onClick={() => open(user)}
                       aria-label="编辑用户"
                     >
-                      <Pencil className="size-4" />
+                      <Pencil />
                     </Button>
                     {user.role !== "SuperAdmin" && (
                       <Button
@@ -208,10 +209,10 @@ export function UsersPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "编辑用户" : "新增用户"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <FieldGroup className="py-4">
             {!editing && (
               <>
-                <div className="space-y-2">
+                <Field>
                   <Label>用户名</Label>
                   <Input
                     value={username}
@@ -222,8 +223,8 @@ export function UsersPage() {
                     }}
                   />
                   <FieldError>{fieldErrors.username}</FieldError>
-                </div>
-                <div className="space-y-2">
+                </Field>
+                <Field>
                   <Label>初始密码</Label>
                   <Input
                     type="password"
@@ -235,10 +236,10 @@ export function UsersPage() {
                     }}
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
-                </div>
+                </Field>
               </>
             )}
-            <div className="space-y-2">
+            <Field>
               <Label>姓名</Label>
               <Input
                 value={name}
@@ -249,8 +250,8 @@ export function UsersPage() {
                 }}
               />
               <FieldError>{fieldErrors.name}</FieldError>
-            </div>
-            <div className="space-y-2">
+            </Field>
+            <Field>
               <Label>角色</Label>
               {editing?.role === "SuperAdmin" ? (
                 <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -271,8 +272,8 @@ export function UsersPage() {
                   </SelectContent>
                 </Select>
               )}
-            </div>
-          </div>
+            </Field>
+          </FieldGroup>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               取消
