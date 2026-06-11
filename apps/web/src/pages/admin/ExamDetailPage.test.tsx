@@ -172,6 +172,102 @@ describe("ExamDetailPage", () => {
         expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/publish");
       });
     });
+
+    it("shows publish error message on failure", async () => {
+      postMock.mockRejectedValue(new Error("发布失败"));
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(await screen.findByText("发布考试"));
+      expect(await screen.findByText("发布失败")).toBeInTheDocument();
+    });
+
+    it("archives a published exam", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({ ...mockDraftExam, status: "published" });
+      });
+      postMock.mockResolvedValue({});
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("期末能力测评");
+      await user.click(screen.getByText("归档"));
+      await waitFor(() => {
+        expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/archive");
+      });
+    });
+  });
+
+  describe("enrollment management", () => {
+    it("opens add enrollment dialog", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        if (path.includes("/api/candidates"))
+          return Promise.resolve({ items: [], total: 0 });
+        return Promise.resolve(mockDraftExam);
+      });
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("期末能力测评");
+      const addButtons = screen.getAllByText("添加考生");
+      await user.click(addButtons[0]!);
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
+    it("shows enrollment status using StatusBadge", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments"))
+          return Promise.resolve([
+            {
+              id: "enr-1",
+              examId: "exam-1",
+              candidateId: "c1",
+              candidateDisplayName: "张三",
+              candidateIdentity: "EMP001",
+              status: "assigned",
+              attemptCount: 0,
+              finalScore: null,
+              finalPassed: null,
+            },
+          ]);
+        return Promise.resolve(mockDraftExam);
+      });
+      renderPage();
+      expect(await screen.findByText("张三")).toBeInTheDocument();
+      expect(screen.getByText("已分配")).toBeInTheDocument();
+    });
+
+    it("shows remove button only for assigned enrollments", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments"))
+          return Promise.resolve([
+            {
+              id: "enr-1",
+              examId: "exam-1",
+              candidateId: "c1",
+              candidateDisplayName: "张三",
+              status: "assigned",
+              attemptCount: 0,
+              finalScore: null,
+              finalPassed: null,
+            },
+            {
+              id: "enr-2",
+              examId: "exam-1",
+              candidateId: "c2",
+              candidateDisplayName: "李四",
+              status: "completed",
+              attemptCount: 1,
+              finalScore: 80,
+              finalPassed: true,
+            },
+          ]);
+        return Promise.resolve(mockDraftExam);
+      });
+      renderPage();
+      await screen.findByText("张三");
+      const removeButtons = screen.getAllByRole("button", { name: "移除考生" });
+      expect(removeButtons).toHaveLength(1);
+    });
   });
 
   describe("error states", () => {

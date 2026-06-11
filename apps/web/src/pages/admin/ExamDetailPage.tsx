@@ -7,8 +7,8 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -31,7 +31,6 @@ import {
   EnrollmentPicker,
   type CandidateItem,
 } from "@/components/exam/EnrollmentPicker";
-import { STATUS_LABELS } from "@/lib/constants";
 
 interface ExamDetail {
   id: string;
@@ -280,7 +279,7 @@ export function ExamDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Badge>{STATUS_LABELS[exam.status] ?? exam.status}</Badge>
+            <StatusBadge status={exam.status} />
           </CardContent>
         </Card>
         <Card className="shadow-sm">
@@ -419,7 +418,9 @@ export function ExamDetailPage() {
                             enrollment.candidateId.slice(0, 8)}
                         </TableCell>
                         <TableCell>{enrollment.candidateDisplayName}</TableCell>
-                        <TableCell>{enrollment.status}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={enrollment.status} />
+                        </TableCell>
                         <TableCell>{enrollment.attemptCount}</TableCell>
                         <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
                         <TableCell>

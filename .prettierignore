@@ -1,4 +1,5 @@
 apps/web/src/components/ui/
+apps/web/public/fonts/
 docs/SPEC.md
 pnpm-lock.yaml
 coverage/

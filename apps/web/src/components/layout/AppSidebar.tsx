@@ -116,14 +116,24 @@ export function AppSidebar({
         collapsed ? "w-14" : "w-56",
       )}
     >
-      <div className="flex min-h-14 items-center px-2">
-        <BrandHeader compact={collapsed} />
+      <div
+        className={cn(
+          "border-b px-2",
+          collapsed
+            ? "flex min-h-24 flex-col items-center justify-center gap-2 py-2"
+            : "flex min-h-14 items-center gap-2",
+        )}
+      >
+        <BrandHeader
+          compact={collapsed}
+          className={cn(!collapsed && "flex-1")}
+        />
         {onCollapse && !collapsed && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="ml-auto"
+            data-testid="sidebar-collapse-button"
             aria-label="折叠侧栏"
             onClick={onCollapse}
           >
@@ -134,7 +144,8 @@ export function AppSidebar({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-sm"
+            data-testid="sidebar-collapse-button"
             aria-label="展开侧栏"
             onClick={onCollapse}
           >

@@ -6,8 +6,7 @@ import { PlatformSettingsForm } from "@/components/settings/PlatformSettingsForm
 import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings2, Shield } from "lucide-react";
+import { FormSection } from "@/components/shared/FormSection";
 
 type SettingsData = UpdateBrandingRequest;
 
@@ -59,32 +58,19 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="平台与机构设置" />
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Settings2 className="size-5 text-muted-foreground" />
-            <CardTitle className="text-base">品牌设置</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <PlatformSettingsForm
-            initialValues={settings ?? undefined}
-            onSave={handleSave}
-            isLoading={isSaving}
-          />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Shield className="size-5 text-muted-foreground" />
-            <CardTitle className="text-base">账号安全</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <PasswordChangeForm cardWrapper={false} />
-        </CardContent>
-      </Card>
+      <FormSection
+        title="品牌设置"
+        description="配置当前部署显示给用户的名称与页脚。"
+      >
+        <PlatformSettingsForm
+          initialValues={settings ?? undefined}
+          onSave={handleSave}
+          isLoading={isSaving}
+        />
+      </FormSection>
+      <FormSection title="账号安全" description="修改当前账号的登录密码。">
+        <PasswordChangeForm cardWrapper={false} />
+      </FormSection>
     </div>
   );
 }

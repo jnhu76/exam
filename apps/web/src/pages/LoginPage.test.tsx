@@ -130,4 +130,19 @@ describe("LoginPage smoke", () => {
       );
     });
   });
+
+  it("clears field error when user types after validation failure", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    expect(screen.getByText("请输入用户名")).toBeInTheDocument();
+    expect(screen.getByText("请输入密码")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("用户名"), "admin");
+    expect(screen.queryByText("请输入用户名")).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("密码"), "pass");
+    expect(screen.queryByText("请输入密码")).not.toBeInTheDocument();
+  });
 });

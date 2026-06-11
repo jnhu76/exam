@@ -69,6 +69,16 @@ describe("SettingsPage", () => {
     expect(screen.getByText("账号安全")).toBeInTheDocument();
   });
 
+  it("renders settings through shared form sections", async () => {
+    renderPage();
+    expect(
+      await screen.findByRole("heading", { name: "品牌设置" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "账号安全" }),
+    ).toBeInTheDocument();
+  });
+
   it("strips empty strings from save payload", async () => {
     const user = userEvent.setup();
     renderPage();

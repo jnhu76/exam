@@ -1,10 +1,18 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { useEffect } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { AdminLayout } from "@/components/layout/AdminLayout";
-import { BrandProvider } from "@/components/layout/BrandProvider";
+import { BrandProvider, useBranding } from "@/components/layout/BrandProvider";
 import { ExamLayout } from "@/components/layout/ExamLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { getDocumentTitle } from "@/lib/pageMeta";
 import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
@@ -68,12 +76,24 @@ export function AppRoutes() {
   );
 }
 
+export function AppTitle() {
+  const location = useLocation();
+  const branding = useBranding();
+
+  useEffect(() => {
+    document.title = getDocumentTitle(location.pathname, branding.productName);
+  }, [branding.productName, location.pathname]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
         <BrandProvider loadRemote>
           <AuthProvider restoreSession>
+            <AppTitle />
             <AppRoutes />
             <Toaster />
           </AuthProvider>

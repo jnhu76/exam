@@ -113,20 +113,20 @@ describe("DashboardPage", () => {
       apiGet.mockResolvedValue(mockDashboardData);
     });
 
-    it("renders status badges with correct variant for each status", async () => {
+    it("renders status badges with centralized tones for each status", async () => {
       renderPage();
       await waitFor(() => {
-        expect(screen.getByText("进行中")).toBeInTheDocument();
+        expect(screen.getByText("开放中")).toBeInTheDocument();
       });
 
-      const openBadge = screen.getByText("进行中");
-      expect(openBadge).toHaveAttribute("data-variant", "default");
+      const openBadge = screen.getByText("开放中");
+      expect(openBadge).toHaveAttribute("data-status-tone", "success");
 
       const draftBadge = screen.getByText("草稿");
-      expect(draftBadge).toHaveAttribute("data-variant", "outline");
+      expect(draftBadge).toHaveAttribute("data-status-tone", "muted");
 
-      const closedBadge = screen.getByText("已结束");
-      expect(closedBadge).toHaveAttribute("data-variant", "secondary");
+      const closedBadge = screen.getByText("已关闭");
+      expect(closedBadge).toHaveAttribute("data-status-tone", "secondary");
     });
   });
 

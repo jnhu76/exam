@@ -139,7 +139,7 @@ export function BrandHeader({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className={cn("flex items-center gap-2", compact && "justify-center")}>
-      <PanelLeft className="size-4 shrink-0 text-primary" aria-hidden="true" />
+      <BrandMark />
       <span className={cn("text-sm font-semibold", compact && "sr-only")}>
         {branding.productName}
       </span>
@@ -148,11 +148,11 @@ export function BrandHeader({ compact = false }: { compact?: boolean }) {
 }
 ```
 
-### 4.3 问题
+### 4.3 已修复问题
 
-1. 使用 `PanelLeft` 图标作为 logo，这是 collapse icon 的语义
-2. collapsed 时显示 sr-only 文字，但 logo 区域被 collapse button 占据
-3. 没有独立的 logo slot
+1. BrandMark 已从 collapse control 中拆出
+2. collapsed 时保留 BrandMark，品牌名称改为 sr-only
+3. BrandMark 提供本地、离线可用 fallback
 
 ### 4.4 期望行为
 

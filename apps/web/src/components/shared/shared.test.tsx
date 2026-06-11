@@ -3,10 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DataTableShell } from "./DataTableShell";
+import { DataToolbar } from "./DataToolbar";
 import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
+import { FormSection } from "./FormSection";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
+import { PageSection } from "./PageSection";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
 import { StatsCard } from "./StatsCard";
 
@@ -31,6 +35,11 @@ describe("PageHeader", () => {
   it("renders without actions slot", () => {
     render(<PageHeader title="成绩查询" />);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("renders status slot when provided", () => {
+    render(<PageHeader title="考试详情" status={<span>已发布</span>} />);
+    expect(screen.getByText("已发布")).toBeInTheDocument();
   });
 });
 
@@ -65,6 +74,14 @@ describe("EmptyState", () => {
       <EmptyState icon={<span>📚</span>} title="空" description="无内容" />,
     );
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("renders with default icon", () => {
+    const { container } = render(
+      <EmptyState title="暂无数据" description="没有可显示的内容" />,
+    );
+    expect(screen.getByText("暂无数据")).toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeInTheDocument();
   });
 });
 
@@ -272,5 +289,142 @@ describe("LoadingState", () => {
   it("sets aria-busy on container", () => {
     render(<LoadingState />);
     expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+});
+
+describe("PageSection", () => {
+  it("renders title, description, content, and actions", () => {
+    render(
+      <PageSection
+        title="基础信息"
+        description="用于展示页面区块"
+        actions={<button type="button">编辑</button>}
+      >
+        <p>区块内容</p>
+      </PageSection>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "基础信息" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("用于展示页面区块")).toBeInTheDocument();
+    expect(screen.getByText("区块内容")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
+  });
+
+  it("renders footer slot when provided", () => {
+    render(
+      <PageSection title="操作记录" footer={<p>共 2 条</p>}>
+        <p>记录列表</p>
+      </PageSection>,
+    );
+
+    expect(screen.getByText("共 2 条")).toBeInTheDocument();
+  });
+});
+
+describe("FormSection", () => {
+  it("renders form section with description and fields", () => {
+    render(
+      <FormSection title="规则设置" description="配置提交规则">
+        <label htmlFor="passing-score">通过分数</label>
+        <input id="passing-score" />
+      </FormSection>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "规则设置" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("配置提交规则")).toBeInTheDocument();
+    expect(screen.getByLabelText("通过分数")).toBeInTheDocument();
+  });
+
+  it("renders action slot", () => {
+    render(
+      <FormSection
+        title="可见范围"
+        actions={<button type="button">重置</button>}
+      >
+        <p>字段</p>
+      </FormSection>,
+    );
+
+    expect(screen.getByRole("button", { name: "重置" })).toBeInTheDocument();
+  });
+});
+
+describe("DataToolbar", () => {
+  it("renders toolbar content and actions", () => {
+    render(
+      <DataToolbar
+        summary="共 3 条"
+        actions={<button type="button">导入</button>}
+      >
+        <label htmlFor="keyword">关键词</label>
+        <input id="keyword" />
+      </DataToolbar>,
+    );
+
+    expect(
+      screen.getByRole("toolbar", { name: "数据工具栏" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("关键词")).toBeInTheDocument();
+    expect(screen.getByText("共 3 条")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导入" })).toBeInTheDocument();
+  });
+
+  it("supports custom accessible label", () => {
+    render(
+      <DataToolbar aria-label="考试筛选">
+        <button type="button">筛选</button>
+      </DataToolbar>,
+    );
+
+    expect(
+      screen.getByRole("toolbar", { name: "考试筛选" }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("DataTableShell", () => {
+  it("renders table content inside shell", () => {
+    render(
+      <DataTableShell title="考试列表" description="展示当前考试">
+        <table>
+          <tbody>
+            <tr>
+              <td>安全测评</td>
+            </tr>
+          </tbody>
+        </table>
+      </DataTableShell>,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "考试列表" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("展示当前考试")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByText("安全测评")).toBeInTheDocument();
+  });
+
+  it("renders toolbar and footer slots", () => {
+    render(
+      <DataTableShell
+        toolbar={<button type="button">刷新</button>}
+        footer={<p>第 1 页</p>}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>结果</td>
+            </tr>
+          </tbody>
+        </table>
+      </DataTableShell>,
+    );
+
+    expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
+    expect(screen.getByText("第 1 页")).toBeInTheDocument();
   });
 });
