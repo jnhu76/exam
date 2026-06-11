@@ -27,6 +27,7 @@ import {
   ExamConfigForm,
   type ExamConfigData,
 } from "@/components/exam/ExamConfigForm";
+import { Separator } from "@/components/ui/separator";
 import { BookOpen, Trash2 } from "lucide-react";
 import { TYPE_LABELS } from "@/lib/constants";
 
@@ -186,7 +187,7 @@ export function ExamCreatePage() {
   if (error) return <ErrorState message={error} onRetry={loadData} />;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader title="创建考试" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -199,7 +200,7 @@ export function ExamCreatePage() {
           />
         </div>
 
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">
               已选题目 ({config.questionIds.length})
@@ -249,7 +250,7 @@ export function ExamCreatePage() {
                         onClick={() => removeQuestion(q.id)}
                         aria-label="删除题目"
                       >
-                        <Trash2 className="size-4" />
+                        <Trash2 />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -260,7 +261,8 @@ export function ExamCreatePage() {
         </div>
       </div>
 
-      <div className="flex justify-end gap-3 border-t pt-4">
+      <Separator />
+      <div className="flex justify-end gap-3 pt-4">
         <Button variant="outline" onClick={() => void navigate("/admin/exams")}>
           取消
         </Button>

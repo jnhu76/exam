@@ -25,6 +25,8 @@ import {
   Users,
   CalendarCheck,
   Activity,
+  PlusCircle,
+  Upload,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_VARIANT } from "@/lib/constants";
 
@@ -65,7 +67,7 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <PageHeader title="仪表盘" />
         <ErrorState message={error} onRetry={loadDashboard} />
       </div>
@@ -73,7 +75,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader title="仪表盘" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -97,6 +99,20 @@ export function DashboardPage() {
           value={data?.todayExams ?? 0}
           icon={<CalendarCheck className="size-5" />}
         />
+      </div>
+
+      <div className="flex gap-3">
+        <Button onClick={() => navigate("/admin/exams/new")}>
+          <PlusCircle data-icon="inline-start" />
+          创建考试
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/admin/questions/import")}
+        >
+          <Upload data-icon="inline-start" />
+          导入题目
+        </Button>
       </div>
 
       <Card className="shadow-sm">
@@ -140,7 +156,7 @@ export function DashboardPage() {
                         aria-label={`查看考试 ${exam.title}`}
                         onClick={() => navigate(`/admin/exams/${exam.id}`)}
                       >
-                        <Eye className="size-4" />
+                        <Eye />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -156,17 +172,17 @@ export function DashboardPage() {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <Skeleton className="h-8 w-32" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-2 rounded-lg border p-6">
+          <div key={i} className="flex flex-col gap-2 rounded-lg border p-6">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-8 w-16" />
           </div>
         ))}
       </div>
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         <Skeleton className="h-6 w-24" />
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />

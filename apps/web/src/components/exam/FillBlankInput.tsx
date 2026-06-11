@@ -39,7 +39,7 @@ export function FillBlankInput({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {normalizedBlanks.map((blank, i) => (
         <div key={blank.id} className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">

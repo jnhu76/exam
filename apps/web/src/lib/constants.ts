@@ -1,10 +1,6 @@
-export type ExamStatus = "draft" | "published" | "open" | "closed" | "archived";
+import type { ExamStatus, QuestionType } from "@exam/domain";
 
-export type QuestionType =
-  | "single_choice"
-  | "multiple_choice"
-  | "fill_blank"
-  | "true_false";
+export type { ExamStatus, QuestionType };
 
 export type BadgeVariant = "default" | "secondary" | "outline" | "destructive";
 

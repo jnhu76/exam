@@ -45,7 +45,7 @@ export function ImportWizard({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">{instructions}</p>
           {warning && <p className="text-sm text-warning">{warning}</p>}
           <FileUpload onText={onCsvChange} />
@@ -55,7 +55,7 @@ export function ImportWizard({
             onChange={(e) => onCsvChange(e.target.value)}
           />
           {preview.length > 0 && (
-            <div className="max-h-48 overflow-auto rounded-md border p-3 text-sm space-y-0.5">
+            <div className="max-h-48 overflow-auto rounded-md border p-3 text-sm flex flex-col gap-0.5">
               {preview.map((row) => (
                 <p
                   key={row.row}

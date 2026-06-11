@@ -77,7 +77,7 @@ export function EnrollmentPicker({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <Input
         placeholder="搜索考生"
         value={search}
@@ -95,7 +95,7 @@ export function EnrollmentPicker({
         </label>
       )}
 
-      <div className="max-h-64 overflow-y-auto space-y-1">
+      <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
         {filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
             无匹配结果

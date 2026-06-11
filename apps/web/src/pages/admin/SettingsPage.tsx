@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import type { UpdateBrandingRequest } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PlatformSettingsForm } from "@/components/settings/PlatformSettingsForm";
@@ -8,13 +9,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Settings2, Shield } from "lucide-react";
 
-interface SettingsData {
-  productName?: string;
-  productSubtitle?: string;
-  footerText?: string;
-  organizationDisplayName?: string;
-  timezone?: string;
-}
+type SettingsData = UpdateBrandingRequest;
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<SettingsData | null>(null);
@@ -41,7 +36,7 @@ export function SettingsPage() {
 
   async function handleSave(data: SettingsData) {
     const filtered = Object.fromEntries(
-      Object.entries(data).map(([k, v]) => [k, v === "" ? null : v]),
+      Object.entries(data).filter(([, v]) => v !== ""),
     );
     setIsSaving(true);
     try {
@@ -62,7 +57,7 @@ export function SettingsPage() {
   if (error) return <ErrorState message={error} onRetry={loadSettings} />;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader title="平台与机构设置" />
       <Card>
         <CardHeader>

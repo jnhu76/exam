@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TYPE_LABELS } from "@/lib/constants";
 
 interface QuestionResult {
   questionId: string;
@@ -49,6 +50,13 @@ type AttemptResultResponse =
       examTitle: string;
     };
 
+function formatAnswer(value: unknown): string {
+  if (value == null) return "—";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
+}
+
 export function AttemptDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -64,7 +72,7 @@ export function AttemptDetailPage() {
       const data = await api.get<AttemptResultResponse>(
         `/api/scores/attempts/${id}`,
       );
-      if (data.showResultImmediately) {
+      if (data.showResultImmediately === true) {
         setResult(data);
       } else {
         setError("该尝试尚未完成评分或结果不可见");
@@ -84,8 +92,13 @@ export function AttemptDetailPage() {
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result) return null;
 
+  const sortedQuestions = [...result.questionResults].sort(
+    (a, b) => a.order - b.order,
+  );
+  const earnedScore = sortedQuestions.reduce((sum, q) => sum + q.score, 0);
+
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title={`${result.examTitle} - 答卷详情`}
         actions={
@@ -95,28 +108,32 @@ export function AttemptDetailPage() {
         }
       />
 
-      {/* Summary */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">成绩概览</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">总分</p>
-              <p className="text-3xl font-bold">{result.totalScore}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">得分</p>
-              <p
-                className={`text-3xl font-bold ${result.passed ? "text-green-600" : "text-red-600"}`}
-              >
+              <p className="text-3xl font-bold tabular-nums">
                 {result.totalScore}
               </p>
             </div>
             <div>
+              <p className="text-sm text-muted-foreground">得分</p>
+              <p
+                data-testid="earned-score"
+                className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
+              >
+                {earnedScore}
+              </p>
+            </div>
+            <div>
               <p className="text-sm text-muted-foreground">及格线</p>
-              <p className="text-3xl font-bold">{result.passingScore}</p>
+              <p className="text-3xl font-bold tabular-nums">
+                {result.passingScore}
+              </p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">状态</p>
@@ -131,7 +148,6 @@ export function AttemptDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Answers */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">答题详情</CardTitle>
@@ -150,47 +166,31 @@ export function AttemptDetailPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.questionResults
-                .sort((a, b) => a.order - b.order)
-                .map((q) => (
-                  <TableRow key={q.questionId}>
-                    <TableCell className="font-medium">{q.order}</TableCell>
-                    <TableCell className="max-w-md truncate" title={q.content}>
-                      {q.content}
-                    </TableCell>
-                    <TableCell>
-                      {q.type === "single_choice"
-                        ? "单选题"
-                        : q.type === "multiple_choice"
-                          ? "多选题"
-                          : q.type === "fill_blank"
-                            ? "填空题"
-                            : q.type === "true_false"
-                              ? "判断题"
-                              : q.type}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={q.correct ? "default" : "destructive"}>
-                        {typeof q.candidateAnswer === "string"
-                          ? q.candidateAnswer
-                          : Array.isArray(q.candidateAnswer)
-                            ? q.candidateAnswer.join(", ")
-                            : String(q.candidateAnswer)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {typeof q.standardAnswer === "string"
-                        ? q.standardAnswer
-                        : Array.isArray(q.standardAnswer)
-                          ? q.standardAnswer.join(", ")
-                          : String(q.standardAnswer)}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">
-                      {q.score}
-                    </TableCell>
-                    <TableCell className="text-right">{q.maxScore}</TableCell>
-                  </TableRow>
-                ))}
+              {sortedQuestions.map((q) => (
+                <TableRow key={q.questionId}>
+                  <TableCell className="font-medium">{q.order}</TableCell>
+                  <TableCell className="max-w-md truncate" title={q.content}>
+                    {q.content}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {TYPE_LABELS[q.type] ?? q.type}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={q.correct ? "default" : "destructive"}>
+                      {formatAnswer(q.candidateAnswer)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{formatAnswer(q.standardAnswer)}</TableCell>
+                  <TableCell className="text-right font-bold tabular-nums">
+                    {q.score}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {q.maxScore}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </CardContent>
