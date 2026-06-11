@@ -19,6 +19,7 @@ const admin: User = {
   name: "管理员",
   role: Role.Admin,
   isActive: true,
+  sessionVersion: 0,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

@@ -54,6 +54,7 @@ export interface User {
   name: string;
   role: Role;
   isActive: boolean;
+  sessionVersion: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -304,6 +305,7 @@ export interface RequestContext {
   role: Role;
   permissions: Permission[];
   sessionId: string;
+  sessionVersion?: number;
   targetOrganizationId?: string;
 }
 

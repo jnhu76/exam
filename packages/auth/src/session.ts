@@ -3,13 +3,10 @@ import type { RequestContext } from "@exam/domain";
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
-  if (secret) {
-    return secret;
+  if (!secret) {
+    throw new Error("JWT_SECRET is required");
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET is required in production");
-  }
-  return "development-only-change-me";
+  return secret;
 }
 
 export function signJWT(

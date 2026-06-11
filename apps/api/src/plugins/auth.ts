@@ -66,12 +66,22 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       });
     }
 
+    if (
+      typeof payload.sessionVersion === "number" &&
+      payload.sessionVersion !== user.sessionVersion
+    ) {
+      return reply.code(401).send({
+        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
+      });
+    }
+
     request.ctx = {
       actorId: payload.actorId,
       organizationId: payload.organizationId,
       role: user.role,
       permissions: getPermissionsForRole(user.role as Role) as Permission[],
-      sessionId: token,
+      sessionId: `ses_${payload.actorId}_${user.sessionVersion}`,
+      sessionVersion: user.sessionVersion,
     };
   };
 

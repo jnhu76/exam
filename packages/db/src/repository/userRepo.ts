@@ -8,7 +8,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 export function createUserRepo(db: AnyDatabase) {
   const repo = createAsyncTenantCrudRepo(db, {
@@ -72,6 +72,30 @@ export function createUserRepo(db: AnyDatabase) {
         .from(pgUsers)
         .where(and(eq(pgUsers.organizationId, orgId), eq(pgUsers.id, id)));
       return (rows[0] as typeof sqliteUsers.$inferSelect | undefined) ?? null;
+    },
+    async incrementSessionVersion(userId: string): Promise<void> {
+      if (isSqlite(db)) {
+        const row = db
+          .select({ sv: sqliteUsers.sessionVersion })
+          .from(sqliteUsers)
+          .where(eq(sqliteUsers.id, userId))
+          .get();
+        if (!row) return;
+        db.update(sqliteUsers)
+          .set({ sessionVersion: row.sv + 1 })
+          .where(eq(sqliteUsers.id, userId))
+          .run();
+      } else {
+        const rows = await (db as PostgresDatabase)
+          .select({ sv: pgUsers.sessionVersion })
+          .from(pgUsers)
+          .where(eq(pgUsers.id, userId));
+        if (!rows[0]) return;
+        await (db as PostgresDatabase)
+          .update(pgUsers)
+          .set({ sessionVersion: rows[0].sv + 1 })
+          .where(eq(pgUsers.id, userId));
+      }
     },
   };
 }

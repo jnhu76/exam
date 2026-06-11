@@ -9,7 +9,7 @@ import {
   ChangePasswordRequestSchema,
 } from "@exam/contracts";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
-import { signJWT } from "@exam/auth/src/session.js";
+import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { PublicBrandingContext, RequestContext } from "@exam/domain";
@@ -96,6 +96,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         data.username,
       );
       if (!user?.isActive) {
+        await verifyPassword(
+          data.password,
+          "$argon2id$v=19$m=65536,t=3,p=4$dummy$dummy",
+        ).catch(() => {});
         return reply.code(401).send({
           message: "Invalid username or password",
           code: "INVALID_CREDENTIALS",
@@ -117,11 +121,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: user.id,
         role: user.role,
         organizationId: user.organizationId,
+        sessionVersion: user.sessionVersion ?? 0,
       });
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.COOKIE_SECURE === "true",
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",
@@ -139,7 +144,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post("/logout", async (_request, reply) => {
+  fastify.post("/logout", async (request, reply) => {
+    const token = request.cookies["auth-token"];
+    if (token) {
+      try {
+        const payload = verifyJWT(token);
+        await createUserRepo(fastify.db).incrementSessionVersion(
+          payload.actorId,
+        );
+      } catch {}
+    }
     reply.clearCookie("auth-token", { path: "/" });
     return reply.code(200).send({ success: true });
   });
@@ -219,6 +233,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "User not found" } });
       }
+      await userRepo.incrementSessionVersion(user.id);
       return { ok: true as const };
     },
   );

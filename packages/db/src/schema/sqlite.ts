@@ -87,6 +87,9 @@ export const users = sqliteTable(
       enum: ["SuperAdmin", "Admin", "Teacher", "Proctor", "Candidate"],
     }).notNull(),
     isActive: integer("is_active", { mode: "boolean" }).notNull(),
+    sessionVersion: integer("session_version", { mode: "number" })
+      .notNull()
+      .default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

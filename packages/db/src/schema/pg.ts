@@ -90,6 +90,7 @@ export const users = pgTable(
     name: text("name").notNull(),
     role: text("role").notNull(),
     isActive: boolean("is_active").notNull(),
+    sessionVersion: integer("session_version").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

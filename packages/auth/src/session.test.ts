@@ -1,41 +1,80 @@
-import { describe, it, expect, vi } from "vitest";
-import { signJWT, verifyJWT } from "../src/session.js";
-import { Role } from "@exam/domain";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { signJWT, verifyJWT } from "./session";
 
-describe("JWT session management", () => {
-  it("should sign and verify a JWT token", async () => {
-    const payload = {
-      actorId: "123e4567-e89b-12d3-a456-426614174000",
-      role: Role.SuperAdmin,
-      organizationId: "123e4567-e89b-12d3-a456-426614174001",
-    };
+describe("JWT Secret Validation", () => {
+  const originalEnv = process.env;
 
-    const token = signJWT(payload);
-    expect(typeof token).toBe("string");
-    expect(token.length).toBeGreaterThan(0);
-
-    const decoded = verifyJWT(token);
-    expect(decoded.actorId).toEqual(payload.actorId);
-    expect(decoded.role).toEqual(payload.role);
-    expect(decoded.organizationId).toEqual(payload.organizationId);
-    // 检查 JWT 标准字段
-    expect(typeof (decoded as any).iat).toBe("number");
-    expect(typeof (decoded as any).exp).toBe("number");
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
   });
 
-  it("should verify token with expiration", async () => {
-    const payload = {
-      actorId: "123e4567-e89b-12d3-a456-426614174000",
-      role: Role.SuperAdmin,
-      organizationId: "123e4567-e89b-12d3-a456-426614174001",
-    };
+  afterEach(() => {
+    process.env = originalEnv;
+  });
 
-    const token = signJWT(payload, { expiresIn: "1h" });
+  it("rejects sign when JWT_SECRET is not set in production", () => {
+    delete process.env.JWT_SECRET;
+    process.env.NODE_ENV = "production";
+
+    expect(() =>
+      signJWT({
+        actorId: "test-id",
+        role: "Admin",
+        organizationId: "org-1",
+      }),
+    ).toThrow("JWT_SECRET is required");
+  });
+
+  it("rejects verify when JWT_SECRET is not set in production", () => {
+    delete process.env.JWT_SECRET;
+    process.env.NODE_ENV = "production";
+
+    expect(() => verifyJWT("any-token")).toThrow("JWT_SECRET is required");
+  });
+
+  it("rejects sign when JWT_SECRET is not set in development", () => {
+    delete process.env.JWT_SECRET;
+    process.env.NODE_ENV = "development";
+
+    expect(() =>
+      signJWT({
+        actorId: "test-id",
+        role: "Admin",
+        organizationId: "org-1",
+      }),
+    ).toThrow("JWT_SECRET is required");
+  });
+
+  it("rejects sign when JWT_SECRET is not set in test", () => {
+    delete process.env.JWT_SECRET;
+    process.env.NODE_ENV = "test";
+
+    expect(() =>
+      signJWT({
+        actorId: "test-id",
+        role: "Admin",
+        organizationId: "org-1",
+      }),
+    ).toThrow("JWT_SECRET is required");
+  });
+
+  it("allows sign/verify when JWT_SECRET is set", () => {
+    process.env.JWT_SECRET = "test-secret-123";
+    process.env.NODE_ENV = "production";
+
+    const token = signJWT({
+      actorId: "test-id",
+      role: "Admin",
+      organizationId: "org-1",
+    });
+
+    expect(token).toBeTruthy();
+
     const decoded = verifyJWT(token);
-    expect(decoded.actorId).toEqual(payload.actorId);
-    expect(decoded.role).toEqual(payload.role);
-    expect(decoded.organizationId).toEqual(payload.organizationId);
-    // 检查 JWT 标准字段
+    expect(decoded.actorId).toBe("test-id");
+    expect(decoded.role).toBe("Admin");
+    expect(decoded.organizationId).toBe("org-1");
     expect(typeof (decoded as any).iat).toBe("number");
     expect(typeof (decoded as any).exp).toBe("number");
   });
