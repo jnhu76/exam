@@ -126,7 +126,7 @@ export function ScoreListPage() {
               onClick={() => {
                 // Download CSV
                 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
-                const url = `${baseUrl}/exams/${id}/export/scores`;
+                const url = `${baseUrl}/api/exams/${id}/export/scores`;
                 const a = document.createElement("a");
                 a.href = url;
                 a.target = "_blank";

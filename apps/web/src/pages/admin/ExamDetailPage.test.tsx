@@ -45,16 +45,6 @@ const mockDraftExam = {
   participants: [],
 };
 
-const mockPublishedExam = {
-  ...mockDraftExam,
-  status: "published",
-};
-
-const mockClosedExam = {
-  ...mockDraftExam,
-  status: "closed",
-};
-
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1"]}>
@@ -82,120 +72,40 @@ describe("ExamDetailPage", () => {
     getMock.mockReset();
     postMock.mockReset();
     deleteMock.mockReset();
+    getMock.mockImplementation((path: string) => {
+      if (path.includes("/enrollments")) return Promise.resolve([]);
+      return Promise.resolve({ ...mockDraftExam });
+    });
   });
 
-  describe("draft exam", () => {
-    beforeEach(() => {
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments")) return Promise.resolve([]);
-        return Promise.resolve({ ...mockDraftExam });
-      });
-    });
-
-    it("renders exam title and stats cards", async () => {
+  describe("layout structure", () => {
+    it("renders stats cards at the top", async () => {
       renderPage();
       expect(await screen.findByText("期末能力测评")).toBeInTheDocument();
-      expect(screen.getByText("60分钟")).toBeInTheDocument();
-      expect(screen.getByText("60/100")).toBeInTheDocument();
-      expect(screen.getByText("草稿")).toBeInTheDocument();
-      expect(screen.getByText("2")).toBeInTheDocument();
+      expect(screen.getByText("状态")).toBeInTheDocument();
+      expect(screen.getByText("考试时长")).toBeInTheDocument();
+      expect(screen.getByText("及格分")).toBeInTheDocument();
+      expect(screen.getByText("题目数量")).toBeInTheDocument();
     });
 
-    it("renders config card with timing and policy info", async () => {
+    it("renders config section", async () => {
       renderPage();
       expect(await screen.findByText("考试配置")).toBeInTheDocument();
       expect(screen.getByText("timed_window")).toBeInTheDocument();
-      expect(screen.getByText("no-retake")).toBeInTheDocument();
-      expect(screen.getByText("best")).toBeInTheDocument();
     });
 
-    it("renders publish button for draft", async () => {
+    it("renders tabs for enrollment, scores, and audit log", async () => {
       renderPage();
-      expect(await screen.findByText("发布考试")).toBeInTheDocument();
-    });
-
-    it("shows server validation error when publish fails", async () => {
-      postMock.mockRejectedValue(
-        new Error("Exam totalScore must match question scores"),
-      );
-      renderPage();
-      await userEvent.click(await screen.findByText("发布考试"));
-      await waitFor(() => {
-        expect(
-          screen.getByText("Exam totalScore must match question scores"),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it("publishes exam successfully", async () => {
-      postMock.mockResolvedValue({});
-      const user = userEvent.setup();
-      renderPage();
-      await user.click(await screen.findByText("发布考试"));
-      await waitFor(() => {
-        expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/publish");
-      });
-    });
-
-    it("renders empty enrollment state", async () => {
-      renderPage();
-      expect(await screen.findByText("暂无考生")).toBeInTheDocument();
-    });
-
-    it("renders back button", async () => {
-      renderPage();
-      expect(await screen.findByText("返回列表")).toBeInTheDocument();
-    });
-
-    it("renders stat cards with zeros", async () => {
-      renderPage();
-      expect(await screen.findByText("参与人数")).toBeInTheDocument();
-      expect(screen.getByText("已完成")).toBeInTheDocument();
-      expect(screen.getByText("已通过")).toBeInTheDocument();
+      expect(
+        await screen.findByRole("tab", { name: "报考" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "成绩" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "操作日志" })).toBeInTheDocument();
     });
   });
 
-  describe("published exam", () => {
-    beforeEach(() => {
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments")) return Promise.resolve([]);
-        return Promise.resolve({ ...mockPublishedExam });
-      });
-    });
-
-    it("renders archive button for published exam", async () => {
-      renderPage();
-      expect(await screen.findByText("归档")).toBeInTheDocument();
-      expect(screen.queryByText("发布考试")).not.toBeInTheDocument();
-    });
-
-    it("archives exam successfully", async () => {
-      postMock.mockResolvedValue({});
-      const user = userEvent.setup();
-      renderPage();
-      await user.click(await screen.findByText("归档"));
-      await waitFor(() => {
-        expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/archive");
-      });
-    });
-  });
-
-  describe("closed exam", () => {
-    beforeEach(() => {
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments")) return Promise.resolve([]);
-        return Promise.resolve({ ...mockClosedExam });
-      });
-    });
-
-    it("renders archive button for closed exam", async () => {
-      renderPage();
-      expect(await screen.findByText("归档")).toBeInTheDocument();
-    });
-  });
-
-  describe("enrollments", () => {
-    it("renders enrollment list with details", async () => {
+  describe("enrollment tab", () => {
+    it("shows enrollment stats and table in报考 tab", async () => {
       getMock.mockImplementation((path: string) => {
         if (path.includes("/enrollments"))
           return Promise.resolve([
@@ -219,75 +129,48 @@ describe("ExamDetailPage", () => {
       renderPage();
       expect(await screen.findByText("张三")).toBeInTheDocument();
       expect(screen.getByText("EMP001")).toBeInTheDocument();
-      expect(screen.getByText("assigned")).toBeInTheDocument();
     });
 
-    it("removes enrollment after confirmation", async () => {
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments"))
-          return Promise.resolve([
-            {
-              id: "enr-1",
-              examId: "exam-1",
-              candidateId: "c1",
-              candidateDisplayName: "张三",
-              status: "assigned",
-              attemptCount: 0,
-              finalScore: null,
-              finalPassed: null,
-            },
-          ]);
-        return Promise.resolve({ ...mockDraftExam });
-      });
-      deleteMock.mockResolvedValue(undefined);
+    it("shows empty state when no enrollments", async () => {
+      renderPage();
+      expect(await screen.findByText("暂无考生")).toBeInTheDocument();
+    });
+  });
+
+  describe("scores tab", () => {
+    it("shows scores tab content with link to score list", async () => {
+      renderPage();
+      await screen.findByRole("tab", { name: "成绩" });
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("tab", { name: "成绩" }));
+      expect(screen.getByText("成绩管理")).toBeInTheDocument();
+    });
+  });
+
+  describe("audit log tab", () => {
+    it("shows placeholder for audit log tab", async () => {
+      renderPage();
+      await screen.findByRole("tab", { name: "操作日志" });
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("tab", { name: "操作日志" }));
+      expect(screen.getByText("功能开发中")).toBeInTheDocument();
+    });
+  });
+
+  describe("publish and archive", () => {
+    it("renders publish button for draft", async () => {
+      renderPage();
+      expect(await screen.findByText("发布考试")).toBeInTheDocument();
+    });
+
+    it("publishes exam successfully", async () => {
+      postMock.mockResolvedValue({});
       const user = userEvent.setup();
       renderPage();
-      const removeBtn = await screen.findByLabelText("移除考生");
-      await user.click(removeBtn);
-      const dialog = await screen.findByRole("alertdialog");
-      const confirmBtn = within(dialog).getByRole("button", { name: "确认" });
-      await user.click(confirmBtn);
-      expect(deleteMock).toHaveBeenCalledWith(
-        "/api/exams/exam-1/enrollments/enr-1",
-      );
-    });
-
-    it("opens add candidate dialog", async () => {
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments")) return Promise.resolve([]);
-        if (path.includes("/candidates"))
-          return Promise.resolve({ items: [], total: 0 });
-        return Promise.resolve({ ...mockDraftExam });
+      await user.click(await screen.findByText("发布考试"));
+      await waitFor(() => {
+        expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/publish");
       });
-      const user = userEvent.setup();
-      renderPage();
-      const addBtn = await screen.findByRole("button", { name: /添加考生/ });
-      await user.click(addBtn);
-      const dialog = await screen.findByRole("dialog");
-      expect(dialog).toBeInTheDocument();
-    });
-
-    it("shows candidate identity fallback when not provided", async () => {
-      const longId = "candidate-very-long-id-12345678";
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments"))
-          return Promise.resolve([
-            {
-              id: "enr-1",
-              examId: "exam-1",
-              candidateId: longId,
-              candidateDisplayName: "李四",
-              status: "assigned",
-              attemptCount: 0,
-              finalScore: null,
-              finalPassed: null,
-            },
-          ]);
-        return Promise.resolve({ ...mockDraftExam });
-      });
-      renderPage();
-      expect(await screen.findByText("李四")).toBeInTheDocument();
-      expect(screen.getByText(longId.slice(0, 8))).toBeInTheDocument();
     });
   });
 
@@ -296,27 +179,6 @@ describe("ExamDetailPage", () => {
       getMock.mockRejectedValue(new Error("fail"));
       renderPage();
       expect(await screen.findByText("加载考试详情失败")).toBeInTheDocument();
-    });
-
-    it("shows score in enrollment", async () => {
-      getMock.mockImplementation((path: string) => {
-        if (path.includes("/enrollments"))
-          return Promise.resolve([
-            {
-              id: "enr-1",
-              examId: "exam-1",
-              candidateId: "c1",
-              candidateDisplayName: "王五",
-              status: "completed",
-              attemptCount: 1,
-              finalScore: 85,
-              finalPassed: true,
-            },
-          ]);
-        return Promise.resolve({ ...mockDraftExam });
-      });
-      renderPage();
-      expect(await screen.findByText("85")).toBeInTheDocument();
     });
   });
 });

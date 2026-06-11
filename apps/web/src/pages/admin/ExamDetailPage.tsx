@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, Plus, Trash2 } from "lucide-react";
 import {
   EnrollmentPicker,
@@ -338,105 +339,153 @@ export function ExamDetailPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              参与人数
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{exam.stats.participantCount}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              已完成
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{exam.stats.completedCount}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              已通过
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{exam.stats.passedCount}</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Tabs defaultValue="enrollment">
+        <TabsList>
+          <TabsTrigger value="enrollment">报考</TabsTrigger>
+          <TabsTrigger value="scores">成绩</TabsTrigger>
+          <TabsTrigger value="audit">操作日志</TabsTrigger>
+        </TabsList>
 
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">考生资格</CardTitle>
-          <Button size="sm" onClick={handleOpenAddDialog}>
-            <Plus data-icon="inline-start" />
-            添加考生
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {enrollments.length === 0 ? (
-            <EmptyState
-              icon={<Users className="size-8" />}
-              title="暂无考生"
-              description="还没有为此考试分配考生。"
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>身份信息</TableHead>
-                  <TableHead>姓名</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>尝试次数</TableHead>
-                  <TableHead>成绩</TableHead>
-                  <TableHead className="w-16">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {enrollments.map((enrollment) => (
-                  <TableRow key={enrollment.id}>
-                    <TableCell>
-                      {enrollment.candidateIdentity ??
-                        enrollment.candidateId.slice(0, 8)}
-                    </TableCell>
-                    <TableCell>{enrollment.candidateDisplayName}</TableCell>
-                    <TableCell>{enrollment.status}</TableCell>
-                    <TableCell>{enrollment.attemptCount}</TableCell>
-                    <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
-                    <TableCell>
-                      {enrollment.status === "assigned" && (
-                        <ConfirmDialog
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="移除考生"
-                            >
-                              <Trash2 className="text-destructive" />
-                            </Button>
-                          }
-                          title="确认移除"
-                          description={`确定要移除「${enrollment.candidateDisplayName}」吗？`}
-                          destructive
-                          onConfirm={() =>
-                            void handleRemoveEnrollment(enrollment.id)
-                          }
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="enrollment" className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">
+                  参与人数
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">
+                  {exam.stats.participantCount}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">
+                  已完成
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">
+                  {exam.stats.completedCount}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-muted-foreground">
+                  已通过
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">{exam.stats.passedCount}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">考生资格</CardTitle>
+              <Button size="sm" onClick={handleOpenAddDialog}>
+                <Plus data-icon="inline-start" />
+                添加考生
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {enrollments.length === 0 ? (
+                <EmptyState
+                  icon={<Users className="size-8" />}
+                  title="暂无考生"
+                  description="还没有为此考试分配考生。"
+                />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>身份信息</TableHead>
+                      <TableHead>姓名</TableHead>
+                      <TableHead>状态</TableHead>
+                      <TableHead>尝试次数</TableHead>
+                      <TableHead>成绩</TableHead>
+                      <TableHead className="w-16">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {enrollments.map((enrollment) => (
+                      <TableRow key={enrollment.id}>
+                        <TableCell>
+                          {enrollment.candidateIdentity ??
+                            enrollment.candidateId.slice(0, 8)}
+                        </TableCell>
+                        <TableCell>{enrollment.candidateDisplayName}</TableCell>
+                        <TableCell>{enrollment.status}</TableCell>
+                        <TableCell>{enrollment.attemptCount}</TableCell>
+                        <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
+                        <TableCell>
+                          {enrollment.status === "assigned" && (
+                            <ConfirmDialog
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="移除考生"
+                                >
+                                  <Trash2 className="text-destructive" />
+                                </Button>
+                              }
+                              title="确认移除"
+                              description={`确定要移除「${enrollment.candidateDisplayName}」吗？`}
+                              destructive
+                              onConfirm={() =>
+                                void handleRemoveEnrollment(enrollment.id)
+                              }
+                            />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="scores">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">成绩管理</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                查看和导出考试成绩数据。
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => void navigate(`/admin/exams/${id}/scores`)}
+              >
+                前往成绩管理
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="audit">
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">操作日志</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyState
+                icon={<Users className="size-8" />}
+                title="功能开发中"
+                description="操作日志功能将在后续版本中提供。"
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="max-w-lg">
