@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -167,17 +168,17 @@ export function CandidateFieldsPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="考生字段配置"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => void download()}>
-              <Download className="size-4" />
+              <Download data-icon="inline-start" />
               下载模板
             </Button>
             <Button onClick={() => dialog()}>
-              <Plus className="size-4" />
+              <Plus data-icon="inline-start" />
               添加字段
             </Button>
           </div>
@@ -233,7 +234,7 @@ export function CandidateFieldsPage() {
                       onClick={() => void move(field, -1)}
                       aria-label="上移"
                     >
-                      <ArrowUp className="size-4" />
+                      <ArrowUp />
                     </Button>
                     <Button
                       size="icon"
@@ -242,7 +243,7 @@ export function CandidateFieldsPage() {
                       onClick={() => void move(field, 1)}
                       aria-label="下移"
                     >
-                      <ArrowDown className="size-4" />
+                      <ArrowDown />
                     </Button>
                     <Button
                       size="icon"
@@ -250,7 +251,7 @@ export function CandidateFieldsPage() {
                       onClick={() => dialog(field)}
                       aria-label="编辑字段"
                     >
-                      <Pencil className="size-4" />
+                      <Pencil />
                     </Button>
                     <ConfirmDialog
                       trigger={
@@ -259,7 +260,7 @@ export function CandidateFieldsPage() {
                           variant="ghost"
                           aria-label="删除字段"
                         >
-                          <Trash2 className="size-4 text-destructive" />
+                          <Trash2 className="text-destructive" />
                         </Button>
                       }
                       title="确认删除"
@@ -279,18 +280,18 @@ export function CandidateFieldsPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "编辑字段" : "添加字段"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <FieldGroup className="py-4">
             {!editing && (
-              <div className="space-y-2">
+              <Field>
                 <Label>字段名</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
+              </Field>
             )}
-            <div className="space-y-2">
+            <Field>
               <Label>标签</Label>
               <Input value={label} onChange={(e) => setLabel(e.target.value)} />
-            </div>
-            <div className="space-y-2">
+            </Field>
+            <Field>
               <Label>类型</Label>
               {editing ? (
                 <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -318,7 +319,7 @@ export function CandidateFieldsPage() {
                   </SelectContent>
                 </Select>
               )}
-            </div>
+            </Field>
             <label className="flex gap-2">
               <Checkbox
                 checked={required}
@@ -333,7 +334,7 @@ export function CandidateFieldsPage() {
               />
               唯一身份标识
             </label>
-          </div>
+          </FieldGroup>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               取消

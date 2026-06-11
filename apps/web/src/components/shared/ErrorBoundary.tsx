@@ -51,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <CardDescription>应用程序遇到了一个意外错误</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2">
                 <p className="text-sm text-muted-foreground">
                   {this.state.error?.message || "未知错误"}
                 </p>
@@ -67,7 +67,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardContent>
             <CardFooter>
               <Button onClick={this.handleReset} className="w-full">
-                <RefreshCw className="mr-2 size-4" />
+                <RefreshCw data-icon="inline-start" />
                 重新加载
               </Button>
             </CardFooter>

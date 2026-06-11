@@ -21,7 +21,7 @@ export function FileUpload({ onText }: { onText: (text: string) => void }) {
         variant="outline"
         onClick={() => input.current?.click()}
       >
-        <Upload className="size-4" />
+        <Upload data-icon="inline-start" />
         选择 CSV
       </Button>
     </>

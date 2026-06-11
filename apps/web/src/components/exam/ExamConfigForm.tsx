@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/shared/FieldError";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 interface QuestionScore {
   id: string;
@@ -121,46 +122,48 @@ export function ExamConfigForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">基本信息</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>考试名称</Label>
-            <Input
-              value={data.title}
-              onChange={(e) => update({ title: e.target.value })}
-              placeholder="请输入考试名称"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>所属课程</Label>
-            <Select
-              value={data.courseId}
-              onValueChange={(v) => update({ courseId: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="选择课程" />
-              </SelectTrigger>
-              <SelectContent>
-                {courses.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>考试说明</Label>
-            <Input
-              value={data.description}
-              onChange={(e) => update({ description: e.target.value })}
-              placeholder="可选"
-            />
-          </div>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <Label>考试名称</Label>
+              <Input
+                value={data.title}
+                onChange={(e) => update({ title: e.target.value })}
+                placeholder="请输入考试名称"
+              />
+            </Field>
+            <Field>
+              <Label>所属课程</Label>
+              <Select
+                value={data.courseId}
+                onValueChange={(v) => update({ courseId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择课程" />
+                </SelectTrigger>
+                <SelectContent>
+                  {courses.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <Label>考试说明</Label>
+              <Input
+                value={data.description}
+                onChange={(e) => update({ description: e.target.value })}
+                placeholder="可选"
+              />
+            </Field>
+          </FieldGroup>
         </CardContent>
       </Card>
 
@@ -168,44 +171,46 @@ export function ExamConfigForm({
         <CardHeader>
           <CardTitle className="text-base">时间设置</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>开始时间</Label>
-              <Input
-                type="datetime-local"
-                value={data.openAt}
-                onChange={(e) => update({ openAt: e.target.value })}
-              />
+        <CardContent>
+          <FieldGroup>
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <Label>开始时间</Label>
+                <Input
+                  type="datetime-local"
+                  value={data.openAt}
+                  onChange={(e) => update({ openAt: e.target.value })}
+                />
+              </Field>
+              <Field>
+                <Label>结束时间</Label>
+                <Input
+                  type="datetime-local"
+                  value={data.closeAt}
+                  onChange={(e) => update({ closeAt: e.target.value })}
+                />
+              </Field>
             </div>
-            <div className="space-y-2">
-              <Label>结束时间</Label>
+            {timeError && (
+              <p role="alert" className="text-xs text-destructive">
+                结束时间必须晚于开始时间
+              </p>
+            )}
+            <Field>
+              <Label>考试时长（分钟）</Label>
               <Input
-                type="datetime-local"
-                value={data.closeAt}
-                onChange={(e) => update({ closeAt: e.target.value })}
+                type="number"
+                value={data.durationMinutes}
+                onChange={(e) =>
+                  update({ durationMinutes: Number(e.target.value) })
+                }
+                min={1}
               />
-            </div>
-          </div>
-          {timeError && (
-            <p role="alert" className="text-xs text-destructive">
-              结束时间必须晚于开始时间
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              时间模式：timed_window（Phase 1 仅支持此模式）
             </p>
-          )}
-          <div className="space-y-2">
-            <Label>考试时长（分钟）</Label>
-            <Input
-              type="number"
-              value={data.durationMinutes}
-              onChange={(e) =>
-                update({ durationMinutes: Number(e.target.value) })
-              }
-              min={1}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            时间模式：timed_window（Phase 1 仅支持此模式）
-          </p>
+          </FieldGroup>
         </CardContent>
       </Card>
 
@@ -213,69 +218,73 @@ export function ExamConfigForm({
         <CardHeader>
           <CardTitle className="text-base">分数设置</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="totalScore">总分</Label>
-                {hasQuestions && (
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0 text-xs"
-                    onClick={() => {
-                      if (manualTotalScore) {
-                        setManualTotalScore(false);
-                        if (computedTotal > 0) {
-                          update({ totalScore: computedTotal });
+        <CardContent>
+          <FieldGroup>
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="totalScore">总分</Label>
+                  {hasQuestions && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      onClick={() => {
+                        if (manualTotalScore) {
+                          setManualTotalScore(false);
+                          if (computedTotal > 0) {
+                            update({ totalScore: computedTotal });
+                          }
+                        } else {
+                          setManualTotalScore(true);
                         }
-                      } else {
-                        setManualTotalScore(true);
-                      }
-                    }}
-                  >
-                    {manualTotalScore ? "自动计算" : "手动输入"}
-                  </Button>
+                      }}
+                    >
+                      {manualTotalScore ? "自动计算" : "手动输入"}
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  id="totalScore"
+                  type="number"
+                  value={data.totalScore}
+                  onChange={(e) =>
+                    update({ totalScore: Number(e.target.value) })
+                  }
+                  min={1}
+                  readOnly={hasQuestions && !manualTotalScore}
+                  aria-label="总分"
+                />
+                {hasQuestions && !manualTotalScore && (
+                  <p className="text-xs text-muted-foreground">
+                    自动计算：{computedTotal} 分
+                  </p>
                 )}
-              </div>
-              <Input
-                id="totalScore"
-                type="number"
-                value={data.totalScore}
-                onChange={(e) => update({ totalScore: Number(e.target.value) })}
-                min={1}
-                readOnly={hasQuestions && !manualTotalScore}
-                aria-label="总分"
-              />
-              {hasQuestions && !manualTotalScore && (
-                <p className="text-xs text-muted-foreground">
-                  自动计算：{computedTotal} 分
-                </p>
-              )}
-              {showWarning && (
-                <p className="text-xs text-destructive">
-                  总分与题目分值之和不匹配（应为 {computedTotal}）
-                </p>
-              )}
+                {showWarning && (
+                  <p className="text-xs text-destructive">
+                    总分与题目分值之和不匹配（应为 {computedTotal}）
+                  </p>
+                )}
+              </Field>
+              <Field>
+                <Label>及格分</Label>
+                <Input
+                  type="number"
+                  value={data.passingScore}
+                  onChange={(e) =>
+                    update({ passingScore: Number(e.target.value) })
+                  }
+                  min={1}
+                />
+              </Field>
             </div>
-            <div className="space-y-2">
-              <Label>及格分</Label>
-              <Input
-                type="number"
-                value={data.passingScore}
-                onChange={(e) =>
-                  update({ passingScore: Number(e.target.value) })
-                }
-                min={1}
-              />
-            </div>
-          </div>
-          {scoreError && (
-            <p role="alert" className="text-xs text-destructive">
-              及格分不能超过总分（{data.passingScore} &gt; {data.totalScore}）
-            </p>
-          )}
+            {scoreError && (
+              <p role="alert" className="text-xs text-destructive">
+                及格分不能超过总分（{data.passingScore} &gt; {data.totalScore}）
+              </p>
+            )}
+          </FieldGroup>
         </CardContent>
       </Card>
 
@@ -283,15 +292,49 @@ export function ExamConfigForm({
         <CardHeader>
           <CardTitle className="text-base">重考策略</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>重考策略</Label>
+        <CardContent>
+          <FieldGroup>
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <Label>重考策略</Label>
+                <Select
+                  value={data.retakePolicy}
+                  onValueChange={(v) =>
+                    update({
+                      retakePolicy: v as ExamConfigData["retakePolicy"],
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unlimited">不限次数</SelectItem>
+                    <SelectItem value="max_attempts">限制次数</SelectItem>
+                    <SelectItem value="pass_then_stop">通过后停止</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field>
+                <Label>最大尝试次数</Label>
+                <Input
+                  type="number"
+                  value={data.maxAttempts}
+                  onChange={(e) =>
+                    update({ maxAttempts: Number(e.target.value) })
+                  }
+                  min={1}
+                  disabled={data.retakePolicy === "unlimited"}
+                />
+              </Field>
+            </div>
+            <Field>
+              <Label>分数策略</Label>
               <Select
-                value={data.retakePolicy}
+                value={data.scoreStrategy}
                 onValueChange={(v) =>
                   update({
-                    retakePolicy: v as ExamConfigData["retakePolicy"],
+                    scoreStrategy: v as ExamConfigData["scoreStrategy"],
                   })
                 }
               >
@@ -299,45 +342,13 @@ export function ExamConfigForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unlimited">不限次数</SelectItem>
-                  <SelectItem value="max_attempts">限制次数</SelectItem>
-                  <SelectItem value="pass_then_stop">通过后停止</SelectItem>
+                  <SelectItem value="highest">取最高分</SelectItem>
+                  <SelectItem value="latest">取最新分</SelectItem>
+                  <SelectItem value="first">取首次分</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>最大尝试次数</Label>
-              <Input
-                type="number"
-                value={data.maxAttempts}
-                onChange={(e) =>
-                  update({ maxAttempts: Number(e.target.value) })
-                }
-                min={1}
-                disabled={data.retakePolicy === "unlimited"}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>分数策略</Label>
-            <Select
-              value={data.scoreStrategy}
-              onValueChange={(v) =>
-                update({
-                  scoreStrategy: v as ExamConfigData["scoreStrategy"],
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="highest">取最高分</SelectItem>
-                <SelectItem value="latest">取最新分</SelectItem>
-                <SelectItem value="first">取首次分</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            </Field>
+          </FieldGroup>
         </CardContent>
       </Card>
 
@@ -345,7 +356,7 @@ export function ExamConfigForm({
         <CardHeader>
           <CardTitle className="text-base">控制设置</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"

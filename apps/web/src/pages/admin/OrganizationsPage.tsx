@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -105,12 +106,12 @@ export function OrganizationsPage() {
   if (error) return <ErrorState message={error} onRetry={loadOrgs} />;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="机构管理"
         actions={
           <Button onClick={() => openDialog()} data-testid="create-org-btn">
-            <Plus className="size-4" />
+            <Plus data-icon="inline-start" />
             新增机构
           </Button>
         }
@@ -145,7 +146,7 @@ export function OrganizationsPage() {
                       onClick={() => openDialog(org)}
                       aria-label="编辑机构"
                     >
-                      <Pencil className="size-4" />
+                      <Pencil />
                     </Button>
                     <ConfirmDialog
                       trigger={
@@ -154,7 +155,7 @@ export function OrganizationsPage() {
                           size="icon"
                           aria-label="删除机构"
                         >
-                          <Trash2 className="size-4 text-destructive" />
+                          <Trash2 className="text-destructive" />
                         </Button>
                       }
                       title="确认删除"
@@ -174,8 +175,8 @@ export function OrganizationsPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "编辑机构" : "新增机构"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
+          <FieldGroup className="py-4">
+            <Field>
               <Label>名称</Label>
               <Input
                 value={name}
@@ -186,8 +187,8 @@ export function OrganizationsPage() {
                 }}
               />
               <FieldError>{fieldErrors.name}</FieldError>
-            </div>
-            <div className="space-y-2">
+            </Field>
+            <Field>
               <Label>显示名</Label>
               <Input
                 value={displayName}
@@ -198,8 +199,8 @@ export function OrganizationsPage() {
                 }}
               />
               <FieldError>{fieldErrors.displayName}</FieldError>
-            </div>
-            <div className="space-y-2">
+            </Field>
+            <Field>
               <Label>标识</Label>
               <Input
                 value={slug}
@@ -210,8 +211,8 @@ export function OrganizationsPage() {
                     setFieldErrors((prev) => ({ ...prev, slug: "" }));
                 }}
               />
-            </div>
-          </div>
+            </Field>
+          </FieldGroup>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               取消

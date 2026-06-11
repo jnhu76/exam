@@ -47,7 +47,7 @@ export function AdminLayout() {
           <header className="flex h-14 items-center border-b bg-card px-6">
             <Skeleton className="h-4 w-24" />
           </header>
-          <main className="space-y-4 p-6">
+          <main className="flex flex-col gap-4 p-6">
             <Skeleton className="h-8 w-32" />
             <Skeleton className="h-32 w-full rounded-lg" />
             <Skeleton className="h-32 w-full rounded-lg" />

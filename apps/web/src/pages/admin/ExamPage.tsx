@@ -87,12 +87,12 @@ export function ExamPage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <PageHeader
           title="考试管理"
           actions={
             <Button onClick={() => void navigate("/admin/exams/new")}>
-              <Plus className="size-4" />
+              <Plus data-icon="inline-start" />
               创建考试
             </Button>
           }
@@ -127,7 +127,7 @@ export function ExamPage() {
                     aria-label="删除考试"
                     disabled={!exam.canDelete}
                   >
-                    <Trash2 className="size-4 text-destructive" />
+                    <Trash2 className="text-destructive" />
                   </Button>
                 );
 
@@ -159,7 +159,7 @@ export function ExamPage() {
                           }
                           aria-label="查看详情"
                         >
-                          <Eye className="size-4" />
+                          <Eye />
                         </Button>
                         {exam.canDelete ? (
                           <ConfirmDialog

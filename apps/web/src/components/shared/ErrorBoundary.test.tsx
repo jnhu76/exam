@@ -81,5 +81,6 @@ describe("ErrorBoundary", () => {
 
     expect(reloadSpy).toHaveBeenCalled();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 });

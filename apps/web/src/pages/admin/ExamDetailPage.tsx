@@ -231,7 +231,7 @@ export function ExamDetailPage() {
   if (!exam) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title={exam.title}
         actions={
@@ -321,7 +321,7 @@ export function ExamDetailPage() {
         <CardHeader>
           <CardTitle className="text-base">考试配置</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="flex flex-col gap-2 text-sm">
           <div className="grid grid-cols-2 gap-2">
             <span className="text-muted-foreground">时间模式：</span>
             <span>{exam.timingMode}</span>
@@ -388,7 +388,7 @@ export function ExamDetailPage() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">考生资格</CardTitle>
               <Button size="sm" onClick={handleOpenAddDialog}>
-                <Plus className="size-4" />
+                <Plus data-icon="inline-start" />
                 添加考生
               </Button>
             </CardHeader>
@@ -431,7 +431,7 @@ export function ExamDetailPage() {
                                   size="icon"
                                   aria-label="移除考生"
                                 >
-                                  <Trash2 className="size-4 text-destructive" />
+                                  <Trash2 className="text-destructive" />
                                 </Button>
                               }
                               title="确认移除"

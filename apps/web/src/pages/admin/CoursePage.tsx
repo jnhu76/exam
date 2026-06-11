@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -159,12 +160,12 @@ export function CoursePage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <PageHeader
           title="课程管理"
           actions={
             <Button onClick={openCreate}>
-              <Plus className="size-4" />
+              <Plus data-icon="inline-start" />
               新增课程
             </Button>
           }
@@ -224,7 +225,7 @@ export function CoursePage() {
                         onClick={() => openEdit(course)}
                         aria-label="编辑课程"
                       >
-                        <Pencil className="size-4" />
+                        <Pencil />
                       </Button>
                       <ConfirmDialog
                         trigger={
@@ -233,7 +234,7 @@ export function CoursePage() {
                             size="icon"
                             aria-label="删除课程"
                           >
-                            <Trash2 className="size-4 text-destructive" />
+                            <Trash2 className="text-destructive" />
                           </Button>
                         }
                         title="确认删除"
@@ -256,8 +257,8 @@ export function CoursePage() {
                 {editingCourse ? "编辑课程" : "新增课程"}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
+            <FieldGroup className="py-4">
+              <Field>
                 <Label htmlFor="course-name">课程名称</Label>
                 <Input
                   id="course-name"
@@ -270,8 +271,8 @@ export function CoursePage() {
                   placeholder="请输入课程名称"
                 />
                 <FieldError>{fieldErrors.name}</FieldError>
-              </div>
-              <div className="space-y-2">
+              </Field>
+              <Field>
                 <Label htmlFor="course-code">课程代码</Label>
                 <Input
                   id="course-code"
@@ -284,8 +285,8 @@ export function CoursePage() {
                   placeholder="请输入课程代码"
                 />
                 <FieldError>{fieldErrors.code}</FieldError>
-              </div>
-              <div className="space-y-2">
+              </Field>
+              <Field>
                 <Label htmlFor="course-desc">描述</Label>
                 <Textarea
                   id="course-desc"
@@ -294,8 +295,8 @@ export function CoursePage() {
                   placeholder="请输入课程描述"
                   rows={4}
                 />
-              </div>
-            </div>
+              </Field>
+            </FieldGroup>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 取消

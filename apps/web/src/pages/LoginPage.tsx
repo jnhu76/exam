@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/shared/FieldError";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 export function LoginPage() {
   const branding = useBranding();
@@ -44,50 +45,52 @@ export function LoginPage() {
               {branding.productSubtitle}
             </p>
           )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">用户名</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="请输入用户名"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  if (fieldErrors.username)
-                    setFieldErrors((prev) => ({ ...prev, username: "" }));
-                }}
-                disabled={isLoading}
-              />
-              <FieldError>{fieldErrors.username}</FieldError>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">密码</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="请输入密码"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (fieldErrors.password)
-                    setFieldErrors((prev) => ({ ...prev, password: "" }));
-                }}
-                disabled={isLoading}
-              />
-              <FieldError>{fieldErrors.password}</FieldError>
-            </div>
-            {error && (
-              <div
-                role="alert"
-                className="text-sm text-destructive bg-destructive/10 p-2 rounded"
-              >
-                {error}
-              </div>
-            )}
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "登录中..." : "登录"}
-            </Button>
+          <form onSubmit={handleSubmit}>
+            <FieldGroup>
+              <Field>
+                <Label htmlFor="username">用户名</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="请输入用户名"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (fieldErrors.username)
+                      setFieldErrors((prev) => ({ ...prev, username: "" }));
+                  }}
+                  disabled={isLoading}
+                />
+                <FieldError>{fieldErrors.username}</FieldError>
+              </Field>
+              <Field>
+                <Label htmlFor="password">密码</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="请输入密码"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldErrors.password)
+                      setFieldErrors((prev) => ({ ...prev, password: "" }));
+                  }}
+                  disabled={isLoading}
+                />
+                <FieldError>{fieldErrors.password}</FieldError>
+              </Field>
+              {error && (
+                <div
+                  role="alert"
+                  className="text-sm text-destructive bg-destructive/10 p-2 rounded"
+                >
+                  {error}
+                </div>
+              )}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "登录中..." : "登录"}
+              </Button>
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>

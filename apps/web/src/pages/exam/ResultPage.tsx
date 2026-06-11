@@ -83,7 +83,7 @@ export function ResultPage() {
   if (!result) return <LoadingState />;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-6">
+    <div className="mx-auto max-w-5xl flex flex-col gap-6 p-6">
       <h1 className="text-2xl font-semibold">{result.examTitle}</h1>
 
       {result.showResultImmediately ? (
@@ -92,7 +92,7 @@ export function ResultPage() {
             <CardHeader>
               <CardTitle>考试成绩</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-center">
+            <CardContent className="flex flex-col gap-2 text-center">
               <p className="text-5xl font-bold">{result.totalScore}</p>
               <p className="text-sm text-muted-foreground">
                 及格线：{result.passingScore}

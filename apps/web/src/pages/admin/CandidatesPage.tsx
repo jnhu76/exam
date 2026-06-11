@@ -7,6 +7,7 @@ import {
   MAX_IMPORT_ROWS,
 } from "@/lib/candidateImport";
 import type { CandidateFieldConfig } from "@/lib/candidateImport";
+import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -251,13 +252,13 @@ export function CandidatesPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <PageHeader
         title="考生管理"
         actions={
           <div className="flex gap-2">
             <Button onClick={() => open()}>
-              <Plus className="size-4" />
+              <Plus data-icon="inline-start" />
               新增考生
             </Button>
             <Button
@@ -268,7 +269,7 @@ export function CandidatesPage() {
                 setCsv("");
               }}
             >
-              <Upload className="size-4" />
+              <Upload data-icon="inline-start" />
               导入
             </Button>
           </div>
@@ -330,7 +331,7 @@ export function CandidatesPage() {
                         onClick={() => open(candidate)}
                         aria-label="编辑考生"
                       >
-                        <Pencil className="size-4" />
+                        <Pencil />
                       </Button>
                       <Button
                         size="sm"
@@ -352,10 +353,10 @@ export function CandidatesPage() {
           <DialogHeader>
             <DialogTitle>{editing ? "编辑考生" : "新增考生"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <FieldGroup className="py-4">
             {!editing && (
               <>
-                <div className="space-y-2">
+                <Field>
                   <Label htmlFor="candidate-username">
                     用户名 <span className="text-destructive">*</span>
                   </Label>
@@ -369,8 +370,8 @@ export function CandidatesPage() {
                     }}
                   />
                   <FieldError>{fieldErrors.username}</FieldError>
-                </div>
-                <div className="space-y-2">
+                </Field>
+                <Field>
                   <Label htmlFor="candidate-password">
                     初始密码 <span className="text-destructive">*</span>
                   </Label>
@@ -386,10 +387,10 @@ export function CandidatesPage() {
                     placeholder="至少 6 位"
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
-                </div>
+                </Field>
               </>
             )}
-            <div className="space-y-2">
+            <Field>
               <Label htmlFor="candidate-name">
                 姓名 <span className="text-destructive">*</span>
               </Label>
@@ -403,9 +404,9 @@ export function CandidatesPage() {
                 }}
               />
               <FieldError>{fieldErrors.name}</FieldError>
-            </div>
+            </Field>
             {fields.map((field) => (
-              <div key={field.id} className="space-y-2">
+              <Field key={field.id}>
                 <Label htmlFor={`candidate-field-${field.name}`}>
                   {field.label}
                   {field.required && (
@@ -424,9 +425,9 @@ export function CandidatesPage() {
                   }
                 />
                 <FieldError>{fieldErrors[`field:${field.name}`]}</FieldError>
-              </div>
+              </Field>
             ))}
-          </div>
+          </FieldGroup>
           {saveError && <p className="text-sm text-destructive">{saveError}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>

@@ -154,14 +154,14 @@ export function StartExamPage() {
         : error;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-6">
+    <div className="mx-auto max-w-2xl flex flex-col gap-6 p-6">
       <h1 className="text-2xl font-semibold">{exam.title}</h1>
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">考试信息</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="flex flex-col gap-3 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Clock className="size-4" />
@@ -226,7 +226,7 @@ export function StartExamPage() {
           <CardHeader>
             <CardTitle className="text-base">正在排队</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="flex flex-col gap-3 text-sm">
             <p>前方等待人数：{queueStatus.waitCount}</p>
             <p>预计等待：{queueStatus.estimatedWaitSeconds}秒</p>
             <div
@@ -258,7 +258,8 @@ export function StartExamPage() {
         >
           {isStarting && (
             <LoaderCircle
-              className="mr-2 size-4 animate-spin"
+              data-icon="inline-start"
+              className="animate-spin"
               aria-hidden="true"
             />
           )}

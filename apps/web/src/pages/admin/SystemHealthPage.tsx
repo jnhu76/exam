@@ -67,7 +67,7 @@ export function SystemHealthPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6">
         <PageHeader title="系统健康" />
         <ErrorState message={error} onRetry={loadHealth} />
       </div>
@@ -75,7 +75,7 @@ export function SystemHealthPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <PageHeader title="系统健康" />
         <div className="flex items-center gap-3">
@@ -96,7 +96,7 @@ export function SystemHealthPage() {
               loadHealth();
             }}
           >
-            <RefreshCw className="size-4" />
+            <RefreshCw />
           </Button>
         </div>
       </div>
@@ -170,14 +170,14 @@ function MetricCard({
 
 function SystemHealthSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-8 w-24" />
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="space-y-2 rounded-lg border p-6">
+          <div key={i} className="flex flex-col gap-2 rounded-lg border p-6">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-8 w-16" />
             <Skeleton className="h-3 w-12" />
