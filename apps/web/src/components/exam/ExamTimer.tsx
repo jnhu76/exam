@@ -25,14 +25,19 @@ export function ExamTimer({
 
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
-  const isLow = remaining < 300;
+  const isLow = remaining <= 300;
 
   return (
-    <span
-      className={`font-mono text-lg font-bold ${isLow ? "text-destructive" : ""}`}
+    <div
+      className={`rounded-md border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
     >
-      {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-    </span>
+      <div className="text-[11px] font-medium leading-none text-muted-foreground">
+        剩余时间
+      </div>
+      <span className="font-mono text-xl font-bold leading-tight tabular-nums">
+        {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+      </span>
+    </div>
   );
 }
 

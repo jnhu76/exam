@@ -1,6 +1,41 @@
-import { CircleCheck, LoaderCircle, TriangleAlert } from "lucide-react";
+import {
+  CircleCheck,
+  CircleDashed,
+  LoaderCircle,
+  TriangleAlert,
+} from "lucide-react";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
+
+const statusConfig = {
+  idle: {
+    icon: CircleDashed,
+    text: "等待保存",
+    className: "border-border bg-card text-muted-foreground",
+  },
+  saving: {
+    icon: LoaderCircle,
+    text: "保存中...",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  saved: {
+    icon: CircleCheck,
+    text: "已保存",
+    className: "border-success/30 bg-success/10 text-success",
+  },
+  error: {
+    icon: TriangleAlert,
+    text: "保存失败",
+    className: "border-destructive/30 bg-destructive/10 text-destructive",
+  },
+} satisfies Record<
+  SaveState,
+  {
+    icon: typeof CircleCheck;
+    text: string;
+    className: string;
+  }
+>;
 
 export function SaveIndicator({
   state,
@@ -9,38 +44,20 @@ export function SaveIndicator({
   state?: SaveState;
   status?: "saving" | "saved" | "error";
 }) {
-  const effectiveStatus = state
-    ? state === "idle"
-      ? undefined
-      : state
-    : status;
+  const effectiveStatus = state ? state : status;
 
-  if (!effectiveStatus) {
-    return null;
-  }
-
-  if (effectiveStatus === "saving") {
-    return (
-      <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-        保存中...
-      </span>
-    );
-  }
-
-  if (effectiveStatus === "saved") {
-    return (
-      <span className="inline-flex items-center gap-1 text-sm text-success">
-        <CircleCheck className="size-4" aria-hidden="true" />
-        已保存
-      </span>
-    );
-  }
+  const config = statusConfig[effectiveStatus ?? "idle"];
+  const Icon = config.icon;
 
   return (
-    <span className="inline-flex items-center gap-1 text-sm text-destructive">
-      <TriangleAlert className="size-4" aria-hidden="true" />
-      保存失败
+    <span
+      className={`inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${config.className}`}
+    >
+      <Icon
+        className={`size-4 ${effectiveStatus === "saving" ? "animate-spin" : ""}`}
+        aria-hidden="true"
+      />
+      {config.text}
     </span>
   );
 }
