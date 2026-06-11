@@ -28,6 +28,7 @@ import {
   type ExamConfigData,
 } from "@/components/exam/ExamConfigForm";
 import { BookOpen, Trash2 } from "lucide-react";
+import { TYPE_LABELS } from "@/lib/constants";
 
 interface CourseRow {
   id: string;
@@ -45,13 +46,6 @@ interface PaginatedResponse<T> {
   items: T[];
   total: number;
 }
-
-const typeLabels: Record<string, string> = {
-  single_choice: "单选",
-  multiple_choice: "多选",
-  fill_blank: "填空",
-  true_false: "判断",
-};
 
 export function ExamCreatePage() {
   const navigate = useNavigate();
@@ -241,7 +235,7 @@ export function ExamCreatePage() {
                   <TableRow key={q.id}>
                     <TableCell>
                       <Badge variant="outline">
-                        {typeLabels[q.type] ?? q.type}
+                        {TYPE_LABELS[q.type] ?? q.type}
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-[250px] truncate">
@@ -301,7 +295,7 @@ export function ExamCreatePage() {
                 <TableRow key={q.id}>
                   <TableCell>
                     <Badge variant="outline">
-                      {typeLabels[q.type] ?? q.type}
+                      {TYPE_LABELS[q.type] ?? q.type}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate">

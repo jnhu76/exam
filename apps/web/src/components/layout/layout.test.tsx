@@ -49,7 +49,7 @@ function renderWithProviders(ui: React.ReactElement, route = "/") {
 describe("branding", () => {
   it("provides generic fallback branding", () => {
     renderWithProviders(<BrandingProbe />);
-    expect(screen.getByText("内网考试平台")).toBeInTheDocument();
+    expect(screen.getByText("考试平台")).toBeInTheDocument();
   });
 
   it("exposes product subtitle in branding", () => {
@@ -59,7 +59,7 @@ describe("branding", () => {
       </Routes>,
       "/login",
     );
-    expect(screen.getByText("机构内部测评与准入认证")).toBeInTheDocument();
+    expect(screen.getByText("内部考核与准入控制")).toBeInTheDocument();
   });
 });
 
@@ -209,8 +209,6 @@ describe("ExamLayout header navigation", () => {
     );
     const myExamLink = screen.getByRole("link", { name: "我的考试" });
     expect(myExamLink).toHaveAttribute("href", "/exam/list");
-    const settingsLink = screen.getByRole("link", { name: "账号设置" });
-    expect(settingsLink).toHaveAttribute("href", "/exam/settings");
   });
 });
 

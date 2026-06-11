@@ -44,16 +44,6 @@ export function ExamLayout() {
               我的考试
             </NavLink>
           </Button>
-          <Button variant="ghost" size="sm" asChild>
-            <NavLink
-              to="/exam/settings"
-              className={({ isActive }) =>
-                cn(isActive && "font-medium text-primary")
-              }
-            >
-              账号设置
-            </NavLink>
-          </Button>
           <span className="mx-2 h-4 w-px bg-border" />
           <div className="flex items-center gap-2">
             <Avatar className="size-7">

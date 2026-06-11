@@ -1,9 +1,19 @@
 import { cn } from "@/lib/utils";
+import { CONNECTION_STATUS_LABELS } from "@/lib/constants";
 
 const statusView = {
-  connected: { label: "连接正常", className: "bg-green-500" },
-  degraded: { label: "连接不稳定", className: "bg-yellow-500" },
-  offline: { label: "连接已断开", className: "bg-red-500" },
+  connected: {
+    label: CONNECTION_STATUS_LABELS.connected,
+    className: "bg-success",
+  },
+  degraded: {
+    label: CONNECTION_STATUS_LABELS.degraded,
+    className: "bg-warning",
+  },
+  offline: {
+    label: CONNECTION_STATUS_LABELS.offline,
+    className: "bg-destructive",
+  },
 } as const;
 
 export function ConnectionIndicator({

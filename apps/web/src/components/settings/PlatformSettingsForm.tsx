@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,18 +34,24 @@ export interface SettingsFormValues {
 }
 
 export function PlatformSettingsForm({
-  defaultValues,
+  initialValues,
   onSave,
   isLoading,
 }: {
-  defaultValues: SettingsFormValues;
+  initialValues?: SettingsFormValues;
   onSave: (data: SettingsFormValues) => void;
   isLoading?: boolean;
 }) {
-  const { register, handleSubmit, setValue, watch } =
+  const { register, handleSubmit, setValue, watch, reset } =
     useForm<SettingsFormValues>({
-      defaultValues,
+      defaultValues: {},
     });
+
+  useEffect(() => {
+    if (initialValues) {
+      reset(initialValues);
+    }
+  }, [initialValues, reset]);
 
   const timezoneValue = watch("timezone");
 
@@ -52,31 +59,44 @@ export function PlatformSettingsForm({
     <form onSubmit={handleSubmit(onSave)} className="max-w-xl space-y-4">
       <div className="space-y-2">
         <Label htmlFor="productName">产品标题</Label>
-        <Input id="productName" {...register("productName")} />
+        <Input
+          id="productName"
+          placeholder="输入产品标题"
+          {...register("productName")}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="productSubtitle">产品副标题</Label>
-        <Input id="productSubtitle" {...register("productSubtitle")} />
+        <Input
+          id="productSubtitle"
+          placeholder="输入产品副标题"
+          {...register("productSubtitle")}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="footerText">页脚说明</Label>
-        <Input id="footerText" {...register("footerText")} />
+        <Input
+          id="footerText"
+          placeholder="输入页脚说明"
+          {...register("footerText")}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="organizationDisplayName">机构显示名</Label>
         <Input
           id="organizationDisplayName"
+          placeholder="输入机构显示名"
           {...register("organizationDisplayName")}
         />
       </div>
       <div className="space-y-2">
         <Label>默认时区</Label>
         <Select
-          value={timezoneValue}
+          value={timezoneValue ?? ""}
           onValueChange={(val) => setValue("timezone", val)}
         >
           <SelectTrigger className="w-full">
-            <SelectValue />
+            <SelectValue placeholder="选择时区" />
           </SelectTrigger>
           <SelectContent>
             {TIMEZONE_OPTIONS.map((tz) => (

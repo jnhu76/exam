@@ -30,12 +30,12 @@ export function QuestionNav({
         let stateLabel = "未作答";
         if (state === "answered") {
           bgColor =
-            "border border-green-500 bg-green-500 text-white hover:bg-green-600";
+            "border border-success bg-success text-success-foreground hover:bg-success/90";
           stateLabel = "已作答";
         }
         if (state === "flagged") {
           bgColor =
-            "border border-amber-500 bg-amber-100 text-amber-900 hover:bg-amber-200";
+            "border border-warning bg-warning/10 text-warning hover:bg-warning/20";
           stateLabel = "已标记";
         }
         if (isCurrent) {

@@ -4,6 +4,7 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamLayout } from "@/components/layout/ExamLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
@@ -69,13 +70,15 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <BrandProvider loadRemote>
-        <AuthProvider restoreSession>
-          <AppRoutes />
-          <Toaster />
-        </AuthProvider>
-      </BrandProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <BrandProvider loadRemote>
+          <AuthProvider restoreSession>
+            <AppRoutes />
+            <Toaster />
+          </AuthProvider>
+        </BrandProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

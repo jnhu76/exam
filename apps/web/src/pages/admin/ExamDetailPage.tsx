@@ -30,6 +30,7 @@ import {
   EnrollmentPicker,
   type CandidateItem,
 } from "@/components/exam/EnrollmentPicker";
+import { STATUS_LABELS } from "@/lib/constants";
 
 interface ExamDetail {
   id: string;
@@ -62,14 +63,6 @@ interface ExamDetail {
     passed: boolean | null;
   }>;
 }
-
-const statusLabels: Record<string, string> = {
-  draft: "草稿",
-  published: "已发布",
-  open: "进行中",
-  closed: "已结束",
-  archived: "已归档",
-};
 
 interface EnrollmentItem {
   id: string;
@@ -286,7 +279,7 @@ export function ExamDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Badge>{statusLabels[exam.status] ?? exam.status}</Badge>
+            <Badge>{STATUS_LABELS[exam.status] ?? exam.status}</Badge>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
