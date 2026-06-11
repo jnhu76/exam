@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
+import { STATUS_LABELS, STATUS_VARIANT } from "@/lib/constants";
 
 interface ExamRow {
   id: string;
@@ -47,25 +48,6 @@ interface PaginatedResponse<T> {
   pageSize: number;
   totalPages: number;
 }
-
-const statusLabels: Record<string, string> = {
-  draft: "草稿",
-  published: "已发布",
-  open: "进行中",
-  closed: "已结束",
-  archived: "已归档",
-};
-
-const statusVariant: Record<
-  string,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  draft: "outline",
-  published: "default",
-  open: "default",
-  closed: "secondary",
-  archived: "outline",
-};
 
 export function ExamPage() {
   const navigate = useNavigate();
@@ -153,8 +135,8 @@ export function ExamPage() {
                   <TableRow key={exam.id}>
                     <TableCell className="font-medium">{exam.title}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant[exam.status] ?? "outline"}>
-                        {statusLabels[exam.status] ?? exam.status}
+                      <Badge variant={STATUS_VARIANT[exam.status] ?? "outline"}>
+                        {STATUS_LABELS[exam.status] ?? exam.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">

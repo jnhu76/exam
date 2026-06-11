@@ -10,8 +10,8 @@ import type { BrandingView } from "@exam/domain";
 import { api } from "@/lib/api";
 
 const fallbackBranding: BrandingView = {
-  productName: "内网考试平台",
-  productSubtitle: "机构内部测评与准入认证",
+  productName: "Assessment Platform",
+  productSubtitle: "Internal Assessment & Access Control",
 };
 
 const BrandingContext = createContext<BrandingView>(fallbackBranding);

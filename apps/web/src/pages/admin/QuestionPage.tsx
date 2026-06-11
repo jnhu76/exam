@@ -34,6 +34,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
+import { TYPE_LABELS, TYPE_VARIANT } from "@/lib/constants";
 
 interface QuestionRow {
   id: string;
@@ -58,20 +59,6 @@ interface PaginatedResponse<T> {
   pageSize: number;
   totalPages: number;
 }
-
-const typeLabels: Record<string, string> = {
-  single_choice: "单选",
-  multiple_choice: "多选",
-  fill_blank: "填空",
-  true_false: "判断",
-};
-
-const typeVariant: Record<string, "default" | "secondary" | "outline"> = {
-  single_choice: "default",
-  multiple_choice: "secondary",
-  fill_blank: "outline",
-  true_false: "outline",
-};
 
 export function QuestionPage() {
   const navigate = useNavigate();
@@ -321,8 +308,8 @@ export function QuestionPage() {
               {filtered.map((q) => (
                 <TableRow key={q.id}>
                   <TableCell>
-                    <Badge variant={typeVariant[q.type] ?? "default"}>
-                      {typeLabels[q.type] ?? q.type}
+                    <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
+                      {TYPE_LABELS[q.type] ?? q.type}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate">

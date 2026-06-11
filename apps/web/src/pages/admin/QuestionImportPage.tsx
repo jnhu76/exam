@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { TYPE_LABELS } from "@/lib/constants";
 
 interface CourseRow {
   id: string;
@@ -55,13 +56,6 @@ interface ImportResult {
     message?: string;
   }>;
 }
-
-const typeLabels: Record<string, string> = {
-  single_choice: "单选",
-  multiple_choice: "多选",
-  fill_blank: "填空",
-  true_false: "判断",
-};
 
 export function QuestionImportPage() {
   const navigate = useNavigate();
@@ -249,7 +243,7 @@ export function QuestionImportPage() {
                   <TableCell>{i + 1}</TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {typeLabels[row.type] ?? row.type}
+                      {TYPE_LABELS[row.type] ?? row.type}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[400px] truncate">

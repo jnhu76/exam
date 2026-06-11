@@ -48,7 +48,7 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("平台与机构设置")).toBeInTheDocument();
   });
 
-  it("renders product name field with loaded value", async () => {
+  it("renders product name field", async () => {
     renderPage();
     const input = await screen.findByLabelText("产品标题");
     expect(input).toBeInTheDocument();
@@ -61,11 +61,9 @@ describe("SettingsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows tabs for branding and security", async () => {
+  it("shows card headers for branding and security", async () => {
     renderPage();
-    expect(
-      await screen.findByRole("tab", { name: "品牌设置" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "账号安全" })).toBeInTheDocument();
+    expect(await screen.findByText("品牌设置")).toBeInTheDocument();
+    expect(screen.getByText("账号安全")).toBeInTheDocument();
   });
 });

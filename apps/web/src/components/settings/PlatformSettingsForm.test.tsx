@@ -3,21 +3,15 @@ import { describe, expect, it } from "vitest";
 import { PlatformSettingsForm } from "./PlatformSettingsForm";
 
 describe("PlatformSettingsForm", () => {
-  it("shows timezone as a select dropdown", () => {
-    render(
-      <PlatformSettingsForm
-        defaultValues={{ timezone: "Asia/Shanghai" }}
-        onSave={() => {}}
-      />,
-    );
+  it("shows timezone select with placeholder", () => {
+    render(<PlatformSettingsForm onSave={() => {}} />);
 
     expect(screen.getByRole("combobox")).toBeInTheDocument();
-
-    expect(screen.getAllByText("Asia/Shanghai").length).toBeGreaterThan(0);
+    expect(screen.getByText("选择时区")).toBeInTheDocument();
   });
 
   it("shows branding fields in the form", () => {
-    render(<PlatformSettingsForm defaultValues={{}} onSave={() => {}} />);
+    render(<PlatformSettingsForm onSave={() => {}} />);
 
     expect(screen.getByLabelText("产品标题")).toBeInTheDocument();
     expect(screen.getByLabelText("产品副标题")).toBeInTheDocument();

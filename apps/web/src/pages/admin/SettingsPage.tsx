@@ -5,7 +5,8 @@ import { PlatformSettingsForm } from "@/components/settings/PlatformSettingsForm
 import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Settings2, Shield } from "lucide-react";
 
 interface SettingsData {
   productName?: string;
@@ -39,11 +40,14 @@ export function SettingsPage() {
   }, [loadSettings]);
 
   async function handleSave(data: SettingsData) {
+    const filtered = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined && v !== ""),
+    );
     setIsSaving(true);
     try {
       const updated = await api.patch<SettingsData>(
         "/api/admin/settings/branding",
-        data,
+        filtered,
       );
       setSettings(updated);
       window.dispatchEvent(new Event("branding:refresh"));
@@ -60,22 +64,28 @@ export function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="平台与机构设置" />
-      <Tabs defaultValue="branding">
-        <TabsList>
-          <TabsTrigger value="branding">品牌设置</TabsTrigger>
-          <TabsTrigger value="security">账号安全</TabsTrigger>
-        </TabsList>
-        <TabsContent value="branding">
-          <PlatformSettingsForm
-            defaultValues={settings ?? {}}
-            onSave={handleSave}
-            isLoading={isSaving}
-          />
-        </TabsContent>
-        <TabsContent value="security">
-          <PasswordChangeForm />
-        </TabsContent>
-      </Tabs>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Settings2 className="size-5 text-muted-foreground" />
+            <CardTitle className="text-base">品牌设置</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <PlatformSettingsForm onSave={handleSave} isLoading={isSaving} />
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Shield className="size-5 text-muted-foreground" />
+            <CardTitle className="text-base">账号安全</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <PasswordChangeForm cardWrapper={false} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

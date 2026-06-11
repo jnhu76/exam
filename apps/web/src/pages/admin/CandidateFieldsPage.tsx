@@ -17,6 +17,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -293,20 +300,23 @@ export function CandidateFieldsPage() {
                   <span className="ml-2 text-xs">（创建后不可修改）</span>
                 </div>
               ) : (
-                <select
+                <Select
                   value={fieldType}
-                  onChange={(event) =>
-                    setFieldType(event.target.value as Field["fieldType"])
+                  onValueChange={(value) =>
+                    setFieldType(value as Field["fieldType"])
                   }
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                  aria-label="字段类型"
                 >
-                  {FIELD_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label="字段类型">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FIELD_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             </div>
             <label className="flex gap-2">

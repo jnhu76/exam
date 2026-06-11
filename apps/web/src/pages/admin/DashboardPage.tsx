@@ -26,17 +26,10 @@ import {
   CalendarCheck,
   Activity,
 } from "lucide-react";
-
-const statusLabels: Record<string, string> = {
-  draft: "草稿",
-  published: "已发布",
-  open: "进行中",
-  closed: "已结束",
-  archived: "已归档",
-};
+import { STATUS_LABELS } from "@/lib/constants";
 
 function StatusBadge({ status }: { status: string }) {
-  const label = statusLabels[status] ?? status;
+  const label = STATUS_LABELS[status] ?? status;
   if (status === "open")
     return (
       <Badge className="bg-success/10 text-success hover:bg-success/20">
