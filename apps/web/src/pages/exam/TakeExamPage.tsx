@@ -3,13 +3,15 @@ import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Flag } from "lucide-react";
+import { ChevronLeft, ChevronRight, Flag, WifiOff } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { Separator } from "@/components/ui/separator";
 import { QuestionNav } from "@/components/exam/QuestionNav";
 import { ExamTimer } from "@/components/exam/ExamTimer";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,8 @@ export function TakeExamPage() {
   const navigate = useNavigate();
   const [attempt, setAttempt] = useState<AttemptData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isDisconnected, setIsDisconnected] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [questionStates, setQuestionStates] = useState<QuestionState[]>([]);
   const [answers, setAnswers] = useState<Map<string, unknown>>(new Map());
@@ -52,6 +56,7 @@ export function TakeExamPage() {
   const loadAttempt = useCallback(async () => {
     if (!attemptId) return;
     setIsLoading(true);
+    setLoadError(null);
     try {
       const data = await api.get<AttemptData>(`/api/attempts/${attemptId}`);
       if (data.status !== "in_progress") {
@@ -74,8 +79,9 @@ export function TakeExamPage() {
         return "unanswered";
       });
       setQuestionStates(states);
+      setIsDisconnected(false);
     } catch {
-      navigate(routes.exam.list);
+      setLoadError("无法加载答题记录，请检查连接后重试");
     } finally {
       setIsLoading(false);
     }
@@ -129,11 +135,13 @@ export function TakeExamPage() {
         if (result.accepted) {
           versionsRef.current.set(questionId, result.serverVersion);
           setSaveState("saved");
+          setIsDisconnected(false);
         } else {
           setSaveState("error");
         }
       } catch {
         setSaveState("error");
+        setIsDisconnected(true);
       }
     }, 1500);
     saveTimerRefs.current.set(questionId, timer);
@@ -188,8 +196,9 @@ export function TakeExamPage() {
     if (!attemptId) return;
     try {
       await api.post(`/api/attempts/${attemptId}/heartbeat`);
+      setIsDisconnected(false);
     } catch {
-      // heartbeat failure is non-critical
+      setIsDisconnected(true);
     }
   }, [attemptId]);
 
@@ -198,7 +207,24 @@ export function TakeExamPage() {
     return () => clearInterval(interval);
   }, [handleHeartbeat]);
 
-  if (isLoading || !attempt || !currentQuestion) return <LoadingState />;
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingState label="正在加载答题记录..." />
+      </div>
+    );
+  }
+
+  if (loadError || !attempt || !currentQuestion) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <ErrorState
+          message={loadError ?? "答题记录不可用"}
+          onRetry={loadAttempt}
+        />
+      </div>
+    );
+  }
 
   const unansweredCount = questionStates.filter(
     (s) => s === "unanswered",
@@ -209,98 +235,150 @@ export function TakeExamPage() {
   ).length;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex h-14 items-center justify-between border-b px-4">
-        <span className="text-lg font-semibold">
-          {attempt.questionSnapshot.length}题
-        </span>
-        <div className="flex items-center gap-4">
-          <SaveIndicator state={saveState} />
-          <ExamTimer
-            deadlineAt={attempt.deadlineAt}
-            onTimeout={handleTimeout}
-          />
-          <Button
-            variant="default"
-            size="sm"
-            onClick={() => setShowSubmitDialog(true)}
-          >
-            交卷
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="w-20 overflow-y-auto border-r p-2">
-          <QuestionNav
-            questions={attempt.questionSnapshot.map((q) => ({
-              id: q.originalQuestionId,
-            }))}
-            states={questionStates}
-            currentIndex={currentIndex}
-            onSelect={setCurrentIndex}
-          />
-        </aside>
-
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-3xl">
-            <div className="mb-4 text-sm text-muted-foreground">
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-lg font-semibold">答题中</div>
+            <div className="text-sm text-muted-foreground">
               第 {currentIndex + 1} 题 / 共 {attempt.questionSnapshot.length} 题
-              （{currentQuestion.score}分）
             </div>
-            <div className="mb-6 text-lg">{currentQuestion.content}</div>
-            <QuestionRenderer
-              question={currentQuestion}
-              answer={currentAnswer}
-              onChange={(answer) =>
-                saveAnswer(currentQuestion.originalQuestionId, answer)
-              }
-            />
           </div>
-        </main>
-      </div>
-
-      <Separator />
-      <footer className="flex items-center justify-between px-4 py-2">
-        <div className="text-sm text-muted-foreground">
-          已答 {answeredCount} / 未答 {unansweredCount} / 标记 {flaggedCount} /
-          共 {attempt.questionSnapshot.length}
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrev}
-            disabled={currentIndex === 0}
-          >
-            <ChevronLeft data-icon="inline-start" />
-            上一题
-          </Button>
-          <Button variant="outline" size="sm" onClick={toggleFlag}>
-            <Flag
-              data-icon="inline-start"
-              fill={
-                questionStates[currentIndex] === "flagged"
-                  ? "currentColor"
-                  : "none"
-              }
+          <div className="flex flex-wrap items-center gap-3">
+            <SaveIndicator state={saveState} />
+            <ExamTimer
+              deadlineAt={attempt.deadlineAt}
+              onTimeout={handleTimeout}
             />
-            {questionStates[currentIndex] === "flagged" ? "取消标记" : "标记"}
-          </Button>
-          {currentIndex === attempt.questionSnapshot.length - 1 ? (
             <Button
               variant="default"
               size="sm"
               onClick={() => setShowSubmitDialog(true)}
             >
-              提交考试
+              交卷
             </Button>
-          ) : (
-            <Button variant="outline" size="sm" onClick={handleNext}>
-              下一题
-              <ChevronRight data-icon="inline-end" />
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start">
+        <aside className="rounded-lg border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
+          <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground xl:block">
+            <span>题号</span>
+            <span className="xl:hidden">
+              已答 {answeredCount} / 未答 {unansweredCount}
+            </span>
+          </div>
+          <div className="overflow-x-auto xl:overflow-visible">
+            <QuestionNav
+              questions={attempt.questionSnapshot.map((q) => ({
+                id: q.originalQuestionId,
+              }))}
+              states={questionStates}
+              currentIndex={currentIndex}
+              onSelect={setCurrentIndex}
+            />
+          </div>
+        </aside>
+
+        <main className="min-w-0 flex-1">
+          <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            {isDisconnected && (
+              <Alert
+                variant="destructive"
+                className="border-destructive/30 bg-destructive/10"
+              >
+                <WifiOff aria-hidden="true" />
+                <AlertTitle>连接异常</AlertTitle>
+                <AlertDescription>
+                  系统会在连接恢复后继续保存，请不要关闭页面
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <section className="rounded-lg border bg-card p-5 shadow-sm md:p-8">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">
+                    第 {currentIndex + 1} 题 / 共{" "}
+                    {attempt.questionSnapshot.length} 题
+                  </div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    {currentQuestion.score} 分
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" onClick={toggleFlag}>
+                  <Flag
+                    data-icon="inline-start"
+                    fill={
+                      questionStates[currentIndex] === "flagged"
+                        ? "currentColor"
+                        : "none"
+                    }
+                  />
+                  {questionStates[currentIndex] === "flagged"
+                    ? "取消标记"
+                    : "标记"}
+                </Button>
+              </div>
+              <div className="mb-8 text-xl font-medium leading-8 text-foreground">
+                {currentQuestion.content}
+              </div>
+              <QuestionRenderer
+                question={currentQuestion}
+                answer={currentAnswer}
+                onChange={(answer) =>
+                  saveAnswer(currentQuestion.originalQuestionId, answer)
+                }
+              />
+            </section>
+          </div>
+        </main>
+      </div>
+
+      <Separator />
+      <footer className="sticky bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-muted-foreground">
+            已答 {answeredCount} / 未答 {unansweredCount} / 标记 {flaggedCount}{" "}
+            / 共 {attempt.questionSnapshot.length}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrev}
+              disabled={currentIndex === 0}
+            >
+              <ChevronLeft data-icon="inline-start" />
+              上一题
             </Button>
-          )}
+            <Button variant="outline" size="sm" onClick={toggleFlag}>
+              <Flag
+                data-icon="inline-start"
+                fill={
+                  questionStates[currentIndex] === "flagged"
+                    ? "currentColor"
+                    : "none"
+                }
+              />
+              {questionStates[currentIndex] === "flagged" ? "取消标记" : "标记"}
+            </Button>
+            {currentIndex === attempt.questionSnapshot.length - 1 ? (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setShowSubmitDialog(true)}
+              >
+                提交考试
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleNext}>
+                下一题
+                <ChevronRight data-icon="inline-end" />
+              </Button>
+            )}
+          </div>
         </div>
       </footer>
 

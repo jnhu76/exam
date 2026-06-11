@@ -83,7 +83,7 @@ export function ExamConfigForm({
     ) {
       onChange({ ...data, totalScore: computedTotal });
     }
-  }, [computedTotal, hasQuestions, manualTotalScore]);
+  }, [computedTotal, data, hasQuestions, manualTotalScore, onChange]);
 
   function update(partial: Partial<ExamConfigData>) {
     onChange({ ...data, ...partial });

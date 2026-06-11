@@ -15,12 +15,13 @@ export function QuestionNav({
   currentIndex: number;
   onSelect: (index: number) => void;
 }) {
-  const isTwoColumn = questions.length >= 50;
+  const columns =
+    questions.length >= 50
+      ? "grid-cols-2 max-xl:grid-cols-10"
+      : "grid-cols-1 max-xl:grid-cols-10";
 
   return (
-    <div
-      className={`grid gap-1 ${isTwoColumn ? "grid-cols-2" : "grid-cols-1"}`}
-    >
+    <div className={`grid min-w-max gap-1.5 lg:min-w-0 ${columns}`}>
       {questions.map((q, i) => {
         const state = states[i] ?? "unanswered";
         const isCurrent = i === currentIndex;
@@ -52,7 +53,7 @@ export function QuestionNav({
           <button
             key={q.id}
             type="button"
-            className={`flex h-9 w-9 items-center justify-center rounded text-sm transition-colors ${bgColor}`}
+            className={`flex size-9 shrink-0 items-center justify-center rounded-md text-sm transition-colors ${bgColor}`}
             onClick={() => onSelect(i)}
             aria-label={ariaLabel}
             aria-current={isCurrent ? "true" : undefined}

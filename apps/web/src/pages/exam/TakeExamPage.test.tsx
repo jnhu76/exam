@@ -99,14 +99,17 @@ describe("TakeExamPage smoke", () => {
     renderPage();
 
     expect(await screen.findByText("地球是圆的")).toBeInTheDocument();
-    expect(screen.getByText(/第 1 题/)).toBeInTheDocument();
-    expect(screen.getByText(/共 2 题/)).toBeInTheDocument();
+    expect(screen.getAllByText(/第 1 题/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/共 2 题/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows question count in header", async () => {
     renderPage();
 
-    expect(await screen.findByText("2题")).toBeInTheDocument();
+    expect(await screen.findByText("答题中")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/第 1 题 \/ 共 2 题/).length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("shows submit button", async () => {
@@ -172,9 +175,61 @@ describe("TakeExamPage smoke", () => {
   it("shows answered/unanswered counts in footer", async () => {
     renderPage();
 
-    expect(await screen.findByText(/已答 0/)).toBeInTheDocument();
-    expect(screen.getByText(/未答 2/)).toBeInTheDocument();
-    expect(screen.getByText(/共 2 题/)).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/已答 0/)).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/未答 2/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/共 2 题/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows an error state when attempt loading fails", async () => {
+    apiGet.mockRejectedValueOnce(new Error("network error"));
+
+    renderPage();
+
+    expect(
+      await screen.findByText("无法加载答题记录，请检查连接后重试"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
+
+  it("highlights timer when less than five minutes remain", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      deadlineAt: new Date(Date.now() + 295000).toISOString(),
+    });
+
+    renderPage();
+
+    const timer = await screen.findByText(/04:5\d/);
+    expect(timer.closest("div")).toHaveClass("text-destructive");
+  });
+
+  it("shows disconnected feedback when answer save fails", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+    apiPost.mockRejectedValueOnce(new Error("offline"));
+
+    renderPage();
+
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "A");
+
+    expect(
+      await screen.findByText("连接异常", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("保存失败")).toBeInTheDocument();
   });
 
   it("renders fill_blank input and saves the answer", async () => {
