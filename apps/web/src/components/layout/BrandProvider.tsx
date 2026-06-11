@@ -20,20 +20,26 @@ export function BrandProvider({
   children,
   value = fallbackBranding,
   loadRemote = false,
+  organizationDisplayName,
 }: {
   children: ReactNode;
   value?: BrandingView;
   loadRemote?: boolean;
+  organizationDisplayName?: string;
 }) {
-  const [branding, setBranding] = useState(value);
+  const initialValue =
+    organizationDisplayName && value === fallbackBranding
+      ? { ...value, productName: organizationDisplayName }
+      : value;
+  const [branding, setBranding] = useState(initialValue);
   const refresh = useCallback(async () => {
     if (!loadRemote) return;
     try {
       setBranding(await api.get<BrandingView>("/api/settings/branding"));
     } catch {
-      setBranding(value);
+      setBranding(initialValue);
     }
-  }, [loadRemote, value]);
+  }, [loadRemote, initialValue]);
 
   useEffect(() => {
     void refresh();
