@@ -14,6 +14,7 @@ export interface FlushResult {
 interface PendingEntry {
   timer: ReturnType<typeof setTimeout>;
   save: () => Promise<void>;
+  generation: number;
 }
 
 export interface UseSubmitFlush {
@@ -27,6 +28,7 @@ export function useSubmitFlush(): UseSubmitFlush {
   const pendingRef = useRef(new Map<string, PendingEntry>());
   const inflightRef = useRef(new Map<string, Promise<void>>());
   const statusRef = useRef(new Map<string, SaveStatus>());
+  const generationRef = useRef(new Map<string, number>());
   const mountedRef = useRef(true);
   const [failedQuestionIds, setFailedQuestionIds] = useState<string[]>([]);
   const [, forceTick] = useState(0);
@@ -53,17 +55,38 @@ export function useSubmitFlush(): UseSubmitFlush {
   );
 
   const runSave = useCallback(
-    (questionId: string, save: () => Promise<void>): Promise<void> => {
-      setStatus(questionId, "inflight");
-      const promise = save()
+    (
+      questionId: string,
+      save: () => Promise<void>,
+      generation: number,
+    ): Promise<void> => {
+      const previous = inflightRef.current.get(questionId);
+      const execute = () => {
+        if (generationRef.current.get(questionId) === generation) {
+          setStatus(questionId, "inflight");
+        }
+        try {
+          return save();
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      };
+      const operation = previous ? previous.then(execute) : execute();
+      const promise = operation
         .then(() => {
-          setStatus(questionId, "saved");
+          if (generationRef.current.get(questionId) === generation) {
+            setStatus(questionId, "saved");
+          }
         })
         .catch(() => {
-          setStatus(questionId, "failed");
+          if (generationRef.current.get(questionId) === generation) {
+            setStatus(questionId, "failed");
+          }
         })
         .finally(() => {
-          inflightRef.current.delete(questionId);
+          if (inflightRef.current.get(questionId) === promise) {
+            inflightRef.current.delete(questionId);
+          }
         });
       inflightRef.current.set(questionId, promise);
       return promise;
@@ -75,7 +98,7 @@ export function useSubmitFlush(): UseSubmitFlush {
     for (const [questionId, entry] of pendingRef.current.entries()) {
       clearTimeout(entry.timer);
       pendingRef.current.delete(questionId);
-      void runSave(questionId, entry.save);
+      void runSave(questionId, entry.save, entry.generation);
     }
   }, [runSave]);
 
@@ -84,15 +107,17 @@ export function useSubmitFlush(): UseSubmitFlush {
       const existing = pendingRef.current.get(questionId);
       if (existing) clearTimeout(existing.timer);
 
+      const generation = (generationRef.current.get(questionId) ?? 0) + 1;
+      generationRef.current.set(questionId, generation);
       setStatus(questionId, "pending");
 
       const timer = setTimeout(() => {
         if (!mountedRef.current) return;
         pendingRef.current.delete(questionId);
-        void runSave(questionId, save);
+        void runSave(questionId, save, generation);
       }, DEBOUNCE_MS);
 
-      pendingRef.current.set(questionId, { timer, save });
+      pendingRef.current.set(questionId, { timer, save, generation });
     },
     [runSave, setStatus],
   );
@@ -116,14 +141,16 @@ export function useSubmitFlush(): UseSubmitFlush {
 
       const inflightPromises = Array.from(inflightRef.current.values());
       const settledRound = Promise.allSettled(inflightPromises);
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<"timeout">((resolve) => {
-        setTimeout(() => resolve("timeout"), remaining);
+        timeoutId = setTimeout(() => resolve("timeout"), remaining);
       });
 
       const winner = await Promise.race([
         settledRound.then(() => "settled" as const),
         timeout,
       ]);
+      if (timeoutId) clearTimeout(timeoutId);
 
       if (winner === "timeout") {
         timedOut = true;
@@ -157,6 +184,7 @@ export function useSubmitFlush(): UseSubmitFlush {
   );
 
   useEffect(() => {
+    mountedRef.current = true;
     const pending = pendingRef.current;
     return () => {
       mountedRef.current = false;

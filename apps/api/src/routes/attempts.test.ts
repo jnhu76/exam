@@ -577,6 +577,46 @@ describe("attempt routes", () => {
       expect(res.json().accepted).toBe(false);
       expect(res.json().reason).toBe("STALE_VERSION");
       expect(res.json().message).toBe(getSaveAnswerMessage("STALE_VERSION"));
+      expect(res.json().serverVersion).toBe(2);
+      expect(res.json().details).toEqual({ serverAnswer: "c" });
+    });
+
+    it("preserves a null server answer in stale-version details", async () => {
+      const saveNull = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: null,
+          clientSeq: 4,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 2,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(saveNull.json().accepted).toBe(true);
+
+      const stale = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "late",
+          clientSeq: 5,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 2,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(stale.json()).toMatchObject({
+        accepted: false,
+        reason: "STALE_VERSION",
+        serverVersion: 3,
+        details: { serverAnswer: null },
+      });
     });
 
     it("returns 400 for malformed save payload", async () => {

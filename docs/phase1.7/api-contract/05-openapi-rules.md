@@ -73,6 +73,8 @@ SaveAnswerRejected:
     - accepted
     - reason
     - message
+    - serverVersion
+    - savedAt
   properties:
     accepted:
       type: boolean
@@ -96,9 +98,6 @@ SaveAnswerRejected:
       properties:
         serverAnswer:
           description: "服务端当前答案值"
-        serverVersion:
-          type: integer
-          description: "服务端当前版本号"
 
 SaveAnswerResponse:
   oneOf:

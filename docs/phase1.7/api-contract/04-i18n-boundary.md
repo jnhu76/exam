@@ -26,7 +26,7 @@ MAY: future frontend maps code/reason to localized text
 
 - 它是 `code`/`reason` → 默认 zh-CN `message` 的映射表。
 - **默认落点**：
-  - `packages/contracts`：schema、enum、wire type 定义（如 `SaveAnswerRejectReason`、`ErrorResponseSchema`）**以及** save-answer 等特定 endpoint 的 message registry（`code/reason → zh-CN message` 映射）。contracts 是 leaf package，不依赖其他内部 package，因此 registry 只引用本地定义的 enum。
+  - `packages/contracts`：schema、enum、wire type 定义（如 `SaveAnswerRejectReason`、`ErrorResponseSchema`）**以及** save-answer 等特定 endpoint 的 message registry（`code/reason → zh-CN message` 映射）。registry 与 wire enum 同包，避免 API route 和 Web client 各自维护文案映射。
   - `packages/domain`：通用 response builder（构建 ErrorResponse / Command Result 的辅助函数）。domain 是 leaf node，不依赖 contracts，因此通用 builder 使用 domain 内部类型。
   - `apps/api`：只调用 registry/builder，不 inline message。
 - **route 不允许散落 inline message**：所有错误和拒绝的 message 必须来自 registry 或由 registry 提供的 lookup 函数生成。

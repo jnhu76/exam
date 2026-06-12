@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
+import { createElement, StrictMode } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useSubmitFlush } from "./useSubmitFlush";
+import { useSubmitFlush, type UseSubmitFlush } from "./useSubmitFlush";
 
 describe("useSubmitFlush", () => {
   beforeEach(() => {
@@ -271,5 +273,114 @@ describe("useSubmitFlush", () => {
     });
 
     expect(settledOrder).toEqual(["save-settled", "flush-settled"]);
+  });
+
+  it("continues saving after the StrictMode setup-cleanup-setup cycle", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let hook: UseSubmitFlush | undefined;
+
+    act(() => {
+      root.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(() => {
+            hook = useSubmitFlush();
+            return null;
+          }),
+        ),
+      );
+    });
+
+    act(() => {
+      hook?.scheduleSave("q1", save);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(hook?.getQuestionStatus("q1")).toBe("saved");
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it("serializes saves for the same question", async () => {
+    let resolveFirst!: () => void;
+    let resolveSecond!: () => void;
+    const firstSave = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const secondSave = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSecond = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useSubmitFlush());
+
+    act(() => {
+      result.current.scheduleSave("q1", firstSave);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    act(() => {
+      result.current.scheduleSave("q1", secondSave);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+
+    expect(firstSave).toHaveBeenCalledTimes(1);
+    expect(secondSave).not.toHaveBeenCalled();
+
+    let flushPromise!: Promise<
+      Awaited<ReturnType<typeof result.current.flush>>
+    >;
+    act(() => {
+      flushPromise = result.current.flush();
+    });
+
+    await act(async () => {
+      resolveFirst();
+      await Promise.resolve();
+    });
+    expect(secondSave).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSecond();
+      await flushPromise;
+    });
+
+    await expect(flushPromise).resolves.toEqual({
+      pendingCount: 0,
+      failedQuestionIds: [],
+      timedOut: false,
+    });
+  });
+
+  it("clears the flush timeout when saves settle first", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useSubmitFlush());
+
+    act(() => {
+      result.current.scheduleSave("q1", save);
+    });
+
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

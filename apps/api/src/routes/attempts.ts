@@ -710,15 +710,16 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
+      const conflict = result.conflict;
       return SaveAnswerRejectedSchema.parse({
         accepted: false,
-        reason: result.conflict!.reason,
-        message: getSaveAnswerMessage(result.conflict!.reason),
+        reason: conflict.reason,
+        message: getSaveAnswerMessage(conflict.reason),
         serverVersion: result.serverVersion,
         savedAt: result.savedAt,
         details:
-          result.conflict!.latestAnswer != null
-            ? { serverAnswer: result.conflict!.latestAnswer }
+          conflict.reason === "STALE_VERSION"
+            ? { serverAnswer: conflict.latestAnswer }
             : undefined,
       });
     },

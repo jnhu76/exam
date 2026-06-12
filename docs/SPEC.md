@@ -467,12 +467,18 @@ SaveAnswerRequest {
 
 ```ts
 SaveAnswerResponse {
-  accepted: boolean
+  accepted: true
   serverVersion: number
   savedAt: string
-  conflict?: {
-    reason: "STALE_VERSION" | "SUBMITTED" | "ATTEMPT_CLOSED"
-    latestAnswer?: unknown
+} | {
+  accepted: false
+  reason: "STALE_VERSION" | "ATTEMPT_ALREADY_SUBMITTED"
+        | "ATTEMPT_CLOSED" | "DEADLINE_EXCEEDED"
+  message: string
+  serverVersion: number
+  savedAt: string
+  details?: {
+    serverAnswer?: unknown
   }
 }
 ```
