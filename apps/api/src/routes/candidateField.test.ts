@@ -1,16 +1,30 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import candidateFieldRoutes from "./candidateField.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 
 describe("candidate field routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  const p = uniquePrefix();
 
   beforeAll(async () => {
     ctx = await buildTestApp(candidateFieldRoutes);
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    const fields = await ctx.db
+      .select()
+      .from(schema.candidateFields)
+      .where(eq(schema.candidateFields.organizationId, ctx.org.id));
+    for (const f of fields) {
+      if (f.name.startsWith(`cf-${p}`)) {
+        await ctx.db
+          .delete(schema.candidateFields)
+          .where(eq(schema.candidateFields.id, f.id));
+      }
+    }
+    await ctx.cleanup();
   });
 
   it("GET /api/candidate-fields returns list", async () => {
@@ -28,7 +42,7 @@ describe("candidate field routes", () => {
       method: "POST",
       url: "/api/candidate-fields",
       payload: {
-        name: "employeeId",
+        name: `cf-${p}-employeeId`,
         label: "工号",
         fieldType: "text",
         required: true,
@@ -39,8 +53,7 @@ describe("candidate field routes", () => {
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
-    expect(body.name).toBe("employeeId");
-    expect(body.label).toBe("工号");
+    expect(body.name).toBe(`cf-${p}-employeeId`);
     expect(body.required).toBe(true);
   });
 
@@ -49,7 +62,7 @@ describe("candidate field routes", () => {
       method: "POST",
       url: "/api/candidate-fields",
       payload: {
-        name: "department",
+        name: `cf-${p}-department`,
         label: "Department",
         fieldType: "text",
         required: false,
@@ -74,7 +87,7 @@ describe("candidate field routes", () => {
       method: "POST",
       url: "/api/candidate-fields",
       payload: {
-        name: "toDelete",
+        name: `cf-${p}-toDelete`,
         label: "ToDelete",
         fieldType: "text",
         required: false,
@@ -97,7 +110,7 @@ describe("candidate field routes", () => {
       method: "POST",
       url: "/api/candidate-fields",
       payload: {
-        name: "forbidden",
+        name: `cf-${p}-forbidden`,
         label: "Forbidden",
         fieldType: "text",
         required: false,

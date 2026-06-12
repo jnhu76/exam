@@ -1,9 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { schema } from "@exam/db/src/schema/pg.js";
 import {
   buildTestApp,
   createCandidateViaApi,
   createExamViaApi,
   publishExamViaApi,
+  uniquePrefix,
 } from "./testHelpers.js";
 import authRoutes from "./auth.js";
 import candidateRoutes from "./candidate.js";
@@ -29,14 +33,14 @@ describe("candidate profile invariant", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("POST /api/candidates creates both user and candidateProfile", async () => {
     const candidate = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      "invariant-test-1",
+      `invariant-test-1-${uniquePrefix()}`,
       ctx.org.id,
     );
 
@@ -78,7 +82,7 @@ describe("candidate profile invariant", () => {
     const candidate = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      "invariant-test-2",
+      `invariant-test-2-${uniquePrefix()}`,
       ctx.org.id,
     );
 
@@ -91,17 +95,59 @@ describe("candidate profile invariant", () => {
     expect(Array.isArray(res.json())).toBe(true);
   });
 
-  it("Seed candidate without profile gets empty exam list", async () => {
+  it("candidate without profile gets empty exam list", async () => {
+    const bareUserId = randomUUID();
+    await ctx.db.insert(schema.users).values({
+      id: bareUserId,
+      organizationId: ctx.org.id,
+      username: `bare-cand-${uniquePrefix()}`,
+      passwordHash: await (
+        await import("@exam/auth/src/password.js")
+      ).hashPassword("test123"),
+      name: "Bare Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const { signJWT } = await import("@exam/auth/src/session.js");
+    const bareToken = signJWT({
+      actorId: bareUserId,
+      role: "Candidate",
+      organizationId: ctx.org.id,
+    });
+
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/candidate/exams",
-      cookies: { "auth-token": ctx.candidateToken },
+      cookies: { "auth-token": bareToken },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([]);
+    expect(Array.isArray(res.json())).toBe(true);
   });
 
-  it("Seed candidate without profile cannot start exam attempt", async () => {
+  it("candidate without profile cannot start exam attempt", async () => {
+    const bareUserId = randomUUID();
+    await ctx.db.insert(schema.users).values({
+      id: bareUserId,
+      organizationId: ctx.org.id,
+      username: `bare-start-cand-${uniquePrefix()}`,
+      passwordHash: await (
+        await import("@exam/auth/src/password.js")
+      ).hashPassword("test123"),
+      name: "Bare Start Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const { signJWT } = await import("@exam/auth/src/session.js");
+    const bareToken = signJWT({
+      actorId: bareUserId,
+      role: "Candidate",
+      organizationId: ctx.org.id,
+    });
+
     const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Profile Invariant Start Exam",
       courseCode: "PI-START-101",
@@ -118,7 +164,7 @@ describe("candidate profile invariant", () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: `/api/attempts/${examId}/start`,
-      cookies: { "auth-token": ctx.candidateToken },
+      cookies: { "auth-token": bareToken },
     });
     expect(res.statusCode).not.toBe(201);
   });

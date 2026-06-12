@@ -10,7 +10,7 @@ describe("user routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("GET /api/users returns paginated list", async () => {

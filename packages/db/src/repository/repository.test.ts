@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PublicBrandingContext, RequestContext } from "@exam/domain";
-import { beforeEach, describe, expect, it } from "vitest";
-import { createSqliteDatabase, migrateSqlite } from "../sqlite.js";
+import { beforeAll, describe, expect, it } from "vitest";
+import { getTestDb } from "../testDb.js";
 import { createCourseRepo } from "./courseRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { createQuestionRepo } from "./questionRepo.js";
@@ -29,32 +29,31 @@ describe("repository tenant isolation", () => {
     purpose: "public_branding",
   };
 
-  let database: ReturnType<typeof createSqliteDatabase>;
   let organizationRepo: ReturnType<typeof createOrganizationRepo>;
   let settingsRepo: ReturnType<typeof createSettingsRepo>;
   let courseRepo: ReturnType<typeof createCourseRepo>;
   let questionRepo: ReturnType<typeof createQuestionRepo>;
   const rootContext = createContext("system", "SuperAdmin", "system");
 
-  beforeEach(() => {
-    database = createSqliteDatabase(":memory:");
-    migrateSqlite(database.db);
-    organizationRepo = createOrganizationRepo(database.db);
-    settingsRepo = createSettingsRepo(database.db);
-    courseRepo = createCourseRepo(database.db);
-    questionRepo = createQuestionRepo(database.db);
+  beforeAll(async () => {
+    const { db } = await getTestDb();
+    organizationRepo = createOrganizationRepo(db);
+    settingsRepo = createSettingsRepo(db);
+    courseRepo = createCourseRepo(db);
+    questionRepo = createQuestionRepo(db);
   });
 
   it("keeps tenant-scoped course queries isolated", async () => {
+    const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
-      slug: "alpha",
+      slug: `alpha-${suffix}`,
     });
     const beta = await organizationRepo.create(rootContext, {
       name: "beta",
       displayName: "Beta",
-      slug: "beta",
+      slug: `beta-${suffix}`,
     });
     const alphaContext = createContext(alpha.id);
     const betaContext = createContext(beta.id);
@@ -74,15 +73,16 @@ describe("repository tenant isolation", () => {
   });
 
   it("updates and deletes tenant records without crossing tenant boundaries", async () => {
+    const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
-      slug: "alpha",
+      slug: `alpha-${suffix}`,
     });
     const beta = await organizationRepo.create(rootContext, {
       name: "beta",
       displayName: "Beta",
-      slug: "beta",
+      slug: `beta-${suffix}`,
     });
     const alphaContext = createContext(alpha.id);
     const betaContext = createContext(beta.id);
@@ -107,10 +107,11 @@ describe("repository tenant isolation", () => {
   });
 
   it("requires SuperAdmin to select a target tenant explicitly", async () => {
+    const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
-      slug: "alpha",
+      slug: `alpha-${suffix}`,
     });
     const superAdminContext = createContext(alpha.id, "SuperAdmin");
 
@@ -133,15 +134,16 @@ describe("repository tenant isolation", () => {
   });
 
   it("filters question lookups by organizationId", async () => {
+    const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
-      slug: "alpha",
+      slug: `alpha-${suffix}`,
     });
     const beta = await organizationRepo.create(rootContext, {
       name: "beta",
       displayName: "Beta",
-      slug: "beta",
+      slug: `beta-${suffix}`,
     });
     const alphaContext = createContext(alpha.id);
     const betaContext = createContext(beta.id);
@@ -176,10 +178,12 @@ describe("repository tenant isolation", () => {
   });
 
   it("returns only public branding fields before login", async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const slug = `alpha-${suffix}`;
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
-      slug: "alpha",
+      slug,
     });
     const alphaContext = createContext(alpha.id);
 
@@ -191,7 +195,7 @@ describe("repository tenant isolation", () => {
 
     const tenant = await organizationRepo.resolveBrandingTenant(
       publicBrandingContext,
-      "alpha",
+      slug,
     );
     const branding = await settingsRepo.getPublicBranding({
       purpose: "public_branding",

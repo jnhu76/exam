@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
@@ -8,24 +8,28 @@ import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
 import setupSecurity from "../../src/plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { createSqliteDatabase, migrateSqlite } from "@exam/db/src/sqlite.js";
-import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
+import { createDatabase } from "@exam/db/src/database.js";
+import { migratePostgres } from "@exam/db/src/postgres.js";
+import { schema } from "@exam/db/src/schema/pg.js";
+import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
 import examRoutes from "../../src/routes/exam.js";
 import systemRoutes from "../../src/routes/system.js";
 import organizationRoutes from "../../src/routes/organization.js";
 import { randomUUID } from "node:crypto";
-import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
+import type { Database } from "@exam/db/src/types.js";
+import type { Role } from "@exam/domain";
 
-function createDbPlugin(db: SqliteDatabase) {
+function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
     fastify.decorate("db", db);
   });
 }
 
 describe("Tenant Isolation (S01)", () => {
-  let db: SqliteDatabase;
+  let db: Database;
+  let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let orgA: {
     id: string;
     slug: string;
@@ -47,163 +51,167 @@ describe("Tenant Isolation (S01)", () => {
   let examBId: string;
 
   beforeAll(async () => {
-    const sqlite = createSqliteDatabase(":memory:");
-    db = sqlite.db;
-    migrateSqlite(db);
+    const conn = await createDatabase(
+      process.env.TEST_DATABASE_URL ??
+        "postgresql://exam:exam@localhost:5432/exam_test",
+    );
+    await migratePostgres(conn.db);
+    db = conn.db;
+    sql = conn.sql;
 
-    await seed(db, hashPassword);
+    const seedResult = await seed(db, hashPassword);
 
-    const orgs = db.select().from(sqliteSchema.organizations).all();
+    const orgs = await db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, seedResult.orgId));
     orgA = orgs[0]!;
 
-    const usersA = db.select().from(sqliteSchema.users).all();
-    const superAdminUser = usersA.find((u) => u.role === "SuperAdmin")!;
-    const candidateUser = usersA.find((u) => u.role === "Candidate");
+    superAdmin = (
+      await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, seedResult.users.superAdminId))
+    )[0]! as typeof superAdmin;
+    const candidateUser = (
+      await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, seedResult.users.candidateId))
+    )[0]!;
 
-    superAdmin = superAdminUser;
-    candidateA = candidateUser ?? superAdminUser;
+    candidateA = candidateUser as typeof candidateA;
 
     const now = new Date();
 
     const adminAId = randomUUID();
     const hashA = await hashPassword("admin123");
-    db.insert(sqliteSchema.users)
-      .values({
-        id: adminAId,
-        organizationId: orgA.id,
-        username: "admin-a",
-        passwordHash: hashA,
-        name: "Admin A",
-        role: "Admin",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.users).values({
+      id: adminAId,
+      organizationId: orgA.id,
+      username: `admin-a-${adminAId.slice(0, 8)}`,
+      passwordHash: hashA,
+      name: "Admin A",
+      role: "Admin",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     adminA = { id: adminAId, organizationId: orgA.id, role: "Admin" };
 
     const orgBId = randomUUID();
-    orgB = { id: orgBId, slug: "org-b" };
-    db.insert(sqliteSchema.organizations)
-      .values({
-        id: orgBId,
-        name: "Organization B",
-        displayName: "Org B",
-        slug: "org-b",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    const orgBSlug = `org-b-${orgBId.slice(0, 8)}`;
+    orgB = { id: orgBId, slug: orgBSlug };
+    await db.insert(schema.organizations).values({
+      id: orgBId,
+      name: "Organization B",
+      displayName: "Org B",
+      slug: orgBSlug,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     const adminBId = randomUUID();
     const hashB = await hashPassword("admin123");
-    db.insert(sqliteSchema.users)
-      .values({
-        id: adminBId,
-        organizationId: orgBId,
-        username: "admin-b",
-        passwordHash: hashB,
-        name: "Admin B",
-        role: "Admin",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.users).values({
+      id: adminBId,
+      organizationId: orgBId,
+      username: `admin-b-${adminBId.slice(0, 8)}`,
+      passwordHash: hashB,
+      name: "Admin B",
+      role: "Admin",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     adminB = { id: adminBId, organizationId: orgBId, role: "Admin" };
 
     const courseId = randomUUID();
-    db.insert(sqliteSchema.courses)
-      .values({
-        id: courseId,
-        organizationId: orgBId,
-        name: "Course B",
-        code: "CB",
-        description: "",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: orgBId,
+      name: "Course B",
+      code: "CB",
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
 
     const questionId = randomUUID();
-    db.insert(sqliteSchema.questions)
-      .values({
-        id: questionId,
-        organizationId: orgBId,
-        courseId,
-        type: "true_false",
-        content: "Q1 B",
-        standardAnswer: true,
-        score: 10,
-        options: [],
-        attachments: [],
-        difficulty: 0,
-        tags: [],
-        gradingRule: {
-          multiSelectScoring: "all_correct_full",
-          fillBlankMatchMode: "exact",
-        },
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.questions).values({
+      id: questionId,
+      organizationId: orgBId,
+      courseId,
+      type: "true_false",
+      content: "Q1 B",
+      standardAnswer: true,
+      score: 10,
+      options: [],
+      attachments: [],
+      difficulty: 0,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
 
     examBId = randomUUID();
-    db.insert(sqliteSchema.exams)
-      .values({
-        id: examBId,
-        organizationId: orgBId,
-        courseId,
-        title: "Exam B",
-        description: "",
-        status: "published",
-        timingMode: "timed_window",
-        durationMinutes: 60,
-        openAt: now,
-        closeAt: new Date(Date.now() + 86400000),
-        passingScore: 60,
-        totalScore: 100,
-        questionSelectionMode: "manual",
-        questionIds: [questionId],
-        questionSnapshot: [],
-        controlFlags: {
-          shuffleQuestions: false,
-          shuffleOptions: false,
-          detectTabSwitch: false,
-          disableCopyPaste: false,
-          requireQueue: false,
-          batchSize: 0,
-          batchInterval: 0,
-          restrictIp: false,
-          requireLockdown: false,
-          showResultImmediately: false,
-        },
-        retakePolicy: "unlimited",
-        scoreStrategy: "highest",
-        maxAttempts: 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.exams).values({
+      id: examBId,
+      organizationId: orgBId,
+      courseId,
+      title: "Exam B",
+      description: "",
+      status: "published",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(Date.now() + 86400000),
+      passingScore: 60,
+      totalScore: 100,
+      questionSelectionMode: "manual",
+      questionIds: [questionId],
+      questionSnapshot: [],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 0,
+        batchInterval: 0,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: false,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     adminAToken = signJWT({
       actorId: adminA.id,
-      role: adminA.role as "Admin",
+      role: adminA.role as Role,
       organizationId: adminA.organizationId,
     });
     adminBToken = signJWT({
       actorId: adminB.id,
-      role: adminB.role as "Admin",
+      role: adminB.role as Role,
       organizationId: adminB.organizationId,
     });
     candidateAToken = signJWT({
       actorId: candidateA.id,
-      role: candidateA.role as "Candidate",
+      role: candidateA.role as Role,
       organizationId: candidateA.organizationId,
     });
     superAdminToken = signJWT({
       actorId: superAdmin.id,
-      role: superAdmin.role as "SuperAdmin",
+      role: superAdmin.role as Role,
       organizationId: superAdmin.organizationId,
     });
 
@@ -226,59 +234,60 @@ describe("Tenant Isolation (S01)", () => {
     await app.ready();
   });
 
+  afterAll(async () => {
+    await app.close();
+    await sql.end();
+  });
+
   describe("Cross-tenant data isolation", () => {
     it("org A admin sees only org A exams", async () => {
       const courseAId = randomUUID();
       const now = new Date();
-      db.insert(sqliteSchema.courses)
-        .values({
-          id: courseAId,
-          organizationId: orgA.id,
-          name: "Course A",
-          code: "CA",
-          description: "",
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+      await db.insert(schema.courses).values({
+        id: courseAId,
+        organizationId: orgA.id,
+        name: "Course A",
+        code: `CA-${Date.now()}`,
+        description: "",
+        createdAt: now,
+        updatedAt: now,
+      });
 
       const examAId = randomUUID();
-      db.insert(sqliteSchema.exams)
-        .values({
-          id: examAId,
-          organizationId: orgA.id,
-          courseId: courseAId,
-          title: "Exam A",
-          description: "",
-          status: "published",
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: now,
-          closeAt: new Date(Date.now() + 86400000),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
-          questionIds: [],
-          questionSnapshot: [],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 0,
-            batchInterval: 0,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: false,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 1,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+      await db.insert(schema.exams).values({
+        id: examAId,
+        organizationId: orgA.id,
+        courseId: courseAId,
+        title: "Exam A",
+        description: "",
+        status: "published",
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: now,
+        closeAt: new Date(Date.now() + 86400000),
+        passingScore: 60,
+        totalScore: 100,
+        questionSelectionMode: "manual",
+        questionIds: [],
+        questionSnapshot: [],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 0,
+          batchInterval: 0,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: false,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
 
       const res = await app.inject({
         method: "GET",

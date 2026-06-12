@@ -1,2 +1,1 @@
-export { sqliteSchema } from "./schema/sqlite.js";
-export { pgSchema } from "./schema/pg.js";
+export { schema } from "./schema/pg.js";

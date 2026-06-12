@@ -8,16 +8,24 @@ import rateLimitPlugin from "../plugins/rateLimit.js";
 import { setupErrorHandler } from "../plugins/errors.js";
 import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { createSqliteDatabase } from "@exam/db/src/sqlite.js";
-import { migrateSqlite } from "@exam/db/src/sqlite.js";
-import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
+import { createDatabase } from "@exam/db/src/database.js";
+import { migratePostgres } from "@exam/db/src/postgres.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
-import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
+import type { Database } from "@exam/db/src/types.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
-import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import type { Role } from "@exam/domain";
+import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 
-function createDbPlugin(db: SqliteDatabase) {
+let _counter = 0;
+export function uniquePrefix(): string {
+  _counter++;
+  return `${Date.now().toString(36)}-${_counter}`;
+}
+
+function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
     fastify.decorate("db", db);
   });
@@ -25,25 +33,79 @@ function createDbPlugin(db: SqliteDatabase) {
 
 export interface TestContext {
   app: ReturnType<typeof Fastify>;
-  db: SqliteDatabase;
-  org: typeof sqliteSchema.organizations.$inferSelect;
-  admin: typeof sqliteSchema.users.$inferSelect;
-  teacher: typeof sqliteSchema.users.$inferSelect;
-  candidate: typeof sqliteSchema.users.$inferSelect;
-  superAdmin: typeof sqliteSchema.users.$inferSelect;
+  db: Database;
+  cleanup: () => Promise<void>;
+  org: {
+    id: string;
+    name: string;
+    displayName: string;
+    slug: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  admin: {
+    id: string;
+    organizationId: string;
+    username: string;
+    passwordHash: string;
+    name: string;
+    role: Role;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  teacher: {
+    id: string;
+    organizationId: string;
+    username: string;
+    passwordHash: string;
+    name: string;
+    role: Role;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  candidate: {
+    id: string;
+    organizationId: string;
+    username: string;
+    passwordHash: string;
+    name: string;
+    role: Role;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  superAdmin: {
+    id: string;
+    organizationId: string;
+    username: string;
+    passwordHash: string;
+    name: string;
+    role: Role;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  };
   adminToken: string;
   teacherToken: string;
   candidateToken: string;
   superAdminToken: string;
 }
 
+const TEST_DB_URL =
+  process.env.TEST_DATABASE_URL ??
+  "postgresql://exam:exam@localhost:5432/exam_test";
+
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,
   opts?: { prefix?: string },
 ): Promise<TestContext> {
-  const { db } = createSqliteDatabase(":memory:");
-  migrateSqlite(db);
-  await seed(db, hashPassword);
+  const conn = await createDatabase(TEST_DB_URL);
+  await migratePostgres(conn.db);
+  const db = conn.db;
+
+  const seedResult = await seed(db, hashPassword);
 
   const app = Fastify();
   setupSecurity(app);
@@ -56,61 +118,70 @@ export async function buildTestApp(
   await app.register(routePlugin, { prefix: opts?.prefix ?? "/api" });
   await app.ready();
 
-  const org = db.select().from(sqliteSchema.organizations).get()!;
-  let users = db.select().from(sqliteSchema.users).all();
-  const superAdmin = users.find((u) => u.role === "SuperAdmin")!;
-  const teacher = users.find((u) => u.role === "Teacher")!;
-  const candidate = users.find((u) => u.role === "Candidate")!;
+  const orgRows = await db
+    .select()
+    .from(schema.organizations)
+    .where(eq(schema.organizations.id, seedResult.orgId));
+  const org = orgRows[0]!;
 
-  const now = new Date();
-  const adminUserId = randomUUID();
-  await db
-    .insert(sqliteSchema.users)
-    .values({
-      id: adminUserId,
-      organizationId: org.id,
-      username: "test-admin",
-      passwordHash: await hashPassword("admin123"),
-      name: "Test Admin",
-      role: "Admin",
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
-  users = db.select().from(sqliteSchema.users).all();
-  const admin = users.find((u) => u.id === adminUserId)!;
+  const superAdminRows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, seedResult.users.superAdminId));
+  const superAdmin = superAdminRows[0]!;
+
+  const adminRows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, seedResult.users.adminId));
+  const admin = adminRows[0]!;
+
+  const teacherRows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, seedResult.users.teacherId));
+  const teacher = teacherRows[0]!;
+
+  const candidateRows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, seedResult.users.candidateId));
+  const candidate = candidateRows[0]!;
 
   const adminToken = signJWT({
     actorId: admin.id,
-    role: admin.role,
+    role: admin.role as Role,
     organizationId: admin.organizationId,
   });
   const teacherToken = signJWT({
     actorId: teacher.id,
-    role: teacher.role,
+    role: teacher.role as Role,
     organizationId: teacher.organizationId,
   });
   const candidateToken = signJWT({
     actorId: candidate.id,
-    role: candidate.role,
+    role: candidate.role as Role,
     organizationId: candidate.organizationId,
   });
 
   const superAdminToken = signJWT({
     actorId: superAdmin.id,
-    role: superAdmin.role,
+    role: superAdmin.role as Role,
     organizationId: superAdmin.organizationId,
   });
 
   return {
     app,
     db,
+    cleanup: async () => {
+      await app.close();
+      await conn.sql.end();
+    },
     org,
-    admin,
-    teacher,
-    candidate,
-    superAdmin,
+    admin: admin as TestContext["admin"],
+    teacher: teacher as TestContext["teacher"],
+    candidate: candidate as TestContext["candidate"],
+    superAdmin: superAdmin as TestContext["superAdmin"],
     adminToken,
     teacherToken,
     candidateToken,
@@ -124,6 +195,22 @@ export async function createCandidateViaApi(
   username: string,
   orgId: string,
 ) {
+  const fieldRepo = createCandidateFieldRepo(
+    (app as any).db ?? (app as any).decorator?.db,
+  );
+  let fields: Record<string, unknown> = {};
+  try {
+    const ctx = { organizationId: orgId, targetOrganizationId: orgId } as any;
+    const configured = await fieldRepo.list(ctx);
+    for (const f of configured) {
+      if (f.required) {
+        fields[f.name] = `${username}-${f.name}`;
+      }
+    }
+  } catch {
+    fields = {};
+  }
+
   const res = await app.inject({
     method: "POST",
     url: "/api/candidates",
@@ -131,7 +218,7 @@ export async function createCandidateViaApi(
       username,
       password: "password123",
       name: `Candidate ${username}`,
-      fields: {},
+      fields,
     },
     cookies: { "auth-token": adminToken },
   });
@@ -174,12 +261,13 @@ export async function createExamViaApi(
     totalScore: number;
   },
 ): Promise<string> {
+  const courseCode = `${opts.courseCode}-${uniquePrefix()}`;
   const courseRes = await app.inject({
     method: "POST",
     url: "/api/courses",
     payload: {
       name: opts.courseName,
-      code: opts.courseCode,
+      code: courseCode,
       description: "",
     },
     cookies: { "auth-token": adminToken },

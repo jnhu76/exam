@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { RequestContext } from "@exam/domain";
-import type { AnyDatabase } from "@exam/db";
+import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 
 export function recordAudit(
@@ -12,7 +12,7 @@ export function recordAudit(
   targetId: string,
   metadata: Record<string, unknown> = {},
 ): void {
-  createAuditLogRepo(fastify.db as AnyDatabase)
+  createAuditLogRepo(fastify.db as Database)
     .create(ctx, {
       actorId: ctx.actorId,
       action,

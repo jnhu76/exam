@@ -18,8 +18,14 @@
     "test": {
       "dependsOn": ["^build"]
     },
+    "@exam/api#test": {
+      "dependsOn": ["^build", "@exam/db#test"]
+    },
     "coverage": {
       "dependsOn": ["^build"]
+    },
+    "@exam/api#coverage": {
+      "dependsOn": ["^build", "@exam/db#coverage"]
     },
     "test:integration": {},
     "test:e2e": {},

@@ -3,6 +3,10 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import authRoutes from "./auth.js";
 import { buildTestApp } from "./testHelpers.js";
+import { schema } from "@exam/db/src/schema/pg.js";
+import { eq } from "drizzle-orm";
+import { hashPassword } from "@exam/auth/src/password.js";
+import { signJWT } from "@exam/auth/src/session.js";
 
 describe("auth routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -12,7 +16,11 @@ describe("auth routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.db
+      .update(schema.users)
+      .set({ passwordHash: await hashPassword("admin123") })
+      .where(eq(schema.users.id, ctx.admin.id));
+    await ctx.cleanup();
   });
 
   it("POST /api/auth/login authenticates within the requested tenant", async () => {
@@ -21,7 +29,7 @@ describe("auth routes", () => {
       url: "/api/auth/login",
       payload: {
         organizationSlug: "default",
-        username: "admin",
+        username: ctx.admin.username,
         password: "admin123",
       },
     });
@@ -31,6 +39,21 @@ describe("auth routes", () => {
   });
 
   it("POST /api/auth/login rejects disabled users", async () => {
+    const disableUsername = `to-disable-${Date.now()}`;
+    const disableUserId = crypto.randomUUID();
+    const hash = await hashPassword("disable123");
+    await ctx.db.insert(schema.users).values({
+      id: disableUserId,
+      organizationId: ctx.org.id,
+      username: disableUsername,
+      passwordHash: hash,
+      name: "To Disable",
+      role: "Teacher",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     const adminCtx: RequestContext = {
       actorId: ctx.admin.id,
       organizationId: ctx.org.id,
@@ -39,7 +62,7 @@ describe("auth routes", () => {
       permissions: [],
       sessionId: "test",
     };
-    createUserRepo(ctx.db).update(adminCtx, ctx.teacher.id, {
+    await createUserRepo(ctx.db).update(adminCtx, disableUserId, {
       isActive: false,
     });
 
@@ -48,22 +71,24 @@ describe("auth routes", () => {
       url: "/api/auth/login",
       payload: {
         organizationSlug: "default",
-        username: "teacher",
-        password: "teacher123",
+        username: disableUsername,
+        password: "disable123",
       },
     });
 
     expect(response.statusCode).toBe(401);
-  });
 
-  it("GET /api/auth/me rejects an existing session after user disable", async () => {
-    const response = await ctx.app.inject({
+    const disableToken = signJWT({
+      actorId: disableUserId,
+      role: "Teacher",
+      organizationId: ctx.org.id,
+    });
+    const meRes = await ctx.app.inject({
       method: "GET",
       url: "/api/auth/me",
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": disableToken },
     });
-
-    expect(response.statusCode).toBe(401);
+    expect(meRes.statusCode).toBe(401);
   });
 
   it("POST /api/auth/login returns 400 for malformed input", async () => {

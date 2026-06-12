@@ -6,7 +6,7 @@ import {
   DashboardResponseSchema,
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
-import type { AnyDatabase } from "@exam/db/src/types.js";
+import type { Database } from "@exam/db/src/types.js";
 
 function getCpuUsage(): number {
   const cpus = os.cpus();

@@ -1,7 +1,6 @@
 import { eq, and } from "drizzle-orm";
-import type { AnyDatabase, SqliteDatabase } from "./types.js";
-import { isSqlite } from "./types.js";
-import { sqliteSchema } from "./schema/sqlite.js";
+import type { Database } from "./types.js";
+import { schema } from "./schema/pg.js";
 
 interface DemoIds {
   orgId: string;
@@ -15,11 +14,10 @@ interface DemoIds {
   attempts: Record<string, string>;
 }
 
-export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
-  if (!isSqlite(_db)) {
-    return ["verifyDemoSeed() only supports SQLite databases"];
-  }
-  const db: SqliteDatabase = _db;
+export async function verifyDemoSeed(
+  db: Database,
+  ids: DemoIds,
+): Promise<string[]> {
   const errors: string[] = [];
   const now = Date.now();
 
@@ -28,20 +26,20 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   }
 
   // 1. Organization exists
-  const org = db
+  const orgRows = await db
     .select()
-    .from(sqliteSchema.organizations)
-    .where(eq(sqliteSchema.organizations.id, ids.orgId))
-    .get();
+    .from(schema.organizations)
+    .where(eq(schema.organizations.id, ids.orgId));
+  const org = orgRows[0];
   assert(!!org, "Organization not found");
   assert(org?.slug === "demo", "Organization slug should be 'demo'");
 
   // 2. Settings exist
-  const settings = db
+  const settingsRows = await db
     .select()
-    .from(sqliteSchema.organizationSettings)
-    .where(eq(sqliteSchema.organizationSettings.organizationId, ids.orgId))
-    .get();
+    .from(schema.organizationSettings)
+    .where(eq(schema.organizationSettings.organizationId, ids.orgId));
+  const settings = settingsRows[0];
   assert(!!settings, "OrganizationSettings not found");
   assert(
     settings?.productName === "Exam Platform",
@@ -60,16 +58,16 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
     "candidate4",
   ];
   for (const username of requiredUsers) {
-    const user = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.users)
+      .from(schema.users)
       .where(
         and(
-          eq(sqliteSchema.users.organizationId, ids.orgId),
-          eq(sqliteSchema.users.username, username),
+          eq(schema.users.organizationId, ids.orgId),
+          eq(schema.users.username, username),
         ),
-      )
-      .get();
+      );
+    const user = rows[0];
     assert(!!user, `User '${username}' not found`);
     assert(user?.isActive === true, `User '${username}' should be active`);
   }
@@ -86,16 +84,16 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
       errors.push(`No user ID for '${username}'`);
       continue;
     }
-    const profile = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.candidateProfiles)
+      .from(schema.candidateProfiles)
       .where(
         and(
-          eq(sqliteSchema.candidateProfiles.organizationId, ids.orgId),
-          eq(sqliteSchema.candidateProfiles.userId, userId),
+          eq(schema.candidateProfiles.organizationId, ids.orgId),
+          eq(schema.candidateProfiles.userId, userId),
         ),
-      )
-      .get();
+      );
+    const profile = rows[0];
     assert(!!profile, `CandidateProfile for '${username}' not found`);
     const fields = profile?.fields as Record<string, unknown> | undefined;
     assert(
@@ -106,32 +104,30 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
 
   // 5. Candidate fields exist
   for (const fieldName of ["employeeId", "department", "phone"]) {
-    const field = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.candidateFields)
+      .from(schema.candidateFields)
       .where(
         and(
-          eq(sqliteSchema.candidateFields.organizationId, ids.orgId),
-          eq(sqliteSchema.candidateFields.name, fieldName),
+          eq(schema.candidateFields.organizationId, ids.orgId),
+          eq(schema.candidateFields.name, fieldName),
         ),
-      )
-      .get();
-    assert(!!field, `CandidateField '${fieldName}' not found`);
+      );
+    assert(rows.length > 0, `CandidateField '${fieldName}' not found`);
   }
 
   // 6. Courses exist
   for (const code of ["SAFETY-101", "SKILL-201", "EMPTY-001"]) {
-    const course = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.courses)
+      .from(schema.courses)
       .where(
         and(
-          eq(sqliteSchema.courses.organizationId, ids.orgId),
-          eq(sqliteSchema.courses.code, code),
+          eq(schema.courses.organizationId, ids.orgId),
+          eq(schema.courses.code, code),
         ),
-      )
-      .get();
-    assert(!!course, `Course '${code}' not found`);
+      );
+    assert(rows.length > 0, `Course '${code}' not found`);
   }
 
   // 7. Non-empty courses have questions
@@ -140,16 +136,15 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   const emptyCourseId = ids.courses["EMPTY-001"];
 
   if (safetyCourseId) {
-    const safetyQuestions = db
+    const safetyQuestions = await db
       .select()
-      .from(sqliteSchema.questions)
+      .from(schema.questions)
       .where(
         and(
-          eq(sqliteSchema.questions.organizationId, ids.orgId),
-          eq(sqliteSchema.questions.courseId, safetyCourseId),
+          eq(schema.questions.organizationId, ids.orgId),
+          eq(schema.questions.courseId, safetyCourseId),
         ),
-      )
-      .all();
+      );
     assert(
       safetyQuestions.length >= 6,
       `SAFETY-101 should have >= 6 questions, found ${safetyQuestions.length}`,
@@ -157,16 +152,15 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   }
 
   if (skillCourseId) {
-    const skillQuestions = db
+    const skillQuestions = await db
       .select()
-      .from(sqliteSchema.questions)
+      .from(schema.questions)
       .where(
         and(
-          eq(sqliteSchema.questions.organizationId, ids.orgId),
-          eq(sqliteSchema.questions.courseId, skillCourseId),
+          eq(schema.questions.organizationId, ids.orgId),
+          eq(schema.questions.courseId, skillCourseId),
         ),
-      )
-      .all();
+      );
     assert(
       skillQuestions.length >= 4,
       `SKILL-201 should have >= 4 questions, found ${skillQuestions.length}`,
@@ -174,16 +168,15 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   }
 
   if (emptyCourseId) {
-    const emptyQuestions = db
+    const emptyQuestions = await db
       .select()
-      .from(sqliteSchema.questions)
+      .from(schema.questions)
       .where(
         and(
-          eq(sqliteSchema.questions.organizationId, ids.orgId),
-          eq(sqliteSchema.questions.courseId, emptyCourseId),
+          eq(schema.questions.organizationId, ids.orgId),
+          eq(schema.questions.courseId, emptyCourseId),
         ),
-      )
-      .all();
+      );
     assert(
       emptyQuestions.length === 0,
       `EMPTY-001 should have 0 questions, found ${emptyQuestions.length}`,
@@ -191,11 +184,10 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   }
 
   // 8. Question type coverage
-  const allQuestions = db
+  const allQuestions = await db
     .select()
-    .from(sqliteSchema.questions)
-    .where(eq(sqliteSchema.questions.organizationId, ids.orgId))
-    .all();
+    .from(schema.questions)
+    .where(eq(schema.questions.organizationId, ids.orgId));
   const types = new Set(allQuestions.map((q) => q.type));
   assert(types.has("single_choice"), "Missing single_choice question type");
   assert(types.has("multiple_choice"), "Missing multiple_choice question type");
@@ -217,11 +209,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
       errors.push(`Exam '${key}' ID not found`);
       continue;
     }
-    const exam = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.exams)
-      .where(eq(sqliteSchema.exams.id, examId))
-      .get();
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    const exam = rows[0];
     assert(!!exam, `Exam '${key}' not found`);
     assert(
       exam?.status === expectedStatus,
@@ -233,11 +225,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   for (const key of ["open", "published", "closed", "strict"]) {
     const examId = ids.exams[key];
     if (!examId) continue;
-    const exam = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.exams)
-      .where(eq(sqliteSchema.exams.id, examId))
-      .get();
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    const exam = rows[0];
     const snapshot = exam?.questionSnapshot as Array<unknown> | undefined;
     assert(
       Array.isArray(snapshot) && snapshot.length > 0,
@@ -249,11 +241,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   {
     const draftExamId = ids.exams["draft"];
     if (draftExamId) {
-      const exam = db
+      const rows = await db
         .select()
-        .from(sqliteSchema.exams)
-        .where(eq(sqliteSchema.exams.id, draftExamId))
-        .get();
+        .from(schema.exams)
+        .where(eq(schema.exams.id, draftExamId));
+      const exam = rows[0];
       const snapshot = exam?.questionSnapshot as Array<unknown> | undefined;
       assert(
         Array.isArray(snapshot) && snapshot.length === 0,
@@ -266,11 +258,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   for (const key of ["open", "published", "closed", "strict"]) {
     const examId = ids.exams[key];
     if (!examId) continue;
-    const exam = db
+    const rows = await db
       .select()
-      .from(sqliteSchema.exams)
-      .where(eq(sqliteSchema.exams.id, examId))
-      .get();
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    const exam = rows[0];
     if (!exam) continue;
     const snapshot = exam.questionSnapshot as Array<{ score: number }>;
     if (snapshot && snapshot.length > 0) {
@@ -284,11 +276,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
 
   // 13. Time window checks
   {
-    const openExam = db
+    const openExamRows = await db
       .select()
-      .from(sqliteSchema.exams)
-      .where(eq(sqliteSchema.exams.id, ids.exams["open"] ?? ""))
-      .get();
+      .from(schema.exams)
+      .where(eq(schema.exams.id, ids.exams["open"] ?? ""));
+    const openExam = openExamRows[0];
     if (openExam) {
       assert(
         openExam.openAt.getTime() <= now,
@@ -300,11 +292,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
       );
     }
 
-    const closedExam = db
+    const closedExamRows = await db
       .select()
-      .from(sqliteSchema.exams)
-      .where(eq(sqliteSchema.exams.id, ids.exams["closed"] ?? ""))
-      .get();
+      .from(schema.exams)
+      .where(eq(schema.exams.id, ids.exams["closed"] ?? ""));
+    const closedExam = closedExamRows[0];
     if (closedExam) {
       assert(
         closedExam.closeAt.getTime() < now,
@@ -312,11 +304,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
       );
     }
 
-    const publishedExam = db
+    const publishedExamRows = await db
       .select()
-      .from(sqliteSchema.exams)
-      .where(eq(sqliteSchema.exams.id, ids.exams["published"] ?? ""))
-      .get();
+      .from(schema.exams)
+      .where(eq(schema.exams.id, ids.exams["published"] ?? ""));
+    const publishedExam = publishedExamRows[0];
     if (publishedExam) {
       assert(
         publishedExam.openAt.getTime() > now,
@@ -326,44 +318,44 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   }
 
   // 14. Enrollments belong only to Candidate users
-  const allEnrollments = db
+  const allEnrollments = await db
     .select()
-    .from(sqliteSchema.examEnrollments)
-    .where(eq(sqliteSchema.examEnrollments.organizationId, ids.orgId))
-    .all();
+    .from(schema.examEnrollments)
+    .where(eq(schema.examEnrollments.organizationId, ids.orgId));
 
   for (const enrollment of allEnrollments) {
-    const profile = db
+    const profileRows = await db
       .select()
-      .from(sqliteSchema.candidateProfiles)
-      .where(eq(sqliteSchema.candidateProfiles.id, enrollment.candidateId))
-      .get();
+      .from(schema.candidateProfiles)
+      .where(eq(schema.candidateProfiles.id, enrollment.candidateId));
+    const profile = profileRows[0];
     assert(
       profile !== undefined,
       `Enrollment ${enrollment.id} references missing candidateProfile for candidateId='${enrollment.candidateId}'`,
     );
-    const user = db
-      .select()
-      .from(sqliteSchema.users)
-      .where(eq(sqliteSchema.users.id, profile!.userId))
-      .get();
-    assert(
-      user?.role === "Candidate",
-      `Enrollment ${enrollment.id} belongs to non-Candidate user '${user?.username}' (role: ${user?.role})`,
-    );
+    if (profile) {
+      const userRows = await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, profile.userId));
+      const user = userRows[0];
+      assert(
+        user?.role === "Candidate",
+        `Enrollment ${enrollment.id} belongs to non-Candidate user '${user?.username}' (role: ${user?.role})`,
+      );
+    }
   }
 
   // 15. Graded attempts have grading detail
-  const gradedAttempts = db
+  const gradedAttempts = await db
     .select()
-    .from(sqliteSchema.examAttempts)
+    .from(schema.examAttempts)
     .where(
       and(
-        eq(sqliteSchema.examAttempts.organizationId, ids.orgId),
-        eq(sqliteSchema.examAttempts.status, "graded"),
+        eq(schema.examAttempts.organizationId, ids.orgId),
+        eq(schema.examAttempts.status, "graded"),
       ),
-    )
-    .all();
+    );
 
   for (const attempt of gradedAttempts) {
     assert(
@@ -389,11 +381,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   {
     const ipAttemptId = ids.attempts["open-c1-inprogress"];
     if (ipAttemptId) {
-      const attempt = db
+      const rows = await db
         .select()
-        .from(sqliteSchema.examAttempts)
-        .where(eq(sqliteSchema.examAttempts.id, ipAttemptId))
-        .get();
+        .from(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, ipAttemptId));
+      const attempt = rows[0];
       assert(
         attempt?.status === "in_progress",
         `In-progress attempt should be 'in_progress', got '${attempt?.status}'`,
@@ -416,11 +408,11 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   {
     const disruptedId = ids.attempts["open-c3-disrupted"];
     if (disruptedId) {
-      const attempt = db
+      const rows = await db
         .select()
-        .from(sqliteSchema.examAttempts)
-        .where(eq(sqliteSchema.examAttempts.id, disruptedId))
-        .get();
+        .from(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, disruptedId));
+      const attempt = rows[0];
       assert(
         attempt?.status === "disrupted",
         `Disrupted attempt should be 'disrupted', got '${attempt?.status}'`,
@@ -431,45 +423,41 @@ export function verifyDemoSeed(_db: AnyDatabase, ids: DemoIds): string[] {
   // 18. Enrollment finalScore consistency (highest strategy)
   {
     const closedExamId = ids.exams["closed"];
-    const c1ProfileId = db
+    const c1ProfileRows = await db
       .select()
-      .from(sqliteSchema.candidateProfiles)
+      .from(schema.candidateProfiles)
       .where(
         and(
-          eq(sqliteSchema.candidateProfiles.organizationId, ids.orgId),
-          eq(
-            sqliteSchema.candidateProfiles.userId,
-            ids.users["candidate1"] ?? "",
-          ),
+          eq(schema.candidateProfiles.organizationId, ids.orgId),
+          eq(schema.candidateProfiles.userId, ids.users["candidate1"] ?? ""),
         ),
-      )
-      .get()?.id;
+      );
+    const c1ProfileId = c1ProfileRows[0]?.id;
 
     if (closedExamId && c1ProfileId) {
-      const enrollment = db
+      const enrollmentRows = await db
         .select()
-        .from(sqliteSchema.examEnrollments)
+        .from(schema.examEnrollments)
         .where(
           and(
-            eq(sqliteSchema.examEnrollments.organizationId, ids.orgId),
-            eq(sqliteSchema.examEnrollments.examId, closedExamId),
-            eq(sqliteSchema.examEnrollments.candidateId, c1ProfileId),
+            eq(schema.examEnrollments.organizationId, ids.orgId),
+            eq(schema.examEnrollments.examId, closedExamId),
+            eq(schema.examEnrollments.candidateId, c1ProfileId),
           ),
-        )
-        .get();
+        );
+      const enrollment = enrollmentRows[0];
 
       if (enrollment) {
-        const gradedForC1 = db
+        const gradedForC1 = await db
           .select()
-          .from(sqliteSchema.examAttempts)
+          .from(schema.examAttempts)
           .where(
             and(
-              eq(sqliteSchema.examAttempts.organizationId, ids.orgId),
-              eq(sqliteSchema.examAttempts.enrollmentId, enrollment.id),
-              eq(sqliteSchema.examAttempts.status, "graded"),
+              eq(schema.examAttempts.organizationId, ids.orgId),
+              eq(schema.examAttempts.enrollmentId, enrollment.id),
+              eq(schema.examAttempts.status, "graded"),
             ),
-          )
-          .all();
+          );
 
         if (gradedForC1.length >= 2) {
           const highestScore = Math.max(

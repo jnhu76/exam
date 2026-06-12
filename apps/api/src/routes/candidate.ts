@@ -141,13 +141,30 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const passwordHash = await hashPassword(data.password);
-      const user = await userRepo.create(ctx, {
-        username: data.username,
-        passwordHash,
-        name: data.name,
-        role: "Candidate" as const,
-        isActive: true,
-      });
+      let user;
+      try {
+        user = await userRepo.create(ctx, {
+          username: data.username,
+          passwordHash,
+          name: data.name,
+          role: "Candidate" as const,
+          isActive: true,
+        });
+      } catch (err: any) {
+        if (
+          err?.code === "23505" ||
+          err?.message?.includes("unique") ||
+          err?.message?.includes("duplicate")
+        ) {
+          return reply.code(409).send({
+            error: {
+              code: "DUPLICATE",
+              message: "Username already exists",
+            },
+          });
+        }
+        throw err;
+      }
 
       const candidate = await candidateRepo.create(ctx, {
         userId: user.id,

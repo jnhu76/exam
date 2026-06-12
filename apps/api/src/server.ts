@@ -68,6 +68,14 @@ async function main() {
       root: publicDir,
       prefix: "/",
       wildcard: false,
+      immutable: true,
+      maxAge: "1y",
+      setHeaders: (res, pathname) => {
+        if (pathname.endsWith("index.html")) {
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("immutable", "false");
+        }
+      },
     });
     app.setNotFoundHandler((_req, reply) => {
       reply.sendFile("index.html");

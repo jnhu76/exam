@@ -1,7 +1,5 @@
-import type { AnyDatabase, PostgresDatabase } from "../types.js";
-import { isSqlite } from "../types.js";
-import { examEnrollments as sqliteExamEnrollments } from "../schema/sqlite.js";
-import { examEnrollments as pgExamEnrollments } from "../schema/pg.js";
+import type { Database } from "../types.js";
+import { examEnrollments } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
@@ -10,11 +8,8 @@ import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 
-export function createEnrollmentRepo(db: AnyDatabase) {
-  const repo = createAsyncTenantCrudRepo(db, {
-    sqlite: sqliteExamEnrollments,
-    pg: pgExamEnrollments,
-  });
+export function createEnrollmentRepo(db: Database) {
+  const repo = createAsyncTenantCrudRepo(db, examEnrollments);
 
   return {
     ...repo,
@@ -24,35 +19,18 @@ export function createEnrollmentRepo(db: AnyDatabase) {
       candidateId: string,
     ) {
       const orgId = resolveOptionalOrganizationId(ctx);
-      if (isSqlite(db)) {
-        return (
-          (db
-            .select()
-            .from(sqliteExamEnrollments)
-            .where(
-              and(
-                eq(sqliteExamEnrollments.organizationId, orgId),
-                eq(sqliteExamEnrollments.examId, examId),
-                eq(sqliteExamEnrollments.candidateId, candidateId),
-              ),
-            )
-            .get() as typeof sqliteExamEnrollments.$inferSelect | undefined) ??
-          null
-        );
-      }
-      const rows = await (db as PostgresDatabase)
+      const rows = await db
         .select()
-        .from(pgExamEnrollments)
+        .from(examEnrollments)
         .where(
           and(
-            eq(pgExamEnrollments.organizationId, orgId),
-            eq(pgExamEnrollments.examId, examId),
-            eq(pgExamEnrollments.candidateId, candidateId),
+            eq(examEnrollments.organizationId, orgId),
+            eq(examEnrollments.examId, examId),
+            eq(examEnrollments.candidateId, candidateId),
           ),
         );
       return (
-        (rows[0] as typeof sqliteExamEnrollments.$inferSelect | undefined) ??
-        null
+        (rows[0] as typeof examEnrollments.$inferSelect | undefined) ?? null
       );
     },
     async findByCandidate(
@@ -60,27 +38,15 @@ export function createEnrollmentRepo(db: AnyDatabase) {
       candidateId: string,
     ) {
       const orgId = resolveOptionalOrganizationId(ctx);
-      if (isSqlite(db)) {
-        return db
-          .select()
-          .from(sqliteExamEnrollments)
-          .where(
-            and(
-              eq(sqliteExamEnrollments.organizationId, orgId),
-              eq(sqliteExamEnrollments.candidateId, candidateId),
-            ),
-          )
-          .all() as (typeof sqliteExamEnrollments.$inferSelect)[];
-      }
-      return (await (db as PostgresDatabase)
+      return (await db
         .select()
-        .from(pgExamEnrollments)
+        .from(examEnrollments)
         .where(
           and(
-            eq(pgExamEnrollments.organizationId, orgId),
-            eq(pgExamEnrollments.candidateId, candidateId),
+            eq(examEnrollments.organizationId, orgId),
+            eq(examEnrollments.candidateId, candidateId),
           ),
-        )) as (typeof sqliteExamEnrollments.$inferSelect)[];
+        )) as (typeof examEnrollments.$inferSelect)[];
     },
   };
 }

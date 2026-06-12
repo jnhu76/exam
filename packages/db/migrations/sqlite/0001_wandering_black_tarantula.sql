@@ -1,1 +1,0 @@
-ALTER TABLE `exams` ADD `course_id` text NOT NULL REFERENCES courses(id);

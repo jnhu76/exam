@@ -3,12 +3,18 @@ import { AppError } from "@exam/domain";
 import { ZodError } from "zod";
 
 function isConstraintError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>).code === "SQLITE_CONSTRAINT_UNIQUE"
-  );
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as Record<string, unknown>;
+  if (e.code === "23505" || e.code === "SQLITE_CONSTRAINT_UNIQUE") return true;
+  const cause = e.cause as Record<string, unknown> | undefined;
+  if (cause && typeof cause === "object" && cause.code === "23505") return true;
+  if (
+    typeof e.message === "string" &&
+    (e.message.includes("duplicate key") ||
+      e.message.includes("unique constraint"))
+  )
+    return true;
+  return false;
 }
 
 function isClientError(

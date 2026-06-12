@@ -7,6 +7,7 @@ import {
   publishExamViaApi,
   submitExamAsCandidate,
   exportResultsCsvAsAdmin,
+  uniquePrefix,
 } from "./testHelpers.js";
 import authRoutes from "./auth.js";
 import candidateRoutes from "./candidate.js";
@@ -36,7 +37,7 @@ describe("permission boundary", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   function adminRequestContext() {
@@ -50,9 +51,10 @@ describe("permission boundary", () => {
     };
   }
 
-  function markExamClosed(examId: string) {
-    createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+  async function markExamClosed(examId: string) {
+    await createExamRepo(ctx.db).update(adminRequestContext(), examId, {
       closeAt: new Date(Date.now() - 1000),
+      status: "closed",
     });
   }
 
@@ -95,7 +97,7 @@ describe("permission boundary", () => {
       const candidate = await createCandidateViaApi(
         ctx.app,
         ctx.adminToken,
-        "boundary-candidate-01",
+        `boundary-cand-01-${uniquePrefix()}`,
         ctx.org.id,
       );
       candidateToken = candidate.token;
@@ -181,16 +183,16 @@ describe("permission boundary", () => {
         ctx.adminToken,
         ctx.org.id,
         examId,
-        "boundary-score-candidate",
+        `boundary-score-cand-${uniquePrefix()}`,
       );
-      markExamClosed(examId);
+      await markExamClosed(examId);
 
       const res = await ctx.app.inject({
         method: "GET",
         url: `/api/exams/${examId}/scores`,
         cookies: { "auth-token": ctx.teacherToken },
       });
-      expect(res.statusCode).toBe(200);
+      expect(res.statusCode, `body: ${res.body}`).toBe(200);
     });
 
     it("GET /api/users returns 403", async () => {

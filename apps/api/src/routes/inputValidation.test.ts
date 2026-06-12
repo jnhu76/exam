@@ -4,7 +4,7 @@ import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
 import examRoutes from "./exam.js";
-import { buildTestApp, createExamViaApi } from "./testHelpers.js";
+import { buildTestApp, createExamViaApi, uniquePrefix } from "./testHelpers.js";
 
 describe("API input validation (Zod schema boundary)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -23,7 +23,11 @@ describe("API input validation (Zod schema boundary)", () => {
     const courseRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Validation Course", code: "VC101", description: "" },
+      payload: {
+        name: "Validation Course",
+        code: `VC-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     courseId = courseRes.json().id;
@@ -44,7 +48,7 @@ describe("API input validation (Zod schema boundary)", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   function baseExamPayload() {
@@ -216,7 +220,7 @@ describe("API input validation (Zod schema boundary)", () => {
   });
 
   it("candidate creation rejects duplicate username", async () => {
-    const username = `dup-user-${Date.now()}`;
+    const username = `dup-user-${uniquePrefix()}`;
     const payload = {
       username,
       password: "password123",

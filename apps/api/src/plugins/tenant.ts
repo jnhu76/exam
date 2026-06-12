@@ -6,12 +6,12 @@ import {
   isPublicEndpoint,
 } from "@exam/auth/src/tenantGuard.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import type { AnyDatabase } from "@exam/db/src/types.js";
+import type { Database } from "@exam/db/src/types.js";
 
 const tenantGuardHook = async (
   request: FastifyRequest,
   reply: FastifyReply,
-  db: AnyDatabase,
+  db: Database,
 ) => {
   if (!request.ctx) return;
   if (isPublicEndpoint(request.url)) return;
@@ -68,7 +68,7 @@ const tenantPlugin: FastifyPluginAsync = async (fastify) => {
     if (!hasAuthenticate) return;
 
     const tenantHandler = (req: FastifyRequest, reply: FastifyReply) =>
-      tenantGuardHook(req, reply, fastify.db as AnyDatabase);
+      tenantGuardHook(req, reply, fastify.db as Database);
 
     if (Array.isArray(routeOptions.preHandler)) {
       const authIdx = routeOptions.preHandler.findIndex((h) => {
