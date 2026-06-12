@@ -229,6 +229,97 @@ describe("CSV export integration", () => {
     expect(body).toContain('"Zhang, ""San"""');
   });
 
+  it("CSV escaping prefixes dangerous-prefix candidate names to mitigate CSV injection", async () => {
+    const candidateRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `csv-injection-${uniquePrefix()}`,
+        password: "password123",
+        name: "=cmd|' /C calc'!A0",
+        fields: {},
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(candidateRes.statusCode).toBe(201);
+    const candidateBody = candidateRes.json();
+    const candidateToken = signJWT({
+      actorId: candidateBody.userId,
+      role: "Candidate",
+      organizationId: ctx.org.id,
+    });
+
+    const injExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "CSV Injection Exam",
+      courseCode: "INJ102",
+      courseName: "Injection Course",
+      questionContent: "Is CSV injection mitigated?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, injExamId);
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${injExamId}/enrollments`,
+      payload: { candidateIds: [candidateBody.id] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${injExamId}/start`,
+      cookies: { "auth-token": candidateToken },
+    });
+    expect(startRes.statusCode).toBe(201);
+    const attempt = startRes.json();
+
+    const examDetailRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${injExamId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const questionId = examDetailRes.json().questionIds[0];
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attempt.id}/answers/${questionId}`,
+      payload: {
+        attemptId: attempt.id,
+        questionId,
+        answer: true,
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": candidateToken },
+    });
+
+    const submitRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attempt.id}/submit`,
+      cookies: { "auth-token": candidateToken },
+    });
+    expect(submitRes.statusCode).toBe(200);
+
+    const { body } = await exportResultsCsvAsAdmin(
+      ctx.app,
+      ctx.adminToken,
+      injExamId,
+    );
+    // Dangerous-prefix value ('=' here) must be escaped with a leading single quote
+    // before any quote-wrapping that the CSV format requires. The negative
+    // assertions cover both row-start and mid-row cell-start positions, so an
+    // unescaped formula anywhere in the CSV would fail this test.
+    expect(body).toContain("'=cmd");
+    expect(body).not.toMatch(/(^|\n)=cmd/);
+    expect(body).not.toMatch(/,=cmd/);
+    expect(body).not.toMatch(/,"=cmd/);
+  });
+
   it("examId filtering — export only returns data for specified exam", async () => {
     const examAId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Filter Exam A",

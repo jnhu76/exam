@@ -26,6 +26,7 @@ export const errorMessages = {
   QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
   MAX_ATTEMPTS_REACHED: "已达到最大考试次数",
   EXAM_ALREADY_PASSED: "本场考试已通过",
+  CSRF_ORIGIN_REJECTED: "请求来源不被允许",
 } as const;
 
 export type ErrorCode = keyof typeof errorMessages;

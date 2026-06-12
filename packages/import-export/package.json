@@ -8,10 +8,11 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "node ../../scripts/check-code-quality.mjs",
-    "test": "tsc --noEmit",
-    "coverage": "tsc --noEmit"
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.7"
   }
 }
