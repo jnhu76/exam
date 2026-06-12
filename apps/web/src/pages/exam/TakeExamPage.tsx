@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -26,7 +27,7 @@ import type {
   SaveAnswerResponseDTO,
 } from "@exam/contracts";
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
-import { useSubmitFlush } from "@/hooks/useSubmitFlush";
+import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
 
 type AttemptData = Omit<
   LoadAttemptResponse,
@@ -52,6 +53,7 @@ export function TakeExamPage() {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFlushing, setIsFlushing] = useState(false);
+  const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
   const { scheduleSave, flush } = useSubmitFlush();
@@ -165,8 +167,9 @@ export function TakeExamPage() {
   const openSubmitDialog = useCallback(async () => {
     setShowSubmitDialog(true);
     setIsFlushing(true);
+    setFlushResult(null);
     try {
-      await flush();
+      setFlushResult(await flush());
     } finally {
       setIsFlushing(false);
     }
@@ -244,6 +247,10 @@ export function TakeExamPage() {
   const answeredCount = questionStates.filter(
     (s) => s === "answered" || s === "flagged",
   ).length;
+  const failedSaveCount = flushResult?.failedQuestionIds.length ?? 0;
+  const unsavedCount = flushResult
+    ? flushResult.pendingCount + failedSaveCount
+    : 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -397,13 +404,16 @@ export function TakeExamPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>确认交卷</DialogTitle>
+            <DialogDescription>请确认以下答题与保存状态。</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 text-sm">
             {isFlushing && <p>保存中...</p>}
-            {unansweredCount > 0 && (
-              <p>
-                还有 <strong>{unansweredCount}</strong> 题未作答
-              </p>
+            {flushResult && (
+              <>
+                <p>未答题：{unansweredCount} 题未作答</p>
+                <p>未保存：{unsavedCount} 题</p>
+                <p>保存失败：{failedSaveCount} 题</p>
+              </>
             )}
             {flaggedCount > 0 && (
               <p>

@@ -473,4 +473,48 @@ describe("TakeExamPage S03b submit flush", () => {
       ).toBe(true);
     });
   });
+
+  it("dialog shows unanswered, unsaved, and failed save counts", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+        {
+          originalQuestionId: "q2",
+          type: "true_false",
+          content: "确认第二项",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        throw new Error("offline");
+      }
+      return { ok: true };
+    });
+
+    renderPage();
+
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("第1空答案");
+    await user.type(input, "A");
+    await user.click(screen.getByRole("button", { name: "交卷" }));
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(within(dialog).queryByText(/保存中/)).not.toBeInTheDocument();
+    });
+
+    expect(within(dialog).getByText("未答题：1 题未作答")).toBeInTheDocument();
+    expect(within(dialog).getByText("未保存：1 题")).toBeInTheDocument();
+    expect(within(dialog).getByText("保存失败：1 题")).toBeInTheDocument();
+  });
 });
