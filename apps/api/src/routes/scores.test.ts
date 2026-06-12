@@ -244,7 +244,7 @@ describe("score routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       accepted: false,
-      conflict: { reason: "SUBMITTED" },
+      conflict: { reason: "ATTEMPT_ALREADY_SUBMITTED" },
     });
   });
 

@@ -15,8 +15,9 @@ const AttemptStatusEnum = z.enum([
 
 const ConflictReasonEnum = z.enum([
   "STALE_VERSION",
-  "SUBMITTED",
+  "ATTEMPT_ALREADY_SUBMITTED",
   "ATTEMPT_CLOSED",
+  "DEADLINE_EXCEEDED",
 ]);
 
 export const QuestionSnapshotSchema = z.object({

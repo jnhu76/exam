@@ -731,19 +731,21 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         if (!candidateProfile) {
           throw new NotFoundError("Candidate profile not found");
         }
-        const attempt = (await txAttemptRepo.findByIdAndCandidate(
+        const lockedAttempt = await txAttemptRepo.findByIdForUpdate(
           ctx,
           attemptId,
-          candidateProfile.id,
-        )) as ExamAttempt | null;
-        if (!attempt) {
+        );
+        if (
+          !lockedAttempt ||
+          lockedAttempt.candidateId !== candidateProfile.id
+        ) {
           throw new NotFoundError("Attempt not found");
         }
 
         await submitAttempt(
           createAttemptRepoAdapter(txAttemptRepo, ctx),
           attemptId,
-          new Date(),
+          fastify.now(),
         );
       });
 
@@ -757,7 +759,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         createEnrollmentRepoAdapter(enrollmentRepo, ctx),
         attRepoAdapter,
         attemptId,
-        new Date(),
+        fastify.now(),
       );
       const attempt = await attemptRepo.findById(ctx, attemptId);
       if (!attempt) {

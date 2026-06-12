@@ -1,270 +1,252 @@
 # Phase 1.6 Job Cards
 
-本文档是 Phase1.6 的详细 Job Cards，每个 Job 都包含 Purpose / Scope / Non-goals / Acceptance Criteria / Risk。
+本文件是 Phase1.6 的可执行 Job Cards 列表，与 `phase1.6-bridge-plan.md` 一一对应，提供更紧凑的施工 checklist 视图。**若两文件冲突，以 `phase1.6-bridge-plan.md` 为准。**
+
+> Phase1.6 使用唯一一套 Job 编号 `P1.6-S03a-1..5`。任何 `P1.6-J1..J5` 旧编号已废弃。
 
 ---
 
-## P1.6-S03a-1: Deadline Error Code Convergence
+## P1.6-S03a-1: Submit Deadline E2E Hardening
 
 ### Purpose
 
-将 deadline exceeded 相关错误码统一为 `ATTEMPT_DEADLINE_EXCEEDED`，避免 `EXAM_TIME_EXPIRED` 等不一致的错误码，提高协议一致性。
+Phase1.4 已经把 deadline 错误码统一为 `ATTEMPT_DEADLINE_EXCEEDED`（HTTP 409），但 submit 路由层缺少端到端 HTTP 集成测试断言；同时清理任何残留的 `EXAM_TIME_EXPIRED` 字符串。
 
 ### Scope
 
-- [ ] 审查所有 deadline 相关错误码
-- [ ] 统一为 `ATTEMPT_DEADLINE_EXCEEDED`（409 Conflict）
-- [ ] 更新 domain errors 定义
-- [ ] 更新 contracts schemas
-- [ ] 更新 route handlers
-- [ ] 更新 tests（包括 integration tests 和 unit tests）
-- [ ] 验证错误码一致性
+- [ ] `rg -n "EXAM_TIME_EXPIRED" apps/ packages/` 返回空（仅 `docs/` 历史改名记录章节可保留）
+- [ ] 在 `apps/api/src/routes/attempts.test.ts` 增加 HTTP 集成测试，覆盖三个时点分支
+- [ ] 验证错误响应文案 zh-CN
 
 ### Non-goals
 
-- [ ] 不改变 deadline 检查逻辑
-- [ ] 不改变 deadline 策略
-- [ ] 不引入新的错误码
+- [ ] 不修改 `AttemptDeadlineExceededError` 类与 errorCode
+- [ ] 不引入新错误码
+- [ ] 不实现自动提交（auto-submit）
 
 ### Acceptance Criteria
 
-- [ ] `now > deadlineAt` submit → `409 ATTEMPT_DEADLINE_EXCEEDED`
-- [ ] `now == deadlineAt` submit → success
-- [ ] `now < deadlineAt` submit → success
-- [ ] Timeout submit 不计分、不自动提交、不改变为 graded/submitted
-- [ ] Domain errors、contracts schemas、route handlers、tests 保持一致
+- [ ] `now > deadlineAt` 时 `POST /attempts/:id/submit` → `409 { error: { code: "ATTEMPT_DEADLINE_EXCEEDED", message: "<zh-CN>" } }`
+- [ ] `now == deadlineAt` 时 → `200`，attempt.status = `submitted`
+- [ ] `now < deadlineAt` 时 → `200`，attempt.status = `submitted`
+- [ ] 超时 submit 不计分、不写 grading 字段、不修改 enrollment 终态
 - [ ] `pnpm verify` 通过
 
 ### Risk
 
-- 需要检查所有使用 deadline 检查的代码路径
-- 需要确保错误码在 domain、contracts、route、tests 中保持一致
-- 可能存在隐藏的 deadline 检查点
+- 时间断言在 CI 上易 flaky，建议通过 server 端注入 `now` 或 fake-timer 控制
 
 ### Dependencies
 
-- Phase1.5（PG-only 基础）
+- 无
 
 ### Parallelizable
 
-- 是（可以与 P1.6-S03a-2、P1.6-S03a-3 并行开始）
+- 是（与 S03a-2 / S03a-3 并行）
 
 ---
 
-## P1.6-S03a-2: saveAnswers PostgreSQL Transaction Boundary
+## P1.6-S03a-2: Submit Route Row-level Lock Alignment
 
 ### Purpose
 
-确保 `saveAnswers` 的 read → merge/compute → write 在同一个 PG transaction 内，防止并发问题，避免 read-modify-write race condition。
+Phase1.6 唯一的核心代码动作。让 `POST /attempts/:id/submit` 在事务内对同一 attempt 行加 `FOR UPDATE` 行锁，与 `saveAnswers` 锁同一行，关闭 lost-update / submit-after-save 竞争窗口。
 
 ### Scope
 
-- [ ] 审查 saveAnswers 的调用链
-- [ ] 重构 saveAnswers，将 read → merge/compute → write 放在同一个 `db.transaction()` 内
-- [ ] 确保 route 不直接裸写 repository
-- [ ] Command/service 层负责 transaction boundary
-- [ ] 修改 repository 方法签名，支持 tx client 参数
-- [ ] 添加 `findByIdForUpdate` 等 repository 方法（使用 `SELECT ... FOR UPDATE`）
-- [ ] 更新 tests（包括 integration tests 和 unit tests）
-- [ ] 验证 transaction 边界正确
+- [ ] 修改 `apps/api/src/routes/attempts.ts` submit 路由：在 `executeInTransaction` 内先取行锁再做 ownership 校验
+- [ ] 视情况在 `attemptRepo` 新增 `findByIdAndCandidateForUpdate` 复合方法
+- [ ] 保持 `submitAttempt` 命令（`packages/exam-engine/src/attemptCommands.ts`）对外签名不变
+- [ ] 单元 / 集成测试覆盖「无 candidate profile」「attempt 不属于该 candidate」分支
 
 ### Non-goals
 
-- [ ] 不改变 saveAnswers 的业务逻辑
-- [ ] 不改变 answer protocol 的版本化和幂等机制
-- [ ] 不引入新的事务策略
+- [ ] 不修改 `submitAttempt` 命令对外签名
+- [ ] 不更换隔离级别（保持 PG 默认 `read committed`）
+- [ ] 不引入 advisory lock 作为业务锁
+- [ ] 不实现 optimistic lock 替代方案
 
 ### Acceptance Criteria
 
-- [ ] saveAnswers 的 read → merge/compute → write 在同一个 PG transaction 内
-- [ ] Route 不直接裸写 repository
-- [ ] Command/service 层负责 transaction boundary
-- [ ] Repository 支持 tx client 参数
-- [ ] 存在 `findByIdForUpdate` 等 repository 方法（使用 `SELECT ... FOR UPDATE`）
-- [ ] `pnpm test` 通过
+- [ ] submit 路由在事务内使用 `findByIdForUpdate(ctx, attemptId)`（或 `findByIdAndCandidateForUpdate`）
+- [ ] Candidate ownership 校验在取行锁之后、调用 `submitAttempt` 之前完成
+- [ ] 双连接同时调用 saveAnswers 与 submit 时：后启动者必须等待先启动者事务结束（由 S03a-4 测试断言）
+- [ ] `pnpm typecheck` / `pnpm lint:arch` / `pnpm test` / `pnpm test:pg` 通过
+
+### Risk
+
+- `attemptRepo` 公开方法签名变化需同步 fake repository（如有）
+- `submitAttempt` 命令内部仍会再次 `findById`；保留命令现签名 + adapter 注入即可
+- PG 默认 `read committed` + `FOR UPDATE` 已足够串行化两事务对同一行的写
+
+### Drizzle API 锚定（context7 核对，2026-06）
+
+- `db.transaction(async tx => {...}, { isolationLevel: "read committed", accessMode: "read write" })`
+- `tx.select().from(t).for("update").where(...)` 对应 `SELECT ... FOR UPDATE`
+- 路由层沿用 `executeInTransaction`（`packages/db/src/types.ts`）
+
+### Dependencies
+
+- 无（与 S03a-1 / S03a-3 并行）
+
+### Parallelizable
+
+- 是
+
+---
+
+## P1.6-S03a-3: Graded/Submitted Save Rejection E2E
+
+### Purpose
+
+确认 `POST /attempts/:id/answers/:qid` 在 attempt 状态为 `submitted` / `graded` 时端到端被拒绝，事务回滚不留半状态。`processSaveAnswer` 已含 status 判断；本 Job 只补缺失的 HTTP 集成断言。
+
+### Scope
+
+- [ ] HTTP 集成测试覆盖：状态 = `submitted` 时 save 被拒绝
+- [ ] HTTP 集成测试覆盖：状态 = `graded` 时 save 被拒绝
+- [ ] 拒绝场景下断言数据库 attempt 行未被修改
+
+### Non-goals
+
+- [ ] 不修改 `processSaveAnswer` 业务逻辑
+- [ ] 不修改 `AttemptStatus` 枚举
+- [ ] 不引入新错误码（沿用 `processSaveAnswer` 已抛出的错误）
+
+### Acceptance Criteria
+
+- [ ] 两类 HTTP 集成测试存在并通过
+- [ ] 拒绝场景下 `answers` / `lastActivityAt` 不变
+- [ ] 错误响应文案 zh-CN
+- [ ] `pnpm verify` 通过
+
+### Risk
+
+- 需与 S03a-2 协调，确认 submit 后的最终 attempt 状态以决定测试 fixture
+
+### Dependencies
+
+- 无（与 S03a-1 / S03a-2 并行）
+
+### Parallelizable
+
+- 是
+
+---
+
+## P1.6-S03a-4: PostgreSQL Concurrency Test Suite
+
+### Purpose
+
+编写真正可重现的 PG 并发集成测试，覆盖 saveAnswers 与 submitAttempt 在同一 attempt 行上的关键交错。**禁止用 `Promise.all` 碰运气。**
+
+### Scope
+
+- [ ] 选定 barrier 实现：`pg_advisory_lock` / `pg_advisory_unlock` 或 controlled interleaving（手动 `await` 阶段控制）
+- [ ] 使用真实双 PG client（独立连接 + 独立事务）
+- [ ] 测试位置：`packages/db/src/__tests__/` 或 `apps/api/tests/concurrency/`
+- [ ] 通过 `pnpm test:pg` 入口运行
+
+### 必须覆盖的 4 类场景
+
+- [ ] **rollback**：事务在 saveAnswers 内抛错 → 事务回滚 → attempt 行的 `answers` / `lastActivityAt` / `status` 与事务前一致
+- [ ] **submit-then-save**：submit 已 commit（status = `submitted` / `graded`）→ 后续 save 被拒绝
+- [ ] **save-then-submit**：save 持有 `FOR UPDATE` 行锁 → submit 必须等待 → save commit 后 submit 才返回 → 最终 status = `submitted` 且 `answers` 包含 save 写入的版本
+- [ ] **N-parallel save**（建议 N=10）：N 个并发 save 同一 attempt → 最终 `answers` 中每个 questionId 的 `version` 单调递增、不丢失任何 accepted save、idempotency 保护幂等重复
+
+### Non-goals
+
+- [ ] 不测试 application-level mutex
+- [ ] 不测试 PG advisory lock 作为业务锁（仅作为测试 barrier）
+- [ ] 不引入 `vitest.concurrent`（避免 worker 并发干扰真实事务时序）
+- [ ] 不测试 cross-attempt 串行化（不同 attempt 行不应互相阻塞）
+
+### Acceptance Criteria
+
+- [ ] 上述 4 类测试全部存在并通过
+- [ ] 在 CI 上跑 10 次不 flaky（PR review 阶段抽样验证）
+- [ ] 测试不依赖 `sleep` / `setTimeout` 等时间魔法
 - [ ] `pnpm test:pg` 通过
-- [ ] `pnpm verify` 通过
 
 ### Risk
 
-- 需要重构 saveAnswers 的调用链，确保 transaction 边界正确
-- 需要修改 repository 方法签名，支持 tx client 参数
-- 需要确保 transaction 失败时正确 rollback
-- 需要避免嵌套事务问题
+- 跨连接 barrier 实现复杂度高，需谨慎管理连接释放避免耗尽 PG `max_connections`
+- N-parallel save 的 N 取值不可过大以免拖慢 CI
 
 ### Dependencies
 
-- Phase1.5（PG-only 基础）
+- S03a-2（必须先完成 row-level lock 对齐）
+- S03a-3（拒绝行为需要先定义）
 
 ### Parallelizable
 
-- 是（可以与 P1.6-S03a-1、P1.6-S03a-3 并行开始）
+- 否（必须在 S03a-2 与 S03a-3 都合入 master 后开始）
 
 ---
 
-## P1.6-S03a-3: saveAnswers and submitAttempt Attempt-level Serialization
+## P1.6-S03a-5: Phase1.3 P0 Submit Regression on New Transaction Boundary
 
 ### Purpose
 
-确保 `saveAnswers` 与 `submitAttempt` 对同一个 attempt 使用一致的 serialization strategy，防止 submit 后旧 save 覆盖答案，防止 grading 使用的答案与最终保存答案不一致。
+S03a-1..4 全部合入 master 后，复测 Phase1.3 标记为 P0 的「正常考生提交」端到端场景，确认新事务边界 + 行锁不破坏正常流程。
 
 ### Scope
 
-- [ ] 选择 serialization strategy（推荐使用 row-level lock / `SELECT ... FOR UPDATE`）
-- [ ] 确保 saveAnswers 和 submitAttempt 使用相同的 serialization strategy
-- [ ] 在 graded/submitted 状态下拒绝 save
-- [ ] 防止 submit 后旧 save 覆盖答案
-- [ ] 防止 grading 使用的答案与最终保存答案不一致
-- [ ] 防止 attempt status 与 answers 不一致
-- [ ] 更新 tests（包括 integration tests 和 unit tests）
-- [ ] 验证 serialization 正确
+- [ ] 跑 Phase1.3 现有 smoke / integration / e2e tests
+- [ ] 跑 `pnpm test` / `pnpm test:pg` / `pnpm verify`
+- [ ] 重点观察 `lastActivityAt` 在新事务边界下是否被多写或漏写
 
 ### Non-goals
 
-- [ ] 不实现新的 serialization strategy（使用 PG 现有能力）
-- [ ] 不改变 saveAnswers 和 submitAttempt 的业务逻辑
-- [ ] 不引入新的锁机制
+- [ ] 不重写 Phase1.3 的测试
+- [ ] 不引入新业务流程
+- [ ] 不扩展为 stress test
 
 ### Acceptance Criteria
 
-- [ ] saveAnswers 和 submitAttempt 使用相同的 serialization strategy
-- [ ] saveAnswers 和 submitAttempt 锁同一条 attempt row
-- [ ] Graded/submitted 后 save 被拒绝（返回 409 Conflict 或类似错误）
-- [ ] Submit 不会被并发 save 破坏
-- [ ] 最终状态与答案一致
-- [ ] `pnpm test` 通过
-- [ ] `pnpm test:pg` 通过
+- [ ] 正常答题 → save → submit → graded/submitted 流程在 master 当前代码上跑通
+- [ ] `now == deadlineAt` 边界 submit 不被新逻辑误伤
+- [ ] enrollment 终态、scoreStrategy 选分行为符合 Phase1.3 既有预期
+- [ ] Phase1.3 现有测试全部通过
 - [ ] `pnpm verify` 通过
 
 ### Risk
 
-- 需要选择合适的 serialization strategy（row-level lock、pessimistic lock、optimistic lock）
-- 需要测试各种并发场景，确保没有 data race
-- 需要考虑性能影响，避免过度锁表
-- 需要确保死锁不会发生
+- 隐藏的正常流程回归（如 `lastActivityAt` 多写一次导致 heartbeat 行为变化）
 
 ### Dependencies
 
-- Phase1.5（PG-only 基础）
-- P1.6-S03a-2（saveAnswers transaction boundary）
+- S03a-1 + S03a-2 + S03a-3 + S03a-4
 
 ### Parallelizable
 
-- 是（可以与 P1.6-S03a-1、P1.6-S03a-2 并行开始，但建议在 S03a-2 完成后执行）
-
----
-
-## P1.6-S03a-4: PostgreSQL Concurrency Tests
-
-### Purpose
-
-新增 PG integration tests，验证 rollback、concurrent save + submit、submit 使用的答案与事务提交顺序一致，确保并发场景下的正确性。
-
-### Scope
-
-- [ ] 设计并发测试策略（barrier、delayed repository、transaction lock、controlled interleaving 等）
-- [ ] 实现 saveAnswers rollback 测试
-- [ ] 实现 graded/submitted 后 save 被拒绝测试
-- [ ] 实现 concurrent save + submit 不损坏数据测试
-- [ ] 实现 submit 使用的答案与事务提交顺序一致测试
-- [ ] 确保测试可靠（不 flaky）
-- [ ] 验证所有 PG integration tests 通过
-
-### Non-goals
-
-- [ ] 不重写现有 tests
-- [ ] 不改变测试目的
-
-### Acceptance Criteria
-
-- [ ] PG 下 saveAnswers rollback 测试通过
-- [ ] PG 下 graded/submitted 后 save 被拒绝测试通过
-- [ ] PG 下 concurrent save + submit 不损坏数据测试通过
-- [ ] PG 下 submit 使用的答案与事务提交顺序一致测试通过
-- [ ] 测试可靠（不 flaky）
-- [ ] `pnpm test:pg` 通过
-- [ ] `pnpm verify` 通过
-
-### Risk
-
-- 需要设计可靠的并发测试策略，避免 flaky tests
-- 需要确保测试覆盖所有关键边界场景
-- 并发测试可能耗时较长，需要考虑 CI 时间
-
-### Dependencies
-
-- P1.6-S03a-2（saveAnswers transaction boundary）
-- P1.6-S03a-3（attempt-level serialization）
-
-### Parallelizable
-
-- 否（必须在 S03a-2、S03a-3 完成后执行）
-
----
-
-## P1.6-S03a-5: Phase1.3 P0 Student Submit Scenario Regression
-
-### Purpose
-
-复测正常考生提交场景，确认新事务边界不破坏正常流程，确保 deadline 新逻辑不误伤正常提交。
-
-### Scope
-
-- [ ] 复测正常考生提交场景（答题 → 保存答案 → submit → graded/submitted）
-- [ ] 确认 graded/submitted 状态符合既有预期
-- [ ] 确认 deadline 新逻辑不误伤正常提交（`now <= deadlineAt`）
-- [ ] 运行现有 Phase1.3 smoke tests
-- [ ] 运行现有 Phase1.3 integration tests
-- [ ] 验证所有 tests 通过
-
-### Non-goals
-
-- [ ] 不改变正常考生提交的业务流程
-- [ ] 不引入新的业务逻辑
-
-### Acceptance Criteria
-
-- [ ] 正常答题 → 保存答案 → submit → graded/submitted 流程正常
-- [ ] Graded/submitted 状态符合既有预期
-- [ ] Deadline 新逻辑不误伤正常提交（`now <= deadlineAt`）
-- [ ] Phase1.3 smoke tests 通过
-- [ ] Phase1.3 integration tests 通过
-- [ ] `pnpm test` 通过
-- [ ] `pnpm test:pg` 通过
-- [ ] `pnpm verify` 通过
-
-### Risk
-
-- 需要确保新事务边界不会影响现有正常流程
-- 需要确认 deadline 新逻辑不会误伤正常提交
-- 可能存在隐藏的正常流程回归
-
-### Dependencies
-
-- P1.6-S03a-1（deadline error code convergence）
-- P1.6-S03a-2（saveAnswers transaction boundary）
-- P1.6-S03a-3（attempt-level serialization）
-- P1.6-S03a-4（PG concurrency tests）
-
-### Parallelizable
-
-- 否（必须在所有 S03a job 完成后执行）
+- 否（最后一步）
 
 ---
 
 ## Dependencies Summary
 
-### Blocking
+### Blocking（外部）
 
-- Phase1.5（PG-only 基础）
+- Phase1.4-S03a 已合并
+- Phase1.5 已合并（PR #33 / commit `dec707c`）
 
-### Parallelizable
+### Internal Order
 
-- P1.6-S03a-1、P1.6-S03a-3 可与 S03a-2 并行开发，但 S03a-3 的 saveAnswers/submit 集成及合并必须在 S03a-2（saveAnswers transaction boundary）完成并通过测试后进行；CI 对 submit 流程变更应强制此顺序
-- P1.6-S03a-4 必须在 S03a-2、S03a-3 完成后执行
-- P1.6-S03a-5 必须在所有 S03a job 完成后执行
+```text
+S03a-1 ─┐
+S03a-2 ─┼─→ S03a-4 ─→ S03a-5
+S03a-3 ─┘
+```
+
+- S03a-1 / S03a-2 / S03a-3 三者并行启动
+- S03a-4 必须在 S03a-2 + S03a-3 都合入 master 后开始
+- S03a-5 必须在前 4 个 Job 全部合入 master 后开始
+
+> 旧版「S03a-3 与 S03a-2 并行 + 建议在 S03a-2 之后」的自相矛盾表述已废弃。
 
 ### Blocks
 
-- Phase2 Entry Gate：Phase2 必须依赖 S03a 的 save + submit 并发测试
-- Phase2-Auto-submit：Phase2 的自动提交依赖 S03a 的事务硬化
+- **Phase2 Entry Gate**：依赖 S03a-4 PG 并发测试套件
+- **Phase2 Auto-submit**：依赖 S03a-2 row-level lock 对齐
+- **Phase1.7 安全 Job**：依赖 S03a-2 行锁基础

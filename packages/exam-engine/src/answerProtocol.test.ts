@@ -107,7 +107,7 @@ describe("answerProtocol", () => {
       const result = processSaveAnswer(state, request);
 
       expect(result.accepted).toBe(false);
-      expect(result.conflict?.reason).toBe("SUBMITTED");
+      expect(result.conflict?.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
     });
 
     it("rejects save when attempt is graded", () => {
@@ -117,7 +117,7 @@ describe("answerProtocol", () => {
       const result = processSaveAnswer(state, request);
 
       expect(result.accepted).toBe(false);
-      expect(result.conflict?.reason).toBe("SUBMITTED");
+      expect(result.conflict?.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
     });
 
     it("rejects save when attempt is voided", () => {

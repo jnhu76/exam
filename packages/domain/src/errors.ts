@@ -69,9 +69,6 @@ export class AttemptDeadlineExceededError extends AppError {
   }
 }
 
-/** @deprecated Use AttemptDeadlineExceededError */
-export const ExamTimeExpiredError = AttemptDeadlineExceededError;
-
 export class ConflictError extends AppError {
   constructor(message: string) {
     super(message, "CONFLICT", 409);

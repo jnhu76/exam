@@ -5,6 +5,7 @@ import type { FastifyPluginAsync } from "fastify";
 import authPlugin from "../plugins/auth.js";
 import tenantPlugin from "../plugins/tenant.js";
 import rateLimitPlugin from "../plugins/rateLimit.js";
+import nowPlugin from "../plugins/now.js";
 import { setupErrorHandler } from "../plugins/errors.js";
 import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -91,6 +92,7 @@ export interface TestContext {
   teacherToken: string;
   candidateToken: string;
   superAdminToken: string;
+  setNow: (now: Date | null) => void;
 }
 
 const TEST_DB_URL =
@@ -112,6 +114,7 @@ export async function buildTestApp(
   setupErrorHandler(app);
   await app.register(fastifyCookie);
   await app.register(createDbPlugin(db));
+  await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);
   await app.register(rateLimitPlugin);
@@ -186,6 +189,9 @@ export async function buildTestApp(
     teacherToken,
     candidateToken,
     superAdminToken,
+    setNow: (now: Date | null) => {
+      app.setNowOverride(now ? () => now : null);
+    },
   };
 }
 
