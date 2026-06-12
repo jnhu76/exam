@@ -163,19 +163,26 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         if (
           err &&
           typeof err === "object" &&
-          ((err as Record<string, unknown>).code === "23505" ||
-            String((err as Record<string, unknown>).message ?? "").includes(
-              "unique",
-            ) ||
-            String((err as Record<string, unknown>).message ?? "").includes(
-              "duplicate",
-            ))
+          (err as Record<string, unknown>).code === "23505"
         ) {
+          const constraint = String(
+            (err as Record<string, unknown>).constraint ?? "",
+          );
+          if (constraint === "users_org_username_unique") {
+            return reply.code(409).send({
+              error: { code: "DUPLICATE", message: "Username already exists" },
+            });
+          }
+          if (constraint === "candidate_profiles_org_user_unique") {
+            return reply.code(409).send({
+              error: {
+                code: "DUPLICATE",
+                message: "Candidate profile already exists for this user",
+              },
+            });
+          }
           return reply.code(409).send({
-            error: {
-              code: "DUPLICATE",
-              message: "Username already exists",
-            },
+            error: { code: "DUPLICATE", message: "Duplicate field value" },
           });
         }
         throw err;
