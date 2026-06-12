@@ -1,192 +1,87 @@
-# Phase 1.6 — PostgreSQL Correctness Hardening
+# Phase 1.6 — PostgreSQL Correctness Hardening（历史 / 决策附录）
 
-**日期**: 2026-06-11
-**分支**: `phase1.5-1.6-documentation`
-**前置**: Phase1.5 PostgreSQL-only convergence 完成
-**定位**: Phase1 收口层第三阶段，数据库正确性收敛
-**核心原则**: PG-only 基础上的事务正确性验证，不是 UI 阶段
-
----
-
-## 1. Purpose
-
-Phase1.5 完成了 PostgreSQL-only 数据库收敛，移除了 SQLite 作为数据库行为测试后端。Phase1.6 将在 PG-only 基础上完成数据库正确性、事务正确性、migration、seed、CI、并发测试和回归门禁。
-
-Phase1.6 是数据库正确性收敛，不是 UI 阶段，也不是新考试功能开发阶段。
+> ⚠️ **本文件不再作为 Job 来源**。
+>
+> Phase1.6 的可执行 Job 列表在 [`phase1.6-bridge-plan.md`](./phase1.6-bridge-plan.md) 与 [`jobs.md`](./jobs.md) 中定义，使用唯一一套编号 `P1.6-S03a-1..5`。
+>
+> 本文件的旧版 `P1.6-J1..J5` 编号体系已**废弃**，仅作为决策背景与历史记录保留。
 
 ---
 
-## 2. Scope
+## 1. 背景与决策（仍然有效）
 
-Phase1.6 至少包含以下任务：
+Phase1.4 执行过程中暴露了底层问题：生产部署使用 PostgreSQL，但本地 / 测试 / CI 中仍存在 SQLite。SQLite 与 PostgreSQL 在事务、锁、约束、类型、并发语义上不一致，导致测试可信度不足，AI 修改时容易在两种数据库语义之间摇摆。
 
-### P1.6-J1: Transaction Correctness
+围绕这个根因，团队做出了三段拆分决策：
 
-**目标**:
-- `saveAnswers` 的 read -> merge/compute -> write 必须在同一个 `db.transaction()` 内
-- `submitAttempt` 的 deadline check + status update 在单个事务内完成
-- Route 不直接裸写 repository
-- Command/service 层负责 transaction boundary
-- Repository 支持 tx client
+1. **Phase1.4-S03a**：deadline 策略文档化、错误码定义（`ATTEMPT_DEADLINE_EXCEEDED`）、初始 deadline 检查、基础 submit 幂等
+2. **Phase1.5**：PG-only 数据库收敛、SQLite 测试后端移除、PG integration test foundation
+3. **Phase1.6**：考试协议事务硬化收尾（saveAnswers + submitAttempt attempt-level serialization、PG 并发测试、Phase1.3 P0 回归）
 
-**反例（禁止）**:
-
-```ts
-// Wrong: read is outside transaction
-const attempt = await repo.findById(id)
-await db.transaction(async tx => {
-  await repo.update(tx, id, nextAnswers)
-})
-```
-
-**正确方向**:
-
-```ts
-await db.transaction(async tx => {
-  const attempt = await repo.findByIdForUpdate(tx, attemptId)
-  // validate status
-  // merge answers
-  // write answers
-})
-```
-
-**验收**:
-- [ ] saveAnswers 的 read -> merge/compute -> write 在同一个 PG transaction 内
-- [ ] submitAttempt 的 deadline check + status update 在事务内
-- [ ] Route 不直接裸写 repository
-- [ ] Command/service 层负责 transaction boundary
-- [ ] Repository 支持 tx client 参数
+详情见 `s03a-status-adjustment.md`。
 
 ---
 
-### P1.6-J2: Concurrency Tests
+## 2. 历史 Job 编号映射（已废弃）
 
-**目标**:
-- 新增 PG integration tests
-- 验证 rollback
-- 验证 concurrent save + submit
-- 验证 submit 使用的答案与事务提交顺序一致
-- 不允许只用普通 `Promise.all` 碰运气
-
-**测试建议**:
-- Barrier
-- Delayed repository
-- Transaction lock
-- Controlled interleaving
-- 或项目已有测试工具
-
-**验收**:
-- [ ] PG 下 saveAnswers rollback 测试通过
-- [ ] PG 下 graded/submitted 后 save 被拒绝测试通过
-- [ ] PG 下 concurrent save + submit 不损坏数据测试通过
-- [ ] PG 下 submit 使用的答案与事务提交顺序一致测试通过
-- [ ] 测试可靠（不 flaky）
+| 旧编号（已废弃） | 旧描述 | 当前归属 |
+|---|---|---|
+| `P1.6-J1` Transaction Correctness | saveAnswers / submitAttempt 事务边界 | 已被 `P1.6-S03a-2`（Submit Route Row-level Lock Alignment）取代；saveAnswers 主路径已在 Phase1.4-S03a 完成 |
+| `P1.6-J2` Concurrency Tests | PG 并发测试 | 已被 `P1.6-S03a-4` 取代 |
+| `P1.6-J3` S03a PG Verification | submit + 并发场景验证 | 已分摊到 `P1.6-S03a-1` / `P1.6-S03a-4` / `P1.6-S03a-5` |
+| `P1.6-J4` Migration / Seed Regression | migration / seed 在空 PG 数据库可重复执行 | **Phase1.5 已交付**，不再作为 Phase1.6 Job |
+| `P1.6-J5` CI Gate | CI 中 PG integration gate 稳定 | **Phase1.5 已交付**，不再作为 Phase1.6 Job |
 
 ---
 
-### P1.6-J3: S03a PG Verification
+## 3. 已废弃 Job 的代码证据（说明为何不再列入 Phase1.6）
 
-**目标**:
-- 在 PG-only 基础上验证 S03a 的服务端考试协议
-- 验证 deadline 强制 409
-- 验证 submit 幂等
-- 验证 save + submit 并发安全
+### 旧 J4（migration / seed regression）已在 Phase1.5 完成
 
-**验收**:
-- [ ] `now > deadlineAt` submit -> 409 ATTEMPT_DEADLINE_EXCEEDED
-- [ ] `now <= deadlineAt` submit 正常
-- [ ] 并发 save + submit 不导致数据损坏
-- [ ] `pnpm verify` 通过
+- `seed.ts` 改为 `INSERT ... ON CONFLICT (organization_id, username) DO UPDATE ... RETURNING`，消除 SELECT-then-INSERT TOCTOU
+- `seed.test.ts` 增加 `Promise.all([seed, seed, seed])` 并发幂等测试
+- `turbo.json` 把 `@exam/api#test` 串行在 `@exam/db#test` 之后，避免共享 `exam_test` DB 的并行污染
+- 全部见 commit `71dea67 feat(phase1.5): converge to PostgreSQL-only and fix test pollution`
 
----
+### 旧 J5（CI Gate）已在 Phase1.5 完成
 
-### P1.6-J4: Migration/Seed Regression
-
-**目标**:
-- migration reset 稳定性
-- seed reset 稳定性
-- 在空 PG 数据库上可重复执行
-
-**验收**:
-- [ ] migration reset clean
-- [ ] seed reset clean
-- [ ] 空 PG 数据库上 migration + seed 可重复执行
+- `.github/workflows/ci.yml` 增加 PostgreSQL service container job，固定 PG 版本
+- 移除 SQLite-only CI service
+- `pnpm verify` 已在 PG service container 上跑通
+- `pnpm db:up` / `db:down` / `db:reset` / `db:migrate` / `db:seed` / `test:pg` 命令在 `package.json` 落地
+- 见 commit `71dea67`
 
 ---
 
-### P1.6-J5: CI Gate
+## 4. 仍然有效的指导原则
 
-**目标**:
-- CI 中 PG integration gate 稳定
-- `pnpm verify` 在 CI 中通过
+下列原则在 Phase1.6 实际 Job（`P1.6-S03a-1..5`）中仍然适用：
 
-**验收**:
-- [ ] CI 中 `pnpm verify` 稳定通过
-- [ ] CI 中 PG integration tests 稳定通过
-- [ ] CI 中 `pnpm lint:arch` 通过
-
----
-
-## 3. Explicit Non-goals
-
-Phase1.6 **明确不**实现以下功能：
-
-- [ ] 不做 UI 样板
-- [ ] 不做 S03b submit flush
-- [ ] 不做 S04/S07 账号安全
-- [ ] 不做 Phase2 监考功能
-- [ ] 不恢复 SQLite correctness backend
-- [ ] 不实现自动提交超时试卷（auto-submit on deadline）
-- [ ] 不实现 voidAttempt
-- [ ] 不实现 showResultImmediately 服务端检查
-- [ ] 不拆 attempt_answers 表
-- [ ] 不实现多标签页会话锁
-- [ ] 不实现 late submit
-- [ ] 不实现 proctor override
-- [ ] 不做数据库性能优化
+- **路由不裸写 repository**：所有 attempt mutation 路径走 command / service 层 + `executeInTransaction`
+- **Repository 接收 ctx**：`packages/db` 的所有方法第一参数为 `TenantContext | RequestContext`
+- **read → merge / compute → write 同事务**：禁止事务外读、事务内写的假事务
+- **PG 行锁优先**：使用 Drizzle `.for("update")` 而非 application-level mutex
+- **测试不允许碰运气**：禁止 `Promise.all` 替代真实并发测试（详见 `P1.6-S03a-4`）
 
 ---
 
-## 4. Exit Criteria
+## 5. 不在 Phase1.6 范围（保留作为反例提醒）
 
-Phase1.6 完成时必须满足：
-
-- [ ] saveAnswers PG concurrency test pass
-- [ ] submitAttempt PG transaction test pass
-- [ ] save + submit race test pass
-- [ ] deadline protocol test pass
-- [ ] Phase1.3 P0 student submit regression pass
-- [ ] migration reset clean
-- [ ] seed reset clean
-- [ ] `pnpm verify` pass
-
----
-
-## 5. CI Gate
-
-1. CI 必须运行 PG integration tests
-2. CI 必须运行并发测试
-3. CI 必须验证 migration reset + seed reset
-4. CI 必须验证 `pnpm verify`
+- 不实现自动提交超时试卷
+- 不实现 voidAttempt / late submit / proctor override
+- 不实现 showResultImmediately 服务端检查
+- 不拆 `attempt_answers` 表
+- 不实现多标签页会话锁
+- 不做前端 submit flush（S03b）
+- 不重新引入 SQLite 并发测试
+- 不做数据库性能优化
+- 不重复 Phase1.5 已交付内容
 
 ---
 
-## 6. Migration/Seed Regression
+## 6. Rollback 备忘（如需回退 Phase1.6 改动）
 
-1. 每次 PR 必须验证 migration 在空 PG 数据库上可运行
-2. seed 数据必须可重复生成
-3. test seed 与 dev seed 隔离
-4. migration 文件保持 database-agnostic
-
----
-
-## Phase1.6 Dependencies
-
-### Blocking
-
-- Phase1.5 PostgreSQL-only convergence 必须已完成
-
-### Blocks
-
-- **Phase1.7**: Phase1.7 安全完成依赖 Phase1.6 的数据库正确性
-- **Phase2 Entry Gate**: Phase2 必须依赖 Phase1.6 的 PG correctness hardening
+1. submit 路由改回 `findByIdAndCandidate`：行锁丢失但功能仍工作（与 Phase1.5 后状态一致）
+2. PG 并发测试套件可独立回退；不影响生产
+3. 不需要回退 errors.ts 错误码（Phase1.4 即定）
+4. 不需要回退 `findByIdForUpdate`（Phase1.5 已实现且 saveAnswers 已使用）
