@@ -953,6 +953,118 @@ describe("attempt routes", () => {
     });
   });
 
+  describe("POST /attempts/:attemptId/answers/:questionId — rejects after submit", () => {
+    let gradedAttemptId: string;
+    let gradedQuestionId: string;
+    let answersBeforeSave: unknown;
+
+    beforeAll(async () => {
+      gradedQuestionId = questionId;
+
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Save After Submit Exam",
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionSelectionMode: "manual",
+          questionIds: [gradedQuestionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "unlimited",
+          scoreStrategy: "highest",
+          maxAttempts: 3,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const gradedExamId = examRes.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${gradedExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${gradedExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      gradedAttemptId = startRes.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${gradedAttemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      const attemptRepo = createAttemptRepo(ctx.db);
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const row = await attemptRepo.findById(candidateCtx, gradedAttemptId);
+      answersBeforeSave = row?.answers;
+    });
+
+    it("rejects save when attempt is graded (accepted: false, conflict: SUBMITTED)", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${gradedAttemptId}/answers/${gradedQuestionId}`,
+        payload: {
+          attemptId: gradedAttemptId,
+          questionId: gradedQuestionId,
+          answer: true,
+          clientSeq: 999,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.accepted).toBe(false);
+      expect(body.conflict).toBeDefined();
+      expect(body.conflict.reason).toBe("SUBMITTED");
+    });
+
+    it("does not modify attempt answers in DB after rejected save", async () => {
+      const attemptRepo = createAttemptRepo(ctx.db);
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const row = await attemptRepo.findById(candidateCtx, gradedAttemptId);
+      expect(row?.answers).toEqual(answersBeforeSave);
+    });
+  });
+
   describe("fill_blank attempt flow", () => {
     it("loads, saves, submits, and grades a fill_blank answer", async () => {
       const examResponse = await ctx.app.inject({
