@@ -272,6 +272,54 @@ describe("question routes", () => {
       url: "/api/questions",
     });
     expect(res.statusCode).toBe(401);
+    const body = res.json();
+    expect(body.error.code).toBe("AUTH_REQUIRED");
+    expect(body.error.requestId).toBeDefined();
+  });
+
+  it("GET /api/questions/:id returns 404 ErrorResponse v0 for missing question", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/questions/00000000-0000-0000-0000-000000000000",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json();
+    expect(body.error.code).toBe("RESOURCE_NOT_FOUND");
+    expect(body.error.requestId).toBeDefined();
+  });
+
+  it("POST /api/questions returns 400 ErrorResponse v0 for invalid courseId", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId: "00000000-0000-0000-0000-000000000000",
+        type: "true_false",
+        content: "Bad course question.",
+        standardAnswer: true,
+        score: 5,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.requestId).toBeDefined();
+    expect(body.error.details.fields).toBeDefined();
+    expect(body.error.details.fields[0].field).toBe("courseId");
+  });
+
+  it("DELETE /api/questions/:id returns 404 ErrorResponse v0 for missing question", async () => {
+    const res = await ctx.app.inject({
+      method: "DELETE",
+      url: "/api/questions/00000000-0000-0000-0000-000000000000",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(404);
+    const body = res.json();
+    expect(body.error.code).toBe("RESOURCE_NOT_FOUND");
+    expect(body.error.requestId).toBeDefined();
   });
 
   it("POST /api/questions/import imports valid rows", async () => {

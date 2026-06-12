@@ -81,3 +81,15 @@ export class CandidateIdentityConflictError extends AppError {
     super(message, "CANDIDATE_IDENTITY_CONFLICT", 409);
   }
 }
+
+export class ExamAlreadyPublishedError extends AppError {
+  constructor(message = "Exam already published") {
+    super(message, "EXAM_ALREADY_PUBLISHED", 409);
+  }
+}
+
+export class ExamNotDraftError extends AppError {
+  constructor(message = "Exam is not in draft status") {
+    super(message, "EXAM_NOT_DRAFT", 409);
+  }
+}

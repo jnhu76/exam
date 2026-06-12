@@ -20,6 +20,10 @@ export const errorMessages = {
   ANSWER_VERSION_CONFLICT: "答案版本冲突",
   EXAM_NOT_OPEN: "考试尚未开放",
   ATTEMPT_DEADLINE_EXCEEDED: "考试时间已到",
+  EXAM_ALREADY_PUBLISHED: "考试已发布，不能重复发布",
+  EXAM_NOT_DRAFT: "仅草稿状态的考试允许此操作",
+  ENROLLMENT_NOT_REMOVABLE: "已开始的报名不能移除",
+  QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
 } as const;
 
 export type ErrorCode = keyof typeof errorMessages;
