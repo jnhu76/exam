@@ -187,6 +187,14 @@ export function TakeExamPage() {
     }
   }, [flush, handleSubmit]);
 
+  const handleSubmitDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open && isFlushing) return;
+      setShowSubmitDialog(open);
+    },
+    [isFlushing],
+  );
+
   function toggleFlag() {
     setQuestionStates((prev) => {
       const next = [...prev];
@@ -406,8 +414,11 @@ export function TakeExamPage() {
         </div>
       </footer>
 
-      <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
-        <DialogContent>
+      <Dialog
+        open={showSubmitDialog}
+        onOpenChange={handleSubmitDialogOpenChange}
+      >
+        <DialogContent showCloseButton={!isFlushing}>
           <DialogHeader>
             <DialogTitle>确认交卷</DialogTitle>
             <DialogDescription>请确认以下答题与保存状态。</DialogDescription>

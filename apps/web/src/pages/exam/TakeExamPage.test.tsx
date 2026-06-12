@@ -393,6 +393,9 @@ describe("TakeExamPage S03b submit flush", () => {
 
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/保存中/)).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Close" }),
+    ).not.toBeInTheDocument();
 
     const confirm = within(dialog).getByRole("button", { name: "确认交卷" });
     expect(confirm).toBeDisabled();
