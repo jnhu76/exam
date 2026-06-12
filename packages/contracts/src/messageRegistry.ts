@@ -24,6 +24,8 @@ export const errorMessages = {
   EXAM_NOT_DRAFT: "仅草稿状态的考试允许此操作",
   ENROLLMENT_NOT_REMOVABLE: "已开始的报名不能移除",
   QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
+  MAX_ATTEMPTS_REACHED: "已达到最大考试次数",
+  EXAM_ALREADY_PASSED: "本场考试已通过",
 } as const;
 
 export type ErrorCode = keyof typeof errorMessages;

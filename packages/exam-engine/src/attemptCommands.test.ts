@@ -19,6 +19,7 @@ import {
   AttemptDeadlineExceededError,
   InvalidStateTransitionError,
   ValidationError,
+  MaxAttemptsReachedError,
 } from "@exam/domain";
 
 function makeSnapshot(): QuestionSnapshot[] {
@@ -391,7 +392,7 @@ describe("attemptCommands", () => {
       ).rejects.toThrow(ExamNotOpenError);
     });
 
-    it("throws ValidationError when max attempts reached", async () => {
+    it("throws MaxAttemptsReachedError when max attempts reached", async () => {
       const exam = makeExam({
         retakePolicy: "max_attempts",
         maxAttempts: 1,
@@ -403,7 +404,7 @@ describe("attemptCommands", () => {
 
       await expect(
         startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
-      ).rejects.toThrow(ValidationError);
+      ).rejects.toThrow(MaxAttemptsReachedError);
     });
 
     it("increments attempt number for subsequent attempts", async () => {

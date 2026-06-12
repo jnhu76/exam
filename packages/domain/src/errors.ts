@@ -93,3 +93,15 @@ export class ExamNotDraftError extends AppError {
     super(message, "EXAM_NOT_DRAFT", 409);
   }
 }
+
+export class MaxAttemptsReachedError extends AppError {
+  constructor(message = "Maximum attempt count reached") {
+    super(message, "MAX_ATTEMPTS_REACHED", 409);
+  }
+}
+
+export class ExamAlreadyPassedError extends AppError {
+  constructor(message = "Already passed this exam") {
+    super(message, "EXAM_ALREADY_PASSED", 409);
+  }
+}

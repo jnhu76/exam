@@ -141,6 +141,25 @@ export function TakeExamPage() {
           setIsDisconnected(false);
           return;
         }
+
+        if (
+          !result.accepted &&
+          result.reason === "STALE_VERSION" &&
+          result.details &&
+          typeof result.details === "object" &&
+          "serverAnswer" in result.details
+        ) {
+          versionsRef.current.set(questionId, result.serverVersion);
+          setAnswers((prev) => {
+            const next = new Map(prev);
+            next.set(questionId, result.details!.serverAnswer);
+            return next;
+          });
+          setSaveState("saved");
+          setIsDisconnected(false);
+          return;
+        }
+
         rejected = true;
         setSaveState("error");
         throw new Error("save rejected by server");

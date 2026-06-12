@@ -71,16 +71,22 @@ export function StartExamPage() {
     } catch (err) {
       let message = "无法开始考试，请稍后重试";
       if (err instanceof ApiError) {
-        if (/Maximum attempt count reached/i.test(err.message)) {
-          message = "已达到最大考试次数，无法再次开始考试。";
-        } else if (/Already passed/i.test(err.message)) {
-          message = "本场考试已通过，无需再次参加。";
-        } else if (/not open|outside exam open window/i.test(err.message)) {
-          message = "考试当前不在开放时间内。";
-        } else if (/Wait for queue admission/i.test(err.message)) {
-          message = "当前仍在排队中，请等待准入后继续。";
-        } else if (err.message) {
-          message = err.message;
+        switch (err.code) {
+          case "MAX_ATTEMPTS_REACHED":
+            message = "已达到最大考试次数，无法再次开始考试。";
+            break;
+          case "EXAM_ALREADY_PASSED":
+            message = "本场考试已通过，无需再次参加。";
+            break;
+          case "EXAM_NOT_OPEN":
+            message = "考试当前不在开放时间内。";
+            break;
+          case "QUEUE_WAIT_REQUIRED":
+            message = "当前仍在排队中，请等待准入后继续。";
+            break;
+          default:
+            if (err.message) message = err.message;
+            break;
         }
       }
       setError(message);

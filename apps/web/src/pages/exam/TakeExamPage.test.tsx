@@ -549,7 +549,6 @@ describe("TakeExamPage S03b submit flush", () => {
           message: "服务器上存在更新的答案版本",
           serverVersion: 2,
           savedAt: new Date().toISOString(),
-          details: { serverAnswer: "B" },
         };
       }
       if (path.includes("/submit")) {
@@ -679,5 +678,51 @@ describe("TakeExamPage S03b submit flush", () => {
           typeof call[0] === "string" && call[0].includes("/submit"),
       ),
     ).toBe(true);
+  });
+
+  it("recovers from stale version by accepting server answer", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        return {
+          accepted: false,
+          reason: "STALE_VERSION",
+          message: "服务器上存在更新的答案版本",
+          serverVersion: 3,
+          savedAt: new Date().toISOString(),
+          details: { serverAnswer: ["B"] },
+        };
+      }
+      return { ok: true };
+    });
+
+    renderPage();
+
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("第1空答案");
+    await user.type(input, "A");
+    await user.click(screen.getByRole("button", { name: "交卷" }));
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(within(dialog).getByText("未保存：0 题")).toBeInTheDocument();
+    });
+    expect(
+      within(dialog).queryByText("保存失败：1 题"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "确认交卷" }),
+    ).toBeEnabled();
   });
 });
