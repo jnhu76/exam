@@ -14,7 +14,10 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { CandidateIdentityConflictError, ValidationError } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
-import { buildErrorResponse } from "../lib/errorResponse.js";
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+} from "../lib/errorResponse.js";
 
 function validateCandidateFields(
   configuredFields: Awaited<
@@ -308,9 +311,15 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
-      const data = CandidateImportRequestSchema.parse(request.body);
+      const parsed = CandidateImportRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
+      }
+      const data = parsed.data;
       const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
@@ -329,7 +338,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
 
       let created = 0;
       let updated = 0;
-      const errors: { row: number; message: string }[] = [];
+      const errors: { row: number; code: string; message: string }[] = [];
 
       for (let i = 0; i < data.rows.length; i++) {
         try {
@@ -340,7 +349,11 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           const fields = row.fields ?? {};
 
           if (!username || !name) {
-            errors.push({ row: i + 1, message: "缺少用户名或姓名" });
+            errors.push({
+              row: i + 1,
+              code: "MISSING_REQUIRED_FIELD",
+              message: "缺少用户名或姓名",
+            });
             continue;
           }
           validateCandidateFields(configuredFields, fields);
@@ -364,6 +377,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           if (!password) {
             errors.push({
               row: i + 1,
+              code: "MISSING_PASSWORD",
               message: "新增考生需要初始密码",
             });
             continue;
@@ -389,6 +403,10 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         } catch (err) {
           errors.push({
             row: i + 1,
+            code:
+              err instanceof ValidationError
+                ? "VALIDATION_ERROR"
+                : "INTERNAL_ERROR",
             message: err instanceof Error ? err.message : "Unknown error",
           });
         }

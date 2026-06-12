@@ -50,13 +50,17 @@ describe("CSV export integration", () => {
     await ctx.cleanup();
   });
 
-  it("returns 404 for non-existent exam", async () => {
+  it("returns 404 ErrorResponse v0 with RESOURCE_NOT_FOUND and requestId for non-existent exam", async () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/exams/nonexistent/export/scores",
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(404);
+    const body = res.json();
+    expect(body.error.code).toBe("RESOURCE_NOT_FOUND");
+    expect(body.error.message).toEqual(expect.any(String));
+    expect(body.error.requestId).toEqual(expect.any(String));
   });
 
   it("returns CSV with correct headers for empty results", async () => {
@@ -73,15 +77,19 @@ describe("CSV export integration", () => {
     expect(body).toContain("及格状态");
   });
 
-  it("rejects unauthenticated requests", async () => {
+  it("returns 401 ErrorResponse v0 with AUTH_REQUIRED and requestId when unauthenticated", async () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: `/api/exams/${examId}/export/scores`,
     });
     expect(res.statusCode).toBe(401);
+    const body = res.json();
+    expect(body.error.code).toBe("AUTH_REQUIRED");
+    expect(body.error.message).toEqual(expect.any(String));
+    expect(body.error.requestId).toEqual(expect.any(String));
   });
 
-  it("rejects candidate role", async () => {
+  it("returns 403 ErrorResponse v0 with PERMISSION_DENIED and requestId for candidate role", async () => {
     const candidate = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
@@ -94,6 +102,10 @@ describe("CSV export integration", () => {
       cookies: { "auth-token": candidate.token },
     });
     expect(res.statusCode).toBe(403);
+    const body = res.json();
+    expect(body.error.code).toBe("PERMISSION_DENIED");
+    expect(body.error.message).toEqual(expect.any(String));
+    expect(body.error.requestId).toEqual(expect.any(String));
   });
 
   it("Content-Disposition header contains attachment and examId", async () => {

@@ -93,6 +93,7 @@ export const CandidateImportResultSchema = z.object({
   errors: z.array(
     z.object({
       row: z.number().int(),
+      code: z.string(),
       message: z.string(),
     }),
   ),

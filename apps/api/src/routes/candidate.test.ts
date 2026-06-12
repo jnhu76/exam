@@ -290,6 +290,41 @@ describe("candidate routes", () => {
     expect(body.errors[1].row).toBe(2);
   });
 
+  it("POST /api/candidates/import row errors include stable code field", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates/import",
+      payload: {
+        rows: [
+          { username: "", password: "123456", name: "No User", fields: {} },
+        ],
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.errors).toHaveLength(1);
+    expect(body.errors[0].row).toBe(1);
+    expect(body.errors[0].code).toEqual(expect.any(String));
+    expect(body.errors[0].code.length).toBeGreaterThan(0);
+  });
+
+  it("POST /api/candidates/import returns 400 ErrorResponse v0 for invalid body", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates/import",
+      payload: {},
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.message).toEqual(expect.any(String));
+    expect(body.error.details.fields).toBeInstanceOf(Array);
+    expect(body.error.details.fields.length).toBeGreaterThan(0);
+    expect(body.error.requestId).toEqual(expect.any(String));
+  });
+
   it("POST /api/candidates requires Admin role", async () => {
     const res = await ctx.app.inject({
       method: "POST",
