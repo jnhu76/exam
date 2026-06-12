@@ -3,6 +3,7 @@ import {
   CreateCandidateRequestSchema,
   CandidateImportRequestSchema,
   UpdateCandidateRequestSchema,
+  candidateFieldValidationMessages,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -10,10 +11,10 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
-import type { RequestContext } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
+import { CandidateIdentityConflictError, ValidationError } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 function validateCandidateFields(
   configuredFields: Awaited<
@@ -27,6 +28,15 @@ function validateCandidateFields(
   if (configuredFields.filter((field) => field.unique).length !== 1) {
     throw new ValidationError(
       "Exactly one candidate identity field is required",
+      {
+        fields: [
+          {
+            field: "fields",
+            code: "IDENTITY_FIELD_CONFIGURATION",
+            message: candidateFieldValidationMessages.configurationInvalid,
+          },
+        ],
+      },
     );
   }
   for (const field of configuredFields) {
@@ -35,7 +45,15 @@ function validateCandidateFields(
       field.required &&
       (value === undefined || value === null || value === "")
     ) {
-      throw new ValidationError(`${field.label} is required`);
+      throw new ValidationError(`${field.label} is required`, {
+        fields: [
+          {
+            field: `fields.${field.name}`,
+            code: "REQUIRED",
+            message: candidateFieldValidationMessages.required(field.label),
+          },
+        ],
+      });
     }
     if (
       value !== undefined &&
@@ -43,7 +61,17 @@ function validateCandidateFields(
       field.fieldType === "number" &&
       typeof value !== "number"
     ) {
-      throw new ValidationError(`${field.label} must be a number`);
+      throw new ValidationError(`${field.label} must be a number`, {
+        fields: [
+          {
+            field: `fields.${field.name}`,
+            code: "INVALID_TYPE",
+            message: candidateFieldValidationMessages.numberRequired(
+              field.label,
+            ),
+          },
+        ],
+      });
     }
     if (
       value !== undefined &&
@@ -51,7 +79,15 @@ function validateCandidateFields(
       field.fieldType !== "number" &&
       typeof value !== "string"
     ) {
-      throw new ValidationError(`${field.label} must be text`);
+      throw new ValidationError(`${field.label} must be text`, {
+        fields: [
+          {
+            field: `fields.${field.name}`,
+            code: "INVALID_TYPE",
+            message: candidateFieldValidationMessages.textRequired(field.label),
+          },
+        ],
+      });
     }
   }
 }
@@ -85,8 +121,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
@@ -123,8 +159,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateCandidateRequestSchema.parse(request.body);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
@@ -138,7 +174,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           data.fields,
         )
       ) {
-        throw new ValidationError("Candidate identity already exists");
+        throw new CandidateIdentityConflictError();
       }
 
       const passwordHash = await hashPassword(data.password);
@@ -169,21 +205,20 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             (err as Record<string, unknown>).constraint ?? "",
           );
           if (constraint === "users_org_username_unique") {
-            return reply.code(409).send({
-              error: { code: "DUPLICATE", message: "Username already exists" },
-            });
+            return reply
+              .code(409)
+              .send(buildErrorResponse(request.id, "USER_ALREADY_EXISTS"));
           }
           if (constraint === "candidate_profiles_org_user_unique") {
-            return reply.code(409).send({
-              error: {
-                code: "DUPLICATE",
-                message: "Candidate profile already exists for this user",
-              },
-            });
+            return reply
+              .code(409)
+              .send(
+                buildErrorResponse(request.id, "CANDIDATE_IDENTITY_CONFLICT"),
+              );
           }
-          return reply.code(409).send({
-            error: { code: "DUPLICATE", message: "Duplicate field value" },
-          });
+          return reply
+            .code(409)
+            .send(buildErrorResponse(request.id, "RESOURCE_CONFLICT"));
         }
         throw err;
       }
@@ -219,9 +254,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const candidateRepo = createCandidateRepo(fastify.db);
       const candidate = await candidateRepo.findById(ctx, id);
       if (!candidate) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Candidate not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       if (data.fields) {
         const configuredFields = await createCandidateFieldRepo(
@@ -234,7 +269,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           data.fields,
         );
         if (duplicate && duplicate.id !== id) {
-          throw new ValidationError("Candidate identity already exists");
+          throw new CandidateIdentityConflictError();
         }
         await candidateRepo.update(ctx, id, { fields: data.fields });
       }
@@ -246,9 +281,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const updated = await candidateRepo.findById(ctx, id);
       if (!updated) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Candidate not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "candidate.update", "candidate", id);
       return {
@@ -273,8 +308,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const data = CandidateImportRequestSchema.parse(request.body);
       const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);

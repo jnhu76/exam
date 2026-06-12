@@ -6,9 +6,9 @@ import {
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
-import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -19,8 +19,8 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
@@ -52,8 +52,8 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
       const passwordHash = await hashPassword(data.password);
@@ -86,20 +86,20 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
-      const updated = await repo.update(
-        ctx,
-        id,
-        data as Record<string, unknown>,
-      );
+      const updated = await repo.update(ctx, id, {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.role !== undefined ? { role: data.role } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+      });
       if (!updated) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "user.update", "user", id);
       return {
@@ -123,15 +123,15 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createUserRepo(fastify.db);
       const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "user.delete", "user", id);
       return reply.code(204).send();

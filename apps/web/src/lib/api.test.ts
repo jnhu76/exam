@@ -192,6 +192,52 @@ describe("api client", () => {
       await expect(api.get("/api/broken")).rejects.toThrow("500");
     });
 
+    it("preserves ErrorResponse v0 fields on ApiError", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "请求参数无效",
+                details: {
+                  fields: [
+                    {
+                      field: "username",
+                      code: "TOO_SMALL",
+                      message: "用户名不能为空",
+                    },
+                  ],
+                },
+                requestId: "req-web",
+              },
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.post("/api/auth/login", {})).rejects.toMatchObject({
+        name: "ApiError",
+        status: 400,
+        code: "VALIDATION_ERROR",
+        details: {
+          fields: [
+            {
+              field: "username",
+              code: "TOO_SMALL",
+              message: "用户名不能为空",
+            },
+          ],
+        },
+        requestId: "req-web",
+      });
+    });
+
     it("shows toast on network failure", async () => {
       vi.stubGlobal(
         "fetch",
@@ -218,12 +264,21 @@ describe("api client", () => {
   });
 
   describe("ApiError class", () => {
-    it("has correct name and status", () => {
-      const error = new ApiError(403, "Forbidden");
+    it("exposes structured error metadata", () => {
+      const error = new ApiError(
+        403,
+        "无权执行此操作",
+        "PERMISSION_DENIED",
+        { action: "user.update" },
+        "req-class",
+      );
 
       expect(error.name).toBe("ApiError");
       expect(error.status).toBe(403);
-      expect(error.message).toBe("Forbidden");
+      expect(error.message).toBe("无权执行此操作");
+      expect(error.code).toBe("PERMISSION_DENIED");
+      expect(error.details).toEqual({ action: "user.update" });
+      expect(error.requestId).toBe("req-class");
       expect(error).toBeInstanceOf(Error);
     });
   });

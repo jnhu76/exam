@@ -21,8 +21,98 @@ import {
   SaveAnswerAcceptedSchema,
   SaveAnswerRejectedSchema,
   SaveAnswerRejectReasonEnum,
+  ErrorResponseSchema,
   getSaveAnswerMessage,
+  isErrorCode,
+  getErrorMessage,
+  candidateFieldValidationMessages,
+  errorMessages,
 } from "../index.js";
+
+describe("common contracts", () => {
+  it("requires requestId on error responses", () => {
+    const result = ErrorResponseSchema.safeParse({
+      error: {
+        code: "RESOURCE_NOT_FOUND",
+        message: "资源不存在",
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("preserves structured validation details", () => {
+    const result = ErrorResponseSchema.parse({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "请求参数无效",
+        details: {
+          fields: [
+            {
+              field: "durationMinutes",
+              code: "TOO_SMALL",
+              message: "数值太小",
+            },
+          ],
+        },
+        requestId: "req-contract",
+      },
+    });
+
+    expect(result.error.details).toEqual({
+      fields: [
+        {
+          field: "durationMinutes",
+          code: "TOO_SMALL",
+          message: "数值太小",
+        },
+      ],
+    });
+  });
+});
+
+describe("message registry", () => {
+  it("isErrorCode returns true for known codes", () => {
+    expect(isErrorCode("AUTH_REQUIRED")).toBe(true);
+    expect(isErrorCode("RESOURCE_NOT_FOUND")).toBe(true);
+    expect(isErrorCode("VALIDATION_ERROR")).toBe(true);
+  });
+
+  it("isErrorCode returns false for unknown codes", () => {
+    expect(isErrorCode("UNAUTHORIZED")).toBe(false);
+    expect(isErrorCode("FOO_BAR")).toBe(false);
+    expect(isErrorCode("")).toBe(false);
+  });
+
+  it("getErrorMessage returns the registry message for a valid code", () => {
+    expect(getErrorMessage("AUTH_REQUIRED")).toBe(errorMessages.AUTH_REQUIRED);
+    expect(getErrorMessage("RATE_LIMITED")).toBe("请求过于频繁，请稍后重试");
+  });
+
+  it("every ErrorCode key has a non-empty message", () => {
+    for (const key of Object.keys(
+      errorMessages,
+    ) as (keyof typeof errorMessages)[]) {
+      expect(typeof errorMessages[key]).toBe("string");
+      expect(errorMessages[key].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("candidateFieldValidationMessages returns localized messages", () => {
+    expect(candidateFieldValidationMessages.configurationInvalid).toBe(
+      "身份字段配置无效",
+    );
+    expect(candidateFieldValidationMessages.required("姓名")).toBe(
+      "姓名为必填项",
+    );
+    expect(candidateFieldValidationMessages.numberRequired("年龄")).toBe(
+      "年龄必须为数字",
+    );
+    expect(candidateFieldValidationMessages.textRequired("地址")).toBe(
+      "地址必须为文本",
+    );
+  });
+});
 
 describe("auth contracts", () => {
   it("LoginRequestSchema accepts valid login", () => {

@@ -301,7 +301,21 @@ describe("AuthContext", () => {
     it("sets error state on login failure", async () => {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTH_INVALID_CREDENTIALS",
+                message: "用户名或密码错误",
+                requestId: "req-login",
+              },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
       );
 
       renderAuth("/login");
@@ -310,14 +324,28 @@ describe("AuthContext", () => {
         await userEvent.click(screen.getByText("login"));
       });
 
-      expect(screen.getByTestId("error")).toHaveTextContent("401 Unauthorized");
+      expect(screen.getByTestId("error")).toHaveTextContent("用户名或密码错误");
       expect(screen.getByTestId("user-name")).toHaveTextContent("未登录");
     });
 
     it("clears error on next login attempt", async () => {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(new Response(null, { status: 401 })),
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTH_INVALID_CREDENTIALS",
+                message: "用户名或密码错误",
+                requestId: "req-login",
+              },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
       );
 
       renderAuth("/login");
@@ -326,7 +354,7 @@ describe("AuthContext", () => {
         await userEvent.click(screen.getByText("login"));
       });
 
-      expect(screen.getByTestId("error")).toHaveTextContent("401 Unauthorized");
+      expect(screen.getByTestId("error")).toHaveTextContent("用户名或密码错误");
 
       vi.stubGlobal(
         "fetch",

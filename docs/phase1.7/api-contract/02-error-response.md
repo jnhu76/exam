@@ -123,8 +123,23 @@ Command Result 不能取代 401、403、404、429、500。
 
 ## 现有 code 的迁移
 
-当前存在 `UNAUTHORIZED`、`FORBIDDEN`、`NOT_FOUND`、`CONFLICT` 等 code。A02/A03
-必须先建立映射和兼容策略，再决定是否改名。本文档定义目标命名，不在 A00 改变现有响应。
+A02 在 API 边界统一执行以下映射。服务端不返回双 code；旧 domain code 仅作为内部兼容输入，
+前端只消费新 code。
+
+| 旧 code | 新 code |
+| --- | --- |
+| `UNAUTHORIZED` | `AUTH_REQUIRED` |
+| `INVALID_CREDENTIALS` | `AUTH_INVALID_CREDENTIALS` |
+| `FORBIDDEN`, `TENANT_ACCESS_DENIED` | `PERMISSION_DENIED` |
+| `NOT_FOUND`, `USER_NOT_FOUND` | `RESOURCE_NOT_FOUND` |
+| `CONFLICT`, `DUPLICATE` | `RESOURCE_CONFLICT` 或调用方需要区分的领域 code |
+| `USER_EXISTS` | `USER_ALREADY_EXISTS` |
+| `INVALID_PASSWORD` | `CURRENT_PASSWORD_INVALID` |
+| `TOO_MANY_REQUESTS` | `RATE_LIMITED` |
+| `INTERNAL_SERVER_ERROR` | `INTERNAL_ERROR` |
+
+`requestId` 直接使用 Fastify 的 `request.id`。Zod 校验错误使用 `issues.path/code/message`
+生成 `ValidationErrorDetails.fields`，不包含原始输入值。
 
 ## HTTP status 规则
 

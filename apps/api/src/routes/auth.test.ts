@@ -77,6 +77,13 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "AUTH_INVALID_CREDENTIALS",
+        message: "用户名或密码错误",
+        requestId: expect.any(String),
+      },
+    });
 
     const disableToken = signJWT({
       actorId: disableUserId,
@@ -89,9 +96,53 @@ describe("auth routes", () => {
       cookies: { "auth-token": disableToken },
     });
     expect(meRes.statusCode).toBe(401);
+    expect(meRes.json()).toMatchObject({
+      error: {
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+        requestId: expect.any(String),
+      },
+    });
   });
 
-  it("POST /api/auth/login returns 400 for malformed input", async () => {
+  it("POST /api/auth/login does not reveal unknown tenants or users", async () => {
+    const attempts = [
+      {
+        organizationSlug: "unknown-organization",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+      {
+        organizationSlug: "default",
+        username: "unknown-user",
+        password: "admin123",
+      },
+      {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "wrong-password",
+      },
+    ];
+
+    for (const payload of attempts) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        error: {
+          code: "AUTH_INVALID_CREDENTIALS",
+          message: "用户名或密码错误",
+          requestId: expect.any(String),
+        },
+      });
+    }
+  });
+
+  it("POST /api/auth/login returns validation details for malformed input", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
@@ -99,7 +150,21 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "请求参数无效",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({
+              field: "username",
+              code: "INVALID_TYPE",
+            }),
+          ]),
+        },
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("POST /api/auth/register is disabled without a bootstrap token", async () => {
@@ -116,7 +181,24 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe("PERMISSION_DENIED");
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "PERMISSION_DENIED",
+        message: "无权执行此操作",
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("POST /api/auth/logout returns 204 without a response body", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe("");
   });
 
   it("PATCH /api/auth/me/password changes password for authenticated user", async () => {
@@ -157,6 +239,13 @@ describe("auth routes", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "CURRENT_PASSWORD_INVALID",
+        message: "当前密码不正确",
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("PATCH /api/auth/me/password requires authentication", async () => {
@@ -169,5 +258,12 @@ describe("auth routes", () => {
       },
     });
     expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+        requestId: expect.any(String),
+      },
+    });
   });
 });

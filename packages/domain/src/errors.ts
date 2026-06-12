@@ -3,6 +3,7 @@ export class AppError extends Error {
     message: string,
     readonly code: string,
     readonly statusCode = 500,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = new.target.name;
@@ -10,8 +11,8 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string) {
-    super(message, "VALIDATION_ERROR", 400);
+  constructor(message: string, details?: unknown) {
+    super(message, "VALIDATION_ERROR", 400, details);
   }
 }
 
@@ -72,5 +73,11 @@ export class AttemptDeadlineExceededError extends AppError {
 export class ConflictError extends AppError {
   constructor(message: string) {
     super(message, "CONFLICT", 409);
+  }
+}
+
+export class CandidateIdentityConflictError extends AppError {
+  constructor(message = "Candidate identity already exists") {
+    super(message, "CANDIDATE_IDENTITY_CONFLICT", 409);
   }
 }

@@ -1,6 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import { AppError } from "@exam/domain";
 import { ZodError } from "zod";
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+  normalizeErrorCode,
+} from "../lib/errorResponse.js";
+import type { ErrorCode } from "@exam/contracts";
 
 function isConstraintError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
@@ -15,6 +21,28 @@ function isConstraintError(err: unknown): boolean {
   )
     return true;
   return false;
+}
+
+function getConstraintName(
+  err: unknown,
+  remainingDepth = 3,
+): string | undefined {
+  if (remainingDepth === 0) return undefined;
+  if (typeof err !== "object" || err === null) return undefined;
+  const error = err as Record<string, unknown>;
+  if (typeof error.constraint === "string") return error.constraint;
+  if (typeof error.message === "string") {
+    const match = error.message.match(/constraint ["']([^"']+)["']/);
+    if (match?.[1]) return match[1];
+  }
+  return getConstraintName(error.cause, remainingDepth - 1);
+}
+
+function getConstraintErrorCode(err: unknown): ErrorCode {
+  if (getConstraintName(err) === "users_org_username_unique") {
+    return "USER_ALREADY_EXISTS";
+  }
+  return "RESOURCE_CONFLICT";
 }
 
 function isClientError(
@@ -34,34 +62,29 @@ function isClientError(
 export function setupErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
-      return reply.code(400).send({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: error.issues.map((issue) => issue.message).join("; "),
-        },
-      });
+      return reply
+        .code(400)
+        .send(buildValidationErrorResponse(request.id, error));
     }
     if (error instanceof AppError) {
-      return reply.code(error.statusCode).send({
-        error: { code: error.code, message: error.message },
-      });
+      const code = normalizeErrorCode(error.code, error.statusCode);
+      return reply
+        .code(error.statusCode)
+        .send(buildErrorResponse(request.id, code, error.details));
     }
     if (isClientError(error)) {
-      return reply.code(error.statusCode).send({
-        error: {
-          code: error.code || "BAD_REQUEST",
-          message: error.message,
-        },
-      });
+      const code = normalizeErrorCode(error.code, error.statusCode);
+      return reply
+        .code(error.statusCode)
+        .send(buildErrorResponse(request.id, code));
     }
     if (isConstraintError(error)) {
-      return reply.code(409).send({
-        error: { code: "CONFLICT", message: "Resource already exists" },
-      });
+      const code = getConstraintErrorCode(error);
+      return reply.code(409).send(buildErrorResponse(request.id, code));
     }
     request.log.error({ err: error }, "Unhandled request error");
-    return reply.code(500).send({
-      error: { code: "INTERNAL_ERROR", message: "Internal server error" },
-    });
+    return reply
+      .code(500)
+      .send(buildErrorResponse(request.id, "INTERNAL_ERROR"));
   });
 }

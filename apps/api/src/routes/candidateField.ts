@@ -5,9 +5,9 @@ import {
 } from "@exam/contracts";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
-import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -18,8 +18,8 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const repo = createCandidateFieldRepo(fastify.db);
       const fields = await repo.list(ctx);
       return fields.map((f) => ({
@@ -37,17 +37,16 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateCandidateFieldRequestSchema.parse(request.body);
       const repo = createCandidateFieldRepo(fastify.db);
       if (data.unique && (await repo.list(ctx)).some((field) => field.unique)) {
-        return reply.code(409).send({
-          error: {
-            code: "CONFLICT",
-            message: "Only one candidate identity field can be unique",
-          },
-        });
+        return reply
+          .code(409)
+          .send(
+            buildErrorResponse(request.id, "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
+          );
       }
       const field = await repo.create(ctx, data);
       recordAudit(
@@ -73,8 +72,8 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const data = UpdateCandidateFieldRequestSchema.parse(request.body);
       const repo = createCandidateFieldRepo(fastify.db);
@@ -82,22 +81,23 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         data.unique &&
         (await repo.list(ctx)).some((field) => field.unique && field.id !== id)
       ) {
-        return reply.code(409).send({
-          error: {
-            code: "CONFLICT",
-            message: "Only one candidate identity field can be unique",
-          },
-        });
+        return reply
+          .code(409)
+          .send(
+            buildErrorResponse(request.id, "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
+          );
       }
-      const updated = await repo.update(
-        ctx,
-        id,
-        data as Record<string, unknown>,
-      );
+      const updated = await repo.update(ctx, id, {
+        ...(data.label !== undefined ? { label: data.label } : {}),
+        ...(data.fieldType !== undefined ? { fieldType: data.fieldType } : {}),
+        ...(data.required !== undefined ? { required: data.required } : {}),
+        ...(data.unique !== undefined ? { unique: data.unique } : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+      });
       if (!updated) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Candidate field not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(
         fastify,
@@ -119,8 +119,8 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createCandidateFieldRepo(fastify.db);
       const field = await repo.findById(ctx, id);
@@ -128,18 +128,15 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         field?.unique &&
         (await createCandidateRepo(fastify.db).count(ctx)) > 0
       ) {
-        return reply.code(409).send({
-          error: {
-            code: "CONFLICT",
-            message: "Cannot delete the active candidate identity field",
-          },
-        });
+        return reply
+          .code(409)
+          .send(buildErrorResponse(request.id, "CANDIDATE_FIELD_IN_USE"));
       }
       const deleted = await repo.delete(ctx, id);
       if (!deleted) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Candidate field not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(
         fastify,

@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import type { ErrorResponse } from "@exam/contracts";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -12,11 +13,18 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
+    readonly details?: unknown,
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
+
+type ErrorBody = Partial<ErrorResponse> & {
+  message?: string;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
@@ -30,23 +38,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
 
-    if (response.status === 401) {
-      navigateFn?.("/login");
-      throw new ApiError(401, "401 Unauthorized");
-    }
-
     if (!response.ok) {
       let message = `${response.status} Request failed`;
+      let code: string | undefined;
+      let details: unknown;
+      let requestId: string | undefined;
       try {
-        const body = (await response.json()) as {
-          error?: { message?: string };
-          message?: string;
-        };
+        const body = (await response.json()) as ErrorBody;
         message = body.error?.message ?? body.message ?? message;
+        code = body.error?.code;
+        details = body.error?.details;
+        requestId = body.error?.requestId;
       } catch {
         // use default message
       }
-      throw new ApiError(response.status, message);
+      if (response.status === 401) {
+        navigateFn?.("/login");
+      }
+      throw new ApiError(response.status, message, code, details, requestId);
     }
 
     if (response.status === 204) {

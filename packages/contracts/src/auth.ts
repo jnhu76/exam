@@ -53,11 +53,6 @@ export type MeResponse = z.infer<typeof MeResponseSchema>;
 export const LogoutRequestSchema = z.object({}).strict();
 export type LogoutRequest = z.infer<typeof LogoutRequestSchema>;
 
-export const LogoutResponseSchema = z.object({
-  success: z.boolean(),
-});
-export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
-
 // ── Change Password ───────────────────────────────────────────────
 
 export const ChangePasswordRequestSchema = z.object({

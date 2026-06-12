@@ -38,7 +38,8 @@ export const ErrorResponseSchema = z.object({
   error: z.object({
     code: z.string(),
     message: z.string(),
-    requestId: z.string().optional(),
+    details: z.unknown().optional(),
+    requestId: z.string().min(1),
   }),
 });
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
@@ -49,3 +50,10 @@ export const ValidationErrorDetailSchema = z.object({
   code: z.string(),
 });
 export type ValidationErrorDetail = z.infer<typeof ValidationErrorDetailSchema>;
+
+export const ValidationErrorDetailsSchema = z.object({
+  fields: z.array(ValidationErrorDetailSchema),
+});
+export type ValidationErrorDetails = z.infer<
+  typeof ValidationErrorDetailsSchema
+>;

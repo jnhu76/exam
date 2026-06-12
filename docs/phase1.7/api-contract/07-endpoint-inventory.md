@@ -72,7 +72,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | RegisterPage |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /login
 
@@ -91,7 +91,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | LoginPage |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /logout
 
@@ -110,7 +110,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | N/A (204) |
 | Frontend client | header/logout button |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### GET /me
 
@@ -129,7 +129,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | auth context |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### PATCH /me/password
 
@@ -148,7 +148,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | ChangePasswordDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ## system.ts
 
@@ -228,7 +228,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | UsersPage |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /users
 
@@ -247,7 +247,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | UserCreateDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### PATCH /users/:id
 
@@ -266,7 +266,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | UserEditDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### DELETE /users/:id
 
@@ -285,7 +285,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | N/A (204) |
 | Frontend client | UsersPage |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ## organization.ts
 
@@ -306,7 +306,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | SuperAdmin org list |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /organizations
 
@@ -325,7 +325,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | OrgCreateDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### PATCH /organizations/:id
 
@@ -344,7 +344,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | OrgEditDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### DELETE /organizations/:id
 
@@ -363,7 +363,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | N/A (204) |
 | Frontend client | OrgListPage |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ## course.ts
 
@@ -791,7 +791,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidatePage |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /candidates
 
@@ -810,7 +810,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidateCreateDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### PATCH /candidates/:id
 
@@ -829,7 +829,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidateEditDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /candidates/import
 
@@ -869,7 +869,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidateFieldSettings |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### POST /candidate-fields
 
@@ -888,7 +888,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidateFieldCreateDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### PATCH /candidate-fields/:id
 
@@ -907,7 +907,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidateFieldEditDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### DELETE /candidate-fields/:id
 
@@ -926,7 +926,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | N/A (204) |
 | Frontend client | CandidateFieldSettings |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ### GET /candidate-fields/template
 
@@ -945,7 +945,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | CandidateImportDialog |
 | Migration job | A02 |
-| Status | pending verification |
+| Status | confirmed |
 
 ## attempts.ts
 

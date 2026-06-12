@@ -714,7 +714,7 @@ describe("attempt routes", () => {
       const body = res.json();
       expect(body.error).toBeDefined();
       expect(body.error.code).toBe("INVALID_STATE_TRANSITION");
-      expect(body.error.message).toContain("Cannot submit attempt in");
+      expect(body.error.requestId).toEqual(expect.any(String));
     });
   });
 
@@ -764,10 +764,10 @@ describe("attempt routes", () => {
       });
 
       expect(submitRes.statusCode).toBe(409);
-      expect(submitRes.json()).toEqual({
+      expect(submitRes.json()).toMatchObject({
         error: {
           code: "ATTEMPT_DEADLINE_EXCEEDED",
-          message: "Attempt deadline exceeded",
+          requestId: expect.any(String),
         },
       });
     });
@@ -842,8 +842,8 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(404);
       const body = res.json();
       expect(body.error).toBeDefined();
-      expect(body.error.code).toBe("NOT_FOUND");
-      expect(body.error.message).toBe("Attempt not found");
+      expect(body.error.code).toBe("RESOURCE_NOT_FOUND");
+      expect(body.error.requestId).toEqual(expect.any(String));
     });
 
     it("owner can still submit after cross-candidate attempt", async () => {

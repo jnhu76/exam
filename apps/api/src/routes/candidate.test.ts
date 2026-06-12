@@ -1,15 +1,84 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import { hashPassword } from "@exam/auth/src/password.js";
+import { signJWT } from "@exam/auth/src/session.js";
+import { eq } from "drizzle-orm";
+import { schema } from "@exam/db/src/schema/pg.js";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp } from "./testHelpers.js";
 
 describe("candidate routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let adminToken: string;
+  let organizationId: string;
+  let identityFieldName: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(candidateRoutes);
+    organizationId = crypto.randomUUID();
+    const adminId = crypto.randomUUID();
+    const now = new Date();
+    await ctx.db.insert(schema.organizations).values({
+      id: organizationId,
+      name: "Candidate Test Organization",
+      displayName: "Candidate Test Organization",
+      slug: `candidate-test-${organizationId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.users).values({
+      id: adminId,
+      organizationId,
+      username: `candidate-admin-${organizationId}`,
+      passwordHash: await hashPassword("password123"),
+      name: "Candidate Test Admin",
+      role: "Admin",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    adminToken = signJWT({
+      actorId: adminId,
+      role: "Admin",
+      organizationId,
+    });
+
+    const fieldRepo = createCandidateFieldRepo(ctx.db);
+    const repoCtx = {
+      actorId: adminId,
+      organizationId,
+      targetOrganizationId: organizationId,
+      role: "Admin" as const,
+      permissions: [],
+      sessionId: "test",
+    };
+    const created = await fieldRepo.create(repoCtx, {
+      name: "employeeId",
+      label: "身份编号",
+      fieldType: "text",
+      required: true,
+      unique: true,
+      sortOrder: 0,
+    });
+    identityFieldName = created.name;
   });
 
   afterAll(async () => {
+    await ctx.db
+      .delete(schema.auditLogs)
+      .where(eq(schema.auditLogs.organizationId, organizationId));
+    await ctx.db
+      .delete(schema.candidateProfiles)
+      .where(eq(schema.candidateProfiles.organizationId, organizationId));
+    await ctx.db
+      .delete(schema.candidateFields)
+      .where(eq(schema.candidateFields.organizationId, organizationId));
+    await ctx.db
+      .delete(schema.users)
+      .where(eq(schema.users.organizationId, organizationId));
+    await ctx.db
+      .delete(schema.organizations)
+      .where(eq(schema.organizations.id, organizationId));
     await ctx.cleanup();
   });
 
@@ -17,7 +86,7 @@ describe("candidate routes", () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/candidates",
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": adminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -29,6 +98,7 @@ describe("candidate routes", () => {
   });
 
   it("POST /api/candidates creates a candidate with user", async () => {
+    const identity = `E-${Date.now()}`;
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/candidates",
@@ -36,17 +106,101 @@ describe("candidate routes", () => {
         username: `candidate-${Date.now()}`,
         password: "password123",
         name: "Test Candidate",
-        fields: { employeeId: "E001" },
+        fields: { [identityFieldName]: identity },
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": adminToken },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
-    expect(body.fields).toEqual({ employeeId: "E001" });
+    expect(body.fields).toEqual({ [identityFieldName]: identity });
     expect(body).toHaveProperty("userId");
   });
 
+  it("POST /api/candidates returns field validation details", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `missing-field-${Date.now()}`,
+        password: "password123",
+        name: "Missing Field",
+        fields: {},
+      },
+      cookies: { "auth-token": adminToken },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({
+              field: `fields.${identityFieldName}`,
+              code: "REQUIRED",
+            }),
+          ]),
+        },
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("POST /api/candidates returns a stable identity conflict", async () => {
+    const identity = `duplicate-${Date.now()}`;
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `candidate-first-${Date.now()}`,
+        password: "password123",
+        name: "First Candidate",
+        fields: { [identityFieldName]: identity },
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(first.statusCode).toBe(201);
+
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `candidate-second-${Date.now()}`,
+        password: "password123",
+        name: "Second Candidate",
+        fields: { [identityFieldName]: identity },
+      },
+      cookies: { "auth-token": adminToken },
+    });
+
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).toMatchObject({
+      error: {
+        code: "CANDIDATE_IDENTITY_CONFLICT",
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("PATCH /api/candidates/:id returns ErrorResponse v0 when missing", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/candidates/${crypto.randomUUID()}`,
+      payload: { name: "Missing Candidate" },
+      cookies: { "auth-token": adminToken },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "RESOURCE_NOT_FOUND",
+        requestId: expect.any(String),
+      },
+    });
+  });
+
   it("POST /api/candidates/import bulk imports candidates", async () => {
+    const identitySuffix = Date.now();
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/candidates/import",
@@ -56,17 +210,17 @@ describe("candidate routes", () => {
             username: `import1-${Date.now()}`,
             password: "password123",
             name: "Import One",
-            fields: { employeeId: "I001" },
+            fields: { [identityFieldName]: `I001-${identitySuffix}` },
           },
           {
             username: `import2-${Date.now()}`,
             password: "password123",
             name: "Import Two",
-            fields: { employeeId: "I002" },
+            fields: { [identityFieldName]: `I002-${identitySuffix}` },
           },
         ],
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": adminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -76,6 +230,7 @@ describe("candidate routes", () => {
 
   it("POST /api/candidates/import re-imports by username as update", async () => {
     const username = `dup-${Date.now()}`;
+    const identity = `D-${Date.now()}`;
     const res1 = await ctx.app.inject({
       method: "POST",
       url: "/api/candidates/import",
@@ -85,11 +240,11 @@ describe("candidate routes", () => {
             username,
             password: "password123",
             name: "Dup User",
-            fields: { employeeId: "D001" },
+            fields: { [identityFieldName]: identity },
           },
         ],
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": adminToken },
     });
     expect(res1.statusCode).toBe(200);
     expect(res1.json().created).toBe(1);
@@ -103,11 +258,11 @@ describe("candidate routes", () => {
             username,
             password: "password123",
             name: "Dup User Updated",
-            fields: { employeeId: "D001" },
+            fields: { [identityFieldName]: identity },
           },
         ],
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": adminToken },
     });
     expect(res2.statusCode).toBe(200);
     const body = res2.json();
@@ -126,7 +281,7 @@ describe("candidate routes", () => {
           { username: "no-name", password: "123456", name: "", fields: {} },
         ],
       },
-      cookies: { "auth-token": ctx.adminToken },
+      cookies: { "auth-token": adminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -148,5 +303,11 @@ describe("candidate routes", () => {
       cookies: { "auth-token": ctx.teacherToken },
     });
     expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "PERMISSION_DENIED",
+        requestId: expect.any(String),
+      },
+    });
   });
 });

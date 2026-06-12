@@ -355,7 +355,8 @@ describe("Tenant Isolation (S01)", () => {
       });
       expect(res.statusCode).toBe(403);
       const body = res.json();
-      expect(body.error?.code).toBe("TENANT_ACCESS_DENIED");
+      expect(body.error?.code).toBe("PERMISSION_DENIED");
+      expect(body.error?.requestId).toEqual(expect.any(String));
     });
 
     it("SuperAdmin on platform API (GET /api/organizations) works without targetOrg", async () => {
