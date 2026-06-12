@@ -56,6 +56,7 @@ SaveAnswerAccepted:
   required:
     - accepted
     - serverVersion
+    - savedAt
   properties:
     accepted:
       type: boolean
@@ -65,15 +66,6 @@ SaveAnswerAccepted:
     savedAt:
       type: string
       format: date-time
-    conflict:
-      type: object
-      nullable: true
-      properties:
-        reason:
-          type: string
-        latestAnswer:
-          type: object
-          additionalProperties: true
 
 SaveAnswerRejected:
   type: object
@@ -88,18 +80,25 @@ SaveAnswerRejected:
     reason:
       type: string
       enum:
+        - STALE_VERSION
         - ATTEMPT_ALREADY_SUBMITTED
-        - ATTEMPT_NOT_IN_PROGRESS
-        - ANSWER_VERSION_CONFLICT
-        - QUESTION_NOT_IN_EXAM
+        - ATTEMPT_CLOSED
+        - DEADLINE_EXCEEDED
     message:
       type: string
     serverVersion:
       type: integer
-      nullable: true
+    savedAt:
+      type: string
+      format: date-time
     details:
       type: object
-      additionalProperties: true
+      properties:
+        serverAnswer:
+          description: "服务端当前答案值"
+        serverVersion:
+          type: integer
+          description: "服务端当前版本号"
 
 SaveAnswerResponse:
   oneOf:

@@ -1,9 +1,61 @@
 # Phase 1.7 — Security Completion / Account & Browser Security Baseline
 
-**日期**: 2026-06-11
+**日期**: 2026-06-11（更新: 2026-06-12）
 **前置**: Phase1.5 / Phase1.6 完成
 **定位**: Phase1 最终安全收口层，承接 Phase1.4 中暂停的安全 Job
 **核心原则**: 拆分为 baseline / full 两层，避免再次破坏 seed、登录态、前端流程和开发体验
+**与 API Contract 的关系**: S 线依赖 A 线；各 S Job 的具体 A 前置见下方
+
+---
+
+## API Contract 前置依赖
+
+Phase1.7 拆成两条线，API Contract（A 线）是 Security Baseline（S 线）的前置：
+
+```text
+Phase1.7-A (API Contract)                       Phase1.7-S (Security Baseline)
+  A00  Constitution + Inventory
+  A01  Attempts Save/Submit ──────────────────→ S03b  Submit Flush
+  A02  Auth/Users/Candidates Errors ─────────→ S04-lite  Auth Session Baseline
+                                               S05-lite  CSV + Headers + CSRF
+                                               S07-lite  Password Policy
+  A03  Exams/Questions Response ───(推荐)───→ S06-lite  Audit Log Baseline
+  A04  Import/Export Response
+  A05  OpenAPI Schema
+  A06  Web Client Convergence
+  ···                                          S08-lite  Red-Team Test Suite
+                                               S09-lite  Security Validation
+  A07  i18n Systematization (optional/deferred)
+```
+
+**为什么 S 线依赖 A 线**：
+
+1. **ErrorResponse v0 是安全错误的基础格式**：S04-S07 会大量产生 400/401/403/409/500 response。如果不先固定 ErrorResponse v0（code + message + requestId + details?），安全实现会继续散落 inline error message，导致后续 A02/A06 返工。
+2. **code/message registry 必须先存在**：安全 Job 的错误码和提示文案必须走 registry，不能 inline。
+3. **Command Result semantics 已固定**：save/submit 冲突的 accepted:false vs 409 ErrorResponse 语义已在 A00 文档中固定，S03b 直接复用。
+
+**各 S Job 的具体 A 前置**：
+
+| S Job | A 前置 | 理由 |
+| --- | --- | --- |
+| S03b | A01 | submit flush 与 save/submit contract 强耦合 |
+| S04-lite | A02 | login/logout 错误响应需要 ErrorResponse v0 + registry |
+| S05-lite | A02 | CSRF 403 需要 ErrorResponse v0 |
+| S06-lite | A02（必须）、A03（推荐） | audit-logs 新 endpoint 需要分页和错误响应格式 |
+| S07-lite | A02 | 密码策略 400 需要 ErrorResponse v0 + ValidationErrorDetails |
+| S08-lite | A02 + 对应 S Job | 测试断言使用 stable code/reason |
+| S09-lite | S01-S08 | 最终验收 |
+
+**完整双线总顺序和 Job Cards**：见 [`api-contract/06-migration-plan.md`](./api-contract/06-migration-plan.md)。
+
+### 安全 Job 的 API Contract 合规检查
+
+每个 S 线 Job 完成时必须说明：
+
+1. 是否新增或修改 ErrorResponse → 必须复用 ErrorResponse v0
+2. 是否复用已有 code/message registry → 必须是
+3. 是否影响 API contract → 如有，同步更新 endpoint inventory
+4. 是否需要补充 endpoint inventory → 如有新 endpoint，必须登记
 
 ---
 
@@ -81,7 +133,7 @@ Phase1.7 不做 full：
 
 **风险**: High — 考试协议完整性
 
-**依赖**: S03a（server-side deadline + transaction）已在 Phase1.4/1.6 完成
+**依赖**: S03a（server-side deadline + transaction）已在 Phase1.4/1.6 完成。**A01（Attempts Save/Submit Contract）必须已完成**，S03b 复用 A01 的 submit 409 ErrorResponse 语义。
 
 ---
 
@@ -250,6 +302,9 @@ Phase1.7 完成时必须满足：
 - Phase1.4: S01, S02, S03a 必须已完成
 - Phase1.5: PostgreSQL-only convergence 必须已完成
 - Phase1.6: PostgreSQL correctness hardening 必须已完成
+- **A01**: S03b 前置（submit flush 与 save/submit contract 强相关）
+- **A02**: S04-lite ~ S07-lite 前置（ErrorResponse v0 + registry）
+- **A03**（推荐）: S06-lite 前置（audit-logs endpoint 需要分页和资源响应格式）
 
 ### Blocks
 

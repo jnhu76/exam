@@ -5,17 +5,53 @@
 - API `message` 默认使用 zh-CN。
 - 本阶段不实现完整多语言系统。
 - 不做 `Accept-Language` negotiation。
-- 不引入 message catalog。
 - 不要求前端立即实现多语言。
 - API 必须先提供稳定 `code` / `reason`，未来 i18n 基于机器码本地化。
+- 不引入运行时云翻译。
+- 不要求全站 locale catalog。
 
 ## 规范
 
 ```text
 MUST: frontend logic depends on code/reason
-MUST NOT: frontend logic parses message
+MUST NOT: frontend logic parses or compares message
+MUST: route message comes from message registry, not inline string
 SHOULD: message is zh-CN human-readable default
 MAY: future frontend maps code/reason to localized text
+```
+
+## Server Default Message Registry
+
+本阶段引入 **server default message registry**（不是完整 i18n catalog）：
+
+- 它是 `code`/`reason` → 默认 zh-CN `message` 的映射表。
+- **默认落点**：
+  - `packages/contracts`：schema、enum、wire type 定义（如 `SaveAnswerRejectReason`、`ErrorResponseSchema`）。
+  - `packages/domain`：message registry + response builder（`code → message` 映射表、构建 ErrorResponse / Command Result 的辅助函数）。
+  - `apps/api`：只调用 registry/builder，不 inline message。
+- **route 不允许散落 inline message**：所有错误和拒绝的 message 必须来自 registry 或由 registry 提供的 lookup 函数生成。
+- 新增 code/reason 时必须同步注册对应 message。
+- A01-A04 迁移时，将现有 inline message 收敛到 registry。
+- 安全 Job（S04-S09）产生的错误也必须使用 registry，不得新增散落 inline message。
+
+Registry 示例：
+
+```typescript
+const errorMessages: Record<string, string> = {
+  VALIDATION_ERROR: "请求参数无效",
+  AUTH_REQUIRED: "请先登录",
+  AUTH_INVALID_CREDENTIALS: "用户名或密码错误",
+  PERMISSION_DENIED: "没有操作权限",
+  RESOURCE_NOT_FOUND: "请求的资源不存在",
+  INTERNAL_ERROR: "服务器内部错误",
+};
+
+const conflictMessages: Record<string, string> = {
+  STALE_VERSION: "服务器上存在更新的答案版本",
+  ATTEMPT_ALREADY_SUBMITTED: "考试已提交，不能继续保存答案",
+  ATTEMPT_CLOSED: "考试已结束",
+  DEADLINE_EXCEEDED: "考试时间已到",
+};
 ```
 
 ## API 规则
@@ -40,10 +76,10 @@ MAY: future frontend maps code/reason to localized text
 
 ## 未来扩展点
 
-未来引入 i18n 时可选择：
+A07 在稳定 code/reason + registry 基础上评估：
 
 - 前端按 code/reason 映射本地文案。
-- 服务端 message catalog。
+- 服务端 message catalog（多语言扩展 registry）。
 - `Accept-Language` negotiation。
 
 这些选择均不属于 A00-A06 的必要前置。稳定机器码必须先于任何方案落地。

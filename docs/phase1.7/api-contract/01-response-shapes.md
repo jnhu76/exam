@@ -98,7 +98,36 @@ API 不做全系统 envelope 化。响应结构按 endpoint 语义分类，同�
 - OpenAPI 在对应 status 下声明 media type；错误 status 仍使用 JSON ErrorResponse。
 - 文件内容和动态 CandidateField 列应遵守数据导出与权限规则。
 
-## 6. Error Response
+## 6. Batch Operation Result / Import Result
+
+用于批量导入、批量操作等"部分成功"语义的 endpoint。
+
+```json
+{
+  "created": 5,
+  "updated": 3,
+  "skipped": 1,
+  "failed": 2,
+  "errors": [
+    {
+      "row": 3,
+      "code": "DUPLICATE_IDENTIFIER",
+      "message": "第 3 行标识符重复"
+    }
+  ]
+}
+```
+
+规则：
+
+- 响应使用 200（即使是部分失败），因为批量操作的结果是"成功处理了请求并返回汇总"。
+- 顶层的 `created`/`updated`/`skipped`/`failed` 必须为非负整数，且 `created + updated + skipped + failed` 等于总行数。
+- `errors` 数组中每个元素必须有 `row`（行号）、`code`（稳定机器码）和 `message`（人类可读文案）。
+- 如果整个请求在进入行级处理前就失败（如文件格式错误、权限不足），走 ErrorResponse。
+- 这是 Command Result 的子类：操作本身被接受（HTTP 200），但行级结果包含失败。
+- endpoint 必须在 schema 中声明完整结构，不得用裸 `{ success, message }` 替代。
+
+## 7. Error Response
 
 用于请求不能按 contract 正常处理的情况。
 
@@ -124,9 +153,34 @@ API 不做全系统 envelope 化。响应结构按 endpoint 语义分类，同�
 | 分页查询 users | List Response |
 | 小规模配置列表 | 明确的非分页 List Response |
 | save answer 业务拒绝 | Command Result Response |
+| 批量导入 candidates | Batch Operation Result / Import Result |
 | 参数校验失败 | Error Response |
 | 删除成功且无需 body | 204 |
 | 导出 CSV | File Response |
+
+## HTTP Status 总规则
+
+| Status | 语义 | 适用 Response Shape |
+| ---: | --- | --- |
+| 200 | 成功读取、更新、列表查询、Command Result（含 accepted:false）或文件下载 | Resource / List / Command Result / File |
+| 201 | 资源创建成功 | Resource |
+| 204 | 成功完成但无响应体 | 无 body |
+| 400 | 请求结构或字段校验失败 | ErrorResponse |
+| 401 | 未认证或凭据无效 | ErrorResponse |
+| 403 | 已认证但无权限 | ErrorResponse |
+| 404 | 资源不存在或按安全策略隐藏 | ErrorResponse |
+| 409 | 资源状态冲突（除非 endpoint 明确选择 200 Command Result） | ErrorResponse |
+| 429 | 限流 | ErrorResponse |
+| 500 | 未预期服务端错误 | ErrorResponse |
+
+规则：
+
+- status 表示 HTTP/协议层结果，code 表示稳定错误类别。
+- 相同 code 应尽量使用相同 status。
+- 404 可同时承担"资源不存在"和"跨租户不可见"，避免泄露资源存在性。
+- 500 统一返回安全文案和 requestId，详细错误只进入日志。
+- 204 必须无 body，不得返回 `{ ok: true }`。
+- `accepted:false` 使用 200，不得用 4xx/5xx 表示业务拒绝。
 
 ## 不允许的混淆
 
@@ -135,3 +189,4 @@ API 不做全系统 envelope 化。响应结构按 endpoint 语义分类，同�
 - 文件成功响应套 JSON，再把文件放进字符串字段。
 - 204 同时返回 `{ ok: true }`。
 - 把所有资源响应改成 `{ data, error, meta }` 作为本阶段目标。
+- 安全 Job 新增独立错误格式，不经过 ErrorResponse v0。
