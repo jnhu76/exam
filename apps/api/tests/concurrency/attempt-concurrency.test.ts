@@ -9,10 +9,32 @@ const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
   "postgresql://exam:exam@localhost:5432/exam_test";
 
-const LOCK_ID = 42;
+interface Deferred<T = void> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T = void>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+async function expectStillPending(p: Promise<unknown>, ms: number) {
+  const result = await Promise.race([
+    p.then(
+      () => "resolved" as const,
+      () => "rejected" as const,
+    ),
+    new Promise<"pending">((r) => setTimeout(() => r("pending"), ms)),
+  ]);
+  expect(result).toBe("pending");
+}
 
 interface Fixture {
-  sql: { unsafe: (q: string) => Promise<unknown>; end: () => Promise<void> };
+  sql: { end: () => Promise<void> };
   db: Database;
   orgId: string;
   candidateUserId: string;
@@ -235,7 +257,7 @@ describe("PG concurrency — attempt row-level serialization", () => {
     expect(after?.status).toBe(before?.status);
   });
 
-  it("submit-then-save: write to submitted row still serializes via FOR UPDATE", async () => {
+  it("FOR UPDATE can lock and mutate a submitted-status row (DB layer)", async () => {
     const submittedId = await insertAttempt(fx, 2, "submitted", {
       submittedAt: new Date(),
     });
@@ -267,14 +289,22 @@ describe("PG concurrency — attempt row-level serialization", () => {
   });
 
   it("save-then-submit: second FOR UPDATE blocks until first commits", async () => {
-    const lockAttemptId = await insertAttempt(fx, 3, "in_progress");
+    const rowId = await insertAttempt(fx, 3, "in_progress");
     let saveCommitted = false;
     let submitSawPreCommit = false;
 
+    // Test-only barrier: keep the save transaction open after it has
+    // acquired the attempt row lock via FOR UPDATE. This forces submit
+    // to wait on the same attempt row through FOR UPDATE.
+    // Production serialization is provided by the row lock, not by
+    // this Promise latch.
+    const saveHoldingRowLock = deferred();
+    const saveCanCommit = deferred();
+
     const saveTx = fx.db.transaction(async (tx) => {
       const txRepo = createAttemptRepo(tx as unknown as Database);
-      await txRepo.findByIdForUpdate(ctx, lockAttemptId);
-      await txRepo.update(ctx, lockAttemptId, {
+      await txRepo.findByIdForUpdate(ctx, rowId);
+      await txRepo.update(ctx, rowId, {
         answers: [
           {
             questionId: fx.questionId,
@@ -285,34 +315,34 @@ describe("PG concurrency — attempt row-level serialization", () => {
         ],
         lastActivityAt: new Date(),
       });
-      await fx.sql.unsafe(`SELECT pg_advisory_lock(${LOCK_ID})`);
+      saveHoldingRowLock.resolve();
+      await saveCanCommit.promise;
       saveCommitted = true;
     });
 
-    const barrier = (async () => {
-      await new Promise((r) => setTimeout(r, 150));
-      await fx.sql.unsafe(`SELECT pg_advisory_unlock(${LOCK_ID})`);
-    })();
+    await saveHoldingRowLock.promise;
 
-    const submitOp = (async () => {
-      await fx.db.transaction(async (tx) => {
-        await createAttemptRepo(tx as unknown as Database).findByIdForUpdate(
-          ctx,
-          lockAttemptId,
-        );
-        if (!saveCommitted) submitSawPreCommit = true;
-      });
-    })();
+    const submitOp = fx.db.transaction(async (tx) => {
+      await createAttemptRepo(tx as unknown as Database).findByIdForUpdate(
+        ctx,
+        rowId,
+      );
+      if (!saveCommitted) submitSawPreCommit = true;
+    });
 
-    await Promise.all([
-      barrier,
-      submitOp.catch(() => {}),
-      saveTx.catch(() => {}),
-    ]);
+    await expectStillPending(submitOp, 50);
+
+    try {
+      saveCanCommit.resolve();
+      await Promise.all([saveTx, submitOp]);
+    } finally {
+      saveCanCommit.resolve();
+    }
+
     expect(submitSawPreCommit).toBe(false);
 
     const repo = createAttemptRepo(fx.db);
-    const final = await repo.findById(ctx, lockAttemptId);
+    const final = await repo.findById(ctx, rowId);
     const answers = final!.answers as Array<{ version: number }>;
     expect(answers).toHaveLength(1);
     expect(answers[0]!.version).toBe(1);

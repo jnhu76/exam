@@ -40,7 +40,7 @@ export function processSaveAnswer(
       accepted: false,
       serverVersion: 0,
       savedAt: new Date().toISOString(),
-      conflict: { reason: "SUBMITTED" },
+      conflict: { reason: "ATTEMPT_ALREADY_SUBMITTED" },
     };
   }
 

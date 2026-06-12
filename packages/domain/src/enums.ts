@@ -127,7 +127,7 @@ export type FillBlankMatchMode =
 
 export const ConflictReason = {
   StaleVersion: "STALE_VERSION",
-  Submitted: "SUBMITTED",
+  AttemptAlreadySubmitted: "ATTEMPT_ALREADY_SUBMITTED",
   AttemptClosed: "ATTEMPT_CLOSED",
   DeadlineExceeded: "DEADLINE_EXCEEDED",
 } as const;

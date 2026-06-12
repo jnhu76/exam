@@ -1,11 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import type { TestContext } from "./testHelpers.js";
-import {
-  buildTestApp,
-  uniquePrefix,
-  createCandidateViaApi,
-} from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -29,6 +25,52 @@ async function ensureCandidateProfile(ctx: TestContext): Promise<string> {
     updatedAt: new Date(),
   });
   return id;
+}
+
+const DEFAULT_CONTROL_FLAGS = {
+  shuffleQuestions: false,
+  shuffleOptions: false,
+  detectTabSwitch: false,
+  disableCopyPaste: false,
+  requireQueue: false,
+  batchSize: 10,
+  batchInterval: 3,
+  restrictIp: false,
+  requireLockdown: false,
+  showResultImmediately: true,
+} as const;
+
+function buildExamPayload(
+  overrides: Partial<{
+    title: string;
+    courseId: string;
+    questionIds: string[];
+    controlFlags: object;
+    retakePolicy: string;
+    scoreStrategy: string;
+    maxAttempts: number;
+    passingScore: number;
+    totalScore: number;
+    durationMinutes: number;
+  }> = {},
+) {
+  return {
+    title: "Test Exam",
+    description: "",
+    courseId: overrides.courseId ?? "",
+    timingMode: "timed_window" as const,
+    durationMinutes: overrides.durationMinutes ?? 60,
+    openAt: new Date(Date.now() - 3600000).toISOString(),
+    closeAt: new Date(Date.now() + 86400000).toISOString(),
+    passingScore: overrides.passingScore ?? 60,
+    totalScore: overrides.totalScore ?? 100,
+    questionSelectionMode: "manual" as const,
+    questionIds: overrides.questionIds ?? [],
+    controlFlags: overrides.controlFlags ?? { ...DEFAULT_CONTROL_FLAGS },
+    retakePolicy: overrides.retakePolicy ?? "unlimited",
+    scoreStrategy: overrides.scoreStrategy ?? "highest",
+    maxAttempts: overrides.maxAttempts ?? 3,
+  };
 }
 
 describe("attempt routes", () => {
@@ -109,34 +151,11 @@ describe("attempt routes", () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
-      payload: {
+      payload: buildExamPayload({
         title: "Attempt Test Exam",
-        description: "",
         courseId,
-        timingMode: "timed_window",
-        durationMinutes: 60,
-        openAt: new Date(Date.now() - 3600000).toISOString(),
-        closeAt: new Date(Date.now() + 86400000).toISOString(),
-        passingScore: 60,
-        totalScore: 100,
-        questionSelectionMode: "manual",
         questionIds: [questionId],
-        controlFlags: {
-          shuffleQuestions: false,
-          shuffleOptions: false,
-          detectTabSwitch: false,
-          disableCopyPaste: false,
-          requireQueue: false,
-          batchSize: 10,
-          batchInterval: 3,
-          restrictIp: false,
-          requireLockdown: false,
-          showResultImmediately: true,
-        },
-        retakePolicy: "unlimited",
-        scoreStrategy: "highest",
-        maxAttempts: 3,
-      },
+      }),
       cookies: { "auth-token": ctx.adminToken },
     });
     if (res.statusCode !== 201) {
@@ -208,34 +227,13 @@ describe("attempt routes", () => {
       const examResponse = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Resume Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
           retakePolicy: "max_attempts",
-          scoreStrategy: "highest",
           maxAttempts: 1,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const resumeExamId = examResponse.json().id as string;
@@ -294,34 +292,13 @@ describe("attempt routes", () => {
       const examResponse = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Blocked Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
           retakePolicy: "max_attempts",
-          scoreStrategy: "highest",
           maxAttempts: 1,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const blockedExamId = examResponse.json().id as string;
@@ -368,34 +345,11 @@ describe("attempt routes", () => {
       const exam2 = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Load Test Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const examId2 = exam2.json().id;
@@ -483,34 +437,11 @@ describe("attempt routes", () => {
       const exam3 = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Answer Test Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const examId3 = exam3.json().id;
@@ -690,34 +621,11 @@ describe("attempt routes", () => {
       const exam4 = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Submit Test Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const examId4 = exam4.json().id;
@@ -775,34 +683,12 @@ describe("attempt routes", () => {
       const exam = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Deadline Submit Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 1,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+          durationMinutes: 1,
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       deadlineExamId = exam.json().id;
@@ -881,34 +767,11 @@ describe("attempt routes", () => {
       const examRes = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Ownership Test Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       ownershipExamId = examRes.json().id;
@@ -964,34 +827,11 @@ describe("attempt routes", () => {
       const examRes = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Save After Submit Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [gradedQuestionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const gradedExamId = examRes.json().id;
@@ -1028,7 +868,7 @@ describe("attempt routes", () => {
       answersBeforeSave = row?.answers;
     });
 
-    it("rejects save when attempt is graded (accepted: false, conflict: SUBMITTED)", async () => {
+    it("rejects save when attempt is graded (accepted: false, conflict: ATTEMPT_ALREADY_SUBMITTED)", async () => {
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${gradedAttemptId}/answers/${gradedQuestionId}`,
@@ -1047,10 +887,10 @@ describe("attempt routes", () => {
       const body = res.json();
       expect(body.accepted).toBe(false);
       expect(body.conflict).toBeDefined();
-      expect(body.conflict.reason).toBe("SUBMITTED");
+      expect(body.conflict.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
     });
 
-    it("does not modify attempt answers in DB after rejected save", async () => {
+    it("DB invariant: answers unchanged after rejected save (regression guard for route-level rejection)", async () => {
       const attemptRepo = createAttemptRepo(ctx.db);
       const candidateCtx = {
         actorId: ctx.candidate.id,
@@ -1070,34 +910,11 @@ describe("attempt routes", () => {
       const examResponse = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Fill Blank Flow Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [fillBlankQuestionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const fillBlankExamId = examResponse.json().id as string;
@@ -1172,34 +989,11 @@ describe("attempt routes", () => {
       const exam5 = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Heartbeat Test Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const examId5 = exam5.json().id;
@@ -1259,34 +1053,11 @@ describe("attempt routes", () => {
       const exam6 = await ctx.app.inject({
         method: "POST",
         url: "/api/exams",
-        payload: {
+        payload: buildExamPayload({
           title: "Restore Test Exam",
-          description: "",
           courseId,
-          timingMode: "timed_window",
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 60,
-          totalScore: 100,
-          questionSelectionMode: "manual",
           questionIds: [questionId],
-          controlFlags: {
-            shuffleQuestions: false,
-            shuffleOptions: false,
-            detectTabSwitch: false,
-            disableCopyPaste: false,
-            requireQueue: false,
-            batchSize: 10,
-            batchInterval: 3,
-            restrictIp: false,
-            requireLockdown: false,
-            showResultImmediately: true,
-          },
-          retakePolicy: "unlimited",
-          scoreStrategy: "highest",
-          maxAttempts: 3,
-        },
+        }),
         cookies: { "auth-token": ctx.adminToken },
       });
       const examId6 = exam6.json().id;
