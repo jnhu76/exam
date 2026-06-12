@@ -11,7 +11,11 @@ Fastify Swagger 官方文档确认：
 - OpenAPI 3 response 可以按 media type 声明 `content`。
 - 204 等空响应可以显式声明为空。
 
-A05 必须选择并固定 OpenAPI 版本、schema 来源和生成验证方式。
+A05 必须选择并固定 OpenAPI 版本、schema 来源和生成验证方式。选择标准：
+- 工具链兼容性（Zod → JSON Schema 输出版本、`@fastify/swagger` 支持范围）。
+- `const` / nullable / discriminator 支持差异。
+- 生成 client 是否需要特定版本。
+- LAN/offline 环境下工具可用性。
 
 ## 必须规则
 

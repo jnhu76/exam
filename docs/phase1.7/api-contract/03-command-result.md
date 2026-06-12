@@ -21,7 +21,7 @@ Command Result 用于有明确状态机或并发协议的 endpoint。它描述�
 - `accepted`：命令是否被业务状态机接受。
 - `reason`：稳定机器码，前端和测试依赖它。
 - `message`：默认 zh-CN 人类可读文案。
-- `details`：冲突信息、`serverVersion`、`serverAnswer`、允许状态等结构化上下文。
+- `details`：额外结构化上下文（如 `serverAnswer`、允许状态等）；endpoint schema 可将高频字段（如 `serverVersion`）提升至顶层。
 - 不得把 `"Server has newer version"` 之类自然语言作为机器判断依据。
 
 ## Save Answer
@@ -84,7 +84,8 @@ Submit 的状态冲突有两种可接受设计：
 1. `409 + ErrorResponse`
 2. `200 + accepted:false` Command Result
 
-本阶段不替代码作最终选择。A01 必须根据以下因素固定单一 endpoint contract：
+本阶段不替代码作最终选择。A01 必须根据以下因素固定单一 endpoint contract，并在 endpoint
+contract 文档中记录选择理由：
 
 - 是否把重复 submit 定义为幂等成功、业务拒绝或冲突错误。
 - Web UI 在 flush 后如何处理 deadline 与已提交状态。

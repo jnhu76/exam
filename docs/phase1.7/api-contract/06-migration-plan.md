@@ -26,8 +26,6 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 
 - 新增本目录全部规划文档。
 - 审计旧 API 参考与当前实现。
-- 标记 `docs/api/reference.md` 的历史参考属性。
-- 在 Phase1.6 known limitations 登记移交项。
 
 ### Non-goals
 
@@ -38,8 +36,6 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 ### Files likely affected
 
 - `docs/phase1.7/api-contract/**`
-- `docs/api/reference.md`
-- `docs/phase1.6/known-limitations.md`
 
 ### Acceptance criteria
 
@@ -51,7 +47,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 ### Tests / verification
 
 - `git diff --check`
-- `pnpm exec prettier --check docs/phase1.7/api-contract docs/api/reference.md docs/phase1.6/known-limitations.md`
+- `pnpm exec prettier --check docs/phase1.7/api-contract`
 - `git diff --name-only` 只包含 `docs/`
 
 ### Risks
@@ -93,7 +89,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - accepted true/false 均有独立 schema 和测试。
 - rejected 分支包含稳定 reason，不依赖 message。
 - stale version 提供恢复所需的 serverVersion/serverAnswer。
-- submit 冲突语义在 endpoint contract 中唯一确定。
+- submit 冲突语义在 endpoint contract 中唯一确定，并记录选择理由。
 - Phase1.6 并发测试全部保持通过。
 
 ### Tests / verification
