@@ -267,3 +267,210 @@ describe("TakeExamPage smoke", () => {
     );
   });
 });
+
+describe("TakeExamPage S03b submit flush", () => {
+  it("clicking 交卷 awaits pending saves before submit POST is fired", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    let resolveSave!: (value: unknown) => void;
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        return new Promise((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      if (path.includes("/submit")) {
+        return { score: 10 };
+      }
+      return { ok: true };
+    });
+
+    const wasSubmitCalled = () =>
+      apiPost.mock.calls.some(
+        (call: unknown[]) =>
+          typeof call[0] === "string" && call[0].includes("/submit"),
+      );
+    const wasSaveCalled = () =>
+      apiPost.mock.calls.some(
+        (call: unknown[]) =>
+          typeof call[0] === "string" && call[0].includes("/answers/"),
+      );
+
+    renderPage();
+
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("第1空答案");
+
+    await user.type(input, "A");
+    expect(wasSaveCalled()).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "交卷" }));
+    const dialog = await screen.findByRole("dialog");
+    const confirm = within(dialog).getByRole("button", { name: "确认交卷" });
+
+    await waitFor(() => {
+      expect(wasSaveCalled()).toBe(true);
+    });
+    expect(confirm).toBeDisabled();
+    expect(wasSubmitCalled()).toBe(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(wasSubmitCalled()).toBe(false);
+
+    resolveSave({ accepted: true, serverVersion: 1, savedAt: "now" });
+
+    await waitFor(() => {
+      expect(confirm).toBeEnabled();
+    });
+    expect(wasSubmitCalled()).toBe(false);
+
+    await user.click(confirm);
+
+    await waitFor(() => {
+      expect(wasSubmitCalled()).toBe(true);
+    });
+
+    const saveIndex = apiPost.mock.calls.findIndex(
+      (call: unknown[]) =>
+        typeof call[0] === "string" && call[0].includes("/answers/"),
+    );
+    const submitIndex = apiPost.mock.calls.findIndex(
+      (call: unknown[]) =>
+        typeof call[0] === "string" && call[0].includes("/submit"),
+    );
+    expect(saveIndex).toBeGreaterThanOrEqual(0);
+    expect(submitIndex).toBeGreaterThan(saveIndex);
+  });
+
+  it("dialog shows 保存中 progress and gates submit while flush is in flight", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    let resolveSave!: (value: unknown) => void;
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        return new Promise((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      return { ok: true };
+    });
+
+    renderPage();
+
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("第1空答案");
+    await user.type(input, "A");
+    await user.click(screen.getByRole("button", { name: "交卷" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/保存中/)).toBeInTheDocument();
+
+    const confirm = within(dialog).getByRole("button", { name: "确认交卷" });
+    expect(confirm).toBeDisabled();
+
+    await user.click(confirm);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      apiPost.mock.calls.some(
+        (call: unknown[]) =>
+          typeof call[0] === "string" && call[0].includes("/submit"),
+      ),
+    ).toBe(false);
+
+    resolveSave({ accepted: true, serverVersion: 1, savedAt: "now" });
+
+    await waitFor(() => {
+      expect(within(dialog).queryByText(/保存中/)).not.toBeInTheDocument();
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "确认交卷" }),
+    ).toBeEnabled();
+  });
+
+  it("timer timeout flushes pending saves before submit", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      deadlineAt: new Date(Date.now() - 1000).toISOString(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    let resolveSave!: (value: unknown) => void;
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        return new Promise((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      if (path.includes("/submit")) {
+        return { score: 10 };
+      }
+      return { ok: true };
+    });
+
+    renderPage();
+
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("第1空答案");
+    await user.type(input, "A");
+
+    await waitFor(
+      () => {
+        expect(
+          apiPost.mock.calls.some(
+            (call: unknown[]) =>
+              typeof call[0] === "string" && call[0].includes("/answers/"),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 2500 },
+    );
+    expect(
+      apiPost.mock.calls.some(
+        (call: unknown[]) =>
+          typeof call[0] === "string" && call[0].includes("/submit"),
+      ),
+    ).toBe(false);
+
+    resolveSave({ accepted: true, serverVersion: 1, savedAt: "now" });
+
+    await waitFor(() => {
+      expect(
+        apiPost.mock.calls.some(
+          (call: unknown[]) =>
+            typeof call[0] === "string" && call[0].includes("/submit"),
+        ),
+      ).toBe(true);
+    });
+  });
+});

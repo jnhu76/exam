@@ -21,8 +21,12 @@ import {
 } from "@/components/ui/dialog";
 import { QuestionRenderer } from "@/components/exam/QuestionRenderer";
 import type { SaveState } from "@/components/exam/SaveIndicator";
-import type { LoadAttemptResponse } from "@exam/contracts";
+import type {
+  LoadAttemptResponse,
+  SaveAnswerResponseDTO,
+} from "@exam/contracts";
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
+import { useSubmitFlush } from "@/hooks/useSubmitFlush";
 
 type AttemptData = Omit<
   LoadAttemptResponse,
@@ -47,11 +51,10 @@ export function TakeExamPage() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const saveTimerRefs = useRef(
-    new Map<string, ReturnType<typeof setTimeout>>(),
-  );
+  const [isFlushing, setIsFlushing] = useState(false);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
+  const { scheduleSave, flush } = useSubmitFlush();
 
   const loadAttempt = useCallback(async () => {
     if (!attemptId) return;
@@ -109,53 +112,43 @@ export function TakeExamPage() {
       ),
     );
 
-    const existingTimer = saveTimerRefs.current.get(questionId);
-    if (existingTimer) clearTimeout(existingTimer);
-
     setSaveState("saving");
-    const timer = setTimeout(async () => {
+
+    scheduleSave(questionId, async () => {
       const baseVersion = versionsRef.current.get(questionId) ?? 0;
       const clientSeq = (clientSeqsRef.current.get(questionId) ?? 0) + 1;
       clientSeqsRef.current.set(questionId, clientSeq);
+      let rejected = false;
 
       try {
-        const result = await api.post<{
-          accepted: boolean;
-          serverVersion: number;
-          savedAt: string;
-          reason?: string;
-          message?: string;
-          details?: { serverAnswer?: unknown };
-        }>(`/api/attempts/${attemptId}/answers/${questionId}`, {
-          attemptId,
-          questionId,
-          answer,
-          clientSeq,
-          clientSavedAt: new Date().toISOString(),
-          baseVersion,
-        });
+        const result = await api.post<SaveAnswerResponseDTO>(
+          `/api/attempts/${attemptId}/answers/${questionId}`,
+          {
+            attemptId,
+            questionId,
+            answer,
+            clientSeq,
+            clientSavedAt: new Date().toISOString(),
+            baseVersion,
+          },
+        );
 
         if (result.accepted) {
           versionsRef.current.set(questionId, result.serverVersion);
           setSaveState("saved");
           setIsDisconnected(false);
-        } else {
-          setSaveState("error");
+          return;
         }
-      } catch {
+        rejected = true;
         setSaveState("error");
-        setIsDisconnected(true);
+        throw new Error("save rejected by server");
+      } catch (err) {
+        setSaveState("error");
+        if (!rejected) setIsDisconnected(true);
+        throw err;
       }
-    }, 1500);
-    saveTimerRefs.current.set(questionId, timer);
+    });
   }
-
-  useEffect(() => {
-    const timers = saveTimerRefs.current;
-    return () => {
-      for (const timer of timers.values()) clearTimeout(timer);
-    };
-  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!attemptId) return;
@@ -168,9 +161,24 @@ export function TakeExamPage() {
       toast.error("提交失败，请重试");
     }
   }, [attemptId, navigate]);
-  const handleTimeout = useCallback(() => {
-    void handleSubmit();
-  }, [handleSubmit]);
+
+  const openSubmitDialog = useCallback(async () => {
+    setShowSubmitDialog(true);
+    setIsFlushing(true);
+    try {
+      await flush();
+    } finally {
+      setIsFlushing(false);
+    }
+  }, [flush]);
+
+  const handleTimeout = useCallback(async () => {
+    try {
+      await flush();
+    } finally {
+      void handleSubmit();
+    }
+  }, [flush, handleSubmit]);
 
   function toggleFlag() {
     setQuestionStates((prev) => {
@@ -256,7 +264,7 @@ export function TakeExamPage() {
             <Button
               variant="default"
               size="sm"
-              onClick={() => setShowSubmitDialog(true)}
+              onClick={() => void openSubmitDialog()}
             >
               交卷
             </Button>
@@ -371,7 +379,7 @@ export function TakeExamPage() {
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => setShowSubmitDialog(true)}
+                onClick={() => void openSubmitDialog()}
               >
                 提交考试
               </Button>
@@ -391,6 +399,7 @@ export function TakeExamPage() {
             <DialogTitle>确认交卷</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2 text-sm">
+            {isFlushing && <p>保存中...</p>}
             {unansweredCount > 0 && (
               <p>
                 还有 <strong>{unansweredCount}</strong> 题未作答
@@ -407,10 +416,14 @@ export function TakeExamPage() {
             <Button
               variant="outline"
               onClick={() => setShowSubmitDialog(false)}
+              disabled={isFlushing}
             >
               继续答题
             </Button>
-            <Button onClick={() => void handleSubmit()} disabled={isSubmitting}>
+            <Button
+              onClick={() => void handleSubmit()}
+              disabled={isSubmitting || isFlushing}
+            >
               {isSubmitting ? "提交中..." : "确认交卷"}
             </Button>
           </DialogFooter>
