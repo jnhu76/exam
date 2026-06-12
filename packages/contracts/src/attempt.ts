@@ -13,12 +13,13 @@ const AttemptStatusEnum = z.enum([
   "voided",
 ]);
 
-const ConflictReasonEnum = z.enum([
+export const SaveAnswerRejectReasonEnum = z.enum([
   "STALE_VERSION",
   "ATTEMPT_ALREADY_SUBMITTED",
   "ATTEMPT_CLOSED",
   "DEADLINE_EXCEEDED",
-]);
+] as const);
+export type SaveAnswerRejectReason = z.infer<typeof SaveAnswerRejectReasonEnum>;
 
 export const QuestionSnapshotSchema = z.object({
   originalQuestionId: z.string(),
@@ -101,17 +102,33 @@ export const SaveAnswerRequestSchema = z.object({
 });
 export type SaveAnswerRequestDTO = z.infer<typeof SaveAnswerRequestSchema>;
 
-export const SaveAnswerResponseSchema = z.object({
-  accepted: z.boolean(),
-  serverVersion: z.number().int(),
-  savedAt: z.string().datetime(),
-  conflict: z
-    .object({
-      reason: ConflictReasonEnum,
-      latestAnswer: z.unknown().optional(),
-    })
-    .optional(),
-});
+export const SaveAnswerAcceptedSchema = z
+  .object({
+    accepted: z.literal(true),
+    serverVersion: z.number().int(),
+    savedAt: z.string().datetime(),
+  })
+  .strict();
+
+export const SaveAnswerRejectedSchema = z
+  .object({
+    accepted: z.literal(false),
+    reason: SaveAnswerRejectReasonEnum,
+    message: z.string(),
+    serverVersion: z.number().int(),
+    savedAt: z.string().datetime(),
+    details: z
+      .object({
+        serverAnswer: z.unknown().optional(),
+      })
+      .optional(),
+  })
+  .strict();
+
+export const SaveAnswerResponseSchema = z.discriminatedUnion("accepted", [
+  SaveAnswerAcceptedSchema,
+  SaveAnswerRejectedSchema,
+]);
 export type SaveAnswerResponseDTO = z.infer<typeof SaveAnswerResponseSchema>;
 
 // ── Route Params ─────────────────────────────────────────────────

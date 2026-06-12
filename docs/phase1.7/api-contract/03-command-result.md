@@ -44,11 +44,10 @@ type SaveAnswerRejected = {
   accepted: false;
   reason: SaveAnswerRejectReason;
   message: string;
-  serverVersion?: number;
-  savedAt?: string;
+  serverVersion: number;
+  savedAt: string;
   details?: {
     serverAnswer?: unknown;
-    serverVersion?: number;
   };
 };
 ```
@@ -73,6 +72,7 @@ Accepted 分支不含 `conflict` 字段。
   "reason": "STALE_VERSION",
   "message": "服务器上存在更新的答案版本",
   "serverVersion": 5,
+  "savedAt": "2026-06-12T08:00:00.000Z",
   "details": {
     "serverAnswer": true
   }
@@ -83,8 +83,8 @@ Rejected 分支规则：
 
 - `reason`：稳定机器码，前端和测试依赖它做分支处理。
 - `message`：默认 zh-CN 人类可读文案，来自 message registry。
-- `serverVersion`/`savedAt`：可选提升字段，当拒绝原因携带服务端版本信息时提供。
-- `details`：可选结构化上下文（如 `serverAnswer`、`serverVersion`）。
+- `serverVersion`/`savedAt`：必填。所有 4 个拒绝分支（`STALE_VERSION`、`ATTEMPT_ALREADY_SUBMITTED`、`ATTEMPT_CLOSED`、`DEADLINE_EXCEEDED`）在 `answerProtocol.ts` 中均返回 `serverVersion` 和 `savedAt`，不存在缺失分支。
+- `details`：可选结构化上下文（如 `serverAnswer`）。`serverVersion` 已作为顶层必填字段，不重复放入 `details`。
 
 ### Reason Enum
 

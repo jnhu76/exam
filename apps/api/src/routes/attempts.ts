@@ -8,9 +8,11 @@ import {
   RestoreAttemptRequestSchema,
   SaveAnswerParamsSchema,
   SaveAnswerRequestSchema,
-  SaveAnswerResponseSchema,
+  SaveAnswerAcceptedSchema,
+  SaveAnswerRejectedSchema,
   StartAttemptRequestSchema,
   SubmitAttemptRequestSchema,
+  getSaveAnswerMessage,
 } from "@exam/contracts";
 import type {
   RequestContext,
@@ -700,11 +702,24 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      return SaveAnswerResponseSchema.parse({
-        accepted: result.accepted,
+      if (result.accepted) {
+        return SaveAnswerAcceptedSchema.parse({
+          accepted: true,
+          serverVersion: result.serverVersion,
+          savedAt: result.savedAt,
+        });
+      }
+
+      return SaveAnswerRejectedSchema.parse({
+        accepted: false,
+        reason: result.conflict!.reason,
+        message: getSaveAnswerMessage(result.conflict!.reason),
         serverVersion: result.serverVersion,
         savedAt: result.savedAt,
-        conflict: result.conflict,
+        details:
+          result.conflict!.latestAnswer != null
+            ? { serverAnswer: result.conflict!.latestAnswer }
+            : undefined,
       });
     },
   );

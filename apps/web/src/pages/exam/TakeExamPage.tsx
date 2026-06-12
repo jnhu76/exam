@@ -122,7 +122,10 @@ export function TakeExamPage() {
         const result = await api.post<{
           accepted: boolean;
           serverVersion: number;
-          conflict?: { reason: string };
+          savedAt: string;
+          reason?: string;
+          message?: string;
+          details?: { serverAnswer?: unknown };
         }>(`/api/attempts/${attemptId}/answers/${questionId}`, {
           attemptId,
           questionId,

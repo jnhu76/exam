@@ -18,6 +18,10 @@ import {
   SaveAnswerRequestSchema,
   SaveAnswerResponseSchema,
   CandidateExamDetailResponseSchema,
+  SaveAnswerAcceptedSchema,
+  SaveAnswerRejectedSchema,
+  SaveAnswerRejectReasonEnum,
+  getSaveAnswerMessage,
 } from "../index.js";
 
 describe("auth contracts", () => {
@@ -291,12 +295,13 @@ describe("attempt contracts", () => {
     expect(result.success).toBe(true);
   });
 
-  it("SaveAnswerResponseSchema validates conflict", () => {
+  it("SaveAnswerResponseSchema validates rejected via union", () => {
     const result = SaveAnswerResponseSchema.safeParse({
       accepted: false,
+      reason: "STALE_VERSION",
+      message: "服务器上存在更新的答案版本",
       serverVersion: 2,
       savedAt: new Date().toISOString(),
-      conflict: { reason: "STALE_VERSION" },
     });
     expect(result.success).toBe(true);
   });
@@ -326,5 +331,194 @@ describe("attempt contracts", () => {
       canStartNewAttempt: true,
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("SaveAnswerAcceptedSchema (A01 strict)", () => {
+  const validAccepted = {
+    accepted: true as const,
+    serverVersion: 1,
+    savedAt: "2026-06-12T08:00:00.000Z",
+  };
+
+  it("parses minimal accepted", () => {
+    const result = SaveAnswerAcceptedSchema.safeParse(validAccepted);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.accepted).toBe(true);
+      expect(result.data.serverVersion).toBe(1);
+      expect(result.data.savedAt).toBe("2026-06-12T08:00:00.000Z");
+    }
+  });
+
+  it("rejects conflict field (strict)", () => {
+    const result = SaveAnswerAcceptedSchema.safeParse({
+      ...validAccepted,
+      conflict: { reason: "STALE_VERSION" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects unknown key (strict)", () => {
+    const result = SaveAnswerAcceptedSchema.safeParse({
+      ...validAccepted,
+      foo: "bar",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("SaveAnswerRejectedSchema (A01 strict)", () => {
+  const validRejected = {
+    accepted: false as const,
+    reason: "STALE_VERSION" as const,
+    message: "服务器上存在更新的答案版本",
+    serverVersion: 5,
+    savedAt: "2026-06-12T08:00:00.000Z",
+  };
+
+  it("parses STALE_VERSION with details", () => {
+    const result = SaveAnswerRejectedSchema.safeParse({
+      ...validRejected,
+      details: { serverAnswer: true },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.details?.serverAnswer).toBe(true);
+    }
+  });
+
+  it("parses STALE_VERSION without details", () => {
+    const result = SaveAnswerRejectedSchema.safeParse(validRejected);
+    expect(result.success).toBe(true);
+  });
+
+  it("parses all 4 reasons", () => {
+    const reasons = [
+      "STALE_VERSION",
+      "ATTEMPT_ALREADY_SUBMITTED",
+      "ATTEMPT_CLOSED",
+      "DEADLINE_EXCEEDED",
+    ] as const;
+    for (const reason of reasons) {
+      const result = SaveAnswerRejectedSchema.safeParse({
+        ...validRejected,
+        reason,
+      });
+      expect(result.success, `reason=${reason}`).toBe(true);
+    }
+  });
+
+  it("rejects unknown reason", () => {
+    const result = SaveAnswerRejectedSchema.safeParse({
+      ...validRejected,
+      reason: "UNKNOWN",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects conflict field (strict)", () => {
+    const result = SaveAnswerRejectedSchema.safeParse({
+      ...validRejected,
+      conflict: { reason: "STALE_VERSION" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects unknown key (strict)", () => {
+    const result = SaveAnswerRejectedSchema.safeParse({
+      ...validRejected,
+      foo: "bar",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("SaveAnswerResponseSchema (A01 discriminated union)", () => {
+  it("accepts accepted branch", () => {
+    const result = SaveAnswerResponseSchema.safeParse({
+      accepted: true,
+      serverVersion: 1,
+      savedAt: "2026-06-12T08:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts rejected branch", () => {
+    const result = SaveAnswerResponseSchema.safeParse({
+      accepted: false,
+      reason: "STALE_VERSION",
+      message: "服务器上存在更新的答案版本",
+      serverVersion: 5,
+      savedAt: "2026-06-12T08:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("SaveAnswerRejectReasonEnum", () => {
+  it("has exactly 4 values", () => {
+    const values = SaveAnswerRejectReasonEnum.options;
+    expect(values).toEqual([
+      "STALE_VERSION",
+      "ATTEMPT_ALREADY_SUBMITTED",
+      "ATTEMPT_CLOSED",
+      "DEADLINE_EXCEEDED",
+    ]);
+  });
+});
+
+describe("SaveAnswer route-shape equivalence (A01 wire contract)", () => {
+  // Mirrors the construction in apps/api/src/routes/attempts.ts:713-722.
+  // Guards against contract drift for reasons not yet reachable through the
+  // HTTP route (ATTEMPT_CLOSED requires admin void; DEADLINE_EXCEEDED requires
+  // route-level deadline check). When those code paths land, route tests must
+  // assert the equivalent shape end-to-end.
+  const buildRejectedWireShape = (
+    reason: import("../attempt.js").SaveAnswerRejectReason,
+    options: { latestAnswer?: unknown } = {},
+  ) => ({
+    accepted: false as const,
+    reason,
+    message: getSaveAnswerMessage(reason),
+    serverVersion: 0,
+    savedAt: "2026-06-12T08:00:00.000Z",
+    details:
+      options.latestAnswer != null
+        ? { serverAnswer: options.latestAnswer }
+        : undefined,
+  });
+
+  it("STALE_VERSION wire shape parses with serverAnswer in details", () => {
+    const wire = buildRejectedWireShape("STALE_VERSION", {
+      latestAnswer: "previous-candidate-answer",
+    });
+    const result = SaveAnswerResponseSchema.safeParse(wire);
+    expect(result.success).toBe(true);
+  });
+
+  it("ATTEMPT_ALREADY_SUBMITTED wire shape parses without details", () => {
+    const wire = buildRejectedWireShape("ATTEMPT_ALREADY_SUBMITTED");
+    const result = SaveAnswerResponseSchema.safeParse(wire);
+    expect(result.success).toBe(true);
+  });
+
+  it("ATTEMPT_CLOSED wire shape parses without details", () => {
+    const wire = buildRejectedWireShape("ATTEMPT_CLOSED");
+    const result = SaveAnswerResponseSchema.safeParse(wire);
+    expect(result.success).toBe(true);
+  });
+
+  it("DEADLINE_EXCEEDED wire shape parses without details", () => {
+    const wire = buildRejectedWireShape("DEADLINE_EXCEEDED");
+    const result = SaveAnswerResponseSchema.safeParse(wire);
+    expect(result.success).toBe(true);
+  });
+
+  it("registry message is non-empty for every reason", () => {
+    for (const reason of SaveAnswerRejectReasonEnum.options) {
+      const message = getSaveAnswerMessage(reason);
+      expect(message.length, `reason=${reason}`).toBeGreaterThan(0);
+    }
   });
 });

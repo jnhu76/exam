@@ -1053,7 +1053,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Route file | attempts.ts:585 |
 | Auth | Candidate |
 | Current success status | 200 |
-| Current success shape | Command Result (accepted true/false + reason/message) |
+| Current success shape | Command Result Response (discriminated union on `accepted`) |
 | Target success status | 200 |
 | Target success shape | Command Result Response (discriminated union accepted true/false) |
 | Current error shape | 400 VALIDATION_ERROR / 404 via NotFoundError |
@@ -1061,7 +1061,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Content-Type | application/json |
 | Frontend client | TakeExamPage autosave |
 | Migration job | A01 |
-| Status | pending verification |
+| Status | A01 contract complete; OpenAPI pending (A05) |
 
 ### POST /attempts/:attemptId/submit
 

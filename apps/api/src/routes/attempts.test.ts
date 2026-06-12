@@ -8,6 +8,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { scanDatabaseForDisruptedAttempts } from "../plugins/heartbeat.js";
+import { getSaveAnswerMessage } from "@exam/contracts";
 
 async function ensureCandidateProfile(ctx: TestContext): Promise<string> {
   const existing = await ctx.db
@@ -574,7 +575,8 @@ describe("attempt routes", () => {
       });
 
       expect(res.json().accepted).toBe(false);
-      expect(res.json().conflict?.reason).toBe("STALE_VERSION");
+      expect(res.json().reason).toBe("STALE_VERSION");
+      expect(res.json().message).toBe(getSaveAnswerMessage("STALE_VERSION"));
     });
 
     it("returns 400 for malformed save payload", async () => {
@@ -886,8 +888,11 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.accepted).toBe(false);
-      expect(body.conflict).toBeDefined();
-      expect(body.conflict.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+      expect(body.reason).toBeDefined();
+      expect(body.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+      expect(body.message).toBe(
+        getSaveAnswerMessage("ATTEMPT_ALREADY_SUBMITTED"),
+      );
     });
 
     it("DB invariant: answers unchanged after rejected save (regression guard for route-level rejection)", async () => {
