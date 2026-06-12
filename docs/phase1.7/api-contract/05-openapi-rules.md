@@ -66,7 +66,14 @@ SaveAnswerAccepted:
       type: string
       format: date-time
     conflict:
+      type: object
       nullable: true
+      properties:
+        reason:
+          type: string
+        latestAnswer:
+          type: object
+          additionalProperties: true
 
 SaveAnswerRejected:
   type: object

@@ -113,9 +113,9 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 
 ### Scope
 
-- 收敛 401/403/404/409/429/500 响应。
+- 收敛 400/401/403/404/409/429/500 响应，400 携带 ValidationErrorDetails（见 02-error-response.md）。
 - 增加 requestId 和安全的 validation details。
-- 建立旧 code 到目标 code 的兼容/迁移表。
+- 建立旧 code 到目标 code 的兼容/迁移表（含 400 VALIDATION_ERROR → ValidationErrorDetails 映射）。
 - 与 Phase1.7 S04/S06/S07 安全 Job 协调。
 
 ### Non-goals
