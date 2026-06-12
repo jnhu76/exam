@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
@@ -757,6 +757,87 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(409);
+      const body = res.json();
+      expect(body.error).toBeDefined();
+      expect(typeof body.error.code).toBe("string");
+      expect(typeof body.error.message).toBe("string");
+    });
+  });
+
+  describe("POST /attempts/:attemptId/submit — deadline 行为", () => {
+    let deadlineExamId: string;
+
+    beforeAll(async () => {
+      const exam = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Deadline Submit Exam",
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 1,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionSelectionMode: "manual",
+          questionIds: [questionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "unlimited",
+          scoreStrategy: "highest",
+          maxAttempts: 3,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      deadlineExamId = exam.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${deadlineExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+    });
+
+    afterEach(() => {
+      ctx.setNow(null);
+    });
+
+    it("rejects submit when fastify.now() is past deadlineAt", async () => {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${deadlineExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(startRes.statusCode).toBe(201);
+      const lateAttemptId = startRes.json().id as string;
+
+      ctx.setNow(new Date(Date.now() + 5 * 60 * 1000));
+
+      const submitRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${lateAttemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(submitRes.statusCode).toBe(409);
+      expect(submitRes.json()).toEqual({
+        error: {
+          code: "ATTEMPT_DEADLINE_EXCEEDED",
+          message: "Attempt deadline exceeded",
+        },
+      });
     });
   });
 

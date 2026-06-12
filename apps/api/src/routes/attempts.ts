@@ -743,7 +743,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         await submitAttempt(
           createAttemptRepoAdapter(txAttemptRepo, ctx),
           attemptId,
-          new Date(),
+          fastify.now(),
         );
       });
 
@@ -757,7 +757,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         createEnrollmentRepoAdapter(enrollmentRepo, ctx),
         attRepoAdapter,
         attemptId,
-        new Date(),
+        fastify.now(),
       );
       const attempt = await attemptRepo.findById(ctx, attemptId);
       if (!attempt) {

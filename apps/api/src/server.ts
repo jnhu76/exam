@@ -8,6 +8,7 @@ import cors from "./plugins/cors.js";
 import setupSecurity from "./plugins/security.js";
 import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
+import nowPlugin from "./plugins/now.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
@@ -37,6 +38,7 @@ async function main() {
   setupSecurity(app);
   setupErrorHandler(app);
   await app.register(dbPlugin);
+  await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);
   await app.register(rateLimitPlugin);
