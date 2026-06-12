@@ -671,8 +671,8 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(409);
       const body = res.json();
       expect(body.error).toBeDefined();
-      expect(typeof body.error.code).toBe("string");
-      expect(typeof body.error.message).toBe("string");
+      expect(body.error.code).toBe("INVALID_STATE_TRANSITION");
+      expect(body.error.message).toContain("Cannot submit attempt in");
     });
   });
 
@@ -800,8 +800,8 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(404);
       const body = res.json();
       expect(body.error).toBeDefined();
-      expect(typeof body.error.code).toBe("string");
-      expect(typeof body.error.message).toBe("string");
+      expect(body.error.code).toBe("NOT_FOUND");
+      expect(body.error.message).toBe("Attempt not found");
     });
 
     it("owner can still submit after cross-candidate attempt", async () => {
