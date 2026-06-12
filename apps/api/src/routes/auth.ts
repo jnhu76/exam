@@ -7,7 +7,11 @@ import {
   MeResponseSchema,
   ChangePasswordRequestSchema,
 } from "@exam/contracts";
-import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
+import {
+  hashPassword,
+  verifyPassword,
+  verifyPasswordOrDummy,
+} from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
@@ -88,6 +92,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         );
       } catch (error) {
         if (error instanceof NotFoundError) {
+          // Always perform a dummy argon2 verify to avoid leaking whether the tenant exists via timing.
+          await verifyPasswordOrDummy(data.password, null);
           return reply
             .code(401)
             .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
@@ -105,17 +111,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         anonCtx,
         data.username,
       );
-      if (!user?.isActive) {
-        return reply
-          .code(401)
-          .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
-      }
 
-      const isPasswordValid = await verifyPassword(
+      const isPasswordValid = await verifyPasswordOrDummy(
         data.password,
-        user.passwordHash,
+        user?.isActive ? user.passwordHash : null,
       );
-      if (!isPasswordValid) {
+      if (!user?.isActive || !isPasswordValid) {
         return reply
           .code(401)
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
@@ -129,7 +130,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: process.env.COOKIE_SECURE === "true",
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",

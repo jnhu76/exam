@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
-import { verifyJWT } from "@exam/auth/src/session.js";
+import { verifyJWT, deriveSessionId } from "@exam/auth/src/session.js";
 import type { Role, Permission } from "@exam/domain";
 import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
@@ -69,7 +69,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       organizationId: payload.organizationId,
       role: user.role as Role,
       permissions: getPermissionsForRole(user.role as Role) as Permission[],
-      sessionId: token,
+      sessionId: deriveSessionId(token),
     };
   };
 

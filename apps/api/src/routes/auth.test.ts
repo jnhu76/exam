@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import authRoutes from "./auth.js";
@@ -23,6 +31,10 @@ describe("auth routes", () => {
     await ctx.cleanup();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("POST /api/auth/login authenticates within the requested tenant", async () => {
     const response = await ctx.app.inject({
       method: "POST",
@@ -36,6 +48,44 @@ describe("auth routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().organizationId).toBe(ctx.org.id);
+  });
+
+  it("POST /api/auth/login sets Secure cookie when COOKIE_SECURE=true", async () => {
+    vi.stubEnv("COOKIE_SECURE", "true");
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).toMatch(/Secure/);
+  });
+
+  it("POST /api/auth/login omits Secure flag when COOKIE_SECURE!=true", async () => {
+    vi.stubEnv("COOKIE_SECURE", "false");
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).not.toMatch(/Secure/);
   });
 
   it("POST /api/auth/login rejects disabled users", async () => {
