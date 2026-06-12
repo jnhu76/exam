@@ -1,7 +1,11 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import type { TestContext } from "./testHelpers.js";
-import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import {
+  buildTestApp,
+  uniquePrefix,
+  createCandidateViaApi,
+} from "./testHelpers.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -838,6 +842,114 @@ describe("attempt routes", () => {
           message: "Attempt deadline exceeded",
         },
       });
+    });
+  });
+
+  describe("POST /attempts/:attemptId/submit — ownership safety net", () => {
+    let otherCandidateToken: string;
+    let ownAttemptId: string;
+    let ownershipExamId: string;
+
+    beforeAll(async () => {
+      const otherUserId = crypto.randomUUID();
+      await ctx.db.insert(schema.users).values({
+        id: otherUserId,
+        organizationId: ctx.org.id,
+        username: `other-candidate-${uniquePrefix()}`,
+        passwordHash: "unused",
+        name: "Other Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const otherProfileId = crypto.randomUUID();
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id: otherProfileId,
+        organizationId: ctx.org.id,
+        userId: otherUserId,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      otherCandidateToken = signJWT({
+        actorId: otherUserId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+      });
+
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Ownership Test Exam",
+          description: "",
+          courseId,
+          timingMode: "timed_window",
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 60,
+          totalScore: 100,
+          questionSelectionMode: "manual",
+          questionIds: [questionId],
+          controlFlags: {
+            shuffleQuestions: false,
+            shuffleOptions: false,
+            detectTabSwitch: false,
+            disableCopyPaste: false,
+            requireQueue: false,
+            batchSize: 10,
+            batchInterval: 3,
+            restrictIp: false,
+            requireLockdown: false,
+            showResultImmediately: true,
+          },
+          retakePolicy: "unlimited",
+          scoreStrategy: "highest",
+          maxAttempts: 3,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      ownershipExamId = examRes.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${ownershipExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${ownershipExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      ownAttemptId = startRes.json().id;
+    });
+
+    it("rejects submit by a different candidate (404)", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${ownAttemptId}/submit`,
+        cookies: { "auth-token": otherCandidateToken },
+      });
+
+      expect(res.statusCode).toBe(404);
+      const body = res.json();
+      expect(body.error).toBeDefined();
+      expect(typeof body.error.code).toBe("string");
+      expect(typeof body.error.message).toBe("string");
+    });
+
+    it("owner can still submit after cross-candidate attempt", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${ownAttemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().status).toBe("graded");
     });
   });
 
