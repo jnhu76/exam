@@ -164,8 +164,7 @@ export function TakeExamPage() {
     }
   }, [attemptId, navigate]);
 
-  const openSubmitDialog = useCallback(async () => {
-    setShowSubmitDialog(true);
+  const runSubmitFlush = useCallback(async () => {
     setIsFlushing(true);
     setFlushResult(null);
     try {
@@ -174,6 +173,11 @@ export function TakeExamPage() {
       setIsFlushing(false);
     }
   }, [flush]);
+
+  const openSubmitDialog = useCallback(async () => {
+    setShowSubmitDialog(true);
+    await runSubmitFlush();
+  }, [runSubmitFlush]);
 
   const handleTimeout = useCallback(async () => {
     try {
@@ -251,6 +255,8 @@ export function TakeExamPage() {
   const unsavedCount = flushResult
     ? flushResult.pendingCount + failedSaveCount
     : 0;
+  const flushTimedOut = flushResult?.timedOut ?? false;
+  const requiresSubmitOverride = failedSaveCount > 0 || flushTimedOut;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -417,7 +423,12 @@ export function TakeExamPage() {
             )}
             {failedSaveCount > 0 && (
               <p className="text-destructive">
-                部分答案保存失败，请重试保存或确认仍然提交。
+                部分答案保存失败，请继续答题后重新保存或确认仍然提交。
+              </p>
+            )}
+            {flushTimedOut && (
+              <p className="text-destructive">
+                保存超时，仍有答案未确认保存。请重试或选择仍然提交。
               </p>
             )}
             {flaggedCount > 0 && (
@@ -435,13 +446,22 @@ export function TakeExamPage() {
             >
               继续答题
             </Button>
+            {flushTimedOut && (
+              <Button
+                variant="outline"
+                onClick={() => void runSubmitFlush()}
+                disabled={isSubmitting || isFlushing}
+              >
+                重试
+              </Button>
+            )}
             <Button
               onClick={() => void handleSubmit()}
-              disabled={isSubmitting || isFlushing || failedSaveCount > 0}
+              disabled={isSubmitting || isFlushing || requiresSubmitOverride}
             >
               {isSubmitting ? "提交中..." : "确认交卷"}
             </Button>
-            {failedSaveCount > 0 && (
+            {requiresSubmitOverride && (
               <Button
                 variant="destructive"
                 onClick={() => void handleSubmit()}

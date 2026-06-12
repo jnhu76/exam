@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -581,5 +588,93 @@ describe("TakeExamPage S03b submit flush", () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it("offers retry or 仍然提交 after flush timeout", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    let resolveSave!: (value: unknown) => void;
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        return new Promise((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      if (path.includes("/submit")) {
+        return { score: 10 };
+      }
+      return { ok: true };
+    });
+
+    renderPage();
+
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText("第1空答案");
+    await user.type(input, "A");
+
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "交卷" }));
+    });
+    const dialog = screen.getByRole("dialog");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(within(dialog).getByText(/保存超时/)).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "重试" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "仍然提交" }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "确认交卷" }),
+    ).toBeDisabled();
+    expect(
+      apiPost.mock.calls.some(
+        (call: unknown[]) =>
+          typeof call[0] === "string" && call[0].includes("/submit"),
+      ),
+    ).toBe(false);
+
+    await act(async () => {
+      resolveSave({ accepted: true, serverVersion: 1, savedAt: "now" });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "重试" }));
+      await Promise.resolve();
+    });
+
+    expect(within(dialog).queryByText(/保存超时/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText("未保存：0 题")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "确认交卷" }),
+    ).toBeEnabled();
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "确认交卷" }));
+      await Promise.resolve();
+    });
+
+    expect(
+      apiPost.mock.calls.some(
+        (call: unknown[]) =>
+          typeof call[0] === "string" && call[0].includes("/submit"),
+      ),
+    ).toBe(true);
   });
 });
