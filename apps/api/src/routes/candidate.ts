@@ -9,6 +9,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";
 import { ValidationError } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
@@ -125,7 +126,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateCandidateRequestSchema.parse(request.body);
-      const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
         ctx,
@@ -142,20 +142,34 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const passwordHash = await hashPassword(data.password);
-      let user;
+      let candidate;
       try {
-        user = await userRepo.create(ctx, {
-          username: data.username,
-          passwordHash,
-          name: data.name,
-          role: "Candidate" as const,
-          isActive: true,
+        candidate = await executeInTransaction(fastify.db, async (tx) => {
+          const txUserRepo = createUserRepo(tx);
+          const txCandidateRepo = createCandidateRepo(tx);
+          const user = await txUserRepo.create(ctx, {
+            username: data.username,
+            passwordHash,
+            name: data.name,
+            role: "Candidate" as const,
+            isActive: true,
+          });
+          return txCandidateRepo.create(ctx, {
+            userId: user.id,
+            fields: data.fields,
+          });
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (
-          err?.code === "23505" ||
-          err?.message?.includes("unique") ||
-          err?.message?.includes("duplicate")
+          err &&
+          typeof err === "object" &&
+          ((err as Record<string, unknown>).code === "23505" ||
+            String((err as Record<string, unknown>).message ?? "").includes(
+              "unique",
+            ) ||
+            String((err as Record<string, unknown>).message ?? "").includes(
+              "duplicate",
+            ))
         ) {
           return reply.code(409).send({
             error: {
@@ -166,11 +180,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         }
         throw err;
       }
-
-      const candidate = await candidateRepo.create(ctx, {
-        userId: user.id,
-        fields: data.fields,
-      });
       recordAudit(
         fastify,
         request,
