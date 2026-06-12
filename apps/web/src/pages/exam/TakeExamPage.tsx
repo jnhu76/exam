@@ -415,6 +415,11 @@ export function TakeExamPage() {
                 <p>保存失败：{failedSaveCount} 题</p>
               </>
             )}
+            {failedSaveCount > 0 && (
+              <p className="text-destructive">
+                部分答案保存失败，请重试保存或确认仍然提交。
+              </p>
+            )}
             {flaggedCount > 0 && (
               <p>
                 有 <strong>{flaggedCount}</strong> 题已标记待检查
@@ -432,10 +437,19 @@ export function TakeExamPage() {
             </Button>
             <Button
               onClick={() => void handleSubmit()}
-              disabled={isSubmitting || isFlushing}
+              disabled={isSubmitting || isFlushing || failedSaveCount > 0}
             >
               {isSubmitting ? "提交中..." : "确认交卷"}
             </Button>
+            {failedSaveCount > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => void handleSubmit()}
+                disabled={isSubmitting || isFlushing}
+              >
+                {isSubmitting ? "提交中..." : "仍然提交"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
