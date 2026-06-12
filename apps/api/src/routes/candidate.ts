@@ -66,10 +66,11 @@ function findByIdentity(
 ) {
   const uniqueField = configuredFields.find((field) => field.unique);
   if (!uniqueField) return null;
+  const value = fields[uniqueField.name];
+  if (value === undefined || value === null || value === "") return null;
   return (
     candidates.find(
-      (candidate) =>
-        candidate.fields[uniqueField.name] === fields[uniqueField.name],
+      (candidate) => candidate.fields[uniqueField.name] === value,
     ) ?? null
   );
 }

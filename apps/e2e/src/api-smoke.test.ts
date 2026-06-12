@@ -176,7 +176,7 @@ describe("Smoke — candidate fields CRUD", () => {
         label: "Employee ID",
         fieldType: "text",
         required: true,
-        unique: true,
+        unique: false,
         sortOrder: 0,
       },
       cookies: { "auth-token": ctx.adminToken },
@@ -190,7 +190,7 @@ describe("Smoke — candidate fields CRUD", () => {
       payload: {
         label: "Staff Number",
         required: true,
-        unique: true,
+        unique: false,
         sortOrder: 0,
       },
       cookies: { "auth-token": ctx.adminToken },
