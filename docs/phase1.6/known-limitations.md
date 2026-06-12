@@ -35,33 +35,32 @@ Commit: `7cbacf5`
 
 ## S03a-2 — Submit Route Row-level Lock Alignment
 
-_Not yet started. Limitations to be filled when Job lands._
+Commit: `0448a48`
 
-### L2.x (placeholder)
+No new limitations surfaced. The refactor from `findByIdAndCandidate` to `findByIdForUpdate` + application-level ownership check preserves all existing behavior.
 
----
+## S03a-3 — Graded/Submitted Save Rejection E2E
 
-## S03a-3 — Save Route Deadline E2E
+Commit: `f76d187`
 
-_Not yet started. Limitations to be filled when Job lands._
-
-### L3.x (placeholder)
-
----
+No new limitations surfaced. Test-only commit confirming existing `processSaveAnswer` rejection behavior at HTTP layer.
 
 ## S03a-4 — PG Concurrency Test Suite
 
-_Not yet started. Limitations to be filled when Job lands._
+Commit: `a628e79`
 
-### L4.x (placeholder)
-
----
+### L4.1 Advisory lock as test barrier only
+- **Where**: `apps/api/tests/concurrency/attempt-concurrency.test.ts`
+- **Decision**: `pg_advisory_lock`/`pg_advisory_unlock` used only as test synchronization barrier, never as business lock.
+- **Why noted**: Future readers must not copy advisory lock pattern into production code.
 
 ## S03a-5 — Phase1.3 P0 Regression
 
-_Not yet started. Limitations to be filled when Job lands._
+Commit: (this commit)
 
-### L5.x (placeholder)
+### L5.1 No new regressions found
+- **Result**: `pnpm verify` + `pnpm test:pg` = 26 files, 205 tests, all passed.
+- **Coverage**: smoke, integration, e2e, concurrency, security — all green.
 
 ---
 
