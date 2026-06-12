@@ -60,8 +60,8 @@ SEED_CANDIDATE_NAME="Candidate"
 The demo seed creates a rich dataset for full-flow manual testing. It includes 8 users, 3 courses, 10 questions (all 4 types), 5 exams in various statuses, enrollments, and graded attempts.
 
 ```bash
-# Fresh demo seed (deletes and recreates dev.db)
-rm -f dev.db && pnpm db:seed:demo
+# Fresh demo seed (resets database)
+pnpm db:reset && pnpm db:seed:demo
 
 # Re-run on existing database (idempotent)
 pnpm db:seed:demo
@@ -94,91 +94,47 @@ See `docs/dev/demo-seed-test-guide.md` for detailed test flows and verification 
 
 ## Deployment Modes
 
-### Mode 1: Local Development (SQLite)
+### Mode 1: Local Development
 
-The simplest way to run. No Docker required. Uses SQLite as the database.
+Requires a running PostgreSQL instance. Use `pnpm db:up` to start one via Docker.
 
 ```bash
 pnpm install
-pnpm db:seed    # Creates dev.db with test users
-pnpm dev        # Starts API + Web with hot reload
+pnpm db:up       # Start PostgreSQL container (port 15432)
+pnpm db:migrate  # Run migrations
+pnpm db:seed     # Seed with test users
+pnpm dev         # Start API + Web with hot reload
 ```
 
 - Web: http://localhost:5173
 - API: http://localhost:3000
-- Database: `./dev.db` (SQLite file, auto-created)
+- Database: PostgreSQL 18 on `localhost:15432`
 
-### Mode 2: Local Development with PostgreSQL
-
-For testing PostgreSQL compatibility locally. Starts only a PostgreSQL container; API and Web run on host via `pnpm dev`.
-
-```bash
-# 1. Start PostgreSQL container
-docker compose -f docker-compose.test.yml up -d
-
-# 2. Set DATABASE_URL in .env
-echo 'DATABASE_URL="postgresql://exam:exam@localhost:5432/exam_test"' >> .env
-
-# 3. Install and start
-pnpm install
-pnpm dev
-```
-
-The API server auto-runs migrations on startup. No manual `db:seed` needed for PostgreSQL — create users via the admin UI after first login.
-
-To stop PostgreSQL:
-
-```bash
-docker compose -f docker-compose.test.yml down
-# Optionally remove data:
-docker compose -f docker-compose.test.yml down -v
-```
-
-### Mode 3: Docker Compose (Full Stack)
+### Mode 2: Docker Compose (Full Stack)
 
 Production-like deployment. Builds the app image and starts both API and PostgreSQL in containers.
 
 ```bash
-# Start all services
 docker compose up -d
-
-# View logs
 docker compose logs -f app
-
-# Stop all services
 docker compose down
-
-# Stop and remove database data
-docker compose down -v
+docker compose down -v   # remove database data
 ```
 
 - App: http://localhost:3000
 - Database: PostgreSQL (internal, not exposed to host)
 - Migrations run automatically on container start
 
-### Mode 4: Docker Compose (Development with Docker)
-
-Runs the app in Docker with SQLite. Useful for testing the Docker build without PostgreSQL.
-
-```bash
-docker compose -f docker-compose.dev.yml up -d
-docker compose -f docker-compose.dev.yml logs -f app
-docker compose -f docker-compose.dev.yml down
-```
-
-- App: http://localhost:3000
-- Database: SQLite (persisted in Docker volume)
-
 ## Docker Files Reference
 
-| File                      | Purpose                                                        |
-| ------------------------- | -------------------------------------------------------------- |
-| `Dockerfile`              | Multi-stage build: base → builder → production runner        |
-| `docker-compose.yml`      | Production: app + PostgreSQL                                   |
-| `docker-compose.dev.yml`  | Development: app + SQLite (or PostgreSQL via profile)          |
-| `docker-compose.test.yml` | Local testing: PostgreSQL only (for host-based `pnpm dev`)     |
-| `docker-entrypoint.sh`    | Runs migrations before starting the server                     |
-| `.env.example`            | Environment variable template                                  |
+| File                      | Purpose                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `Dockerfile`              | Multi-stage build: base → builder → production runner      |
+| `docker-compose.yml`      | Production: app + PostgreSQL 18                            |
+| `docker-compose.dev.yml`  | Development: app + PostgreSQL 18                           |
+| `docker-compose.test.yml` | Testing: PostgreSQL 18 only (for host-based test runs)     |
+| `docker-entrypoint.sh`    | Runs migrations before starting the server                 |
+| `.env.example`            | Environment variable template                              |
 
 ## Development Commands
 
@@ -187,12 +143,16 @@ docker compose -f docker-compose.dev.yml down
 | `pnpm dev`               | Start all services in dev mode (hot reload)                 |
 | `pnpm --filter web dev`  | Start only the web frontend                                 |
 | `pnpm --filter api dev`  | Start only the API server                                   |
-| `pnpm db:seed`           | Seed SQLite database with basic test users                |
+| `pnpm db:seed`           | Seed database with basic test users                        |
 | `pnpm db:seed:demo`      | Seed rich demo dataset (8 users, 5 exams, graded attempts) |
 | `pnpm db:seed:demo:verify` | Verify demo seed data integrity                          |
 | `pnpm db:push`           | Push schema changes to database                             |
 | `pnpm db:migrate`        | Run database migrations                                     |
 | `pnpm db:studio`         | Open Drizzle Studio                                         |
+| `pnpm db:up`             | Start PostgreSQL container (dev, port 15432)               |
+| `pnpm db:down`           | Stop PostgreSQL container                                   |
+| `pnpm db:reset`          | Reset dev database (down + up + migrate)                   |
+| `pnpm test:pg`           | Run tests against PostgreSQL                                |
 | `pnpm test`              | Run all tests                                               |
 | `pnpm --filter web test` | Run web tests only                                          |
 | `pnpm typecheck`         | Type-check all packages                                     |
@@ -219,7 +179,7 @@ packages/
 
 - **Frontend**: React 19, Vite, TypeScript, shadcn/ui, TailwindCSS v4
 - **Backend**: Fastify, TypeScript, Zod validation
-- **Database**: SQLite (dev) / PostgreSQL (prod) via Drizzle ORM
+- **Database**: PostgreSQL 18 via Drizzle ORM
 - **Monorepo**: pnpm workspaces + Turborepo
 
 ## Documentation
@@ -243,7 +203,7 @@ packages/
 | `VITE_API_BASE_URL` | `""` (proxy)              | API base URL for the web client               |
 | `APP_PORT`          | `3000`                    | API server port                               |
 | `HOST`              | `0.0.0.0`                 | API server host                               |
-| `DATABASE_URL`      | `sqlite:./dev.db`         | Database connection URL                       |
+| `DATABASE_URL`      | `postgresql://...`       | Database connection URL                       |
 | `JWT_SECRET`        | `change-me-in-production` | Secret key for JWT token generation           |
 | `NODE_ENV`          | `development`             | Application environment                       |
 | `COOKIE_SECURE`     | `false`                   | Whether cookies should be secure (HTTPS only) |

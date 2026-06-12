@@ -69,7 +69,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     request.ctx = {
       actorId: payload.actorId,
       organizationId: payload.organizationId,
-      role: user.role,
+      role: user.role as Role,
       permissions: getPermissionsForRole(user.role as Role) as Permission[],
       sessionId: token,
     };

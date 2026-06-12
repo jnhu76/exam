@@ -12,7 +12,7 @@ import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import type { PublicBrandingContext, RequestContext } from "@exam/domain";
+import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
 import { PermissionDeniedError, ValidationError } from "@exam/domain";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -115,7 +115,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const token = signJWT({
         actorId: user.id,
-        role: user.role,
+        role: user.role as Role,
         organizationId: user.organizationId,
       });
 

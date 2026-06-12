@@ -1,14 +1,33 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
+import { eq } from "drizzle-orm";
+import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import type { TestContext } from "./testHelpers.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
+
+async function ensureCandidateProfile(ctx: TestContext): Promise<string> {
+  const existing = await ctx.db
+    .select({ id: schema.candidateProfiles.id })
+    .from(schema.candidateProfiles)
+    .where(eq(schema.candidateProfiles.userId, ctx.candidate.id));
+  if (existing[0]) return existing[0].id;
+  const id = crypto.randomUUID();
+  await ctx.db.insert(schema.candidateProfiles).values({
+    id,
+    organizationId: ctx.org.id,
+    userId: ctx.candidate.id,
+    fields: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return id;
+}
 
 describe("score routes", () => {
   let ctx: TestContext;
@@ -25,55 +44,39 @@ describe("score routes", () => {
     courseId = crypto.randomUUID();
     questionId = crypto.randomUUID();
     candidateProfileId = crypto.randomUUID();
-    ctx.db
-      .insert(sqliteSchema.courses)
-      .values({
-        id: courseId,
-        organizationId: ctx.org.id,
-        name: "Course",
-        code: "SCORE",
-        description: "",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
-    ctx.db
-      .insert(sqliteSchema.questions)
-      .values({
-        id: questionId,
-        organizationId: ctx.org.id,
-        courseId,
-        type: "single_choice",
-        content: "Choose A",
-        options: [{ id: "a", content: "A" }],
-        standardAnswer: "a",
-        attachments: [],
-        score: 10,
-        difficulty: 1,
-        tags: [],
-        gradingRule: {
-          multiSelectScoring: "all_correct_full",
-          fillBlankMatchMode: "exact",
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
-    ctx.db
-      .insert(sqliteSchema.candidateProfiles)
-      .values({
-        id: candidateProfileId,
-        organizationId: ctx.org.id,
-        userId: ctx.candidate.id,
-        fields: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Course",
+      code: `SCORE-${uniquePrefix()}`,
+      description: "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.questions).values({
+      id: questionId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "single_choice",
+      content: "Choose A",
+      options: [{ id: "a", content: "A" }],
+      standardAnswer: "a",
+      attachments: [],
+      score: 10,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    candidateProfileId = await ensureCandidateProfile(ctx);
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   function adminRequestContext() {
@@ -87,8 +90,8 @@ describe("score routes", () => {
     };
   }
 
-  function markExamClosed(examId: string) {
-    return createExamRepo(ctx.db).update(adminRequestContext(), examId, {
+  async function markExamClosed(examId: string) {
+    await createExamRepo(ctx.db).update(adminRequestContext(), examId, {
       closeAt: new Date(Date.now() - 1000),
     });
   }
@@ -312,31 +315,25 @@ describe("score routes", () => {
     const foreignOrganizationId = crypto.randomUUID();
     const foreignTeacherId = crypto.randomUUID();
     const now = new Date();
-    ctx.db
-      .insert(sqliteSchema.organizations)
-      .values({
-        id: foreignOrganizationId,
-        name: "Foreign Organization",
-        displayName: "Foreign Organization",
-        slug: `foreign-${foreignOrganizationId}`,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-    ctx.db
-      .insert(sqliteSchema.users)
-      .values({
-        id: foreignTeacherId,
-        organizationId: foreignOrganizationId,
-        username: "foreign-teacher",
-        passwordHash: "not-used",
-        name: "Foreign Teacher",
-        role: "Teacher",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await ctx.db.insert(schema.organizations).values({
+      id: foreignOrganizationId,
+      name: "Foreign Organization",
+      displayName: "Foreign Organization",
+      slug: `foreign-${foreignOrganizationId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.users).values({
+      id: foreignTeacherId,
+      organizationId: foreignOrganizationId,
+      username: `foreign-teacher-${uniquePrefix()}`,
+      passwordHash: "not-used",
+      name: "Foreign Teacher",
+      role: "Teacher",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     const foreignTeacherToken = signJWT({
       actorId: foreignTeacherId,
       role: "Teacher",
@@ -368,58 +365,42 @@ describe("J8: score list routes", () => {
     courseId = crypto.randomUUID();
     questionId = crypto.randomUUID();
     candidateProfileId = crypto.randomUUID();
-    ctx.db
-      .insert(sqliteSchema.courses)
-      .values({
-        id: courseId,
-        organizationId: ctx.org.id,
-        name: "Course",
-        code: "SCORE-LIST",
-        description: "",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
-    ctx.db
-      .insert(sqliteSchema.questions)
-      .values({
-        id: questionId,
-        organizationId: ctx.org.id,
-        courseId,
-        type: "single_choice",
-        content: "Choose A",
-        options: [
-          { id: "a", content: "A" },
-          { id: "b", content: "B" },
-        ],
-        standardAnswer: "a",
-        attachments: [],
-        score: 10,
-        difficulty: 1,
-        tags: [],
-        gradingRule: {
-          multiSelectScoring: "all_correct_full",
-          fillBlankMatchMode: "exact",
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
-    ctx.db
-      .insert(sqliteSchema.candidateProfiles)
-      .values({
-        id: candidateProfileId,
-        organizationId: ctx.org.id,
-        userId: ctx.candidate.id,
-        fields: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Course",
+      code: `SCORE-LIST-${uniquePrefix()}`,
+      description: "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.questions).values({
+      id: questionId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "single_choice",
+      content: "Choose A",
+      options: [
+        { id: "a", content: "A" },
+        { id: "b", content: "B" },
+      ],
+      standardAnswer: "a",
+      attachments: [],
+      score: 10,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    candidateProfileId = await ensureCandidateProfile(ctx);
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   function adminRequestContext() {
@@ -618,32 +599,26 @@ describe("J8: score list routes", () => {
     const tempUserId = crypto.randomUUID();
     const now = new Date();
 
-    ctx.db
-      .insert(sqliteSchema.users)
-      .values({
-        id: tempUserId,
-        organizationId: ctx.org.id,
-        username: "temp-candidate-" + Date.now(),
-        passwordHash: "not-used",
-        name: "Temp Candidate",
-        role: "Candidate",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await ctx.db.insert(schema.users).values({
+      id: tempUserId,
+      organizationId: ctx.org.id,
+      username: "temp-candidate-" + Date.now(),
+      passwordHash: "not-used",
+      name: "Temp Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-    ctx.db
-      .insert(sqliteSchema.candidateProfiles)
-      .values({
-        id: tempCandidateId,
-        organizationId: ctx.org.id,
-        userId: tempUserId,
-        fields: {},
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: tempCandidateId,
+      organizationId: ctx.org.id,
+      userId: tempUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
 
     const tempToken = signJWT({
       actorId: tempUserId,

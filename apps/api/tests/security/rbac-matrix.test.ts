@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
@@ -8,8 +8,10 @@ import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
 import setupSecurity from "../../src/plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { createSqliteDatabase, migrateSqlite } from "@exam/db/src/sqlite.js";
-import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
+import { createDatabase } from "@exam/db/src/database.js";
+import { migratePostgres } from "@exam/db/src/postgres.js";
+import { schema } from "@exam/db/src/schema/pg.js";
+import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
 import examRoutes from "../../src/routes/exam.js";
@@ -19,18 +21,19 @@ import candidateRoutes from "../../src/routes/candidate.js";
 import systemRoutes from "../../src/routes/system.js";
 import settingsRoutes from "../../src/routes/settings.js";
 import { randomUUID } from "node:crypto";
-import type { SqliteDatabase } from "@exam/db/src/sqlite.js";
-import type { Permission } from "@exam/domain";
+import type { Database } from "@exam/db/src/types.js";
+import type { Permission, Role } from "@exam/domain";
 import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
 
-function createDbPlugin(db: SqliteDatabase) {
+function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
     fastify.decorate("db", db);
   });
 }
 
 describe("RBAC Permission Matrix (S02)", () => {
-  let db: SqliteDatabase;
+  let db: Database;
+  let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let org: { id: string };
   let adminId: string;
   let adminToken: string;
@@ -40,55 +43,74 @@ describe("RBAC Permission Matrix (S02)", () => {
   let app: ReturnType<typeof Fastify>;
 
   beforeAll(async () => {
-    const sqlite = createSqliteDatabase(":memory:");
-    db = sqlite.db;
-    migrateSqlite(db);
+    const conn = await createDatabase(
+      process.env.TEST_DATABASE_URL ??
+        "postgresql://exam:exam@localhost:5432/exam_test",
+    );
+    await migratePostgres(conn.db);
+    db = conn.db;
+    sql = conn.sql;
 
-    await seed(db, hashPassword);
+    const seedResult = await seed(db, hashPassword);
 
-    const orgs = db.select().from(sqliteSchema.organizations).all();
+    const orgs = await db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, seedResult.orgId));
     org = orgs[0]!;
 
-    const users = db.select().from(sqliteSchema.users).all();
-    const superAdmin = users.find((u) => u.role === "SuperAdmin")!;
-    const teacher = users.find((u) => u.role === "Teacher")!;
-    const candidate = users.find((u) => u.role === "Candidate")!;
+    const superAdmin = (
+      await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, seedResult.users.superAdminId))
+    )[0]!;
+    const teacher = (
+      await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, seedResult.users.teacherId))
+    )[0]!;
+    const candidate = (
+      await db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, seedResult.users.candidateId))
+    )[0]!;
 
     const now = new Date();
     adminId = randomUUID();
     const hash = await hashPassword("admin123");
-    db.insert(sqliteSchema.users)
-      .values({
-        id: adminId,
-        organizationId: org.id,
-        username: "test-admin",
-        passwordHash: hash,
-        name: "Test Admin",
-        role: "Admin",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
+    await db.insert(schema.users).values({
+      id: adminId,
+      organizationId: org.id,
+      username: `test-admin-${adminId.slice(0, 8)}`,
+      passwordHash: hash,
+      name: "Test Admin",
+      role: "Admin",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     superAdminToken = signJWT({
       actorId: superAdmin.id,
-      role: superAdmin.role,
+      role: superAdmin.role as Role,
       organizationId: superAdmin.organizationId,
     });
     adminToken = signJWT({
       actorId: adminId,
-      role: "Admin",
+      role: "Admin" as Role,
       organizationId: org.id,
     });
     teacherToken = signJWT({
       actorId: teacher.id,
-      role: teacher.role,
+      role: teacher.role as Role,
       organizationId: teacher.organizationId,
     });
     candidateToken = signJWT({
       actorId: candidate.id,
-      role: candidate.role,
+      role: candidate.role as Role,
       organizationId: candidate.organizationId,
     });
 
@@ -114,6 +136,11 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
 
     await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await sql.end();
   });
 
   describe("AC1: Candidate cannot create exams", () => {

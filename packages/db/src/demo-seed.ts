@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
-import type { AnyDatabase, SqliteDatabase } from "./types.js";
-import { isSqlite } from "./types.js";
-import { sqliteSchema } from "./schema/sqlite.js";
+import type { Database } from "./types.js";
+import { schema } from "./schema/pg.js";
 import type {
   QuestionSnapshot,
   QuestionScoreResult,
@@ -28,11 +27,11 @@ function ts(offsetMs = 0): Date {
   return new Date(Date.now() + offsetMs);
 }
 
-function uuid(tag: string): string {
+function uuid(_tag: string): string {
   return randomUUID();
 }
 
-interface DemoIds {
+export interface DemoIds {
   orgId: string;
   settingsId: string;
   users: Record<string, string>;
@@ -84,15 +83,9 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
 }
 
 export async function seedDemo(
-  _db: AnyDatabase,
+  db: Database,
   hashFn: HashFunction,
 ): Promise<DemoIds> {
-  if (!isSqlite(_db)) {
-    throw new Error(
-      "seedDemo() only supports SQLite databases. Use migrations for PostgreSQL.",
-    );
-  }
-  const db: SqliteDatabase = _db;
   const now = Date.now();
   const ids: DemoIds = {
     orgId: "",
@@ -107,50 +100,46 @@ export async function seedDemo(
   };
 
   // ── Organization ──────────────────────────────────────────────
-  const existingOrg = db
+  const existingOrgRows = await db
     .select()
-    .from(sqliteSchema.organizations)
-    .where(eq(sqliteSchema.organizations.slug, DEMO_ORG_SLUG))
-    .get();
+    .from(schema.organizations)
+    .where(eq(schema.organizations.slug, DEMO_ORG_SLUG));
+  const existingOrg = existingOrgRows[0];
 
   if (existingOrg) {
     ids.orgId = existingOrg.id;
   } else {
     ids.orgId = uuid("org");
-    db.insert(sqliteSchema.organizations)
-      .values({
-        id: ids.orgId,
-        name: "Demo Organization",
-        displayName: "Demo Organization",
-        slug: DEMO_ORG_SLUG,
-        createdAt: ts(),
-        updatedAt: ts(),
-      })
-      .run();
+    await db.insert(schema.organizations).values({
+      id: ids.orgId,
+      name: "Demo Organization",
+      displayName: "Demo Organization",
+      slug: DEMO_ORG_SLUG,
+      createdAt: ts(),
+      updatedAt: ts(),
+    });
   }
 
   // ── OrganizationSettings ──────────────────────────────────────
-  const existingSettings = db
+  const existingSettingsRows = await db
     .select()
-    .from(sqliteSchema.organizationSettings)
-    .where(eq(sqliteSchema.organizationSettings.organizationId, ids.orgId))
-    .get();
+    .from(schema.organizationSettings)
+    .where(eq(schema.organizationSettings.organizationId, ids.orgId));
+  const existingSettings = existingSettingsRows[0];
 
   if (!existingSettings) {
     ids.settingsId = uuid("settings");
-    db.insert(sqliteSchema.organizationSettings)
-      .values({
-        id: ids.settingsId,
-        organizationId: ids.orgId,
-        productName: "Exam Platform",
-        productSubtitle: "Assessment & Certification",
-        footerText: "Demo Instance",
-        organizationDisplayName: "Demo Organization",
-        timezone: "Asia/Shanghai",
-        createdAt: ts(),
-        updatedAt: ts(),
-      })
-      .run();
+    await db.insert(schema.organizationSettings).values({
+      id: ids.settingsId,
+      organizationId: ids.orgId,
+      productName: "Exam Platform",
+      productSubtitle: "Assessment & Certification",
+      footerText: "Demo Instance",
+      organizationDisplayName: "Demo Organization",
+      timezone: "Asia/Shanghai",
+      createdAt: ts(),
+      updatedAt: ts(),
+    });
   } else {
     ids.settingsId = existingSettings.id;
   }
@@ -184,29 +173,26 @@ export async function seedDemo(
   ];
 
   for (const fd of fieldDefs) {
-    const existing = db
+    const existing = await db
       .select()
-      .from(sqliteSchema.candidateFields)
+      .from(schema.candidateFields)
       .where(
         and(
-          eq(sqliteSchema.candidateFields.organizationId, ids.orgId),
-          eq(sqliteSchema.candidateFields.name, fd.name),
+          eq(schema.candidateFields.organizationId, ids.orgId),
+          eq(schema.candidateFields.name, fd.name),
         ),
-      )
-      .get();
-    if (existing) {
-      ids.candidateFields[fd.name] = existing.id;
+      );
+    if (existing.length > 0) {
+      ids.candidateFields[fd.name] = existing[0]!.id;
     } else {
       const fieldId = uuid("cf");
       ids.candidateFields[fd.name] = fieldId;
-      db.insert(sqliteSchema.candidateFields)
-        .values({
-          id: fieldId,
-          organizationId: ids.orgId,
-          ...fd,
-          createdAt: ts(),
-        })
-        .run();
+      await db.insert(schema.candidateFields).values({
+        id: fieldId,
+        organizationId: ids.orgId,
+        ...fd,
+        createdAt: ts(),
+      });
     }
   }
 
@@ -223,55 +209,39 @@ export async function seedDemo(
   ];
 
   for (const ud of userDefs) {
-    const existing = db
+    const existing = await db
       .select()
-      .from(sqliteSchema.users)
+      .from(schema.users)
       .where(
         and(
-          eq(sqliteSchema.users.organizationId, ids.orgId),
-          eq(sqliteSchema.users.username, ud.username),
+          eq(schema.users.organizationId, ids.orgId),
+          eq(schema.users.username, ud.username),
         ),
-      )
-      .get();
+      );
 
-    if (existing) {
-      ids.users[ud.username] = existing.id;
+    if (existing.length > 0) {
+      ids.users[ud.username] = existing[0]!.id;
     } else {
       const userId = uuid("user");
       ids.users[ud.username] = userId;
       const passwordHash = await hashFn(
-        ud.role === "Candidate" ? "candidate123" : "admin123",
+        ud.role === "Teacher"
+          ? "teacher123"
+          : ud.role === "Candidate"
+            ? "candidate123"
+            : "admin123",
       );
-      if (ud.role === "Teacher") {
-        const hash = await hashFn("teacher123");
-        db.insert(sqliteSchema.users)
-          .values({
-            id: userId,
-            organizationId: ids.orgId,
-            username: ud.username,
-            passwordHash: hash,
-            name: ud.name,
-            role: ud.role,
-            isActive: true,
-            createdAt: ts(),
-            updatedAt: ts(),
-          })
-          .run();
-      } else {
-        db.insert(sqliteSchema.users)
-          .values({
-            id: userId,
-            organizationId: ids.orgId,
-            username: ud.username,
-            passwordHash,
-            name: ud.name,
-            role: ud.role,
-            isActive: true,
-            createdAt: ts(),
-            updatedAt: ts(),
-          })
-          .run();
-      }
+      await db.insert(schema.users).values({
+        id: userId,
+        organizationId: ids.orgId,
+        username: ud.username,
+        passwordHash,
+        name: ud.name,
+        role: ud.role,
+        isActive: true,
+        createdAt: ts(),
+        updatedAt: ts(),
+      });
     }
   }
 
@@ -302,31 +272,27 @@ export async function seedDemo(
   for (const [username, fields] of Object.entries(candidateFieldValues)) {
     const userId = ids.users[username];
     if (!userId) continue;
-    const existing = db
+    const existing = await db
       .select()
-      .from(sqliteSchema.candidateProfiles)
+      .from(schema.candidateProfiles)
       .where(
         and(
-          eq(sqliteSchema.candidateProfiles.organizationId, ids.orgId),
-          eq(sqliteSchema.candidateProfiles.userId, userId),
+          eq(schema.candidateProfiles.organizationId, ids.orgId),
+          eq(schema.candidateProfiles.userId, userId),
         ),
-      )
-      .get();
-    if (!existing) {
-      db.insert(sqliteSchema.candidateProfiles)
-        .values({
-          id: uuid("cp"),
-          organizationId: ids.orgId,
-          userId,
-          fields,
-          createdAt: ts(),
-          updatedAt: ts(),
-        })
-        .run();
+      );
+    if (existing.length === 0) {
+      await db.insert(schema.candidateProfiles).values({
+        id: uuid("cp"),
+        organizationId: ids.orgId,
+        userId,
+        fields,
+        createdAt: ts(),
+        updatedAt: ts(),
+      });
     }
   }
 
-  // Get candidate profile IDs (needed for enrollments)
   const candidateProfileIds: Record<string, string> = {};
   for (const username of [
     "candidate1",
@@ -336,18 +302,17 @@ export async function seedDemo(
   ]) {
     const userId = ids.users[username];
     if (!userId) continue;
-    const profile = db
+    const profile = await db
       .select()
-      .from(sqliteSchema.candidateProfiles)
+      .from(schema.candidateProfiles)
       .where(
         and(
-          eq(sqliteSchema.candidateProfiles.organizationId, ids.orgId),
-          eq(sqliteSchema.candidateProfiles.userId, userId),
+          eq(schema.candidateProfiles.organizationId, ids.orgId),
+          eq(schema.candidateProfiles.userId, userId),
         ),
-      )
-      .get();
-    if (profile) {
-      candidateProfileIds[username] = profile.id;
+      );
+    if (profile.length > 0) {
+      candidateProfileIds[username] = profile[0]!.id;
     }
   }
 
@@ -371,32 +336,29 @@ export async function seedDemo(
   ];
 
   for (const cd of courseDefs) {
-    const existing = db
+    const existing = await db
       .select()
-      .from(sqliteSchema.courses)
+      .from(schema.courses)
       .where(
         and(
-          eq(sqliteSchema.courses.organizationId, ids.orgId),
-          eq(sqliteSchema.courses.code, cd.code),
+          eq(schema.courses.organizationId, ids.orgId),
+          eq(schema.courses.code, cd.code),
         ),
-      )
-      .get();
-    if (existing) {
-      ids.courses[cd.code] = existing.id;
+      );
+    if (existing.length > 0) {
+      ids.courses[cd.code] = existing[0]!.id;
     } else {
       const courseId = uuid("course");
       ids.courses[cd.code] = courseId;
-      db.insert(sqliteSchema.courses)
-        .values({
-          id: courseId,
-          organizationId: ids.orgId,
-          name: cd.name,
-          code: cd.code,
-          description: cd.description,
-          createdAt: ts(),
-          updatedAt: ts(),
-        })
-        .run();
+      await db.insert(schema.courses).values({
+        id: courseId,
+        organizationId: ids.orgId,
+        name: cd.name,
+        code: cd.code,
+        description: cd.description,
+        createdAt: ts(),
+        updatedAt: ts(),
+      });
     }
   }
 
@@ -405,7 +367,6 @@ export async function seedDemo(
   const skillCourseId = ids.courses["SKILL-201"]!;
 
   const questionDefs = [
-    // SAFETY-101 questions (6)
     {
       tag: "safety-sc1",
       courseId: safetyCourseId,
@@ -496,7 +457,6 @@ export async function seedDemo(
       tags: ["safety", "regulation"],
       gradingRule: makeGradingRule({ fillBlankMatchMode: "exact" }),
     },
-    // SKILL-201 questions (4)
     {
       tag: "skill-sc1",
       courseId: skillCourseId,
@@ -561,39 +521,36 @@ export async function seedDemo(
   ];
 
   for (const qd of questionDefs) {
-    const existing = db
+    const existing = await db
       .select()
-      .from(sqliteSchema.questions)
+      .from(schema.questions)
       .where(
         and(
-          eq(sqliteSchema.questions.organizationId, ids.orgId),
-          eq(sqliteSchema.questions.content, qd.content),
+          eq(schema.questions.organizationId, ids.orgId),
+          eq(schema.questions.content, qd.content),
         ),
-      )
-      .get();
-    if (existing) {
-      ids.questions[qd.tag] = existing.id;
+      );
+    if (existing.length > 0) {
+      ids.questions[qd.tag] = existing[0]!.id;
     } else {
       const qId = uuid("q");
       ids.questions[qd.tag] = qId;
-      db.insert(sqliteSchema.questions)
-        .values({
-          id: qId,
-          organizationId: ids.orgId,
-          courseId: qd.courseId,
-          type: qd.type,
-          content: qd.content,
-          options: qd.options,
-          standardAnswer: qd.standardAnswer,
-          attachments: [],
-          score: qd.score,
-          difficulty: qd.difficulty,
-          tags: qd.tags,
-          gradingRule: qd.gradingRule,
-          createdAt: ts(),
-          updatedAt: ts(),
-        })
-        .run();
+      await db.insert(schema.questions).values({
+        id: qId,
+        organizationId: ids.orgId,
+        courseId: qd.courseId,
+        type: qd.type,
+        content: qd.content,
+        options: qd.options,
+        standardAnswer: qd.standardAnswer,
+        attachments: [],
+        score: qd.score,
+        difficulty: qd.difficulty,
+        tags: qd.tags,
+        gradingRule: qd.gradingRule,
+        createdAt: ts(),
+        updatedAt: ts(),
+      });
     }
   }
 
@@ -604,15 +561,17 @@ export async function seedDemo(
     return id;
   }
 
-  function buildSnapshot(questionTags: string[]): QuestionSnapshot[] {
+  async function buildSnapshot(
+    questionTags: string[],
+  ): Promise<QuestionSnapshot[]> {
     const snapshots: QuestionSnapshot[] = [];
     for (let i = 0; i < questionTags.length; i++) {
       const tag = questionTags[i]!;
-      const q = db
+      const rows = await db
         .select()
-        .from(sqliteSchema.questions)
-        .where(eq(sqliteSchema.questions.id, qid(tag)))
-        .get();
+        .from(schema.questions)
+        .where(eq(schema.questions.id, qid(tag)));
+      const q = rows[0];
       if (!q) continue;
       snapshots.push({
         originalQuestionId: q.id,
@@ -657,33 +616,30 @@ export async function seedDemo(
     updatedAt: Date;
   };
 
-  function upsertExam(title: string, data: ExamInsert): string {
-    const existing = db
+  async function upsertExam(title: string, data: ExamInsert): Promise<string> {
+    const existing = await db
       .select()
-      .from(sqliteSchema.exams)
+      .from(schema.exams)
       .where(
         and(
-          eq(sqliteSchema.exams.organizationId, ids.orgId),
-          eq(sqliteSchema.exams.title, title),
+          eq(schema.exams.organizationId, ids.orgId),
+          eq(schema.exams.title, title),
         ),
-      )
-      .get();
-    if (existing) {
-      db.update(sqliteSchema.exams)
-        .set({ ...data, createdAt: existing.createdAt, updatedAt: ts() })
-        .where(eq(sqliteSchema.exams.id, existing.id))
-        .run();
-      return existing.id;
+      );
+    if (existing.length > 0) {
+      await db
+        .update(schema.exams)
+        .set({ ...data, createdAt: existing[0]!.createdAt, updatedAt: ts() })
+        .where(eq(schema.exams.id, existing[0]!.id));
+      return existing[0]!.id;
     }
     const id = uuid("exam");
-    db.insert(sqliteSchema.exams)
-      .values({
-        id,
-        organizationId: ids.orgId,
-        title,
-        ...data,
-      })
-      .run();
+    await db.insert(schema.exams).values({
+      id,
+      organizationId: ids.orgId,
+      title,
+      ...data,
+    });
     return id;
   }
 
@@ -691,7 +647,6 @@ export async function seedDemo(
   const HOUR = 3600_000;
   const DAY = 86400_000;
 
-  // Exam 1: 安全培训考核 A (open)
   const exam1Questions = [
     "safety-sc1",
     "safety-mc1",
@@ -700,9 +655,9 @@ export async function seedDemo(
     "safety-sc2",
     "safety-fb2",
   ];
-  const exam1Snapshot = buildSnapshot(exam1Questions);
+  const exam1Snapshot = await buildSnapshot(exam1Questions);
   const exam1TotalScore = snapshotTotalScore(exam1Snapshot);
-  const exam1Id = upsertExam("安全培训考核 A", {
+  const exam1Id = await upsertExam("安全培训考核 A", {
     description: "安全培训综合考核",
     courseId: safetyCourseId,
     status: "open",
@@ -724,19 +679,11 @@ export async function seedDemo(
   });
   ids.exams["open"] = exam1Id;
 
-  // Exam 2: 安全培训草稿考试 (draft)
   const exam2Questions = ["safety-sc1", "safety-tf1", "safety-sc2"];
-  const exam2Snapshot: QuestionSnapshot[] = [];
   const exam2QIds = exam2Questions.map((t) => qid(t));
-  const exam2TotalScore = exam2Questions.reduce((sum, tag) => {
-    const q = db
-      .select()
-      .from(sqliteSchema.questions)
-      .where(eq(sqliteSchema.questions.id, qid(tag)))
-      .get();
-    return sum + (q?.score ?? 0);
-  }, 0);
-  const exam2Id = upsertExam("安全培训草稿考试", {
+  const exam2Snapshot: QuestionSnapshot[] = await buildSnapshot(exam2Questions);
+  const exam2TotalScore = snapshotTotalScore(exam2Snapshot);
+  const exam2Id = await upsertExam("安全培训草稿考试", {
     description: "草稿状态测试",
     courseId: safetyCourseId,
     status: "draft",
@@ -758,11 +705,10 @@ export async function seedDemo(
   });
   ids.exams["draft"] = exam2Id;
 
-  // Exam 3: 安全培训已发布未开始 (published, future)
   const exam3Questions = ["safety-sc1", "safety-mc1", "safety-fb1"];
-  const exam3Snapshot = buildSnapshot(exam3Questions);
+  const exam3Snapshot = await buildSnapshot(exam3Questions);
   const exam3TotalScore = snapshotTotalScore(exam3Snapshot);
-  const exam3Id = upsertExam("安全培训已发布未开始", {
+  const exam3Id = await upsertExam("安全培训已发布未开始", {
     description: "已发布但考试尚未开始",
     courseId: safetyCourseId,
     status: "published",
@@ -784,11 +730,10 @@ export async function seedDemo(
   });
   ids.exams["published"] = exam3Id;
 
-  // Exam 4: 技能认证历史考试 (closed)
   const exam4Questions = ["skill-sc1", "skill-mc1", "skill-tf1", "skill-fb1"];
-  const exam4Snapshot = buildSnapshot(exam4Questions);
+  const exam4Snapshot = await buildSnapshot(exam4Questions);
   const exam4TotalScore = snapshotTotalScore(exam4Snapshot);
-  const exam4Id = upsertExam("技能认证历史考试", {
+  const exam4Id = await upsertExam("技能认证历史考试", {
     description: "已结束的技能认证考试",
     courseId: skillCourseId,
     status: "closed",
@@ -810,11 +755,10 @@ export async function seedDemo(
   });
   ids.exams["closed"] = exam4Id;
 
-  // Exam 5: 严格模式考试 (open, strict control flags)
   const exam5Questions = ["skill-sc1", "skill-tf1", "skill-fb1"];
-  const exam5Snapshot = buildSnapshot(exam5Questions);
+  const exam5Snapshot = await buildSnapshot(exam5Questions);
   const exam5TotalScore = snapshotTotalScore(exam5Snapshot);
-  const exam5Id = upsertExam("严格模式考试", {
+  const exam5Id = await upsertExam("严格模式考试", {
     description: "启用全部控制选项的考试",
     courseId: skillCourseId,
     status: "open",
@@ -837,7 +781,7 @@ export async function seedDemo(
   ids.exams["strict"] = exam5Id;
 
   // ── Enrollments ───────────────────────────────────────────────
-  function upsertEnrollment(
+  async function upsertEnrollment(
     examId: string,
     candidateProfileId: string,
     data: {
@@ -847,37 +791,34 @@ export async function seedDemo(
       finalPassed?: boolean;
       finalAttemptId?: string;
     },
-  ): string {
-    const existing = db
+  ): Promise<string> {
+    const existing = await db
       .select()
-      .from(sqliteSchema.examEnrollments)
+      .from(schema.examEnrollments)
       .where(
         and(
-          eq(sqliteSchema.examEnrollments.organizationId, ids.orgId),
-          eq(sqliteSchema.examEnrollments.examId, examId),
-          eq(sqliteSchema.examEnrollments.candidateId, candidateProfileId),
+          eq(schema.examEnrollments.organizationId, ids.orgId),
+          eq(schema.examEnrollments.examId, examId),
+          eq(schema.examEnrollments.candidateId, candidateProfileId),
         ),
-      )
-      .get();
-    if (existing) {
-      db.update(sqliteSchema.examEnrollments)
+      );
+    if (existing.length > 0) {
+      await db
+        .update(schema.examEnrollments)
         .set({ ...data, updatedAt: ts() })
-        .where(eq(sqliteSchema.examEnrollments.id, existing.id))
-        .run();
-      return existing.id;
+        .where(eq(schema.examEnrollments.id, existing[0]!.id));
+      return existing[0]!.id;
     }
     const id = uuid("enroll");
-    db.insert(sqliteSchema.examEnrollments)
-      .values({
-        id,
-        organizationId: ids.orgId,
-        examId,
-        candidateId: candidateProfileId,
-        ...data,
-        createdAt: ts(),
-        updatedAt: ts(),
-      })
-      .run();
+    await db.insert(schema.examEnrollments).values({
+      id,
+      organizationId: ids.orgId,
+      examId,
+      candidateId: candidateProfileId,
+      ...data,
+      createdAt: ts(),
+      updatedAt: ts(),
+    });
     return id;
   }
 
@@ -886,32 +827,29 @@ export async function seedDemo(
   const c3 = candidateProfileIds["candidate3"] ?? "";
   const c4 = candidateProfileIds["candidate4"] ?? "";
 
-  // Open exam enrollments
-  const enrollOpen1 = upsertEnrollment(exam1Id, c1, {
-    status: "started",
-    attemptCount: 1,
-  });
-  ids.enrollments["open-c1"] = enrollOpen1;
+  function buildGradingResult(
+    snapshot: QuestionSnapshot[],
+    answers: AnswerRecord[],
+    passingScore: number,
+  ): {
+    gradingResult: QuestionScoreResult[];
+    totalScore: number;
+    passed: boolean;
+  } {
+    const result = gradeAnswers(
+      "seed-attempt",
+      snapshot,
+      answers,
+      passingScore,
+      ts(),
+    );
+    return {
+      gradingResult: result.questionResults,
+      totalScore: result.totalScore,
+      passed: result.passed,
+    };
+  }
 
-  const enrollOpen2 = upsertEnrollment(exam1Id, c2, {
-    status: "assigned",
-    attemptCount: 0,
-  });
-  ids.enrollments["open-c2"] = enrollOpen2;
-
-  const enrollOpen3 = upsertEnrollment(exam1Id, c3, {
-    status: "started",
-    attemptCount: 1,
-  });
-  ids.enrollments["open-c3"] = enrollOpen3;
-
-  const enrollOpen4 = upsertEnrollment(exam1Id, c4, {
-    status: "completed",
-    attemptCount: 1,
-  });
-  ids.enrollments["open-c4"] = enrollOpen4;
-
-  // Pre-compute grading results for closed exam (needed for enrollment finalScore)
   const closedC1Attempt1Answers: AnswerRecord[] = exam4Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer:
@@ -1000,14 +938,36 @@ export async function seedDemo(
     15,
   );
 
-  // Compute finalScore for closed exam enrollments (highest strategy)
   const closedC1Highest = Math.max(
     closedC1Grading1.totalScore,
     closedC1Grading2.totalScore,
   );
 
-  // Closed exam enrollments (use actual graded scores)
-  const enrollClosed1 = upsertEnrollment(exam4Id, c1, {
+  const enrollOpen1 = await upsertEnrollment(exam1Id, c1, {
+    status: "started",
+    attemptCount: 1,
+  });
+  ids.enrollments["open-c1"] = enrollOpen1;
+
+  const enrollOpen2 = await upsertEnrollment(exam1Id, c2, {
+    status: "assigned",
+    attemptCount: 0,
+  });
+  ids.enrollments["open-c2"] = enrollOpen2;
+
+  const enrollOpen3 = await upsertEnrollment(exam1Id, c3, {
+    status: "started",
+    attemptCount: 1,
+  });
+  ids.enrollments["open-c3"] = enrollOpen3;
+
+  const enrollOpen4 = await upsertEnrollment(exam1Id, c4, {
+    status: "completed",
+    attemptCount: 1,
+  });
+  ids.enrollments["open-c4"] = enrollOpen4;
+
+  const enrollClosed1 = await upsertEnrollment(exam4Id, c1, {
     status: "completed",
     attemptCount: 2,
     finalScore: closedC1Highest,
@@ -1015,7 +975,7 @@ export async function seedDemo(
   });
   ids.enrollments["closed-c1"] = enrollClosed1;
 
-  const enrollClosed2 = upsertEnrollment(exam4Id, c2, {
+  const enrollClosed2 = await upsertEnrollment(exam4Id, c2, {
     status: "completed",
     attemptCount: 1,
     finalScore: closedC2Grading.totalScore,
@@ -1023,7 +983,7 @@ export async function seedDemo(
   });
   ids.enrollments["closed-c2"] = enrollClosed2;
 
-  const enrollClosed3 = upsertEnrollment(exam4Id, c3, {
+  const enrollClosed3 = await upsertEnrollment(exam4Id, c3, {
     status: "completed",
     attemptCount: 1,
     finalScore: closedC3Grading.totalScore,
@@ -1031,7 +991,7 @@ export async function seedDemo(
   });
   ids.enrollments["closed-c3"] = enrollClosed3;
 
-  const enrollClosed4 = upsertEnrollment(exam4Id, c4, {
+  const enrollClosed4 = await upsertEnrollment(exam4Id, c4, {
     status: "completed",
     attemptCount: 1,
     finalScore: closedC4Grading.totalScore,
@@ -1039,15 +999,14 @@ export async function seedDemo(
   });
   ids.enrollments["closed-c4"] = enrollClosed4;
 
-  // Strict exam enrollment
-  const enrollStrict1 = upsertEnrollment(exam5Id, c1, {
+  const enrollStrict1 = await upsertEnrollment(exam5Id, c1, {
     status: "assigned",
     attemptCount: 0,
   });
   ids.enrollments["strict-c1"] = enrollStrict1;
 
   // ── Attempts ──────────────────────────────────────────────────
-  function upsertAttempt(
+  async function upsertAttempt(
     enrollmentId: string,
     candidateProfileId: string,
     examId: string,
@@ -1065,68 +1024,40 @@ export async function seedDemo(
       gradedAt?: Date;
       lastActivityAt?: Date;
     },
-  ): string {
-    const existing = db
+  ): Promise<string> {
+    const existing = await db
       .select()
-      .from(sqliteSchema.examAttempts)
+      .from(schema.examAttempts)
       .where(
         and(
-          eq(sqliteSchema.examAttempts.organizationId, ids.orgId),
-          eq(sqliteSchema.examAttempts.enrollmentId, enrollmentId),
-          eq(sqliteSchema.examAttempts.attemptNo, attemptNo),
+          eq(schema.examAttempts.organizationId, ids.orgId),
+          eq(schema.examAttempts.enrollmentId, enrollmentId),
+          eq(schema.examAttempts.attemptNo, attemptNo),
         ),
-      )
-      .get();
-    if (existing) {
-      db.update(sqliteSchema.examAttempts)
+      );
+    if (existing.length > 0) {
+      await db
+        .update(schema.examAttempts)
         .set({ ...data, updatedAt: ts() })
-        .where(eq(sqliteSchema.examAttempts.id, existing.id))
-        .run();
-      return existing.id;
+        .where(eq(schema.examAttempts.id, existing[0]!.id));
+      return existing[0]!.id;
     }
     const id = uuid("attempt");
-    db.insert(sqliteSchema.examAttempts)
-      .values({
-        id,
-        organizationId: ids.orgId,
-        examId,
-        enrollmentId,
-        candidateId: candidateProfileId,
-        attemptNo,
-        ...data,
-        createdAt: ts(),
-        updatedAt: ts(),
-      })
-      .run();
+    await db.insert(schema.examAttempts).values({
+      id,
+      organizationId: ids.orgId,
+      examId,
+      enrollmentId,
+      candidateId: candidateProfileId,
+      attemptNo,
+      ...data,
+      createdAt: ts(),
+      updatedAt: ts(),
+    });
     return id;
   }
 
-  // Helper: build grading result for a set of questions + answers
-  function buildGradingResult(
-    snapshot: QuestionSnapshot[],
-    answers: AnswerRecord[],
-    passingScore: number,
-  ): {
-    gradingResult: QuestionScoreResult[];
-    totalScore: number;
-    passed: boolean;
-  } {
-    const result = gradeAnswers(
-      "seed-attempt",
-      snapshot,
-      answers,
-      passingScore,
-      ts(),
-    );
-    return {
-      gradingResult: result.questionResults,
-      totalScore: result.totalScore,
-      passed: result.passed,
-    };
-  }
-
-  // --- Open exam: candidate1 in_progress ---
-  const openAttempt1Id = upsertAttempt(enrollOpen1, c1, exam1Id, 1, {
+  const openAttempt1Id = await upsertAttempt(enrollOpen1, c1, exam1Id, 1, {
     status: "in_progress",
     questionSnapshot: exam1Snapshot,
     answers: [
@@ -1149,8 +1080,7 @@ export async function seedDemo(
   });
   ids.attempts["open-c1-inprogress"] = openAttempt1Id;
 
-  // --- Open exam: candidate3 disrupted ---
-  const openAttempt3Id = upsertAttempt(enrollOpen3, c3, exam1Id, 1, {
+  const openAttempt3Id = await upsertAttempt(enrollOpen3, c3, exam1Id, 1, {
     status: "disrupted",
     questionSnapshot: exam1Snapshot,
     answers: [
@@ -1167,7 +1097,6 @@ export async function seedDemo(
   });
   ids.attempts["open-c3-disrupted"] = openAttempt3Id;
 
-  // --- Open exam: candidate4 graded ---
   const openC4Answers: AnswerRecord[] = exam1Snapshot.map((q, i) => ({
     questionId: q.originalQuestionId,
     answer:
@@ -1182,7 +1111,7 @@ export async function seedDemo(
     savedAt: ts(-25 * 60_000 + i * 60_000),
   }));
   const openC4Grading = buildGradingResult(exam1Snapshot, openC4Answers, 20);
-  const openAttempt4Id = upsertAttempt(enrollOpen4, c4, exam1Id, 1, {
+  const openAttempt4Id = await upsertAttempt(enrollOpen4, c4, exam1Id, 1, {
     status: "graded",
     questionSnapshot: exam1Snapshot,
     answers: openC4Answers,
@@ -1197,8 +1126,7 @@ export async function seedDemo(
   });
   ids.attempts["open-c4-graded"] = openAttempt4Id;
 
-  // --- Closed exam: candidate1 attempt 1 (graded, high score) ---
-  const closedAttempt1Id = upsertAttempt(enrollClosed1, c1, exam4Id, 1, {
+  const closedAttempt1Id = await upsertAttempt(enrollClosed1, c1, exam4Id, 1, {
     status: "graded",
     questionSnapshot: exam4Snapshot,
     answers: closedC1Attempt1Answers,
@@ -1213,8 +1141,7 @@ export async function seedDemo(
   });
   ids.attempts["closed-c1-attempt1"] = closedAttempt1Id;
 
-  // --- Closed exam: candidate1 attempt 2 (graded, lower score) ---
-  const closedAttempt2Id = upsertAttempt(enrollClosed1, c1, exam4Id, 2, {
+  const closedAttempt2Id = await upsertAttempt(enrollClosed1, c1, exam4Id, 2, {
     status: "graded",
     questionSnapshot: exam4Snapshot,
     answers: closedC1Attempt2Answers,
@@ -1229,8 +1156,7 @@ export async function seedDemo(
   });
   ids.attempts["closed-c1-attempt2"] = closedAttempt2Id;
 
-  // --- Closed exam: candidate2 (graded, failed) ---
-  const closedAttemptC2Id = upsertAttempt(enrollClosed2, c2, exam4Id, 1, {
+  const closedAttemptC2Id = await upsertAttempt(enrollClosed2, c2, exam4Id, 1, {
     status: "graded",
     questionSnapshot: exam4Snapshot,
     answers: closedC2Answers,
@@ -1245,8 +1171,7 @@ export async function seedDemo(
   });
   ids.attempts["closed-c2-graded"] = closedAttemptC2Id;
 
-  // --- Closed exam: candidate3 (graded, borderline) ---
-  const closedAttemptC3Id = upsertAttempt(enrollClosed3, c3, exam4Id, 1, {
+  const closedAttemptC3Id = await upsertAttempt(enrollClosed3, c3, exam4Id, 1, {
     status: "graded",
     questionSnapshot: exam4Snapshot,
     answers: closedC3Answers,
@@ -1261,8 +1186,7 @@ export async function seedDemo(
   });
   ids.attempts["closed-c3-graded"] = closedAttemptC3Id;
 
-  // --- Closed exam: candidate4 (graded, full score) ---
-  const closedAttemptC4Id = upsertAttempt(enrollClosed4, c4, exam4Id, 1, {
+  const closedAttemptC4Id = await upsertAttempt(enrollClosed4, c4, exam4Id, 1, {
     status: "graded",
     questionSnapshot: exam4Snapshot,
     answers: closedC4Answers,

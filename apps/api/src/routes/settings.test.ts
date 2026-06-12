@@ -10,7 +10,7 @@ describe("settings routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("GET /api/settings/branding returns branding", async () => {

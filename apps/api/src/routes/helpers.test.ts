@@ -13,6 +13,7 @@ import {
   publishExamViaApi,
   submitExamAsCandidate,
   exportResultsCsvAsAdmin,
+  uniquePrefix,
 } from "./testHelpers.js";
 
 describe("test helpers — full lifecycle via helpers", () => {
@@ -32,7 +33,7 @@ describe("test helpers — full lifecycle via helpers", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("createExamViaApi creates a draft exam with course and question", async () => {
@@ -69,7 +70,7 @@ describe("test helpers — full lifecycle via helpers", () => {
       ctx.adminToken,
       ctx.org.id,
       examId,
-      "helper-candidate-1",
+      "helper-cand-" + uniquePrefix(),
     );
 
     expect(result.id).toBeDefined();

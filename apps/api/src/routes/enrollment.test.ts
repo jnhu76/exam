@@ -3,7 +3,7 @@ import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 
 describe("exam enrollment routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -23,7 +23,11 @@ describe("exam enrollment routes", () => {
     const courseRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Enrollment Course", code: "ENR101", description: "" },
+      payload: {
+        name: "Enrollment Course",
+        code: `ENR-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     courseId = courseRes.json().id;
@@ -46,7 +50,7 @@ describe("exam enrollment routes", () => {
       method: "POST",
       url: "/api/candidates",
       payload: {
-        username: "enroll-candidate",
+        username: `enroll-cand-${uniquePrefix()}`,
         password: "password123",
         name: "Enroll Candidate",
         fields: {},
@@ -80,7 +84,7 @@ describe("exam enrollment routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("POST /api/exams/:examId/enrollments adds a candidate", async () => {

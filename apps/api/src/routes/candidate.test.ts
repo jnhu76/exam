@@ -10,7 +10,7 @@ describe("candidate routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("GET /api/candidates returns paginated list", async () => {

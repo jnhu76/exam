@@ -11,7 +11,7 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import type { AnyDatabase } from "@exam/db/src/types.js";
+import type { Database } from "@exam/db/src/types.js";
 import {
   archiveExam,
   publishExam,
@@ -48,7 +48,7 @@ function toExamResponse(exam: Exam) {
 }
 
 async function getExamParticipants(
-  db: AnyDatabase,
+  db: Database,
   ctx: RequestContext,
   examId: string,
   preFetchedEnrollments?: Awaited<

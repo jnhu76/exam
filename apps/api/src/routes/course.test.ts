@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import courseRoutes from "./course.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 
 describe("course routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -10,7 +10,7 @@ describe("course routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("GET /api/courses returns paginated list", async () => {
@@ -27,12 +27,13 @@ describe("course routes", () => {
   });
 
   it("POST /api/courses creates a course", async () => {
+    const code = `TC-${uniquePrefix()}`;
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
       payload: {
         name: "Test Course",
-        code: "TC101",
+        code,
         description: "A test course",
       },
       cookies: { "auth-token": ctx.adminToken },
@@ -40,7 +41,7 @@ describe("course routes", () => {
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.name).toBe("Test Course");
-    expect(body.code).toBe("TC101");
+    expect(body.code).toBe(code);
     expect(body).toHaveProperty("id");
     expect(body).toHaveProperty("organizationId");
   });
@@ -49,7 +50,11 @@ describe("course routes", () => {
     const createRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Detail Course", code: "DC101", description: "detail" },
+      payload: {
+        name: "Detail Course",
+        code: `DC-${uniquePrefix()}`,
+        description: "detail",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     const created = createRes.json();
@@ -67,7 +72,11 @@ describe("course routes", () => {
     const createRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Update Course", code: "UC101", description: "" },
+      payload: {
+        name: "Update Course",
+        code: `UC-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     const created = createRes.json();
@@ -86,7 +95,11 @@ describe("course routes", () => {
     const createRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Delete Course", code: "DEL101", description: "" },
+      payload: {
+        name: "Delete Course",
+        code: `DEL-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     const created = createRes.json();
@@ -112,26 +125,29 @@ describe("course routes", () => {
     const candidateRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Forbidden", code: "F101", description: "" },
-      cookies: { "auth-token": ctx.teacherToken },
+      payload: {
+        name: "Forbidden",
+        code: `F-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.candidateToken },
     });
-    // Teacher should be allowed (has MANAGE_COURSES permission concept)
-    // but Candidate should not - we test with teacher for now
-    expect([200, 201, 403]).toContain(candidateRes.statusCode);
+    expect(candidateRes.statusCode).toBe(403);
   });
 
   it("POST /api/courses rejects duplicate code within org", async () => {
+    const dupCode = `DUP-${uniquePrefix()}`;
     await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Dup Course", code: "DUP101", description: "" },
+      payload: { name: "Dup Course", code: dupCode, description: "" },
       cookies: { "auth-token": ctx.adminToken },
     });
 
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Dup Course 2", code: "DUP101", description: "" },
+      payload: { name: "Dup Course 2", code: dupCode, description: "" },
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(409);

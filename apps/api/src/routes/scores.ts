@@ -30,14 +30,21 @@ function normalizeScoreListQuery(query: unknown) {
   }
 
   const raw = query as Record<string, unknown>;
-  return {
-    page: normalizeScalarQueryValue(raw.page),
-    pageSize: normalizeScalarQueryValue(raw.pageSize),
-    passFilter: normalizeScalarQueryValue(raw.passFilter),
-    search: normalizeScalarQueryValue(raw.search),
-    sortBy: normalizeScalarQueryValue(raw.sortBy),
-    sortOrder: normalizeScalarQueryValue(raw.sortOrder),
-  };
+  const result: Record<string, unknown> = {};
+  for (const key of [
+    "page",
+    "pageSize",
+    "passFilter",
+    "search",
+    "sortBy",
+    "sortOrder",
+  ] as const) {
+    const val = normalizeScalarQueryValue(raw[key]);
+    if (val !== undefined) {
+      result[key] = val;
+    }
+  }
+  return result;
 }
 
 async function findVisibleAttempt(
@@ -120,9 +127,8 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const examId = (request.params as any).id;
-      const parsedQuery = ScoreListQuerySchema.safeParse(
-        normalizeScoreListQuery(request.query),
-      );
+      const normalized = normalizeScoreListQuery(request.query);
+      const parsedQuery = ScoreListQuerySchema.safeParse(normalized);
       if (!parsedQuery.success) {
         return reply.code(400).send(formatZodError(parsedQuery.error));
       }
@@ -150,7 +156,8 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
       const offset = (page - 1) * pageSize;
-      const [results, total, stats] = await Promise.all([
+      const statsResult = await attemptRepo.getGradedStats(ctx, examId);
+      const [results, total] = await Promise.all([
         attemptRepo.listGradedByExam(ctx, examId, {
           passFilter,
           sortBy,
@@ -159,7 +166,6 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
           offset,
         }),
         attemptRepo.countGradedByExam(ctx, examId, { passFilter }),
-        attemptRepo.getGradedStats(ctx, examId),
       ]);
 
       const items = results.map(
@@ -170,20 +176,21 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
           candidateFields: candidateProfile.fields,
           examId: attempt.examId,
           examTitle: exam.title,
-          score: attempt.score,
+          score: Number(attempt.score),
           passed: attempt.passed,
-          attemptNo: attempt.attemptNo,
+          attemptNo: Number(attempt.attemptNo),
           submittedAt: attempt.submittedAt?.toISOString(),
         }),
       );
 
-      return ScoreListResponseSchema.parse({
+      const responsePayload = {
         items,
-        stats,
+        stats: statsResult,
         total,
         page,
         pageSize,
-      });
+      };
+      return ScoreListResponseSchema.parse(responsePayload);
     },
   );
 

@@ -6,6 +6,7 @@ import {
   publishExamViaApi,
   submitExamAsCandidate,
   exportResultsCsvAsAdmin,
+  uniquePrefix,
 } from "./testHelpers.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import authRoutes from "./auth.js";
@@ -46,7 +47,7 @@ describe("CSV export integration", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("returns 404 for non-existent exam", async () => {
@@ -84,7 +85,7 @@ describe("CSV export integration", () => {
     const candidate = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      "export-candidate",
+      `export-cand-${uniquePrefix()}`,
       ctx.org.id,
     );
     const res = await ctx.app.inject({
@@ -114,12 +115,13 @@ describe("CSV export integration", () => {
       totalScore: 100,
     });
     await publishExamViaApi(ctx.app, ctx.adminToken, gradedExamId);
+    const gradedUsername = `graded-export-cand-${uniquePrefix()}`;
     await submitExamAsCandidate(
       ctx.app,
       ctx.adminToken,
       ctx.org.id,
       gradedExamId,
-      "graded-export-candidate",
+      gradedUsername,
     );
     const { body } = await exportResultsCsvAsAdmin(
       ctx.app,
@@ -128,7 +130,7 @@ describe("CSV export integration", () => {
     );
     expect(body).toContain("100");
     expect(body).toContain("及格");
-    expect(body).toContain("Candidate graded-export-candidate");
+    expect(body).toContain(`Candidate ${gradedUsername}`);
   });
 
   it("CSV escaping handles commas and quotes in candidate name", async () => {
@@ -136,7 +138,7 @@ describe("CSV export integration", () => {
       method: "POST",
       url: "/api/candidates",
       payload: {
-        username: "csv-escape-user",
+        username: `csv-escape-user-${uniquePrefix()}`,
         password: "password123",
         name: 'Zhang, "San"',
         fields: {},
@@ -241,12 +243,13 @@ describe("CSV export integration", () => {
     await publishExamViaApi(ctx.app, ctx.adminToken, examAId);
     await publishExamViaApi(ctx.app, ctx.adminToken, examBId);
 
+    const filterUsername = `filter-exam-a-cand-${uniquePrefix()}`;
     await submitExamAsCandidate(
       ctx.app,
       ctx.adminToken,
       ctx.org.id,
       examAId,
-      "filter-exam-a-candidate",
+      filterUsername,
     );
 
     const exportB = await exportResultsCsvAsAdmin(
@@ -264,6 +267,6 @@ describe("CSV export integration", () => {
     );
     const linesA = exportA.body.split("\n");
     expect(linesA.length).toBeGreaterThan(1);
-    expect(exportA.body).toContain("Candidate filter-exam-a-candidate");
+    expect(exportA.body).toContain(`Candidate ${filterUsername}`);
   });
 });

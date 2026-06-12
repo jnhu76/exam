@@ -1,26 +1,25 @@
 import { createDatabase } from "@exam/db/src/database.js";
-import { migrateSqlite } from "@exam/db/src/sqlite.js";
+import { migratePostgres } from "@exam/db/src/postgres.js";
 import { seedDemo } from "@exam/db/src/demo-seed.js";
 import { verifyDemoSeed } from "@exam/db/src/demo-seed-verify.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 
-const databaseUrl = process.env.DATABASE_URL ?? "sqlite:./dev.db";
-const conn = createDatabase(databaseUrl);
-if (conn.kind !== "sqlite") {
-  throw new Error("Demo seed only supports SQLite databases");
-}
-migrateSqlite(conn.db);
+const conn = await createDatabase();
+
+process.stdout.write("Running migrations...\n");
+await migratePostgres(conn.db);
 
 process.stdout.write("Seeding demo data...\n");
 const ids = await seedDemo(conn.db, hashPassword);
 
 process.stdout.write("\nVerifying demo data...\n");
-const errors = verifyDemoSeed(conn.db, ids);
+const errors = await verifyDemoSeed(conn.db, ids);
 if (errors.length > 0) {
   process.stderr.write(`\nVerification FAILED (${errors.length} errors):\n`);
   for (const e of errors) {
     process.stderr.write(`  FAIL: ${e}\n`);
   }
+  await conn.sql.end();
   process.exit(1);
 }
 
@@ -42,3 +41,5 @@ process.stdout.write(
 process.stdout.write(
   "  Candidate:   candidate4 / candidate123  (graded result)\n",
 );
+
+await conn.sql.end();

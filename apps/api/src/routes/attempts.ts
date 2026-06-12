@@ -17,6 +17,8 @@ import type {
   ExamAttempt,
   Exam,
   ExamEnrollment,
+  EnrollmentStatus,
+  AttemptStatus,
 } from "@exam/domain";
 import type { AnswerRecord } from "@exam/domain";
 import { NotFoundError, ValidationError } from "@exam/domain";
@@ -294,7 +296,7 @@ function normalizeEnrollment(
     organizationId: enrollment.organizationId,
     examId: enrollment.examId,
     candidateId: enrollment.candidateId,
-    status: enrollment.status,
+    status: enrollment.status as EnrollmentStatus,
     attemptCount: enrollment.attemptCount,
     createdAt: enrollment.createdAt,
     updatedAt: enrollment.updatedAt,
@@ -637,7 +639,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
         const saveResult = processSaveAnswer(
           {
-            attemptStatus: lockedAttempt.status,
+            attemptStatus: lockedAttempt.status as AttemptStatus,
             answers: lockedAttempt.answers,
             clientSeqMap,
           },

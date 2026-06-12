@@ -9,6 +9,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";
 import { ValidationError } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
@@ -66,10 +67,11 @@ function findByIdentity(
 ) {
   const uniqueField = configuredFields.find((field) => field.unique);
   if (!uniqueField) return null;
+  const value = fields[uniqueField.name];
+  if (value === undefined || value === null || value === "") return null;
   return (
     candidates.find(
-      (candidate) =>
-        candidate.fields[uniqueField.name] === fields[uniqueField.name],
+      (candidate) => candidate.fields[uniqueField.name] === value,
     ) ?? null
   );
 }
@@ -124,7 +126,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateCandidateRequestSchema.parse(request.body);
-      const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
         ctx,
@@ -141,18 +142,51 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const passwordHash = await hashPassword(data.password);
-      const user = await userRepo.create(ctx, {
-        username: data.username,
-        passwordHash,
-        name: data.name,
-        role: "Candidate" as const,
-        isActive: true,
-      });
-
-      const candidate = await candidateRepo.create(ctx, {
-        userId: user.id,
-        fields: data.fields,
-      });
+      let candidate;
+      try {
+        candidate = await executeInTransaction(fastify.db, async (tx) => {
+          const txUserRepo = createUserRepo(tx);
+          const txCandidateRepo = createCandidateRepo(tx);
+          const user = await txUserRepo.create(ctx, {
+            username: data.username,
+            passwordHash,
+            name: data.name,
+            role: "Candidate" as const,
+            isActive: true,
+          });
+          return txCandidateRepo.create(ctx, {
+            userId: user.id,
+            fields: data.fields,
+          });
+        });
+      } catch (err: unknown) {
+        if (
+          err &&
+          typeof err === "object" &&
+          (err as Record<string, unknown>).code === "23505"
+        ) {
+          const constraint = String(
+            (err as Record<string, unknown>).constraint ?? "",
+          );
+          if (constraint === "users_org_username_unique") {
+            return reply.code(409).send({
+              error: { code: "DUPLICATE", message: "Username already exists" },
+            });
+          }
+          if (constraint === "candidate_profiles_org_user_unique") {
+            return reply.code(409).send({
+              error: {
+                code: "DUPLICATE",
+                message: "Candidate profile already exists for this user",
+              },
+            });
+          }
+          return reply.code(409).send({
+            error: { code: "DUPLICATE", message: "Duplicate field value" },
+          });
+        }
+        throw err;
+      }
       recordAudit(
         fastify,
         request,

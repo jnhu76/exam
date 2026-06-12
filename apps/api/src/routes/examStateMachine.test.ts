@@ -40,7 +40,7 @@ describe("exam state machine transitions", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("draft exam can be updated", async () => {

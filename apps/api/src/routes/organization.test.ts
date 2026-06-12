@@ -10,7 +10,7 @@ describe("organization routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("GET /api/organizations returns list for SuperAdmin", async () => {

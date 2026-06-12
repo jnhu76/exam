@@ -90,19 +90,19 @@ describe("Smoke — auth flow", () => {
     await ctx.app.close();
   });
 
-  it("login with seed admin succeeds", async () => {
+  it("login with seed superadmin succeeds", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        username: "admin",
+        username: "superadmin",
         password: "admin123",
         organizationSlug: "default",
       },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.username).toBe("admin");
+    expect(body.username).toBe("superadmin");
     expect(body.role).toBe("SuperAdmin");
   });
 
@@ -111,7 +111,7 @@ describe("Smoke — auth flow", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        username: "admin",
+        username: "superadmin",
         password: "wrong",
         organizationSlug: "default",
       },

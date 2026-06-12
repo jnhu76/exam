@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 
 describe("exam routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -19,7 +19,11 @@ describe("exam routes", () => {
     const courseRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Exam Course", code: "EC101", description: "" },
+      payload: {
+        name: "Exam Course",
+        code: `EC-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     courseId = courseRes.json().id;
@@ -40,7 +44,7 @@ describe("exam routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("POST /api/exams creates a draft exam", async () => {

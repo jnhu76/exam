@@ -5,7 +5,14 @@ import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
 import attemptRoutes from "./attempts.js";
 import authRoutes from "./auth.js";
-import { buildTestApp, createCandidateViaApi } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createCandidateViaApi,
+  uniquePrefix,
+} from "./testHelpers.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { hashPassword } from "@exam/auth/src/password.js";
+import { randomUUID } from "node:crypto";
 
 describe("Phase 1.1 regression - critical path", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -14,6 +21,8 @@ describe("Phase 1.1 regression - critical path", () => {
   let examId: string;
   let candidateProfileId: string;
   let candidateToken: string;
+  let passwordTestUserId: string;
+  let passwordTestToken: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(async (fastify) => {
@@ -25,10 +34,46 @@ describe("Phase 1.1 regression - critical path", () => {
       await fastify.register(attemptRoutes);
     });
 
+    const pwUserId = randomUUID();
+    const pwHash = await hashPassword("pwtest123");
+    await ctx.db
+      .insert((await import("@exam/db/src/schema/pg.js")).schema.users)
+      .values({
+        id: pwUserId,
+        organizationId: ctx.org.id,
+        username: `pwtest-${uniquePrefix()}`,
+        passwordHash: pwHash,
+        name: "Password Test User",
+        role: "Teacher",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    const pwRows = await ctx.db
+      .select()
+      .from((await import("@exam/db/src/schema/pg.js")).schema.users)
+      .where(
+        (await import("drizzle-orm")).eq(
+          (await import("@exam/db/src/schema/pg.js")).schema.users.id,
+          pwUserId,
+        ),
+      );
+    passwordTestUserId = pwRows[0]!.id;
+    const { signJWT } = await import("@exam/auth/src/session.js");
+    passwordTestToken = signJWT({
+      actorId: passwordTestUserId,
+      role: "Teacher",
+      organizationId: ctx.org.id,
+    });
+
     const courseRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Smoke Course", code: "SM101", description: "" },
+      payload: {
+        name: "Smoke Course",
+        code: `SM-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     courseId = courseRes.json().id;
@@ -66,7 +111,7 @@ describe("Phase 1.1 regression - critical path", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("publishes an exam", async () => {
@@ -83,7 +128,7 @@ describe("Phase 1.1 regression - critical path", () => {
     const candidate = await createCandidateViaApi(
       ctx.app,
       ctx.adminToken,
-      "smoke-candidate",
+      "smoke-candidate-" + uniquePrefix(),
       ctx.org.id,
     );
     candidateProfileId = candidate.candidateProfileId;
@@ -139,23 +184,32 @@ describe("Phase 1.1 regression - critical path", () => {
       method: "PATCH",
       url: "/api/auth/me/password",
       payload: {
-        currentPassword: "teacher123",
-        newPassword: "newteacher123",
+        currentPassword: "pwtest123",
+        newPassword: "newpwtest123",
       },
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": passwordTestToken },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
   });
 
   it("login works with new password", async () => {
+    const pwUser = await ctx.db
+      .select()
+      .from((await import("@exam/db/src/schema/pg.js")).schema.users)
+      .where(
+        (await import("drizzle-orm")).eq(
+          (await import("@exam/db/src/schema/pg.js")).schema.users.id,
+          passwordTestUserId,
+        ),
+      );
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
       payload: {
         organizationSlug: "default",
-        username: "teacher",
-        password: "newteacher123",
+        username: pwUser[0]!.username,
+        password: "newpwtest123",
       },
     });
     expect(res.statusCode).toBe(200);

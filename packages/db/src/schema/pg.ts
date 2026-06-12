@@ -276,7 +276,7 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: createdAt(),
 });
 
-export const pgSchema = {
+export const schema = {
   organizations,
   organizationSettings,
   candidateFields,

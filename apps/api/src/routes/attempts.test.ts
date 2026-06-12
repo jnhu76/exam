@@ -1,12 +1,31 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import type { TestContext } from "./testHelpers.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
-import { sqliteSchema } from "@exam/db/src/schema/sqlite.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { scanDatabaseForDisruptedAttempts } from "../plugins/heartbeat.js";
+
+async function ensureCandidateProfile(ctx: TestContext): Promise<string> {
+  const existing = await ctx.db
+    .select({ id: schema.candidateProfiles.id })
+    .from(schema.candidateProfiles)
+    .where(eq(schema.candidateProfiles.userId, ctx.candidate.id));
+  if (existing[0]) return existing[0].id;
+  const id = crypto.randomUUID();
+  await ctx.db.insert(schema.candidateProfiles).values({
+    id,
+    organizationId: ctx.org.id,
+    userId: ctx.candidate.id,
+    fields: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  return id;
+}
 
 describe("attempt routes", () => {
   let ctx: TestContext;
@@ -27,80 +46,61 @@ describe("attempt routes", () => {
     fillBlankQuestionId = crypto.randomUUID();
     candidateProfileId = crypto.randomUUID();
 
-    ctx.db
-      .insert(sqliteSchema.courses)
-      .values({
-        id: courseId,
-        organizationId: ctx.org.id,
-        name: "Test Course",
-        code: "TC101",
-        description: "Test",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "Test Course",
+      code: `TC-${uniquePrefix()}`,
+      description: "Test",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    ctx.db
-      .insert(sqliteSchema.questions)
-      .values({
-        id: questionId,
-        organizationId: ctx.org.id,
-        courseId,
-        type: "single_choice",
-        content: "What is 1+1?",
-        options: [
-          { id: "a", content: "1" },
-          { id: "b", content: "2" },
-          { id: "c", content: "3" },
-        ],
-        standardAnswer: "b",
-        attachments: [],
-        score: 100,
-        difficulty: 1,
-        tags: [],
-        gradingRule: {
-          multiSelectScoring: "all_correct_full",
-          fillBlankMatchMode: "exact",
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    await ctx.db.insert(schema.questions).values({
+      id: questionId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "single_choice",
+      content: "What is 1+1?",
+      options: [
+        { id: "a", content: "1" },
+        { id: "b", content: "2" },
+        { id: "c", content: "3" },
+      ],
+      standardAnswer: "b",
+      attachments: [],
+      score: 100,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    ctx.db
-      .insert(sqliteSchema.questions)
-      .values({
-        id: fillBlankQuestionId,
-        organizationId: ctx.org.id,
-        courseId,
-        type: "fill_blank",
-        content: "安全出口标识的颜色是____色",
-        options: [],
-        standardAnswer: "绿",
-        attachments: [],
-        score: 100,
-        difficulty: 1,
-        tags: [],
-        gradingRule: {
-          multiSelectScoring: "all_correct_full",
-          fillBlankMatchMode: "exact",
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    await ctx.db.insert(schema.questions).values({
+      id: fillBlankQuestionId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "fill_blank",
+      content: "安全出口标识的颜色是____色",
+      options: [],
+      standardAnswer: "绿",
+      attachments: [],
+      score: 100,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
-    ctx.db
-      .insert(sqliteSchema.candidateProfiles)
-      .values({
-        id: candidateProfileId,
-        organizationId: ctx.org.id,
-        userId: ctx.candidate.id,
-        fields: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .run();
+    candidateProfileId = await ensureCandidateProfile(ctx);
 
     const res = await ctx.app.inject({
       method: "POST",
@@ -150,7 +150,7 @@ describe("attempt routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   describe("POST /attempts/:examId/start", () => {
@@ -436,31 +436,25 @@ describe("attempt routes", () => {
 
     it("does not expose another candidate's attempt", async () => {
       const userId = crypto.randomUUID();
-      ctx.db
-        .insert(sqliteSchema.users)
-        .values({
-          id: userId,
-          organizationId: ctx.org.id,
-          username: `candidate-${userId}`,
-          passwordHash: "unused",
-          name: "Other Candidate",
-          role: "Candidate",
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .run();
-      ctx.db
-        .insert(sqliteSchema.candidateProfiles)
-        .values({
-          id: crypto.randomUUID(),
-          organizationId: ctx.org.id,
-          userId,
-          fields: {},
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .run();
+      await ctx.db.insert(schema.users).values({
+        id: userId,
+        organizationId: ctx.org.id,
+        username: `candidate-${userId}`,
+        passwordHash: "unused",
+        name: "Other Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
       const token = signJWT({
         actorId: userId,
         role: "Candidate",

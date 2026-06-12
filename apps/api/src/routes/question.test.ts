@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import questionRoutes from "./question.js";
 import courseRoutes from "./course.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 
 describe("question routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -16,14 +16,18 @@ describe("question routes", () => {
     const courseRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",
-      payload: { name: "Q Course", code: "QC101", description: "" },
+      payload: {
+        name: "Q Course",
+        code: `QC-${uniquePrefix()}`,
+        description: "",
+      },
       cookies: { "auth-token": ctx.adminToken },
     });
     courseId = courseRes.json().id;
   });
 
   afterAll(async () => {
-    await ctx.app.close();
+    await ctx.cleanup();
   });
 
   it("POST /api/questions creates a single_choice question", async () => {

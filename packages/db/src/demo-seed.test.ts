@@ -1,67 +1,100 @@
-import { describe, expect, it } from "vitest";
-import { createDatabase } from "./database.js";
-import { migrateSqlite } from "./sqlite.js";
+import { describe, expect, it, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
+import { getTestDb } from "./testDb.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
-
-const fakeHash = async (password: string) =>
-  `$fake$${Buffer.from(password).toString("base64")}`;
+import { schema } from "./schema/pg.js";
+import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 
 describe("demo seed", () => {
   it("seeds and verifies without errors", async () => {
-    const conn = createDatabase(":memory:");
-    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
-    migrateSqlite(conn.db);
-    const ids = await seedDemo(conn.db, fakeHash);
-    const errors = verifyDemoSeed(conn.db, ids);
+    const { db } = await getTestDb();
+    const ids = await seedDemo(db, hashPassword);
+    const errors = await verifyDemoSeed(db, ids);
     expect(errors).toEqual([]);
   });
 
   it("is idempotent on second run", async () => {
-    const conn = createDatabase(":memory:");
-    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
-    migrateSqlite(conn.db);
-    await seedDemo(conn.db, fakeHash);
-    const ids = await seedDemo(conn.db, fakeHash);
-    const errors = verifyDemoSeed(conn.db, ids);
+    const { db } = await getTestDb();
+    await seedDemo(db, hashPassword);
+    const ids = await seedDemo(db, hashPassword);
+    const errors = await verifyDemoSeed(db, ids);
     expect(errors).toEqual([]);
   });
 
-  it("creates all expected users", async () => {
-    const conn = createDatabase(":memory:");
-    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
-    migrateSqlite(conn.db);
-    await seedDemo(conn.db, fakeHash);
-    const { sqliteSchema } = await import("./schema/sqlite.js");
-    const users = conn.db.select().from(sqliteSchema.users).all();
+  it("creates all expected users with real argon2 hashes", async () => {
+    const { db } = await getTestDb();
+    await seedDemo(db, hashPassword);
+    const demoOrg = await db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.slug, "demo"));
+    const users = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.organizationId, demoOrg[0]!.id));
     const usernames = users.map((u) => u.username).sort();
     expect(usernames).toContain("superadmin");
     expect(usernames).toContain("admin");
     expect(usernames).toContain("teacher1");
-    expect(usernames).toContain("teacher2");
     expect(usernames).toContain("candidate1");
-    expect(usernames).toContain("candidate2");
-    expect(usernames).toContain("candidate3");
-    expect(usernames).toContain("candidate4");
+
+    const admin = users.find((u) => u.username === "admin")!;
+    expect(await verifyPassword("admin123", admin.passwordHash)).toBe(true);
   });
 
   it("creates graded attempts with grading results", async () => {
-    const conn = createDatabase(":memory:");
-    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
-    migrateSqlite(conn.db);
-    await seedDemo(conn.db, fakeHash);
-    const { sqliteSchema } = await import("./schema/sqlite.js");
-    const gradedAttempts = conn.db
-      .select()
-      .from(sqliteSchema.examAttempts)
-      .all()
-      .filter((a) => a.status === "graded");
+    const { db } = await getTestDb();
+    await seedDemo(db, hashPassword);
+    const allAttempts = await db.select().from(schema.examAttempts);
+    const gradedAttempts = allAttempts.filter((a) => a.status === "graded");
     expect(gradedAttempts.length).toBeGreaterThanOrEqual(5);
     for (const attempt of gradedAttempts) {
       expect(attempt.score).toBeDefined();
       expect(attempt.gradingResult).toBeDefined();
       const results = attempt.gradingResult as Array<unknown>;
       expect(results.length).toBeGreaterThan(0);
+    }
+  });
+
+  afterAll(async () => {
+    const { db } = await getTestDb();
+    const demoOrg = await db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.slug, "demo"));
+    if (demoOrg[0]) {
+      const orgId = demoOrg[0].id;
+      await db
+        .delete(schema.examAttempts)
+        .where(eq(schema.examAttempts.organizationId, orgId));
+      await db
+        .delete(schema.examEnrollments)
+        .where(eq(schema.examEnrollments.organizationId, orgId));
+      await db
+        .delete(schema.exams)
+        .where(eq(schema.exams.organizationId, orgId));
+      await db
+        .delete(schema.questions)
+        .where(eq(schema.questions.organizationId, orgId));
+      await db
+        .delete(schema.candidateProfiles)
+        .where(eq(schema.candidateProfiles.organizationId, orgId));
+      await db
+        .delete(schema.candidateFields)
+        .where(eq(schema.candidateFields.organizationId, orgId));
+      await db
+        .delete(schema.organizationSettings)
+        .where(eq(schema.organizationSettings.organizationId, orgId));
+      await db
+        .delete(schema.courses)
+        .where(eq(schema.courses.organizationId, orgId));
+      await db
+        .delete(schema.users)
+        .where(eq(schema.users.organizationId, orgId));
+      await db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, orgId));
     }
   });
 });

@@ -2,14 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { NotFoundError, ValidationError } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
-import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
-import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
-import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update";
-import type { PgUpdateSetSource } from "drizzle-orm/pg-core/query-builders/update";
-import type { SqliteDatabase } from "../types.js";
-import type { PostgresDatabase } from "../types.js";
-import type { AnyDatabase } from "../types.js";
-import { isSqlite } from "../types.js";
+import type { PgTable, TableConfig } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import type { Database } from "../types.js";
 import type {
   AuthLookupContext,
   PlatformContext,
@@ -44,68 +39,44 @@ export function now(): Date {
   return new Date();
 }
 
-type SQLiteTenantTable = AnySQLiteTable & {
-  id: AnySQLiteColumn;
-  organizationId: AnySQLiteColumn;
-  createdAt: AnySQLiteColumn;
-  updatedAt?: AnySQLiteColumn;
-};
-
-type PGTenantTable = PgTable & {
+type TenantTable = PgTable<TableConfig> & {
   id: AnyPgColumn;
   organizationId: AnyPgColumn;
   createdAt: AnyPgColumn;
   updatedAt?: AnyPgColumn;
 };
 
-export interface TenantTablePair {
-  sqlite: SQLiteTenantTable;
-  pg: PGTenantTable;
+export type { TenantTable };
+
+type PgDrizzleTable = PgTable<TableConfig>;
+
+function asDrizzleTable<T extends TenantTable>(t: T): PgDrizzleTable {
+  return t as PgDrizzleTable;
 }
 
-export function createAsyncTenantCrudRepo(
-  db: AnyDatabase,
-  tables: TenantTablePair,
+export function createAsyncTenantCrudRepo<T extends TenantTable>(
+  db: Database,
+  table: T,
 ) {
-  type SqliteSelect = (typeof tables.sqlite)["$inferSelect"];
-  type SqliteInsert = (typeof tables.sqlite)["$inferInsert"];
-  type PgInsert = (typeof tables.pg)["$inferInsert"];
-
-  type Select = SqliteSelect;
+  type Select = T["$inferSelect"];
+  type Insert = T["$inferInsert"];
   type ManagedColumn = "id" | "organizationId" | "createdAt" | "updatedAt";
-  type CreateInput = Omit<SqliteInsert, ManagedColumn>;
+  type CreateInput = Omit<Insert, ManagedColumn>;
   type UpdateInput = Partial<CreateInput>;
 
   const orgId = (ctx: TenantContext | RequestContext) =>
     resolveOrganizationId(ctx);
 
+  const tbl = asDrizzleTable(table);
+
   async function findById(
     ctx: TenantContext | RequestContext,
     entityId: string,
   ): Promise<Select | null> {
-    if (isSqlite(db)) {
-      return (
-        (db
-          .select()
-          .from(tables.sqlite)
-          .where(
-            and(
-              eq(tables.sqlite.organizationId, orgId(ctx)),
-              eq(tables.sqlite.id, entityId),
-            ),
-          )
-          .get() as Select | undefined) ?? null
-      );
-    }
-    const rows = await (db as PostgresDatabase)
+    const rows = await db
       .select()
-      .from(tables.pg)
-      .where(
-        and(
-          eq(tables.pg.organizationId, orgId(ctx)),
-          eq(tables.pg.id, entityId),
-        ),
-      );
+      .from(tbl)
+      .where(and(eq(table.organizationId, orgId(ctx)), eq(table.id, entityId)));
     return (rows[0] as Select | undefined) ?? null;
   }
 
@@ -120,16 +91,11 @@ export function createAsyncTenantCrudRepo(
         id,
         organizationId: orgId(ctx),
         createdAt: timestamp,
-        ...("updatedAt" in tables.sqlite ? { updatedAt: timestamp } : {}),
+        ...("updatedAt" in table ? { updatedAt: timestamp } : {}),
       };
 
-      if (isSqlite(db)) {
-        const row = { ...managed, ...input } as SqliteInsert;
-        db.insert(tables.sqlite).values(row).run();
-      } else {
-        const row = { ...managed, ...input } as PgInsert;
-        await (db as PostgresDatabase).insert(tables.pg).values(row);
-      }
+      const row = { ...managed, ...input } as Insert;
+      await db.insert(tbl).values(row);
 
       const created = await findById(ctx, id);
       if (!created) {
@@ -139,32 +105,17 @@ export function createAsyncTenantCrudRepo(
     },
     findById,
     async list(ctx: TenantContext | RequestContext): Promise<Select[]> {
-      if (isSqlite(db)) {
-        return db
-          .select()
-          .from(tables.sqlite)
-          .where(eq(tables.sqlite.organizationId, orgId(ctx)))
-          .all() as Select[];
-      }
-      return (await (db as PostgresDatabase)
+      return db
         .select()
-        .from(tables.pg)
-        .where(eq(tables.pg.organizationId, orgId(ctx)))) as Select[];
+        .from(tbl)
+        .where(eq(table.organizationId, orgId(ctx))) as Promise<Select[]>;
     },
     async count(ctx: TenantContext | RequestContext): Promise<number> {
-      const oid = orgId(ctx);
-      if (isSqlite(db)) {
-        return db
-          .select({ id: tables.sqlite.id })
-          .from(tables.sqlite)
-          .where(eq(tables.sqlite.organizationId, oid))
-          .all().length;
-      }
       return (
-        await (db as PostgresDatabase)
-          .select({ id: tables.pg.id })
-          .from(tables.pg)
-          .where(eq(tables.pg.organizationId, oid))
+        await db
+          .select({ id: table.id })
+          .from(tbl)
+          .where(eq(table.organizationId, orgId(ctx)))
       ).length;
     },
     async listPaginated(
@@ -174,34 +125,18 @@ export function createAsyncTenantCrudRepo(
     ): Promise<{ items: Select[]; total: number }> {
       const oid = orgId(ctx);
       const offset = (page - 1) * pageSize;
-      if (isSqlite(db)) {
-        const items = db
-          .select()
-          .from(tables.sqlite)
-          .where(eq(tables.sqlite.organizationId, oid))
-          .orderBy(tables.sqlite.createdAt, tables.sqlite.id)
-          .limit(pageSize)
-          .offset(offset)
-          .all() as Select[];
-        const total = db
-          .select({ id: tables.sqlite.id })
-          .from(tables.sqlite)
-          .where(eq(tables.sqlite.organizationId, oid))
-          .all().length;
-        return { items, total };
-      }
-      const items = (await (db as PostgresDatabase)
+      const items = (await db
         .select()
-        .from(tables.pg)
-        .where(eq(tables.pg.organizationId, oid))
-        .orderBy(tables.pg.createdAt, tables.pg.id)
+        .from(tbl)
+        .where(eq(table.organizationId, oid))
+        .orderBy(table.createdAt, table.id)
         .limit(pageSize)
         .offset(offset)) as Select[];
       const total = (
-        await (db as PostgresDatabase)
-          .select({ id: tables.pg.id })
-          .from(tables.pg)
-          .where(eq(tables.pg.organizationId, oid))
+        await db
+          .select({ id: table.id })
+          .from(tbl)
+          .where(eq(table.organizationId, oid))
       ).length;
       return { items, total };
     },
@@ -212,54 +147,24 @@ export function createAsyncTenantCrudRepo(
     ): Promise<Select | null> {
       const changes = {
         ...input,
-        ...("updatedAt" in tables.sqlite ? { updatedAt: now() } : {}),
+        ...("updatedAt" in table ? { updatedAt: now() } : {}),
       };
-      if (isSqlite(db)) {
-        db.update(tables.sqlite)
-          .set(changes as SQLiteUpdateSetSource<typeof tables.sqlite>)
-          .where(
-            and(
-              eq(tables.sqlite.organizationId, orgId(ctx)),
-              eq(tables.sqlite.id, entityId),
-            ),
-          )
-          .run();
-      } else {
-        await (db as PostgresDatabase)
-          .update(tables.pg)
-          .set(changes as PgUpdateSetSource<typeof tables.pg>)
-          .where(
-            and(
-              eq(tables.pg.organizationId, orgId(ctx)),
-              eq(tables.pg.id, entityId),
-            ),
-          );
-      }
+      await db
+        .update(tbl)
+        .set(changes)
+        .where(
+          and(eq(table.organizationId, orgId(ctx)), eq(table.id, entityId)),
+        );
       return findById(ctx, entityId);
     },
     async delete(
       ctx: TenantContext | RequestContext,
       entityId: string,
     ): Promise<boolean> {
-      if (isSqlite(db)) {
-        const result = db
-          .delete(tables.sqlite)
-          .where(
-            and(
-              eq(tables.sqlite.organizationId, orgId(ctx)),
-              eq(tables.sqlite.id, entityId),
-            ),
-          )
-          .run();
-        return result.changes > 0;
-      }
-      const result = await (db as PostgresDatabase)
-        .delete(tables.pg)
+      const result = await db
+        .delete(tbl)
         .where(
-          and(
-            eq(tables.pg.organizationId, orgId(ctx)),
-            eq(tables.pg.id, entityId),
-          ),
+          and(eq(table.organizationId, orgId(ctx)), eq(table.id, entityId)),
         );
       return (result.count ?? 0) > 0;
     },

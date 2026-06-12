@@ -3,17 +3,14 @@ import type {
   AuthLookupContext,
   PlatformContext,
   RepoContext,
-  SqliteDatabase,
   TenantContext,
 } from "../types.js";
-import { isPlatformContext, isSqlite, isTenantContext } from "../types.js";
+import { isPlatformContext, isTenantContext } from "../types.js";
 import {
   AsyncAuthLookupRepo,
   AsyncPlatformRepo,
   AsyncTenantRepo,
 } from "../repository/baseRepo.js";
-import { createDatabase } from "../database.js";
-import { migrateSqlite } from "../sqlite.js";
 
 describe("A01: Context types", () => {
   describe("TenantContext", () => {
@@ -127,19 +124,6 @@ describe("A01: Context type guards", () => {
       purpose: "auth_lookup",
     };
     expect(isPlatformContext(ctx)).toBe(false);
-  });
-});
-
-describe("A01: isSqlite type guard", () => {
-  it("narrows AnyDatabase to SqliteDatabase", () => {
-    const conn = createDatabase(":memory:");
-    if (conn.kind !== "sqlite") throw new Error("Expected sqlite");
-    migrateSqlite(conn.db);
-    expect(isSqlite(conn.db)).toBe(true);
-    if (isSqlite(conn.db)) {
-      const _typed: SqliteDatabase = conn.db;
-      expect(_typed).toBeDefined();
-    }
   });
 });
 
