@@ -12,6 +12,7 @@ services:
       COOKIE_SECURE: "false"
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-multiTenant}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-200}
     depends_on:
       db:
         condition: service_healthy
@@ -49,6 +50,29 @@ services:
     networks:
       - exam-net
     restart: unless-stopped
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.57.0-noble
+    depends_on:
+      app:
+        condition: service_healthy
+    working_dir: /app/apps/e2e
+    volumes:
+      - ./apps/e2e:/app/apps/e2e
+      - ./packages:/app/packages:ro
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+    environment:
+      E2E_BASE_URL: "http://app:3000"
+      HOME: /tmp
+      HTTP_PROXY: ${E2E_PROXY:-}
+      HTTPS_PROXY: ${E2E_PROXY:-}
+    command: >-
+      sh -c "npm install --no-save --no-package-lock @playwright/test@1.57.0 2>/dev/null &&
+             npx playwright test --reporter=list"
+    profiles:
+      - e2e
+    networks:
+      - exam-net
 
 volumes:
   pgdata:

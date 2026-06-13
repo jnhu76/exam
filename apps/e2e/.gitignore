@@ -1,3 +1,5 @@
-src/e2e/.auth/
+node_modules/
 test-results/
 playwright-report/
+auth/
+*.log

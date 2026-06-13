@@ -119,16 +119,40 @@ describe("AttemptDetailPage", () => {
     expect(screen.getByText("60")).toBeInTheDocument();
   });
 
-  it("shows error when result is not graded", async () => {
+  it("shows status-specific message when result is submitted (not graded)", async () => {
     apiGet.mockResolvedValue({
       attemptId: "attempt-1",
-      status: "pending",
+      status: "submitted",
       showResultImmediately: false,
       examTitle: "期末考试",
     });
     renderPage();
     expect(
-      await screen.findByText("该尝试尚未完成评分或结果不可见"),
+      await screen.findByText("该尝试已提交，等待评分"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows status-specific message when result is grading", async () => {
+    apiGet.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "grading",
+      showResultImmediately: false,
+      examTitle: "期末考试",
+    });
+    renderPage();
+    expect(await screen.findByText("该尝试正在评分中")).toBeInTheDocument();
+  });
+
+  it("shows status-specific message when graded but not visible", async () => {
+    apiGet.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: false,
+      examTitle: "期末考试",
+    });
+    renderPage();
+    expect(
+      await screen.findByText("该尝试已评分，但成绩尚未公布"),
     ).toBeInTheDocument();
   });
 

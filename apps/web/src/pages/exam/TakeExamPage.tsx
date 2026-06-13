@@ -5,7 +5,14 @@ import { toast } from "sonner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Flag, WifiOff } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Lock,
+  TimerOff,
+  WifiOff,
+} from "lucide-react";
 import { routes } from "@/lib/routes";
 import { Separator } from "@/components/ui/separator";
 import { QuestionNav } from "@/components/exam/QuestionNav";
@@ -26,6 +33,8 @@ import type {
   LoadAttemptResponse,
   SaveAnswerResponseDTO,
 } from "@exam/contracts";
+
+type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
 
@@ -46,6 +55,9 @@ export function TakeExamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDisconnected, setIsDisconnected] = useState(false);
+  const [saveRejection, setSaveRejection] = useState<SaveRejection | null>(
+    null,
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [questionStates, setQuestionStates] = useState<QuestionState[]>([]);
   const [answers, setAnswers] = useState<Map<string, unknown>>(new Map());
@@ -140,6 +152,7 @@ export function TakeExamPage() {
           versionsRef.current.set(questionId, result.serverVersion);
           setSaveState("saved");
           setIsDisconnected(false);
+          setSaveRejection(null);
           return;
         }
 
@@ -158,11 +171,13 @@ export function TakeExamPage() {
           });
           setSaveState("saved");
           setIsDisconnected(false);
+          setSaveRejection(null);
           return;
         }
 
         rejected = true;
         setSaveState("error");
+        setSaveRejection(result);
         throw new Error("save rejected by server");
       } catch (err) {
         setSaveState("error");
@@ -308,6 +323,7 @@ export function TakeExamPage() {
               variant="default"
               size="sm"
               onClick={() => void openSubmitDialog()}
+              data-testid="take-submit-btn"
             >
               交卷
             </Button>
@@ -337,6 +353,37 @@ export function TakeExamPage() {
 
         <main className="min-w-0 flex-1">
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
+            {saveRejection && !isDisconnected && (
+              <Alert
+                variant="destructive"
+                className="border-destructive/30 bg-destructive/10"
+                data-testid="save-rejection-alert"
+              >
+                {saveRejection.reason === "DEADLINE_EXCEEDED" ? (
+                  <TimerOff aria-hidden="true" />
+                ) : (
+                  <Lock aria-hidden="true" />
+                )}
+                <AlertTitle>
+                  {saveRejection.reason === "DEADLINE_EXCEEDED"
+                    ? "已到截止时间"
+                    : saveRejection.reason === "ATTEMPT_ALREADY_SUBMITTED" ||
+                        saveRejection.reason === "ATTEMPT_CLOSED"
+                      ? "考试已结束"
+                      : "答案保存被拒"}
+                </AlertTitle>
+                <AlertDescription>
+                  {saveRejection.reason === "DEADLINE_EXCEEDED"
+                    ? "已到截止时间，不能继续修改答案"
+                    : saveRejection.reason === "ATTEMPT_ALREADY_SUBMITTED"
+                      ? "答案已提交，考试已结束"
+                      : saveRejection.reason === "ATTEMPT_CLOSED"
+                        ? "该考试已被关闭，无法继续作答"
+                        : (saveRejection.message ?? "服务器拒绝了本次保存")}
+                </AlertDescription>
+              </Alert>
+            )}
+
             {isDisconnected && (
               <Alert
                 variant="destructive"
@@ -350,7 +397,10 @@ export function TakeExamPage() {
               </Alert>
             )}
 
-            <section className="rounded-lg border bg-card p-5 shadow-sm md:p-8">
+            <section
+              className="rounded-lg border bg-card p-5 shadow-sm md:p-8"
+              data-testid="take-question-section"
+            >
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
                 <div>
                   <div className="text-sm text-muted-foreground">
@@ -491,6 +541,7 @@ export function TakeExamPage() {
             <Button
               onClick={() => void handleSubmit()}
               disabled={isSubmitting || isFlushing || requiresSubmitOverride}
+              data-testid="confirm-submit-btn"
             >
               {isSubmitting ? "提交中..." : "确认交卷"}
             </Button>

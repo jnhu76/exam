@@ -103,9 +103,9 @@ function buildConfig(): AppRuntimeConfig {
       exposeSuperAdmin,
     },
     rateLimit: {
-      enabled: true,
-      max: 100,
-      timeWindow: 60 * 1000,
+      enabled: !isTruthy(process.env.RATE_LIMIT_DISABLED),
+      max: Number(process.env.RATE_LIMIT_MAX) || 100,
+      timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
     },
     security: {
       cspEnabled: true,

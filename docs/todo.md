@@ -9,6 +9,17 @@
 - [ ] **Repo 统一重构**：`userRepo.findByOrganizationAndUsername` 和 `findByOrganizationAndId` 不接收 `ctx`，违反 AGENTS.md "所有 repo 方法必须接收 ctx" 规则。当前导入循环已改用预加载 Set 规避，但其他调用点仍使用旧签名。需统一改为 `findByUsername(ctx, username)` 模式并更新所有调用方。
 - [ ] **前端 detectDuplicate 防御性加固**：当前依赖后端 `validateCandidateFields` 强制恰好一个 unique 字段。如果后续放宽此约束，前端应遍历所有 unique 字段而非只取第一个。低优先级，待 CandidateField 规则变更时再处理。
 
+## Phase 1.7 — Exam Lifecycle Non-E2E Closeout
+
+> 详细范围：`docs/phase1.7/exam-lifecycle-non-e2e-closeout.md`
+>
+> 本轮已完成的文档/契约对齐：heartbeat `204 → 200 + { ok: true }`、save-answer 拒绝响应迁移到稳定 `reason` 枚举 + 扁平结构、ghost states 文档化（不删 enum）。E2E 区域不在本轮范围。
+>
+> 已归入 Phase 2 backlog 的事项：disrupted 前端 restore UI（P2A-J3 / P2A-J4 前置条件）、score list 提前开放控制、admin 手动 open/close 按钮（Phase 2C）。
+>
+> **Restore 可达性判定（Phase 1.7 复核）**：`disrupted` 状态在真实流程中可达——后台心跳扫描（`apps/api/src/plugins/heartbeat.ts`，`HEARTBEAT_TIMEOUT_MS` 默认 60s）会将长时间无 `lastActivityAt` 的 `in_progress` attempt 标记为 `disrupted`；后端 `POST /attempts/:id/restore` 端点已实现（`disrupted → in_progress`）。但前端 Phase 1.7 不接入 restore UI：`TakeExamPage` 对非 `in_progress` 状态直接跳转 ResultPage，`/restore` 端点无前端调用方。**结论：前端 restore 路径留 Phase 2 接入（不补 UI、不补 e2e），仅保留后端契约与文档标注。**
+
+
 ## Phase 1.4 — Release Hardening / 基础收口层
 
 > 详细范围：`docs/phase1.4/phase1.4-bridge-plan.md`
@@ -25,8 +36,8 @@
 
 ### S03a — Server-side Exam Protocol Hardening (Phase1.4 部分)
 
-- [x] deadline 强制 409
-- [x] submit 幂等
+- [x] deadline 后禁止继续保存答案（save-answer 返回 `DEADLINE_EXCEEDED`），但允许提交服务器已保存答案（submit 不受 deadline 限制）
+- [x] submit 幂等（in_progress/disrupted→submitted；submitted→retry grading；graded→幂等返回）
 - [x] 基础状态机保护
 
 > S03a 的事务硬化部分（saveAnswers transaction boundary、attempt-level serialization、PG concurrency tests）已迁移到 Phase1.6。
@@ -245,6 +256,23 @@
 | P2A-J4 | disrupted 检测与恢复 | 待开始 |
 | P2A-J5 | Proctor Operations   | 待开始 |
 | P2A-J6 | AuditLog 扩展        | 待开始 |
+
+> **入场前提（来自 Phase 1.7 closeout）**：P2A-J3 与 P2A-J4 是 disrupted 状态在生产真实启用前的硬前置条件。后端心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）与 restore 路由（`apps/api/src/routes/attempts.ts:892-930`）已存在，缺失项是前端 restore UI 与监考介入入口。详见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
+>
+> **P2A-J3 Attempt Heartbeat — 验收口径**
+>
+> - 前端在 attempt 进入 `disrupted` 时显示 restore 入口（不是直接跳结果页）。
+> - 前端调用既有后端 restore 路由（POST `/attempts/:attemptId/restore`），成功后从服务端拉取最新答案与剩余时间，恢复到 `in_progress`。
+> - 心跳超时阈值（默认 60s）/ 扫描周期（默认 30s）至少做一次基于真实考场场景的调参评估，结论落入 `docs/phase2/` 对应文档。
+> - 单元测试与组件测试覆盖：disrupted → restore → in_progress 的前端状态切换；心跳超时阈值的服务端边界测试。
+>
+> **P2A-J4 disrupted 检测与恢复 — 验收口径**
+>
+> - 在监考面板（属 P2B）或临时 admin 入口提供"恢复某 attempt"操作，写入 AuditLog。
+> - 给出"误标 disrupted"场景下的人工裁决流程，并落到 SPEC.md 监考职责段。
+> - 端到端验证一次：候考人离线 → disrupted → 监考介入恢复 → 候考人继续答题 → 提交并出分。
+>
+> 完成上述两项后再讨论是否在生产环境放开 disrupted 触发条件；在此之前不应在大规模真实考场启用心跳扫描器。
 
 ### Phase 2B — Proctor Panel
 

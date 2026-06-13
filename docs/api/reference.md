@@ -898,28 +898,50 @@
 }
 ```
 
-**响应** (200):
+**接受响应** (200):
 
 ```json
 {
   "accepted": true,
   "serverVersion": 2,
-  "conflict": null
+  "savedAt": "2024-06-01T09:10:00.123Z"
 }
 ```
 
-**冲突响应** (200):
+**拒绝响应** (200): 服务器以 200 + `accepted:false` 表达可恢复的业务拒绝（command result，不是 ErrorResponse）。客户端必须根据稳定的机器可读 `reason` 枚举分支处理，**不要**对 `message` 做字符串匹配——`message` 仅用于人类展示，文案可能随 i18n 调整。
 
 ```json
 {
   "accepted": false,
+  "reason": "STALE_VERSION",
+  "message": "服务器上存在更新的答案版本",
   "serverVersion": 5,
-  "conflict": {
-    "reason": "Server has newer version",
+  "savedAt": "2024-06-01T09:10:00.123Z",
+  "details": {
     "serverAnswer": true
   }
 }
 ```
+
+**`reason` 枚举**（稳定契约，参见 `packages/contracts/src/attempt.ts` `SaveAnswerRejectReasonEnum`）：
+
+| reason | 触发条件 | 客户端建议处理 |
+| --- | --- | --- |
+| `STALE_VERSION` | `baseVersion < serverVersion`（乐观并发冲突） | 以 `details.serverAnswer` 合并/覆盖本地状态；用 `serverVersion` 重试 |
+| `ATTEMPT_ALREADY_SUBMITTED` | attempt 已在 `submitted` / `grading` / `graded` | 停止保存，提示考试已结束，引导跳转到结果页 |
+| `ATTEMPT_CLOSED` | attempt 在 `voided` 等终止状态（Phase 1 暂未持续触发） | 停止保存，提示考试已被关闭 |
+| `DEADLINE_EXCEEDED` | `now > deadlineAt`（save-answer 路由传入 `attempt.deadlineAt + fastify.now()` 给 `processSaveAnswer`） | 停止继续保存；已保存答案仍可 submit |
+
+**字段说明**：
+
+- `accepted`: discriminated union 判别字段。
+- `reason`: 仅在 `accepted:false` 时出现，机器可读枚举，**契约稳定**。
+- `message`: 仅在 `accepted:false` 时出现，i18n 文案，**非协议字段**，禁止用于业务分支判断。
+- `serverVersion`: 当前服务器持有的版本号；接受分支返回新版本，拒绝分支返回当前最新版本。
+- `savedAt`: 服务器侧时间戳。
+- `details.serverAnswer?`: 仅在 `STALE_VERSION` 拒绝时返回，用于客户端合并冲突状态。
+
+> 该响应形态由 `SaveAnswerAcceptedSchema` / `SaveAnswerRejectedSchema` (strict) 在 `packages/contracts/src/attempt.ts` 定义；route handler 在 `apps/api/src/routes/attempts.ts` 通过这两个 schema 做出口校验。Phase 1.7 起，schema 标记为 `.strict()`，**禁止**返回 legacy 嵌套 `conflict: { reason, serverAnswer }` 形状或其他未声明字段。
 
 ---
 
@@ -932,12 +954,14 @@
 ```json
 {
   "id": "attempt-uuid",
-  "status": "completed",
+  "status": "graded",
   "score": 85,
   "passed": true,
   "submittedAt": "2024-06-01T10:05:00.000Z"
 }
 ```
+
+> Phase 1 语义：`submit` 不受 deadline 限制。deadline 仅限制继续保存答案（`save-answer` 在 deadline 后返回 `accepted:false, reason:"DEADLINE_EXCEEDED"`），不限制提交服务器已保存答案。submit 内联完成评分（in_progress/disrupted→submitted→graded），并对 `submitted`/`graded` 幂等——若 submit 在评分前崩溃，attempt 停在 `submitted`，再次 POST submit 会重试评分并推进到 `graded`。
 
 ---
 
@@ -945,7 +969,17 @@
 
 **权限**: Candidate
 
-**响应** (204): No Content
+**响应** (200):
+
+```json
+{
+  "ok": true
+}
+```
+
+**错误响应** (409): 当 attempt 不在 `in_progress` 时返回 ErrorResponse，`error.code` 为 `INVALID_STATE_TRANSITION`。
+
+> Phase 1 语义：心跳仅用于刷新 `lastActivityAt`，与 deadline 无耦合——deadline 之后的心跳仍会被接受。后台扫描任务（`HEARTBEAT_TIMEOUT_MS`，默认 60s）将长时间无活动的 `in_progress` attempt 标记为 `disrupted`。前端 restore UI 在 Phase 1.7 未接入，参见 `docs/todo.md` Phase 2 backlog。
 
 ---
 
