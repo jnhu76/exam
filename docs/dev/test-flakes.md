@@ -20,27 +20,42 @@
 
 ### BUG-FLAKE-001 — `attempts.test.ts:1070` 后台扫描在 coverage 模式下 5s timeout
 
-**状态**: 已升级（≥3 次复发，2026-06-13）。
+**状态**: 已升级（≥3 次复发，2026-06-13）。已从单点 timeout 缓解升级为 **apps/api coverage serial containment**（A′ 方案）。
 
-**当前缓解**: `apps/api/src/routes/attempts.test.ts:1070` 用例加 positional `15_000` ms 超时（即 `it("...", async () => { ... }, 15_000)`，"已知非确定性 flake 登记册"中的选项 C）。该缓解只是延长单个用例的 timeout 边界，并未消除根因。
+**当前缓解**:
 
-**已知根因（待验证）**: vitest 默认按文件并行调度 + 全部测试文件共享同一本地 PG 实例 + c8 instrumentation 在 coverage 模式下放大 I/O 与调度争用。导致 `scanDatabaseForDisruptedAttempts` 的 PG 调用在某些瞬间无法在 5s 默认 testTimeout 内回包。
+1. **A′ 方案（主缓解，现行）**: `apps/api/vitest.config.ts` 与 `packages/db/vitest.config.ts` 均设置 `fileParallelism: false`，让两个共享 `exam_test` PostgreSQL 实例的 package 内部测试文件串行执行。从源头消除 vitest 跨文件并行 + 共享 PostgreSQL schema + coverage instrumentation + turbo 跨 package 并发四者叠加导致的 DB 资源争用。
+   - 影响范围：仅 `apps/api` 和 `packages/db`（即唯一两个使用 `exam_test` PG 的 package）。`web`、`contracts`、`domain`、`import-export`、`exam-engine`、`auth` 不受影响，仍然并行。
+   - turbo 层面：`@exam/api` 和 `@exam/db` 仍然在 turbo 调度下跨 package 并行，但每个 package 内部测试文件串行；这是 vitest config 的官方推荐做法（见 vitest "Parallelism > File Parallelism"：当测试共享外部资源如数据库时，应禁用文件并行）。
+   - 代价：受影响 package 测试时间约翻倍（apps/api 70s → ~71s，packages/db 11s → ~16s 量级），但稳定。
+   - 兼容：`vitest watch`（`pnpm --filter ... dev`）仍可走默认配置；CLI 行为保持透明。
+2. **C 方案（遗留安全网，保留）**: `apps/api/src/routes/attempts.test.ts:1070` 该 it() 仍带 positional `15_000` ms timeout。在 A′ 生效后此 timeout 已变成 redundant safety net；不主动移除，避免再次回退。如果后续做 B 方案恢复并行，此 timeout 应一并 review。
 
-**建议根因修复（按优先级）**:
+**已知根因（已部分验证）**: vitest 默认按文件并行调度 + 全部测试文件共享同一本地 PG 实例 + c8 instrumentation 在 coverage 模式下放大 I/O 与调度争用。导致 `scanDatabaseForDisruptedAttempts` 的 PG 调用在某些瞬间无法在 5s 默认 testTimeout 内回包。A′ 通过让测试文件串行执行验证了 "并行 + 共享 schema" 是触发条件之一。
 
-1. 选项 A：`apps/api` vitest 切到 `pool: "forks"` + `singleFork: true`，跨文件串行。代价：CI 时间增加。
-2. 选项 B：每个测试文件用独立 PG schema（`SET search_path`）从源头消除共享状态争用。代价：基础设施改造。
+**后续根因修复（B 方案，待启动）**:
 
-**禁止做**:
+- 给 `apps/api` 测试加上"每测试文件 / 每 worker 独立 PostgreSQL schema"机制：测试 setup 阶段为每个 worker 创建一个独立 schema 并 `SET search_path`，把"共享 schema 下并行写入"这一类争用从源头消除。
+- 完成后可恢复 `fileParallelism` 默认值（删除 A′ 配置中的 `fileParallelism: false`），并 review 是否同步移除 `attempts.test.ts:1070` 的 15_000 ms timeout。
+- 推荐基础设施：扩展 `@exam/db` 提供 `withTestSchema(workerId)` helper，或封装在 `apps/api` 的 `tests/setup.ts` 里。
+
+**禁止做（仍然有效）**:
+
 - 永久延长 scanner 自身超时（产品代码不为测试便利让步）
 - skip 该用例
 - 在 CI 上设置自动重跑后默认通过（会掩盖真实回归）
+- 在 A′ 方案之上继续给其他测试加单点 timeout（应通过 B 方案根治）
 
-**触发条件**: 若 BUG-FLAKE-001 在 Phase1.7 后续 Job 中再次出现（即使是 coverage 模式），必须立即开始选项 A 或 B 的根因修复，不再追加 timeout。
+**触发条件**: 在 A′ 生效后，若 BUG-FLAKE-001 在 `apps/api` 串行执行下仍然出现，必须立即开始 B 方案，不再依赖 timeout 缓解。
+
+**Stress 验证脚本**: 项目根的 `scripts/test/verify-stress.sh` 提供手动连续运行 `pnpm verify` 的脚手架（默认 3 次，可传参，例 `bash scripts/test/verify-stress.sh 5`）。该脚本不进入 CI，仅供开发者在改 vitest 调度或 PG 隔离机制时手动验证稳定性。
 
 **复发记录**:
+
 - 2026-06-13：S06-lite review 修复阶段，单次出现，重跑通过（普通 flake）
-- 2026-06-13：S07-lite GREEN 阶段，`pnpm verify` coverage 模式连续 3 次同位置 timeout——触发升级，应用选项 C 缓解
+- 2026-06-13：S07-lite GREEN 阶段，`pnpm verify` coverage 模式连续 3 次同位置 timeout——触发升级，应用 C 方案 timeout 缓解
+- 2026-06-13：A07 i18n GREEN 阶段，`pnpm verify` 再次出现同位置 timeout——单点 timeout 缓解失效（仅延长边界，未消除根因），按"再次出现"触发条件升级为 A′ apps/api coverage serial containment
+- 2026-06-13：A′ 方案首轮 `verify-stress.sh 5 --no-cache` 验证时，**packages/db `demo-seed.test.ts` 同样出现 5s timeout**——证明 PG 资源争用同样影响 packages/db。修复扩展到 `packages/db/vitest.config.ts` 同样设置 `fileParallelism: false`
 
 ---
 
