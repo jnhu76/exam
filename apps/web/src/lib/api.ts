@@ -1,5 +1,9 @@
 import { toast } from "sonner";
-import type { ErrorResponse } from "@exam/contracts";
+import {
+  getMessageForLocale,
+  isErrorCode,
+  type ErrorResponse,
+} from "@exam/contracts";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -39,18 +43,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
 
     if (!response.ok) {
-      let message = `${response.status} Request failed`;
+      let message: string | undefined;
       let code: string | undefined;
       let details: unknown;
       let requestId: string | undefined;
       try {
         const body = (await response.json()) as ErrorBody;
-        message = body.error?.message ?? body.message ?? message;
+        message = body.error?.message ?? body.message;
         code = body.error?.code;
         details = body.error?.details;
         requestId = body.error?.requestId;
       } catch {
-        // use default message
+        // body parse failed; fall through to code/status fallback
+      }
+      if (!message && code && isErrorCode(code)) {
+        message = getMessageForLocale(code);
+      }
+      if (!message) {
+        message = `${response.status} Request failed`;
       }
       if (response.status === 401) {
         navigateFn?.("/login");

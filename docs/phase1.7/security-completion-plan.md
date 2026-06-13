@@ -25,7 +25,7 @@ Phase1.7-A (API Contract)                       Phase1.7-S (Security Baseline)
   A06  Web Client Convergence
   ···                                          S08-lite  Red-Team Test Suite
                                                S09-lite  Security Validation
-  A07  i18n Systematization (optional/deferred)
+  A07  i18n Systematization (baseline 已完成 2026-06-13)
 ```
 
 **为什么 S 线依赖 A 线**：

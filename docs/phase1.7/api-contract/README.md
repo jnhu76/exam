@@ -49,7 +49,7 @@ A00  API Contract Constitution + Endpoint Inventory
   → S07-lite Password Policy + Account Security Baseline
   → S08-lite Red-Team Security Test Suite
   → S09-lite Security Baseline Validation
-  → A07  i18n Systematization（optional/deferred，不阻塞 Phase2 Entry Gate）
+  → A07  i18n Systematization（已完成 baseline 2026-06-13；不阻塞 Phase2 Entry Gate）
 ```
 
 如果发现安全任务必须提前做，必须说明它不会引入新的 response shape 漂移，并复用已有 code/message registry。

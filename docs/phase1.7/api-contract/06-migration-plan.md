@@ -429,7 +429,17 @@ submit 前 flush 所有 pending saves，与 A01 的 save/submit contract 对齐�
 
 ### Status
 
-**A07 不阻塞 Phase2 Entry Gate**。A07 可以在 Phase2 前任何时候完成，也可以推迟到 Phase2 内部按需启动。只有当产品明确要求完整多语言支持时，才将 A07 升级为 Phase2 前置。
+**A07 已完成基线（2026-06-13）**。完成范围限定于"Phase2 前 i18n 基础设施"，未做全站 inline 文案清债（保留为后续 follow-up）。
+
+具体已落地：
+
+- `packages/contracts` 提供 `SUPPORTED_LOCALES`、`SupportedLocale`、`DEFAULT_LOCALE`、`localeCatalogs`、`getMessageForLocale(code, locale?)`、`fallbackMessages`。
+- `apps/web/src/lib/i18n.ts` 提供 `resolveErrorMessage(error)`，按 `ApiError.code → registry → server message → fallback` 链路解析。
+- `apps/web/src/lib/api.ts` 接入 `getMessageForLocale`：当服务端响应缺失 `error.message` 但 `error.code` 在 registry 中时，自动用 zh-CN registry 文案兜底，避免落到 `${status} Request failed` 这种英文 fallback。
+- 测试覆盖：`packages/contracts` 13 个 locale catalog 测试、`apps/web` 9 个 `resolveErrorMessage` 测试、`apps/web` 4 个 `api.ts` representative integration 测试（含 fallback 路径）。
+- 文档：`docs/phase1.7/api-contract/04-i18n-boundary.md` 给出语言策略、fallback 链、扩展新 locale 的 5 步流程。
+
+A07 不阻塞 Phase2 Entry Gate。后续如需引入第二个 locale，遵循 `04-i18n-boundary.md` "扩展新 Locale 的步骤" 即可。
 
 ### Purpose
 
@@ -468,6 +478,19 @@ submit 前 flush 所有 pending saves，与 A01 的 save/submit contract 对齐�
 - fallback tests
 - representative E2E
 - `pnpm verify`
+
+### Verification result (2026-06-13)
+
+- contracts: 13 locale catalog tests pass（覆盖 `getMessageForLocale`、`isSupportedLocale`、`fallbackMessages`、所有 `errorMessages` 条目在 `DEFAULT_LOCALE` 下回归一致）。
+- web: 9 个 `resolveErrorMessage` 单元测试 + 4 个 `api.ts` integration 测试 pass（覆盖 server 提供 / 缺失 message、未知 code、body 解析失败、fallback 链）。
+- representative path：`api.ts` 的 fetch error 处理是所有 ApiError 的源头，A07 接入此处即覆盖前端所有 ApiError 消费者的"server 缺 message"路径。
+- `pnpm verify` 通过。
+
+### Follow-up debt（不在 A07 baseline 内，留待后续按需启动）
+
+- `apps/web` 各页面页面级 `catch` 站点（如 `StartExamPage.tsx`、`UsersPage.tsx`、`ExamDetailPage.tsx`、`CoursePage.tsx` 等）目前仍 inline `err instanceof Error ? err.message : "..."`。这些站点已经从 `api.ts` 拿到 zh-CN message，并不依赖 fallback；不构成功能问题，仅是代码风格可收敛点。
+- 部分页面（如 `StartExamPage.tsx`）的 code-based switch 提供比 registry 更详细的产品文案（"已达到最大考试次数，无法再次开始考试。" vs registry 的"已达到最大考试次数"）；这是符合 `04-i18n-boundary.md` "MAY: future frontend maps code/reason to localized text" 的产品差异化文案，**不应**机械替换为 `resolveErrorMessage`。如未来引入第二 locale，再决定是把扩展文案进 catalog，还是保留页面级覆盖。
+- 服务端 `apps/api` 部分 inline message 仍未全部收敛到 registry（A04 阶段已大量收敛但非 100%）。这是 registry 单边 debt，与 i18n 无关；保留为独立清债任务。
 
 ### Risks
 
