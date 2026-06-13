@@ -35,6 +35,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let adminToken: string;
   let candidateToken: string;
+  let otherCandidateToken: string;
   let candidateProfileId: string;
   let courseId: string;
   let questionId: string;
@@ -127,6 +128,32 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     candidateToken = signJWT({
       actorId: candidate.id,
       role: candidate.role as Role,
+      organizationId: candidate.organizationId,
+    });
+
+    const otherCandidateUserId = randomUUID();
+    await db.insert(schema.users).values({
+      id: otherCandidateUserId,
+      organizationId: candidate.organizationId,
+      username: `security-other-${randomUUID().slice(0, 8)}`,
+      passwordHash: "unused",
+      name: "Other Candidate",
+      role: "Candidate",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await db.insert(schema.candidateProfiles).values({
+      id: randomUUID(),
+      userId: otherCandidateUserId,
+      organizationId: candidate.organizationId,
+      fields: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    otherCandidateToken = signJWT({
+      actorId: otherCandidateUserId,
+      role: "Candidate",
       organizationId: candidate.organizationId,
     });
 
@@ -299,15 +326,16 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
   });
 
   describe("AC4: Candidate cannot submit another candidate's attempt", () => {
-    it("returns 403/409 for cross-candidate submit", async () => {
+    it("returns 404 for cross-candidate submit", async () => {
       const attemptId = await createExamAndStart("Ownership Exam");
 
       const res = await app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/submit`,
-        cookies: { "auth-token": adminToken },
+        cookies: { "auth-token": otherCandidateToken },
       });
-      expect([403, 409]).toContain(res.statusCode);
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
     });
   });
 });

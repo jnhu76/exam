@@ -16,6 +16,6 @@ export const AuditLogResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()),
   ipAddress: z.string().nullable(),
   userAgent: z.string().nullable(),
-  createdAt: z.string(),
+  createdAt: z.string().datetime(),
 });
 export type AuditLogResponse = z.infer<typeof AuditLogResponseSchema>;

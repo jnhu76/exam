@@ -4,13 +4,13 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import authRoutes from "./auth.js";
-import auditAdminRoutes from "./auditAdmin.js";
+import auditRoutes from "./audit.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
-  await fastify.register(auditAdminRoutes);
+  await fastify.register(auditRoutes);
 };
 
 describe("audit log baseline (S06-lite)", () => {
@@ -284,7 +284,6 @@ describe("audit log baseline (S06-lite)", () => {
 
     it("returns paginated audit logs for Admin", async () => {
       await clearAudits();
-      // create some audit entries via login attempts
       for (let i = 0; i < 3; i += 1) {
         await ctx.app.inject({
           method: "POST",
@@ -296,7 +295,7 @@ describe("audit log baseline (S06-lite)", () => {
           },
         });
       }
-      await waitForAudit();
+      await waitForAudit(async () => (await readAudits()).length >= 3);
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -327,7 +326,6 @@ describe("audit log baseline (S06-lite)", () => {
 
     it("filters by action query param", async () => {
       await clearAudits();
-      // 2 success
       for (let i = 0; i < 2; i += 1) {
         await ctx.app.inject({
           method: "POST",
@@ -339,7 +337,6 @@ describe("audit log baseline (S06-lite)", () => {
           },
         });
       }
-      // 1 failure
       await ctx.app.inject({
         method: "POST",
         url: "/api/auth/login",
@@ -349,7 +346,7 @@ describe("audit log baseline (S06-lite)", () => {
           password: "nope",
         },
       });
-      await waitForAudit();
+      await waitForAudit(async () => (await readAudits()).length >= 3);
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -390,7 +387,7 @@ describe("audit log baseline (S06-lite)", () => {
           adminId,
         );
       }
-      await waitForAudit();
+      await waitForAudit(async () => (await readAudits()).length >= 5);
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -447,7 +444,8 @@ describe("audit log baseline (S06-lite)", () => {
           { foo: "bar" },
         );
 
-        await waitForAudit();
+        await waitForAudit(async () => (await readAudits()).length >= 3);
+
         const rows = await ctx.db
           .select()
           .from(schema.auditLogs)

@@ -57,7 +57,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const data = CreateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
       const passwordHash = await hashPassword(data.password);
-      const user = await repo.create(ctx, {
+      const user = await repo.createUnique(ctx, {
         username: data.username,
         passwordHash,
         name: data.name,

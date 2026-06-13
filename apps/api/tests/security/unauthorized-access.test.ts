@@ -17,7 +17,7 @@ import { seed } from "@exam/db/src/seed.js";
 import examRoutes from "../../src/routes/exam.js";
 import userRoutes from "../../src/routes/user.js";
 import candidateRoutes from "../../src/routes/candidate.js";
-import auditAdminRoutes from "../../src/routes/auditAdmin.js";
+import auditRoutes from "../../src/routes/audit.js";
 import systemRoutes from "../../src/routes/system.js";
 import settingsRoutes from "../../src/routes/settings.js";
 import { randomUUID } from "node:crypto";
@@ -83,7 +83,7 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
     await app.register(examRoutes, { prefix: "/api" });
     await app.register(userRoutes, { prefix: "/api" });
     await app.register(candidateRoutes, { prefix: "/api" });
-    await app.register(auditAdminRoutes, { prefix: "/api" });
+    await app.register(auditRoutes, { prefix: "/api" });
     await app.register(systemRoutes, { prefix: "/api" });
     await app.register(settingsRoutes, { prefix: "/api" });
     await app.ready();

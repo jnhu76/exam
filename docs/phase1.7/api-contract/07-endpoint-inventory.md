@@ -582,6 +582,8 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Conflict behavior | 409 ErrorResponse |
 | Status | pending verification |
 
+### DELETE /exams/:id
+
 | Field | Value |
 | --- | --- |
 | Method | DELETE |
@@ -762,7 +764,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Route file | question.ts:272 |
 | Auth | Admin / Teacher |
 | Current success status | 200 |
-| Current success shape | import summary |
+| Current success shape | Batch Operation Result / Import Result |
 | Target success status | 200 |
 | Target success shape | Batch Operation Result / Import Result |
 | Current error shape | inline { error: { code, message } } |
@@ -840,7 +842,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Route file | candidate.ts:263 |
 | Auth | Admin / Teacher |
 | Current success status | 200 |
-| Current success shape | import summary |
+| Current success shape | Batch Operation Result / Import Result |
 | Target success status | 200 |
 | Target success shape | Batch Operation Result / Import Result |
 | Current error shape | inline { error: { code, message } } |
@@ -1057,7 +1059,7 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Target success status | 200 |
 | Target success shape | Command Result Response (discriminated union accepted true/false) |
 | Current error shape | 400 VALIDATION_ERROR / 404 via NotFoundError |
-| Target error shape | ErrorResponse v0 (400/404) + Command Result rejected (reason + message + details?) |
+| Target error shape | ErrorResponse v0 (400/404); save protocol business rejections use 200 `accepted:false` Command Result |
 | Content-Type | application/json |
 | Frontend client | TakeExamPage autosave |
 | Migration job | A01 |
@@ -1247,8 +1249,8 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | Migration Job | Endpoint Count | Route Files |
 | --- | ---: | --- |
 | A01 | 9 | attempts.ts |
-| A02 | 14 | auth.ts, user.ts, candidate.ts, candidateField.ts |
-| A03 | 16 | exam.ts, question.ts, course.ts, settings.ts, scores.ts, system.ts |
+| A02 | 21 | auth.ts, user.ts, candidate.ts, candidateField.ts |
+| A03 | 27 | exam.ts, question.ts, course.ts, settings.ts, scores.ts, system.ts |
 | A04 | 3 | export.ts, question.ts (import), candidate.ts (import) |
 | A05 | all | all (OpenAPI coverage) |
 | A06 | all | all (frontend client convergence) |

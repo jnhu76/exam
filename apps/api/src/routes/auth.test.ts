@@ -69,7 +69,8 @@ describe("auth routes", () => {
     expect(cookieStr).toMatch(/Secure/);
   });
 
-  it("POST /api/auth/login omits Secure flag when COOKIE_SECURE!=true", async () => {
+  it("POST /api/auth/login omits Secure flag outside production when COOKIE_SECURE!=true", async () => {
+    vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("COOKIE_SECURE", "false");
     const response = await ctx.app.inject({
       method: "POST",
@@ -86,6 +87,27 @@ describe("auth routes", () => {
       ? setCookie.join(";")
       : setCookie;
     expect(cookieStr).not.toMatch(/Secure/);
+  });
+
+  it("POST /api/auth/login sets Secure cookie in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("JWT_SECRET", "test-production-secret");
+    vi.stubEnv("COOKIE_SECURE", "false");
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).toMatch(/Secure/);
   });
 
   it("POST /api/auth/login rejects disabled users", async () => {

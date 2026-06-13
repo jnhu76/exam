@@ -34,6 +34,25 @@ const csvSuccessResponse = {
   },
 };
 
+function isMarkedAuthHook(hook: unknown): boolean {
+  if (
+    (typeof hook !== "function" && typeof hook !== "object") ||
+    hook === null
+  ) {
+    return false;
+  }
+  return (
+    "_isAuthenticate" in hook &&
+    (hook as { _isAuthenticate?: unknown })._isAuthenticate === true
+  );
+}
+
+function hasMarkedAuthHook(hooks: unknown): boolean {
+  if (!hooks) return false;
+  const hookList = Array.isArray(hooks) ? hooks : [hooks];
+  return hookList.some(isMarkedAuthHook);
+}
+
 export const openApiConfig = {
   openapi: {
     openapi: "3.0.3",
@@ -59,7 +78,10 @@ export function addCommonResponseSchemas(app: FastifyInstance): void {
     const response = routeOptions.schema.response as Record<string, unknown>;
     const method = routeOptions.method;
     const methods = Array.isArray(method) ? method : [method];
-    const hasAuth = routeOptions.preHandler !== undefined;
+    const hasAuth =
+      hasMarkedAuthHook(routeOptions.preHandler) ||
+      hasMarkedAuthHook(routeOptions.onRequest) ||
+      hasMarkedAuthHook(routeOptions.preValidation);
     const path = String(routeOptions.url ?? routeOptions.path ?? "");
     const hasIdParam = path.includes(":id") || path.includes("{id}");
 

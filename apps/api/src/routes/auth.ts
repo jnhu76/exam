@@ -62,7 +62,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       permissions: [],
       sessionId: "bootstrap",
     };
-    const user = await userRepo.create(ctx, {
+    const user = await userRepo.createUnique(ctx, {
       username: data.username,
       name: data.name,
       passwordHash: await hashPassword(data.password),
@@ -161,7 +161,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure: process.env.COOKIE_SECURE === "true",
+        secure:
+          process.env.NODE_ENV === "production" ||
+          process.env.COOKIE_SECURE === "true",
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",

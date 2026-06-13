@@ -5,7 +5,6 @@ import {
 } from "@exam/contracts";
 import { ApiError } from "./api";
 
-// FIXME(A07): 当前 locale 固定为 DEFAULT_LOCALE (zh-CN)。
 // 接入用户偏好或 Accept-Language 时改为传入实际 locale。
 export function resolveErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {

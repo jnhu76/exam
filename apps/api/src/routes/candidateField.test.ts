@@ -234,19 +234,102 @@ describe("candidate field routes", () => {
   });
 
   it("DELETE /api/candidate-fields/:id blocks an active identity field", async () => {
-    const res = await ctx.app.inject({
-      method: "DELETE",
-      url: `/api/candidate-fields/${identityFieldId}`,
-      cookies: { "auth-token": adminToken },
+    const localOrgId = crypto.randomUUID();
+    const localAdminId = crypto.randomUUID();
+    const localCandidateUserId = crypto.randomUUID();
+    const now = new Date();
+    await ctx.db.insert(schema.organizations).values({
+      id: localOrgId,
+      name: "Candidate Field Delete Test Organization",
+      displayName: "Candidate Field Delete Test Organization",
+      slug: `candidate-field-delete-test-${localOrgId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.users).values([
+      {
+        id: localAdminId,
+        organizationId: localOrgId,
+        username: `candidate-field-delete-admin-${localOrgId}`,
+        passwordHash: await hashPassword("password123"),
+        name: "Candidate Field Delete Test Admin",
+        role: "Admin",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: localCandidateUserId,
+        organizationId: localOrgId,
+        username: `candidate-field-delete-user-${localOrgId}`,
+        passwordHash: await hashPassword("password123"),
+        name: "Candidate Field Delete Test User",
+        role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: crypto.randomUUID(),
+      organizationId: localOrgId,
+      userId: localCandidateUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    const localAdminToken = signJWT({
+      actorId: localAdminId,
+      role: "Admin",
+      organizationId: localOrgId,
     });
 
-    expect(res.statusCode).toBe(409);
-    expect(res.json()).toMatchObject({
-      error: {
-        code: "CANDIDATE_FIELD_IN_USE",
-        requestId: expect.any(String),
-      },
-    });
+    try {
+      const createRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/candidate-fields",
+        payload: {
+          name: `cf-${p}-localIdentity`,
+          label: "本地身份字段",
+          fieldType: "text",
+          required: true,
+          unique: true,
+          sortOrder: 0,
+        },
+        cookies: { "auth-token": localAdminToken },
+      });
+      expect(createRes.statusCode).toBe(201);
+
+      const res = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/candidate-fields/${createRes.json().id}`,
+        cookies: { "auth-token": localAdminToken },
+      });
+
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toMatchObject({
+        error: {
+          code: "CANDIDATE_FIELD_IN_USE",
+          requestId: expect.any(String),
+        },
+      });
+    } finally {
+      await ctx.db
+        .delete(schema.auditLogs)
+        .where(eq(schema.auditLogs.organizationId, localOrgId));
+      await ctx.db
+        .delete(schema.candidateProfiles)
+        .where(eq(schema.candidateProfiles.organizationId, localOrgId));
+      await ctx.db
+        .delete(schema.candidateFields)
+        .where(eq(schema.candidateFields.organizationId, localOrgId));
+      await ctx.db
+        .delete(schema.users)
+        .where(eq(schema.users.organizationId, localOrgId));
+      await ctx.db
+        .delete(schema.organizations)
+        .where(eq(schema.organizations.id, localOrgId));
+    }
   });
 
   it("PATCH /api/candidate-fields/:id returns ErrorResponse v0 when missing", async () => {

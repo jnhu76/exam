@@ -95,6 +95,7 @@ SaveAnswerRejected:
       format: date-time
     details:
       type: object
+      additionalProperties: false
       properties:
         serverAnswer:
           description: "服务端当前答案值"
@@ -198,7 +199,7 @@ A05 至少验证：
 - `GET /docs/json`：OpenAPI 3.0.3 spec
 - `GET /docs/static/*`：UI 静态资源 (同源)
 
-不暴露 `/docs/yaml` 之外的额外端点；`/api/health`、`/api/system/health`
+不暴露 `/docs/yaml` 或其它额外端点；`/api/health`、`/api/system/health`
 不受影响。
 
 ### 安全约束

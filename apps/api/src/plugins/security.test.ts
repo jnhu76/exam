@@ -130,6 +130,24 @@ describe("security plugin: CSRF Origin/Referer check", () => {
     await app.close();
   });
 
+  it("rejects mutating requests in production when no allowed origin is configured", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_ORIGIN", "");
+    vi.stubEnv("ALLOWED_ORIGINS", "");
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/mutate",
+      payload: {},
+      headers: { origin: "https://example.com" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({
+      error: { code: "CSRF_ORIGIN_REJECTED" },
+    });
+    await app.close();
+  });
+
   it("rejects mutating requests with disallowed Origin in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("APP_ORIGIN", "https://example.com");

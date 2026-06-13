@@ -1,4 +1,4 @@
-const DANGEROUS_PREFIXES = new Set(["=", "+", "-", "@", "\t", "\r"]);
+const DANGEROUS_PREFIXES = new Set(["=", "+", "-", "@", "\t", "\r", "\n"]);
 
 export function escapeCSVValue(value: unknown): string {
   const str = String(value ?? "");

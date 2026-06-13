@@ -16,13 +16,16 @@ import attemptRoutes from "../routes/attempts.js";
 import scoreRoutes from "../routes/scores.js";
 import { exportRoutes } from "../routes/export.js";
 import systemRoutes from "../routes/system.js";
+import auditRoutes from "../routes/audit.js";
 
 const routePrefix = "/api";
 
 export async function buildSwaggerApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
-  app.decorate("authenticate", async () => {});
+  const authenticate = async () => {};
+  Object.assign(authenticate, { _isAuthenticate: true });
+  app.decorate("authenticate", authenticate);
   app.decorate("requireRole", () => async () => {});
   app.decorate("db", null as never);
   app.decorate("now", () => new Date());
@@ -45,6 +48,7 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   await app.register(scoreRoutes, { prefix: routePrefix });
   await app.register(exportRoutes, { prefix: routePrefix });
   await app.register(systemRoutes, { prefix: routePrefix });
+  await app.register(auditRoutes, { prefix: routePrefix });
 
   await app.ready();
   return app;
@@ -83,5 +87,9 @@ export interface OpenAPISpecDocument {
 
 export async function generateOpenAPISpec(): Promise<OpenAPISpecDocument> {
   const app = await buildSwaggerApp();
-  return app.swagger() as OpenAPISpecDocument;
+  try {
+    return app.swagger() as OpenAPISpecDocument;
+  } finally {
+    await app.close();
+  }
 }

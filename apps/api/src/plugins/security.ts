@@ -96,7 +96,7 @@ export default function setupSecurity(app: FastifyInstance): void {
   const csrfActive = process.env.NODE_ENV === "production";
   if (csrfActive && allowedOrigins.length === 0) {
     app.log.warn(
-      "CSRF Origin enforcement disabled in production: APP_ORIGIN/ALLOWED_ORIGINS not configured",
+      "CSRF Origin enforcement fail-closed in production: APP_ORIGIN/ALLOWED_ORIGINS not configured",
     );
   }
 
@@ -110,7 +110,9 @@ export default function setupSecurity(app: FastifyInstance): void {
       return;
     }
     if (allowedOrigins.length === 0) {
-      done();
+      reply
+        .code(403)
+        .send(buildErrorResponse(request.id, "CSRF_ORIGIN_REJECTED"));
       return;
     }
     const origin = originOf(request);

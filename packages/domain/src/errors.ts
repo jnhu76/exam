@@ -76,6 +76,12 @@ export class ConflictError extends AppError {
   }
 }
 
+export class UserAlreadyExistsError extends AppError {
+  constructor(message = "User already exists") {
+    super(message, "USER_ALREADY_EXISTS", 409);
+  }
+}
+
 export class CandidateIdentityConflictError extends AppError {
   constructor(message = "Candidate identity already exists") {
     super(message, "CANDIDATE_IDENTITY_CONFLICT", 409);

@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs } from "../schema/pg.js";
@@ -35,11 +35,11 @@ export function createAuditLogRepo(db: Database) {
         .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
         .limit(pageSize)
         .offset(offset);
-      const totalRows = await db
-        .select({ id: auditLogs.id })
+      const [countResult] = await db
+        .select({ total: count() })
         .from(auditLogs)
         .where(where);
-      return { items, total: totalRows.length };
+      return { items, total: Number(countResult?.total ?? 0) };
     },
   };
 }

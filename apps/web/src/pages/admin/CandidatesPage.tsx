@@ -218,6 +218,17 @@ export function CandidatesPage() {
           message: "新增候选人需要初始密码",
         };
       }
+      if (
+        !exists &&
+        row.password &&
+        row.password.length < DEFAULT_PASSWORD_POLICY.minLength
+      ) {
+        return {
+          row: index + 2,
+          status: "error",
+          message: `初始密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`,
+        };
+      }
       const message = existsInDb
         ? "已存在，重复导入将覆盖现有资料"
         : inBatch

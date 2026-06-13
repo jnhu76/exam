@@ -3,6 +3,7 @@ import {
   CreateExamRequestSchema,
   UpdateExamRequestSchema,
   PaginationParamsSchema,
+  EnrollCandidatesRequestSchema,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -549,23 +550,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
       ],
     },
-    async (request: any, reply: any) => {
+    async (request, reply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
-      const { candidateIds } = request.body as { candidateIds: string[] };
-      if (!Array.isArray(candidateIds) || candidateIds.length === 0) {
-        return reply.code(400).send(
-          buildErrorResponse(request.id, "VALIDATION_ERROR", {
-            fields: [
-              {
-                field: "candidateIds",
-                code: "INVALID_TYPE",
-                message: "candidateIds 必须为非空数组",
-              },
-            ],
-          }),
-        );
+      const parsedBody = EnrollCandidatesRequestSchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsedBody.error));
       }
+      const { candidateIds } = parsedBody.data;
 
       const examRepo = createExamRepo(fastify.db);
       const exam = (await examRepo.findById(ctx, examId)) as Exam | null;

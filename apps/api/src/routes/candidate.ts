@@ -11,7 +11,11 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
-import { CandidateIdentityConflictError, ValidationError } from "@exam/domain";
+import {
+  CandidateIdentityConflictError,
+  UserAlreadyExistsError,
+  ValidationError,
+} from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import {
@@ -186,7 +190,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         candidate = await executeInTransaction(fastify.db, async (tx) => {
           const txUserRepo = createUserRepo(tx);
           const txCandidateRepo = createCandidateRepo(tx);
-          const user = await txUserRepo.create(ctx, {
+          const user = await txUserRepo.createUnique(ctx, {
             username: data.username,
             passwordHash,
             name: data.name,
@@ -199,6 +203,11 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           });
         });
       } catch (err: unknown) {
+        if (err instanceof UserAlreadyExistsError) {
+          return reply
+            .code(409)
+            .send(buildErrorResponse(request.id, "USER_ALREADY_EXISTS"));
+        }
         if (
           err &&
           typeof err === "object" &&
@@ -207,11 +216,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           const constraint = String(
             (err as Record<string, unknown>).constraint ?? "",
           );
-          if (constraint === "users_org_username_unique") {
-            return reply
-              .code(409)
-              .send(buildErrorResponse(request.id, "USER_ALREADY_EXISTS"));
-          }
           if (constraint === "candidate_profiles_org_user_unique") {
             return reply
               .code(409)
@@ -327,8 +331,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       const allCandidates = await candidateRepo.list(ctx);
-      // TODO: optimize for large orgs — userRepo.list(ctx) loads all users into memory.
-      // Consider a role-scoped query or batch lookup when orgs exceed ~10k users.
       const existingUsernames = new Set<string>();
       const userIdMap = new Map<string, string>();
       for (const user of await userRepo.list(ctx)) {
@@ -384,7 +386,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           const passwordHash = await hashPassword(password);
-          const user = await userRepo.create(ctx, {
+          const user = await userRepo.createUnique(ctx, {
             username,
             passwordHash,
             name,

@@ -99,7 +99,7 @@ Command Result 不能取代 401、403、404、429、500。
 以下码用于 ErrorResponse（如 submit 的 409）。Command Result（如 save answer 的 200 accepted:false）使用独立的 reason 枚举，见 03-command-result.md。
 
 - `ATTEMPT_ALREADY_SUBMITTED`
-- `ATTEMPT_CLOSED`
+- `ATTEMPT_NOT_IN_PROGRESS`
 - `ATTEMPT_DEADLINE_EXCEEDED`
 - `ANSWER_VERSION_CONFLICT`
 - `EXAM_NOT_OPEN`

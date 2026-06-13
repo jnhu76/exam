@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { generateOpenAPISpec } from "./swagger.js";
+import Fastify from "fastify";
+import type { FastifyInstance } from "fastify";
+import swaggerPlugin from "@fastify/swagger";
+import { addCommonResponseSchemas, openApiConfig } from "./config.js";
+import { generateOpenAPISpec, type OpenAPISpecDocument } from "./swagger.js";
+
+async function generateSpecWithProbeRoutes(
+  registerRoutes: (app: FastifyInstance) => void,
+): Promise<OpenAPISpecDocument> {
+  const app = Fastify({ logger: false });
+  const authenticate = async () => {};
+  Object.assign(authenticate, { _isAuthenticate: true });
+  app.decorate("authenticate", authenticate);
+  await app.register(swaggerPlugin as never, openApiConfig);
+  addCommonResponseSchemas(app);
+  registerRoutes(app);
+  await app.ready();
+  try {
+    return app.swagger() as OpenAPISpecDocument;
+  } finally {
+    await app.close();
+  }
+}
 
 describe("OpenAPI spec generation", () => {
   it("generates a valid OpenAPI 3.0 document", async () => {
@@ -59,6 +81,52 @@ describe("OpenAPI spec generation", () => {
     expect(exportScores!.responses["404"]).toBeDefined();
     expect(exportScores!.responses["401"]).toBeDefined();
     expect(exportScores!.responses["403"]).toBeDefined();
+  });
+
+  it("documents audit log endpoint with auth and pagination responses", async () => {
+    const spec = await generateOpenAPISpec();
+
+    const auditLogs = spec.paths["/api/admin/audit-logs"]?.get;
+    expect(auditLogs).toBeDefined();
+    expect(auditLogs!.responses["200"]).toBeDefined();
+    expect(auditLogs!.responses["401"]).toBeDefined();
+    expect(auditLogs!.responses["403"]).toBeDefined();
+  });
+
+  it("does not classify arbitrary preHandlers as auth", async () => {
+    const spec = await generateSpecWithProbeRoutes((app) => {
+      app.get("/probe-public", { preHandler: async () => {} }, async () => ({
+        ok: true,
+      }));
+    });
+
+    const probe = spec.paths["/probe-public"]?.get;
+    expect(probe).toBeDefined();
+    expect(probe!.responses["200"]).toBeDefined();
+    expect(probe!.responses["401"]).toBeUndefined();
+    expect(probe!.responses["403"]).toBeUndefined();
+  });
+
+  it("documents auth when the marked auth hook runs outside preHandler", async () => {
+    const spec = await generateSpecWithProbeRoutes((app) => {
+      const authenticate = async () => {};
+      Object.assign(authenticate, { _isAuthenticate: true });
+      app.get("/probe-on-request", { onRequest: authenticate }, async () => ({
+        ok: true,
+      }));
+      app.get(
+        "/probe-pre-validation",
+        { preValidation: authenticate },
+        async () => ({ ok: true }),
+      );
+    });
+
+    expect(
+      spec.paths["/probe-on-request"]?.get?.responses["401"],
+    ).toBeDefined();
+    expect(
+      spec.paths["/probe-pre-validation"]?.get?.responses["401"],
+    ).toBeDefined();
   });
 
   it("documents DELETE endpoints with 204 response", async () => {

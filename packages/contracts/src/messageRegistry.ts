@@ -58,8 +58,6 @@ export function getErrorMessage(code: ErrorCode): string {
   return errorMessages[code];
 }
 
-// FIXME(A07): 当前只有 zh-CN 一种 catalog，未支持 locale 时退回 DEFAULT_LOCALE。
-// 添加新 locale 时，在 localeCatalogs 中注册对应 catalog 即可。
 export function getMessageForLocale(
   code: string,
   locale: SupportedLocale = DEFAULT_LOCALE,

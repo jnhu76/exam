@@ -56,6 +56,7 @@ export function TakeExamPage() {
   const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
+  const submittingRef = useRef(false);
   const { scheduleSave, flush } = useSubmitFlush();
 
   const loadAttempt = useCallback(async () => {
@@ -172,12 +173,14 @@ export function TakeExamPage() {
   }
 
   const handleSubmit = useCallback(async () => {
-    if (!attemptId) return;
+    if (!attemptId || submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       await api.post(`/api/attempts/${attemptId}/submit`);
       navigate(routes.exam.result(attemptId));
     } catch {
+      submittingRef.current = false;
       setIsSubmitting(false);
       toast.error("提交失败，请重试");
     }

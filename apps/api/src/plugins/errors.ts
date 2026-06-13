@@ -6,8 +6,6 @@ import {
   buildValidationErrorResponse,
   normalizeErrorCode,
 } from "../lib/errorResponse.js";
-import type { ErrorCode } from "@exam/contracts";
-
 function isConstraintError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as Record<string, unknown>;
@@ -21,28 +19,6 @@ function isConstraintError(err: unknown): boolean {
   )
     return true;
   return false;
-}
-
-function getConstraintName(
-  err: unknown,
-  remainingDepth = 3,
-): string | undefined {
-  if (remainingDepth === 0) return undefined;
-  if (typeof err !== "object" || err === null) return undefined;
-  const error = err as Record<string, unknown>;
-  if (typeof error.constraint === "string") return error.constraint;
-  if (typeof error.message === "string") {
-    const match = error.message.match(/constraint ["']([^"']+)["']/);
-    if (match?.[1]) return match[1];
-  }
-  return getConstraintName(error.cause, remainingDepth - 1);
-}
-
-function getConstraintErrorCode(err: unknown): ErrorCode {
-  if (getConstraintName(err) === "users_org_username_unique") {
-    return "USER_ALREADY_EXISTS";
-  }
-  return "RESOURCE_CONFLICT";
 }
 
 function isClientError(
@@ -79,8 +55,9 @@ export function setupErrorHandler(app: FastifyInstance): void {
         .send(buildErrorResponse(request.id, code));
     }
     if (isConstraintError(error)) {
-      const code = getConstraintErrorCode(error);
-      return reply.code(409).send(buildErrorResponse(request.id, code));
+      return reply
+        .code(409)
+        .send(buildErrorResponse(request.id, "RESOURCE_CONFLICT"));
     }
     request.log.error({ err: error }, "Unhandled request error");
     return reply
