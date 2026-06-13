@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
+import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 interface UserRow {
   id: string;
@@ -104,7 +105,8 @@ export function UsersPage() {
     if (!name.trim()) errors.name = "请输入姓名";
     if (!editing) {
       if (!username.trim()) errors.username = "请输入用户名";
-      if (password.length < 6) errors.password = "密码至少6位";
+      if (password.length < DEFAULT_PASSWORD_POLICY.minLength)
+        errors.password = `密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`;
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;

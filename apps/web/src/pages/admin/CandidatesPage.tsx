@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table";
 import { Pencil, Plus, Search, Upload, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
+import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 interface Field {
   id: string;
@@ -134,7 +135,8 @@ export function CandidatesPage() {
     if (!name.trim()) errors.name = "请输入姓名";
     if (!editing) {
       if (!username.trim()) errors.username = "请输入用户名";
-      if (password.length < 6) errors.password = "密码至少6位";
+      if (password.length < DEFAULT_PASSWORD_POLICY.minLength)
+        errors.password = `密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`;
     }
     for (const field of fields) {
       if (field.required && !(values[field.name] ?? "").toString().trim()) {
@@ -384,7 +386,7 @@ export function CandidatesPage() {
                       if (fieldErrors.password)
                         setFieldErrors((prev) => ({ ...prev, password: "" }));
                     }}
-                    placeholder="至少 6 位"
+                    placeholder={`至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`}
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
                 </Field>

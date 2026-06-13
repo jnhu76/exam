@@ -4,6 +4,8 @@ import {
   RegisterRequestSchema,
   ChangePasswordRequestSchema,
 } from "../auth.js";
+import { CreateUserRequestSchema } from "../user.js";
+import { CreateCandidateRequestSchema } from "../candidate.js";
 import {
   CreateCourseRequestSchema,
   UpdateCourseRequestSchema,
@@ -610,5 +612,104 @@ describe("SaveAnswer route-shape equivalence (A01 wire contract)", () => {
       const message = getSaveAnswerMessage(reason);
       expect(message.length, `reason=${reason}`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("password policy enforcement at boundary", () => {
+  const sevenChars = "1234567";
+  const eightChars = "12345678";
+
+  it("RegisterRequestSchema rejects 7-char password", () => {
+    const result = RegisterRequestSchema.safeParse({
+      organizationSlug: "default",
+      bootstrapToken: "token",
+      username: "admin",
+      password: sevenChars,
+      name: "Admin",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("RegisterRequestSchema accepts 8-char password", () => {
+    const result = RegisterRequestSchema.safeParse({
+      organizationSlug: "default",
+      bootstrapToken: "token",
+      username: "admin",
+      password: eightChars,
+      name: "Admin",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("ChangePasswordRequestSchema rejects 7-char newPassword", () => {
+    const result = ChangePasswordRequestSchema.safeParse({
+      currentPassword: "old",
+      newPassword: sevenChars,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("ChangePasswordRequestSchema accepts 8-char newPassword", () => {
+    const result = ChangePasswordRequestSchema.safeParse({
+      currentPassword: "old",
+      newPassword: eightChars,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateUserRequestSchema rejects 7-char password", () => {
+    const result = CreateUserRequestSchema.safeParse({
+      username: "newuser",
+      password: sevenChars,
+      name: "New User",
+      role: "Teacher",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateUserRequestSchema accepts 8-char password", () => {
+    const result = CreateUserRequestSchema.safeParse({
+      username: "newuser",
+      password: eightChars,
+      name: "New User",
+      role: "Teacher",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateCandidateRequestSchema rejects 7-char password", () => {
+    const result = CreateCandidateRequestSchema.safeParse({
+      username: "cand001",
+      password: sevenChars,
+      name: "Cand",
+      fields: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateCandidateRequestSchema accepts 8-char password", () => {
+    const result = CreateCandidateRequestSchema.safeParse({
+      username: "cand001",
+      password: eightChars,
+      name: "Cand",
+      fields: {},
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("LoginRequestSchema still accepts a short password to preserve auth-failure semantics", () => {
+    const result = LoginRequestSchema.safeParse({
+      username: "admin",
+      password: "short",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("LoginRequestSchema accepts an empty password so auth returns uniform 401, not 400", () => {
+    const result = LoginRequestSchema.safeParse({
+      username: "admin",
+      password: "",
+    });
+    expect(result.success).toBe(true);
   });
 });

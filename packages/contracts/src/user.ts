@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { passwordField } from "./passwordPolicy.js";
 
 // ── User ──────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export type UserDTO = z.infer<typeof UserSchema>;
 
 export const CreateUserRequestSchema = z.object({
   username: z.string().min(3).max(50),
-  password: z.string().min(6).max(100),
+  password: passwordField(),
   name: z.string().min(1).max(100),
   role: RoleSchema.exclude(["SuperAdmin", "Candidate"]),
 });

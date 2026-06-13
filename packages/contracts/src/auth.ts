@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RoleSchema } from "./user.js";
+import { passwordField, passwordLoginField } from "./passwordPolicy.js";
 
 // ── Register ──────────────────────────────────────────────────────
 
@@ -7,7 +8,7 @@ export const RegisterRequestSchema = z.object({
   organizationSlug: z.string().min(1).max(100),
   bootstrapToken: z.string().min(1),
   username: z.string().min(3).max(50),
-  password: z.string().min(6).max(100),
+  password: passwordField(),
   name: z.string().min(1).max(100),
 });
 export type RegisterRequest = z.infer<typeof RegisterRequestSchema>;
@@ -24,7 +25,7 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 export const LoginRequestSchema = z.object({
   organizationSlug: z.string().min(1).max(100).optional(),
   username: z.string(),
-  password: z.string(),
+  password: passwordLoginField(),
 });
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
@@ -57,7 +58,7 @@ export type LogoutRequest = z.infer<typeof LogoutRequestSchema>;
 
 export const ChangePasswordRequestSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(6).max(100),
+  newPassword: passwordField(),
 });
 export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
 

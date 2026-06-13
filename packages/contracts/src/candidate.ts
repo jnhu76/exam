@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { passwordField } from "./passwordPolicy.js";
 
 // ── Candidate ─────────────────────────────────────────────────────
 
@@ -14,7 +15,7 @@ export type CandidateDTO = z.infer<typeof CandidateSchema>;
 
 export const CreateCandidateRequestSchema = z.object({
   username: z.string().min(3).max(50),
-  password: z.string().min(6).max(100),
+  password: passwordField(),
   name: z.string().min(1).max(100),
   fields: z.record(z.unknown()),
 });

@@ -12,11 +12,41 @@
 
 1. **必须有再现一次"同代码再跑就过"的证据**才能记入此处，否则按真实 bug 处理。
 2. 每条至少含：日期、Job 上下文、失败测试 file:line、错误片段、根因假设、当前缓解、后续动作。
-3. 同一条目复发 ≥3 次 → 升级为 `docs/dev/manual-test-bugs.md` 或开 issue。
+3. 同一条目复发 ≥3 次 → 升级为正式跟踪条目（本文档"已升级条目"段，或 issue tracker），并在原条目末尾标记"已升级"。
+
+---
+
+## 已升级条目
+
+### BUG-FLAKE-001 — `attempts.test.ts:1070` 后台扫描在 coverage 模式下 5s timeout
+
+**状态**: 已升级（≥3 次复发，2026-06-13）。
+
+**当前缓解**: `apps/api/src/routes/attempts.test.ts:1070` 用例加 positional `15_000` ms 超时（即 `it("...", async () => { ... }, 15_000)`，"已知非确定性 flake 登记册"中的选项 C）。该缓解只是延长单个用例的 timeout 边界，并未消除根因。
+
+**已知根因（待验证）**: vitest 默认按文件并行调度 + 全部测试文件共享同一本地 PG 实例 + c8 instrumentation 在 coverage 模式下放大 I/O 与调度争用。导致 `scanDatabaseForDisruptedAttempts` 的 PG 调用在某些瞬间无法在 5s 默认 testTimeout 内回包。
+
+**建议根因修复（按优先级）**:
+
+1. 选项 A：`apps/api` vitest 切到 `pool: "forks"` + `singleFork: true`，跨文件串行。代价：CI 时间增加。
+2. 选项 B：每个测试文件用独立 PG schema（`SET search_path`）从源头消除共享状态争用。代价：基础设施改造。
+
+**禁止做**:
+- 永久延长 scanner 自身超时（产品代码不为测试便利让步）
+- skip 该用例
+- 在 CI 上设置自动重跑后默认通过（会掩盖真实回归）
+
+**触发条件**: 若 BUG-FLAKE-001 在 Phase1.7 后续 Job 中再次出现（即使是 coverage 模式），必须立即开始选项 A 或 B 的根因修复，不再追加 timeout。
+
+**复发记录**:
+- 2026-06-13：S06-lite review 修复阶段，单次出现，重跑通过（普通 flake）
+- 2026-06-13：S07-lite GREEN 阶段，`pnpm verify` coverage 模式连续 3 次同位置 timeout——触发升级，应用选项 C 缓解
 
 ---
 
 ## 2026-06-13 — `attempts.test.ts` 后台扫描测试 5s timeout
+
+**已升级到 BUG-FLAKE-001（见上）。** 本节保留作为升级前的原始上下文。
 
 ### 失败位置
 
@@ -84,6 +114,7 @@ configure it globally with "testTimeout".
 ### 复发记录
 
 - 2026-06-13：S06-lite review 修复阶段，单次出现，重跑通过
+- 2026-06-13：S07-lite GREEN 阶段，`pnpm verify`（coverage 模式，c8 instrumentation 放大）下连续 3 次同位置 5s timeout。已升级为治标修复——给该 it() 加 positional `15_000` ms 超时（`it("...", async () => { ... }, 15_000)`，选项 C）。后续 Phase1.7 收紧测试基础设施时再做选项 A/B。已升级到 BUG-FLAKE-001 跟踪根因（见本文档"已升级条目"段），因为已达 ≥3 次复发阈值。
 
 ---
 

@@ -96,7 +96,7 @@ Phase1.7 做 baseline：
 - Candidate 403 on audit
 - 密码最小长度 8
 - seed 密码全部 >= 8
-- 密码策略从 config 读取
+- 密码策略集中到单一权威 module
 - red-team baseline suite
 - Phase1.7 security baseline validation
 
@@ -193,18 +193,21 @@ Phase1.7 不做 full：
 ### P1.7-S07-lite: Password Policy + Account Security Baseline
 
 **做（baseline）**:
-- [ ] 新建用户 / 重置密码最小长度 8
-- [ ] seed 密码全部 >= 8
-- [ ] 密码策略从 config 读取
-- [ ] password policy docs
+- [x] 新建用户 / 重置密码最小长度 8
+- [x] seed 密码全部 >= 8
+- [x] 密码策略集中到单一权威 module（`packages/contracts/src/passwordPolicy.ts`，`DEFAULT_PASSWORD_POLICY`），4 个 schema 改用 `passwordField()` 工厂；详见 `docs/phase1.7/password-policy.md`
+- [x] password policy docs
 
 **暂缓（full，deferred to Phase2/1.8）**:
+- [ ] 运行时 env 可调（`PASSWORD_MIN_LENGTH` 之类）
+- [ ] Organization 级动态策略
+- [ ] 复杂度规则（必须含大小写/数字/符号）
 - [ ] 5 次失败锁定 15 分钟
 - [ ] mustChangePassword
 - [ ] 首次登录强制改密
 - [ ] 最后 SuperAdmin 不被永久锁死
 
-**原因**: 账户锁定和 mustChangePassword 会严重干扰 seed 数据、测试登录态、开发体验。baseline 先提高最小长度和统一策略配置。
+**原因**: 账户锁定和 mustChangePassword 会严重干扰 seed 数据、测试登录态、开发体验。运行时 env / org-level 策略需要前后端策略同步机制，不属于 baseline 范围。baseline 先做最小长度抬升与策略集中化。
 
 ---
 
@@ -218,7 +221,7 @@ Phase1.7 不做 full：
   - `tenant-isolation.test.ts` — 跨组织隔离 baseline
   - `exam-protocol-security.test.ts` — 考生提交 baseline（deadline 409, submit idempotency）
   - `xss-csrf-csv.test.ts` — XSS 排查 + CSV escape + security headers
-  - `password-policy.test.ts` — 最小长度 8 + config 策略
+  - `password-policy.test.ts` — 最小长度 8 + 集中策略 module
   - `auth-session-baseline.test.ts` — JWT secret fallback removed + dummy verify + cookie secure
 
 **验收**:
@@ -247,7 +250,7 @@ Phase1.7 不做 full：
 - [ ] S04-lite baseline complete（JWT secret, cookie secure, dummy verify, sessionId）
 - [ ] S05-lite baseline complete（CSV escape, security headers, CSP）
 - [ ] S06-lite baseline complete（login/logout audit, audit-logs API）
-- [ ] S07-lite baseline complete（min length 8, seed password, config policy）
+- [ ] S07-lite baseline complete（min length 8, seed password, 集中策略 module）
 - [ ] S08-lite red-team baseline suite pass
 - [ ] `pnpm verify` pass
 
@@ -322,7 +325,7 @@ Phase1.7 完成后，Phase2 可以安全地假设：
 - 审计日志 baseline 已建立
 - CSV / security header baseline 已建立
 - 账号 / session baseline 已建立
-- 密码策略 baseline 已建立（最小长度 8，config 驱动）
+- 密码策略 baseline 已建立（最小长度 8，集中策略 module）
 
 Phase2 自己负责的安全内容：
 

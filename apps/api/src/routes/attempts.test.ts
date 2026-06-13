@@ -1088,7 +1088,7 @@ describe("attempt routes", () => {
 
       expect(result.markedCount).toBeGreaterThan(0);
       expect(attempt?.status).toBe("disrupted");
-    });
+    }, 15_000);
   });
 
   describe("POST /attempts/:attemptId/restore", () => {

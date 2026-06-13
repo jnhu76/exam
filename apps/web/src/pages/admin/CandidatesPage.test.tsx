@@ -151,7 +151,7 @@ describe("CandidatesPage", () => {
     await user.click(dialogSaveBtn(dialog));
     expect(within(dialog).getByText("请输入用户名")).toBeInTheDocument();
     expect(within(dialog).getByText("请输入姓名")).toBeInTheDocument();
-    expect(within(dialog).getByText("密码至少6位")).toBeInTheDocument();
+    expect(within(dialog).getByText("密码至少 8 位")).toBeInTheDocument();
   });
 
   it("creates a new candidate with valid data", async () => {
