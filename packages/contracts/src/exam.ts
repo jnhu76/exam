@@ -70,9 +70,7 @@ export const ExamSchema = z.object({
 export type ExamDTO = z.infer<typeof ExamSchema>;
 
 export const EnrollCandidatesRequestSchema = z.object({
-  candidateIds: z
-    .array(z.string().uuid())
-    .min(1, "candidateIds 必须为非空数组"),
+  candidateIds: z.array(z.string().uuid()).min(1),
 });
 export type EnrollCandidatesRequest = z.infer<
   typeof EnrollCandidatesRequestSchema

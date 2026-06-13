@@ -12,11 +12,11 @@ async function generateSpecWithProbeRoutes(
   const authenticate = async () => {};
   Object.assign(authenticate, { _isAuthenticate: true });
   app.decorate("authenticate", authenticate);
-  await app.register(swaggerPlugin as never, openApiConfig);
-  addCommonResponseSchemas(app);
-  registerRoutes(app);
-  await app.ready();
   try {
+    await app.register(swaggerPlugin as never, openApiConfig);
+    addCommonResponseSchemas(app);
+    registerRoutes(app);
+    await app.ready();
     return app.swagger() as OpenAPISpecDocument;
   } finally {
     await app.close();

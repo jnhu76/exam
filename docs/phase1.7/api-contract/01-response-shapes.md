@@ -189,4 +189,3 @@ API 不做全系统 envelope 化。响应结构按 endpoint 语义分类，同�
 - 文件成功响应套 JSON，再把文件放进字符串字段。
 - 204 同时返回 `{ ok: true }`。
 - 把所有资源响应改成 `{ data, error, meta }` 作为本阶段目标。
-- S04-S09 安全 Job 新增独立错误格式，不经过 ErrorResponse v0 和共享 code/message registry。
