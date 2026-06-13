@@ -2,7 +2,10 @@ import { and, desc, eq } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs } from "../schema/pg.js";
-import { createAsyncTenantCrudRepo } from "./baseRepo.js";
+import {
+  createAsyncTenantCrudRepo,
+  resolveOrganizationId,
+} from "./baseRepo.js";
 
 export function createAuditLogRepo(db: Database) {
   const base = createAsyncTenantCrudRepo(db, auditLogs);
@@ -17,7 +20,7 @@ export function createAuditLogRepo(db: Database) {
       items: (typeof auditLogs.$inferSelect)[];
       total: number;
     }> {
-      const orgId = ctx.targetOrganizationId ?? ctx.organizationId;
+      const orgId = resolveOrganizationId(ctx);
       const conditions = [eq(auditLogs.organizationId, orgId)];
       if (filter.action) {
         conditions.push(eq(auditLogs.action, filter.action));

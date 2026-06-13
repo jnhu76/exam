@@ -100,8 +100,14 @@ describe("audit log baseline (S06-lite)", () => {
       .where(eq(schema.auditLogs.organizationId, orgId));
   }
 
-  async function waitForAudit() {
-    await new Promise((r) => setTimeout(r, 250));
+  async function waitForAudit(predicate?: () => Promise<boolean>) {
+    const timeoutMs = predicate ? 2000 : 800;
+    const deadline = Date.now() + timeoutMs;
+    const check = predicate ?? (async () => (await readAudits()).length > 0);
+    while (Date.now() < deadline) {
+      if (await check()) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
   }
 
   describe("login.success audit", () => {
@@ -400,7 +406,7 @@ describe("audit log baseline (S06-lite)", () => {
   });
 
   describe("SuperAdmin cross-org metadata", () => {
-    it("recordAudit captures targetOrganizationId in metadata when it differs from organizationId", async () => {
+    it("recordAudit captures actorOrganizationId in metadata when ctx acts cross-org", async () => {
       const { recordAudit } = await import("./audit.js");
 
       await clearAudits();
@@ -447,10 +453,12 @@ describe("audit log baseline (S06-lite)", () => {
           .from(schema.auditLogs)
           .where(eq(schema.auditLogs.targetId, targetId));
         expect(rows.length).toBe(1);
+        expect(rows[0]!.organizationId).toBe(otherOrgId);
         expect(rows[0]!.metadata).toMatchObject({
           foo: "bar",
-          targetOrganizationId: otherOrgId,
+          actorOrganizationId: orgId,
         });
+        expect(rows[0]!.metadata).not.toHaveProperty("targetOrganizationId");
       } finally {
         await ctx.db
           .delete(schema.auditLogs)
@@ -461,7 +469,7 @@ describe("audit log baseline (S06-lite)", () => {
       }
     });
 
-    it("recordAudit does NOT add targetOrganizationId when ctx targets its own org", async () => {
+    it("recordAudit does NOT add actorOrganizationId when ctx targets its own org", async () => {
       const { recordAudit } = await import("./audit.js");
 
       await clearAudits();
@@ -496,6 +504,7 @@ describe("audit log baseline (S06-lite)", () => {
         .from(schema.auditLogs)
         .where(eq(schema.auditLogs.targetId, targetId2));
       expect(rows.length).toBe(1);
+      expect(rows[0]!.metadata).not.toHaveProperty("actorOrganizationId");
       expect(rows[0]!.metadata).not.toHaveProperty("targetOrganizationId");
     });
   });

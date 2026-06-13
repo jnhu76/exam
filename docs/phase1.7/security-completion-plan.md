@@ -179,7 +179,7 @@ Phase1.7 不做 full：
 - [ ] login.success audit
 - [ ] login.failure audit
 - [ ] logout audit
-- [ ] SuperAdmin cross-org metadata（`targetOrganizationId` 记入 metadata）
+- [ ] SuperAdmin cross-org metadata（跨 org 操作时 `metadata.actorOrganizationId` 记录 SuperAdmin 的 home org；row.organizationId 已经是 target org）
 - [ ] `GET /api/admin/audit-logs`（Admin/SuperAdmin only，分页 + action 过滤）
 - [ ] Candidate 403 on audit query
 

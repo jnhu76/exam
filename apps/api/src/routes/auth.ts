@@ -211,8 +211,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           sessionId: "logout",
         };
         recordAudit(fastify, request, ctx, "logout", "user", payload.actorId);
-      } catch {
-        // skip audit on invalid token
+      } catch (err) {
+        fastify.log.warn(
+          { err, event: "logout.invalid_token" },
+          "logout: invalid or expired token",
+        );
       }
     }
     reply.clearCookie("auth-token", { path: "/" });
