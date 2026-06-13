@@ -11,6 +11,7 @@ services:
       HOST: 0.0.0.0
       COOKIE_SECURE: "false"
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-multiTenant}
     depends_on:
       db:
         condition: service_healthy

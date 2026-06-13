@@ -34,7 +34,12 @@ export function isPlatformApi(
 }
 
 export function isPublicEndpoint(url: string): boolean {
-  return url === "/api/health" || url === "/api/settings/branding";
+  return (
+    url === "/api/health" ||
+    url === "/api/settings/branding" ||
+    url === "/api/system/public-config" ||
+    url === "/api/system/info"
+  );
 }
 
 export function validateTenantAccess(
