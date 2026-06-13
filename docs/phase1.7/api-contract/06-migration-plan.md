@@ -435,8 +435,8 @@ submit 前 flush 所有 pending saves，与 A01 的 save/submit contract 对齐�
 
 - `packages/contracts` 提供 `SUPPORTED_LOCALES`、`SupportedLocale`、`DEFAULT_LOCALE`、`localeCatalogs`、`getMessageForLocale(code, locale?)`、`fallbackMessages`。
 - `apps/web/src/lib/i18n.ts` 提供 `resolveErrorMessage(error)`，按 `ApiError.code → registry → server message → fallback` 链路解析。
-- `apps/web/src/lib/api.ts` 接入 `getMessageForLocale`：当服务端响应缺失 `error.message` 但 `error.code` 在 registry 中时，自动用 zh-CN registry 文案兜底，避免落到 `${status} Request failed` 这种英文 fallback。
-- 测试覆盖：`packages/contracts` 13 个 locale catalog 测试、`apps/web` 9 个 `resolveErrorMessage` 测试、`apps/web` 4 个 `api.ts` representative integration 测试（含 fallback 路径）。
+- `apps/web/src/lib/api.ts` 接入 `getMessageForLocale` + `isErrorCode`：error code 命中 registry 时优先使用 registry zh-CN 文案；code 未注册且服务端 message 非空时回退到服务端 message；否则回退到 `${status} Request failed`。语义与 `resolveErrorMessage` 和 `04-i18n-boundary.md` 的 registry-first 规则一致。
+- 测试覆盖：`packages/contracts` 13 个 locale catalog 测试、`apps/web` 9 个 `resolveErrorMessage` 测试、`apps/web` 7 个 `api.ts` representative integration 测试（含 registry-first、empty-string、unknown-code 各分支）。
 - 文档：`docs/phase1.7/api-contract/04-i18n-boundary.md` 给出语言策略、fallback 链、扩展新 locale 的 5 步流程。
 
 A07 不阻塞 Phase2 Entry Gate。后续如需引入第二个 locale，遵循 `04-i18n-boundary.md` "扩展新 Locale 的步骤" 即可。
@@ -482,8 +482,8 @@ A07 不阻塞 Phase2 Entry Gate。后续如需引入第二个 locale，遵循 `0
 ### Verification result (2026-06-13)
 
 - contracts: 13 locale catalog tests pass（覆盖 `getMessageForLocale`、`isSupportedLocale`、`fallbackMessages`、所有 `errorMessages` 条目在 `DEFAULT_LOCALE` 下回归一致）。
-- web: 9 个 `resolveErrorMessage` 单元测试 + 4 个 `api.ts` integration 测试 pass（覆盖 server 提供 / 缺失 message、未知 code、body 解析失败、fallback 链）。
-- representative path：`api.ts` 的 fetch error 处理是所有 ApiError 的源头，A07 接入此处即覆盖前端所有 ApiError 消费者的"server 缺 message"路径。
+- web: 9 个 `resolveErrorMessage` 单元测试 + 7 个 `api.ts` integration 测试 pass（覆盖 registry-first、code 已知 + 服务端 message 非空、code 已知 + 服务端 message 为空字符串、code 未知 + 服务端 message 非空、code 未知 + 服务端 message 为空字符串、body 解析失败、code 未知 + 服务端 message 缺失）。
+- representative path：`api.ts` 的 fetch error 处理是所有 ApiError 的源头，A07 接入此处即覆盖前端所有 ApiError 消费者的 registry-first 路径。
 - `pnpm verify` 通过。
 
 ### Follow-up debt（不在 A07 baseline 内，留待后续按需启动）

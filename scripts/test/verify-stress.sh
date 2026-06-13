@@ -43,7 +43,7 @@ for i in $(seq 1 "$ITERATIONS"); do
   echo
   echo "==> [round $i/$ITERATIONS] ${extra_env[*]:-} ${verify_cmd[*]}"
   round_start=$(date +%s)
-  if ! "${extra_env[@]}" "${verify_cmd[@]}"; then
+  if ! ${extra_env[@]+"${extra_env[@]}"} "${verify_cmd[@]}"; then
     echo
     echo "==> FAIL at round $i/$ITERATIONS"
     exit 1

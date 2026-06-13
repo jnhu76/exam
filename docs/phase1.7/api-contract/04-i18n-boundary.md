@@ -28,12 +28,27 @@
   → 通用 Error.message
   → fallbackMessages.operationFailed
 
+前端: api.ts request error path（构建 ApiError.message 时）
+  → error.code 在 registry → getMessageForLocale(code)（registry 优先）
+  → error.code 未注册 + 服务端 message 非空 → 服务端 message 兜底
+  → 否则 → `${status} Request failed`
+
 服务端: buildErrorResponse(requestId, code)
   → getErrorMessage(code)（从 registry 查找 zh-CN message）
   → fallbackMessages.unknownError（"未知错误"，仅在 code 未注册时）
 ```
 
 `fallbackMessages` 集中维护兜底文案，便于未来加入新 locale 时统一翻译。
+
+### Ordering rationale（registry-first）
+
+为什么前端在已知 code 时优先使用 registry，而不是服务端 message：
+
+- **`code`/`reason` 是机器契约**，是跨服务、跨语言的稳定标识。
+- **registry 是展示文案的唯一来源**，集中维护、便于扩展 locale、便于审计文案。
+- **服务端 message 仅是 unknown code 的兜底**：当前端 registry 落后于服务端（服务端引入了新 code 但前端尚未更新 catalog），服务端 zh-CN message 可作为合理 fallback，避免落到 `"${status} Request failed"` 这种英文字符串。
+- **不要用服务端 message 做"更详细的产品文案"**：如果 registry 文案不够好，应该改 registry，或拆分出更具体的 code/reason，而不是让服务端临时返回不同 message。后者会在引入第二 locale 时立即崩塌。
+- **未来扩展点**：更细的业务文案应通过 (a) 更具体的 code/reason，或 (b) 未来在 ErrorResponse 中引入 `metadata` / interpolation 参数实现。本阶段不引入 metadata/interpolation。
 
 ### 扩展新 Locale 的步骤
 

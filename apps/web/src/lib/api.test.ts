@@ -312,7 +312,7 @@ describe("api client", () => {
       });
     });
 
-    it("preserves server-provided message even when code is also present", async () => {
+    it("uses registry zh-CN message when code is known, even if server also provides message", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -336,7 +336,90 @@ describe("api client", () => {
         name: "ApiError",
         status: 401,
         code: "AUTH_REQUIRED",
-        message: "服务端自定义文案",
+        message: "请先登录",
+      });
+    });
+
+    it("uses registry zh-CN message when code is known and server message is empty string", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTH_REQUIRED",
+                message: "",
+                requestId: "req-i18n-empty-known",
+              },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/protected")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 401,
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+      });
+    });
+
+    it("falls back to server-provided message when code is unknown and message is non-empty", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+                message: "上游服务返回的特殊文案",
+                requestId: "req-i18n-unknown-with-msg",
+              },
+            }),
+            {
+              status: 418,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/strange")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 418,
+        code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+        message: "上游服务返回的特殊文案",
+      });
+    });
+
+    it("falls back to status string when code is unknown and message is empty string", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+                message: "",
+              },
+            }),
+            {
+              status: 418,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/strange")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 418,
+        code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+        message: "418 Request failed",
       });
     });
 

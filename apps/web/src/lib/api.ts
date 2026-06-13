@@ -44,20 +44,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     if (!response.ok) {
       let message: string | undefined;
+      let serverMessage: string | undefined;
       let code: string | undefined;
       let details: unknown;
       let requestId: string | undefined;
       try {
         const body = (await response.json()) as ErrorBody;
-        message = body.error?.message ?? body.message;
+        serverMessage = body.error?.message ?? body.message;
         code = body.error?.code;
         details = body.error?.details;
         requestId = body.error?.requestId;
       } catch {
         // body parse failed; fall through to code/status fallback
       }
-      if (!message && code && isErrorCode(code)) {
+      if (code && isErrorCode(code)) {
         message = getMessageForLocale(code);
+      } else if (serverMessage) {
+        message = serverMessage;
       }
       if (!message) {
         message = `${response.status} Request failed`;
