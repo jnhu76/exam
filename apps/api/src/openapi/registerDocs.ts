@@ -20,5 +20,6 @@ export async function registerOpenApiDocs(app: FastifyInstance): Promise<void> {
 
   await app.register(swaggerUiPlugin as never, {
     routePrefix: "/docs",
+    staticCSP: true,
   });
 }

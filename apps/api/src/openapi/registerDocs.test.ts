@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
+import rateLimit from "@fastify/rate-limit";
+import setupSecurity from "../plugins/security.js";
 import { registerOpenApiDocs } from "./registerDocs.js";
 
 const ENV_KEYS = ["API_DOCS_ENABLED", "NODE_ENV"] as const;
@@ -15,6 +17,39 @@ async function buildAppWithDocs(
     }
   }
   const app = Fastify({ logger: false });
+  await registerOpenApiDocs(app);
+  app.get("/api/health", async () => ({ status: "ok" }));
+  await app.ready();
+  return app;
+}
+
+async function buildAppWithDocsAndRateLimit(
+  env: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>,
+  rateLimitMax: number,
+): Promise<FastifyInstance> {
+  for (const key of ENV_KEYS) {
+    if (key in env) {
+      const value = env[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  const app = Fastify({ logger: false });
+  await app.register(rateLimit, {
+    max: rateLimitMax,
+    timeWindow: 60 * 1000,
+    allowList(request) {
+      if (
+        process.env.API_DOCS_ENABLED !== "true" ||
+        process.env.NODE_ENV === "production"
+      ) {
+        return false;
+      }
+      const url = request.url ?? "";
+      const pathOnly = url.split("?", 1)[0] ?? "";
+      return pathOnly === "/docs" || pathOnly.startsWith("/docs/");
+    },
+  });
   await registerOpenApiDocs(app);
   app.get("/api/health", async () => ({ status: "ok" }));
   await app.ready();
@@ -128,6 +163,68 @@ describe("registerOpenApiDocs", () => {
       try {
         const response = await app.inject({ method: "GET", url: "/docs/" });
         expect(response.statusCode).toBe(404);
+      } finally {
+        await app.close();
+      }
+    });
+  });
+
+  describe("interaction with global security stack", () => {
+    it("emits a swagger-ui scoped CSP on /docs/ that replaces the global CSP", async () => {
+      process.env.API_DOCS_ENABLED = "true";
+      process.env.NODE_ENV = "test";
+      const app = Fastify({ logger: false });
+      setupSecurity(app);
+      await registerOpenApiDocs(app);
+      app.get("/api/health", async () => ({ status: "ok" }));
+      await app.ready();
+      try {
+        const docsResponse = await app.inject({
+          method: "GET",
+          url: "/docs/",
+        });
+        expect(docsResponse.statusCode).toBe(200);
+        const docsCsp = String(
+          docsResponse.headers["content-security-policy"] ?? "",
+        );
+        expect(docsCsp).toMatch(/script-src[^;]*'self'/);
+        expect(docsCsp).toMatch(/img-src[^;]*validator\.swagger\.io/);
+        const healthResponse = await app.inject({
+          method: "GET",
+          url: "/api/health",
+        });
+        const healthCsp = String(
+          healthResponse.headers["content-security-policy"] ?? "",
+        );
+        expect(healthCsp).not.toMatch(/validator\.swagger\.io/);
+      } finally {
+        await app.close();
+      }
+    });
+
+    it("does not consume the global rate-limit budget on /docs/json", async () => {
+      const app = await buildAppWithDocsAndRateLimit(
+        { API_DOCS_ENABLED: "true", NODE_ENV: "test" },
+        2,
+      );
+      try {
+        for (let i = 0; i < 5; i += 1) {
+          const docsResponse = await app.inject({
+            method: "GET",
+            url: "/docs/json",
+          });
+          expect(docsResponse.statusCode).toBe(200);
+        }
+        const apiResponse1 = await app.inject({
+          method: "GET",
+          url: "/api/health",
+        });
+        const apiResponse2 = await app.inject({
+          method: "GET",
+          url: "/api/health",
+        });
+        expect(apiResponse1.statusCode).toBe(200);
+        expect(apiResponse2.statusCode).toBe(200);
       } finally {
         await app.close();
       }
