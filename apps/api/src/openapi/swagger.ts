@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import swaggerPlugin from "@fastify/swagger";
 
+import { openApiConfig, addCommonResponseSchemas } from "./config.js";
+
 import authRoutes from "../routes/auth.js";
 import settingsRoutes from "../routes/settings.js";
 import organizationRoutes from "../routes/organization.js";
@@ -15,117 +17,7 @@ import scoreRoutes from "../routes/scores.js";
 import { exportRoutes } from "../routes/export.js";
 import systemRoutes from "../routes/system.js";
 
-const errorResponseSchema = {
-  type: "object",
-  properties: {
-    error: {
-      type: "object",
-      properties: {
-        code: { type: "string" },
-        message: { type: "string" },
-        details: { type: "object" },
-        requestId: { type: "string" },
-      },
-      required: ["code", "message", "requestId"],
-    },
-  },
-  required: ["error"],
-} as const;
-
-const genericSuccessSchema = {
-  type: "object",
-};
-
-const noContentResponse = {
-  description: "No content",
-};
-
-const csvSuccessResponse = {
-  description: "CSV file download",
-  content: {
-    "text/csv": {
-      schema: { type: "string" },
-    },
-  },
-};
-
 const routePrefix = "/api";
-
-function addCommonSchemas(app: FastifyInstance): void {
-  app.addHook("onRoute", (routeOptions) => {
-    if (!routeOptions.schema) routeOptions.schema = {};
-    if (!routeOptions.schema.response) routeOptions.schema.response = {};
-
-    const response = routeOptions.schema.response as Record<string, unknown>;
-    const method = routeOptions.method;
-    const methods = Array.isArray(method) ? method : [method];
-    const hasAuth = routeOptions.preHandler !== undefined;
-    const path = String(routeOptions.url ?? routeOptions.path ?? "");
-    const hasIdParam = path.includes(":id") || path.includes("{id}");
-
-    if (hasAuth && !methods.includes("HEAD") && !path.includes("/auth/login")) {
-      if (!response["401"]) response["401"] = errorResponseSchema;
-    }
-
-    if (path.includes("/auth/login") && !response["401"]) {
-      response["401"] = errorResponseSchema;
-    }
-
-    const adminPaths = [
-      "/exams",
-      "/questions",
-      "/candidates",
-      "/users",
-      "/settings",
-      "/courses",
-      "/export",
-      "/scores",
-      "/admin",
-    ];
-    if (hasAuth && adminPaths.some((p) => path.includes(p))) {
-      if (!response["403"]) response["403"] = errorResponseSchema;
-    }
-
-    if (hasIdParam && !response["404"]) {
-      response["404"] = errorResponseSchema;
-    }
-
-    if (methods.includes("DELETE") && !response["204"]) {
-      response["204"] = noContentResponse;
-    }
-
-    if (path.includes("/export/scores") && !response["200"]) {
-      response["200"] = csvSuccessResponse;
-    }
-
-    if (
-      methods.includes("GET") &&
-      !response["200"] &&
-      !path.includes("/export")
-    ) {
-      response["200"] = genericSuccessSchema;
-    }
-
-    if (
-      (methods.includes("POST") || methods.includes("PATCH")) &&
-      !response["200"] &&
-      !response["201"]
-    ) {
-      response["200"] = genericSuccessSchema;
-    }
-
-    if (
-      (methods.includes("POST") || methods.includes("PATCH")) &&
-      !response["400"]
-    ) {
-      response["400"] = errorResponseSchema;
-    }
-
-    if (methods.includes("POST") && path.includes("/publish")) {
-      if (response["409"] === undefined) response["409"] = errorResponseSchema;
-    }
-  });
-}
 
 export async function buildSwaggerApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -136,24 +28,9 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   app.decorate("now", () => new Date());
   app.decorateRequest("ctx", null as never);
 
-  await app.register(swaggerPlugin as never, {
-    openapi: {
-      openapi: "3.0.3",
-      info: {
-        title: "Exam Platform API",
-        version: "1.0.0",
-        description:
-          "Configurable LAN/on-premise exam and assessment platform API",
-      },
-      components: {
-        schemas: {
-          ErrorResponse: errorResponseSchema,
-        },
-      },
-    },
-  });
+  await app.register(swaggerPlugin as never, openApiConfig);
 
-  addCommonSchemas(app);
+  addCommonResponseSchemas(app);
 
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(settingsRoutes, { prefix: routePrefix });
