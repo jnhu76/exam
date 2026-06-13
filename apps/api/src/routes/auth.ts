@@ -12,7 +12,7 @@ import {
   verifyPassword,
   verifyPasswordOrDummy,
 } from "@exam/auth/src/password.js";
-import { signJWT } from "@exam/auth/src/session.js";
+import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
@@ -21,6 +21,7 @@ import {
   buildErrorResponse,
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
+import { recordAudit } from "./audit.js";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
@@ -94,6 +95,15 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         if (error instanceof NotFoundError) {
           // Always perform a dummy argon2 verify to avoid leaking whether the tenant exists via timing.
           await verifyPasswordOrDummy(data.password, null);
+          fastify.log.warn(
+            {
+              event: "login.failure",
+              reason: "unknown_organization",
+              organizationSlug: data.organizationSlug,
+              username: data.username,
+            },
+            "Login failed: unknown organization",
+          );
           return reply
             .code(401)
             .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
@@ -117,6 +127,27 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         user?.isActive ? user.passwordHash : null,
       );
       if (!user?.isActive || !isPasswordValid) {
+        const failureCtx: RequestContext = {
+          actorId: "anonymous",
+          organizationId: org.id,
+          targetOrganizationId: org.id,
+          role: "Candidate",
+          permissions: [],
+          sessionId: "anonymous",
+        };
+        recordAudit(
+          fastify,
+          request,
+          failureCtx,
+          "login.failure",
+          "login",
+          data.username,
+          {
+            reason: "invalid_credentials",
+            username: data.username,
+            organizationSlug: data.organizationSlug,
+          },
+        );
         return reply
           .code(401)
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
@@ -136,6 +167,24 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         path: "/",
       });
 
+      const successCtx: RequestContext = {
+        actorId: user.id,
+        organizationId: user.organizationId,
+        targetOrganizationId: user.organizationId,
+        role: user.role as Role,
+        permissions: [],
+        sessionId: "login",
+      };
+      recordAudit(
+        fastify,
+        request,
+        successCtx,
+        "login.success",
+        "user",
+        user.id,
+        { username: user.username },
+      );
+
       const response = LoginResponseSchema.parse({
         id: user.id,
         username: user.username,
@@ -148,7 +197,24 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post("/logout", async (_request, reply) => {
+  fastify.post("/logout", async (request, reply) => {
+    const token = request.cookies["auth-token"];
+    if (token) {
+      try {
+        const payload = verifyJWT(token);
+        const ctx: RequestContext = {
+          actorId: payload.actorId,
+          organizationId: payload.organizationId,
+          targetOrganizationId: payload.organizationId,
+          role: payload.role,
+          permissions: [],
+          sessionId: "logout",
+        };
+        recordAudit(fastify, request, ctx, "logout", "user", payload.actorId);
+      } catch {
+        // skip audit on invalid token
+      }
+    }
     reply.clearCookie("auth-token", { path: "/" });
     return reply.code(204).send();
   });

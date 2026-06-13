@@ -12,13 +12,18 @@ export function recordAudit(
   targetId: string,
   metadata: Record<string, unknown> = {},
 ): void {
+  const enrichedMetadata: Record<string, unknown> =
+    ctx.targetOrganizationId && ctx.targetOrganizationId !== ctx.organizationId
+      ? { ...metadata, targetOrganizationId: ctx.targetOrganizationId }
+      : metadata;
+
   createAuditLogRepo(fastify.db as Database)
     .create(ctx, {
       actorId: ctx.actorId,
       action,
       targetType,
       targetId,
-      metadata,
+      metadata: enrichedMetadata,
       ipAddress: request.ip,
       ...(request.headers["user-agent"]
         ? { userAgent: request.headers["user-agent"] }

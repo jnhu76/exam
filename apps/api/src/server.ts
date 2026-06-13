@@ -26,6 +26,7 @@ import attemptRoutes from "./routes/attempts.js";
 import scoreRoutes from "./routes/scores.js";
 import { exportRoutes } from "./routes/export.js";
 import systemRoutes from "./routes/system.js";
+import auditAdminRoutes from "./routes/auditAdmin.js";
 
 const port = Number(process.env.APP_PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
@@ -61,6 +62,7 @@ async function main() {
   await app.register(scoreRoutes, { prefix: "/api" });
   await app.register(exportRoutes, { prefix: "/api" });
   await app.register(systemRoutes, { prefix: "/api" });
+  await app.register(auditAdminRoutes, { prefix: "/api" });
 
   const publicDir = resolve(
     fileURLToPath(new URL("../public", import.meta.url)),
