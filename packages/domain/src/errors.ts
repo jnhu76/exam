@@ -3,6 +3,7 @@ export class AppError extends Error {
     message: string,
     readonly code: string,
     readonly statusCode = 500,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = new.target.name;
@@ -10,8 +11,8 @@ export class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string) {
-    super(message, "VALIDATION_ERROR", 400);
+  constructor(message: string, details?: unknown) {
+    super(message, "VALIDATION_ERROR", 400, details);
   }
 }
 
@@ -72,5 +73,41 @@ export class AttemptDeadlineExceededError extends AppError {
 export class ConflictError extends AppError {
   constructor(message: string) {
     super(message, "CONFLICT", 409);
+  }
+}
+
+export class UserAlreadyExistsError extends AppError {
+  constructor(message = "User already exists") {
+    super(message, "USER_ALREADY_EXISTS", 409);
+  }
+}
+
+export class CandidateIdentityConflictError extends AppError {
+  constructor(message = "Candidate identity already exists") {
+    super(message, "CANDIDATE_IDENTITY_CONFLICT", 409);
+  }
+}
+
+export class ExamAlreadyPublishedError extends AppError {
+  constructor(message = "Exam already published") {
+    super(message, "EXAM_ALREADY_PUBLISHED", 409);
+  }
+}
+
+export class ExamNotDraftError extends AppError {
+  constructor(message = "Exam is not in draft status") {
+    super(message, "EXAM_NOT_DRAFT", 409);
+  }
+}
+
+export class MaxAttemptsReachedError extends AppError {
+  constructor(message = "Maximum attempt count reached") {
+    super(message, "MAX_ATTEMPTS_REACHED", 409);
+  }
+}
+
+export class ExamAlreadyPassedError extends AppError {
+  constructor(message = "Already passed this exam") {
+    super(message, "EXAM_ALREADY_PASSED", 409);
   }
 }

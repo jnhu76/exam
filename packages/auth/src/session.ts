@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { RequestContext } from "@exam/domain";
 
@@ -35,4 +36,8 @@ export function verifyJWT(
     RequestContext,
     "permissions" | "sessionId" | "targetOrganizationId"
   >;
+}
+
+export function deriveSessionId(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }

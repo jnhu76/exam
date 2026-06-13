@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { StartExamPage } from "./StartExamPage";
+import { ApiError } from "@/lib/api";
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -17,11 +18,22 @@ vi.mock("@/lib/api", () => ({
     post: (...args: unknown[]) => apiPost(...args),
   },
   ApiError: class ApiError extends Error {
+    readonly status: number;
+    readonly code?: string;
+    readonly details?: unknown;
+    readonly requestId?: string;
     constructor(
-      readonly status: number,
+      status: number,
       message: string,
+      code?: string,
+      details?: unknown,
+      requestId?: string,
     ) {
       super(message);
+      this.status = status;
+      this.code = code;
+      this.details = details;
+      this.requestId = requestId;
       this.name = "ApiError";
     }
   },
@@ -256,5 +268,163 @@ describe("StartExamPage", () => {
     renderPage();
 
     expect(await screen.findByText("加载考试信息失败")).toBeInTheDocument();
+  });
+
+  it("shows max-attempt message from error code not message text", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Test",
+      durationMinutes: 30,
+      passingScore: 50,
+      totalScore: 100,
+      questionCount: 5,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 1,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+    });
+    apiPost.mockRejectedValueOnce(
+      new ApiError(409, "已达最大考试次数", "MAX_ATTEMPTS_REACHED"),
+    );
+
+    renderPage();
+    await screen.findByText("Test");
+    await user.click(screen.getByRole("button", { name: "开始考试" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("已达到最大考试次数，无法再次开始考试。"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows already-passed message from error code", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Test",
+      durationMinutes: 30,
+      passingScore: 50,
+      totalScore: 100,
+      questionCount: 5,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 1,
+      canStartNewAttempt: true,
+    });
+    apiPost.mockRejectedValueOnce(
+      new ApiError(409, "已通过考试", "EXAM_ALREADY_PASSED"),
+    );
+
+    renderPage();
+    await screen.findByText("Test");
+    await user.click(screen.getByRole("button", { name: "开始考试" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("本场考试已通过，无需再次参加。"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows not-open message from error code", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Test",
+      durationMinutes: 30,
+      passingScore: 50,
+      totalScore: 100,
+      questionCount: 5,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+    });
+    apiPost.mockRejectedValueOnce(
+      new ApiError(409, "考试尚未开放", "EXAM_NOT_OPEN"),
+    );
+
+    renderPage();
+    await screen.findByText("Test");
+    await user.click(screen.getByRole("button", { name: "开始考试" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("考试当前不在开放时间内。")).toBeInTheDocument();
+    });
+  });
+
+  it("shows queue-wait message from error code", async () => {
+    const user = userEvent.setup();
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Test",
+      durationMinutes: 30,
+      passingScore: 50,
+      totalScore: 100,
+      questionCount: 5,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 0,
+      canStartNewAttempt: true,
+    });
+    apiPost.mockRejectedValueOnce(
+      new ApiError(409, "请等待队列准入", "QUEUE_WAIT_REQUIRED"),
+    );
+
+    renderPage();
+    await screen.findByText("Test");
+    await user.click(screen.getByRole("button", { name: "开始考试" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("当前仍在排队中，请等待准入后继续。"),
+      ).toBeInTheDocument();
+    });
   });
 });

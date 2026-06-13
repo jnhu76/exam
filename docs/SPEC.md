@@ -467,12 +467,18 @@ SaveAnswerRequest {
 
 ```ts
 SaveAnswerResponse {
-  accepted: boolean
+  accepted: true
   serverVersion: number
   savedAt: string
-  conflict?: {
-    reason: "STALE_VERSION" | "SUBMITTED" | "ATTEMPT_CLOSED"
-    latestAnswer?: unknown
+} | {
+  accepted: false
+  reason: "STALE_VERSION" | "ATTEMPT_ALREADY_SUBMITTED"
+        | "ATTEMPT_CLOSED" | "DEADLINE_EXCEEDED"
+  message: string
+  serverVersion: number
+  savedAt: string
+  details?: {
+    serverAnswer?: unknown
   }
 }
 ```
@@ -938,6 +944,7 @@ services:
 - Rate limiting：登录严格限制，考试接口适度限制
 - 所有 API 输入用 Zod 校验
 - 安全响应头（X-Content-Type-Options, X-Frame-Options 等）
+- S04-S09 安全 Job 的 API 错误必须复用 ErrorResponse v0 和共享错误码 registry，不得新增独立错误格式
 
 ---
 

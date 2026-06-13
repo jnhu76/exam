@@ -34,6 +34,12 @@ describe("organization routes", () => {
       cookies: { "auth-token": ctx.teacherToken },
     });
     expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "PERMISSION_DENIED",
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("POST /api/organizations creates org for SuperAdmin", async () => {
@@ -50,6 +56,54 @@ describe("organization routes", () => {
     expect(body.slug).toBe(slug);
   });
 
+  it("POST /api/organizations returns validation details", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/organizations",
+      payload: { name: "", displayName: "", slug: "" },
+      cookies: { "auth-token": ctx.superAdminToken },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({ field: "name", code: "TOO_SMALL" }),
+            expect.objectContaining({
+              field: "displayName",
+              code: "TOO_SMALL",
+            }),
+            expect.objectContaining({ field: "slug", code: "TOO_SMALL" }),
+          ]),
+        },
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("POST /api/organizations returns a stable slug conflict", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/organizations",
+      payload: {
+        name: "Duplicate Organization",
+        displayName: "Duplicate Organization",
+        slug: ctx.org.slug,
+      },
+      cookies: { "auth-token": ctx.superAdminToken },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "RESOURCE_CONFLICT",
+        requestId: expect.any(String),
+      },
+    });
+  });
+
   it("PATCH /api/organizations/:id updates org", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",
@@ -60,6 +114,23 @@ describe("organization routes", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.displayName).toBe("Updated Name");
+  });
+
+  it("PATCH /api/organizations/:id returns ErrorResponse v0 when missing", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/organizations/${crypto.randomUUID()}`,
+      payload: { displayName: "Missing Organization" },
+      cookies: { "auth-token": ctx.superAdminToken },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "RESOURCE_NOT_FOUND",
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("DELETE /api/organizations/:id deletes org", async () => {
@@ -80,5 +151,6 @@ describe("organization routes", () => {
       cookies: { "auth-token": ctx.superAdminToken },
     });
     expect(delRes.statusCode).toBe(204);
+    expect(delRes.body).toBe("");
   });
 });

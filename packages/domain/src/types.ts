@@ -252,15 +252,26 @@ export interface SaveAnswerRequest {
   baseVersion: number;
 }
 
-export interface SaveAnswerResponse {
-  accepted: boolean;
+export interface SaveAnswerAcceptedResponse {
+  accepted: true;
   serverVersion: number;
   savedAt: string;
-  conflict?: {
+  conflict?: undefined;
+}
+
+export interface SaveAnswerRejectedResponse {
+  accepted: false;
+  serverVersion: number;
+  savedAt: string;
+  conflict: {
     reason: ConflictReason;
     latestAnswer?: unknown;
   };
 }
+
+export type SaveAnswerResponse =
+  | SaveAnswerAcceptedResponse
+  | SaveAnswerRejectedResponse;
 
 // ── Score Result (§3.7) ──────────────────────────────────────────
 

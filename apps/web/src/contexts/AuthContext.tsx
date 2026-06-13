@@ -5,12 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type {
-  LoginRequest,
-  LoginResponse,
-  LogoutResponse,
-  MeResponse,
-} from "@exam/contracts";
+import type { LoginRequest, LoginResponse, MeResponse } from "@exam/contracts";
 import { useNavigate } from "react-router";
 import { api, setNavigate } from "@/lib/api";
 
@@ -90,7 +85,7 @@ export function AuthProvider({
     setIsLoading(true);
     setError(null);
     try {
-      await api.post<LogoutResponse>("/api/auth/logout");
+      await api.post<void>("/api/auth/logout");
       setUser(null);
       navigate("/login");
     } catch (e) {

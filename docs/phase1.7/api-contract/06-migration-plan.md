@@ -1,31 +1,71 @@
 # Migration Plan
 
-## 总体顺序
+## 双线总顺序
 
 ```text
-A00 文档规则
-  → A01 attempts save/submit
-  → A02 auth/users/candidates errors
-  → A03 exams/questions commands
-  → A04 import/export
-  → A05 OpenAPI 完整化
-  → A06 Web API client
-  → A07 i18n 系统化（后续）
+Phase1.7-A: API Contract Convergence
+  A00  API Contract Constitution + Endpoint Inventory
+  A01  Attempts Save/Submit Contract Vertical Slice
+Phase1.7-S: Security Completion Baseline（A01 强相关项前置）
+  S03b Client Submit Flush Protocol
+Phase1.7-A: API Contract Convergence（继续）
+  A02  Auth/Users/Candidates ErrorResponse Vertical Slice
+  A03  Exams/Questions Command/Resource Response Vertical Slice
+  A04  Import/Export Response Vertical Slice
+  A05  OpenAPI Schema Completion + Drift Test
+  A06  Web API Client Error/Command Handling Convergence
+Phase1.7-S: Security Completion Baseline
+  S04-lite Auth Session Security Baseline
+  S05-lite CSV + Security Headers + CSRF Origin Check
+  S06-lite Audit Log Completion Baseline
+  S07-lite Password Policy + Account Security Baseline
+  S08-lite Red-Team Security Test Suite
+  S09-lite Security Baseline Validation
+Phase1.7-A: 收尾
+  A07  i18n Systematization（optional/deferred，不阻塞 Phase2 Entry Gate）
 ```
 
-迁移以 endpoint contract 为单位。每个 Job 同步修改 contract schema、route、测试、
-OpenAPI 和受影响 client，禁止只改其中一层。
+依赖关系：
 
-## A00: API Contract 文档落地
+- **API contract 是安全 baseline 的前置**：S04-S09 复用 ErrorResponse v0、code/message registry 和 HTTP status 规则。不先固定这些规则，安全实现会引入新的 response shape 漂移。
+- **S03b 前置于 A01 之后**：submit flush 与 save/submit contract 强相关，但不需要完整安全 baseline。
+- **A07 在 A06 之后**：i18n 系统化依赖稳定的 code/reason 和 registry 基础。
+- **A07 不阻塞 Phase2 Entry Gate**：只有产品明确要求完整多语言时才升级为前置。
+- 如果发现安全任务必须提前做，必须说明它不会引入新的 response shape 漂移。
+
+## 迁移方式：Endpoint Family 纵切
+
+代码迁移**禁止**横向切层（先改全部 contract 再改全部 route）。必须按 endpoint family 纵切：
+
+```text
+选定 endpoint family（参考 07-endpoint-inventory.md）
+  → contract schema（packages/contracts）
+  → domain/protocol builder（packages/domain, packages/exam-engine）
+  → message/code registry entry
+  → route response（apps/api/src/routes）
+  → route tests
+  → affected frontend client（apps/web/src）
+  → OpenAPI entry or pending marker
+  → pnpm verify
+```
+
+每完成一个 endpoint family，系统必须保持可运行。
+
+---
+
+## A00: API Contract Constitution + Endpoint Inventory
 
 ### Purpose
 
-建立响应分类、ErrorResponse v0、Command Result、i18n 边界、OpenAPI 规则和迁移顺序。
+建立响应分类、ErrorResponse v0、Command Result、i18n 边界、OpenAPI 规则、HTTP status 规则、message registry 概念和 endpoint inventory。
 
 ### Scope
 
 - 新增本目录全部规划文档。
 - 审计旧 API 参考与当前实现。
+- 统计当前所有 endpoint 到 `07-endpoint-inventory.md`。
+- 固定 HTTP status 规则、ErrorResponse v0 类型、Command Result rejected 类型。
+- 固定 submit 冲突语义（409 ErrorResponse）。
 
 ### Non-goals
 
@@ -41,7 +81,10 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 
 - 文档覆盖六类 response shape。
 - confirmed 与 pending verification 明确分开。
-- A01-A07 均有可执行 Job Card。
+- A01-A07 和 S03b-S09 均有可执行 Job Card。
+- Endpoint inventory 覆盖当前所有 endpoint。
+- HTTP status 规则、ErrorResponse v0、Command Result rejected 类型已固定。
+- Submit 冲突语义已固定并记录理由。
 - 与 Phase1.7 security plan 无权威冲突。
 
 ### Tests / verification
@@ -55,7 +98,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - Phase1.7 已有安全计划，需在总排期中避免编号和范围冲突。
 - 文档目标可能被误读为当前已实现行为，必须持续标注 current/target。
 
-## A01: Attempts Save/Submit Schema 修复
+## A01: Attempts Save/Submit Contract Vertical Slice
 
 ### Purpose
 
@@ -64,32 +107,35 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 ### Scope
 
 - 将 save response 改为 accepted true/false 可判别分支。
-- 将自然语言冲突原因迁移为稳定 reason。
-- 决定 submit 冲突使用 409 ErrorResponse 或 Command Result。
+- 将自然语言冲突原因迁移为稳定 reason + registry message。
+- submit 冲突使用 409 ErrorResponse（已固定，见 03-command-result.md）。
 - 保持 Phase1.6 事务、锁和 deadline 语义不变。
 - 建立兼容策略，评估现有 `conflict.reason` 调用方。
 
 ### Non-goals
 
 - 不改变 answer merge、幂等、row lock 或 grading 业务逻辑。
-- 不实现 submit flush、自动提交或 Phase2 timing mode。
+- 不实现 submit flush（S03b 负责）、自动提交或 Phase2 timing mode。
 - 不暴露标准答案。
 
 ### Files likely affected
 
 - `packages/contracts/src/attempt.ts`
 - `packages/contracts/src/common.ts`
+- `packages/domain/src/types.ts`
 - `packages/exam-engine/src/answerProtocol.ts`
 - `apps/api/src/routes/attempts.ts`
+- `apps/api/src/plugins/errors.ts`
+- message registry module
 - attempts contract/route/concurrency tests
 - `apps/web/src/pages/exam/TakeExamPage.tsx`
 
 ### Acceptance criteria
 
 - accepted true/false 均有独立 schema 和测试。
-- rejected 分支包含稳定 reason，不依赖 message。
+- rejected 分支包含稳定 reason + message（来自 registry），不依赖 inline message。
 - stale version 提供恢复所需的 serverVersion/serverAnswer。
-- submit 冲突语义在 endpoint contract 中唯一确定，并记录选择理由。
+- submit 冲突使用 409 ErrorResponse，理由已在 03-command-result.md 记录。
 - Phase1.6 并发测试全部保持通过。
 
 ### Tests / verification
@@ -105,7 +151,45 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - submit response 改动可能影响成绩页跳转和同步 grading 假设。
 - details 不得泄露其他 candidate 或标准答案。
 
-## A02: Auth/Users/Candidates Error Response 收敛
+## S03b: Client Submit Flush Protocol
+
+### Purpose
+
+submit 前 flush 所有 pending saves，与 A01 的 save/submit contract 对齐。
+
+### Scope
+
+- submit 前 flush 所有 pending saves。
+- 等待所有 save promise settled。
+- 提交确认对话框显示：未答题数、未保存题数、保存失败题数。
+- 有保存失败时默认阻止提交，需用户二次确认。
+- flush 超时提示重试或"仍然提交"。
+
+### Non-goals
+
+- 不实现自动提交或 Phase2 timing mode。
+- 不改变 submit 的 HTTP 语义（保持 409 ErrorResponse for conflict）。
+
+### Acceptance criteria
+
+- 点击"交卷"时先 flush pending saves。
+- 确认对话框显示：未答/未保存/保存失败 题数。
+- 有保存失败时默认阻止，需二次确认。
+- flush 全部成功后发送 submit。
+- flush 超时后提示重试或"仍然提交"。
+
+### Security Job 门禁
+
+- 是否新增或修改 ErrorResponse：否（复用 A01 submit 的 409）。
+- 是否复用已有 code/message registry：是。
+- 是否影响 API contract：否。
+- 是否需要补充 endpoint inventory：否。
+
+### Tests / verification
+
+- `pnpm verify`
+
+## A02: Auth/Users/Candidates ErrorResponse Vertical Slice
 
 ### Purpose
 
@@ -116,6 +200,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - 收敛 400/401/403/404/409/429/500 响应，400 携带 ValidationErrorDetails（见 02-error-response.md）。
 - 增加 requestId 和安全的 validation details。
 - 建立旧 code 到目标 code 的兼容/迁移表（含 400 VALIDATION_ERROR → ValidationErrorDetails 映射）。
+- 将 inline error message 收敛到 message registry。
 - 与 Phase1.7 S04/S06/S07 安全 Job 协调。
 
 ### Non-goals
@@ -130,14 +215,16 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - `packages/domain/src/errors.ts`
 - `apps/api/src/plugins/errors.ts`
 - `apps/api/src/plugins/auth.ts`
+- message registry module
 - auth/user/candidate/candidateField routes and tests
 
 ### Acceptance criteria
 
-- 目标模块错误均符合 ErrorResponse v0。
+- 目标模块错误均符合 ErrorResponse v0（含 required requestId）。
 - frontend 可读取 code/details/requestId。
 - 登录无效凭据使用稳定 code，且不泄露用户是否存在。
 - 测试不再依赖完整自然语言 message。
+- 所有 inline error message 已收敛到 registry。
 
 ### Tests / verification
 
@@ -151,7 +238,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - 错误码改名可能影响已有 UI 或外部脚本。
 - requestId 信任边界配置错误可能造成日志关联混乱。
 
-## A03: Exams/Questions Command Response 收敛
+## A03: Exams/Questions Command/Resource Response Vertical Slice
 
 ### Purpose
 
@@ -160,7 +247,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 ### Scope
 
 - 为 publish、archive、enrollment mutation 等 endpoint 选择明确 response shape。
-- 为状态冲突建立领域 code。
+- 为状态冲突建立领域 code + registry message。
 - 收敛 question/exam validation details。
 - 保持状态变更继续通过 command function。
 
@@ -176,6 +263,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - `apps/api/src/routes/exam.ts`
 - `apps/api/src/routes/question.ts`
 - domain state/error definitions
+- message registry module
 - related tests
 
 ### Acceptance criteria
@@ -197,7 +285,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - 把普通资源更新误改为 command result 会扩大 client 迁移面。
 - 领域码过细会形成难维护枚举。
 
-## A04: Import/Export Response 收敛
+## A04: Import/Export Response Vertical Slice
 
 ### Purpose
 
@@ -221,6 +309,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - candidate/question import contracts and routes
 - `apps/api/src/routes/export.ts`
 - `packages/import-export/`
+- message registry module
 - import/export tests
 
 ### Acceptance criteria
@@ -242,7 +331,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - 批量导入的部分成功语义可能被误当作 HTTP error。
 - 文件名和 header 编码需兼容浏览器及 LAN 部署。
 
-## A05: OpenAPI Schema 补齐
+## A05: OpenAPI Schema Completion + Drift Test
 
 ### Purpose
 
@@ -290,7 +379,7 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - OpenAPI 3.0/3.1 对 `const`、nullable、discriminator 的差异。
 - response serializer 可能剔除未声明字段，必须分阶段启用。
 
-## A06: 前端 API Client 和错误处理迁移
+## A06: Web API Client Error/Command Handling Convergence
 
 ### Purpose
 
@@ -336,17 +425,31 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - 页面当前只捕获 message，迁移不完整会丢失用户提示。
 - generated client 与现有轻量 wrapper 并存可能造成重复抽象。
 
-## A07: i18n 系统化处理
+## A07: i18n Systematization (optional / deferred)
+
+### Status
+
+**A07 已完成基线（2026-06-13）**。完成范围限定于"Phase2 前 i18n 基础设施"，未做全站 inline 文案清债（保留为后续 follow-up）。
+
+具体已落地：
+
+- `packages/contracts` 提供 `SUPPORTED_LOCALES`、`SupportedLocale`、`DEFAULT_LOCALE`、`localeCatalogs`、`getMessageForLocale(code, locale?)`、`fallbackMessages`。
+- `apps/web/src/lib/i18n.ts` 提供 `resolveErrorMessage(error)`，按 `ApiError.code → registry → server message → fallback` 链路解析。
+- `apps/web/src/lib/api.ts` 接入 `getMessageForLocale` + `isErrorCode`：error code 命中 registry 时优先使用 registry zh-CN 文案；code 未注册且服务端 message 非空时回退到服务端 message；否则回退到 `${status} Request failed`。语义与 `resolveErrorMessage` 和 `04-i18n-boundary.md` 的 registry-first 规则一致。
+- 测试覆盖：`packages/contracts` 13 个 locale catalog 测试、`apps/web` 9 个 `resolveErrorMessage` 测试、`apps/web` 7 个 `api.ts` representative integration 测试（含 registry-first、empty-string、unknown-code 各分支）。
+- 文档：`docs/phase1.7/api-contract/04-i18n-boundary.md` 给出语言策略、fallback 链、扩展新 locale 的 5 步流程。
+
+A07 不阻塞 Phase2 Entry Gate。后续如需引入第二个 locale，遵循 `04-i18n-boundary.md` "扩展新 Locale 的步骤" 即可。
 
 ### Purpose
 
-在稳定 code/reason 基础上评估并实现真正需要的多语言策略。
+在稳定 code/reason + message registry 基础上评估并实现真正需要的多语言策略。
 
 ### Scope
 
 - 盘点产品语言需求。
 - 决定前端映射、服务端 catalog 或 language negotiation。
-- 集中管理默认 zh-CN copy。
+- 扩展 message registry 为多语言 catalog。
 - 建立缺失翻译 fallback。
 
 ### Non-goals
@@ -376,19 +479,82 @@ OpenAPI 和受影响 client，禁止只改其中一层。
 - representative E2E
 - `pnpm verify`
 
+### Verification result (2026-06-13)
+
+- contracts: 13 locale catalog tests pass（覆盖 `getMessageForLocale`、`isSupportedLocale`、`fallbackMessages`、所有 `errorMessages` 条目在 `DEFAULT_LOCALE` 下回归一致）。
+- web: 9 个 `resolveErrorMessage` 单元测试 + 7 个 `api.ts` integration 测试 pass（覆盖 registry-first、code 已知 + 服务端 message 非空、code 已知 + 服务端 message 为空字符串、code 未知 + 服务端 message 非空、code 未知 + 服务端 message 为空字符串、body 解析失败、code 未知 + 服务端 message 缺失）。
+- representative path：`api.ts` 的 fetch error 处理是所有 ApiError 的源头，A07 接入此处即覆盖前端所有 ApiError 消费者的 registry-first 路径。
+- `pnpm verify` 通过。
+
+### Follow-up debt（不在 A07 baseline 内，留待后续按需启动）
+
+- `apps/web` 各页面页面级 `catch` 站点（如 `StartExamPage.tsx`、`UsersPage.tsx`、`ExamDetailPage.tsx`、`CoursePage.tsx` 等）目前仍 inline `err instanceof Error ? err.message : "..."`。这些站点已经从 `api.ts` 拿到 zh-CN message，并不依赖 fallback；不构成功能问题，仅是代码风格可收敛点。
+- 部分页面（如 `StartExamPage.tsx`）的 code-based switch 提供比 registry 更详细的产品文案（"已达到最大考试次数，无法再次开始考试。" vs registry 的"已达到最大考试次数"）；这是符合 `04-i18n-boundary.md` "MAY: future frontend maps code/reason to localized text" 的产品差异化文案，**不应**机械替换为 `resolveErrorMessage`。如未来引入第二 locale，再决定是把扩展文案进 catalog，还是保留页面级覆盖。
+- 服务端 `apps/api` 部分 inline message 仍未全部收敛到 registry（A04 阶段已大量收敛但非 100%）。这是 registry 单边 debt，与 i18n 无关；保留为独立清债任务。
+
 ### Risks
 
 - 过早系统化会扩大范围并阻塞核心 contract。
 - server/client 双重 catalog 可能漂移。
 
-## 跨 Job 门禁
+---
 
-每个 A01-A07 Job 完成时必须输出：
+## Phase1.7-S Security Job Cards
+
+S03b-S09 的详细 scope 和 acceptance criteria 见 [`security-completion-plan.md`](../security-completion-plan.md)。以下仅列出每个 Job 与 API contract 的交叉要求。
+
+### S03b: Client Submit Flush Protocol
+
+与 A01 强相关，安排在 A01 之后。不新增 ErrorResponse，复用 submit 的 409 语义。
+
+### S04-lite: Auth Session Security Baseline
+
+可能修改 login/logout 的错误响应。必须复用 A02 建立的 ErrorResponse v0 和 code/message registry。不得引入独立错误格式。
+
+### S05-lite: CSV + Security Headers + CSRF Origin Check
+
+CSV injection escape 和 security headers 不影响 API response shape。CSRF origin check 的 403 必须使用 ErrorResponse v0。
+
+### S06-lite: Audit Log Completion Baseline
+
+新增 `GET /api/admin/audit-logs` endpoint。必须在 endpoint inventory 中登记。使用 A02/A03 建立的分页和错误响应格式。
+
+### S07-lite: Password Policy + Account Security Baseline
+
+密码策略 validation 的 400 错误必须使用 ErrorResponse v0 + ValidationErrorDetails。不得 inline message。
+
+### S08-lite: Red-Team Security Test Suite
+
+测试断言必须使用 stable code/reason，不依赖 message 文案。
+
+### S09-lite: Security Baseline Validation
+
+最终验收。验证所有安全 Job 复用了 API contract 格式。
+
+---
+
+## A01-A06 Job 完成门禁
+
+每个 Job 完成时必须输出：
 
 1. 修改文件列表
-2. 新增/更新测试列表
-3. coverage 结果
-4. `pnpm verify` 结果
-5. 已知限制与兼容性影响
+2. endpoint contract 变化表
+3. HTTP status 变化表
+4. JSON key/shape 变化表
+5. code/reason/message registry 变化
+6. details 字段安全审查
+7. 受影响 frontend/client
+8. 新增/更新测试
+9. OpenAPI entry 或 pending marker
+10. `pnpm verify` 结果
+11. 已知兼容性影响
 
-涉及 endpoint 行为变化时，还必须提供迁移说明和 OpenAPI diff。
+## S03b-S09 Job 完成门禁
+
+每个安全 Job 完成时必须说明：
+
+1. 是否新增或修改 ErrorResponse
+2. 是否复用已有 code/message registry
+3. 是否影响 API contract
+4. 是否需要补充 endpoint inventory
+5. `pnpm verify` 结果

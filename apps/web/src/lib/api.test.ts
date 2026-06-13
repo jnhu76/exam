@@ -192,6 +192,52 @@ describe("api client", () => {
       await expect(api.get("/api/broken")).rejects.toThrow("500");
     });
 
+    it("preserves ErrorResponse v0 fields on ApiError", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "请求参数无效",
+                details: {
+                  fields: [
+                    {
+                      field: "username",
+                      code: "TOO_SMALL",
+                      message: "用户名不能为空",
+                    },
+                  ],
+                },
+                requestId: "req-web",
+              },
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.post("/api/auth/login", {})).rejects.toMatchObject({
+        name: "ApiError",
+        status: 400,
+        code: "VALIDATION_ERROR",
+        details: {
+          fields: [
+            {
+              field: "username",
+              code: "TOO_SMALL",
+              message: "用户名不能为空",
+            },
+          ],
+        },
+        requestId: "req-web",
+      });
+    });
+
     it("shows toast on network failure", async () => {
       vi.stubGlobal(
         "fetch",
@@ -218,13 +264,206 @@ describe("api client", () => {
   });
 
   describe("ApiError class", () => {
-    it("has correct name and status", () => {
-      const error = new ApiError(403, "Forbidden");
+    it("exposes structured error metadata", () => {
+      const error = new ApiError(
+        403,
+        "无权执行此操作",
+        "PERMISSION_DENIED",
+        { action: "user.update" },
+        "req-class",
+      );
 
       expect(error.name).toBe("ApiError");
       expect(error.status).toBe(403);
-      expect(error.message).toBe("Forbidden");
+      expect(error.message).toBe("无权执行此操作");
+      expect(error.code).toBe("PERMISSION_DENIED");
+      expect(error.details).toEqual({ action: "user.update" });
+      expect(error.requestId).toBe("req-class");
       expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe("A07 i18n integration", () => {
+    it("falls back to registry zh-CN message when server omits message but provides known code", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTH_REQUIRED",
+                requestId: "req-i18n-1",
+              },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/protected")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 401,
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+        requestId: "req-i18n-1",
+      });
+    });
+
+    it("uses registry zh-CN message when code is known, even if server also provides message", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTH_REQUIRED",
+                message: "服务端自定义文案",
+                requestId: "req-i18n-2",
+              },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/protected")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 401,
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+      });
+    });
+
+    it("uses registry zh-CN message when code is known and server message is empty string", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "AUTH_REQUIRED",
+                message: "",
+                requestId: "req-i18n-empty-known",
+              },
+            }),
+            {
+              status: 401,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/protected")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 401,
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+      });
+    });
+
+    it("falls back to server-provided message when code is unknown and message is non-empty", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+                message: "上游服务返回的特殊文案",
+                requestId: "req-i18n-unknown-with-msg",
+              },
+            }),
+            {
+              status: 418,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/strange")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 418,
+        code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+        message: "上游服务返回的特殊文案",
+      });
+    });
+
+    it("falls back to status string when code is unknown and message is empty string", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+                message: "",
+              },
+            }),
+            {
+              status: 418,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/strange")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 418,
+        code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+        message: "418 Request failed",
+      });
+    });
+
+    it("falls back to status string when code is unknown and message is absent", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              error: {
+                code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+              },
+            }),
+            {
+              status: 418,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        ),
+      );
+
+      await expect(api.get("/api/strange")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 418,
+        code: "TOTALLY_NEW_CODE_NOT_IN_REGISTRY",
+        message: "418 Request failed",
+      });
+    });
+
+    it("falls back to status string when body cannot be parsed", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response("not-json", {
+            status: 502,
+          }),
+        ),
+      );
+
+      await expect(api.get("/api/upstream")).rejects.toMatchObject({
+        name: "ApiError",
+        status: 502,
+        message: "502 Request failed",
+      });
     });
   });
 });

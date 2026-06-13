@@ -5,15 +5,23 @@ import {
   RegisterRequestSchema,
   RegisterResponseSchema,
   MeResponseSchema,
-  LogoutResponseSchema,
   ChangePasswordRequestSchema,
 } from "@exam/contracts";
-import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
-import { signJWT } from "@exam/auth/src/session.js";
+import {
+  hashPassword,
+  verifyPassword,
+  verifyPasswordOrDummy,
+} from "@exam/auth/src/password.js";
+import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
-import { PermissionDeniedError, ValidationError } from "@exam/domain";
+import { NotFoundError, PermissionDeniedError } from "@exam/domain";
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+} from "../lib/errorResponse.js";
+import { recordAudit } from "./audit.js";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
@@ -41,10 +49,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       data.username,
     );
     if (existingUser) {
-      return reply.code(400).send({
-        message: "Username already exists",
-        code: "USER_EXISTS",
-      });
+      return reply
+        .code(409)
+        .send(buildErrorResponse(request.id, "USER_ALREADY_EXISTS"));
     }
 
     const ctx: RequestContext = {
@@ -55,7 +62,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       permissions: [],
       sessionId: "bootstrap",
     };
-    const user = await userRepo.create(ctx, {
+    const user = await userRepo.createUnique(ctx, {
       username: data.username,
       name: data.name,
       passwordHash: await hashPassword(data.password),
@@ -78,12 +85,31 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
       const userRepo = createUserRepo(fastify.db);
-      const org = await createOrganizationRepo(
-        fastify.db,
-      ).resolveBrandingTenant(
-        { purpose: "public_branding" } as PublicBrandingContext,
-        data.organizationSlug,
-      );
+      let org;
+      try {
+        org = await createOrganizationRepo(fastify.db).resolveBrandingTenant(
+          { purpose: "public_branding" } as PublicBrandingContext,
+          data.organizationSlug,
+        );
+      } catch (error) {
+        if (error instanceof NotFoundError) {
+          // Always perform a dummy argon2 verify to avoid leaking whether the tenant exists via timing.
+          await verifyPasswordOrDummy(data.password, null);
+          fastify.log.warn(
+            {
+              event: "login.failure",
+              reason: "unknown_organization",
+              organizationSlug: data.organizationSlug,
+              username: data.username,
+            },
+            "Login failed: unknown organization",
+          );
+          return reply
+            .code(401)
+            .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
+        }
+        throw error;
+      }
 
       const anonCtx = {
         organizationId: org.id,
@@ -95,22 +121,36 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         anonCtx,
         data.username,
       );
-      if (!user?.isActive) {
-        return reply.code(401).send({
-          message: "Invalid username or password",
-          code: "INVALID_CREDENTIALS",
-        });
-      }
 
-      const isPasswordValid = await verifyPassword(
+      const isPasswordValid = await verifyPasswordOrDummy(
         data.password,
-        user.passwordHash,
+        user?.isActive ? user.passwordHash : null,
       );
-      if (!isPasswordValid) {
-        return reply.code(401).send({
-          message: "Invalid username or password",
-          code: "INVALID_CREDENTIALS",
-        });
+      if (!user?.isActive || !isPasswordValid) {
+        const failureCtx: RequestContext = {
+          actorId: "anonymous",
+          organizationId: org.id,
+          targetOrganizationId: org.id,
+          role: "Candidate",
+          permissions: [],
+          sessionId: "anonymous",
+        };
+        recordAudit(
+          fastify,
+          request,
+          failureCtx,
+          "login.failure",
+          "login",
+          data.username,
+          {
+            reason: "invalid_credentials",
+            username: data.username,
+            organizationSlug: data.organizationSlug,
+          },
+        );
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
       const token = signJWT({
@@ -121,11 +161,31 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure:
+          process.env.NODE_ENV === "production" ||
+          process.env.COOKIE_SECURE === "true",
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",
       });
+
+      const successCtx: RequestContext = {
+        actorId: user.id,
+        organizationId: user.organizationId,
+        targetOrganizationId: user.organizationId,
+        role: user.role as Role,
+        permissions: [],
+        sessionId: "login",
+      };
+      recordAudit(
+        fastify,
+        request,
+        successCtx,
+        "login.success",
+        "user",
+        user.id,
+        { username: user.username },
+      );
 
       const response = LoginResponseSchema.parse({
         id: user.id,
@@ -139,9 +199,29 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post("/logout", async (_request, reply) => {
+  fastify.post("/logout", async (request, reply) => {
+    const token = request.cookies["auth-token"];
+    if (token) {
+      try {
+        const payload = verifyJWT(token);
+        const ctx: RequestContext = {
+          actorId: payload.actorId,
+          organizationId: payload.organizationId,
+          targetOrganizationId: payload.organizationId,
+          role: payload.role,
+          permissions: [],
+          sessionId: "logout",
+        };
+        recordAudit(fastify, request, ctx, "logout", "user", payload.actorId);
+      } catch (err) {
+        fastify.log.warn(
+          { err, event: "logout.invalid_token" },
+          "logout: invalid or expired token",
+        );
+      }
+    }
     reply.clearCookie("auth-token", { path: "/" });
-    return reply.code(200).send({ success: true });
+    return reply.code(204).send();
   });
 
   fastify.get(
@@ -153,10 +233,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const user = await userRepo.findByOrganizationAndId(ctx, ctx.actorId);
 
       if (!user) {
-        return reply.code(404).send({
-          message: "User not found",
-          code: "USER_NOT_FOUND",
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       const response = MeResponseSchema.parse({
@@ -173,18 +252,15 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/me/password",
     { preHandler: fastify.authenticate },
-    async (request: any, reply: any) => {
+    async (request, reply) => {
       const parsed = ChangePasswordRequestSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: parsed.error.issues.map((i) => i.message).join("; "),
-          },
-        });
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const { currentPassword, newPassword } = parsed.data;
-      const ctx = request["ctx"] as RequestContext;
+      const ctx = request.ctx as RequestContext;
       const targetCtx = {
         ...ctx,
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
@@ -197,17 +273,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       if (!user) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       const isValid = await verifyPassword(currentPassword, user.passwordHash);
       if (!isValid) {
-        return reply.code(400).send({
-          error: {
-            code: "INVALID_PASSWORD",
-            message: "Current password is incorrect",
-          },
-        });
+        return reply
+          .code(400)
+          .send(buildErrorResponse(request.id, "CURRENT_PASSWORD_INVALID"));
       }
 
       const newHash = await hashPassword(newPassword);
@@ -217,7 +290,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       if (!updated) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "User not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       return { ok: true as const };
     },

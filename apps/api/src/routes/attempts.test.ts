@@ -8,6 +8,7 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { scanDatabaseForDisruptedAttempts } from "../plugins/heartbeat.js";
+import { getSaveAnswerMessage } from "@exam/contracts";
 
 async function ensureCandidateProfile(ctx: TestContext): Promise<string> {
   const existing = await ctx.db
@@ -574,7 +575,48 @@ describe("attempt routes", () => {
       });
 
       expect(res.json().accepted).toBe(false);
-      expect(res.json().conflict?.reason).toBe("STALE_VERSION");
+      expect(res.json().reason).toBe("STALE_VERSION");
+      expect(res.json().message).toBe(getSaveAnswerMessage("STALE_VERSION"));
+      expect(res.json().serverVersion).toBe(2);
+      expect(res.json().details).toEqual({ serverAnswer: "c" });
+    });
+
+    it("preserves a null server answer in stale-version details", async () => {
+      const saveNull = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: null,
+          clientSeq: 4,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 2,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(saveNull.json().accepted).toBe(true);
+
+      const stale = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "late",
+          clientSeq: 5,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 2,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(stale.json()).toMatchObject({
+        accepted: false,
+        reason: "STALE_VERSION",
+        serverVersion: 3,
+        details: { serverAnswer: null },
+      });
     });
 
     it("returns 400 for malformed save payload", async () => {
@@ -672,7 +714,7 @@ describe("attempt routes", () => {
       const body = res.json();
       expect(body.error).toBeDefined();
       expect(body.error.code).toBe("INVALID_STATE_TRANSITION");
-      expect(body.error.message).toContain("Cannot submit attempt in");
+      expect(body.error.requestId).toEqual(expect.any(String));
     });
   });
 
@@ -722,10 +764,10 @@ describe("attempt routes", () => {
       });
 
       expect(submitRes.statusCode).toBe(409);
-      expect(submitRes.json()).toEqual({
+      expect(submitRes.json()).toMatchObject({
         error: {
           code: "ATTEMPT_DEADLINE_EXCEEDED",
-          message: "Attempt deadline exceeded",
+          requestId: expect.any(String),
         },
       });
     });
@@ -800,8 +842,8 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(404);
       const body = res.json();
       expect(body.error).toBeDefined();
-      expect(body.error.code).toBe("NOT_FOUND");
-      expect(body.error.message).toBe("Attempt not found");
+      expect(body.error.code).toBe("RESOURCE_NOT_FOUND");
+      expect(body.error.requestId).toEqual(expect.any(String));
     });
 
     it("owner can still submit after cross-candidate attempt", async () => {
@@ -886,8 +928,11 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.accepted).toBe(false);
-      expect(body.conflict).toBeDefined();
-      expect(body.conflict.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+      expect(body.reason).toBeDefined();
+      expect(body.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+      expect(body.message).toBe(
+        getSaveAnswerMessage("ATTEMPT_ALREADY_SUBMITTED"),
+      );
     });
 
     it("DB invariant: answers unchanged after rejected save (regression guard for route-level rejection)", async () => {
@@ -1043,7 +1088,7 @@ describe("attempt routes", () => {
 
       expect(result.markedCount).toBeGreaterThan(0);
       expect(attempt?.status).toBe("disrupted");
-    });
+    }, 15_000);
   });
 
   describe("POST /attempts/:attemptId/restore", () => {

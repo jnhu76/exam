@@ -1,9 +1,10 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
-import { verifyJWT } from "@exam/auth/src/session.js";
+import { verifyJWT, deriveSessionId } from "@exam/auth/src/session.js";
 import type { Role, Permission } from "@exam/domain";
 import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   const authenticateFn = async (
@@ -14,23 +15,23 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     try {
       token = request.cookies["auth-token"];
       if (!token) {
-        return reply.code(401).send({
-          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
-        });
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
     } catch {
-      return reply.code(401).send({
-        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
-      });
+      return reply
+        .code(401)
+        .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
     }
 
     let payload: Awaited<ReturnType<typeof verifyJWT>>;
     try {
       payload = verifyJWT(token);
     } catch {
-      return reply.code(401).send({
-        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
-      });
+      return reply
+        .code(401)
+        .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
     }
 
     let user: Awaited<
@@ -52,18 +53,15 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         { err, actorId: payload.actorId },
         "Database error during authentication",
       );
-      return reply.code(500).send({
-        error: {
-          message: "Internal server error",
-          code: "INTERNAL_SERVER_ERROR",
-        },
-      });
+      return reply
+        .code(500)
+        .send(buildErrorResponse(request.id, "INTERNAL_ERROR"));
     }
 
     if (!user?.isActive) {
-      return reply.code(401).send({
-        error: { message: "Unauthorized", code: "UNAUTHORIZED" },
-      });
+      return reply
+        .code(401)
+        .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
     }
 
     request.ctx = {
@@ -71,7 +69,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       organizationId: payload.organizationId,
       role: user.role as Role,
       permissions: getPermissionsForRole(user.role as Role) as Permission[],
-      sessionId: token,
+      sessionId: deriveSessionId(token),
     };
   };
 
@@ -82,15 +80,15 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     return async (request, reply) => {
       const ctx = request.ctx;
       if (!ctx) {
-        return reply.code(401).send({
-          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
-        });
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
 
       if (!ctx.permissions.includes(permission)) {
-        return reply.code(403).send({
-          error: { message: "Forbidden", code: "FORBIDDEN" },
-        });
+        return reply
+          .code(403)
+          .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
       }
     };
   });
@@ -99,15 +97,15 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     return async (request, reply) => {
       const ctx = request.ctx;
       if (!ctx) {
-        return reply.code(401).send({
-          error: { message: "Unauthorized", code: "UNAUTHORIZED" },
-        });
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
 
       if (!roles.includes(ctx.role)) {
-        return reply.code(403).send({
-          error: { message: "Forbidden", code: "FORBIDDEN" },
-        });
+        return reply
+          .code(403)
+          .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
       }
     };
   });

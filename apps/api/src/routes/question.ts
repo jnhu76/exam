@@ -8,8 +8,12 @@ import {
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import type { RequestContext } from "@exam/domain";
-import { ensureTargetOrg, formatZodError } from "./helpers.js";
+import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+} from "../lib/errorResponse.js";
 
 const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -92,9 +96,9 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createQuestionRepo(fastify.db);
       const question = await repo.findById(ctx, id);
       if (!question) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Question not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       return {
         id: question.id,
@@ -127,14 +131,24 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = CreateQuestionRequestSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const data = parsed.data;
       const repo = createQuestionRepo(fastify.db);
       if (!(await createCourseRepo(fastify.db).findById(ctx, data.courseId))) {
-        return reply.code(400).send({
-          error: { code: "VALIDATION_ERROR", message: "Course not found" },
-        });
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "courseId",
+                code: "RESOURCE_NOT_FOUND",
+                message: "课程不存在",
+              },
+            ],
+          }),
+        );
       }
 
       const question = await repo.create(ctx, {
@@ -196,9 +210,9 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createQuestionRepo(fastify.db);
       const existing = await repo.findById(ctx, id);
       if (!existing) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Question not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       const validated = CreateQuestionRequestSchema.parse({
         ...existing,
@@ -207,9 +221,17 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       if (
         !(await createCourseRepo(fastify.db).findById(ctx, validated.courseId))
       ) {
-        return reply.code(400).send({
-          error: { code: "VALIDATION_ERROR", message: "Course not found" },
-        });
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "courseId",
+                code: "RESOURCE_NOT_FOUND",
+                message: "课程不存在",
+              },
+            ],
+          }),
+        );
       }
       const updated = await repo.update(ctx, id, {
         ...validated,
@@ -222,9 +244,9 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         })),
       });
       if (!updated) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Question not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "question.update", "question", id);
       return {
@@ -260,9 +282,9 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const repo = createQuestionRepo(fastify.db);
       const deleted = await repo.delete(ctx, id);
       if (!deleted) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Question not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "question.delete", "question", id);
       return reply.code(204).send();
@@ -282,14 +304,24 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = QuestionImportRequestSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const body = parsed.data;
       const repo = createQuestionRepo(fastify.db);
       if (!(await createCourseRepo(fastify.db).findById(ctx, body.courseId))) {
-        return reply.code(400).send({
-          error: { code: "VALIDATION_ERROR", message: "Course not found" },
-        });
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "courseId",
+                code: "RESOURCE_NOT_FOUND",
+                message: "课程不存在",
+              },
+            ],
+          }),
+        );
       }
 
       const details: Array<{

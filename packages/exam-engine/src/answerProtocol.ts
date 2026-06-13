@@ -13,10 +13,10 @@ export interface AnswerState {
   now?: Date;
 }
 
-export interface ProcessSaveResult extends SaveAnswerResponse {
+export type ProcessSaveResult = SaveAnswerResponse & {
   newAnswer?: AnswerRecord;
   newClientSeqMap?: Map<string, AnswerRecord>;
-}
+};
 
 export function processSaveAnswer(
   state: AnswerState,

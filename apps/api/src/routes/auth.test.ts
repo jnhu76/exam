@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import authRoutes from "./auth.js";
@@ -23,6 +31,10 @@ describe("auth routes", () => {
     await ctx.cleanup();
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("POST /api/auth/login authenticates within the requested tenant", async () => {
     const response = await ctx.app.inject({
       method: "POST",
@@ -36,6 +48,66 @@ describe("auth routes", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().organizationId).toBe(ctx.org.id);
+  });
+
+  it("POST /api/auth/login sets Secure cookie when COOKIE_SECURE=true", async () => {
+    vi.stubEnv("COOKIE_SECURE", "true");
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).toMatch(/Secure/);
+  });
+
+  it("POST /api/auth/login omits Secure flag outside production when COOKIE_SECURE!=true", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("COOKIE_SECURE", "false");
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).not.toMatch(/Secure/);
+  });
+
+  it("POST /api/auth/login sets Secure cookie in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("JWT_SECRET", "test-production-secret");
+    vi.stubEnv("COOKIE_SECURE", "false");
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).toMatch(/Secure/);
   });
 
   it("POST /api/auth/login rejects disabled users", async () => {
@@ -77,6 +149,13 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "AUTH_INVALID_CREDENTIALS",
+        message: "用户名或密码错误",
+        requestId: expect.any(String),
+      },
+    });
 
     const disableToken = signJWT({
       actorId: disableUserId,
@@ -89,9 +168,53 @@ describe("auth routes", () => {
       cookies: { "auth-token": disableToken },
     });
     expect(meRes.statusCode).toBe(401);
+    expect(meRes.json()).toMatchObject({
+      error: {
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+        requestId: expect.any(String),
+      },
+    });
   });
 
-  it("POST /api/auth/login returns 400 for malformed input", async () => {
+  it("POST /api/auth/login does not reveal unknown tenants or users", async () => {
+    const attempts = [
+      {
+        organizationSlug: "unknown-organization",
+        username: ctx.admin.username,
+        password: "admin123",
+      },
+      {
+        organizationSlug: "default",
+        username: "unknown-user",
+        password: "admin123",
+      },
+      {
+        organizationSlug: "default",
+        username: ctx.admin.username,
+        password: "wrong-password",
+      },
+    ];
+
+    for (const payload of attempts) {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({
+        error: {
+          code: "AUTH_INVALID_CREDENTIALS",
+          message: "用户名或密码错误",
+          requestId: expect.any(String),
+        },
+      });
+    }
+  });
+
+  it("POST /api/auth/login returns validation details for malformed input", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
@@ -99,7 +222,21 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe("VALIDATION_ERROR");
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "请求参数无效",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({
+              field: "username",
+              code: "INVALID_TYPE",
+            }),
+          ]),
+        },
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("POST /api/auth/register is disabled without a bootstrap token", async () => {
@@ -116,7 +253,24 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(403);
-    expect(response.json().error.code).toBe("PERMISSION_DENIED");
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "PERMISSION_DENIED",
+        message: "无权执行此操作",
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("POST /api/auth/logout returns 204 without a response body", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/logout",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe("");
   });
 
   it("PATCH /api/auth/me/password changes password for authenticated user", async () => {
@@ -157,6 +311,13 @@ describe("auth routes", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "CURRENT_PASSWORD_INVALID",
+        message: "当前密码不正确",
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("PATCH /api/auth/me/password requires authentication", async () => {
@@ -169,5 +330,12 @@ describe("auth routes", () => {
       },
     });
     expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "AUTH_REQUIRED",
+        message: "请先登录",
+        requestId: expect.any(String),
+      },
+    });
   });
 });

@@ -3,6 +3,7 @@ import {
   CreateCandidateRequestSchema,
   CandidateImportRequestSchema,
   UpdateCandidateRequestSchema,
+  candidateFieldValidationMessages,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -10,10 +11,17 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
-import type { RequestContext } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
+import {
+  CandidateIdentityConflictError,
+  UserAlreadyExistsError,
+  ValidationError,
+} from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+} from "../lib/errorResponse.js";
 
 function validateCandidateFields(
   configuredFields: Awaited<
@@ -27,6 +35,15 @@ function validateCandidateFields(
   if (configuredFields.filter((field) => field.unique).length !== 1) {
     throw new ValidationError(
       "Exactly one candidate identity field is required",
+      {
+        fields: [
+          {
+            field: "fields",
+            code: "IDENTITY_FIELD_CONFIGURATION",
+            message: candidateFieldValidationMessages.configurationInvalid,
+          },
+        ],
+      },
     );
   }
   for (const field of configuredFields) {
@@ -35,7 +52,15 @@ function validateCandidateFields(
       field.required &&
       (value === undefined || value === null || value === "")
     ) {
-      throw new ValidationError(`${field.label} is required`);
+      throw new ValidationError(`${field.label} is required`, {
+        fields: [
+          {
+            field: `fields.${field.name}`,
+            code: "REQUIRED",
+            message: candidateFieldValidationMessages.required(field.label),
+          },
+        ],
+      });
     }
     if (
       value !== undefined &&
@@ -43,7 +68,17 @@ function validateCandidateFields(
       field.fieldType === "number" &&
       typeof value !== "number"
     ) {
-      throw new ValidationError(`${field.label} must be a number`);
+      throw new ValidationError(`${field.label} must be a number`, {
+        fields: [
+          {
+            field: `fields.${field.name}`,
+            code: "INVALID_TYPE",
+            message: candidateFieldValidationMessages.numberRequired(
+              field.label,
+            ),
+          },
+        ],
+      });
     }
     if (
       value !== undefined &&
@@ -51,7 +86,15 @@ function validateCandidateFields(
       field.fieldType !== "number" &&
       typeof value !== "string"
     ) {
-      throw new ValidationError(`${field.label} must be text`);
+      throw new ValidationError(`${field.label} must be text`, {
+        fields: [
+          {
+            field: `fields.${field.name}`,
+            code: "INVALID_TYPE",
+            message: candidateFieldValidationMessages.textRequired(field.label),
+          },
+        ],
+      });
     }
   }
 }
@@ -85,8 +128,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
@@ -123,8 +166,8 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin"]),
       ],
     },
-    async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateCandidateRequestSchema.parse(request.body);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
@@ -138,7 +181,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           data.fields,
         )
       ) {
-        throw new ValidationError("Candidate identity already exists");
+        throw new CandidateIdentityConflictError();
       }
 
       const passwordHash = await hashPassword(data.password);
@@ -147,7 +190,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         candidate = await executeInTransaction(fastify.db, async (tx) => {
           const txUserRepo = createUserRepo(tx);
           const txCandidateRepo = createCandidateRepo(tx);
-          const user = await txUserRepo.create(ctx, {
+          const user = await txUserRepo.createUnique(ctx, {
             username: data.username,
             passwordHash,
             name: data.name,
@@ -160,6 +203,11 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           });
         });
       } catch (err: unknown) {
+        if (err instanceof UserAlreadyExistsError) {
+          return reply
+            .code(409)
+            .send(buildErrorResponse(request.id, "USER_ALREADY_EXISTS"));
+        }
         if (
           err &&
           typeof err === "object" &&
@@ -168,22 +216,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           const constraint = String(
             (err as Record<string, unknown>).constraint ?? "",
           );
-          if (constraint === "users_org_username_unique") {
-            return reply.code(409).send({
-              error: { code: "DUPLICATE", message: "Username already exists" },
-            });
-          }
           if (constraint === "candidate_profiles_org_user_unique") {
-            return reply.code(409).send({
-              error: {
-                code: "DUPLICATE",
-                message: "Candidate profile already exists for this user",
-              },
-            });
+            return reply
+              .code(409)
+              .send(
+                buildErrorResponse(request.id, "CANDIDATE_IDENTITY_CONFLICT"),
+              );
           }
-          return reply.code(409).send({
-            error: { code: "DUPLICATE", message: "Duplicate field value" },
-          });
+          return reply
+            .code(409)
+            .send(buildErrorResponse(request.id, "RESOURCE_CONFLICT"));
         }
         throw err;
       }
@@ -219,9 +261,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       const candidateRepo = createCandidateRepo(fastify.db);
       const candidate = await candidateRepo.findById(ctx, id);
       if (!candidate) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Candidate not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       if (data.fields) {
         const configuredFields = await createCandidateFieldRepo(
@@ -234,7 +276,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           data.fields,
         );
         if (duplicate && duplicate.id !== id) {
-          throw new ValidationError("Candidate identity already exists");
+          throw new CandidateIdentityConflictError();
         }
         await candidateRepo.update(ctx, id, { fields: data.fields });
       }
@@ -246,9 +288,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const updated = await candidateRepo.findById(ctx, id);
       if (!updated) {
-        return reply.code(404).send({
-          error: { code: "NOT_FOUND", message: "Candidate not found" },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "candidate.update", "candidate", id);
       return {
@@ -273,9 +315,15 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
-      const data = CandidateImportRequestSchema.parse(request.body);
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
+      const parsed = CandidateImportRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
+      }
+      const data = parsed.data;
       const userRepo = createUserRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
@@ -283,8 +331,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       const allCandidates = await candidateRepo.list(ctx);
-      // TODO: optimize for large orgs — userRepo.list(ctx) loads all users into memory.
-      // Consider a role-scoped query or batch lookup when orgs exceed ~10k users.
       const existingUsernames = new Set<string>();
       const userIdMap = new Map<string, string>();
       for (const user of await userRepo.list(ctx)) {
@@ -294,7 +340,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
 
       let created = 0;
       let updated = 0;
-      const errors: { row: number; message: string }[] = [];
+      const errors: { row: number; code: string; message: string }[] = [];
 
       for (let i = 0; i < data.rows.length; i++) {
         try {
@@ -305,7 +351,11 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           const fields = row.fields ?? {};
 
           if (!username || !name) {
-            errors.push({ row: i + 1, message: "缺少用户名或姓名" });
+            errors.push({
+              row: i + 1,
+              code: "MISSING_REQUIRED_FIELD",
+              message: "缺少用户名或姓名",
+            });
             continue;
           }
           validateCandidateFields(configuredFields, fields);
@@ -329,13 +379,14 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           if (!password) {
             errors.push({
               row: i + 1,
+              code: "MISSING_PASSWORD",
               message: "新增考生需要初始密码",
             });
             continue;
           }
 
           const passwordHash = await hashPassword(password);
-          const user = await userRepo.create(ctx, {
+          const user = await userRepo.createUnique(ctx, {
             username,
             passwordHash,
             name,
@@ -354,6 +405,10 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         } catch (err) {
           errors.push({
             row: i + 1,
+            code:
+              err instanceof ValidationError
+                ? "VALIDATION_ERROR"
+                : "INTERNAL_ERROR",
             message: err instanceof Error ? err.message : "Unknown error",
           });
         }

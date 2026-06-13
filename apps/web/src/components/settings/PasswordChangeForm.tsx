@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 export function PasswordChangeForm({
   cardWrapper = true,
@@ -21,6 +22,10 @@ export function PasswordChangeForm({
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       toast.error("两次输入的新密码不一致");
+      return;
+    }
+    if (newPassword.length < DEFAULT_PASSWORD_POLICY.minLength) {
+      toast.error(`新密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`);
       return;
     }
     setChanging(true);
@@ -61,8 +66,11 @@ export function PasswordChangeForm({
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={DEFAULT_PASSWORD_POLICY.minLength}
           />
+          <p className="text-xs text-muted-foreground">
+            至少 {DEFAULT_PASSWORD_POLICY.minLength} 位
+          </p>
         </Field>
         <Field>
           <Label htmlFor="confirm-password">确认新密码</Label>
@@ -72,7 +80,7 @@ export function PasswordChangeForm({
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={DEFAULT_PASSWORD_POLICY.minLength}
           />
         </Field>
         <Button type="submit" disabled={changing}>

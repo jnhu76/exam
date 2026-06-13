@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from "fastify";
-import { NotFoundError } from "@exam/domain";
 import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -7,6 +6,7 @@ import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateField
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 export const exportRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -24,7 +24,9 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       const examRepo = createExamRepo(fastify.db);
       const exam = await examRepo.findById(ctx, examId);
       if (!exam) {
-        throw new NotFoundError("Exam not found");
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);

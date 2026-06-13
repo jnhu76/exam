@@ -1,7 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { AppError } from "@exam/domain";
 import { ZodError } from "zod";
-
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+  normalizeErrorCode,
+} from "../lib/errorResponse.js";
 function isConstraintError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as Record<string, unknown>;
@@ -34,34 +38,30 @@ function isClientError(
 export function setupErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
-      return reply.code(400).send({
-        error: {
-          code: "VALIDATION_ERROR",
-          message: error.issues.map((issue) => issue.message).join("; "),
-        },
-      });
+      return reply
+        .code(400)
+        .send(buildValidationErrorResponse(request.id, error));
     }
     if (error instanceof AppError) {
-      return reply.code(error.statusCode).send({
-        error: { code: error.code, message: error.message },
-      });
+      const code = normalizeErrorCode(error.code, error.statusCode);
+      return reply
+        .code(error.statusCode)
+        .send(buildErrorResponse(request.id, code, error.details));
     }
     if (isClientError(error)) {
-      return reply.code(error.statusCode).send({
-        error: {
-          code: error.code || "BAD_REQUEST",
-          message: error.message,
-        },
-      });
+      const code = normalizeErrorCode(error.code, error.statusCode);
+      return reply
+        .code(error.statusCode)
+        .send(buildErrorResponse(request.id, code));
     }
     if (isConstraintError(error)) {
-      return reply.code(409).send({
-        error: { code: "CONFLICT", message: "Resource already exists" },
-      });
+      return reply
+        .code(409)
+        .send(buildErrorResponse(request.id, "RESOURCE_CONFLICT"));
     }
     request.log.error({ err: error }, "Unhandled request error");
-    return reply.code(500).send({
-      error: { code: "INTERNAL_ERROR", message: "Internal server error" },
-    });
+    return reply
+      .code(500)
+      .send(buildErrorResponse(request.id, "INTERNAL_ERROR"));
   });
 }

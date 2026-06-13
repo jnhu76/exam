@@ -9,6 +9,8 @@ import {
   AttemptDeadlineExceededError,
   InvalidStateTransitionError,
   ValidationError,
+  MaxAttemptsReachedError,
+  ExamAlreadyPassedError,
 } from "@exam/domain";
 import { calculateDeadlineAt } from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
@@ -100,14 +102,14 @@ export async function startAttempt(
     exam.retakePolicy === "max_attempts" &&
     enrollment.attemptCount >= exam.maxAttempts
   ) {
-    throw new ValidationError("Maximum attempt count reached");
+    throw new MaxAttemptsReachedError("Maximum attempt count reached");
   }
 
   if (
     exam.retakePolicy === "pass_then_stop" &&
     enrollment.finalPassed === true
   ) {
-    throw new ValidationError("Already passed this exam");
+    throw new ExamAlreadyPassedError("Already passed this exam");
   }
 
   const attemptNo = enrollment.attemptCount + 1;

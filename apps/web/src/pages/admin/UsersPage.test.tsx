@@ -136,7 +136,7 @@ describe("UsersPage", () => {
     await user.click(screen.getByRole("button", { name: "保存" }));
     expect(screen.getByText("请输入用户名")).toBeInTheDocument();
     expect(screen.getByText("请输入姓名")).toBeInTheDocument();
-    expect(screen.getByText("密码至少6位")).toBeInTheDocument();
+    expect(screen.getByText("密码至少 8 位")).toBeInTheDocument();
   });
 
   it("creates a new user with valid data", async () => {

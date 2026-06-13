@@ -1,4 +1,9 @@
 import { toast } from "sonner";
+import {
+  getMessageForLocale,
+  isErrorCode,
+  type ErrorResponse,
+} from "@exam/contracts";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -12,11 +17,18 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
+    readonly details?: unknown,
+    readonly requestId?: string,
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
+
+type ErrorBody = Partial<ErrorResponse> & {
+  message?: string;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
@@ -30,23 +42,33 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     });
 
-    if (response.status === 401) {
-      navigateFn?.("/login");
-      throw new ApiError(401, "401 Unauthorized");
-    }
-
     if (!response.ok) {
-      let message = `${response.status} Request failed`;
+      let message: string | undefined;
+      let serverMessage: string | undefined;
+      let code: string | undefined;
+      let details: unknown;
+      let requestId: string | undefined;
       try {
-        const body = (await response.json()) as {
-          error?: { message?: string };
-          message?: string;
-        };
-        message = body.error?.message ?? body.message ?? message;
+        const body = (await response.json()) as ErrorBody;
+        serverMessage = body.error?.message ?? body.message;
+        code = body.error?.code;
+        details = body.error?.details;
+        requestId = body.error?.requestId;
       } catch {
-        // use default message
+        // body parse failed; fall through to code/status fallback
       }
-      throw new ApiError(response.status, message);
+      if (code && isErrorCode(code)) {
+        message = getMessageForLocale(code);
+      } else if (serverMessage) {
+        message = serverMessage;
+      }
+      if (!message) {
+        message = `${response.status} Request failed`;
+      }
+      if (response.status === 401) {
+        navigateFn?.("/login");
+      }
+      throw new ApiError(response.status, message, code, details, requestId);
     }
 
     if (response.status === 204) {

@@ -7,14 +7,16 @@ Command Result 用于有明确状态机或并发协议的 endpoint。它描述�
 
 ## 通用拒绝形态
 
-```json
-{
-  "accepted": false,
-  "reason": "ATTEMPT_ALREADY_SUBMITTED",
-  "message": "考试已提交，不能继续保存答案",
-  "details": {}
-}
+```typescript
+type CommandResultRejected = {
+  accepted: false;
+  reason: string;
+  message: string;
+  details?: unknown;
+};
 ```
+
+endpoint 可以把高频字段提升到顶层（如 `serverVersion`、`savedAt`），但必须在 endpoint contract 中明确声明。
 
 规则：
 
@@ -29,7 +31,28 @@ Command Result 用于有明确状态机或并发协议的 endpoint。它描述�
 Save answer 是 Command Result 的首个迁移目标，因为 autosave 需要把可恢复的业务拒绝
 作为正常协议分支处理。
 
-### Accepted
+### Wire Types
+
+```typescript
+type SaveAnswerAccepted = {
+  accepted: true;
+  serverVersion: number;
+  savedAt: string;
+};
+
+type SaveAnswerRejected = {
+  accepted: false;
+  reason: SaveAnswerRejectReason;
+  message: string;
+  serverVersion: number;
+  savedAt: string;
+  details?: {
+    serverAnswer?: unknown;
+  };
+};
+```
+
+### Accepted 示例
 
 ```json
 {
@@ -39,27 +62,61 @@ Save answer 是 Command Result 的首个迁移目标，因为 autosave 需要把
 }
 ```
 
-### Rejected
+Accepted 分支不含 `conflict` 字段。
+
+### Rejected 示例
 
 ```json
 {
   "accepted": false,
-  "reason": "ANSWER_VERSION_CONFLICT",
+  "reason": "STALE_VERSION",
   "message": "服务器上存在更新的答案版本",
   "serverVersion": 5,
+  "savedAt": "2026-06-12T08:00:00.000Z",
   "details": {
     "serverAnswer": true
   }
 }
 ```
 
-推荐 reason：
+Rejected 分支规则：
 
-- `ATTEMPT_ALREADY_SUBMITTED`
-- `ATTEMPT_NOT_IN_PROGRESS`
-- `ANSWER_VERSION_CONFLICT`
-- `QUESTION_NOT_IN_EXAM`
-- `ATTEMPT_DEADLINE_EXCEEDED`，仅当 endpoint contract 明确把 deadline 作为可恢复拒绝
+- `reason`：稳定机器码，前端和测试依赖它做分支处理。
+- `message`：默认 zh-CN 人类可读文案，来自 message registry。
+- `serverVersion`/`savedAt`：必填。所有 4 个拒绝分支（`STALE_VERSION`、`ATTEMPT_ALREADY_SUBMITTED`、`ATTEMPT_CLOSED`、`DEADLINE_EXCEEDED`）在 `answerProtocol.ts` 中均返回 `serverVersion` 和 `savedAt`，不存在缺失分支。
+- `details`：可选结构化上下文（如 `serverAnswer`）。`serverVersion` 已作为顶层必填字段，不重复放入 `details`。
+
+### Reason Enum
+
+Save answer rejected 的 reason 枚举（与 `packages/contracts/src/attempt.ts` 当前实现一致）：
+
+```typescript
+type SaveAnswerRejectReason =
+  | "STALE_VERSION"
+  | "ATTEMPT_ALREADY_SUBMITTED"
+  | "ATTEMPT_CLOSED"
+  | "DEADLINE_EXCEEDED";
+```
+
+来源对应（code → 实际使用位置）：
+
+| Reason | 含义 | 来源 |
+| --- | --- | --- |
+| `STALE_VERSION` | 客户端 baseVersion 落后于服务端 | `answerProtocol.ts` version check |
+| `ATTEMPT_ALREADY_SUBMITTED` | attempt 已提交，不能再保存 | `answerProtocol.ts` state check |
+| `ATTEMPT_CLOSED` | attempt 已关闭 | `answerProtocol.ts` state check |
+| `DEADLINE_EXCEEDED` | 考试截止时间已过 | `answerProtocol.ts` deadline check |
+
+**注意**：`errors.ts` 中存在 `ANSWER_VERSION_CONFLICT` 和 `ATTEMPT_DEADLINE_EXCEEDED`，它们用于 submit 的 409 ErrorResponse（不是 save 的 Command Result）。Command Result 路径和 ErrorResponse 路径的 code 可以不同，但同一文档内不应混用。
+
+### Reason Migration（如需改名）
+
+如果未来需要改名（如 `STALE_VERSION` → `ANSWER_VERSION_CONFLICT`），必须：
+
+1. 建立 migration table 记录 old → new 映射。
+2. 评估 breaking change 影响面（前端、测试、客户端脚本）。
+3. 走 A01 Job 的完整验收流程。
+4. A01 阶段不改名，直接使用当前实现已有的 reason。
 
 ### HTTP 语义
 
@@ -79,20 +136,25 @@ Save answer 适合 `HTTP 200 + accepted:false`：
 
 ## Submit Attempt
 
-Submit 的状态冲突有两种可接受设计：
+**固定语义：submit 冲突使用 `409 + ErrorResponse`。**
 
-1. `409 + ErrorResponse`
-2. `200 + accepted:false` Command Result
+选择理由：
 
-本阶段不替代码作最终选择。A01 必须根据以下因素固定单一 endpoint contract，并在 endpoint
-contract 文档中记录选择理由：
+1. submit 是最终状态迁移操作。失败不是"可恢复的业务拒绝"，而是命令执行失败。HTTP 409 正确表达"状态冲突导致命令无法执行"。
+2. Web UI 在 S03b flush 后，如果 submit 仍然 409（deadline 或 double submit），应展示错误并允许用户重试或放弃，不需要像 autosave 那样执行冲突恢复。
+3. 当前前端和测试已经依赖 409 + error.code 语义。改为 200 + accepted:false 会破坏现有行为且无收益。
+4. grading 同步发生在 submit 成功后；成功分支返回 attempt 资源（graded 状态），不是 command receipt。
 
-- 是否把重复 submit 定义为幂等成功、业务拒绝或冲突错误。
-- Web UI 在 flush 后如何处理 deadline 与已提交状态。
-- 外部调用方是否已经依赖当前 409。
-- grading 是否同步发生，以及 accepted 成功分支返回 attempt 资源还是 command receipt。
+save answer 与 submit 的区别总结：
 
-同一 endpoint 不得在没有 schema 区分的情况下随机使用两种设计。
+| 方面 | save answer | submit attempt |
+| --- | --- | --- |
+| 冲突性质 | 乐观并发冲突，可恢复 | 状态迁移失败，不可恢复 |
+| HTTP status | 200 | 409 |
+| 响应类型 | Command Result | ErrorResponse |
+| 调用方动作 | 合并/刷新/停止重试 | 展示错误/重试/放弃 |
+| 成功返回数据 | serverVersion, savedAt | attempt resource (graded) |
+| 失败返回数据 | reason, message, details? | error.code, error.message |
 
 ## OpenAPI 要求
 

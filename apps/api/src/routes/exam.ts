@@ -3,6 +3,7 @@ import {
   CreateExamRequestSchema,
   UpdateExamRequestSchema,
   PaginationParamsSchema,
+  EnrollCandidatesRequestSchema,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -18,9 +19,17 @@ import {
   type ExamRepository,
 } from "@exam/exam-engine";
 import type { RequestContext, Exam, Question } from "@exam/domain";
-import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
-import { ensureTargetOrg, formatZodError } from "./helpers.js";
+import {
+  InvalidStateTransitionError,
+  ExamAlreadyPublishedError,
+  ExamNotDraftError,
+} from "@exam/domain";
+import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import {
+  buildErrorResponse,
+  buildValidationErrorResponse,
+} from "../lib/errorResponse.js";
 
 function toExamResponse(exam: Exam) {
   return {
@@ -226,7 +235,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       if (!exam) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       const participants = await getExamParticipants(fastify.db, ctx, exam.id);
       return {
@@ -257,7 +266,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = CreateExamRequestSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const data = parsed.data;
       const repo = createExamRepo(fastify.db);
@@ -267,20 +278,33 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       );
       const questionRepo = createQuestionRepo(fastify.db);
       if (!course) {
-        return reply.code(400).send({
-          error: { code: "VALIDATION_ERROR", message: "Course not found" },
-        });
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "courseId",
+                code: "RESOURCE_NOT_FOUND",
+                message: "课程不存在",
+              },
+            ],
+          }),
+        );
       }
       const questionChecks = await Promise.all(
         data.questionIds.map((id) => questionRepo.findById(ctx, id)),
       );
       if (questionChecks.some((q) => q?.courseId !== data.courseId)) {
-        return reply.code(400).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Questions must belong to the selected course",
-          },
-        });
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            fields: [
+              {
+                field: "questionIds",
+                code: "QUESTION_COURSE_MISMATCH",
+                message: "题目不属于所选课程",
+              },
+            ],
+          }),
+        );
       }
 
       const exam = await repo.create(ctx, {
@@ -321,7 +345,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const parsed = UpdateExamRequestSchema.safeParse(request.body);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const data = parsed.data;
       const repo = createExamRepo(fastify.db);
@@ -330,16 +356,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       if (!existing) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       if (existing.status !== "draft") {
-        return reply.code(409).send({
-          error: {
-            code: "INVALID_STATE_TRANSITION",
-            message: "Can only update draft exams",
-          },
-        });
+        throw new ExamNotDraftError();
       }
       if (data.questionIds) {
         const questionChecks = await Promise.all(
@@ -348,12 +369,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           ),
         );
         if (questionChecks.some((q) => q?.courseId !== existing.courseId)) {
-          return reply.code(400).send({
-            error: {
-              code: "VALIDATION_ERROR",
-              message: "Questions must belong to the selected course",
-            },
-          });
+          return reply.code(400).send(
+            buildErrorResponse(request.id, "VALIDATION_ERROR", {
+              fields: [
+                {
+                  field: "questionIds",
+                  code: "QUESTION_COURSE_MISMATCH",
+                  message: "题目不属于所选课程",
+                },
+              ],
+            }),
+          );
         }
       }
 
@@ -365,7 +391,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       if (!updated) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "exam.update", "exam", id);
       return toExamResponse(updated);
@@ -390,7 +416,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       if (!exam) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       const questions = (
@@ -406,14 +432,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         return toExamResponse(updated);
       } catch (err) {
         if (err instanceof InvalidStateTransitionError) {
-          return reply.code(409).send({
-            error: { code: err.code, message: err.message },
-          });
-        }
-        if (err instanceof ValidationError) {
-          return reply.code(400).send({
-            error: { code: err.code, message: err.message },
-          });
+          throw new ExamAlreadyPublishedError();
         }
         throw err;
       }
@@ -456,16 +475,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       if (!exam) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       if (exam.status !== "draft") {
-        return reply.code(409).send({
-          error: {
-            code: "INVALID_STATE_TRANSITION",
-            message: "Can only delete draft exams",
-          },
-        });
+        throw new ExamNotDraftError();
       }
 
       await repo.delete(ctx, id);
@@ -490,7 +504,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       if (!exam) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
@@ -536,25 +550,23 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
       ],
     },
-    async (request: any, reply: any) => {
+    async (request, reply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
-      const { candidateIds } = request.body as { candidateIds: string[] };
-      if (!Array.isArray(candidateIds) || candidateIds.length === 0) {
-        return reply.code(400).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "candidateIds must be a non-empty array",
-          },
-        });
+      const parsedBody = EnrollCandidatesRequestSchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsedBody.error));
       }
+      const { candidateIds } = parsedBody.data;
 
       const examRepo = createExamRepo(fastify.db);
       const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
       if (!exam) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Exam not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
@@ -632,20 +644,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
       const enrollment = await enrollmentRepo.findById(ctx, enrollmentId);
       if (!enrollment || enrollment.examId !== examId) {
-        return reply.code(404).send({
-          error: {
-            code: "NOT_FOUND",
-            message: "Enrollment not found",
-          },
-        });
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       if (enrollment.status !== "assigned") {
-        return reply.code(409).send({
-          error: {
-            code: "CONFLICT",
-            message: "Cannot remove enrollment that has started",
-          },
-        });
+        return reply
+          .code(409)
+          .send(buildErrorResponse(request.id, "ENROLLMENT_NOT_REMOVABLE"));
       }
 
       await enrollmentRepo.delete(ctx, enrollmentId);

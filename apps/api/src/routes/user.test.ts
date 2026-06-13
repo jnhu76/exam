@@ -47,6 +47,57 @@ describe("user routes", () => {
     expect(body).not.toHaveProperty("passwordHash");
   });
 
+  it("POST /api/users returns validation details", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/users",
+      payload: {
+        username: "x",
+        password: "short",
+        name: "",
+        role: "Teacher",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        details: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({ field: "username", code: "TOO_SMALL" }),
+            expect.objectContaining({ field: "password", code: "TOO_SMALL" }),
+            expect.objectContaining({ field: "name", code: "TOO_SMALL" }),
+          ]),
+        },
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("POST /api/users returns a stable conflict for duplicate usernames", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/users",
+      payload: {
+        username: ctx.teacher.username,
+        password: "password123",
+        name: "Duplicate User",
+        role: "Teacher",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "USER_ALREADY_EXISTS",
+        requestId: expect.any(String),
+      },
+    });
+  });
+
   it("PATCH /api/users/:id updates a user", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",
@@ -89,6 +140,24 @@ describe("user routes", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(204);
+    expect(res.body).toBe("");
+  });
+
+  it("PATCH /api/users/:id returns ErrorResponse v0 when missing", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/users/${crypto.randomUUID()}`,
+      payload: { name: "Missing User" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "RESOURCE_NOT_FOUND",
+        requestId: expect.any(String),
+      },
+    });
   });
 
   it("POST /api/users requires Admin role", async () => {
@@ -104,5 +173,11 @@ describe("user routes", () => {
       cookies: { "auth-token": ctx.teacherToken },
     });
     expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "PERMISSION_DENIED",
+        requestId: expect.any(String),
+      },
+    });
   });
 });

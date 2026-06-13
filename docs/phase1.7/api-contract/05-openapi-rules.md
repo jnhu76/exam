@@ -56,6 +56,7 @@ SaveAnswerAccepted:
   required:
     - accepted
     - serverVersion
+    - savedAt
   properties:
     accepted:
       type: boolean
@@ -65,15 +66,6 @@ SaveAnswerAccepted:
     savedAt:
       type: string
       format: date-time
-    conflict:
-      type: object
-      nullable: true
-      properties:
-        reason:
-          type: string
-        latestAnswer:
-          type: object
-          additionalProperties: true
 
 SaveAnswerRejected:
   type: object
@@ -81,6 +73,8 @@ SaveAnswerRejected:
     - accepted
     - reason
     - message
+    - serverVersion
+    - savedAt
   properties:
     accepted:
       type: boolean
@@ -88,18 +82,23 @@ SaveAnswerRejected:
     reason:
       type: string
       enum:
+        - STALE_VERSION
         - ATTEMPT_ALREADY_SUBMITTED
-        - ATTEMPT_NOT_IN_PROGRESS
-        - ANSWER_VERSION_CONFLICT
-        - QUESTION_NOT_IN_EXAM
+        - ATTEMPT_CLOSED
+        - DEADLINE_EXCEEDED
     message:
       type: string
     serverVersion:
       type: integer
-      nullable: true
+    savedAt:
+      type: string
+      format: date-time
     details:
       type: object
-      additionalProperties: true
+      additionalProperties: false
+      properties:
+        serverAnswer:
+          description: "服务端当前答案值"
 
 SaveAnswerResponse:
   oneOf:
@@ -177,3 +176,60 @@ A05 至少验证：
 - CSV 不被错误描述为 JSON。
 - ErrorResponse 的 `requestId` 与实现一致。
 - 生成 client 不把 command result 合并成无法判别的宽泛对象。
+
+## 开发文档面 (Swagger UI)
+
+平台仅在开发与内网调试场景暴露 Swagger UI；生产环境硬关闭，且不通过 CDN 加载任何资源。
+
+### 双闸门
+
+启用条件 (必须同时满足)：
+
+- `API_DOCS_ENABLED=true`
+- `NODE_ENV !== "production"`
+
+任一条件不满足，`/docs` 系列路由返回 404，与未注册等价。生产环境即便误设
+`API_DOCS_ENABLED=true`，仍由 `NODE_ENV` 闸门兜底关闭。
+
+### 暴露的端点
+
+启用时仅暴露：
+
+- `GET /docs/`：Swagger UI HTML 页面
+- `GET /docs/json`：OpenAPI 3.0.3 spec
+- `GET /docs/static/*`：UI 静态资源 (同源)
+
+不暴露 `/docs/yaml` 或其它额外端点；`/api/health`、`/api/system/health`
+不受影响。
+
+### 安全约束
+
+- `staticCSP: true` 由 `@fastify/swagger-ui` 在 `/docs/*` 路由上设置 scoped CSP
+  (含 `script-src 'self'`、`img-src ... validator.swagger.io`)，仅对该 prefix
+  生效，不影响其它路由的全局 CSP。
+- 全局 `@fastify/rate-limit` 通过 `allowList` 函数对 `/docs` 与 `/docs/*` 进行
+  bypass，避免开发期浏览 UI 时触发 429；该 bypass 同样受双闸门保护，生产环境
+  不生效。
+- `/docs/*` 默认未挂载 auth `preHandler`：闸门关闭时端点不存在，闸门开启时为
+  内网开发可见，符合 LAN/on-premise 场景。
+
+### 依赖位置
+
+`@fastify/swagger-ui` 列在 `apps/api/package.json` 的 `dependencies` 而非
+`devDependencies`，原因：
+
+1. 注册逻辑位于运行时代码 `src/openapi/registerDocs.ts`，由 `server.ts` 在
+   启动期 `await` 引入。即便生产构建中通过双闸门短路 (`if (!isDocsEnabled())
+   return`)，仍需在运行时解析模块路径，因此不能仅作为 dev 依赖。
+2. 双闸门保证生产部署不调用 `swaggerUiPlugin.register()`，未启用时不会加载
+   `swagger-ui-dist` 静态资源。
+3. 体积代价 (~2.5MB) 已知；如未来需要进一步收敛，可改为 dynamic
+   `import()` + 懒加载，目前以最小变更优先。
+
+### Spec drift 防护
+
+- `apps/api/src/openapi/config.ts` 暴露唯一的 `openApiConfig`。
+- A05 drift 测试 `openapi.test.ts` 通过 `buildSwaggerApp()` 构建独立实例消费
+  该 config。
+- 运行时 `registerOpenApiDocs()` 也消费同一 config。
+- 任何配置变更同时影响两条路径，spec drift 在 CI 中暴露。

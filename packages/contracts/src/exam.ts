@@ -69,6 +69,13 @@ export const ExamSchema = z.object({
 });
 export type ExamDTO = z.infer<typeof ExamSchema>;
 
+export const EnrollCandidatesRequestSchema = z.object({
+  candidateIds: z.array(z.string().uuid()).min(1),
+});
+export type EnrollCandidatesRequest = z.infer<
+  typeof EnrollCandidatesRequestSchema
+>;
+
 export const CreateExamRequestSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),

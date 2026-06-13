@@ -1,14 +1,20 @@
+const DANGEROUS_PREFIXES = new Set(["=", "+", "-", "@", "\t", "\r", "\n"]);
+
 export function escapeCSVValue(value: unknown): string {
   const str = String(value ?? "");
-  if (
-    str.includes(",") ||
-    str.includes('"') ||
-    str.includes("\n") ||
-    str.includes("\r")
-  ) {
-    return `"${str.replace(/"/g, '""')}"`;
+  let body = str;
+  if (body.length > 0 && DANGEROUS_PREFIXES.has(body[0]!)) {
+    body = `'${body}`;
   }
-  return str;
+  if (
+    body.includes(",") ||
+    body.includes('"') ||
+    body.includes("\n") ||
+    body.includes("\r")
+  ) {
+    return `"${body.replace(/"/g, '""')}"`;
+  }
+  return body;
 }
 
 export function generateCSV(
@@ -17,10 +23,8 @@ export function generateCSV(
 ): string {
   const lines: string[] = [];
 
-  // Add headers
   lines.push(headers.map(escapeCSVValue).join(","));
 
-  // Add rows
   for (const row of rows) {
     const values = Array.isArray(row) ? row : headers.map((h) => row[h]);
     lines.push(values.map(escapeCSVValue).join(","));
