@@ -225,9 +225,9 @@ Phase1.7 不做 full：
   - `auth-session-baseline.test.ts` — JWT secret fallback removed + dummy verify + cookie secure
 
 **验收**:
-- [ ] baseline 场景有自动化测试
-- [ ] `pnpm test` 包含所有安全测试
-- [ ] PG-only 下通过
+- [x] baseline 场景有自动化测试
+- [x] `pnpm test` 包含所有安全测试
+- [x] PG-only 下通过
 
 **依赖**: S01-S07-lite, A04（CI PG Gate）
 
@@ -243,16 +243,16 @@ Phase1.7 不做 full：
 - 产出验收报告
 
 **验收**:
-- [ ] S01 tenant isolation complete
-- [ ] S02 RBAC matrix complete
-- [ ] S03a server-side exam protocol complete
-- [ ] S03b submit flush complete
-- [ ] S04-lite baseline complete（JWT secret, cookie secure, dummy verify, sessionId）
-- [ ] S05-lite baseline complete（CSV escape, security headers, CSP）
-- [ ] S06-lite baseline complete（login/logout audit, audit-logs API）
-- [ ] S07-lite baseline complete（min length 8, seed password, 集中策略 module）
-- [ ] S08-lite red-team baseline suite pass
-- [ ] `pnpm verify` pass
+- [x] S01 tenant isolation complete
+- [x] S02 RBAC matrix complete
+- [x] S03a server-side exam protocol complete
+- [x] S03b submit flush complete
+- [x] S04-lite baseline complete（JWT secret, cookie secure, dummy verify, sessionId）
+- [x] S05-lite baseline complete（CSV escape, security headers, CSP）
+- [x] S06-lite baseline complete（login/logout audit, audit-logs API）
+- [x] S07-lite baseline complete（min length 8, seed password, 集中策略 module）
+- [x] S08-lite red-team baseline suite pass
+- [x] `pnpm verify` pass
 
 **明确不做**:
 - [ ] 不要求 Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
