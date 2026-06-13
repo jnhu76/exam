@@ -10,6 +10,39 @@
 - 不引入运行时云翻译。
 - 不要求全站 locale catalog。
 
+## 产品语言策略（A07 完成）
+
+### 当前语言支持
+
+| Locale | 状态 | 说明 |
+|--------|------|------|
+| `zh-CN` | **默认且唯一** | 服务端 message、前端 UI 文案、错误提示均使用简体中文 |
+
+### Fallback 链
+
+```text
+前端: resolveErrorMessage(error)
+  → ApiError.code 已知 → getMessageForLocale(code)（按 locale 查 catalog）
+  → ApiError.message（服务端 zh-CN 默认值）
+  → fallbackMessages.operationFailed（"操作失败，请重试"）
+  → 通用 Error.message
+  → fallbackMessages.operationFailed
+
+服务端: buildErrorResponse(requestId, code)
+  → getErrorMessage(code)（从 registry 查找 zh-CN message）
+  → fallbackMessages.unknownError（"未知错误"，仅在 code 未注册时）
+```
+
+`fallbackMessages` 集中维护兜底文案，便于未来加入新 locale 时统一翻译。
+
+### 扩展新 Locale 的步骤
+
+1. 在 `packages/contracts/src/messageRegistry.ts` 的 `SUPPORTED_LOCALES` 数组中添加新 locale（如 `"en"`）
+2. 创建对应 catalog（如 `enErrorMessages: typeof errorMessages = { ... }`）
+3. 在 `localeCatalogs` 注册新 catalog（如 `"en": enErrorMessages`）
+4. 同步在新 catalog 中翻译 `fallbackMessages` 字段
+5. 前端 `resolveErrorMessage` 无需修改（通过 `getMessageForLocale` 自动走新 catalog）
+
 ## 规范
 
 ```text
@@ -76,10 +109,15 @@ const conflictMessages: Record<string, string> = {
 
 ## 未来扩展点
 
-A07 在稳定 code/reason + registry 基础上评估：
+A07 已完成基础 i18n 基础设施：
 
-- 前端按 code/reason 映射本地文案。
-- 服务端 message catalog（多语言扩展 registry）。
-- `Accept-Language` negotiation。
+- [x] 前端按 code/reason 映射本地文案（`resolveErrorMessage()` in `apps/web/src/lib/i18n.ts`）
+- [x] 服务端 message registry 支持 locale 查询（`getMessageForLocale()` in `packages/contracts`）
+- [x] `SupportedLocale` 类型和 `DEFAULT_LOCALE` 常量
+- [x] 兜底文案集中常量（`fallbackMessages` in `packages/contracts`）
+- [x] 多 locale catalog 注册表（`localeCatalogs` in `packages/contracts`，当前只含 zh-CN）
+- [ ] `Accept-Language` negotiation（需要产品明确需求）
+- [ ] 第二个 locale catalog（如 `en`、`ja` 等）
+- [ ] 前端 UI 文案国际化（约 200+ 硬编码字符串）
 
-这些选择均不属于 A00-A06 的必要前置。稳定机器码必须先于任何方案落地。
+稳定机器码必须先于任何方案落地。

@@ -1,5 +1,15 @@
 import type { SaveAnswerRejectReason } from "./attempt.js";
 
+export const DEFAULT_LOCALE = "zh-CN" as const;
+
+export const SUPPORTED_LOCALES = ["zh-CN"] as const;
+
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
+export function isSupportedLocale(locale: string): locale is SupportedLocale {
+  return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
+}
+
 export const errorMessages = {
   AUTH_REQUIRED: "请先登录",
   AUTH_INVALID_CREDENTIALS: "用户名或密码错误",
@@ -35,8 +45,30 @@ export function isErrorCode(code: string): code is ErrorCode {
   return Object.hasOwn(errorMessages, code);
 }
 
+export const fallbackMessages = {
+  unknownError: "未知错误",
+  operationFailed: "操作失败，请重试",
+} as const;
+
+const localeCatalogs: Record<SupportedLocale, typeof errorMessages> = {
+  "zh-CN": errorMessages,
+};
+
 export function getErrorMessage(code: ErrorCode): string {
   return errorMessages[code];
+}
+
+// FIXME(A07): 当前只有 zh-CN 一种 catalog，未支持 locale 时退回 DEFAULT_LOCALE。
+// 添加新 locale 时，在 localeCatalogs 中注册对应 catalog 即可。
+export function getMessageForLocale(
+  code: string,
+  locale: SupportedLocale = DEFAULT_LOCALE,
+): string {
+  const catalog = isSupportedLocale(locale)
+    ? localeCatalogs[locale]
+    : localeCatalogs[DEFAULT_LOCALE];
+  const message = (catalog as Record<string, string>)[code];
+  return message ?? fallbackMessages.unknownError;
 }
 
 export const candidateFieldValidationMessages = {
