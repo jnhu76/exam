@@ -127,12 +127,25 @@ function parseAppEnv(value: string | undefined): AppEnv {
 }
 
 function parseDeploymentMode(value: string | undefined): DeploymentMode {
+  if (value === undefined || value === "") return "multiTenant";
   if (value === "singleTenant") return "singleTenant";
-  return "multiTenant";
+  if (value === "multiTenant") return "multiTenant";
+  throw new Error(
+    `Invalid DEPLOYMENT_MODE "${value}". Valid values: singleTenant, multiTenant`,
+  );
 }
 
 function isTruthy(value: string | undefined): boolean {
   return value === "true" || value === "1";
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined || value === "") return fallback;
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return fallback;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return n;
 }
 
 function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
@@ -161,14 +174,34 @@ function resolveCorsOrigin(
   env: NodeJS.ProcessEnv,
   mode: AppMode,
 ): string | string[] {
+  let raw: string | undefined;
   if (mode === "production") {
-    const raw = env.CORS_ORIGIN;
+    raw = env.CORS_ORIGIN;
     if (!raw) {
       throw new Error("CORS_ORIGIN is required in production");
     }
-    return raw.includes(",") ? raw.split(",").map((s) => s.trim()) : raw;
+  } else {
+    raw = env.CORS_ORIGIN || "http://localhost:5173";
   }
-  return env.CORS_ORIGIN || "http://localhost:5173";
+  if (raw.includes(",")) {
+    const parts = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (parts.length === 1) return parts[0]!;
+    return parts;
+  }
+  return raw;
+}
+
+/**
+ * Public helper for callers (e.g. migration scripts) that only need the
+ * database URL without forcing the full runtime config validation
+ * (which requires JWT_SECRET / CORS_ORIGIN in production).
+ */
+export function resolveDatabaseUrlFromEnv(env: NodeJS.ProcessEnv): string {
+  const mode = parseAppMode(env);
+  return resolveDatabaseUrl(env, mode);
 }
 
 /**
@@ -232,8 +265,8 @@ export function loadRuntimeConfig(
     },
     rateLimit: {
       enabled: !isTruthy(env.RATE_LIMIT_DISABLED),
-      max: Number(env.RATE_LIMIT_MAX) || 100,
-      timeWindow: Number(env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+      max: parsePositiveInt(env.RATE_LIMIT_MAX, 100),
+      timeWindow: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
     },
     security: {
       cspEnabled: true,

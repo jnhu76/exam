@@ -38,6 +38,43 @@ type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
 
+type SaveRejectionDisplay = {
+  Icon: typeof TimerOff;
+  title: string;
+  description: string;
+};
+
+function getSaveRejectionDisplay(
+  rejection: SaveRejection,
+): SaveRejectionDisplay {
+  switch (rejection.reason) {
+    case "DEADLINE_EXCEEDED":
+      return {
+        Icon: TimerOff,
+        title: "已到截止时间",
+        description: "已到截止时间，不能继续修改答案",
+      };
+    case "ATTEMPT_ALREADY_SUBMITTED":
+      return {
+        Icon: Lock,
+        title: "考试已结束",
+        description: "答案已提交，考试已结束",
+      };
+    case "ATTEMPT_CLOSED":
+      return {
+        Icon: Lock,
+        title: "考试已结束",
+        description: "该考试已被关闭，无法继续作答",
+      };
+    default:
+      return {
+        Icon: Lock,
+        title: "答案保存被拒",
+        description: rejection.message ?? "服务器拒绝了本次保存",
+      };
+  }
+}
+
 type AttemptData = Omit<
   LoadAttemptResponse,
   "questionSnapshot" | "deadlineAt"
@@ -353,36 +390,22 @@ export function TakeExamPage() {
 
         <main className="min-w-0 flex-1">
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
-            {saveRejection && !isDisconnected && (
-              <Alert
-                variant="destructive"
-                className="border-destructive/30 bg-destructive/10"
-                data-testid="save-rejection-alert"
-              >
-                {saveRejection.reason === "DEADLINE_EXCEEDED" ? (
-                  <TimerOff aria-hidden="true" />
-                ) : (
-                  <Lock aria-hidden="true" />
-                )}
-                <AlertTitle>
-                  {saveRejection.reason === "DEADLINE_EXCEEDED"
-                    ? "已到截止时间"
-                    : saveRejection.reason === "ATTEMPT_ALREADY_SUBMITTED" ||
-                        saveRejection.reason === "ATTEMPT_CLOSED"
-                      ? "考试已结束"
-                      : "答案保存被拒"}
-                </AlertTitle>
-                <AlertDescription>
-                  {saveRejection.reason === "DEADLINE_EXCEEDED"
-                    ? "已到截止时间，不能继续修改答案"
-                    : saveRejection.reason === "ATTEMPT_ALREADY_SUBMITTED"
-                      ? "答案已提交，考试已结束"
-                      : saveRejection.reason === "ATTEMPT_CLOSED"
-                        ? "该考试已被关闭，无法继续作答"
-                        : (saveRejection.message ?? "服务器拒绝了本次保存")}
-                </AlertDescription>
-              </Alert>
-            )}
+            {saveRejection &&
+              !isDisconnected &&
+              (() => {
+                const display = getSaveRejectionDisplay(saveRejection);
+                return (
+                  <Alert
+                    variant="destructive"
+                    className="border-destructive/30 bg-destructive/10"
+                    data-testid="save-rejection-alert"
+                  >
+                    <display.Icon aria-hidden="true" />
+                    <AlertTitle>{display.title}</AlertTitle>
+                    <AlertDescription>{display.description}</AlertDescription>
+                  </Alert>
+                );
+              })()}
 
             {isDisconnected && (
               <Alert

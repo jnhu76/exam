@@ -763,7 +763,6 @@ describe("attempt routes", () => {
         cookies: { "auth-token": ctx.candidateToken },
       });
 
-      // Simulate a crash: attempt transitioned to submitted but grading never ran.
       await ctx.db
         .update(schema.examAttempts)
         .set({
@@ -822,7 +821,6 @@ describe("attempt routes", () => {
       const attemptId = startRes.json().id as string;
       const qId = startRes.json().questionSnapshot[0].originalQuestionId;
 
-      // Save a correct answer BEFORE the deadline.
       const saveBefore = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/answers/${qId}`,
@@ -838,10 +836,8 @@ describe("attempt routes", () => {
       });
       expect(saveBefore.json().accepted).toBe(true);
 
-      // Advance past the 1-minute deadline.
       ctx.setNow(new Date(Date.now() + 5 * 60 * 1000));
 
-      // save-answer must now be rejected (Phase 1: deadline limits saving, not submitting).
       const saveAfter = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/answers/${qId}`,
@@ -862,7 +858,6 @@ describe("attempt routes", () => {
         getSaveAnswerMessage("DEADLINE_EXCEEDED"),
       );
 
-      // submit still succeeds and grades the previously-saved answer.
       const submitRes = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/submit`,
@@ -903,9 +898,6 @@ describe("attempt routes", () => {
     });
 
     it("allows submit even when fastify.now() is past deadlineAt", async () => {
-      // Phase 1 fix: submit must not be deadline-guarded to avoid dead-state.
-      // Answers are already saved on the server; submit transitions to grading.
-      // save-answer still rejects after deadline — answer protocol handles that.
       const startRes = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${deadlineExamId}/start`,

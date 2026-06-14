@@ -748,9 +748,6 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
 
-      // Phase 1: transition to submitted under row lock.
-      // Idempotent: in_progress/disrupted → submitted; submitted → retry grading;
-      // graded → return as-is; anything else (voided/grading/…) → 409.
       const phaseOne = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
         const candidateProfile = await createCandidateRepo(tx).findByUserId(
@@ -793,7 +790,6 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
       const attemptRepo = createAttemptRepo(fastify.db);
 
-      // Idempotent fast-path: attempt already graded — return without re-grading.
       if (phaseOne.alreadyGraded) {
         const graded = await attemptRepo.findById(ctx, attemptId);
         if (!graded) {
@@ -804,7 +800,6 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      // Phase 2: read snapshot (no lock needed — read-only)
       const examRepo = createExamRepo(fastify.db);
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
 
@@ -818,14 +813,12 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Attempt not found after submit");
       }
 
-      // Phase 3: compute grading result (CPU-only, no I/O)
       const gradingResult = computeGradingResult(
         snapshot.attempt,
         snapshot.exam,
         fastify.now(),
       );
 
-      // Phase 4: finalize grading atomically (row lock)
       await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
         await txAttemptRepo.findByIdForUpdate(ctx, attemptId);

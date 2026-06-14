@@ -84,13 +84,12 @@ describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret
     vi.stubEnv("JWT_SECRET", "runtime-secret-A");
     const app = await buildAppWithAuth();
 
-    // Sign without explicit secret — falls back to packages/auth default,
-    // which reads process.env.JWT_SECRET; we override it to a different value
-    // for the sign call but plugin already captured "runtime-secret-A".
-    const token = signJWT(
-      { actorId: "user-1", role: "Admin", organizationId: "org-1" },
-      "yet-another-secret",
-    );
+    vi.stubEnv("JWT_SECRET", "fallback-secret-from-env");
+    const token = signJWT({
+      actorId: "user-1",
+      role: "Admin",
+      organizationId: "org-1",
+    });
 
     const res = await app.inject({
       method: "GET",

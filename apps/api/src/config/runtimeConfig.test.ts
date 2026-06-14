@@ -23,6 +23,9 @@ const ENV_KEYS = [
   "FEATURE_RESTORE_FRONTEND",
   "FEATURE_MANUAL_EXAM_OPEN_CLOSE",
   "FEATURE_LIVE_SCORE_LIST",
+  "RATE_LIMIT_MAX",
+  "RATE_LIMIT_WINDOW_MS",
+  "RATE_LIMIT_DISABLED",
 ] as const;
 
 describe("runtimeConfig", () => {
@@ -412,6 +415,223 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.cors.origin).toBe("http://localhost:5173");
+    });
+  });
+
+  describe("CORS origin comma list (all modes)", () => {
+    it("development comma list → string[]", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        CORS_ORIGIN: "http://localhost:5173,http://localhost:3000",
+      });
+      expect(config.cors.origin).toEqual([
+        "http://localhost:5173",
+        "http://localhost:3000",
+      ]);
+    });
+
+    it("test comma list → string[]", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        CORS_ORIGIN: "http://a,http://b",
+      });
+      expect(config.cors.origin).toEqual(["http://a", "http://b"]);
+    });
+
+    it("e2e comma list → string[]", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        CORS_ORIGIN: "http://a,http://b",
+      });
+      expect(config.cors.origin).toEqual(["http://a", "http://b"]);
+    });
+
+    it("ci comma list → string[]", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "ci",
+        CORS_ORIGIN: "http://a,http://b",
+      });
+      expect(config.cors.origin).toEqual(["http://a", "http://b"]);
+    });
+
+    it("production comma list → string[]", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "production",
+        JWT_SECRET: "s",
+        DATABASE_URL: "postgresql://x",
+        CORS_ORIGIN: "https://a.com,https://b.com",
+      });
+      expect(config.cors.origin).toEqual(["https://a.com", "https://b.com"]);
+    });
+
+    it("trims whitespace and filters empty entries", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        CORS_ORIGIN: " http://a , , http://b ,",
+      });
+      expect(config.cors.origin).toEqual(["http://a", "http://b"]);
+    });
+
+    it("single value with no comma stays string", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        CORS_ORIGIN: "http://only",
+      });
+      expect(config.cors.origin).toBe("http://only");
+    });
+
+    it("comma value collapses to single string when only one survives", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        CORS_ORIGIN: "http://only,",
+      });
+      expect(config.cors.origin).toBe("http://only");
+    });
+
+    it("production missing CORS_ORIGIN still throws", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "production",
+          JWT_SECRET: "s",
+          DATABASE_URL: "postgresql://x",
+        }),
+      ).toThrow(/CORS_ORIGIN is required/);
+    });
+  });
+
+  describe("DEPLOYMENT_MODE fail-fast", () => {
+    it("unset → multiTenant", () => {
+      const config = loadRuntimeConfig({ APP_MODE: "development" });
+      expect(config.mode).toBe("multiTenant");
+    });
+
+    it("singleTenant → singleTenant", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        DEPLOYMENT_MODE: "singleTenant",
+      });
+      expect(config.mode).toBe("singleTenant");
+    });
+
+    it("multiTenant → multiTenant", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        DEPLOYMENT_MODE: "multiTenant",
+      });
+      expect(config.mode).toBe("multiTenant");
+    });
+
+    it("invalid value throws", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          DEPLOYMENT_MODE: "saas",
+        }),
+      ).toThrow(/Invalid DEPLOYMENT_MODE "saas"/);
+    });
+  });
+
+  describe("rate limit positive integer validation", () => {
+    it("valid string number works", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_MAX: "200",
+        RATE_LIMIT_WINDOW_MS: "120000",
+      });
+      expect(config.rateLimit.max).toBe(200);
+      expect(config.rateLimit.timeWindow).toBe(120000);
+    });
+
+    it("undefined falls back to defaults", () => {
+      const config = loadRuntimeConfig({ APP_MODE: "development" });
+      expect(config.rateLimit.max).toBe(100);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+
+    it("empty string falls back", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_MAX: "",
+        RATE_LIMIT_WINDOW_MS: "",
+      });
+      expect(config.rateLimit.max).toBe(100);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+
+    it("negative number falls back", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_MAX: "-5",
+        RATE_LIMIT_WINDOW_MS: "-1000",
+      });
+      expect(config.rateLimit.max).toBe(100);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+
+    it("zero falls back", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_MAX: "0",
+        RATE_LIMIT_WINDOW_MS: "0",
+      });
+      expect(config.rateLimit.max).toBe(100);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+
+    it("decimal falls back", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_MAX: "10.5",
+        RATE_LIMIT_WINDOW_MS: "1000.7",
+      });
+      expect(config.rateLimit.max).toBe(100);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+
+    it("non-numeric falls back", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        RATE_LIMIT_MAX: "abc",
+        RATE_LIMIT_WINDOW_MS: "fast",
+      });
+      expect(config.rateLimit.max).toBe(100);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+  });
+
+  describe("resolveDatabaseUrlFromEnv (migration helper)", () => {
+    it("returns TEST_DATABASE_URL in test mode", async () => {
+      const { resolveDatabaseUrlFromEnv } = await import("./runtimeConfig.js");
+      const url = resolveDatabaseUrlFromEnv({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+      });
+      expect(url).toBe("postgresql://t:t@h:5432/testdb");
+    });
+
+    it("returns DATABASE_URL in production", async () => {
+      const { resolveDatabaseUrlFromEnv } = await import("./runtimeConfig.js");
+      const url = resolveDatabaseUrlFromEnv({
+        APP_MODE: "production",
+        DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+      });
+      expect(url).toBe("postgresql://p:p@h:5432/proddb");
+    });
+
+    it("throws in production when DATABASE_URL unset", async () => {
+      const { resolveDatabaseUrlFromEnv } = await import("./runtimeConfig.js");
+      expect(() =>
+        resolveDatabaseUrlFromEnv({ APP_MODE: "production" }),
+      ).toThrow(/DATABASE_URL is required/);
+    });
+
+    it("does NOT require JWT_SECRET / CORS_ORIGIN", async () => {
+      const { resolveDatabaseUrlFromEnv } = await import("./runtimeConfig.js");
+      const url = resolveDatabaseUrlFromEnv({
+        APP_MODE: "production",
+        DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+      });
+      expect(url).toBe("postgresql://p:p@h:5432/proddb");
     });
   });
 });

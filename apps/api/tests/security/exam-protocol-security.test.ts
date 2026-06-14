@@ -238,9 +238,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
 
   describe("AC1: Submit after deadline succeeds (answers already saved)", () => {
     it("allows submit when server time is past deadlineAt", async () => {
-      // Phase 1 fix: submit must not be deadline-guarded.
-      // Answers are already saved on the server; submit transitions to grading.
-      // save-answer still rejects after deadline — answer protocol handles that.
       const attemptId = await createExamAndStart("Deadline Exam", 1);
 
       const originalNow = app.now;

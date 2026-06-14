@@ -479,8 +479,6 @@ describe("attemptCommands", () => {
     });
 
     it("allows late submission (past deadline) — answers already saved on server", async () => {
-      // Phase 1 fix: submit is not deadline-guarded to avoid dead-state.
-      // save-answer still rejects after deadline — answer protocol handles that.
       const attempt = makeAttempt({
         deadlineAt: new Date("2025-01-01T09:00:00Z"),
       });

@@ -91,10 +91,6 @@ describe("attemptStateMachine", () => {
   });
 
   describe("submit is not deadline-guarded", () => {
-    // Phase 1 fix: submit must not be deadline-guarded to avoid dead-state.
-    // Answers are already saved on the server; submit transitions to grading.
-    // save-answer still rejects after deadline — answer protocol handles that.
-
     it("allows in_progress → submit without deadline context", () => {
       const result = transition("in_progress", "submit");
       expect(result).toEqual({ ok: true, next: "submitted" });

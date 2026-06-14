@@ -561,11 +561,6 @@ describe("SaveAnswerRejectReasonEnum", () => {
 });
 
 describe("SaveAnswer route-shape equivalence (A01 wire contract)", () => {
-  // Mirrors the construction in apps/api/src/routes/attempts.ts save-answer route.
-  // DEADLINE_EXCEEDED is now reachable via the HTTP route (the save-answer route
-  // passes attempt.deadlineAt + fastify.now() into processSaveAnswer).
-  // ATTEMPT_CLOSED requires admin void, which is still not implemented in Phase 1.
-  // Route tests assert the equivalent shape end-to-end (attempts.test.ts).
   const buildRejectedWireShape = (
     reason: import("../attempt.js").SaveAnswerRejectReason,
     options: { latestAnswer?: unknown } = {},

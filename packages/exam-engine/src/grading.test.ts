@@ -248,38 +248,6 @@ describe("gradeAttempt", () => {
     ).rejects.toThrow("Failed to persist graded results");
   });
 
-  it("throws ValidationError when writing graded result fails", async () => {
-    const exam = makeExam();
-    const attempt = makeAttempt();
-    const enrollment = makeEnrollment();
-    const examRepo: ExamRepository = {
-      findById: () => exam,
-      update: () => exam,
-    };
-    const attemptRepo: AttemptRepository = {
-      findById: () => attempt,
-      findActiveByEnrollment: () => null,
-      findByEnrollmentAndAttemptNo: () => null,
-      create: () => attempt,
-      update: () => null,
-    };
-    const enrollmentRepo: EnrollmentRepository = {
-      findByExamAndCandidate: () => enrollment,
-      create: () => enrollment,
-      update: () => enrollment,
-    };
-
-    await expect(
-      gradeAttempt(
-        examRepo,
-        enrollmentRepo,
-        attemptRepo,
-        "attempt-1",
-        new Date(),
-      ),
-    ).rejects.toThrow("Failed to persist graded results");
-  });
-
   it("throws ValidationError when updating enrollment result fails", async () => {
     const exam = makeExam();
     const attempt = makeAttempt();

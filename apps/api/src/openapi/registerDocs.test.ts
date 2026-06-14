@@ -76,11 +76,10 @@ describe("registerOpenApiDocs", () => {
     {};
 
   beforeEach(() => {
-    savedEnv = {
-      API_DOCS_ENABLED: process.env.API_DOCS_ENABLED,
-      NODE_ENV: process.env.NODE_ENV,
-      DEPLOYMENT_MODE: process.env.DEPLOYMENT_MODE,
-    };
+    savedEnv = {};
+    for (const key of ENV_KEYS) {
+      savedEnv[key] = process.env[key];
+    }
   });
 
   afterEach(() => {
