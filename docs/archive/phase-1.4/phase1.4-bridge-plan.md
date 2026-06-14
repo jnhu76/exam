@@ -310,7 +310,7 @@ Phase1.4 不再负责完成所有安全 Job。S03b-S09 已迁移到 Phase1.7。
 
 ## Security Jobs (Deferred to Phase1.7)
 
-以下安全 Job 已迁移到 Phase1.7，在 `docs/phase1.7/security-completion-plan.md` 中重新编排为 baseline/lite 版本：
+以下安全 Job 已迁移到 Phase1.7，在 `docs/archive/phase-1.7/security-completion-plan.md` 中重新编排为 baseline/lite 版本：
 
 | Job ID | Name | 新归属 | 说明 |
 |--------|------|--------|------|
@@ -335,7 +335,7 @@ Phase1.4 不再负责完成所有安全 Job。S03b-S09 已迁移到 Phase1.7。
 
 ## Architecture Jobs (Deferred to Phase1.5/1.6)
 
-原 A00-A05 已迁移到 Phase1.5/1.6，详见 `docs/phase1.5/postgresql-only-convergence.md` 和 `docs/phase1.6/postgresql-correctness-hardening.md`。
+原 A00-A05 已迁移到 Phase1.5/1.6，详见 `docs/archive/phase-1.5/postgresql-only-convergence.md` 和 `docs/archive/phase-1.6/postgresql-correctness-hardening.md`。
 
 ## Validation Jobs
 
@@ -352,7 +352,7 @@ Phase1.4 不再负责完成所有安全 Job。S03b-S09 已迁移到 Phase1.7。
 # Job Cards — Architecture
 
 > **重要更新（2026-06-11）**：A00-A05 已迁移到 Phase1.5/1.6。
-> 当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 和 `docs/phase1.6/postgresql-correctness-hardening.md` 为准。
+> 当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 和 `docs/archive/phase-1.6/postgresql-correctness-hardening.md` 为准。
 > 本文档保留历史背景，仅供追溯。
 
 ---
@@ -360,7 +360,7 @@ Phase1.4 不再负责完成所有安全 Job。S03b-S09 已迁移到 Phase1.7。
 ## P1.4-A00: DB Reality Check Spike
 
 > **状态：已迁移到 Phase1.5 (P1.5-J1)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -415,7 +415,7 @@ Drizzle ORM 的 async API 理论上同时支持 SQLite 和 PostgreSQL。但需�
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/adr-db-dual-dialect.md` — 技术方案 ADR
+- `docs/archive/phase-1.4/adr-db-dual-dialect.md` — 技术方案 ADR
 
 ### Dependencies
 
@@ -434,7 +434,7 @@ Critical — 方案选错会导致 A01-A02 全部返工
 ## P1.4-A01: DB Context / Repository Contract Design
 
 > **状态：已迁移到 Phase1.5 (P1.5-J5)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -514,7 +514,7 @@ Critical
 ## P1.4-A02: Repository 双方言迁移
 
 > **状态：已迁移到 Phase1.5 (P1.5-J5)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -603,7 +603,7 @@ Critical
 ## P1.4-A03: Docker + PostgreSQL Smoke Test
 
 > **状态：已迁移到 Phase1.5 (P1.5-J2/J6)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -683,7 +683,7 @@ High
 ## P1.4-A04: CI PostgreSQL Gate
 
 > **状态：已迁移到 Phase1.5 (P1.5-J6)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -717,7 +717,7 @@ Medium
 ## P1.4-A05: Redis / MQ ADR
 
 > **状态：已迁移到 Phase1.5 (P1.5-J7)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.5/postgresql-only-convergence.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.5/postgresql-only-convergence.md` 为准。
 
 ### Purpose
 
@@ -725,7 +725,7 @@ Medium
 
 ### Scope
 
-- `docs/phase1.4/adr-redis-mq.md` — 新建
+- `docs/archive/phase-1.4/adr-redis-mq.md` — 新建
 
 ### Acceptance Criteria
 
@@ -918,7 +918,7 @@ Phase1.4 权限矩阵（Proctor 行仅定义权限枚举，**不新增业务路�
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/permission-matrix.md`
+- `docs/archive/phase-1.4/permission-matrix.md`
 
 ### Dependencies
 
@@ -1034,7 +1034,7 @@ High
 ## P1.4-S03b: Client Submit Flush Protocol
 
 > **状态：已迁移到 Phase1.7 (P1.7-S03b)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 
 ### Purpose
 
@@ -1115,7 +1115,7 @@ High
 ## P1.4-S04: Auth Session Security
 
 > **状态：已迁移到 Phase1.7 (P1.7-S04-lite)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 > Phase1.7 中拆分为 baseline/lite 版本，full 版本 deferred 到 Phase2/1.8。
 
 ### Purpose
@@ -1216,7 +1216,7 @@ Medium
 ## P1.4-S05: CSV Injection + Security Headers + CSRF Origin Check
 
 > **状态：已迁移到 Phase1.7 (P1.7-S05-lite)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 
 ### Purpose
 
@@ -1310,7 +1310,7 @@ Medium
 ## P1.4-S06: Audit Log Completion
 
 > **状态：已迁移到 Phase1.7 (P1.7-S06-lite)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 > Phase1.7 中完成 baseline，Proctor operation audit 留到 Phase2。
 
 ### Purpose
@@ -1358,7 +1358,7 @@ Medium
 ## P1.4-S07: Password Policy + Account Security
 
 > **状态：已迁移到 Phase1.7 (P1.7-S07-lite)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 > Phase1.7 中拆分为 baseline/lite 版本（最小长度 8 + config 策略），full 版本 deferred 到 Phase2/1.8。
 
 ### Purpose
@@ -1387,7 +1387,7 @@ Medium
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/password-policy.md`
+- `docs/archive/phase-1.4/password-policy.md`
 
 ### Dependencies
 
@@ -1406,7 +1406,7 @@ Medium
 ## P1.4-S08: Red-Team Security Test Suite
 
 > **状态：已迁移到 Phase1.7 (P1.7-S08-lite)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 > Phase1.7 中改为 red-team baseline suite，不要求覆盖 full S04/S07。
 
 ### Purpose
@@ -1449,7 +1449,7 @@ High
 ## P1.4-S09: Phase1.3 Security Validation
 
 > **状态：已迁移到 Phase1.7 (P1.7-S09-lite)**
-> 本文档保留历史背景，当前执行以 `docs/phase1.7/security-completion-plan.md` 为准。
+> 本文档保留历史背景，当前执行以 `docs/archive/phase-1.7/security-completion-plan.md` 为准。
 > Phase1.7 中改为 Phase1.7 security baseline validation，不是 Phase1.3 全量复测。
 
 ### Purpose
@@ -1470,7 +1470,7 @@ High
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/phase1.3-validation-report.md`
+- `docs/archive/phase-1.4/phase1.3-validation-report.md`
 
 ### Dependencies
 
@@ -1683,7 +1683,7 @@ High
 # Dependency Graph
 
 > **更新（2026-06-11）**：A00-A05 已迁移到 Phase1.5，S03b-S09 已迁移到 Phase1.7。
-> 详见 `docs/phase1.4/05-dependency-graph.md` 获取完整跨阶段依赖图。
+> 详见 `docs/archive/phase-1.4/05-dependency-graph.md` 获取完整跨阶段依赖图。
 
 ```
 Phase1.4
@@ -1848,8 +1848,8 @@ Phase1.4 的最小必须集：
 | S04-S09 | Phase1.7 | 安全 Job 重新编排为 baseline/lite，避免破坏 seed/登录态 |
 
 详见：
-- `docs/phase1.5/postgresql-only-convergence.md`
-- `docs/phase1.6/postgresql-correctness-hardening.md`
-- `docs/phase1.7/security-completion-plan.md`
-- `docs/phase1.4/phase1.4-closeout-and-deferral.md`
+- `docs/archive/phase-1.5/postgresql-only-convergence.md`
+- `docs/archive/phase-1.6/postgresql-correctness-hardening.md`
+- `docs/archive/phase-1.7/security-completion-plan.md`
+- `docs/archive/phase-1.4/phase1.4-closeout-and-deferral.md`
 

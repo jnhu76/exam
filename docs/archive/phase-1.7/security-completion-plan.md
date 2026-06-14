@@ -195,7 +195,7 @@ Phase1.7 不做 full：
 **做（baseline）**:
 - [x] 新建用户 / 重置密码最小长度 8
 - [x] seed 密码全部 >= 8
-- [x] 密码策略集中到单一权威 module（`packages/contracts/src/passwordPolicy.ts`，`DEFAULT_PASSWORD_POLICY`），4 个 schema 改用 `passwordField()` 工厂；详见 `docs/phase1.7/password-policy.md`
+- [x] 密码策略集中到单一权威 module（`packages/contracts/src/passwordPolicy.ts`，`DEFAULT_PASSWORD_POLICY`），4 个 schema 改用 `passwordField()` 工厂；详见 `docs/archive/phase-1.7/password-policy.md`
 - [x] password policy docs
 
 **暂缓（full，deferred to Phase2/1.8）**:

@@ -5,7 +5,7 @@
 本审计基于 2026-06-12 当前分支，检查了：
 
 - `docs/api/reference.md`
-- `docs/phase1.6/`
+- `docs/archive/phase-1.6/`
 - `apps/api/src/routes/`
 - `apps/api/src/plugins/errors.ts`
 - `apps/api/src/plugins/auth.ts`

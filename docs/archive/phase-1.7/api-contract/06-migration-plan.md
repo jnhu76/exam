@@ -75,7 +75,7 @@ Phase1.7-A: 收尾
 
 ### Files likely affected
 
-- `docs/phase1.7/api-contract/**`
+- `docs/archive/phase-1.7/api-contract/**`
 
 ### Acceptance criteria
 
@@ -90,7 +90,7 @@ Phase1.7-A: 收尾
 ### Tests / verification
 
 - `git diff --check`
-- `pnpm exec prettier --check docs/phase1.7/api-contract`
+- `pnpm exec prettier --check docs/archive/phase-1.7/api-contract`
 - `git diff --name-only` 只包含 `docs/`
 
 ### Risks
@@ -437,7 +437,7 @@ submit 前 flush 所有 pending saves，与 A01 的 save/submit contract 对齐�
 - `apps/web/src/lib/i18n.ts` 提供 `resolveErrorMessage(error)`，按 `ApiError.code → registry → server message → fallback` 链路解析。
 - `apps/web/src/lib/api.ts` 接入 `getMessageForLocale` + `isErrorCode`：error code 命中 registry 时优先使用 registry zh-CN 文案；code 未注册且服务端 message 非空时回退到服务端 message；否则回退到 `${status} Request failed`。语义与 `resolveErrorMessage` 和 `04-i18n-boundary.md` 的 registry-first 规则一致。
 - 测试覆盖：`packages/contracts` 13 个 locale catalog 测试、`apps/web` 9 个 `resolveErrorMessage` 测试、`apps/web` 7 个 `api.ts` representative integration 测试（含 registry-first、empty-string、unknown-code 各分支）。
-- 文档：`docs/phase1.7/api-contract/04-i18n-boundary.md` 给出语言策略、fallback 链、扩展新 locale 的 5 步流程。
+- 文档：`docs/archive/phase-1.7/api-contract/04-i18n-boundary.md` 给出语言策略、fallback 链、扩展新 locale 的 5 步流程。
 
 A07 不阻塞 Phase2 Entry Gate。后续如需引入第二个 locale，遵循 `04-i18n-boundary.md` "扩展新 Locale 的步骤" 即可。
 

@@ -8,24 +8,28 @@
 
 ## 一、系统定位
 
-**通用型内网考试平台。**
+**Phase 1 单机构/单租户内网考试平台。**
 
-部署在校园/机构内网（LAN），服务多种考试场景：实验室准入考试、学院考试、培训确认测验、闭卷期末考试等。核心链路——
+部署在校园/机构内网（LAN），一个部署代表一个机构。Phase 1 是 Admin + Candidate 的 Minimal Deliverable Exam System，不是完整教务平台、协作平台或多租户平台。核心链路——
 
 ```txt
-机构/租户 → 题库 → 组卷 → 考试执行 → 答案保存 → 自动批改 → 出分 → 达标放行
+题库 → 组卷 → 考试执行 → 答案保存 → 自动批改 → 出分
 ```
 
-各院系/实验室/部门作为租户接入，各自管理题库和考试。考生不限于学生——由各机构自己定义考生身份。
+Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是未来协作与权限模型，不进入 Phase 1 核心路径。考生不限于学生——由机构自己定义考生身份。
+
+> **Phase 1 是单租户、多用户系统。** organization 表仅作为内部 default organization 数据归属边界。multiTenant / SuperAdmin / tenant switcher 是 Phase 4 platformization，不属于 Phase 1。"达标放行" / pass-to-proceed 属于 Phase 4 integration。
 
 ### 不变原则
 
 - 考试数据不丢——已作答内容在任何故障场景下都必须可恢复
-- 租户隔离——A 机构看不到 B 机构的任何数据
+- 数据归属边界——所有业务数据归属于内部 default organization（Phase 1 单租户）
 - 服务端计时——倒计时、超时判定以服务端时间为准
 - 答卷可恢复——断线/崩溃后考生可从服务端恢复答案和剩余时间
 - 题目快照——组卷后题目冻结，题库修改不影响历史答卷
 - 服务端是数据权威——客户端是展示层，答案以服务端记录为准
+
+> **Phase 1 数据归属说明**：当前系统为单租户模式，所有业务数据归属于内部 default organization。route / repository 仍携带 organizationId，但 organizationId 来自 default organization，不允许产品路径中切换 organization。Phase 4 如启用 optional multiTenant，数据归属边界才扩展为租户隔离。
 
 > **当前实现边界（Phase 1.7）**：
 >
@@ -37,7 +41,7 @@
 >   - **P2A-J3 Attempt Heartbeat**：前端 restore UI、心跳调参、超时阈值评估
 >   - **P2A-J4 disrupted 检测与恢复**：监考介入 / 恢复裁决流程
 >
-> 详见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
+> 详见 `docs/archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
 
 ---
 
@@ -46,65 +50,69 @@
 ### 2.1 实体关系
 
 ```
-Organization (机构/租户)
- ├── 支持平铺（多个独立机构）和树形层级（大学→学院→实验室）
- ├── 每个租户有自己的 Admin、题库、考试、考生字段定义
- └── 数据隔离：A 机构看不到 B 机构的题目和成绩
-
-SuperAdmin (平台管理员)
- └── 跨租户管理所有机构
+Organization (机构)
+  └── Phase 1 只有一个 internal default organization
+      ├── 用户不创建 organization
+      ├── 登录不传 organizationSlug
+      └── Web 不显示组织选择
 
 Organization 内部：
- User (用户)
-  ├── Admin    → 管理本机构、用户管理、考场管理、考生字段配置
-  ├── Teacher  → 出题、组卷、审卷、查看成绩
-  ├── Proctor  → 监考（查看考场状态、处理异常、标记违纪）
-  │             注：教师可以兼任监考，监考权限是教师权限的子集
-  └── Candidate → 参加考试（通用身份，不绑定"学生"语义）
-                  考生属性由机构自定义（学号/工号/身份证号等）
-                  内部 ID 用 UUID，用户可见标识由机构定义
+  User (用户)
+   ├── Admin     → Phase 1 内最高产品角色；管理考生字段、课程、题库、考试、分配、成绩与导出
+   └── Candidate → 参加被分配考试（通用身份，不绑定"学生"语义）
+                   考生属性由机构自定义（学号/工号/身份证号等）
+                   内部 ID 用 UUID，用户可见标识由机构定义
 
 Course (课程/科目)
- └── 属于某个 Organization
+  └── 属于某个 Organization
 
 QuestionBank (题库)
- └── 按 Course 组织（各机构题库隔离）
-      └── Question (题目)
-           ├── type: single_choice | multiple_choice | fill_blank | true_false
-           ├── content: 题干（支持文字 + 图片引用）
-           ├── attachments[]: 图片/附件 URL
-           ├── options[]: 选项（选择题）
-           ├── standardAnswer: 标准答案（自动批改的依据）
-           ├── score: 分值
-           └── tags[]: 标签（知识点、难度）
+  └── 按 Course 组织
+       └── Question (题目)
+            ├── type: single_choice | multiple_choice | fill_blank | true_false
+            ├── content: 题干（支持文字 + 图片引用）
+            ├── attachments[]: 图片/附件 URL
+            ├── options[]: 选项（选择题）
+            ├── standardAnswer: 标准答案（自动批改的依据）
+            ├── score: 分值
+            └── tags[]: 标签（知识点、难度）
 
 Exam (考试)
- ├── 从 QuestionBank 中抽题组卷
- ├── passingScore: 及格线
- ├── timing: timed_sync | timed_window | deadline | untimed（见 §2.4）
- ├── durationMinutes: 考试时长（timed 模式必填）
- ├── 管控细项（每项可独立开关，见 §2.5）
- └── startTime / endTime: 开放时间窗口
+  ├── 从 QuestionBank 中抽题组卷
+  ├── passingScore: 及格线
+  ├── timing: timed_sync | timed_window | deadline | untimed（见 §2.4）
+  ├── durationMinutes: 考试时长（timed 模式必填）
+  ├── 管控细项（每项可独立开关，见 §2.5）
+  └── startTime / endTime: 开放时间窗口
 
 ExamRoom (考场) [Phase 2]
- ├── name: 考场名称
- ├── ipRange: 允许的 IP 段（LAN 安全）
- └── capacity: 容量
+  ├── name: 考场名称
+  ├── ipRange: 允许的 IP 段（LAN 安全）
+  └── capacity: 容量
 
 ExamEnrollment (考试资格)
- ├── 某考生被允许参加某场考试
- ├── status: assigned | started | completed | blocked
- ├── finalScore / finalPassed: 最终认定成绩（按 scoreStrategy 选）
- └── finalAttemptId: 最终认定的那次 attempt
+  ├── 某考生被允许参加某场考试
+  ├── status: assigned | started | completed | blocked
+  ├── finalScore / finalPassed: 最终认定成绩（按 scoreStrategy 选）
+  └── finalAttemptId: 最终认定的那次 attempt
 
 ExamAttempt (答题记录)
- ├── 某考生 × 某考试 × 第 N 次尝试
- ├── attemptNo: 第几次尝试（从 1 开始）
- ├── questionSnapshot: 题目快照（组卷时冻结，不随题库修改变化）
- ├── answers: 考生的作答（带版本号）
- ├── score / passed: 本次得分与通过状态
- └── lastActivityAt: 心跳时间（断线检测）
+  ├── 某考生 × 某考试 × 第 N 次尝试
+  ├── attemptNo: 第几次尝试（从 1 开始）
+  ├── questionSnapshot: 题目快照（组卷时冻结，不随题库修改变化）
+  ├── answers: 考生的作答（带版本号）
+  ├── score / passed: 本次得分与通过状态
+  └── lastActivityAt: 心跳时间（断线检测）
 ```
+
+**Phase 1 角色说明**：
+
+- **Admin**：Phase 1 内最高产品角色，可以多个。管理 default organization 内的候选人字段、候选人、课程、题库、考试、分配、成绩与导出。
+- **Candidate**：参加被分配考试并查看自己允许查看的成绩，可以多个。
+- **Teacher**：不进入 Phase 1 核心路径；Phase 3 由 permission + scope 组合为 Teacher-like scoped role。
+- **Proctor**：Phase 2/3 后续能力；Phase 2 提供考试运营工作流，Phase 3 提供角色包与授权边界。
+- **Grader / ContentManager / ResultViewer**：Phase 3 scoped role bundles。
+- **SuperAdmin**：Phase 4 optional multiTenant/platformization；Phase 1 不 seed、不登录、不展示。
 
 ### 2.2 ExamAttempt 模型（核心）
 
@@ -125,7 +133,7 @@ not_started → queued → in_progress → submitted → grading → graded
                                      └── disrupted   voided
 ```
 
-> 上图是状态机的**长期目标设计**。当前 Phase 1.7 的实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §3。
+> 上图是状态机的**长期目标设计**。当前 Phase 1.7 的实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
 
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
@@ -223,10 +231,10 @@ remainingSeconds = deadlineAt - serverNow
 
 **CandidateField（考生字段模板）**：
 
-- 每个 Organization 可自定义 N 个考生字段
+- Phase 1 由 Admin 为 internal default organization 配置 N 个考生字段
 - 每个字段可配置：名称、类型（text/number/select）、是否必填、是否作为唯一标识
 - 考生导入模板根据字段定义动态生成
-- 成绩导出时按该机构的字段输出对应列
+- 成绩导出时按当前部署 / default organization 的字段输出对应列
 
 **标识规则**：
 
@@ -235,23 +243,37 @@ remainingSeconds = deadlineAt - serverNow
 - 标识可以是数字、字母、混合（如 `s2024001`、`b2024001`、`2024010001`）
 - 系统不假设标识的格式，只保证唯一性
 
-### 2.4 角色权限矩阵
+### 2.4 Phase 1 角色权限矩阵
 
-| 能力 | SuperAdmin | Admin | Teacher | Proctor | Candidate |
-|------|:----------:|:-----:|:-------:|:-------:|:---------:|
-| 跨租户管理 | ✅ | - | - | - | - |
-| 机构设置 / 考生字段 | - | ✅ | - | - | - |
-| 用户管理 | - | ✅ | - | - | - |
-| 考场管理 | - | ✅ | - | - | - |
-| 出题 / 题库 | - | ✅ | ✅ | - | - |
-| 组卷 / 发布考试 | - | ✅ | ✅ | - | - |
-| 查看所有成绩 | - | ✅ | ✅ | - | - |
-| 监考：查看考场实时状态 | - | ✅ | ✅ | ✅ | - |
-| 监考：延长个人时间 | - | ✅ | ✅ | ✅ | - |
-| 监考：标记违纪 | - | ✅ | ✅ | ✅ | - |
-| 监考：强制交卷 | - | ✅ | ✅ | ✅ | - |
-| 参加考试 | - | - | - | - | ✅ |
-| 查看自己成绩 | - | - | - | - | ✅ |
+| 能力 | Admin | Candidate |
+|------|:-----:|:---------:|
+| 系统初始化 / Admin bootstrap | ✅ | - |
+| 本地 Admin reset-password 脚本执行记录 | ✅ | - |
+| 部署设置 / 考生字段 | ✅ | - |
+| Admin / Candidate 账号管理 | ✅ | - |
+| Candidate 创建 / 批量导入 | ✅ | - |
+| Course 创建 | ✅ | - |
+| Question CSV 导入 | ✅ | - |
+| Exam 创建 / 发布 | ✅ | - |
+| Candidate enrollment / assignment | ✅ | - |
+| 查看考试结果 | ✅ | 仅本人 |
+| Result CSV export | ✅ | - |
+| 参加被分配考试 | - | ✅ |
+| 查看允许展示的本人结果 | - | ✅ |
+
+> **Phase 1 说明**：当前产品角色只有 Admin / Candidate。Teacher-like roles、Proctor、Grader、ContentManager、ResultViewer 均不是 Phase 1 当前角色。
+
+### 2.4.1 Future Roles（Phase 3）
+
+Phase 3 才引入基于 permission + scope 的协作角色：
+
+- Teacher-like roles
+- Proctor
+- Grader
+- ContentManager
+- ResultViewer
+
+这些角色通过 Course / Exam / CandidateGroup 等 scope 授权，不是 multiTenant，也不进入 Phase 1 当前矩阵。
 
 ### 2.5 考试计时模式
 
@@ -268,7 +290,7 @@ remainingSeconds = deadlineAt - serverNow
 
 ```
 timed_sync 示例：
-  Proctor 点击"开考" → 考生排队分批进入 → 开始 90 分钟倒计时
+  Phase 2 运营人员点击"开考" → 考生排队分批进入 → 开始 90 分钟倒计时
   窗口：周一 9:00-11:00，最迟 10:30 可开始（预留 buffer）
 
 timed_window 示例：
@@ -287,15 +309,15 @@ untimed 示例：
 
 ### 2.6 管控与考试模式
 
-管控强度独立于计时方式，两者正交组合。Teacher 组卷时先选计时方式，再逐项勾选管控选项。系统提供"开卷预设"和"闭卷预设"快速填充默认值，但每一项都能单独改。
+管控强度独立于计时方式，两者正交组合。Phase 1 由 Admin 创建考试并选择 `timed_window` 主路径；Phase 2 再引入完整考试运营管控。系统长期目标提供"开卷预设"和"闭卷预设"快速填充默认值，但每一项都能单独改。
 
 | 管控项 | 开卷预设 | 闭卷预设 | 说明 |
 |--------|:--------:|:--------:|------|
 | `shuffleQuestions` | 关 | 开 | 题目乱序 |
 | `shuffleOptions` | 关 | 开 | 选项乱序 |
-| `detectTabSwitch` | 关 | 开 | 切屏检测（Phase 1 仅记录+报告监考员） |
+| `detectTabSwitch` | 关 | 开 | Phase 1 minimal behavior；完整审计与处置进入 Phase 2 |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
-| `requireQueue` | 关 | 开 | 排队分批进入（依赖 `timed_sync`，**Phase 2 / planned**） |
+| `requireQueue` | 关 | 开 | 队列入场（依赖 `timed_sync`，**Phase 2 / planned**） |
 | `batchSize` | - | 10 | 每批放行人数（同上） |
 | `batchInterval` | - | 3 | 批次间隔秒数（同上） |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
@@ -306,6 +328,8 @@ untimed 示例：
 | `retakeCooldown` | 0 | 60 | 重考冷却时间（分钟） |
 | `scoreStrategy` | highest | latest | 多次考试取分策略 |
 | `passThenStop` | 开 | 关 | 通过后不能再考 |
+
+> Phase 1 操作手册只描述 `timed_window`、手动选题、基础显示结果与一次可靠提交路径。队列入场、限制 IP、锁定浏览器、强制锁屏、独立监考、force submit、extend time、misconduct marking、完整 disrupted recovery UI、完整 retake policy / score strategy 工作流均为 Phase 2。
 
 ### 2.7 考试次数限制
 
@@ -325,27 +349,36 @@ untimed 示例：
 
 多次考试的 ExamAttempt 记录都保留，只是 ExamEnrollment 的最终认定成绩按策略选。
 
-### 2.8 多租户与"达标放行"
+### 2.8 达标放行 / Pass-to-proceed [Phase 4]
 
 ```
-Organization (机构/租户)
-  ├── 拥有自己的 Admin、Teacher、题库、考试、考生字段定义
-  ├── 数据隔离：A 机构看不到 B 机构的题目和成绩
-  ├── 支持平铺 + 树形层级（大学→学院→实验室，上级可看下级）[Phase 3]
-  └── SuperAdmin 跨租户管理
-
 "达标放行"流程：
   考试发布 → 考生参加 → 自动批改 → score >= passingScore → passed=true
        ↓
-  外部系统可通过 API 查询"某人是否通过了某考试" [Phase 2]
-  （如：实验室门禁系统调接口确认已通过安全考试才放行）
+  外部系统可通过 API 查询"某人是否通过了某考试" [Phase 4]
 ```
 
-租户隔离规则：
+> Phase 1 只产生成绩并导出 CSV，不提供 pass-to-proceed API、service token、API key 或 webhook。外部集成属于 Phase 4 platformization/integration。
+
+### 2.8.1 Phase 1 数据归属边界
+
+Phase 1 为单租户模式：
 
 - 数据库层面：所有表都有 `organizationId` 字段，查询时强制过滤
-- 一个 Candidate 可以属于多个 Organization
-- 树形层级中，上级 Organization 的 Admin 可查看下级数据 [Phase 3]
+- organizationId 来自内部 default organization
+- 不允许产品路径中切换 organization
+- 所有业务数据归属于内部 default organization
+
+### 2.8.2 Future / Multi-tenant Extension（Phase 4）
+
+> 以下内容不属于 Phase 1 当前实现要求，仅作为 Phase 4 platformization 愿景保留。
+
+- **Multi-tenant**：多租户模式，每个组织独立运行
+- **Tenant hierarchy**：树形组织层级（大学→学院→实验室）
+- **SuperAdmin**：跨租户管理所有机构
+- **Cross-tenant admin**：跨租户管理员
+- **OrganizationSlug login**：基于组织标识的登录
+- **Tenant switcher**：租户切换器
 
 ### 2.9 客户端架构
 
@@ -353,7 +386,7 @@ Organization (机构/租户)
 
 | 客户端 | 场景 | 特性 |
 |--------|------|------|
-| **Web（浏览器）** | Teacher/Proctor/Admin 后台、开卷考试、Phase 1 全场景 | 标准浏览器 |
+| **Web（浏览器）** | Admin 后台、Candidate 考试、Phase 1 全场景 | 标准浏览器 |
 | **Electron 桌面端** | 闭卷考试锁屏 [Phase 2] | 禁止切应用、全屏强制、设备指纹 |
 
 ---
@@ -362,7 +395,7 @@ Organization (机构/租户)
 
 > 这 8 项是考试系统的技术底座，不是业务功能，而是所有业务功能的安全网。任何实现必须遵循。
 
-### 3.1 Tenant Guard：多租户隔离底座
+### 3.1 Organization Data Boundary Guard：数据归属边界底座
 
 所有业务请求必须生成 `RequestContext`：
 
@@ -379,10 +412,16 @@ RequestContext {
 规则：
 
 - 没有 RequestContext，不能访问业务数据
-- 没有 organizationId，不能查询租户数据
+- 没有 organizationId，不能查询业务数据
 - Route 层禁止直接访问 db
 - 所有 repository 方法必须显式接收 ctx
-- SuperAdmin 跨租户操作必须显式声明 targetOrganizationId
+
+**Phase 1 单租户说明**：
+
+- organizationId 来自内部 default organization
+- 不允许产品路径中切换 organization
+- 不暴露 organizationSlug 登录
+- 不实现 tenant switcher
 
 **必须**：
 
@@ -404,8 +443,9 @@ db.select().from(question).where(eq(question.id, id))
 
 - 权限判断不散落在 route handler 里
 - 每个 API endpoint 必须声明 requiredPermission
-- Teacher / Proctor / Admin 的权限边界必须由中间件统一检查
-- 考试期间的特殊权限（强制交卷、延时、标记违纪）必须写入 AuditLog
+- Phase 1 只暴露 Admin / Candidate 产品权限边界
+- Phase 2 的 force submit、extend time、misconduct marking 等考试运营权限必须写入 AuditLog
+- Phase 3 的 Teacher-like / Proctor / Grader 等角色必须由 permission + scope 统一检查
 
 ### 3.3 Exam State Machine：考试状态机
 
@@ -583,24 +623,52 @@ ScoreResult {
 }
 ```
 
-### 3.8 Audit Log：审计日志
+### 3.8 Observability, Audit, and Diagnostics
 
-所有敏感操作必须写入 AuditLog。
+Phase 1 必须区分三类证据：
 
-至少覆盖以下操作：
+- **AuditLog**：谁在什么时候做了什么，用于业务审计。
+- **App log**：系统运行、错误、认证失败内部原因、并发冲突等运行证据。
+- **Trace / requestId**：单次请求链路定位，连接 HTTP 响应、应用日志和 E2E artifacts。
 
-| 类别 | 操作 |
-|------|------|
-| 认证 | 登录失败 |
-| 考试管理 | 发布考试、关闭考试、修改考试 |
-| 考试执行 | 开始考试、交卷、强制交卷 |
-| 监考操作 | 延长考试时间、标记违纪、恢复 disrupted attempt |
-| 成绩 | 修改成绩、导出成绩 |
-| 数据管理 | 导入考生、导入题库、删除题目、修改题目 |
+#### Phase 1 必须覆盖
 
-> **当前实现边界（Phase 1.7）**：上表是 AuditLog 作为长期底座原则的**目标覆盖面**，不等于 Phase 1.7 已全部实现。Phase 1.7 当前仅要求**已接线操作的审计保持一致**——即认证、已实现的考试管理 / 考试执行 / 成绩 / 数据管理路径上的操作。
->
-> 监考类操作的审计——包括延长考试时间、标记违纪、强制交卷、恢复 disrupted attempt——将随 **P2A-J4** 与 Phase 2 监考能力（见 §4.5、§七 Phase 2 列表）一同落地。当前不得因为本节"至少覆盖"列表而提前补实现 proctor intervention 或新增 AuditLog 入口；§3.3 command function 列表中标记为 _Phase 2 / planned_ 的命令同样适用此约束。
+- `requestId`：每个 API 请求都应有稳定 requestId。
+- Structured pino logs。
+- auth failure internal reason 只写入日志，不直接暴露给前端。
+- E2E artifacts：`server.log`、screenshot、video、Playwright trace。
+- health endpoint。
+- stable machine-readable error codes。
+- Minimal AuditLog：
+  - login failure
+  - exam publish
+  - candidate import
+  - attempt submit
+  - result export
+  - local admin reset-password script execution
+
+#### Phase 2 扩展
+
+- exam operation timeline
+- attempt timeline
+- proctor operation audit
+- disrupted recovery audit
+- import/export job logs
+
+#### Phase 3 扩展
+
+- permission audit
+- user lifecycle audit
+- invitation audit
+- SMTP configuration audit
+- audit query/export UI
+
+#### Phase 4 扩展
+
+- optional external log shipping
+- syslog / OTLP-compatible export
+- optional SIEM
+- tenant-scoped audit if optional multiTenant returns
 
 审计模型：
 
@@ -637,7 +705,7 @@ AuditLog {
 导入流程：
 
 1. 上传文件 → 服务端解析校验 → 预览（展示识别出的题目，标记异常行）
-2. Teacher 确认 → 批量写入 QuestionBank
+2. Admin 确认 → 批量写入 QuestionBank
 3. 校验规则：题型必填、选择题必须有选项和标准答案、分值 > 0
 4. 重复检测：基于题干相似度标记，不阻断
 
@@ -650,7 +718,7 @@ AuditLog {
 ### 4.2 组卷
 
 ```
-Teacher 新建 Exam → 选择 Course
+Admin 新建 Exam → 选择 Course
        ↓
  选题方式：手动选题（Phase 1）/ 随机抽题（Phase 2，按规则：题型、难度、标签分布）
        ↓
@@ -667,14 +735,14 @@ Teacher 新建 Exam → 选择 Course
 
 | 方式 | 说明 |
 |------|------|
-| Excel/CSV | 下载动态模板（根据机构自定义的考生字段生成列头），填写后上传 |
-| 手动录入 | Web 端表单，按机构字段动态渲染 |
-| API | 供教务系统/外部系统自动同步 |
-| CAS/OAuth | 统一身份认证自动拉取 [Phase 2] |
+| Excel/CSV | 下载动态模板（根据当前部署 / default organization 的考生字段生成列头），填写后上传 |
+| 手动录入 | Web 端表单，按系统配置字段动态渲染 |
+| API | 供脚本或后续集成使用 [Phase 4] |
+| CAS/OAuth | 统一身份认证自动拉取 [Phase 4] |
 
 导入流程：
 
-1. Admin 配置本机构的 CandidateField（定义有哪些字段、哪些必填、哪个是唯一标识）
+1. Admin 配置当前部署 / default organization 的 CandidateField（定义有哪些字段、哪些必填、哪个是唯一标识）
 2. 下载导入模板（列头 = 已定义的字段名）
 3. 填写上传 → 校验（必填项、唯一标识重复检测）
 4. 确认入库
@@ -728,7 +796,7 @@ Teacher 新建 Exam → 选择 Course
 > 该子流程依赖 `timed_sync` 计时模式与监考面板触发"开考"动作，两者均归属 Phase 2（见 §2.5、§4.5）。Phase 1.7 不实现该流程，下文为目标设计示意。
 
 ```
-Proctor 点击"开考"
+Phase 2 运营人员点击"开考"
       ↓
 考生端显示："考试即将开始，排队中... 前面还有 X 人"
       ↓
@@ -762,10 +830,10 @@ Proctor 点击"开考"
 | 多选 | 全对满分，少选半分，错选零分（可配置） |
 | 填空 | 精确匹配或关键词匹配（可配置模糊度） |
 
-**Phase 2：AI 辅助**
+**Future：AI 辅助**
 
 - 短答题 / 简答题：本地部署 LLM 语义批改
-- AI 批改结果可被 Teacher 覆盖
+- AI 批改结果可被具备 scoped grading permission 的角色覆盖 [Phase 3+]
 - 不依赖外部 API
 
 ### 4.7 数据导入导出
@@ -774,11 +842,11 @@ Proctor 点击"开考"
 
 | 导出类型 | Excel | CSV | PDF |
 |----------|:-----:|:---:|:---:|
-| 成绩单（原始数据） | ✅ | ✅ | - |
-| 题库备份 | ✅ | - | - |
-| 考生名单 | ✅ | ✅ | - |
+| 成绩单（原始数据） | - | ✅ | - |
+| 题库备份 | - | - | - |
+| 考生名单 | - | ✅ | - |
 
-**Phase 2 导出**：
+**Phase 2 导出 / job 化**：
 
 | 导出类型 | Excel | CSV | PDF | Word | JSON |
 |----------|:-----:|:---:|:---:|:----:|:----:|
@@ -786,11 +854,12 @@ Proctor 点击"开考"
 | 答卷详情 | ✅ | - | ✅ | - | - |
 | 统计分析报告 | ✅ | - | ✅ | ✅ | - |
 | 审计日志 | - | ✅ | - | - | ✅ |
-| 达标证明（单人） | - | - | ✅ | - | - |
+
+> 达标证明、pass-to-proceed 查询、service token/API key、webhook 等属于 Phase 4 platformization/integration。
 
 导出原则：
 
-- 成绩单列头按该机构的 CandidateField 动态生成（不是固定输出"学号"）
+- 成绩单列头按当前部署 / default organization 的 CandidateField 动态生成（不是固定输出"学号"）
 - 所有导出操作写入 AuditLog
 - 导出文件名含时间戳和考试名称
 
@@ -853,7 +922,7 @@ exam/
 │   │       ├── schema.ts
 │   │       ├── migrations/
 │   │       └── repository/       # 每个实体一个 repo，必须接收 ctx
-│   ├── auth/               # session、RBAC、tenant guard
+│   ├── auth/               # session、RBAC、organization data boundary guard
 │   │   └── src/
 │   │       ├── session.ts
 │   │       ├── rbac.ts
@@ -946,8 +1015,7 @@ services:
 
 - HTTP-only Cookie + JWT，不使用 localStorage 存 token
 - 密码使用 argon2 或 bcrypt 哈希
-- 五种角色（SuperAdmin / Admin / Teacher / Proctor / Candidate），API 按角色鉴权
-- 教师可兼任监考
+- Phase 1 两种产品角色（Admin / Candidate），API 按角色鉴权
 - 考试期间一个 Candidate 只能有一个 active exam session
 - 考试 session 绑定 attemptId、candidateId、organizationId、ip、userAgent
 - 认证方式可配：本地密码 / CAS / OAuth（通过 `.env` 切换）[CAS/OAuth Phase 2]
@@ -959,11 +1027,11 @@ services:
 | 服务端计时 | 倒计时以服务端时间为准 |
 | IP 白名单 | 考场 IP 段限制 [Phase 2] |
 | 题目乱序 | 每人题目和选项顺序不同 |
-| 防切屏 | Phase 1: 检测+记录+报告监考员。Phase 2: Electron 系统级锁屏 |
+| 防切屏 | Phase 1 minimal behavior；Phase 2 完整记录、审计与处置 |
 | 禁复制粘贴 | 前端禁用右键/选择/复制 |
 | 答案实时同步 | 每次作答按 Answer Save Protocol 提交服务端 |
-| 排队分批 | 防止开考洪峰 |
-| 试卷不可逆 | 交卷后不可修改（可配置是否允许重考） |
+| 排队分批 | Phase 2 queue admission，防止开考洪峰 |
+| 试卷不可逆 | 交卷后不可修改；完整重考策略进入 Phase 2 |
 
 ### 6.3 数据安全
 
@@ -972,7 +1040,18 @@ services:
 - 所有敏感操作写入 AuditLog（见 §3.8）
 - ID 用 UUID，不暴露自增 ID
 
-### 6.4 网络安全
+### 6.4 Data Lifecycle
+
+Phase 1 最小规则：
+
+- Candidate 删除规则：已参加考试或已有 attempt/result 的 Candidate 不应物理删除；可先采用停用/隐藏或后续归档策略。
+- Exam 发布后删除/归档规则：发布后的 Exam 不应直接删除；Phase 1 至少保留结果可追溯，Phase 2 完善 archived 工作流。
+- Question 被 snapshot 引用后的修改规则：QuestionBank 修改不得影响既有 `QuestionSnapshot` 与历史 attempt。
+- Attempt / Result 保留策略：Phase 1 保留完整 attempt/result 以支持诊断与导出；Phase 2 再定义归档与保留周期。
+- AuditLog 保留策略：Phase 1 最小审计不应被普通业务操作删除；Phase 3/4 再定义查询、导出与合规保留。
+- Export 记录：Phase 1 result CSV export 写入最小 AuditLog；Phase 2 引入 export job logs。
+
+### 6.5 网络安全
 
 - CORS 严格限制为 LAN 域名/IP
 - Rate limiting：登录严格限制，考试接口适度限制
@@ -984,65 +1063,68 @@ services:
 
 ## 七、分阶段交付
 
-### Phase 1（MVP）— 可证明闭环
+> 阶段边界以 `docs/phase-roadmap.md` 为权威。本节只保留摘要。
 
-> 目标：一个 Teacher 能完整走通"出题→组卷→学生考试→出分→导出成绩"的全流程。
+### Phase 1: Minimal Deliverable Exam System
 
-核心链路：**出题 → 组卷 → 考试 → 出分 → 导出**
+目标：Admin + Candidate 在单租户部署中跑通可靠考试闭环。
 
-- [ ] 单机构或轻量多租户（平铺 Organization，不做树形层级）
-- [ ] 本地账号登录（用户名 + 密码）
-- [ ] Admin / Teacher / Candidate 三类角色
-- [ ] 题库 CRUD（手动创建 + CSV 导入）
-- [ ] CSV 导入考生（按 CandidateField 动态模板）
-- [ ] 手动组卷（从题库选题）
-- [ ] timed_window 一种计时模式
-- [ ] 客观题答题界面（单选/多选/判断/填空）
-- [ ] 答案自动保存（Answer Save Protocol）
-- [ ] 服务端计时
-- [ ] 自动批改（Grading Engine）
-- [ ] 成绩 CSV 导出
-- [ ] Docker Compose 部署（app + PostgreSQL）
+- Admin + Candidate 两类产品角色
+- internal default organization
+- Admin bootstrap / local admin reset-password script
+- CandidateField 配置、Candidate 创建/批量导入
+- Course 创建、Question CSV 导入
+- Exam 创建、发布、Candidate enrollment / assignment
+- Candidate 登录、开始考试、Answer Save Protocol、Submit Attempt、Auto grading
+- Result visible to Admin and Candidate
+- Result CSV export
+- Minimal AuditLog、structured logs、requestId、health endpoint
+- E2E happy path / resume / submit-flush 恢复为 blocking CI
+- Docker Compose / health / basic deployment notes
 
-### Phase 1 暂缓
+### Phase 2: Exam Operation
 
-> 以下功能从原 Phase 1 中移出，避免范围膨胀。
+目标：真实考试运营能力，不是权限系统。
 
-- 树形 Organization → Phase 3
-- 随机抽题 → Phase 2
-- PDF / Word 导出 → Phase 2
-- WebSocket 监考面板 → Phase 2
-- Electron 锁屏 → Phase 2
-- CAS / OAuth → Phase 2
-- AI 批改 → Phase 3
-- 复杂重考策略（daily_limit / weekly_limit）→ Phase 2
-- 自适应三档降级 → Phase 2（Phase 1 仅做基本健康检查）
-- 题库共享 → Phase 3
-- 移动端 → Phase 3
-- timed_sync / deadline / untimed 计时模式 → Phase 2（先只做 timed_window）
+- open / closed / archived lifecycle
+- disrupted attempt recovery UI
+- proctor intervention workflow
+- force submit / extend time / misconduct marking
+- timed_sync / deadline / untimed
+- queue admission
+- retake policy / score strategy
+- exam operation timeline / attempt timeline
+- import/export job logs / larger result export
+- diagnostics page
 
-### Phase 2
+> **注意**：Phase 2 不实现 multiTenant、SuperAdmin、tenant switcher、organizationSlug login，也不默认做完整 custom role system。
 
-- [ ] 考场管理 + IP 限制
-- [ ] 监考面板 + WebSocket 实时监控
-- [ ] Electron 锁屏客户端
-- [ ] 随机抽题（按规则：题型、难度、标签分布）
-- [ ] timed_sync / deadline / untimed 计时模式
-- [ ] 复杂重考策略（daily_limit / weekly_limit）
-- [ ] 简答题 + AI 辅助批改
-- [ ] 外部系统对接（CAS/OAuth）
-- [ ] 达标放行 API
-- [ ] PDF / Word 导出 + 可定制模板
-- [ ] 自适应三档降级
-- [ ] 审计日志导出
+### Phase 3: Collaboration, Permissions, and Account Lifecycle
 
-### Phase 3
+目标：单部署内多人协作、权限和账号生命周期。
 
-- [ ] 树形组织层级
-- [ ] 题干富内容（LaTeX、化学方程式、代码块）
-- [ ] 文件上传题 / 编程题 / 画图题
-- [ ] 题库共享与跨租户协作
-- [ ] 移动端适配
+- permission registry
+- built-in role bundles
+- scoped role assignment
+- Teacher-like roles built from permission + scope
+- Course / Exam / CandidateGroup scope
+- Proctor / Grader / ContentManager role bundles
+- staff invitation、SMTP email management、email password reset
+- user activation / deactivation
+- permission audit、audit log search/export UI
+
+### Phase 4: Platformization and Integration
+
+目标：平台化与外部集成；optional multiTenant 是其中一部分，不是全部。
+
+- pass-to-proceed API
+- service token / API key
+- webhook / external integration
+- optional multiTenant
+- SuperAdmin
+- tenant hierarchy / tenant switcher / organizationSlug login
+- cross-tenant audit
+- tenant settings / quota / backup / restore
 
 ---
 

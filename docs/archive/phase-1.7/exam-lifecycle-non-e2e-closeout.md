@@ -7,7 +7,7 @@
 
 ## 目的
 
-`docs/phase1.7/exam-lifecycle-global-consistency-scan.md` 列出的不一致与"需要裁决"项，本文档对其中**非 E2E、非新功能、非状态机重构**的问题给出最终裁决，并把无法在 Phase 1.7 范围内解决的项目归入 Phase 2 backlog。
+`docs/archive/phase-1.7/exam-lifecycle-global-consistency-scan.md` 列出的不一致与"需要裁决"项，本文档对其中**非 E2E、非新功能、非状态机重构**的问题给出最终裁决，并把无法在 Phase 1.7 范围内解决的项目归入 Phase 2 backlog。
 
 本文档不修改 SPEC.md 状态图（`docs/SPEC.md:111-138, 407-423`），但记录"图与代码当前偏差"，以便 Phase 2 团队入场即知。
 
@@ -21,8 +21,8 @@
 - **裁决**：保留运行时行为不变（`200 + { ok: true }`），文档对齐到代码。**不切到 204** —— 切换会触发前端兼容性回归，且没有客户端要求 204。
 - **修改文件**：
   - `docs/api/reference.md`：heartbeat 段重写为 200 + `{ ok: true }`，并补充心跳与 deadline 解耦说明、后台扫描器存在但前端 restore UI 未接入的现状。
-  - `docs/phase1.7/api-contract/07-endpoint-inventory.md`：heartbeat target status 从 `204 / Empty Response` 修正为 `200 / { ok: true }`，状态从 `pending verification` 改为 `resolved`。
-  - `docs/phase1.7/api-contract/00-current-state-audit.md`：drift 条目标记已修复。
+  - `docs/archive/phase-1.7/api-contract/07-endpoint-inventory.md`：heartbeat target status 从 `204 / Empty Response` 修正为 `200 / { ok: true }`，状态从 `pending verification` 改为 `resolved`。
+  - `docs/archive/phase-1.7/api-contract/00-current-state-audit.md`：drift 条目标记已修复。
   - `apps/api/src/routes/attempts.test.ts`：`heartbeat updates lastActivityAt` 测试追加 `expect(res.json()).toEqual({ ok: true })` 与 Content-Type 断言。
 
 ### 1.2 Save-answer 拒绝响应：自然语言 reason → 稳定枚举 + 扁平结构

@@ -120,9 +120,9 @@
 - `docs/api/reference.md`
 - `docs/dev/exam-data-chain.md`
 - `docs/dev/phase1-exam-lifecycle-exit-review-2026-06-13.md` (untracked)
-- `docs/phase1.7/security-completion-plan.md`
-- `docs/phase1.7/security-baseline-validation.md`
-- `docs/phase1.7/api-contract/` (7 files)
+- `docs/archive/phase-1.7/security-completion-plan.md`
+- `docs/archive/phase-1.7/security-baseline-validation.md`
+- `docs/archive/phase-1.7/api-contract/` (7 files)
 
 ## 未扫描的相关文件
 

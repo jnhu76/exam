@@ -160,4 +160,4 @@ Custom query methods in `attemptRepo`, `candidateRepo`, `enrollmentRepo` current
 
 - `packages/db/src/spike/dual-dialect.test.ts` — spike test (12/12 pass)
 - `packages/db/src/__tests__/context-types.test.ts` — A01 context type tests
-- `docs/phase1.4/02-architecture-jobs.md` — A00, A01, A02 job cards
+- `docs/archive/phase-1.4/02-architecture-jobs.md` — A00, A01, A02 job cards
