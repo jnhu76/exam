@@ -1,5 +1,9 @@
 import type { APIRequestContext } from "@playwright/test";
 
+const ADMIN_USERNAME = process.env.E2E_ADMIN_USERNAME ?? "admin";
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "admin123";
+const ORG_SLUG = process.env.E2E_ORG_SLUG ?? "default";
+
 export interface SeededExam {
   examId: string;
   questionId: string;
@@ -12,7 +16,11 @@ export interface SeededExam {
 async function adminLogin(request: APIRequestContext, baseURL: string) {
   for (let attempt = 1; attempt <= 5; attempt++) {
     const res = await request.post(`${baseURL}/api/auth/login`, {
-      data: { username: "admin", password: "admin123" },
+      data: {
+        organizationSlug: ORG_SLUG,
+        username: ADMIN_USERNAME,
+        password: ADMIN_PASSWORD,
+      },
     });
     if (res.status() === 429) {
       if (attempt === 5) {

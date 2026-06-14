@@ -119,6 +119,9 @@ jobs:
       - name: E2E / Smoke tests
         env:
           E2E_BASE_URL: http://127.0.0.1:3000
+          E2E_ORG_SLUG: default
+          E2E_ADMIN_USERNAME: admin
+          E2E_ADMIN_PASSWORD: admin123
         run: pnpm test:e2e
 
       - name: Stop API server
