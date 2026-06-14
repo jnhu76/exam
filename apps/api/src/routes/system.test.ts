@@ -131,12 +131,23 @@ describe("system routes", () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body).toHaveProperty("deploymentMode");
-      expect(body).toHaveProperty("features");
       expect(body).toHaveProperty("apiReference");
-      expect(body.features).toHaveProperty("tenantSwitcher");
-      expect(body.features).toHaveProperty("superAdminConsole");
       expect(body.apiReference).toHaveProperty("uiPath");
       expect(body.apiReference).toHaveProperty("specPath");
+    });
+
+    it("does not expose SuperAdmin / tenant switcher / multiTenant fields", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/public-config",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const bodyText = res.body;
+      expect(bodyText).not.toContain("exposeSuperAdmin");
+      expect(bodyText).not.toContain("tenantSwitcher");
+      expect(bodyText).not.toContain("superAdminConsole");
+      expect(bodyText).not.toContain("multiTenant");
     });
 
     it("does not expose secrets in the response body", async () => {

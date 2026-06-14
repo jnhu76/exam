@@ -411,6 +411,10 @@ A: Queue admission 属于 Phase 2 Exam Operation。
 
 A: Electron lockdown / 锁定浏览器属于 Phase 2 Exam Operation。
 
+### Q: 能否设置 DEPLOYMENT_MODE=multiTenant 启用多租户？
+
+A: 不能。Phase 1 运行时只支持 singleTenant（单租户、一个 internal default organization）。设置 `DEPLOYMENT_MODE=multiTenant` 会在启动时 fail fast。SuperAdmin、tenant switcher、organizationSlug login、optional multiTenant 都属于 Phase 4 platformization，不是当前可运行模式。
+
 ---
 
 ## Future capabilities

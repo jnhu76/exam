@@ -1077,6 +1077,34 @@
 
 ---
 
+### GET /system/public-config
+
+**权限**: 公开
+
+返回前端可用的非敏感运行时配置。Phase 1 为单租户运行时，`deploymentMode` 恒为 `singleTenant`。
+
+**注意**：Phase 1 不再输出 `exposeSuperAdmin`、`tenantSwitcher`、`superAdminConsole` 或任何 multiTenant 当前功能字段。这些属于 Phase 4 platformization 能力，不是当前功能，因此完全不输出（而不是输出 `false`），避免暗示该能力存在。
+
+**响应** (200):
+
+```json
+{
+  "deploymentMode": "singleTenant",
+  "features": {
+    "apiReference": false
+  },
+  "apiReference": {
+    "enabled": false,
+    "uiPath": "/_dev/api-reference",
+    "specPath": "/api/openapi.json"
+  }
+}
+```
+
+`DEPLOYMENT_MODE=multiTenant` 会在启动时 fail fast（Phase 1 只支持 singleTenant）。optional multiTenant 是 Phase 4 platformization 能力，不是当前可运行模式。
+
+---
+
 ### GET /system/health
 
 **权限**: 需要认证
