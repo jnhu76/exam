@@ -7,6 +7,10 @@ import {
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import type { Database } from "@exam/db/src/types.js";
+import {
+  getRuntimeConfig,
+  buildPublicConfig,
+} from "../config/runtimeConfig.js";
 
 function getCpuUsage(): number {
   const cpus = os.cpus();
@@ -38,6 +42,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       version: process.env.npm_package_version ?? "0.0.0",
       uptime: process.uptime(),
     };
+  });
+
+  fastify.get("/system/public-config", async () => {
+    return buildPublicConfig();
   });
 
   fastify.get("/system/health", {

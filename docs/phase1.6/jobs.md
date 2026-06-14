@@ -26,11 +26,12 @@ Phase1.4 已经把 deadline 错误码统一为 `ATTEMPT_DEADLINE_EXCEEDED`（HTT
 
 ### Acceptance Criteria
 
-- [ ] `now > deadlineAt` 时 `POST /attempts/:id/submit` → `409 { error: { code: "ATTEMPT_DEADLINE_EXCEEDED", message: "<zh-CN>" } }`
-- [ ] `now == deadlineAt` 时 → `200`，attempt.status = `submitted`
-- [ ] `now < deadlineAt` 时 → `200`，attempt.status = `submitted`
-- [ ] 超时 submit 不计分、不写 grading 字段、不修改 enrollment 终态
-- [ ] `pnpm verify` 通过
+- [x] Phase 1 deadline 语义：deadline 后禁止继续保存答案，但允许提交服务器已保存答案
+- [x] `now > deadlineAt` 时 `POST /attempts/:id/answers/:qid` → `200 { accepted: false, reason: "DEADLINE_EXCEEDED", message: "<zh-CN>" }`
+- [x] `now > deadlineAt` 时 `POST /attempts/:id/submit` → `200`（submit 不受 deadline 限制）
+- [x] submit 对 submitted/graded 幂等；submit 后崩溃卡 submitted 可重试 submit 完成评分
+- [ ] submit 路由 deadline error code 统一为 `ATTEMPT_DEADLINE_EXCEEDED`（可选收敛项；当前 save-answer 使用 contracts enum `DEADLINE_EXCEEDED`）
+- [x] `pnpm verify` 通过
 
 ### Risk
 

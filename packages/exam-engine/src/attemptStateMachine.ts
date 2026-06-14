@@ -37,28 +37,15 @@ const TRANSITION_TABLE: Record<string, AttemptStatus> = {
   "grading:complete_grading": "graded",
 };
 
-const DEADLINE_GUARDED_COMMANDS: Set<AttemptCommand> = new Set(["submit"]);
-
 export function transition(
   current: AttemptStatus,
   command: AttemptCommand,
-  guards?: TransitionGuards,
 ): TransitionResult {
   const key = `${current}:${command}`;
   const next = TRANSITION_TABLE[key];
 
   if (!next) {
     return { ok: false, reason: "INVALID_SOURCE_STATUS" };
-  }
-
-  if (
-    DEADLINE_GUARDED_COMMANDS.has(command) &&
-    guards?.deadlineAt &&
-    guards?.now
-  ) {
-    if (guards.now.getTime() > guards.deadlineAt.getTime()) {
-      return { ok: false, reason: "DEADLINE_EXCEEDED" };
-    }
   }
 
   return { ok: true, next };

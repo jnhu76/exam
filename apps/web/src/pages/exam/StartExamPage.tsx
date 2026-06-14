@@ -261,6 +261,7 @@ export function StartExamPage() {
           disabled={
             isStarting || (!hasActiveAttempt && !exam.canStartNewAttempt)
           }
+          data-testid="exam-start-btn"
         >
           {isStarting && (
             <LoaderCircle

@@ -120,4 +120,36 @@ describe("system routes", () => {
       expect(res.statusCode).toBe(401);
     });
   });
+
+  describe("GET /system/public-config", () => {
+    it("returns deployment mode and features without authentication", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/public-config",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body).toHaveProperty("deploymentMode");
+      expect(body).toHaveProperty("features");
+      expect(body).toHaveProperty("apiReference");
+      expect(body.features).toHaveProperty("tenantSwitcher");
+      expect(body.features).toHaveProperty("superAdminConsole");
+      expect(body.apiReference).toHaveProperty("uiPath");
+      expect(body.apiReference).toHaveProperty("specPath");
+    });
+
+    it("does not expose secrets in the response body", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/public-config",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const bodyText = res.body;
+      expect(bodyText).not.toContain("JWT_SECRET");
+      expect(bodyText).not.toContain("DATABASE_URL");
+      expect(bodyText).not.toContain("password");
+    });
+  });
 });

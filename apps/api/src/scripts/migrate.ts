@@ -1,9 +1,19 @@
 import { createDatabase, migratePostgres } from "@exam/db";
+import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 
-const databaseUrl = process.env.DATABASE_URL;
+let databaseUrl: string;
+try {
+  databaseUrl = resolveDatabaseUrlFromEnv(process.env);
+} catch (err) {
+  process.stderr.write(`FATAL: ${(err as Error).message}\n`);
+  process.exit(1);
+}
+
 if (!databaseUrl) {
-  process.stdout.write("No DATABASE_URL set, skipping migration.\n");
-  process.exit(0);
+  process.stderr.write(
+    "FATAL: DATABASE_URL is required for migrations. Set it in your environment or .env file.\n",
+  );
+  process.exit(1);
 }
 
 const conn = await createDatabase(databaseUrl);

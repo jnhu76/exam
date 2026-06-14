@@ -76,7 +76,17 @@ export function AttemptDetailPage() {
       if (data.showResultImmediately === true) {
         setResult(data);
       } else {
-        setError("该尝试尚未完成评分或结果不可见");
+        setError(
+          data.status === "submitted"
+            ? "该尝试已提交，等待评分"
+            : data.status === "grading"
+              ? "该尝试正在评分中"
+              : data.status === "graded"
+                ? "该尝试已评分，但成绩尚未公布"
+                : data.status === "disrupted"
+                  ? "该尝试答题中断，尚未提交"
+                  : "该尝试尚未完成评分或结果不可见",
+        );
       }
     } catch {
       setError("加载尝试详情失败");

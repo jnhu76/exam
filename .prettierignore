@@ -1,5 +1,7 @@
 apps/web/src/components/ui/
 apps/web/public/fonts/
+apps/e2e/test-results/
+apps/e2e/playwright-report/
 docs/SPEC.md
 pnpm-lock.yaml
 coverage/

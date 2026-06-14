@@ -22,6 +22,7 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 import { recordAudit } from "./audit.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
@@ -84,12 +85,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     { config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } } },
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
+      const tenancy = getRuntimeConfig().tenancy;
+      const resolvedSlug =
+        tenancy.mode === "singleTenant"
+          ? (data.organizationSlug ?? tenancy.defaultTenantSlug)
+          : data.organizationSlug;
       const userRepo = createUserRepo(fastify.db);
       let org;
       try {
         org = await createOrganizationRepo(fastify.db).resolveBrandingTenant(
           { purpose: "public_branding" } as PublicBrandingContext,
-          data.organizationSlug,
+          resolvedSlug,
         );
       } catch (error) {
         if (error instanceof NotFoundError) {
@@ -99,7 +105,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             {
               event: "login.failure",
               reason: "unknown_organization",
-              organizationSlug: data.organizationSlug,
+              organizationSlug: resolvedSlug,
               username: data.username,
             },
             "Login failed: unknown organization",
@@ -145,7 +151,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           {
             reason: "invalid_credentials",
             username: data.username,
-            organizationSlug: data.organizationSlug,
+            organizationSlug: resolvedSlug,
           },
         );
         return reply
@@ -153,17 +159,52 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
-      const token = signJWT({
-        actorId: user.id,
-        role: user.role as Role,
-        organizationId: user.organizationId,
-      });
+      if (tenancy.mode === "singleTenant" && user.role === "SuperAdmin") {
+        const blockedCtx: RequestContext = {
+          actorId: user.id,
+          organizationId: user.organizationId,
+          targetOrganizationId: user.organizationId,
+          role: "SuperAdmin",
+          permissions: [],
+          sessionId: "anonymous",
+        };
+        recordAudit(
+          fastify,
+          request,
+          blockedCtx,
+          "login.failure",
+          "login",
+          user.id,
+          {
+            reason: "superadmin_blocked_in_single_tenant",
+            username: user.username,
+          },
+        );
+        fastify.log.warn(
+          {
+            event: "login.failure",
+            reason: "superadmin_blocked_in_single_tenant",
+            username: user.username,
+          },
+          "Login failed: SuperAdmin blocked in singleTenant deployment",
+        );
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
+      }
+
+      const token = signJWT(
+        {
+          actorId: user.id,
+          role: user.role as Role,
+          organizationId: user.organizationId,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure:
-          process.env.NODE_ENV === "production" ||
-          process.env.COOKIE_SECURE === "true",
+        secure: getRuntimeConfig().authSecret.cookieSecure,
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",
@@ -203,7 +244,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const token = request.cookies["auth-token"];
     if (token) {
       try {
-        const payload = verifyJWT(token);
+        const payload = verifyJWT(
+          token,
+          getRuntimeConfig().authSecret.jwtSecret,
+        );
         const ctx: RequestContext = {
           actorId: payload.actorId,
           organizationId: payload.organizationId,

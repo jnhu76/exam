@@ -93,7 +93,12 @@ export function ResultPage() {
               <CardTitle>考试成绩</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-center">
-              <p className="text-5xl font-bold">{result.totalScore}</p>
+              <p
+                className="text-5xl font-bold"
+                data-testid="result-total-score"
+              >
+                {result.totalScore}
+              </p>
               <p className="text-sm text-muted-foreground">
                 及格线：{result.passingScore}
               </p>
@@ -170,7 +175,20 @@ export function ResultPage() {
         <Card>
           <CardContent className="py-10 text-center">
             <CheckCircle2 className="mx-auto mb-3 size-10 text-success" />
-            <p className="text-lg font-medium">已交卷，等待成绩公布</p>
+            <p
+              className="text-lg font-medium"
+              data-testid="result-status-message"
+            >
+              {result.status === "submitted"
+                ? "已提交，等待评分"
+                : result.status === "grading"
+                  ? "正在评分"
+                  : result.status === "graded"
+                    ? "成绩尚未公布"
+                    : result.status === "disrupted"
+                      ? "答题中断，请联系监考或重新进入"
+                      : "已交卷，等待成绩公布"}
+            </p>
           </CardContent>
         </Card>
       )}

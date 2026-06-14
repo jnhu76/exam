@@ -52,10 +52,10 @@ Phase1.6 收尾这 6 项。
 **HTTP 层 acceptance**:
 
 ```text
-fixedNow >  attempt.deadlineAt → POST /submit → 409 { error: { code: "ATTEMPT_DEADLINE_EXCEEDED", message: "<zh-CN>" } }
-fixedNow == attempt.deadlineAt → POST /submit → 200, attempt.status = "submitted"
-fixedNow <  attempt.deadlineAt → POST /submit → 200, attempt.status = "submitted"
-超时 submit 不计分、不写 submittedAt 之外的 grading 字段、不修改 enrollment 终态
+fixedNow >  attempt.deadlineAt → POST /answers/:qid → 200 { accepted:false, reason:"DEADLINE_EXCEEDED", message:"<zh-CN>" }（deadline 限制继续保存答案）
+fixedNow >  attempt.deadlineAt → POST /submit     → 200（submit 不受 deadline 限制，提交服务器已保存答案）
+fixedNow <= attempt.deadlineAt → POST /answers/:qid → 200 { accepted:true }
+fixedNow <= attempt.deadlineAt → POST /submit       → 200，attempt.status = "graded"（inline grading）
 ```
 
 **Non-goals**:
@@ -314,8 +314,8 @@ Phase1.6 完成时必须满足：
 - [ ] 代码与文档中无残留 `EXAM_TIME_EXPIRED`（仅历史改名记录章节可保留）
 - [ ] `POST /attempts/:id/submit` 在事务内对同一 attempt 行使用 `FOR UPDATE`
 - [ ] saveAnswers 与 submit 在 PG 上对同一 attempt 行串行化（双连接集成测试断言通过）
-- [ ] `now > deadlineAt` submit 端到端返回 `409 ATTEMPT_DEADLINE_EXCEEDED`，文案 zh-CN
-- [ ] `now == deadlineAt` 与 `now < deadlineAt` submit 端到端正常返回 200
+- [x] `now > deadlineAt` 时 save-answer 端到端返回 `200 { accepted:false, reason:"DEADLINE_EXCEEDED" }`，文案 zh-CN
+- [x] `now > deadlineAt` 时 submit 端到端正常返回 200（submit 不受 deadline 限制）
 - [ ] 状态 ∈ {`submitted`, `graded`} 时 save 端到端被拒绝，事务回滚不留半状态
 - [ ] PG 并发测试套件 4 类场景全部通过，且 10 次重跑不 flaky
 - [ ] Phase1.3 P0 正常考生提交场景在新事务边界下回归通过
@@ -331,7 +331,7 @@ S03a 三段（Phase1.4 / Phase1.5 / Phase1.6）合计交付后，Phase2 可以�
 Phase2 可以假设：
 
 - `POST /attempts/:id/answers/:qid` 与 `POST /attempts/:id/submit` 对同一 attempt 行串行化（PG `FOR UPDATE` 行锁）
-- Deadline 超时 submit 端到端返回 `409 ATTEMPT_DEADLINE_EXCEEDED`
+- Deadline 超时后 save-answer 被拒绝（`DEADLINE_EXCEEDED`）；submit 不受 deadline 限制
 - 状态 ∈ {`submitted`, `graded`} 下 save 被端到端拒绝且事务回滚不留半状态
 - PG 并发集成测试套件作为 Phase2 entry gate 前置依赖
 - Phase1.3 P0 正常考生提交场景在新事务边界下回归通过

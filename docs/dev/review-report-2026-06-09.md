@@ -54,7 +54,7 @@ Full-stack review covering UI (React), API (Fastify), domain logic, demo seed, t
 
 | ID | Area | File | Issue |
 |---|---|---|---|
-| BUG-01 | Backend | `attempts.ts` | `submitAttempt` then `gradeAttempt` not in transaction — grading failure leaves attempt in `submitted` state |
+| BUG-01 | Backend | `attempts.ts` | ~~`submitAttempt` then `gradeAttempt` not in transaction — grading failure leaves attempt in `submitted` state~~ **✅ Fixed (2026-06-13)**: submit 走 `tx+lock → readGradingSnapshot → computeGradingResult → finalizeGrading(tx+lock)`；submit 对 submitted/graded 幂等，崩溃卡 submitted 可重试 submit 完成评分 |
 | BUG-02 | Backend | `server.ts` | SPA fallback serves `index.html` for `/api/*` typos instead of 404 JSON |
 | BUG-03 | Backend | `exam.ts` | `archiveExam` route has no try/catch — inconsistent with `/publish` route |
 | BUG-04 | Backend | `errors.ts` | `isConstraintError` only detects SQLite — will miss PostgreSQL unique violations in J9 |

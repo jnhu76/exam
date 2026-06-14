@@ -236,8 +236,8 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     await sql.end();
   });
 
-  describe("AC1: Submit after deadline returns 409", () => {
-    it("rejects submit when server time is past deadlineAt", async () => {
+  describe("AC1: Submit after deadline succeeds (answers already saved)", () => {
+    it("allows submit when server time is past deadlineAt", async () => {
       const attemptId = await createExamAndStart("Deadline Exam", 1);
 
       const originalNow = app.now;
@@ -249,8 +249,8 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
           cookies: { "auth-token": candidateToken },
         });
 
-        expect(submitRes.statusCode).toBe(409);
-        expect(submitRes.json().error.code).toBe("ATTEMPT_DEADLINE_EXCEEDED");
+        expect(submitRes.statusCode).toBe(200);
+        expect(submitRes.json().status).toBe("graded");
       } finally {
         app.now = originalNow;
       }

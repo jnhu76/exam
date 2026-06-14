@@ -90,7 +90,23 @@ describe("Smoke — auth flow", () => {
     await ctx.app.close();
   });
 
-  it("login with seed superadmin succeeds", async () => {
+  it("login with seed admin succeeds", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: {
+        username: "admin",
+        password: "admin123",
+        organizationSlug: "default",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.username).toBe("admin");
+    expect(body.role).toBe("Admin");
+  });
+
+  it("login with seed superadmin is rejected in singleTenant", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
@@ -100,10 +116,7 @@ describe("Smoke — auth flow", () => {
         organizationSlug: "default",
       },
     });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.username).toBe("superadmin");
-    expect(body.role).toBe("SuperAdmin");
+    expect(res.statusCode).toBe(401);
   });
 
   it("login with wrong password returns 401", async () => {

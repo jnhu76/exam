@@ -28,9 +28,9 @@ import { exportRoutes } from "./routes/export.js";
 import systemRoutes from "./routes/system.js";
 import auditRoutes from "./routes/audit.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
+import { getRuntimeConfig } from "./config/runtimeConfig.js";
 
-const port = Number(process.env.APP_PORT) || 3000;
-const host = process.env.HOST || "0.0.0.0";
+const { port, host } = getRuntimeConfig();
 
 async function main() {
   const app = Fastify({ logger: true });

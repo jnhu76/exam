@@ -239,6 +239,78 @@ describe("TakeExamPage smoke", () => {
     expect(screen.getByText("保存失败")).toBeInTheDocument();
   });
 
+  it("shows deadline message (not 连接异常) when save is rejected with DEADLINE_EXCEEDED", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+    apiPost.mockResolvedValueOnce({
+      accepted: false,
+      reason: "DEADLINE_EXCEEDED",
+      message: "考试时间已到",
+      serverVersion: 0,
+      savedAt: new Date().toISOString(),
+    });
+
+    renderPage();
+
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "A");
+
+    expect(
+      await screen.findByTestId("save-rejection-alert", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("已到截止时间")).toBeInTheDocument();
+    expect(
+      screen.getByText("已到截止时间，不能继续修改答案"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
+  });
+
+  it("shows exam-ended message (not 连接异常) when save is rejected with ATTEMPT_ALREADY_SUBMITTED", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+    apiPost.mockResolvedValueOnce({
+      accepted: false,
+      reason: "ATTEMPT_ALREADY_SUBMITTED",
+      message: "考试已提交或已结束",
+      serverVersion: 0,
+      savedAt: new Date().toISOString(),
+    });
+
+    renderPage();
+
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "A");
+
+    expect(
+      await screen.findByTestId("save-rejection-alert", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("考试已结束")).toBeInTheDocument();
+    expect(screen.getByText("答案已提交，考试已结束")).toBeInTheDocument();
+    expect(screen.queryByText("连接异常")).not.toBeInTheDocument();
+  });
+
   it("renders fill_blank input and saves the answer", async () => {
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,

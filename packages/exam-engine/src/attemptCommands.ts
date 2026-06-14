@@ -6,7 +6,6 @@ import type {
 } from "@exam/domain";
 import {
   ExamNotOpenError,
-  AttemptDeadlineExceededError,
   InvalidStateTransitionError,
   ValidationError,
   MaxAttemptsReachedError,
@@ -150,16 +149,9 @@ export async function submitAttempt(
     throw new ValidationError("Attempt not found");
   }
 
-  const guards = attempt.deadlineAt
-    ? { deadlineAt: attempt.deadlineAt, now }
-    : { now };
-
-  const result = transition(attempt.status, "submit" as AttemptCommand, guards);
+  const result = transition(attempt.status, "submit" as AttemptCommand);
 
   if (!isTransitionOk(result)) {
-    if (result.reason === "DEADLINE_EXCEEDED") {
-      throw new AttemptDeadlineExceededError("Attempt deadline exceeded");
-    }
     throw new InvalidStateTransitionError(
       `Cannot submit attempt in ${attempt.status} state`,
     );

@@ -90,68 +90,19 @@ describe("attemptStateMachine", () => {
     });
   });
 
-  describe("deadline guard", () => {
-    const deadline = new Date("2025-01-01T11:00:00Z");
-
-    it("allows submit when now is before deadline", () => {
-      const now = new Date("2025-01-01T10:59:59Z");
-      const result = transition("in_progress", "submit", {
-        deadlineAt: deadline,
-        now,
-      });
-      expect(result).toEqual({ ok: true, next: "submitted" });
-    });
-
-    it("allows submit when now equals deadline exactly", () => {
-      const result = transition("in_progress", "submit", {
-        deadlineAt: deadline,
-        now: deadline,
-      });
-      expect(result).toEqual({ ok: true, next: "submitted" });
-    });
-
-    it("rejects submit when now is after deadline", () => {
-      const now = new Date("2025-01-01T11:00:01Z");
-      const result = transition("in_progress", "submit", {
-        deadlineAt: deadline,
-        now,
-      });
-      expect(result).toEqual({ ok: false, reason: "DEADLINE_EXCEEDED" });
-    });
-
-    it("rejects disrupted → submit when deadline exceeded", () => {
-      const now = new Date("2025-01-01T11:00:01Z");
-      const result = transition("disrupted", "submit", {
-        deadlineAt: deadline,
-        now,
-      });
-      expect(result).toEqual({ ok: false, reason: "DEADLINE_EXCEEDED" });
-    });
-
-    it("skips deadline check when guards are not provided", () => {
+  describe("submit is not deadline-guarded", () => {
+    it("allows in_progress → submit without deadline context", () => {
       const result = transition("in_progress", "submit");
       expect(result).toEqual({ ok: true, next: "submitted" });
     });
 
-    it("skips deadline check when only deadlineAt is provided", () => {
-      const result = transition("in_progress", "submit", {
-        deadlineAt: deadline,
-      });
+    it("allows disrupted → submit without deadline context", () => {
+      const result = transition("disrupted", "submit");
       expect(result).toEqual({ ok: true, next: "submitted" });
     });
 
-    it("skips deadline check when only now is provided", () => {
-      const now = new Date("2025-01-01T12:00:00Z");
-      const result = transition("in_progress", "submit", { now });
-      expect(result).toEqual({ ok: true, next: "submitted" });
-    });
-
-    it("does not apply deadline guard to non-submit commands", () => {
-      const now = new Date("2025-01-01T12:00:00Z");
-      const result = transition("in_progress", "disrupt", {
-        deadlineAt: deadline,
-        now,
-      });
+    it("allows disrupt command", () => {
+      const result = transition("in_progress", "disrupt");
       expect(result).toEqual({ ok: true, next: "disrupted" });
     });
   });

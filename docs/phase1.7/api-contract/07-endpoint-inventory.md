@@ -1090,18 +1090,18 @@ Target success shape 必须是 [`01-response-shapes.md`](./01-response-shapes.md
 | --- | --- |
 | Method | POST |
 | Path | /attempts/:attemptId/heartbeat |
-| Route file | attempts.ts:783 |
+| Route file | attempts.ts:861 |
 | Auth | Candidate |
 | Current success status | 200 |
 | Current success shape | { ok: true } |
-| Target success status | 204 |
-| Target success shape | Empty Response |
+| Target success status | 200 |
+| Target success shape | { ok: true } |
 | Current error shape | 409 { error: { code, message } } |
 | Target error shape | ErrorResponse v0 (409) |
-| Content-Type | N/A (204) |
+| Content-Type | application/json |
 | Frontend client | TakeExamPage heartbeat |
 | Migration job | A01 |
-| Status | pending verification |
+| Status | resolved — 2026-06-14: keep 200 + `{ ok: true }` to avoid frontend regression (前端已按 200 成功处理)；不切换 204。doc 已与 code 对齐。 |
 
 ### POST /attempts/:attemptId/restore
 

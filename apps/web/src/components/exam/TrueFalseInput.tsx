@@ -24,6 +24,7 @@ export function TrueFalseInput({
             checked={value === option.value}
             onChange={() => onChange(option.value)}
             className="size-4 accent-primary"
+            data-testid={`true-false-${option.value}`}
           />
           <span>{option.label}</span>
         </label>

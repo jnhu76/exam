@@ -1,50 +1,28 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
 export default defineConfig({
-  testDir: "./src/e2e",
+  testDir: "./e2e",
   fullyParallel: false,
-  retries: 1,
-  timeout: 30_000,
-  expect: { timeout: 10_000 },
-  reporter: "list",
+  workers: 1,
+  retries: 0,
+  reporter: [["list"], ["html", { open: "never" }]],
+  outputDir: "test-results",
+
   use: {
-    baseURL: "http://localhost:5173",
-    headless: true,
-    actionTimeout: 10_000,
-    navigationTimeout: 15_000,
+    baseURL,
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    video: "retain-on-failure",
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
+
   projects: [
     {
-      name: "setup",
-      testMatch: /auth\.setup\.ts/,
-    },
-    {
-      name: "auth-tests",
-      testMatch: /auth\.spec\.ts/,
+      name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-    },
-    {
-      name: "admin-tests",
-      dependencies: ["setup"],
-      testMatch: /browser\.spec\.ts/,
-      use: {
-        ...devices["Desktop Chrome"],
-        storageState: "src/e2e/.auth/admin.json",
-      },
-    },
-  ],
-  webServer: [
-    {
-      command: "pnpm --filter @exam/api dev",
-      port: 3000,
-      reuseExistingServer: true,
-      timeout: 15_000,
-    },
-    {
-      command: "pnpm --filter @exam/web dev",
-      port: 5173,
-      reuseExistingServer: true,
-      timeout: 15_000,
     },
   ],
 });

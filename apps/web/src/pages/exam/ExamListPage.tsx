@@ -47,7 +47,7 @@ function ExamCard({
   onResult: (attemptId: string) => void;
 }) {
   return (
-    <Card className="shadow-sm">
+    <Card className="shadow-sm" data-testid={`exam-card-${exam.examId}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{exam.title}</CardTitle>
@@ -78,7 +78,11 @@ function ExamCard({
         </div>
         <div className="flex justify-end">
           {exam.isAvailable ? (
-            <Button size="sm" onClick={() => onStart(exam.examId)}>
+            <Button
+              size="sm"
+              onClick={() => onStart(exam.examId)}
+              data-testid="exam-start-btn"
+            >
               开始考试
             </Button>
           ) : exam.finalAttemptId ? (
@@ -86,6 +90,7 @@ function ExamCard({
               variant="outline"
               size="sm"
               onClick={() => onResult(exam.finalAttemptId!)}
+              data-testid="exam-result-btn"
             >
               查看结果
             </Button>

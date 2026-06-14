@@ -7,10 +7,12 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
+      APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-multiTenant}
     depends_on:
       db:
         condition: service_healthy
@@ -39,7 +41,15 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER:-exam}",
+          "-d",
+          "${POSTGRES_DB:-exam}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

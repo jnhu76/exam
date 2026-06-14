@@ -703,18 +703,169 @@ describe("attempt routes", () => {
       );
     });
 
-    it("rejects double submit", async () => {
+    it("idempotent: re-submitting a graded attempt returns the graded result (FIX-2)", async () => {
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${attemptId}/submit`,
         cookies: { "auth-token": ctx.candidateToken },
       });
 
-      expect(res.statusCode).toBe(409);
+      expect(res.statusCode).toBe(200);
       const body = res.json();
-      expect(body.error).toBeDefined();
-      expect(body.error.code).toBe("INVALID_STATE_TRANSITION");
-      expect(body.error.requestId).toEqual(expect.any(String));
+      expect(body.status).toBe("graded");
+      expect(body.score).toBe(0);
+      expect(body.passed).toBe(false);
+    });
+  });
+
+  describe("POST /attempts/:attemptId/submit — idempotent retry-grading (FIX-2)", () => {
+    let retryExamId: string;
+
+    beforeAll(async () => {
+      const exam = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Retry Grading Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      retryExamId = exam.json().id;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${retryExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+    });
+
+    it("re-grades an attempt stuck in submitted after a crash", async () => {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${retryExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const stuckAttemptId = startRes.json().id as string;
+
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${stuckAttemptId}/answers/${qId}`,
+        payload: {
+          attemptId: stuckAttemptId,
+          questionId: qId,
+          answer: "b",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({
+          status: "submitted",
+          submittedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.examAttempts.id, stuckAttemptId));
+
+      const submitRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${stuckAttemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(submitRes.statusCode).toBe(200);
+      expect(submitRes.json().status).toBe("graded");
+      expect(submitRes.json().score).toBe(100);
+      expect(submitRes.json().passed).toBe(true);
+    });
+  });
+
+  describe("POST /attempts/:attemptId/answers — deadline contract (FIX-1)", () => {
+    let deadlineContractExamId: string;
+
+    beforeAll(async () => {
+      const exam = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Deadline Contract Exam",
+          courseId,
+          questionIds: [questionId],
+          durationMinutes: 1,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      deadlineContractExamId = exam.json().id;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${deadlineContractExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+    });
+
+    afterEach(() => {
+      ctx.setNow(null);
+    });
+
+    it("rejects save-answer after deadline with DEADLINE_EXCEEDED, but still allows submit of saved answers", async () => {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${deadlineContractExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+
+      const saveBefore = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "b",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(saveBefore.json().accepted).toBe(true);
+
+      ctx.setNow(new Date(Date.now() + 5 * 60 * 1000));
+
+      const saveAfter = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "a",
+          clientSeq: 2,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 1,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(saveAfter.statusCode).toBe(200);
+      expect(saveAfter.json().accepted).toBe(false);
+      expect(saveAfter.json().reason).toBe("DEADLINE_EXCEEDED");
+      expect(saveAfter.json().message).toBe(
+        getSaveAnswerMessage("DEADLINE_EXCEEDED"),
+      );
+
+      const submitRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(submitRes.statusCode).toBe(200);
+      expect(submitRes.json().status).toBe("graded");
+      expect(submitRes.json().score).toBe(100);
     });
   });
 
@@ -746,7 +897,7 @@ describe("attempt routes", () => {
       ctx.setNow(null);
     });
 
-    it("rejects submit when fastify.now() is past deadlineAt", async () => {
+    it("allows submit even when fastify.now() is past deadlineAt", async () => {
       const startRes = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${deadlineExamId}/start`,
@@ -763,13 +914,8 @@ describe("attempt routes", () => {
         cookies: { "auth-token": ctx.candidateToken },
       });
 
-      expect(submitRes.statusCode).toBe(409);
-      expect(submitRes.json()).toMatchObject({
-        error: {
-          code: "ATTEMPT_DEADLINE_EXCEEDED",
-          requestId: expect.any(String),
-        },
-      });
+      expect(submitRes.statusCode).toBe(200);
+      expect(submitRes.json().status).toBe("graded");
     });
   });
 
@@ -1065,6 +1211,8 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toMatch(/application\/json/);
+      expect(res.json()).toEqual({ ok: true });
     });
 
     it("marks stale attempts as disrupted during the background scan", async () => {

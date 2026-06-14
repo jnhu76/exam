@@ -22,9 +22,9 @@
 `docs/api/reference.md` 与当前实现存在可确认差异，例如：
 
 - 文档把 save-answer 冲突原因写为自然语言 `"Server has newer version"`，当前
-  contract/test 使用 `STALE_VERSION`。
-- 文档描述 heartbeat 为 `204 No Content`，当前路由返回 `{ "ok": true }`。
-- 文档描述 submit 后状态为 `completed`，当前测试断言返回 `graded`。
+  contract/test 使用 `STALE_VERSION`。**(2026-06-14 已修复：`docs/api/reference.md` 已对齐 contract 真实 wire shape — `{ accepted, reason, message, serverVersion, savedAt, details? }`，不再使用嵌套 `conflict` 对象或自然语言 reason。)**
+- 文档描述 heartbeat 为 `204 No Content`，当前路由返回 `{ "ok": true }`。**(2026-06-14 已修复：`docs/api/reference.md` 与 `07-endpoint-inventory.md` 已对齐为 `200 + { ok: true }`，不切换 204；前端按 200 成功处理。)**
+- 文档描述 submit 后状态为 `completed`，当前测试断言返回 `graded`。**(已在 FIX-2 修复，`docs/api/reference.md:935` 已为 `graded`。)**
 - 文档中的 candidate/import/export 示例固定使用学号、院系等部署场景字段，与当前
   `CandidateField` 通用化原则不一致。
 

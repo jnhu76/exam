@@ -2,28 +2,30 @@ import { FastifyPluginAsync, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import rateLimit from "@fastify/rate-limit";
 import { AppError } from "@exam/domain";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
-function isDocsRequest(request: FastifyRequest): boolean {
-  if (
-    process.env.API_DOCS_ENABLED !== "true" ||
-    process.env.NODE_ENV === "production"
-  ) {
+function isApiReferenceRequest(request: FastifyRequest): boolean {
+  const config = getRuntimeConfig();
+  if (!config.apiReference.enabled) {
     return false;
   }
+  const uiPath = config.apiReference.uiPath;
   const url = request.url ?? "";
   const pathOnly = url.split("?", 1)[0] ?? "";
-  return pathOnly === "/docs" || pathOnly.startsWith("/docs/");
+  return pathOnly === uiPath || pathOnly.startsWith(`${uiPath}/`);
 }
 
 const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
+  const config = getRuntimeConfig();
+
   fastify.register(rateLimit, {
-    max: 100,
-    timeWindow: 60 * 1000,
+    max: config.rateLimit.max,
+    timeWindow: config.rateLimit.timeWindow,
     keyGenerator(request: FastifyRequest) {
       return request.ip;
     },
     allowList(request: FastifyRequest) {
-      return isDocsRequest(request);
+      return isApiReferenceRequest(request);
     },
     errorResponseBuilder(_request, context) {
       return new AppError(

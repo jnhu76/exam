@@ -23,7 +23,11 @@ import type {
   AttemptStatus,
 } from "@exam/domain";
 import type { AnswerRecord } from "@exam/domain";
-import { NotFoundError, ValidationError } from "@exam/domain";
+import {
+  NotFoundError,
+  ValidationError,
+  InvalidStateTransitionError,
+} from "@exam/domain";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -33,7 +37,9 @@ import {
   startAttempt,
   submitAttempt,
   restoreAttempt,
-  gradeAttempt,
+  readGradingSnapshot,
+  computeGradingResult,
+  finalizeGrading,
   type ExamRepository,
   type AttemptRepository as AttemptRepoInterface,
   type EnrollmentRepository,
@@ -644,6 +650,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             attemptStatus: lockedAttempt.status as AttemptStatus,
             answers: lockedAttempt.answers,
             clientSeqMap,
+            ...(lockedAttempt.deadlineAt
+              ? { deadlineAt: lockedAttempt.deadlineAt }
+              : {}),
+            now: fastify.now(),
           },
           {
             attemptId,
@@ -738,7 +748,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
 
-      await executeInTransaction(fastify.db, async (tx) => {
+      const phaseOne = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
         const candidateProfile = await createCandidateRepo(tx).findByUserId(
           ctx,
@@ -758,25 +768,70 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           throw new NotFoundError("Attempt not found");
         }
 
-        await submitAttempt(
-          createAttemptRepoAdapter(txAttemptRepo, ctx),
-          attemptId,
-          fastify.now(),
+        const status = lockedAttempt.status;
+        if (status === "in_progress" || status === "disrupted") {
+          await submitAttempt(
+            createAttemptRepoAdapter(txAttemptRepo, ctx),
+            attemptId,
+            fastify.now(),
+          );
+          return { alreadyGraded: false } as const;
+        }
+        if (status === "submitted") {
+          return { alreadyGraded: false } as const;
+        }
+        if (status === "graded") {
+          return { alreadyGraded: true } as const;
+        }
+        throw new InvalidStateTransitionError(
+          `Cannot submit attempt in ${status} state`,
         );
       });
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
+
+      if (phaseOne.alreadyGraded) {
+        const graded = await attemptRepo.findById(ctx, attemptId);
+        if (!graded) {
+          throw new NotFoundError("Attempt not found");
+        }
+        return LoadAttemptResponseSchema.parse(
+          toCandidateAttemptResponse(graded as ExamAttempt),
+        );
+      }
+
       const examRepo = createExamRepo(fastify.db);
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
 
-      await gradeAttempt(
+      const snapshot = await readGradingSnapshot(
         createExamRepoAdapter(examRepo, ctx),
         createEnrollmentRepoAdapter(enrollmentRepo, ctx),
-        attRepoAdapter,
+        createAttemptRepoAdapter(attemptRepo, ctx),
         attemptId,
+      );
+      if (!snapshot) {
+        throw new NotFoundError("Attempt not found after submit");
+      }
+
+      const gradingResult = computeGradingResult(
+        snapshot.attempt,
+        snapshot.exam,
         fastify.now(),
       );
+
+      await executeInTransaction(fastify.db, async (tx) => {
+        const txAttemptRepo = createAttemptRepo(tx);
+        await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+        await finalizeGrading(
+          createEnrollmentRepoAdapter(createEnrollmentRepo(tx), ctx),
+          createAttemptRepoAdapter(txAttemptRepo, ctx),
+          attemptId,
+          snapshot.enrollment.id,
+          gradingResult,
+          snapshot.exam,
+        );
+      });
+
       const attempt = await attemptRepo.findById(ctx, attemptId);
       if (!attempt) {
         throw new NotFoundError("Attempt not found after grading");

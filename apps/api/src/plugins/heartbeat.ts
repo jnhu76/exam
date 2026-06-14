@@ -4,6 +4,7 @@ import type { ExamAttempt, Permission, RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { markDisrupted, type AttemptRepository } from "@exam/exam-engine";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 60_000;
@@ -128,14 +129,8 @@ export async function scanDatabaseForDisruptedAttempts(
 }
 
 const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
-  const scanIntervalMs = readPositiveInteger(
-    process.env.HEARTBEAT_SCAN_INTERVAL_MS,
-    DEFAULT_SCAN_INTERVAL_MS,
-  );
-  const heartbeatTimeoutMs = readPositiveInteger(
-    process.env.HEARTBEAT_TIMEOUT_MS,
-    DEFAULT_HEARTBEAT_TIMEOUT_MS,
-  );
+  const { scanIntervalMs, timeoutMs: heartbeatTimeoutMs } =
+    getRuntimeConfig().heartbeat;
 
   let scanRunning = false;
   const interval = setInterval(async () => {

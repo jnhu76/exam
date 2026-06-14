@@ -561,11 +561,6 @@ describe("SaveAnswerRejectReasonEnum", () => {
 });
 
 describe("SaveAnswer route-shape equivalence (A01 wire contract)", () => {
-  // Mirrors the construction in apps/api/src/routes/attempts.ts:713-722.
-  // Guards against contract drift for reasons not yet reachable through the
-  // HTTP route (ATTEMPT_CLOSED requires admin void; DEADLINE_EXCEEDED requires
-  // route-level deadline check). When those code paths land, route tests must
-  // assert the equivalent shape end-to-end.
   const buildRejectedWireShape = (
     reason: import("../attempt.js").SaveAnswerRejectReason,
     options: { latestAnswer?: unknown } = {},
