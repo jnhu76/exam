@@ -15,7 +15,6 @@ import heartbeatPlugin from "./plugins/heartbeat.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import authRoutes from "./routes/auth.js";
 import settingsRoutes from "./routes/settings.js";
-import organizationRoutes from "./routes/organization.js";
 import candidateFieldRoutes from "./routes/candidateField.js";
 import userRoutes from "./routes/user.js";
 import candidateRoutes from "./routes/candidate.js";
@@ -54,7 +53,6 @@ async function main() {
 
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(settingsRoutes, { prefix: "/api" });
-  await app.register(organizationRoutes, { prefix: "/api" });
   await app.register(candidateFieldRoutes, { prefix: "/api" });
   await app.register(userRoutes, { prefix: "/api" });
   await app.register(candidateRoutes, { prefix: "/api" });

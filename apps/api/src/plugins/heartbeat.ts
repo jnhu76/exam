@@ -50,7 +50,7 @@ function createSystemContext(organizationId: string): RequestContext {
   return {
     actorId: "system:heartbeat",
     organizationId,
-    role: "SuperAdmin",
+    role: "Admin",
     permissions: [] as Permission[],
     sessionId: "system:heartbeat",
     targetOrganizationId: organizationId,

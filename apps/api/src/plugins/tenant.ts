@@ -1,28 +1,12 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
-import {
-  validateTenantAccess,
-  validateTargetOrganizationExists,
-  isPublicEndpoint,
-} from "@exam/auth/src/tenantGuard.js";
-import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import type { Database } from "@exam/db/src/types.js";
+import { validateTenantAccess } from "@exam/auth/src/tenantGuard.js";
 
 const tenantGuardHook = async (
   request: FastifyRequest,
   reply: FastifyReply,
-  db: Database,
 ) => {
   if (!request.ctx) return;
-  if (isPublicEndpoint(request.url)) return;
-
-  if (request.ctx.role === "SuperAdmin") {
-    const targetOrgHeader = request.headers["x-target-org"];
-    if (typeof targetOrgHeader === "string") {
-      request.ctx.targetOrganizationId = targetOrgHeader;
-    }
-  }
-
   try {
     validateTenantAccess(request.ctx, request.method, request.url);
   } catch (err) {
@@ -40,14 +24,6 @@ const tenantGuardHook = async (
       });
     }
     throw err;
-  }
-
-  if (request.ctx.role === "SuperAdmin" && request.ctx.targetOrganizationId) {
-    const orgRepo = createOrganizationRepo(db);
-    await validateTargetOrganizationExists(request.ctx, async (id) => {
-      const org = await orgRepo.findById(request.ctx!, id);
-      return org !== null;
-    });
   }
 };
 
@@ -68,7 +44,7 @@ const tenantPlugin: FastifyPluginAsync = async (fastify) => {
     if (!hasAuthenticate) return;
 
     const tenantHandler = (req: FastifyRequest, reply: FastifyReply) =>
-      tenantGuardHook(req, reply, fastify.db as Database);
+      tenantGuardHook(req, reply);
 
     if (Array.isArray(routeOptions.preHandler)) {
       const authIdx = routeOptions.preHandler.findIndex((h) => {

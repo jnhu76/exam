@@ -11,7 +11,6 @@ interface RouteTitleRule {
 const staticRouteTitles = new Map<string, string>([
   [routes.login, "登录"],
   [routes.admin.dashboard, "仪表盘"],
-  [routes.admin.organizations, "机构管理"],
   [routes.admin.users, "用户管理"],
   [routes.admin.candidates, "考生管理"],
   [routes.admin.settings, "平台设置"],

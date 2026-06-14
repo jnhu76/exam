@@ -8,7 +8,6 @@ describe("routes", () => {
 
   it("has admin routes", () => {
     expect(routes.admin.dashboard).toBe("/admin/dashboard");
-    expect(routes.admin.organizations).toBe("/admin/organizations");
     expect(routes.admin.users).toBe("/admin/users");
     expect(routes.admin.candidates).toBe("/admin/candidates");
     expect(routes.admin.settings).toBe("/admin/settings");

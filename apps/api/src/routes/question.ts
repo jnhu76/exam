@@ -19,10 +19,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -85,10 +82,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -122,10 +116,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/questions",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -198,10 +189,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/questions/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -271,10 +259,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/questions/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -294,10 +279,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/questions/import",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
       config: { rateLimit: { max: 5, timeWindow: 60 * 1000 } },
     },
     async (request: any, reply: any) => {

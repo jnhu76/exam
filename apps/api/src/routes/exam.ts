@@ -174,10 +174,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -222,10 +219,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -257,10 +251,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -335,10 +326,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/exams/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -401,10 +389,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/publish",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -442,10 +427,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/archive",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -461,10 +443,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/exams/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -491,10 +470,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:examId/enrollments",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -545,10 +521,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:examId/enrollments",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -630,10 +603,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/exams/:examId/enrollments/:enrollmentId",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);

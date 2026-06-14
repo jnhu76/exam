@@ -6,7 +6,7 @@ describe("JWT session management", () => {
   it("should sign and verify a JWT token", async () => {
     const payload = {
       actorId: "123e4567-e89b-12d3-a456-426614174000",
-      role: Role.SuperAdmin,
+      role: Role.Admin,
       organizationId: "123e4567-e89b-12d3-a456-426614174001",
     };
 
@@ -26,7 +26,7 @@ describe("JWT session management", () => {
   it("should verify token with expiration", async () => {
     const payload = {
       actorId: "123e4567-e89b-12d3-a456-426614174000",
-      role: Role.SuperAdmin,
+      role: Role.Admin,
       organizationId: "123e4567-e89b-12d3-a456-426614174001",
     };
 
@@ -76,7 +76,7 @@ describe("JWT secret production guard", () => {
     expect(() =>
       signJWT({
         actorId: "123e4567-e89b-12d3-a456-426614174000",
-        role: Role.SuperAdmin,
+        role: Role.Admin,
         organizationId: "123e4567-e89b-12d3-a456-426614174001",
       }),
     ).toThrow(/JWT_SECRET is required in production/);

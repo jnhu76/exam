@@ -33,10 +33,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/settings/branding",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request) => {
       const settingsRepo = createSettingsRepo(fastify.db);
@@ -54,10 +51,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/admin/settings/branding",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const rawCtx = request.ctx!;

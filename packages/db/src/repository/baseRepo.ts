@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { NotFoundError, ValidationError } from "@exam/domain";
+import { NotFoundError } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 import type { PgTable, TableConfig } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -14,24 +14,12 @@ import type {
 export function resolveOrganizationId(
   ctx: TenantContext | RequestContext,
 ): string {
-  if (ctx.role === "SuperAdmin") {
-    if (!ctx.targetOrganizationId) {
-      throw new ValidationError(
-        "SuperAdmin repository operations require targetOrganizationId",
-      );
-    }
-    return ctx.targetOrganizationId;
-  }
-
   return ctx.organizationId;
 }
 
 export function resolveOptionalOrganizationId(
   ctx: TenantContext | RequestContext,
 ): string {
-  if (ctx.role === "SuperAdmin") {
-    return ctx.targetOrganizationId ?? ctx.organizationId;
-  }
   return ctx.organizationId;
 }
 

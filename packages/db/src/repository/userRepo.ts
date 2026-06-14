@@ -3,10 +3,11 @@ import { users } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
+  resolveOrganizationId,
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import { UserAlreadyExistsError, type RequestContext } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 function getConstraintName(err: unknown): string | undefined {
   if (typeof err !== "object" || err === null) return undefined;
@@ -51,6 +52,49 @@ export function createUserRepo(db: Database) {
         .from(users)
         .where(and(eq(users.organizationId, orgId), eq(users.id, id)));
       return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
+    },
+    async listPaginatedByRoles(
+      ctx: TenantContext | RequestContext,
+      roles: readonly string[],
+      page: number,
+      pageSize: number,
+    ): Promise<{
+      items: (typeof users.$inferSelect)[];
+      total: number;
+    }> {
+      const orgId = resolveOrganizationId(ctx);
+      const offset = (page - 1) * pageSize;
+      const where = and(
+        eq(users.organizationId, orgId),
+        inArray(users.role, roles as string[]),
+      );
+      const items = (await db
+        .select()
+        .from(users)
+        .where(where)
+        .orderBy(users.createdAt, users.id)
+        .limit(pageSize)
+        .offset(offset)) as (typeof users.$inferSelect)[];
+      const total = (await db.select({ id: users.id }).from(users).where(where))
+        .length;
+      return { items, total };
+    },
+    async countActiveByRole(
+      ctx: TenantContext | RequestContext,
+      role: string,
+    ): Promise<number> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          and(
+            eq(users.organizationId, orgId),
+            eq(users.role, role),
+            eq(users.isActive, true),
+          ),
+        );
+      return rows.length;
     },
     async createUnique(
       ctx: TenantContext | RequestContext,

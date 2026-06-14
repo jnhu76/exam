@@ -15,7 +15,6 @@ import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
 import examRoutes from "../../src/routes/exam.js";
-import organizationRoutes from "../../src/routes/organization.js";
 import userRoutes from "../../src/routes/user.js";
 import candidateRoutes from "../../src/routes/candidate.js";
 import systemRoutes from "../../src/routes/system.js";
@@ -98,7 +97,6 @@ describe("RBAC Permission Matrix (S02)", () => {
     await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);
     await app.register(settingsRoutes, { prefix: "/api" });
-    await app.register(organizationRoutes, { prefix: "/api" });
     await app.register(examRoutes, { prefix: "/api" });
     await app.register(userRoutes, { prefix: "/api" });
     await app.register(candidateRoutes, { prefix: "/api" });
@@ -139,8 +137,8 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC4: Admin cannot create organizations", () => {
-    it("Admin calling POST /api/organizations returns 403", async () => {
+  describe("AC4: organizations API removed in Phase 1", () => {
+    it("POST /api/organizations is not registered (404)", async () => {
       const res = await app.inject({
         method: "POST",
         url: "/api/organizations",
@@ -151,7 +149,7 @@ describe("RBAC Permission Matrix (S02)", () => {
         },
         cookies: { "auth-token": adminToken },
       });
-      expect(res.statusCode).toBe(403);
+      expect(res.statusCode).toBe(404);
     });
   });
 

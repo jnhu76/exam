@@ -27,27 +27,6 @@ vi.mock("sonner", () => ({
 
 const mockUsers = [
   {
-    id: "u0",
-    username: "superadmin",
-    name: "Super Admin",
-    role: "SuperAdmin",
-    isActive: true,
-  },
-  {
-    id: "u1",
-    username: "teacher1",
-    name: "Teacher One",
-    role: "Teacher",
-    isActive: true,
-  },
-  {
-    id: "u2",
-    username: "proctor1",
-    name: "Proctor One",
-    role: "Proctor",
-    isActive: false,
-  },
-  {
     id: "u3",
     username: "admin1",
     name: "Admin One",
@@ -89,7 +68,7 @@ describe("UsersPage", () => {
     apiPatch.mockReset();
     apiGet.mockResolvedValue({
       items: mockUsers,
-      total: 4,
+      total: 1,
       page: 1,
       pageSize: 20,
       totalPages: 1,
@@ -103,11 +82,9 @@ describe("UsersPage", () => {
     expect(await screen.findByText("用户管理")).toBeInTheDocument();
   });
 
-  it("renders user list with roles", async () => {
+  it("renders user list with Admin role", async () => {
     renderPage();
-    expect(await screen.findByText("superadmin")).toBeInTheDocument();
-    expect(screen.getByText("超级管理员")).toBeInTheDocument();
-    expect(screen.getByText("teacher1")).toBeInTheDocument();
+    expect(await screen.findByText("admin1")).toBeInTheDocument();
     expect(screen.getByText("管理员")).toBeInTheDocument();
   });
 
@@ -118,15 +95,29 @@ describe("UsersPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders add user button and create dialog opens", async () => {
+  it("create dialog shows only Admin role option", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /新增用户/ }));
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toBeInTheDocument();
+    const trigger = within(dialog).getByRole("combobox");
+    await user.click(trigger);
+    const adminOptions = await screen.findAllByRole("option", {
+      name: "管理员",
+    });
+    expect(adminOptions.length).toBeGreaterThanOrEqual(1);
     expect(
-      within(dialog).getAllByRole("textbox").length,
-    ).toBeGreaterThanOrEqual(2);
+      screen.queryByRole("option", { name: "教师" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "监考员" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "超级管理员" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "阅卷员" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows validation errors for empty fields on create", async () => {
@@ -139,7 +130,7 @@ describe("UsersPage", () => {
     expect(screen.getByText("密码至少 8 位")).toBeInTheDocument();
   });
 
-  it("creates a new user with valid data", async () => {
+  it("creates a new Admin user with valid data", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /新增用户/ }));
@@ -156,34 +147,25 @@ describe("UsersPage", () => {
       username: "newuser",
       password: "password123",
       name: "New User",
-      role: "Teacher",
+      role: "Admin",
     });
   });
 
-  it("opens edit dialog for teacher", async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const editButtons = await screen.findAllByLabelText("编辑用户");
-    await user.click(editButtons[1]!);
-    expect(screen.getByText("编辑用户")).toBeInTheDocument();
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toBeInTheDocument();
-  });
-
-  it("opens edit dialog for superadmin and shows role lock", async () => {
+  it("opens edit dialog for Admin", async () => {
     const user = userEvent.setup();
     renderPage();
     const editButtons = await screen.findAllByLabelText("编辑用户");
     await user.click(editButtons[0]!);
     expect(screen.getByText("编辑用户")).toBeInTheDocument();
-    expect(screen.getByText("超级管理员（不可修改）")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
   });
 
   it("edits a user", async () => {
     const user = userEvent.setup();
     renderPage();
     const editButtons = await screen.findAllByLabelText("编辑用户");
-    await user.click(editButtons[1]!);
+    await user.click(editButtons[0]!);
     const dialog = await screen.findByRole("dialog");
     const nameInput = getDialogInputs(dialog)[0]!;
     await user.clear(nameInput);
@@ -192,36 +174,22 @@ describe("UsersPage", () => {
       .getAllByRole("button")
       .find((b) => b.textContent === "保存")!;
     await user.click(saveBtn);
-    expect(apiPatch).toHaveBeenCalledWith("/api/users/u1", {
+    expect(apiPatch).toHaveBeenCalledWith("/api/users/u3", {
       name: "Updated Name",
-      role: "Teacher",
+      role: "Admin",
     });
   });
 
   it("toggles user active status", async () => {
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText("proctor1");
-    const toggleBtn = screen.getByRole("button", { name: "启用" });
+    await screen.findByText("admin1");
+    const toggleBtn = screen.getByRole("button", { name: "禁用" });
     await user.click(toggleBtn);
     expect(apiPatch).toHaveBeenCalledWith(
-      "/api/users/u2",
-      expect.objectContaining({ isActive: true }),
+      "/api/users/u3",
+      expect.objectContaining({ isActive: false }),
     );
-  });
-
-  it("superadmin has no toggle button", async () => {
-    renderPage();
-    await screen.findByText("superadmin");
-    const row = screen.getByText("superadmin").closest("tr")!;
-    expect(row.querySelectorAll("button").length).toBeLessThanOrEqual(2);
-  });
-
-  it("shows active and inactive status labels", async () => {
-    renderPage();
-    await screen.findByText("teacher1");
-    expect(screen.getAllByText("启用").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("禁用").length).toBeGreaterThanOrEqual(1);
   });
 
   it("closes dialog on cancel", async () => {
@@ -268,13 +236,13 @@ describe("UsersPage", () => {
           isActive: true,
         },
       ],
-      total: 5,
+      total: 2,
       page: 1,
       pageSize: 20,
       totalPages: 1,
     });
     renderPage();
-    await screen.findByText("teacher1");
+    await screen.findByText("admin1");
     expect(screen.queryByText("cand1")).not.toBeInTheDocument();
   });
 });

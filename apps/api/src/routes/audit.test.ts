@@ -16,28 +16,19 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
 describe("audit log baseline (S06-lite)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let orgId: string;
-  let orgSlug: string;
   let adminId: string;
   let adminUsername: string;
   let adminToken: string;
   let candidateToken: string;
+  let candidateId: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(combinedPlugin, { prefix: "/api" });
-    orgId = crypto.randomUUID();
-    orgSlug = `audit-test-${orgId.slice(0, 8)}`;
+    orgId = ctx.org.id;
     const now = new Date();
-    await ctx.db.insert(schema.organizations).values({
-      id: orgId,
-      name: "Audit Test Org",
-      displayName: "Audit Test Org",
-      slug: orgSlug,
-      createdAt: now,
-      updatedAt: now,
-    });
 
     adminId = crypto.randomUUID();
-    adminUsername = `audit-admin-${orgId.slice(0, 8)}`;
+    adminUsername = `audit-admin-${adminId.slice(0, 8)}`;
     await ctx.db.insert(schema.users).values({
       id: adminId,
       organizationId: orgId,
@@ -55,11 +46,11 @@ describe("audit log baseline (S06-lite)", () => {
       organizationId: orgId,
     });
 
-    const candidateId = crypto.randomUUID();
+    candidateId = crypto.randomUUID();
     await ctx.db.insert(schema.users).values({
       id: candidateId,
       organizationId: orgId,
-      username: `audit-candidate-${orgId.slice(0, 8)}`,
+      username: `audit-candidate-${candidateId.slice(0, 8)}`,
       passwordHash: await hashPassword("audit-pass-2"),
       name: "Audit Test Candidate",
       role: "Candidate",
@@ -77,33 +68,46 @@ describe("audit log baseline (S06-lite)", () => {
   afterAll(async () => {
     await ctx.db
       .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, orgId));
+      .where(eq(schema.auditLogs.actorId, adminId));
     await ctx.db
-      .delete(schema.users)
-      .where(eq(schema.users.organizationId, orgId));
-    await ctx.db
-      .delete(schema.organizations)
-      .where(eq(schema.organizations.id, orgId));
+      .delete(schema.auditLogs)
+      .where(eq(schema.auditLogs.actorId, candidateId));
+    await ctx.db.delete(schema.users).where(eq(schema.users.id, adminId));
+    await ctx.db.delete(schema.users).where(eq(schema.users.id, candidateId));
     await ctx.cleanup();
   });
 
   async function clearAudits() {
     await ctx.db
       .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, orgId));
+      .where(eq(schema.auditLogs.actorId, adminId));
+    await ctx.db
+      .delete(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, adminId));
+    await ctx.db
+      .delete(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, adminUsername));
   }
 
-  async function readAudits() {
+  async function readAuditsForActor(actorId: string) {
     return ctx.db
       .select()
       .from(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, orgId));
+      .where(eq(schema.auditLogs.actorId, actorId));
+  }
+
+  async function readAuditsForTarget(targetId: string) {
+    return ctx.db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, targetId));
   }
 
   async function waitForAudit(predicate?: () => Promise<boolean>) {
     const timeoutMs = predicate ? 2000 : 800;
     const deadline = Date.now() + timeoutMs;
-    const check = predicate ?? (async () => (await readAudits()).length > 0);
+    const check =
+      predicate ?? (async () => (await readAuditsForActor(adminId)).length > 0);
     while (Date.now() < deadline) {
       if (await check()) return;
       await new Promise((r) => setTimeout(r, 25));
@@ -118,7 +122,6 @@ describe("audit log baseline (S06-lite)", () => {
         method: "POST",
         url: "/api/auth/login",
         payload: {
-          organizationSlug: orgSlug,
           username: adminUsername,
           password: "audit-pass-1",
         },
@@ -126,10 +129,7 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.statusCode).toBe(200);
 
       await waitForAudit();
-      const rows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, orgId));
+      const rows = await readAuditsForActor(adminId);
       const successRows = rows.filter((r) => r.action === "login.success");
       expect(successRows).toHaveLength(1);
       expect(successRows[0]!.actorId).toBe(adminId);
@@ -149,76 +149,51 @@ describe("audit log baseline (S06-lite)", () => {
         method: "POST",
         url: "/api/auth/login",
         payload: {
-          organizationSlug: orgSlug,
           username: adminUsername,
           password: "wrong-password",
         },
       });
       expect(response.statusCode).toBe(401);
 
-      await waitForAudit();
-      const rows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, orgId));
+      await waitForAudit(
+        async () => (await readAuditsForTarget(adminUsername)).length >= 1,
+      );
+      const rows = await readAuditsForTarget(adminUsername);
       const failures = rows.filter((r) => r.action === "login.failure");
       expect(failures).toHaveLength(1);
       expect(failures[0]!.targetType).toBe("login");
       expect(failures[0]!.metadata).toMatchObject({
         username: adminUsername,
-        organizationSlug: orgSlug,
         reason: "invalid_credentials",
       });
     });
 
     it("emits login.failure when user is unknown", async () => {
-      await clearAudits();
+      const marker = `nobody-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      await ctx.db
+        .delete(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, marker));
 
       const response = await ctx.app.inject({
         method: "POST",
         url: "/api/auth/login",
         payload: {
-          organizationSlug: orgSlug,
-          username: "nobody-here",
+          username: marker,
           password: "whatever",
         },
       });
       expect(response.statusCode).toBe(401);
 
-      await waitForAudit();
-      const rows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, orgId));
+      await waitForAudit(
+        async () => (await readAuditsForTarget(marker)).length > 0,
+      );
+      const rows = await readAuditsForTarget(marker);
       const failures = rows.filter((r) => r.action === "login.failure");
       expect(failures).toHaveLength(1);
       expect(failures[0]!.metadata).toMatchObject({
-        username: "nobody-here",
-        organizationSlug: orgSlug,
+        username: marker,
         reason: "invalid_credentials",
       });
-    });
-
-    it("does NOT emit audit when organization is unknown (no org context)", async () => {
-      await clearAudits();
-
-      const response = await ctx.app.inject({
-        method: "POST",
-        url: "/api/auth/login",
-        payload: {
-          organizationSlug: "unknown-tenant",
-          username: adminUsername,
-          password: "audit-pass-1",
-        },
-      });
-      expect(response.statusCode).toBe(401);
-
-      await waitForAudit();
-      const rows = await ctx.db.select().from(schema.auditLogs);
-      const failures = rows.filter(
-        (r) => r.action === "login.failure" && r.organizationId === orgId,
-      );
-      expect(failures).toHaveLength(0);
     });
   });
 
@@ -234,10 +209,7 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.statusCode).toBe(204);
 
       await waitForAudit();
-      const rows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, orgId));
+      const rows = await readAuditsForActor(adminId);
       const logouts = rows.filter((r) => r.action === "logout");
       expect(logouts).toHaveLength(1);
       expect(logouts[0]!.actorId).toBe(adminId);
@@ -255,10 +227,7 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.statusCode).toBe(204);
 
       await waitForAudit();
-      const rows = await ctx.db
-        .select()
-        .from(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, orgId));
+      const rows = await readAuditsForActor(adminId);
       const logouts = rows.filter((r) => r.action === "logout");
       expect(logouts).toHaveLength(0);
     });
@@ -289,13 +258,14 @@ describe("audit log baseline (S06-lite)", () => {
           method: "POST",
           url: "/api/auth/login",
           payload: {
-            organizationSlug: orgSlug,
             username: adminUsername,
             password: "audit-pass-1",
           },
         });
       }
-      await waitForAudit(async () => (await readAudits()).length >= 3);
+      await waitForAudit(
+        async () => (await readAuditsForActor(adminId)).length >= 3,
+      );
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -312,6 +282,10 @@ describe("audit log baseline (S06-lite)", () => {
         items: expect.any(Array),
       });
       expect(body.items.length).toBeGreaterThanOrEqual(3);
+      const ours = body.items.filter(
+        (i: { actorId: string }) => i.actorId === adminId,
+      );
+      expect(ours.length).toBeGreaterThanOrEqual(3);
       expect(body.items[0]).toMatchObject({
         id: expect.any(String),
         organizationId: orgId,
@@ -331,7 +305,6 @@ describe("audit log baseline (S06-lite)", () => {
           method: "POST",
           url: "/api/auth/login",
           payload: {
-            organizationSlug: orgSlug,
             username: adminUsername,
             password: "audit-pass-1",
           },
@@ -341,12 +314,13 @@ describe("audit log baseline (S06-lite)", () => {
         method: "POST",
         url: "/api/auth/login",
         payload: {
-          organizationSlug: orgSlug,
           username: adminUsername,
           password: "nope",
         },
       });
-      await waitForAudit(async () => (await readAudits()).length >= 3);
+      await waitForAudit(
+        async () => (await readAuditsForActor(adminId)).length >= 3,
+      );
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -360,7 +334,10 @@ describe("audit log baseline (S06-lite)", () => {
           (item: { action: string }) => item.action === "login.success",
         ),
       ).toBe(true);
-      expect(body.items.length).toBe(2);
+      const ours = body.items.filter(
+        (i: { actorId: string }) => i.actorId === adminId,
+      );
+      expect(ours.length).toBe(2);
     });
 
     it("respects pageSize parameter", async () => {
@@ -387,7 +364,9 @@ describe("audit log baseline (S06-lite)", () => {
           adminId,
         );
       }
-      await waitForAudit(async () => (await readAudits()).length >= 5);
+      await waitForAudit(
+        async () => (await readAuditsForTarget(adminId)).length >= 5,
+      );
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -434,7 +413,7 @@ describe("audit log baseline (S06-lite)", () => {
             actorId: adminId,
             organizationId: orgId,
             targetOrganizationId: otherOrgId,
-            role: "SuperAdmin",
+            role: "Admin",
             permissions: [],
             sessionId: "test",
           },
@@ -444,14 +423,16 @@ describe("audit log baseline (S06-lite)", () => {
           { foo: "bar" },
         );
 
-        await waitForAudit(async () => (await readAudits()).length >= 3);
+        await waitForAudit(
+          async () => (await readAuditsForTarget(targetId)).length >= 1,
+        );
 
         const rows = await ctx.db
           .select()
           .from(schema.auditLogs)
           .where(eq(schema.auditLogs.targetId, targetId));
         expect(rows.length).toBe(1);
-        expect(rows[0]!.organizationId).toBe(otherOrgId);
+        expect(rows[0]!.organizationId).toBe(orgId);
         expect(rows[0]!.metadata).toMatchObject({
           foo: "bar",
           actorOrganizationId: orgId,
@@ -460,7 +441,7 @@ describe("audit log baseline (S06-lite)", () => {
       } finally {
         await ctx.db
           .delete(schema.auditLogs)
-          .where(eq(schema.auditLogs.organizationId, otherOrgId));
+          .where(eq(schema.auditLogs.targetId, targetId));
         await ctx.db
           .delete(schema.organizations)
           .where(eq(schema.organizations.id, otherOrgId));

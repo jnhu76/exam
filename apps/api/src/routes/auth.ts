@@ -59,7 +59,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       actorId: "bootstrap",
       organizationId: org.id,
       targetOrganizationId: org.id,
-      role: "SuperAdmin",
+      role: "Admin",
       permissions: [],
       sessionId: "bootstrap",
     };
@@ -86,10 +86,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
       const tenancy = getRuntimeConfig().tenancy;
-      const resolvedSlug =
-        tenancy.mode === "singleTenant"
-          ? (data.organizationSlug ?? tenancy.defaultTenantSlug)
-          : data.organizationSlug;
+      const resolvedSlug = tenancy.defaultTenantSlug;
       const userRepo = createUserRepo(fastify.db);
       let org;
       try {
@@ -99,7 +96,6 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         );
       } catch (error) {
         if (error instanceof NotFoundError) {
-          // Always perform a dummy argon2 verify to avoid leaking whether the tenant exists via timing.
           await verifyPasswordOrDummy(data.password, null);
           fastify.log.warn(
             {
@@ -151,7 +147,6 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           {
             reason: "invalid_credentials",
             username: data.username,
-            organizationSlug: resolvedSlug,
           },
         );
         return reply
@@ -159,12 +154,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
-      if (tenancy.mode === "singleTenant" && user.role === "SuperAdmin") {
+      if (user.role !== "Admin" && user.role !== "Candidate") {
+        const legacyRole = user.role;
         const blockedCtx: RequestContext = {
           actorId: user.id,
           organizationId: user.organizationId,
           targetOrganizationId: user.organizationId,
-          role: "SuperAdmin",
+          role: legacyRole as unknown as Role,
           permissions: [],
           sessionId: "anonymous",
         };
@@ -176,17 +172,19 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           "login",
           user.id,
           {
-            reason: "superadmin_blocked_in_single_tenant",
+            reason: "unsupported_phase1_role",
             username: user.username,
+            legacyRole,
           },
         );
         fastify.log.warn(
           {
             event: "login.failure",
-            reason: "superadmin_blocked_in_single_tenant",
+            reason: "unsupported_phase1_role",
             username: user.username,
+            legacyRole,
           },
-          "Login failed: SuperAdmin blocked in singleTenant deployment",
+          "Login failed: role is not a supported Phase 1 role",
         );
         return reply
           .code(401)

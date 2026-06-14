@@ -14,10 +14,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/courses",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -46,10 +43,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/courses/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -76,10 +70,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/courses",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -117,10 +108,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/courses/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -153,10 +141,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/courses/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);

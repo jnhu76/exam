@@ -1,8 +1,5 @@
 export const Role = {
-  SuperAdmin: "SuperAdmin",
   Admin: "Admin",
-  Teacher: "Teacher",
-  Proctor: "Proctor",
   Candidate: "Candidate",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];

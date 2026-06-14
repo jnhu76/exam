@@ -87,31 +87,6 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("机构管理")).not.toBeInTheDocument();
   });
 
-  it("shows organization management for SuperAdmin", () => {
-    renderWithProviders(
-      <AppSidebar
-        user={{ ...admin, role: Role.SuperAdmin }}
-        collapsed={false}
-        onLogout={() => {}}
-      />,
-    );
-    expect(screen.getByText("机构管理")).toBeInTheDocument();
-  });
-
-  it("hides management section for Teacher role", () => {
-    renderWithProviders(
-      <AppSidebar
-        user={{ ...admin, role: Role.Teacher }}
-        collapsed={false}
-        onLogout={() => {}}
-      />,
-    );
-    expect(screen.queryByText("平台设置")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("管理", { selector: "p" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("hides management section for Candidate role", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
@@ -131,19 +106,6 @@ describe("AppSidebar role visibility", () => {
   it("shows question bank group for admin role", () => {
     renderWithProviders(
       <AppSidebar user={admin} collapsed={false} onLogout={() => {}} />,
-    );
-    expect(screen.getByText("题库")).toBeInTheDocument();
-    expect(screen.getByText("课程管理")).toBeInTheDocument();
-    expect(screen.getByText("题目管理")).toBeInTheDocument();
-  });
-
-  it("shows question bank group for teacher role", () => {
-    renderWithProviders(
-      <AppSidebar
-        user={{ ...admin, role: Role.Teacher }}
-        collapsed={false}
-        onLogout={() => {}}
-      />,
     );
     expect(screen.getByText("题库")).toBeInTheDocument();
     expect(screen.getByText("课程管理")).toBeInTheDocument();

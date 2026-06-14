@@ -12,10 +12,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id/export/scores",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const { id: examId } = request.params as { id: string };

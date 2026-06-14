@@ -47,10 +47,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/audit-logs",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);

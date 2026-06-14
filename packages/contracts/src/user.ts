@@ -3,13 +3,7 @@ import { passwordField } from "./passwordPolicy.js";
 
 // ── User ──────────────────────────────────────────────────────────
 
-export const RoleSchema = z.enum([
-  "SuperAdmin",
-  "Admin",
-  "Teacher",
-  "Proctor",
-  "Candidate",
-]);
+export const RoleSchema = z.enum(["Admin", "Candidate"]);
 
 export const UserSchema = z.object({
   id: z.string().uuid(),
@@ -27,13 +21,13 @@ export const CreateUserRequestSchema = z.object({
   username: z.string().min(3).max(50),
   password: passwordField(),
   name: z.string().min(1).max(100),
-  role: RoleSchema.exclude(["SuperAdmin", "Candidate"]),
+  role: z.literal("Admin"),
 });
 export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
 
 export const UpdateUserRequestSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  role: RoleSchema.exclude(["SuperAdmin", "Candidate"]).optional(),
+  role: z.literal("Admin").optional(),
   isActive: z.boolean().optional(),
 });
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;

@@ -5,7 +5,6 @@ import { openApiConfig, addCommonResponseSchemas } from "./config.js";
 
 import authRoutes from "../routes/auth.js";
 import settingsRoutes from "../routes/settings.js";
-import organizationRoutes from "../routes/organization.js";
 import candidateFieldRoutes from "../routes/candidateField.js";
 import userRoutes from "../routes/user.js";
 import candidateRoutes from "../routes/candidate.js";
@@ -37,7 +36,6 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
 
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(settingsRoutes, { prefix: routePrefix });
-  await app.register(organizationRoutes, { prefix: routePrefix });
   await app.register(candidateFieldRoutes, { prefix: routePrefix });
   await app.register(userRoutes, { prefix: routePrefix });
   await app.register(candidateRoutes, { prefix: routePrefix });

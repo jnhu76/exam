@@ -33,7 +33,7 @@ describe("repository tenant isolation", () => {
   let settingsRepo: ReturnType<typeof createSettingsRepo>;
   let courseRepo: ReturnType<typeof createCourseRepo>;
   let questionRepo: ReturnType<typeof createQuestionRepo>;
-  const rootContext = createContext("system", "SuperAdmin", "system");
+  const rootContext = createContext("system", "Admin", "system");
 
   beforeAll(async () => {
     const { db } = await getTestDb();
@@ -106,31 +106,34 @@ describe("repository tenant isolation", () => {
     expect(await courseRepo.findById(alphaContext, course.id)).toBeNull();
   });
 
-  it("requires SuperAdmin to select a target tenant explicitly", async () => {
+  it("Admin repository ops are scoped to organizationId, not targetOrganizationId (Phase 1 single-tenant)", async () => {
     const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: `alpha-${suffix}`,
     });
-    const superAdminContext = createContext(alpha.id, "SuperAdmin");
+    const beta = await organizationRepo.create(rootContext, {
+      name: "beta",
+      displayName: "Beta",
+      slug: `beta-${suffix}`,
+    });
+    const adminContext = createContext(alpha.id, "Admin", beta.id);
 
-    await expect(
-      courseRepo.create(superAdminContext, {
-        name: "Safety",
-        code: "SAFE",
-        description: "",
-      }),
-    ).rejects.toThrow("targetOrganizationId");
+    const created = await courseRepo.create(adminContext, {
+      name: "Safety",
+      code: "SAFE",
+      description: "",
+    });
+    expect(created).toMatchObject({ organizationId: alpha.id });
+    expect(created.organizationId).not.toBe(beta.id);
 
-    const targetedContext = createContext(alpha.id, "SuperAdmin", alpha.id);
+    const alphaScopedReader = createContext(alpha.id);
+    const betaScopedReader = createContext(beta.id);
     expect(
-      await courseRepo.create(targetedContext, {
-        name: "Safety",
-        code: "SAFE",
-        description: "",
-      }),
-    ).toMatchObject({ organizationId: alpha.id });
+      await courseRepo.findById(alphaScopedReader, created.id),
+    ).toMatchObject({ id: created.id });
+    expect(await courseRepo.findById(betaScopedReader, created.id)).toBeNull();
   });
 
   it("filters question lookups by organizationId", async () => {

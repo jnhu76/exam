@@ -28,7 +28,7 @@ describe("A01: Context types", () => {
       const ctx: TenantContext = {
         organizationId: "org-1",
         actorId: "user-1",
-        role: "SuperAdmin",
+        role: "Admin",
         permissions: [],
         targetOrganizationId: "org-2",
       };
@@ -40,7 +40,7 @@ describe("A01: Context types", () => {
     it("does not require organizationId", () => {
       const ctx: PlatformContext = {
         actorId: "user-1",
-        role: "SuperAdmin",
+        role: "Admin",
         permissions: ["MANAGE_ORGANIZATION"],
       };
       expect(ctx.actorId).toBe("user-1");
@@ -49,7 +49,7 @@ describe("A01: Context types", () => {
     it("accepts optional targetOrganizationId", () => {
       const ctx: PlatformContext = {
         actorId: "user-1",
-        role: "SuperAdmin",
+        role: "Admin",
         permissions: [],
         targetOrganizationId: "org-1",
       };
@@ -84,7 +84,7 @@ describe("A01: Context type guards", () => {
   it("isTenantContext rejects PlatformContext", () => {
     const ctx: RepoContext = {
       actorId: "user-1",
-      role: "SuperAdmin",
+      role: "Admin",
       permissions: [],
     };
     expect(isTenantContext(ctx)).toBe(false);
@@ -100,7 +100,7 @@ describe("A01: Context type guards", () => {
   it("isPlatformContext identifies PlatformContext", () => {
     const ctx: RepoContext = {
       actorId: "user-1",
-      role: "SuperAdmin",
+      role: "Admin",
       permissions: [],
     };
     expect(isPlatformContext(ctx)).toBe(true);
@@ -225,30 +225,7 @@ describe("A01: AsyncRepo interface contracts", () => {
 });
 
 describe("A01: resolveOrganizationId / resolveOptionalOrganizationId", () => {
-  it("resolveOrganizationId throws for SuperAdmin without targetOrganizationId", async () => {
-    const { resolveOrganizationId } = await import("../repository/baseRepo.js");
-    const ctx: TenantContext = {
-      organizationId: "org-1",
-      actorId: "super",
-      role: "SuperAdmin",
-      permissions: [],
-    };
-    expect(() => resolveOrganizationId(ctx)).toThrow();
-  });
-
-  it("resolveOrganizationId returns targetOrganizationId for SuperAdmin", async () => {
-    const { resolveOrganizationId } = await import("../repository/baseRepo.js");
-    const ctx: TenantContext = {
-      organizationId: "org-1",
-      actorId: "super",
-      role: "SuperAdmin",
-      permissions: [],
-      targetOrganizationId: "org-2",
-    };
-    expect(resolveOrganizationId(ctx)).toBe("org-2");
-  });
-
-  it("resolveOrganizationId returns organizationId for non-SuperAdmin", async () => {
+  it("resolveOrganizationId returns organizationId for Admin", async () => {
     const { resolveOrganizationId } = await import("../repository/baseRepo.js");
     const ctx: TenantContext = {
       organizationId: "org-1",
@@ -259,28 +236,51 @@ describe("A01: resolveOrganizationId / resolveOptionalOrganizationId", () => {
     expect(resolveOrganizationId(ctx)).toBe("org-1");
   });
 
-  it("resolveOptionalOrganizationId falls back for SuperAdmin", async () => {
+  it("resolveOrganizationId returns organizationId for Candidate", async () => {
+    const { resolveOrganizationId } = await import("../repository/baseRepo.js");
+    const ctx: TenantContext = {
+      organizationId: "org-1",
+      actorId: "cand",
+      role: "Candidate",
+      permissions: [],
+    };
+    expect(resolveOrganizationId(ctx)).toBe("org-1");
+  });
+
+  it("resolveOrganizationId ignores targetOrganizationId (Phase 1 single-tenant)", async () => {
+    const { resolveOrganizationId } = await import("../repository/baseRepo.js");
+    const ctx: TenantContext = {
+      organizationId: "org-1",
+      actorId: "admin",
+      role: "Admin",
+      permissions: [],
+      targetOrganizationId: "org-2",
+    };
+    expect(resolveOrganizationId(ctx)).toBe("org-1");
+  });
+
+  it("resolveOptionalOrganizationId returns organizationId for Admin", async () => {
     const { resolveOptionalOrganizationId } =
       await import("../repository/baseRepo.js");
     const ctx: TenantContext = {
       organizationId: "org-1",
-      actorId: "super",
-      role: "SuperAdmin",
+      actorId: "admin",
+      role: "Admin",
       permissions: [],
     };
     expect(resolveOptionalOrganizationId(ctx)).toBe("org-1");
   });
 
-  it("resolveOptionalOrganizationId uses target when present", async () => {
+  it("resolveOptionalOrganizationId ignores targetOrganizationId (Phase 1 single-tenant)", async () => {
     const { resolveOptionalOrganizationId } =
       await import("../repository/baseRepo.js");
     const ctx: TenantContext = {
       organizationId: "org-1",
-      actorId: "super",
-      role: "SuperAdmin",
+      actorId: "admin",
+      role: "Admin",
       permissions: [],
       targetOrganizationId: "org-2",
     };
-    expect(resolveOptionalOrganizationId(ctx)).toBe("org-2");
+    expect(resolveOptionalOrganizationId(ctx)).toBe("org-1");
   });
 });

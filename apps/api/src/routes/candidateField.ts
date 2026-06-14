@@ -13,10 +13,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate-fields",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -32,10 +29,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/candidate-fields",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -67,10 +61,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/candidate-fields/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -114,10 +105,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/candidate-fields/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -153,10 +141,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate-fields/template",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
