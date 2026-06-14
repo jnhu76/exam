@@ -57,15 +57,6 @@ describe("seed idempotency", () => {
       .map((u) => u.role)
       .sort();
     expect(seededRoles).toEqual(["Admin", "Candidate", "Candidate"]);
-
-    const legacyRoles = seededRows
-      .filter(
-        (u) =>
-          u.username === "superadmin" ||
-          (u.username === "teacher" && u.isActive),
-      )
-      .map((u) => u.role);
-    expect(legacyRoles).toEqual([]);
   });
 
   it("is idempotent on second run and resets password/isActive", async () => {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
 import dotenv from "dotenv";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 dotenv.config();
 
@@ -85,16 +85,6 @@ export async function seed(
     })
     .returning({ id: schema.organizations.id });
   const orgId = orgRows[0]!.id;
-
-  await db
-    .update(schema.users)
-    .set({ isActive: false, updatedAt: timestamp })
-    .where(
-      and(
-        eq(schema.users.organizationId, orgId),
-        inArray(schema.users.username, ["superadmin", "teacher"]),
-      ),
-    );
 
   const userIds: string[] = [];
 

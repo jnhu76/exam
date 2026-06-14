@@ -40,8 +40,6 @@ describe("demo seed", () => {
     expect(activeUsernames).toContain("admin");
     expect(activeUsernames).toContain("candidate1");
     expect(activeUsernames).toContain("candidate2");
-    expect(activeUsernames).not.toContain("superadmin");
-    expect(activeUsernames).not.toContain("teacher1");
 
     const admin = users.find((u) => u.username === "admin")!;
     expect(await verifyPassword("admin123", admin.passwordHash)).toBe(true);

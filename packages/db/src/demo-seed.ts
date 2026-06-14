@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
 import type {
@@ -177,16 +177,6 @@ export async function seedDemo(
   }
 
   // ── Users ─────────────────────────────────────────────────────
-  await db
-    .update(schema.users)
-    .set({ isActive: false, updatedAt: ts() })
-    .where(
-      and(
-        eq(schema.users.organizationId, ids.orgId),
-        inArray(schema.users.username, ["superadmin", "teacher1", "teacher2"]),
-      ),
-    );
-
   const userDefs = [
     { username: "admin", name: "管理员", role: "Admin" as const },
     { username: "candidate1", name: "考生甲", role: "Candidate" as const },
