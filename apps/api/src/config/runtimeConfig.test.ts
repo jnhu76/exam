@@ -46,22 +46,22 @@ describe("runtimeConfig", () => {
   });
 
   describe("deployment mode", () => {
-    it("defaults to multiTenant when DEPLOYMENT_MODE is not set", () => {
+    it("defaults to singleTenant when DEPLOYMENT_MODE is not set", () => {
       delete process.env.DEPLOYMENT_MODE;
-      resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.mode).toBe("multiTenant");
-      expect(config.tenancy.exposeTenantSwitcher).toBe(true);
-      expect(config.tenancy.exposeSuperAdmin).toBe(true);
-    });
-
-    it("respects singleTenant mode", () => {
-      process.env.DEPLOYMENT_MODE = "singleTenant";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.mode).toBe("singleTenant");
       expect(config.tenancy.exposeTenantSwitcher).toBe(false);
       expect(config.tenancy.exposeSuperAdmin).toBe(false);
+    });
+
+    it("respects multiTenant mode", () => {
+      process.env.DEPLOYMENT_MODE = "multiTenant";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.mode).toBe("multiTenant");
+      expect(config.tenancy.exposeTenantSwitcher).toBe(true);
+      expect(config.tenancy.exposeSuperAdmin).toBe(true);
       expect(config.tenancy.requireTenantBoundary).toBe(true);
     });
   });
@@ -105,7 +105,7 @@ describe("runtimeConfig", () => {
 
   describe("buildPublicConfig", () => {
     it("returns correct shape for multiTenant", () => {
-      delete process.env.DEPLOYMENT_MODE;
+      process.env.DEPLOYMENT_MODE = "multiTenant";
       resetRuntimeConfigForTest();
       const pub = buildPublicConfig();
       expect(pub.deploymentMode).toBe("multiTenant");
@@ -117,7 +117,7 @@ describe("runtimeConfig", () => {
     });
 
     it("returns correct shape for singleTenant", () => {
-      process.env.DEPLOYMENT_MODE = "singleTenant";
+      delete process.env.DEPLOYMENT_MODE;
       resetRuntimeConfigForTest();
       const pub = buildPublicConfig();
       expect(pub.deploymentMode).toBe("singleTenant");
@@ -500,9 +500,9 @@ describe("runtimeConfig", () => {
   });
 
   describe("DEPLOYMENT_MODE fail-fast", () => {
-    it("unset → multiTenant", () => {
+    it("unset → singleTenant", () => {
       const config = loadRuntimeConfig({ APP_MODE: "development" });
-      expect(config.mode).toBe("multiTenant");
+      expect(config.mode).toBe("singleTenant");
     });
 
     it("singleTenant → singleTenant", () => {

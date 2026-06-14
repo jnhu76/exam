@@ -85,12 +85,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     { config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } } },
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
+      const tenancy = getRuntimeConfig().tenancy;
+      const resolvedSlug =
+        tenancy.mode === "singleTenant"
+          ? (data.organizationSlug ?? tenancy.defaultTenantSlug)
+          : data.organizationSlug;
       const userRepo = createUserRepo(fastify.db);
       let org;
       try {
         org = await createOrganizationRepo(fastify.db).resolveBrandingTenant(
           { purpose: "public_branding" } as PublicBrandingContext,
-          data.organizationSlug,
+          resolvedSlug,
         );
       } catch (error) {
         if (error instanceof NotFoundError) {
@@ -100,7 +105,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             {
               event: "login.failure",
               reason: "unknown_organization",
-              organizationSlug: data.organizationSlug,
+              organizationSlug: resolvedSlug,
               username: data.username,
             },
             "Login failed: unknown organization",
@@ -146,8 +151,42 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           {
             reason: "invalid_credentials",
             username: data.username,
-            organizationSlug: data.organizationSlug,
+            organizationSlug: resolvedSlug,
           },
+        );
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
+      }
+
+      if (tenancy.mode === "singleTenant" && user.role === "SuperAdmin") {
+        const blockedCtx: RequestContext = {
+          actorId: user.id,
+          organizationId: user.organizationId,
+          targetOrganizationId: user.organizationId,
+          role: "SuperAdmin",
+          permissions: [],
+          sessionId: "anonymous",
+        };
+        recordAudit(
+          fastify,
+          request,
+          blockedCtx,
+          "login.failure",
+          "login",
+          user.id,
+          {
+            reason: "superadmin_blocked_in_single_tenant",
+            username: user.username,
+          },
+        );
+        fastify.log.warn(
+          {
+            event: "login.failure",
+            reason: "superadmin_blocked_in_single_tenant",
+            username: user.username,
+          },
+          "Login failed: SuperAdmin blocked in singleTenant deployment",
         );
         return reply
           .code(401)

@@ -127,7 +127,7 @@ function parseAppEnv(value: string | undefined): AppEnv {
 }
 
 function parseDeploymentMode(value: string | undefined): DeploymentMode {
-  if (value === undefined || value === "") return "multiTenant";
+  if (value === undefined || value === "") return "singleTenant";
   if (value === "singleTenant") return "singleTenant";
   if (value === "multiTenant") return "multiTenant";
   throw new Error(

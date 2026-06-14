@@ -40,6 +40,7 @@ jobs:
       JWT_SECRET: ci-test-secret
       NODE_ENV: test
       APP_MODE: ci
+      DEPLOYMENT_MODE: singleTenant
 
     steps:
       - name: Checkout

@@ -9,6 +9,7 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -24,9 +25,16 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
+      const hideSuperAdmin = getRuntimeConfig().tenancy.mode === "singleTenant";
+      const visibleItems = hideSuperAdmin
+        ? items.filter((u) => u.role !== "SuperAdmin")
+        : items;
+      const visibleTotal = hideSuperAdmin
+        ? total - (items.length - visibleItems.length)
+        : total;
 
       return {
-        items: items.map((u) => ({
+        items: visibleItems.map((u) => ({
           id: u.id,
           organizationId: u.organizationId,
           username: u.username,
@@ -36,10 +44,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           createdAt: u.createdAt.toISOString(),
           updatedAt: u.updatedAt.toISOString(),
         })),
-        total,
+        total: visibleTotal,
         page,
         pageSize,
-        totalPages: Math.ceil(total / pageSize),
+        totalPages: Math.ceil(visibleTotal / pageSize),
       };
     },
   );
@@ -91,6 +99,15 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
+      const hideSuperAdmin = getRuntimeConfig().tenancy.mode === "singleTenant";
+      if (hideSuperAdmin) {
+        const existing = await repo.findByOrganizationAndId(ctx, id);
+        if (existing && existing.role === "SuperAdmin") {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+      }
       const updated = await repo.update(ctx, id, {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.role !== undefined ? { role: data.role } : {}),
@@ -127,6 +144,15 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createUserRepo(fastify.db);
+      const hideSuperAdmin = getRuntimeConfig().tenancy.mode === "singleTenant";
+      if (hideSuperAdmin) {
+        const existing = await repo.findByOrganizationAndId(ctx, id);
+        if (existing && existing.role === "SuperAdmin") {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+      }
       const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply
