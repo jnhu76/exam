@@ -121,7 +121,7 @@ describe("course routes", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("POST /api/courses requires Admin or Teacher role", async () => {
+  it("POST /api/courses requires Admin role", async () => {
     const candidateRes = await ctx.app.inject({
       method: "POST",
       url: "/api/courses",

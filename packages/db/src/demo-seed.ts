@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
 import type {
@@ -20,8 +20,7 @@ import { gradeAnswers } from "@exam/domain";
 
 export type HashFunction = (password: string) => Promise<string>;
 
-const DEMO_ORG_SLUG = "demo";
-const DEMO_TAG = "demo-seed";
+const DEMO_ORG_SLUG = "default";
 
 function ts(offsetMs = 0): Date {
   return new Date(Date.now() + offsetMs);
@@ -55,21 +54,6 @@ function makeDefaultControlFlags(): ControlFlags {
     restrictIp: false,
     requireLockdown: false,
     showResultImmediately: true,
-  };
-}
-
-function makeStrictControlFlags(): ControlFlags {
-  return {
-    shuffleQuestions: true,
-    shuffleOptions: true,
-    detectTabSwitch: true,
-    disableCopyPaste: true,
-    requireQueue: false,
-    batchSize: 1,
-    batchInterval: 60,
-    restrictIp: false,
-    requireLockdown: true,
-    showResultImmediately: false,
   };
 }
 
@@ -112,8 +96,8 @@ export async function seedDemo(
     ids.orgId = uuid("org");
     await db.insert(schema.organizations).values({
       id: ids.orgId,
-      name: "Demo Organization",
-      displayName: "Demo Organization",
+      name: "Default Organization",
+      displayName: "考试中心",
       slug: DEMO_ORG_SLUG,
       createdAt: ts(),
       updatedAt: ts(),
@@ -121,34 +105,38 @@ export async function seedDemo(
   }
 
   // ── OrganizationSettings ──────────────────────────────────────
-  const existingSettingsRows = await db
-    .select()
-    .from(schema.organizationSettings)
-    .where(eq(schema.organizationSettings.organizationId, ids.orgId));
-  const existingSettings = existingSettingsRows[0];
-
-  if (!existingSettings) {
-    ids.settingsId = uuid("settings");
-    await db.insert(schema.organizationSettings).values({
-      id: ids.settingsId,
+  const settingsId = uuid("settings");
+  await db
+    .insert(schema.organizationSettings)
+    .values({
+      id: settingsId,
       organizationId: ids.orgId,
-      productName: "Exam Platform",
-      productSubtitle: "Assessment & Certification",
-      footerText: "Demo Instance",
-      organizationDisplayName: "Demo Organization",
+      productName: "考试平台",
+      productSubtitle: "可靠的内网考试系统",
+      footerText: "© 当前部署",
+      organizationDisplayName: "考试中心",
       timezone: "Asia/Shanghai",
       createdAt: ts(),
       updatedAt: ts(),
+    })
+    .onConflictDoUpdate({
+      target: schema.organizationSettings.organizationId,
+      set: {
+        productName: "考试平台",
+        productSubtitle: "可靠的内网考试系统",
+        footerText: "© 当前部署",
+        organizationDisplayName: "考试中心",
+        timezone: "Asia/Shanghai",
+        updatedAt: ts(),
+      },
     });
-  } else {
-    ids.settingsId = existingSettings.id;
-  }
+  ids.settingsId = settingsId;
 
   // ── CandidateFields ───────────────────────────────────────────
   const fieldDefs = [
     {
-      name: "employeeId",
-      label: "工号",
+      name: "candidateNo",
+      label: "编号",
       fieldType: "text" as const,
       required: true,
       unique: true,
@@ -157,18 +145,10 @@ export async function seedDemo(
     {
       name: "department",
       label: "部门",
-      fieldType: "select" as const,
-      required: true,
-      unique: false,
-      sortOrder: 1,
-    },
-    {
-      name: "phone",
-      label: "手机号",
       fieldType: "text" as const,
       required: false,
       unique: false,
-      sortOrder: 2,
+      sortOrder: 1,
     },
   ];
 
@@ -197,11 +177,18 @@ export async function seedDemo(
   }
 
   // ── Users ─────────────────────────────────────────────────────
+  await db
+    .update(schema.users)
+    .set({ isActive: false, updatedAt: ts() })
+    .where(
+      and(
+        eq(schema.users.organizationId, ids.orgId),
+        inArray(schema.users.username, ["superadmin", "teacher1", "teacher2"]),
+      ),
+    );
+
   const userDefs = [
-    { username: "superadmin", name: "超级管理员", role: "SuperAdmin" as const },
     { username: "admin", name: "管理员", role: "Admin" as const },
-    { username: "teacher1", name: "教师甲", role: "Teacher" as const },
-    { username: "teacher2", name: "教师乙", role: "Teacher" as const },
     { username: "candidate1", name: "考生甲", role: "Candidate" as const },
     { username: "candidate2", name: "考生乙", role: "Candidate" as const },
     { username: "candidate3", name: "考生丙", role: "Candidate" as const },
@@ -225,11 +212,7 @@ export async function seedDemo(
       const userId = uuid("user");
       ids.users[ud.username] = userId;
       const passwordHash = await hashFn(
-        ud.role === "Teacher"
-          ? "teacher123"
-          : ud.role === "Candidate"
-            ? "candidate123"
-            : "admin123",
+        ud.role === "Candidate" ? "candidate123" : "admin123",
       );
       await db.insert(schema.users).values({
         id: userId,
@@ -248,24 +231,20 @@ export async function seedDemo(
   // ── CandidateProfiles ─────────────────────────────────────────
   const candidateFieldValues: Record<string, Record<string, unknown>> = {
     candidate1: {
-      employeeId: "EMP001",
-      department: "tech",
-      phone: "13800001111",
+      candidateNo: "CAND001",
+      department: "研发部",
     },
     candidate2: {
-      employeeId: "EMP002",
-      department: "hr",
-      phone: "13800002222",
+      candidateNo: "CAND002",
+      department: "运营部",
     },
     candidate3: {
-      employeeId: "EMP003",
-      department: "finance",
-      phone: "13800003333",
+      candidateNo: "CAND003",
+      department: "培训部",
     },
     candidate4: {
-      employeeId: "EMP004",
-      department: "operation",
-      phone: "13800004444",
+      candidateNo: "CAND004",
+      department: "服务部",
     },
   };
 
@@ -420,7 +399,7 @@ export async function seedDemo(
       tag: "safety-fb1",
       courseId: safetyCourseId,
       type: "fill_blank" as const,
-      content: "安全出口标识的颜色是___色",
+      content: "安全出口标识的颜色是____色",
       options: [],
       standardAnswer: "绿|green",
       score: 5,
@@ -449,7 +428,7 @@ export async function seedDemo(
       tag: "safety-fb2",
       courseId: safetyCourseId,
       type: "fill_blank" as const,
-      content: "消防通道的宽度不得低于___米",
+      content: "消防通道的宽度不得低于____米",
       options: [],
       standardAnswer: "1.2",
       score: 5,
@@ -510,7 +489,7 @@ export async function seedDemo(
       tag: "skill-fb1",
       courseId: skillCourseId,
       type: "fill_blank" as const,
-      content: "标准操作规程的缩写是___",
+      content: "标准操作规程的缩写是____",
       options: [],
       standardAnswer: "SOP|sop",
       score: 5,
@@ -755,31 +734,6 @@ export async function seedDemo(
   });
   ids.exams["closed"] = exam4Id;
 
-  const exam5Questions = ["skill-sc1", "skill-tf1", "skill-fb1"];
-  const exam5Snapshot = await buildSnapshot(exam5Questions);
-  const exam5TotalScore = snapshotTotalScore(exam5Snapshot);
-  const exam5Id = await upsertExam("严格模式考试", {
-    description: "启用全部控制选项的考试",
-    courseId: skillCourseId,
-    status: "open",
-    timingMode: "timed_window",
-    durationMinutes: 20,
-    openAt: ts(-30 * 60_000),
-    closeAt: ts(2 * HOUR),
-    passingScore: 10,
-    totalScore: exam5TotalScore,
-    questionSelectionMode: "manual",
-    questionIds: exam5Questions.map((t) => qid(t)),
-    questionSnapshot: exam5Snapshot,
-    controlFlags: makeStrictControlFlags(),
-    retakePolicy: "max_attempts",
-    scoreStrategy: "latest",
-    maxAttempts: 1,
-    createdAt: ts(-1 * DAY),
-    updatedAt: ts(),
-  });
-  ids.exams["strict"] = exam5Id;
-
   // ── Enrollments ───────────────────────────────────────────────
   async function upsertEnrollment(
     examId: string,
@@ -998,12 +952,6 @@ export async function seedDemo(
     finalPassed: closedC4Grading.passed,
   });
   ids.enrollments["closed-c4"] = enrollClosed4;
-
-  const enrollStrict1 = await upsertEnrollment(exam5Id, c1, {
-    status: "assigned",
-    attemptCount: 0,
-  });
-  ids.enrollments["strict-c1"] = enrollStrict1;
 
   // ── Attempts ──────────────────────────────────────────────────
   async function upsertAttempt(

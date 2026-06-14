@@ -44,7 +44,7 @@ describe("Phase 1.1 regression - critical path", () => {
         username: `pwtest-${uniquePrefix()}`,
         passwordHash: pwHash,
         name: "Password Test User",
-        role: "Teacher",
+        role: "Admin",
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -62,7 +62,7 @@ describe("Phase 1.1 regression - critical path", () => {
     const { signJWT } = await import("@exam/auth/src/session.js");
     passwordTestToken = signJWT({
       actorId: passwordTestUserId,
-      role: "Teacher",
+      role: "Admin",
       organizationId: ctx.org.id,
     });
 
@@ -207,7 +207,6 @@ describe("Phase 1.1 regression - critical path", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: pwUser[0]!.username,
         password: "newpwtest123",
       },

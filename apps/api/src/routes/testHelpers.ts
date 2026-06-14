@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
@@ -33,66 +34,19 @@ function createDbPlugin(db: Database) {
   });
 }
 
+type TestUser = typeof schema.users.$inferSelect;
+
+type TestOrganization = typeof schema.organizations.$inferSelect;
+
 export interface TestContext {
   app: ReturnType<typeof Fastify>;
   db: Database;
   cleanup: () => Promise<void>;
-  org: {
-    id: string;
-    name: string;
-    displayName: string;
-    slug: string;
-    createdAt: Date;
-    updatedAt: Date;
-  };
-  admin: {
-    id: string;
-    organizationId: string;
-    username: string;
-    passwordHash: string;
-    name: string;
-    role: Role;
-    isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  };
-  teacher: {
-    id: string;
-    organizationId: string;
-    username: string;
-    passwordHash: string;
-    name: string;
-    role: Role;
-    isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  };
-  candidate: {
-    id: string;
-    organizationId: string;
-    username: string;
-    passwordHash: string;
-    name: string;
-    role: Role;
-    isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  };
-  superAdmin: {
-    id: string;
-    organizationId: string;
-    username: string;
-    passwordHash: string;
-    name: string;
-    role: Role;
-    isActive: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-  };
+  org: TestOrganization;
+  admin: TestUser;
+  candidate: TestUser;
   adminToken: string;
-  teacherToken: string;
   candidateToken: string;
-  superAdminToken: string;
   setNow: (now: Date | null) => void;
 }
 
@@ -128,23 +82,11 @@ export async function buildTestApp(
     .where(eq(schema.organizations.id, seedResult.orgId));
   const org = orgRows[0]!;
 
-  const superAdminRows = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, seedResult.users.superAdminId));
-  const superAdmin = superAdminRows[0]!;
-
   const adminRows = await db
     .select()
     .from(schema.users)
     .where(eq(schema.users.id, seedResult.users.adminId));
   const admin = adminRows[0]!;
-
-  const teacherRows = await db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, seedResult.users.teacherId));
-  const teacher = teacherRows[0]!;
 
   const candidateRows = await db
     .select()
@@ -161,28 +103,11 @@ export async function buildTestApp(
     },
     jwtSecret,
   );
-  const teacherToken = signJWT(
-    {
-      actorId: teacher.id,
-      role: teacher.role as Role,
-      organizationId: teacher.organizationId,
-    },
-    jwtSecret,
-  );
   const candidateToken = signJWT(
     {
       actorId: candidate.id,
       role: candidate.role as Role,
       organizationId: candidate.organizationId,
-    },
-    jwtSecret,
-  );
-
-  const superAdminToken = signJWT(
-    {
-      actorId: superAdmin.id,
-      role: superAdmin.role as Role,
-      organizationId: superAdmin.organizationId,
     },
     jwtSecret,
   );
@@ -195,18 +120,48 @@ export async function buildTestApp(
       await conn.sql.end();
     },
     org,
-    admin: admin as TestContext["admin"],
-    teacher: teacher as TestContext["teacher"],
-    candidate: candidate as TestContext["candidate"],
-    superAdmin: superAdmin as TestContext["superAdmin"],
+    admin,
+    candidate,
     adminToken,
-    teacherToken,
     candidateToken,
-    superAdminToken,
     setNow: (now: Date | null) => {
       app.setNowOverride(now ? () => now : null);
     },
   };
+}
+
+export async function createFutureRoleUserForTest(
+  db: Database,
+  orgId: string,
+  role: Extract<Role, "SuperAdmin" | "Teacher" | "Proctor">,
+  usernamePrefix: string,
+): Promise<{ user: TestUser; token: string }> {
+  const now = new Date();
+  const passwordHash = await hashPassword("password123");
+  const userRows = await db
+    .insert(schema.users)
+    .values({
+      id: randomUUID(),
+      organizationId: orgId,
+      username: `${usernamePrefix}-${uniquePrefix()}`,
+      passwordHash,
+      name: `${role} Test User`,
+      role,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  const user = userRows[0]!;
+  const token = signJWT(
+    {
+      actorId: user.id,
+      role: user.role as Role,
+      organizationId: user.organizationId,
+    },
+    getRuntimeConfig().authSecret.jwtSecret,
+  );
+  return { user, token };
 }
 
 export async function createCandidateViaApi(

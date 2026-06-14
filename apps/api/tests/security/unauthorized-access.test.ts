@@ -35,7 +35,6 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let app: ReturnType<typeof Fastify>;
   let candidateToken: string;
-  let teacherToken: string;
 
   beforeAll(async () => {
     const conn = await createDatabase(
@@ -48,12 +47,6 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
 
     const seedResult = await seed(db, hashPassword);
 
-    const teacher = (
-      await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, seedResult.users.teacherId))
-    )[0]!;
     const candidate = (
       await db
         .select()
@@ -61,11 +54,6 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
         .where(eq(schema.users.id, seedResult.users.candidateId))
     )[0]!;
 
-    teacherToken = signJWT({
-      actorId: teacher.id,
-      role: teacher.role as Role,
-      organizationId: teacher.organizationId,
-    });
     candidateToken = signJWT({
       actorId: candidate.id,
       role: candidate.role as Role,
@@ -149,18 +137,6 @@ describe("Unauthorized Access Baseline (S08-lite)", () => {
           role: "Admin",
         },
         cookies: { "auth-token": candidateToken },
-      });
-      expect(res.statusCode).toBe(403);
-      expect(res.json().error.code).toBe("PERMISSION_DENIED");
-    });
-  });
-
-  describe("AC3: Teacher cannot access admin-only endpoints", () => {
-    it("Teacher calling GET /api/admin/audit-logs returns 403", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/admin/audit-logs",
-        cookies: { "auth-token": teacherToken },
       });
       expect(res.statusCode).toBe(403);
       expect(res.json().error.code).toBe("PERMISSION_DENIED");

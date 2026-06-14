@@ -32,7 +32,7 @@ export async function verifyDemoSeed(
     .where(eq(schema.organizations.id, ids.orgId));
   const org = orgRows[0];
   assert(!!org, "Organization not found");
-  assert(org?.slug === "demo", "Organization slug should be 'demo'");
+  assert(org?.slug === "default", "Organization slug should be 'default'");
 
   // 2. Settings exist
   const settingsRows = await db
@@ -42,16 +42,13 @@ export async function verifyDemoSeed(
   const settings = settingsRows[0];
   assert(!!settings, "OrganizationSettings not found");
   assert(
-    settings?.productName === "Exam Platform",
-    "Settings productName should be 'Exam Platform'",
+    settings?.productName === "考试平台",
+    "Settings productName should be '考试平台'",
   );
 
   // 3. All users exist
   const requiredUsers = [
-    "superadmin",
     "admin",
-    "teacher1",
-    "teacher2",
     "candidate1",
     "candidate2",
     "candidate3",
@@ -97,13 +94,13 @@ export async function verifyDemoSeed(
     assert(!!profile, `CandidateProfile for '${username}' not found`);
     const fields = profile?.fields as Record<string, unknown> | undefined;
     assert(
-      !!fields?.employeeId,
-      `CandidateProfile for '${username}' missing employeeId`,
+      !!fields?.candidateNo,
+      `CandidateProfile for '${username}' missing candidateNo`,
     );
   }
 
   // 5. Candidate fields exist
-  for (const fieldName of ["employeeId", "department", "phone"]) {
+  for (const fieldName of ["candidateNo", "department"]) {
     const rows = await db
       .select()
       .from(schema.candidateFields)
@@ -200,7 +197,6 @@ export async function verifyDemoSeed(
     draft: "draft",
     published: "published",
     closed: "closed",
-    strict: "open",
   };
 
   for (const [key, expectedStatus] of Object.entries(examStatusMap)) {
@@ -222,7 +218,7 @@ export async function verifyDemoSeed(
   }
 
   // 10. Published/open/closed exams have question snapshots
-  for (const key of ["open", "published", "closed", "strict"]) {
+  for (const key of ["open", "published", "closed"]) {
     const examId = ids.exams[key];
     if (!examId) continue;
     const rows = await db
@@ -255,7 +251,7 @@ export async function verifyDemoSeed(
   }
 
   // 12. Exam totalScore = snapshot score sum
-  for (const key of ["open", "published", "closed", "strict"]) {
+  for (const key of ["open", "published", "closed"]) {
     const examId = ids.exams[key];
     if (!examId) continue;
     const rows = await db

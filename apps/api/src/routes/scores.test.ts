@@ -5,6 +5,7 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import examRoutes from "./exam.js";
@@ -293,12 +294,12 @@ describe("score routes", () => {
     });
   });
 
-  it("allows teachers to view a single attempt result", async () => {
+  it("allows admins to view a single attempt result", async () => {
     const { attemptId } = await createGradedAttempt(false);
     const response = await ctx.app.inject({
       method: "GET",
       url: `/api/scores/attempts/${attemptId}`,
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.adminToken },
     });
 
     expect(response.statusCode).toBe(200);
@@ -310,10 +311,10 @@ describe("score routes", () => {
     });
   });
 
-  it("does not expose an attempt to a teacher from another organization", async () => {
+  it("does not expose an attempt to an admin from another organization", async () => {
     const { attemptId } = await createGradedAttempt(true);
     const foreignOrganizationId = crypto.randomUUID();
-    const foreignTeacherId = crypto.randomUUID();
+    const foreignAdminId = crypto.randomUUID();
     const now = new Date();
     await ctx.db.insert(schema.organizations).values({
       id: foreignOrganizationId,
@@ -324,26 +325,29 @@ describe("score routes", () => {
       updatedAt: now,
     });
     await ctx.db.insert(schema.users).values({
-      id: foreignTeacherId,
+      id: foreignAdminId,
       organizationId: foreignOrganizationId,
-      username: `foreign-teacher-${uniquePrefix()}`,
+      username: `foreign-admin-${uniquePrefix()}`,
       passwordHash: "not-used",
-      name: "Foreign Teacher",
-      role: "Teacher",
+      name: "Foreign Admin",
+      role: "Admin",
       isActive: true,
       createdAt: now,
       updatedAt: now,
     });
-    const foreignTeacherToken = signJWT({
-      actorId: foreignTeacherId,
-      role: "Teacher",
-      organizationId: foreignOrganizationId,
-    });
+    const foreignAdminToken = signJWT(
+      {
+        actorId: foreignAdminId,
+        role: "Admin",
+        organizationId: foreignOrganizationId,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     const response = await ctx.app.inject({
       method: "GET",
       url: `/api/scores/attempts/${attemptId}`,
-      cookies: { "auth-token": foreignTeacherToken },
+      cookies: { "auth-token": foreignAdminToken },
     });
 
     expect(response.statusCode).toBe(404);
@@ -620,11 +624,14 @@ describe("J8: score list routes", () => {
       updatedAt: now,
     });
 
-    const tempToken = signJWT({
-      actorId: tempUserId,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-    });
+    const tempToken = signJWT(
+      {
+        actorId: tempUserId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+      },
+      getRuntimeConfig().authSecret.jwtSecret,
+    );
 
     // 创建一个及格和一个不及格的尝试
     await createGradedAttemptForExam(examId, true, ctx.candidateToken, false); // passed

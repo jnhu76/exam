@@ -67,12 +67,23 @@ describe("Tenant Isolation (S01)", () => {
       .where(eq(schema.organizations.id, seedResult.orgId));
     orgA = orgs[0]!;
 
-    superAdmin = (
-      await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, seedResult.users.superAdminId))
-    )[0]! as typeof superAdmin;
+    const superAdminId = randomUUID();
+    await db.insert(schema.users).values({
+      id: superAdminId,
+      organizationId: orgA.id,
+      username: `future-superadmin-${superAdminId.slice(0, 8)}`,
+      passwordHash: await hashPassword("admin123"),
+      name: "Future SuperAdmin",
+      role: "SuperAdmin",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    superAdmin = {
+      id: superAdminId,
+      organizationId: orgA.id,
+      role: "SuperAdmin",
+    };
     const candidateUser = (
       await db
         .select()

@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildTestApp } from "@exam/api/src/routes/testHelpers.js";
+import {
+  buildTestApp,
+  uniquePrefix,
+} from "@exam/api/src/routes/testHelpers.js";
 import type { TestContext } from "@exam/api/src/routes/testHelpers.js";
 import authRoutes from "@exam/api/src/routes/auth.js";
 import settingsRoutes from "@exam/api/src/routes/settings.js";
@@ -20,6 +23,7 @@ import {
   createExamViaApi,
   publishExamViaApi,
   exportResultsCsvAsAdmin,
+  createFutureRoleUserForTest,
 } from "@exam/api/src/routes/testHelpers.js";
 
 async function buildFullStackApp(): Promise<TestContext> {
@@ -51,7 +55,7 @@ describe("Smoke — user management CRUD", () => {
     await ctx.app.close();
   });
 
-  it("lists users including all roles", async () => {
+  it("lists Phase 1 users", async () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/users",
@@ -83,17 +87,17 @@ describe("Smoke — user management CRUD", () => {
       url: "/api/users",
       cookies: { "auth-token": ctx.adminToken },
     });
-    const teacher = listRes
+    const candidate = listRes
       .json()
-      .items.find((u: { role: string }) => u.role === "Teacher");
+      .items.find((u: { role: string }) => u.role === "Candidate");
     const res = await ctx.app.inject({
       method: "PATCH",
-      url: `/api/users/${teacher.id}`,
-      payload: { name: "Updated Teacher" },
+      url: `/api/users/${candidate.id}`,
+      payload: { name: "Updated Candidate" },
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().name).toBe("Updated Teacher");
+    expect(res.json().name).toBe("Updated Candidate");
   });
 });
 
@@ -106,26 +110,38 @@ describe("Smoke — organization management", () => {
     await ctx.app.close();
   });
 
-  it("lists organizations", async () => {
+  it("lists organizations with explicit future SuperAdmin fixture", async () => {
+    const superAdmin = await createFutureRoleUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "SuperAdmin",
+      "e2e-smoke-superadmin",
+    );
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/organizations",
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdmin.token },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().length).toBeGreaterThanOrEqual(1);
   });
 
-  it("creates, updates, then deletes an organization", async () => {
+  it("creates, updates, then deletes an organization with explicit future SuperAdmin fixture", async () => {
+    const superAdmin = await createFutureRoleUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "SuperAdmin",
+      "e2e-smoke-superadmin",
+    );
     const createRes = await ctx.app.inject({
       method: "POST",
       url: "/api/organizations",
       payload: {
         name: "Smoke Org",
         displayName: "Smoke Organization",
-        slug: "smoke-org",
+        slug: `smoke-org-${uniquePrefix()}`,
       },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdmin.token },
     });
     expect(createRes.statusCode).toBe(201);
     const orgId = createRes.json().id;
@@ -134,7 +150,7 @@ describe("Smoke — organization management", () => {
       method: "PATCH",
       url: `/api/organizations/${orgId}`,
       payload: { displayName: "Updated Org" },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdmin.token },
     });
     expect(updateRes.statusCode).toBe(200);
     expect(updateRes.json().displayName).toBe("Updated Org");
@@ -142,7 +158,7 @@ describe("Smoke — organization management", () => {
     const deleteRes = await ctx.app.inject({
       method: "DELETE",
       url: `/api/organizations/${orgId}`,
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdmin.token },
     });
     expect(deleteRes.statusCode).toBe(204);
   });
@@ -224,10 +240,10 @@ describe("Smoke — settings branding", () => {
     await ctx.app.close();
   });
 
-  it("gets public branding by org slug", async () => {
+  it("gets public branding for default organization", async () => {
     const res = await ctx.app.inject({
       method: "GET",
-      url: `/api/settings/branding?organizationSlug=${ctx.org.slug}`,
+      url: "/api/settings/branding",
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveProperty("productName");
@@ -418,7 +434,7 @@ describe("Smoke — RBAC role restrictions", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("teacher cannot create users", async () => {
+  it("candidate cannot create users", async () => {
     const res = await ctx.app.inject({
       method: "POST",
       url: "/api/users",
@@ -428,16 +444,16 @@ describe("Smoke — RBAC role restrictions", () => {
         name: "X",
         role: "Admin",
       },
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.candidateToken },
     });
     expect(res.statusCode).toBe(403);
   });
 
-  it("teacher can list courses", async () => {
+  it("admin can list courses", async () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/courses",
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(200);
   });

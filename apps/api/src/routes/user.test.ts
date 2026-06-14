@@ -36,14 +36,14 @@ describe("user routes", () => {
         username: `newuser-${Date.now()}`,
         password: "password123",
         name: "New User",
-        role: "Teacher",
+        role: "Admin",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.name).toBe("New User");
-    expect(body.role).toBe("Teacher");
+    expect(body.role).toBe("Admin");
     expect(body).not.toHaveProperty("passwordHash");
   });
 
@@ -55,7 +55,7 @@ describe("user routes", () => {
         username: "x",
         password: "short",
         name: "",
-        role: "Teacher",
+        role: "Admin",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
@@ -81,10 +81,10 @@ describe("user routes", () => {
       method: "POST",
       url: "/api/users",
       payload: {
-        username: ctx.teacher.username,
+        username: ctx.admin.username,
         password: "password123",
         name: "Duplicate User",
-        role: "Teacher",
+        role: "Admin",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
@@ -106,7 +106,7 @@ describe("user routes", () => {
         username: `updateuser-${Date.now()}`,
         password: "password123",
         name: "Update Me",
-        role: "Teacher",
+        role: "Admin",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
@@ -129,7 +129,7 @@ describe("user routes", () => {
         username: `deleteuser-${Date.now()}`,
         password: "password123",
         name: "Delete Me",
-        role: "Proctor",
+        role: "Admin",
       },
       cookies: { "auth-token": ctx.adminToken },
     });
@@ -168,9 +168,9 @@ describe("user routes", () => {
         username: "forbidden",
         password: "password123",
         name: "Forbidden",
-        role: "Teacher",
+        role: "Admin",
       },
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.candidateToken },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({
