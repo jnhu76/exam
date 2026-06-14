@@ -169,6 +169,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
             buildErrorResponse(
               request.id,
               "PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED",
+              { targetRole: target.role },
             ),
           );
       }

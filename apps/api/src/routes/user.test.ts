@@ -4,13 +4,14 @@ import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
+import type { Database } from "@exam/db/src/types.js";
 
 async function createCandidateUser(
-  db: typeof schema,
+  db: Database,
   orgId: string,
   username: string,
 ) {
-  const rows = await (db as any)
+  const rows = await db
     .insert(schema.users)
     .values({
       id: crypto.randomUUID(),
@@ -24,7 +25,7 @@ async function createCandidateUser(
       updatedAt: new Date(),
     })
     .returning();
-  return rows[0];
+  return rows[0]!;
 }
 
 describe("user routes", () => {
@@ -312,7 +313,7 @@ describe("user routes", () => {
   describe("POST /api/users/:id/reset-password (Candidate password reset)", () => {
     it("Admin resets Candidate password successfully", async () => {
       const candidate = await createCandidateUser(
-        ctx.db as any,
+        ctx.db,
         ctx.org.id,
         `cand-reset-${Date.now()}`,
       );
@@ -353,7 +354,7 @@ describe("user routes", () => {
 
     it("reset-password writes audit log with candidate.password_reset action", async () => {
       const candidate = await createCandidateUser(
-        ctx.db as any,
+        ctx.db,
         ctx.org.id,
         `cand-audit-${Date.now()}`,
       );
@@ -395,7 +396,7 @@ describe("user routes", () => {
 
     it("old password no longer works after reset", async () => {
       const candidate = await createCandidateUser(
-        ctx.db as any,
+        ctx.db,
         ctx.org.id,
         `cand-old-${Date.now()}`,
       );

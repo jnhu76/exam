@@ -53,9 +53,14 @@ describe("bootstrapAdmin service", () => {
     expect(result.user.username).toBe(username);
     expect(result.user.role).toBe("Admin");
     expect(result.user.isActive).toBe(true);
-    expect(result.user.passwordHash).not.toBe("StrongPass123!");
+
+    const stored = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, result.user.id));
+    expect(stored[0]!.passwordHash).not.toBe("StrongPass123!");
     expect(
-      await verifyPassword("StrongPass123!", result.user.passwordHash),
+      await verifyPassword("StrongPass123!", stored[0]!.passwordHash),
     ).toBe(true);
   });
 

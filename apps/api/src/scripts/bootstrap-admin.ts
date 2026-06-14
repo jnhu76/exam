@@ -35,7 +35,6 @@ export interface BootstrapAdminResult {
     name: string;
     role: string;
     isActive: boolean;
-    passwordHash: string;
   };
 }
 
@@ -93,7 +92,6 @@ export async function bootstrapAdmin(
       name: user.name,
       role: user.role,
       isActive: user.isActive,
-      passwordHash: user.passwordHash,
     },
   };
 }
