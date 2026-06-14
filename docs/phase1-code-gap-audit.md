@@ -29,7 +29,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Candidate enrollment / assignment | partially-implemented | Enrollment exists; start flow can auto-create enrollment. |
 | Candidate starts/saves/submits | implemented | Save and submit use row locks and protocol fields; needs blocking E2E evidence. |
 | Result visible/export | aligned-by-PR2 | Score list + export are Admin-only; export field name vs label remains for PR 4. |
-| Minimal AuditLog | partially-implemented | login.success/failure (with `unsupported_role`), publish, candidate import, submit, export exist; reset-password audit missing. |
+| Minimal AuditLog | partially-implemented | login.success/failure (with `unsupported_phase1_role`), publish, candidate import, submit, export exist; reset-password audit missing. |
 | Structured logs/requestId | partially-implemented | Global ErrorResponse has requestId; route-local errors and logger schema are incomplete. |
 | E2E artifacts/blocking CI | partially-implemented | Trace/screenshot/video configured; server.log/upload missing; CI disables E2E (PR 7 scope). |
 
@@ -43,7 +43,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 - `packages/auth/src/rbac.ts`: `ROLE_PERMISSIONS` covers Admin and Candidate only.
 - `packages/auth/src/tenantGuard.ts`: SuperAdmin platform-API branch removed; `validateTenantAccess` is now a public-endpoint passthrough.
 - `apps/api/src/plugins/tenant.ts`: `x-target-org` SuperAdmin escalation removed; tenant guard hook only enforces public-endpoint passthrough.
-- `apps/api/src/routes/auth.ts:83-241`: login resolves the default tenant slug only; rejects users whose role is not Admin or Candidate with a generic `AUTH_INVALID_CREDENTIALS` and an `unsupported_role` audit reason.
+- `apps/api/src/routes/auth.ts:83-241`: login resolves the default tenant slug only; rejects users whose role is not Admin or Candidate with a generic `AUTH_INVALID_CREDENTIALS` and an `unsupported_phase1_role` audit reason.
 - `apps/api/src/plugins/heartbeat.ts:53`: system context role is `"Admin"`.
 - `apps/api/src/routes/{auth,user,system,exam,course,question,scores,export,candidate,candidateField,settings,audit}.ts`: all admin `requireRole` are now `["Admin"]`; candidate-only `["Candidate"]`; shared score endpoint `["Candidate", "Admin"]`.
 - `apps/api/src/routes/organization.ts` and `organization.test.ts`: deleted; `organizationRoutes` is no longer registered in `server.ts`/`openapi/swagger.ts`.
@@ -83,7 +83,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 
 ### Known Residue
 
-- DB `users.role` is `text` (not a Postgres enum), so legacy SuperAdmin/Teacher/Proctor rows can still be inserted directly. They are rejected by Phase 1 login (`unsupported_role`) and cannot be created through any Phase 1 contract or UI. This is recorded as `legacy-db-residue`.
+- DB `users.role` is `text` (not a Postgres enum), so legacy SuperAdmin/Teacher/Proctor rows can still be inserted directly. They are rejected by Phase 1 login (`unsupported_phase1_role`) and cannot be created through any Phase 1 contract or UI. This is recorded as `legacy-db-residue`.
 - `runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload and is always `false` under singleTenant; multiTenant fail-fast is deferred to PR 5+/Phase 4.
 
 ## 4. Gap Table
@@ -122,8 +122,8 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Multiple org fixtures | `tenant-isolation.test.ts`, candidate tests | not Phase 1 acceptance fixture | creates extra orgs. | future-only | keep as boundary tests, not acceptance data. | PR 1 |
 | E2E orgSlug | `apps/e2e/lib/seed.ts` | no orgSlug login | E2E login sends username/password only. | aligned-by-PR1 | None (contract removed in PR 2). | PR 1 |
 | API test orgSlug | `auth.test.ts`, `audit.test.ts`, `smoke.test.ts` | no orgSlug main path | login contract no longer accepts `organizationSlug`; register-only path still uses slug as Phase 3 concern. | aligned-by-PR2 | Register-path slug review tracked under Admin bootstrap. | PR 2 |
-| SuperAdmin seed | `packages/db/src/seed.ts` | no SuperAdmin | default seed excludes SuperAdmin; Role enum/RBAC/routes/UI no longer expose SuperAdmin. | aligned-by-PR2 | Legacy DB rows possible; rejected at login as `unsupported_role`. | PR 1, PR 2 |
-| Teacher seed | `packages/db/src/seed.ts` | no Teacher seeded, exposed, or required | default seed excludes Teacher; Role enum/RBAC/routes/UI no longer expose Teacher. | aligned-by-PR2 | Legacy DB rows possible; rejected at login as `unsupported_role`. | PR 1, PR 2 |
+| SuperAdmin seed | `packages/db/src/seed.ts` | no SuperAdmin | default seed excludes SuperAdmin; Role enum/RBAC/routes/UI no longer expose SuperAdmin. | aligned-by-PR2 | Legacy DB rows possible; rejected at login as `unsupported_phase1_role`. | PR 1, PR 2 |
+| Teacher seed | `packages/db/src/seed.ts` | no Teacher seeded, exposed, or required | default seed excludes Teacher; Role enum/RBAC/routes/UI no longer expose Teacher. | aligned-by-PR2 | Legacy DB rows possible; rejected at login as `unsupported_phase1_role`. | PR 1, PR 2 |
 | Demo users | `packages/db/src/demo-seed.ts` | Admin + Candidates | demo users are Admin + Candidates only. | aligned-by-PR1 | None. | PR 1 |
 | Test helper users | `apps/api/src/routes/testHelpers.ts` | Admin + Candidate helper | default helper creates Admin + Candidate only; future-role helper is explicit. | aligned-by-PR1 | Future role tests must opt in. | PR 1 |
 | Candidate passwords | seed/demo/E2E | dev/test temp only | `candidate123`/weak defaults. | partially-aligned | production safety not enforced. | PR 1, PR 3 |
@@ -196,7 +196,7 @@ Phase 1 test/dev/E2E data should use:
 
 | Finding | Evidence | Impact | Suggested PR | Blocks Phase 1 |
 | --- | --- | --- | --- | --- |
-| Phase 1 roles conflict with code | Pre-PR2: seed/RBAC/routes/UI exposed SuperAdmin/Teacher/Proctor. Post-PR1+PR2: domain Role enum, contracts, RBAC, routes, UsersPage, default test helpers, and E2E fixtures are Admin+Candidate only. | Resolved at the product surface; legacy DB rows remain `unsupported_role` at login. | PR 1, PR 2 | Resolved for product surface |
+| Phase 1 roles conflict with code | Pre-PR2: seed/RBAC/routes/UI exposed SuperAdmin/Teacher/Proctor. Post-PR1+PR2: domain Role enum, contracts, RBAC, routes, UsersPage, default test helpers, and E2E fixtures are Admin+Candidate only. | Resolved at the product surface; legacy DB rows remain `unsupported_phase1_role` at login. | PR 1, PR 2 | Resolved for product surface |
 | Login contract still accepts organizationSlug | Pre-PR2: `LoginRequestSchema` accepted `organizationSlug`. Post-PR2: schema removed, `auth.ts` resolves only the default tenant slug, web/E2E send username/password only. | Resolved. | PR 2 | Resolved |
 | Runtime can enter forbidden multiTenant mode | `runtimeConfig.ts` still accepts `DEPLOYMENT_MODE=multiTenant` as a future-mode input; `runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload (always `false` under singleTenant); Compose may default to multiTenant. | multiTenant fail-fast and public-config field cleanup are deferred. | PR 5+/Phase 4 | Yes |
 | Seed/mock/E2E data inconsistent | PR 1 aligned default seed/demo/E2E fixtures to Admin+Candidate default org. | Main fixture baseline represents Phase 1 acceptance. | PR 1 | Resolved for fixture baseline |

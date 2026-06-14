@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import userRoutes from "./user.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
 
 describe("user routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -179,5 +179,108 @@ describe("user routes", () => {
         requestId: expect.any(String),
       },
     });
+  });
+
+  it("GET /api/users excludes legacy-role rows from items and total via repo-level filter", async () => {
+    const legacyCtx = await buildTestApp(userRoutes);
+    try {
+      await createFutureRoleUserForTest(
+        legacyCtx.db,
+        legacyCtx.org.id,
+        "Teacher",
+        `legacy-teacher-list`,
+      );
+      await createFutureRoleUserForTest(
+        legacyCtx.db,
+        legacyCtx.org.id,
+        "SuperAdmin",
+        `legacy-superadmin-list`,
+      );
+      const res = await legacyCtx.app.inject({
+        method: "GET",
+        url: "/api/users?page=1&pageSize=50",
+        cookies: { "auth-token": legacyCtx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(
+        body.items.every(
+          (u: { role: string }) => u.role === "Admin" || u.role === "Candidate",
+        ),
+      ).toBe(true);
+      expect(body.total).toBe(body.items.length);
+      expect(body.totalPages).toBe(
+        body.total === 0 ? 0 : Math.ceil(body.total / body.pageSize),
+      );
+    } finally {
+      await legacyCtx.cleanup();
+    }
+  });
+
+  it("PATCH /api/users/:id rejects self-disable with VALIDATION_ERROR + reason CANNOT_DISABLE_SELF", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/users/${ctx.admin.id}`,
+      payload: { isActive: false },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({
+      error: {
+        code: "VALIDATION_ERROR",
+        details: { reason: "CANNOT_DISABLE_SELF" },
+        requestId: expect.any(String),
+      },
+    });
+  });
+
+  it("PATCH /api/users/:id rejects disabling the last active Admin", async () => {
+    const adminCtx = await buildTestApp(userRoutes);
+    try {
+      const res = await adminCtx.app.inject({
+        method: "PATCH",
+        url: `/api/users/${adminCtx.admin.id}`,
+        payload: { isActive: false },
+        cookies: { "auth-token": adminCtx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: {
+          code: "VALIDATION_ERROR",
+          details: {
+            reason: expect.stringMatching(
+              /LAST_ACTIVE_ADMIN|CANNOT_DISABLE_SELF/,
+            ),
+          },
+          requestId: expect.any(String),
+        },
+      });
+    } finally {
+      await adminCtx.cleanup();
+    }
+  });
+
+  it("PATCH /api/users/:id allows disabling a non-last Admin when another active Admin exists", async () => {
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: "/api/users",
+      payload: {
+        username: `second-admin-${Date.now()}`,
+        password: "password123",
+        name: "Second Admin",
+        role: "Admin",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(second.statusCode).toBe(201);
+    const created = second.json();
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/users/${created.id}`,
+      payload: { isActive: false },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id: created.id, isActive: false });
   });
 });

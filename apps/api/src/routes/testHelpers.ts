@@ -22,7 +22,14 @@ import { eq } from "drizzle-orm";
 import type { Role } from "@exam/domain";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 
-export const LEGACY_ROLES = ["SuperAdmin", "Teacher", "Proctor"] as const;
+export const LEGACY_ROLES = [
+  "SuperAdmin",
+  "Teacher",
+  "Proctor",
+  "Grader",
+  "ContentManager",
+  "ResultViewer",
+] as const;
 export type LegacyRole = (typeof LEGACY_ROLES)[number];
 
 let _counter = 0;

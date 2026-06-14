@@ -11,7 +11,11 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import authRoutes from "./auth.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
-import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createFutureRoleUserForTest,
+  LEGACY_ROLES,
+} from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -337,7 +341,7 @@ describe("auth routes", () => {
   it("POST /api/auth/login rejects legacy future-role rows with generic auth failure", async () => {
     const legacyCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
     try {
-      for (const role of ["SuperAdmin", "Teacher"] as const) {
+      for (const role of LEGACY_ROLES) {
         const legacy = await createFutureRoleUserForTest(
           legacyCtx.db,
           legacyCtx.org.id,

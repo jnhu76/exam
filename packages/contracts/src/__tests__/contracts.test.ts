@@ -133,6 +133,16 @@ describe("auth contracts", () => {
     expect(parsed).not.toHaveProperty("organizationSlug");
   });
 
+  it("LoginRequestSchema strips organizationSlug if a client smuggles it in", () => {
+    const parsed = LoginRequestSchema.parse({
+      username: "admin",
+      password: "admin123",
+      organizationSlug: "default",
+    } as unknown as { username: string; password: string });
+    expect("organizationSlug" in (parsed as object)).toBe(false);
+    expect(parsed).toEqual({ username: "admin", password: "admin123" });
+  });
+
   it("RegisterRequestSchema rejects short password", () => {
     const result = RegisterRequestSchema.safeParse({
       organizationSlug: "default",

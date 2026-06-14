@@ -106,22 +106,34 @@ describe("repository tenant isolation", () => {
     expect(await courseRepo.findById(alphaContext, course.id)).toBeNull();
   });
 
-  it("Admin repository ops are scoped to organizationId (Phase 1 single-tenant)", async () => {
+  it("Admin repository ops are scoped to organizationId, not targetOrganizationId (Phase 1 single-tenant)", async () => {
     const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: `alpha-${suffix}`,
     });
-    const adminContext = createContext(alpha.id, "Admin", alpha.id);
+    const beta = await organizationRepo.create(rootContext, {
+      name: "beta",
+      displayName: "Beta",
+      slug: `beta-${suffix}`,
+    });
+    const adminContext = createContext(alpha.id, "Admin", beta.id);
 
+    const created = await courseRepo.create(adminContext, {
+      name: "Safety",
+      code: "SAFE",
+      description: "",
+    });
+    expect(created).toMatchObject({ organizationId: alpha.id });
+    expect(created.organizationId).not.toBe(beta.id);
+
+    const alphaScopedReader = createContext(alpha.id);
+    const betaScopedReader = createContext(beta.id);
     expect(
-      await courseRepo.create(adminContext, {
-        name: "Safety",
-        code: "SAFE",
-        description: "",
-      }),
-    ).toMatchObject({ organizationId: alpha.id });
+      await courseRepo.findById(alphaScopedReader, created.id),
+    ).toMatchObject({ id: created.id });
+    expect(await courseRepo.findById(betaScopedReader, created.id)).toBeNull();
   });
 
   it("filters question lookups by organizationId", async () => {

@@ -100,12 +100,24 @@ describe("UsersPage", () => {
     renderPage();
     await user.click(await screen.findByRole("button", { name: /新增用户/ }));
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toBeInTheDocument();
-    const adminOption = within(dialog).getByText("管理员");
-    expect(adminOption).toBeInTheDocument();
-    expect(within(dialog).queryByText("教师")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("监考员")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("超级管理员")).not.toBeInTheDocument();
+    const trigger = within(dialog).getByRole("combobox");
+    await user.click(trigger);
+    const adminOptions = await screen.findAllByRole("option", {
+      name: "管理员",
+    });
+    expect(adminOptions.length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.queryByRole("option", { name: "教师" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "监考员" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "超级管理员" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "阅卷员" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows validation errors for empty fields on create", async () => {

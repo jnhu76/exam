@@ -6,9 +6,12 @@ import {
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { ValidationError } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+
+const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate"] as const;
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -20,13 +23,15 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
-      const { items, total } = await repo.listPaginated(ctx, page, pageSize);
-      const supportedRoles = new Set(["Admin", "Candidate"]);
-      const visibleItems = items.filter((u) => supportedRoles.has(u.role));
-      const visibleTotal = total - (items.length - visibleItems.length);
+      const { items, total } = await repo.listPaginatedByRoles(
+        ctx,
+        PHASE1_SUPPORTED_ROLES,
+        page,
+        pageSize,
+      );
 
       return {
-        items: visibleItems.map((u) => ({
+        items: items.map((u) => ({
           id: u.id,
           organizationId: u.organizationId,
           username: u.username,
@@ -36,10 +41,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           createdAt: u.createdAt.toISOString(),
           updatedAt: u.updatedAt.toISOString(),
         })),
-        total: visibleTotal,
+        total,
         page,
         pageSize,
-        totalPages: Math.ceil(visibleTotal / pageSize),
+        totalPages: Math.ceil(total / pageSize),
       };
     },
   );
@@ -85,6 +90,35 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
+
+      const isSelf = id === ctx.actorId;
+      if (isSelf && data.isActive === false) {
+        throw new ValidationError("不能停用自己的账号", {
+          reason: "CANNOT_DISABLE_SELF",
+        });
+      }
+
+      const target = await repo.findByOrganizationAndId(ctx, id);
+      if (!target) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      const willDisableAdmin =
+        target.role === "Admin" &&
+        target.isActive &&
+        ((data.isActive !== undefined && data.isActive === false) ||
+          (data.role !== undefined && data.role !== "Admin"));
+      if (willDisableAdmin) {
+        const activeAdminCount = await repo.countActiveByRole(ctx, "Admin");
+        if (activeAdminCount <= 1) {
+          throw new ValidationError("不能停用或降级最后一位活跃管理员", {
+            reason: "LAST_ACTIVE_ADMIN",
+          });
+        }
+      }
+
       const updated = await repo.update(ctx, id, {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.role !== undefined ? { role: data.role } : {}),
