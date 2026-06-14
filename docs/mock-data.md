@@ -143,8 +143,8 @@ cand003,Temp1234,王五,CAND003,培训部
 type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring,gradingRule.fillBlankMatchMode
 single_choice,下列哪个是质数？,1,3,4,6,B,5,2,基础,all_correct_full,
 multiple_choice,哪些是偶数？,2,3,4,5,"A,C",10,2,基础,partial_half,
-true_false,HTTP 是无状态协议,,,true,5,2,网络,,
-fill_blank,HTTP 的默认端口是____,80,,,,80,5,2,网络,,exact
+true_false,HTTP 是无状态协议,,,,,true,5,2,网络,,
+fill_blank,HTTP 的默认端口是____,,,,,80,5,2,网络,,exact
 ```
 
 ### 题目 JSON 示例
@@ -197,8 +197,8 @@ fill_blank,HTTP 的默认端口是____,80,,,,80,5,2,网络,,exact
   "durationMinutes": 60,
   "openAt": "2024-06-01T09:00:00.000Z",
   "closeAt": "2024-06-01T11:00:00.000Z",
-  "passingScore": 60,
-  "totalScore": 100,
+  "passingScore": 6,
+  "totalScore": 10,
   "timingMode": "timed_window",
   "questionSelectionMode": "manual",
   "questionIds": ["q-sc-1", "q-tf-1"],

@@ -167,15 +167,15 @@ multiple_choice,哪些是成功 HTTP 状态码？,200,201,404,500,"A,B",10,3,网
 **填空题示例** (`fill_blank`):
 
 ```csv
-fill_blank,HTTP 的默认端口是____,80,,,,80,5,2,网络,,exact
-fill_blank,中国的首都是____,北京,,,,北京,5,2,地理,,exact
+fill_blank,HTTP 的默认端口是____,,,,,80,5,2,网络,,exact
+fill_blank,中国的首都是____,,,,,北京,5,2,地理,,exact
 ```
 
 **判断题示例** (`true_false`):
 
 ```csv
-true_false,HTTP 是无状态协议,,,true,5,2,网络,,
-true_false,一年一定有 366 天,,,false,5,1,常识,,
+true_false,HTTP 是无状态协议,,,,,true,5,2,网络,,
+true_false,一年一定有 366 天,,,,,false,5,1,常识,,
 ```
 
 ### 字段说明
