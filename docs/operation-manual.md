@@ -37,15 +37,24 @@ Teacher / Proctor / 权限包 / 邮件邀请 / 邮件找回密码是后续阶段
 
 **步骤**：
 
-1. 系统内部已有 default organization，无需创建组织。
-2. 创建第一个管理员账号（用户名 + 密码）。
+1. 运行数据库迁移：`pnpm --filter @exam/api migrate`
+2. 使用本地 bootstrap-admin 脚本创建第一个管理员：
+
+   ```bash
+   pnpm --filter @exam/api bootstrap:admin \
+     --username admin --password 'ChangeMe123!' --name 'System Admin'
+   ```
+
 3. 使用管理员账号登录系统。
 
 **注意事项**：
 
-- 管理员无需创建组织。
+- 系统内部已有 default organization，无需创建组织。
 - 登录只需要 username/password，不需要组织标识。
+- 第一个 Admin 通过本地 bootstrap-admin 脚本创建，不通过公开注册。
+- 如果已存在活跃 Admin，脚本会拒绝；使用 `--force` 可创建额外 Admin。
 - Phase 1 没有 SuperAdmin 操作入口。
+- Phase 1 不提供公开注册（`/auth/register` 已禁用）。
 - Admin 可以多个，是 Phase 1 当前部署内最高产品角色。
 
 ---
@@ -54,16 +63,57 @@ Teacher / Proctor / 权限包 / 邮件邀请 / 邮件找回密码是后续阶段
 
 **场景**：新增管理员或管理员忘记密码。
 
-**步骤**：
+**新增管理员**：
 
-1. 已登录 Admin 可在用户管理中创建或停用其他 Admin。
-2. 如果所有 Admin 都无法登录，在服务器本地执行 reset-password script。
-3. 本地脚本执行应记录最小 AuditLog，并在 server log 中包含 requestId / actor 或 operator 信息。
+1. 已登录 Admin 可在用户管理中创建或停用其他 Admin（`POST /users`，role=Admin）。
+2. 也可使用本地脚本：
+
+   ```bash
+   pnpm --filter @exam/api bootstrap:admin \
+     --username newadmin --password 'StrongPass123!' --name 'New Admin' --force
+   ```
+
+**Admin 忘记密码恢复**：
+
+1. 在服务器本地执行 reset-password 脚本（只能重置 Admin 密码）：
+
+   ```bash
+   pnpm --filter @exam/api reset:admin-password \
+     --username admin --password 'NewStrongPassword123!'
+   ```
+
+2. 本地脚本会记录 `admin.password_reset.local` 审计日志（不含密码）。
 
 **注意事项**：
 
-- Phase 1 不提供邮件找回密码。
+- Phase 1 不提供邮件找回密码。邮件找回密码是 Phase 3 future。
+- reset-password script 只能重置 Admin 密码；Candidate 密码由 Admin 在系统内重置。
 - reset-password script 是本地运维恢复机制，不是公网自助找回密码。
+- 本地脚本执行记录最小 AuditLog，不包含密码/hash。
+
+---
+
+### 重置考生密码
+
+**场景**：考生忘记密码，需要 Admin 重置。
+
+**步骤**：
+
+1. Admin 登录系统。
+2. 调用 `POST /api/users/:id/reset-password`，传入新密码：
+
+   ```json
+   { "newPassword": "NewCandidatePass123!" }
+   ```
+
+3. 该端点只能重置 Candidate 密码，不能重置 Admin 密码。
+
+**注意事项**：
+
+- 密码必须满足最小长度要求（8 位以上）。
+- 响应不含密码或 hash。
+- 操作会记录 `candidate.password_reset` 审计日志。
+- 考生不能自行重置他人密码。
 
 ---
 

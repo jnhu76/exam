@@ -19,8 +19,9 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | No tenant switcher | aligned-by-PR3 | Web/UI no longer exposes a switcher and CI runs with `DEPLOYMENT_MODE=singleTenant`. Resolved by PR3: `runtimeConfig.ts` now rejects `DEPLOYMENT_MODE=multiTenant` at startup (Phase 1 single-tenant only) and `buildPublicConfig` no longer emits `tenantSwitcher`/`superAdminConsole`. See `## 3 → Runtime Config`. |
 | No SuperAdmin product path | aligned-by-PR2 | `Role` enum and `RoleSchema` no longer include SuperAdmin/Teacher/Proctor; RBAC matrix is Admin + Candidate only; organization CRUD route + UI removed. Residue: legacy DB rows (see `## 3 → Known Residue`), rejected at login as `unsupported_phase1_role`. PR3 removed `exposeSuperAdmin` from the public config payload. |
 | Admin + Candidate roles | aligned-by-PR2 | Domain `Role`, contracts `RoleSchema`, RBAC, all admin route `requireRole`, web UsersPage role selector, default test helper, and E2E seed are Admin+Candidate only. |
-| Admin bootstrap | partially-implemented | `/auth/register` exists in `apps/api/src/routes/auth.ts:28-81`; bootstrap ctx role is now Admin; still requires `organizationSlug` in register payload (Phase 3 concern). |
-| Local admin reset-password script | missing | No reset script found; required by roadmap and operation manual. |
+| Admin bootstrap | aligned-by-PR4 | `/auth/register` is disabled in Phase 1 (returns `AUTH_REGISTER_DISABLED`). First Admin created via local `bootstrap:admin` script (`apps/api/src/scripts/bootstrap-admin.ts`). Script uses default org, hashes password with argon2id, refuses if active Admin exists (unless `--force`), writes `admin.bootstrap` audit log. |
+| Local admin reset-password script | aligned-by-PR4 | `reset:admin-password` script at `apps/api/src/scripts/reset-admin-password.ts`. Only resets Admin passwords; rejects Candidates. Writes `admin.password_reset.local` audit log without password/hash. |
+| Candidate password reset | aligned-by-PR4 | `POST /users/:id/reset-password` endpoint in `apps/api/src/routes/user.ts`. Admin-only; only resets Candidate passwords; rejects Admin targets with `PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED`. Writes `candidate.password_reset` audit log. |
 | Candidate create/import | aligned-by-PR2 | `requireRole(["Admin"])`; SuperAdmin/Teacher residue removed. |
 | CandidateField config | aligned-by-PR2 | `requireRole(["Admin"])`. |
 | Course create | aligned-by-PR2 | `requireRole(["Admin"])`. |
@@ -29,7 +30,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Candidate enrollment / assignment | partially-implemented | Enrollment exists; start flow can auto-create enrollment. |
 | Candidate starts/saves/submits | implemented | Save and submit use row locks and protocol fields; needs blocking E2E evidence. |
 | Result visible/export | aligned-by-PR2 | Score list + export are Admin-only; export field name vs label remains for PR 4. |
-| Minimal AuditLog | partially-implemented | login.success/failure (with `unsupported_phase1_role`), publish, candidate import, submit, export exist; reset-password audit missing. |
+| Minimal AuditLog | partially-implemented | login.success/failure (with `unsupported_phase1_role`), publish, candidate import, submit, export, `admin.bootstrap`, `admin.password_reset.local`, `candidate.password_reset` exist; route-local error audit gaps remain (PR 6). |
 | Structured logs/requestId | partially-implemented | Global ErrorResponse has requestId; route-local errors and logger schema are incomplete. |
 | E2E artifacts/blocking CI | partially-implemented | Trace/screenshot/video configured; server.log/upload missing; CI disables E2E (PR 7 scope). |
 
@@ -94,8 +95,8 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Runtime mode | `multiTenant` fail-fast | `runtimeConfig.ts`, `docker-compose.yml`, `.env.example` | aligned-by-PR3 | multiTenant rejected at startup; Compose/env default to singleTenant. | — |
 | SuperAdmin path | no SuperAdmin product path | seed, RBAC, routes, UsersPage | aligned-by-PR2 | DB residue only; no product surface. | — |
 | Teacher/Proctor roles | future only | RBAC/routes/UsersPage | aligned-by-PR2 | DB residue only. | — |
-| Admin bootstrap | default-org Admin bootstrap | `apps/api/src/routes/auth.ts:28-81` | partially-implemented | Uses org slug in register body. | PR 3 |
-| Admin recovery | local reset-password script | not found | missing | No recovery path independent of seed. | PR 3 |
+| Admin bootstrap | default-org Admin bootstrap | `apps/api/src/scripts/bootstrap-admin.ts` | aligned-by-PR4 | `/auth/register` disabled; local bootstrap-admin script creates first Admin. | — |
+| Admin recovery | local reset-password script | `apps/api/src/scripts/reset-admin-password.ts` | aligned-by-PR4 | Local script resets Admin password; Candidate reset via API. | — |
 | Seed baseline | default org + Admin/Candidates | `packages/db/src/seed.ts` | aligned-by-PR1 | Default seed creates Admin + Candidates only. | — |
 | Demo baseline | Phase 1 demo matches mock-data | `demo-seed.ts` | aligned-by-PR1 | Demo uses default org, Admin + Candidates, and avoids strict lockdown default exam. | — |
 | Candidate import | Admin-only | `candidate.ts` | aligned-by-PR2 | None. | — |
@@ -108,9 +109,10 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Phase boundary residue | no queue/archive workflow; restore backend only | attempts/exam routes | conflicting | Queue/archive product paths are exposed; restore should remain backend recovery support without Phase 2 UI/operation workflow. | PR 5 |
 | Error responses | stable code + requestId | route-local attempt errors | partially-implemented | Some errors bypass shared shape. | PR 6 |
 | Structured logs | pino fields + redaction | `server.ts` | partially-implemented | default logger only. | PR 6 |
-| AuditLog | minimal action coverage | no reset script audit | partially-implemented | reset action missing; export action naming drift. | PR 3, PR 6 |
+| AuditLog | minimal action coverage | `audit.ts`, script writers | partially-implemented-by-PR4 | `admin.bootstrap`, `admin.password_reset.local`, `candidate.password_reset` added in PR4; route-local error audit gaps remain. | PR 6 |
 | E2E CI | blocking happy/resume/flush | CI disabled | missing | E2E not blocking. | PR 7 |
 | E2E fixture | Admin + Candidate only | E2E seed/smoke | aligned-by-PR2 | None. | — |
+| Test isolation | `buildTestApp` reuses shared `exam_test` DB; some assertions couple on residue from sibling suites | `apps/api/src/routes/user.test.ts` list-pagination test | known | Pre-existing isolation coupling. See `docs/known-test-isolation-issues.md` (K-1). Reproduced on master before PR3/PR4. Not blocking; candidate for dedicated test-isolation PR or Phase 1 exit pass. | test-isolation cleanup |
 
 ## 5. Data Fixture Alignment Audit
 

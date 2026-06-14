@@ -31,3 +31,8 @@ export const UpdateUserRequestSchema = z.object({
   isActive: z.boolean().optional(),
 });
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;
+
+export const ResetPasswordRequestSchema = z.object({
+  newPassword: passwordField(),
+});
+export type ResetPasswordRequest = z.infer<typeof ResetPasswordRequestSchema>;

@@ -1,6 +1,31 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import userRoutes from "./user.js";
 import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
+import { hashPassword } from "@exam/auth/src/password.js";
+import { schema } from "@exam/db/src/schema/pg.js";
+import { eq } from "drizzle-orm";
+
+async function createCandidateUser(
+  db: typeof schema,
+  orgId: string,
+  username: string,
+) {
+  const rows = await (db as any)
+    .insert(schema.users)
+    .values({
+      id: crypto.randomUUID(),
+      organizationId: orgId,
+      username,
+      passwordHash: await hashPassword("password123"),
+      name: `Candidate ${username}`,
+      role: "Candidate",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+  return rows[0];
+}
 
 describe("user routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -282,5 +307,117 @@ describe("user routes", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ id: created.id, isActive: false });
+  });
+
+  describe("POST /api/users/:id/reset-password (Candidate password reset)", () => {
+    it("Admin resets Candidate password successfully", async () => {
+      const candidate = await createCandidateUser(
+        ctx.db as any,
+        ctx.org.id,
+        `cand-reset-${Date.now()}`,
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${candidate.id}/reset-password`,
+        payload: { newPassword: "NewCandPass456!" },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+      expect(res.body).not.toContain("NewCandPass456!");
+    });
+
+    it("Candidate cannot reset another user's password", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${ctx.admin.id}/reset-password`,
+        payload: { newPassword: "Hacked123!" },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("Admin cannot reset another Admin's password via this endpoint", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${ctx.admin.id}/reset-password`,
+        payload: { newPassword: "NewAdminPass456!" },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe(
+        "PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED",
+      );
+    });
+
+    it("reset-password writes audit log with candidate.password_reset action", async () => {
+      const candidate = await createCandidateUser(
+        ctx.db as any,
+        ctx.org.id,
+        `cand-audit-${Date.now()}`,
+      );
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${candidate.id}/reset-password`,
+        payload: { newPassword: "NewAuditPass456!" },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      let resetAudit: typeof schema.auditLogs.$inferSelect | undefined;
+      const deadline = Date.now() + 2000;
+      while (Date.now() < deadline) {
+        const auditRows = await ctx.db
+          .select()
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.targetId, candidate.id));
+        resetAudit = auditRows.find(
+          (r) => r.action === "candidate.password_reset",
+        );
+        if (resetAudit) break;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      expect(resetAudit).toBeDefined();
+      const metadata = resetAudit!.metadata as Record<string, unknown>;
+      expect(JSON.stringify(metadata)).not.toContain("NewAuditPass456!");
+      expect(JSON.stringify(metadata)).not.toContain("password");
+    });
+
+    it("reset-password requires authentication", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${ctx.candidate.id}/reset-password`,
+        payload: { newPassword: "NewPass456!" },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("old password no longer works after reset", async () => {
+      const candidate = await createCandidateUser(
+        ctx.db as any,
+        ctx.org.id,
+        `cand-old-${Date.now()}`,
+      );
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${candidate.id}/reset-password`,
+        payload: { newPassword: "NewLoginPass456!" },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const { verifyPassword } = await import("@exam/auth/src/password.js");
+      const updated = await ctx.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, candidate.id));
+      expect(
+        await verifyPassword("NewLoginPass456!", updated[0]!.passwordHash),
+      ).toBe(true);
+      expect(
+        await verifyPassword("password123", updated[0]!.passwordHash),
+      ).toBe(false);
+    });
   });
 });

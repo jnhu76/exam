@@ -2,8 +2,6 @@ import { FastifyPluginAsync } from "fastify";
 import {
   LoginRequestSchema,
   LoginResponseSchema,
-  RegisterRequestSchema,
-  RegisterResponseSchema,
   MeResponseSchema,
   ChangePasswordRequestSchema,
 } from "@exam/contracts";
@@ -16,7 +14,7 @@ import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
-import { NotFoundError, PermissionDeniedError } from "@exam/domain";
+import { NotFoundError } from "@exam/domain";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
@@ -26,58 +24,9 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
-    const data = RegisterRequestSchema.parse(request.body);
-    const userRepo = createUserRepo(fastify.db);
-    const org = await createOrganizationRepo(fastify.db).resolveBrandingTenant(
-      { purpose: "public_branding" } as PublicBrandingContext,
-      data.organizationSlug,
-    );
-    if (
-      !process.env.BOOTSTRAP_REGISTRATION_TOKEN ||
-      data.bootstrapToken !== process.env.BOOTSTRAP_REGISTRATION_TOKEN
-    ) {
-      throw new PermissionDeniedError("Bootstrap registration is disabled");
-    }
-
-    const bootstrapCtx = {
-      organizationId: org.id,
-      actorId: "bootstrap",
-      role: "Admin" as const,
-      permissions: [],
-    };
-    const existingUser = await userRepo.findByOrganizationAndUsername(
-      bootstrapCtx,
-      data.username,
-    );
-    if (existingUser) {
-      return reply
-        .code(409)
-        .send(buildErrorResponse(request.id, "USER_ALREADY_EXISTS"));
-    }
-
-    const ctx: RequestContext = {
-      actorId: "bootstrap",
-      organizationId: org.id,
-      targetOrganizationId: org.id,
-      role: "Admin",
-      permissions: [],
-      sessionId: "bootstrap",
-    };
-    const user = await userRepo.createUnique(ctx, {
-      username: data.username,
-      name: data.name,
-      passwordHash: await hashPassword(data.password),
-      role: "Admin",
-      isActive: true,
-    });
-
-    const response = RegisterResponseSchema.parse({
-      id: user.id,
-      username: user.username,
-      name: user.name,
-    });
-
-    return reply.code(201).send(response);
+    return reply
+      .code(403)
+      .send(buildErrorResponse(request.id, "AUTH_REGISTER_DISABLED"));
   });
 
   fastify.post(

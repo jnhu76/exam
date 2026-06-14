@@ -13,7 +13,9 @@
     "start": "node dist/server.js",
     "db:seed": "tsx src/seed.ts",
     "db:seed:demo": "tsx src/demo-seed.ts",
-    "db:seed:demo:verify": "tsx src/demo-seed-verify.ts"
+    "db:seed:demo:verify": "tsx src/demo-seed-verify.ts",
+    "bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts",
+    "reset:admin-password": "tsx src/scripts/reset-admin-password.ts"
   },
   "dependencies": {
     "@exam/auth": "workspace:*",
