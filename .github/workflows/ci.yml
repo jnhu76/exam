@@ -76,8 +76,15 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: E2E / Smoke tests
-        run: pnpm test:e2e
+      # E2E temporarily skipped in CI — see Phase 1.7 follow-up.
+      # The runner has no Playwright browser binaries, no API/Web server,
+      # and no DB seed wired. Re-enable after a dedicated CI job that:
+      #   1. installs `pnpm exec playwright install --with-deps chromium`
+      #   2. starts API + Web (built or via docker compose)
+      #   3. waits for http://localhost:3000 and seeds admin
+      # Tracking: docs/phase1.7/exam-lifecycle-non-e2e-closeout.md
+      # - name: E2E / Smoke tests
+      #   run: pnpm test:e2e
 
       - name: Coverage
         run: pnpm coverage
