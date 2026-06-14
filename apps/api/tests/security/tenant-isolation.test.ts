@@ -16,7 +16,6 @@ import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
 import examRoutes from "../../src/routes/exam.js";
 import systemRoutes from "../../src/routes/system.js";
-import organizationRoutes from "../../src/routes/organization.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
@@ -42,11 +41,9 @@ describe("Tenant Isolation (S01)", () => {
   let adminA: { id: string; organizationId: string; role: string };
   let adminB: { id: string; organizationId: string; role: string };
   let candidateA: { id: string; organizationId: string; role: string };
-  let superAdmin: { id: string; organizationId: string; role: string };
   let adminAToken: string;
   let adminBToken: string;
   let candidateAToken: string;
-  let superAdminToken: string;
   let app: ReturnType<typeof Fastify>;
   let examBId: string;
 
@@ -67,23 +64,6 @@ describe("Tenant Isolation (S01)", () => {
       .where(eq(schema.organizations.id, seedResult.orgId));
     orgA = orgs[0]!;
 
-    const superAdminId = randomUUID();
-    await db.insert(schema.users).values({
-      id: superAdminId,
-      organizationId: orgA.id,
-      username: `future-superadmin-${superAdminId.slice(0, 8)}`,
-      passwordHash: await hashPassword("admin123"),
-      name: "Future SuperAdmin",
-      role: "SuperAdmin",
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    superAdmin = {
-      id: superAdminId,
-      organizationId: orgA.id,
-      role: "SuperAdmin",
-    };
     const candidateUser = (
       await db
         .select()
@@ -220,11 +200,6 @@ describe("Tenant Isolation (S01)", () => {
       role: candidateA.role as Role,
       organizationId: candidateA.organizationId,
     });
-    superAdminToken = signJWT({
-      actorId: superAdmin.id,
-      role: superAdmin.role as Role,
-      organizationId: superAdmin.organizationId,
-    });
 
     app = Fastify();
     setupSecurity(app);
@@ -234,7 +209,6 @@ describe("Tenant Isolation (S01)", () => {
     await app.register(authPlugin);
     await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);
-    await app.register(organizationRoutes, { prefix: "/api" });
     await app.register(examRoutes, { prefix: "/api" });
     await app.register(systemRoutes, { prefix: "/api" });
 
@@ -335,53 +309,6 @@ describe("Tenant Isolation (S01)", () => {
     });
   });
 
-  describe("SuperAdmin cross-organization access", () => {
-    it("SuperAdmin without targetOrganizationId on org-scoped API returns 400", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": superAdminToken },
-      });
-      expect(res.statusCode).toBe(400);
-      const body = res.json();
-      expect(body.error?.code).toBe("TARGET_ORGANIZATION_REQUIRED");
-    });
-
-    it("SuperAdmin with valid targetOrganizationId can view org B data", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": superAdminToken },
-        headers: { "x-target-org": orgB.id },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("SuperAdmin with invalid targetOrganizationId returns 403", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": superAdminToken },
-        headers: { "x-target-org": "nonexistent-org-id" },
-      });
-      expect(res.statusCode).toBe(403);
-      const body = res.json();
-      expect(body.error?.code).toBe("PERMISSION_DENIED");
-      expect(body.error?.requestId).toEqual(expect.any(String));
-    });
-
-    it("SuperAdmin on platform API (GET /api/organizations) works without targetOrg", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/organizations",
-        cookies: { "auth-token": superAdminToken },
-      });
-      expect(res.statusCode).toBe(200);
-      const orgs = res.json();
-      expect(orgs.length).toBeGreaterThanOrEqual(2);
-    });
-  });
-
   describe("Public endpoint exemption", () => {
     it("GET /api/health does not require authentication", async () => {
       const res = await app.inject({
@@ -416,19 +343,6 @@ describe("Tenant Isolation (S01)", () => {
         cookies: { "auth-token": candidateAToken },
       });
       expect(res.statusCode).toBe(403);
-    });
-
-    it("GET /api/system/health allows SuperAdmin without x-target-org", async () => {
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/system/health",
-        cookies: { "auth-token": superAdminToken },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body).toHaveProperty("cpu");
-      expect(body).toHaveProperty("memory");
-      expect(body).toHaveProperty("status");
     });
   });
 });

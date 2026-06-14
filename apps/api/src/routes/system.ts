@@ -49,10 +49,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get("/system/health", {
-    preHandler: [
-      fastify.authenticate,
-      fastify.requireRole(["Admin", "SuperAdmin"]),
-    ],
+    preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     handler: async () => {
       const cpu = getCpuUsage();
       const memory = getMemoryUsage();
@@ -67,10 +64,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get("/system/dashboard", {
-    preHandler: [
-      fastify.authenticate,
-      fastify.requireRole(["Admin", "SuperAdmin"]),
-    ],
+    preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     handler: async (request) => {
       const ctx = request.ctx!;
       const statsRepo = createSystemStatsRepo(anyDb);

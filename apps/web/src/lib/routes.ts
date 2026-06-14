@@ -2,7 +2,6 @@ export const routes = {
   login: "/login",
   admin: {
     dashboard: "/admin/dashboard",
-    organizations: "/admin/organizations",
     users: "/admin/users",
     candidates: "/admin/candidates",
     settings: "/admin/settings",

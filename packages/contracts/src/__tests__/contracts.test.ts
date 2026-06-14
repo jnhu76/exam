@@ -4,7 +4,7 @@ import {
   RegisterRequestSchema,
   ChangePasswordRequestSchema,
 } from "../auth.js";
-import { CreateUserRequestSchema } from "../user.js";
+import { CreateUserRequestSchema, RoleSchema } from "../user.js";
 import { CreateCandidateRequestSchema } from "../candidate.js";
 import {
   CreateCourseRequestSchema,
@@ -125,13 +125,12 @@ describe("auth contracts", () => {
     expect(result.success).toBe(true);
   });
 
-  it("LoginRequestSchema accepts optional organizationSlug", () => {
-    const result = LoginRequestSchema.safeParse({
+  it("LoginRequestSchema does not model organizationSlug as a Phase 1 field", () => {
+    const parsed = LoginRequestSchema.parse({
       username: "admin",
       password: "admin123",
-      organizationSlug: "default",
     });
-    expect(result.success).toBe(true);
+    expect(parsed).not.toHaveProperty("organizationSlug");
   });
 
   it("RegisterRequestSchema rejects short password", () => {
@@ -657,7 +656,7 @@ describe("password policy enforcement at boundary", () => {
       username: "newuser",
       password: sevenChars,
       name: "New User",
-      role: "Teacher",
+      role: "Admin",
     });
     expect(result.success).toBe(false);
   });
@@ -667,7 +666,7 @@ describe("password policy enforcement at boundary", () => {
       username: "newuser",
       password: eightChars,
       name: "New User",
-      role: "Teacher",
+      role: "Admin",
     });
     expect(result.success).toBe(true);
   });
@@ -706,5 +705,67 @@ describe("password policy enforcement at boundary", () => {
       password: "",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("Phase 1 role model (Admin + Candidate only)", () => {
+  it("RoleSchema accepts Admin", () => {
+    expect(RoleSchema.safeParse("Admin").success).toBe(true);
+  });
+
+  it("RoleSchema accepts Candidate", () => {
+    expect(RoleSchema.safeParse("Candidate").success).toBe(true);
+  });
+
+  it("RoleSchema rejects Teacher", () => {
+    expect(RoleSchema.safeParse("Teacher").success).toBe(false);
+  });
+
+  it("RoleSchema rejects SuperAdmin", () => {
+    expect(RoleSchema.safeParse("SuperAdmin").success).toBe(false);
+  });
+
+  it("RoleSchema rejects Proctor", () => {
+    expect(RoleSchema.safeParse("Proctor").success).toBe(false);
+  });
+
+  it("CreateUserRequestSchema accepts Admin", () => {
+    const result = CreateUserRequestSchema.safeParse({
+      username: "newuser",
+      password: "password123",
+      name: "New User",
+      role: "Admin",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateUserRequestSchema rejects Teacher", () => {
+    const result = CreateUserRequestSchema.safeParse({
+      username: "newuser",
+      password: "password123",
+      name: "New User",
+      role: "Teacher",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateUserRequestSchema rejects SuperAdmin", () => {
+    const result = CreateUserRequestSchema.safeParse({
+      username: "newuser",
+      password: "password123",
+      name: "New User",
+      role: "SuperAdmin",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CreateUserRequestSchema rejects Candidate (candidates are managed via candidate routes)", () => {
+    const result = CreateUserRequestSchema.safeParse({
+      username: "newuser",
+      password: "password123",
+      name: "New User",
+      role: "Candidate",
+    });
+    expect(result.success).toBe(false);
   });
 });

@@ -9,29 +9,21 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
-import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/users",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
-      const hideSuperAdmin = getRuntimeConfig().tenancy.mode === "singleTenant";
-      const visibleItems = hideSuperAdmin
-        ? items.filter((u) => u.role !== "SuperAdmin")
-        : items;
-      const visibleTotal = hideSuperAdmin
-        ? total - (items.length - visibleItems.length)
-        : total;
+      const supportedRoles = new Set(["Admin", "Candidate"]);
+      const visibleItems = items.filter((u) => supportedRoles.has(u.role));
+      const visibleTotal = total - (items.length - visibleItems.length);
 
       return {
         items: visibleItems.map((u) => ({
@@ -55,10 +47,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/users",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -89,25 +78,13 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/users/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
-      const hideSuperAdmin = getRuntimeConfig().tenancy.mode === "singleTenant";
-      if (hideSuperAdmin) {
-        const existing = await repo.findByOrganizationAndId(ctx, id);
-        if (existing && existing.role === "SuperAdmin") {
-          return reply
-            .code(404)
-            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-        }
-      }
       const updated = await repo.update(ctx, id, {
         ...(data.name !== undefined ? { name: data.name } : {}),
         ...(data.role !== undefined ? { role: data.role } : {}),
@@ -135,24 +112,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/users/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createUserRepo(fastify.db);
-      const hideSuperAdmin = getRuntimeConfig().tenancy.mode === "singleTenant";
-      if (hideSuperAdmin) {
-        const existing = await repo.findByOrganizationAndId(ctx, id);
-        if (existing && existing.role === "SuperAdmin") {
-          return reply
-            .code(404)
-            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-        }
-      }
       const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply

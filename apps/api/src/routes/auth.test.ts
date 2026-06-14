@@ -11,7 +11,7 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import authRoutes from "./auth.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -332,5 +332,59 @@ describe("auth routes", () => {
         requestId: expect.any(String),
       },
     });
+  });
+
+  it("POST /api/auth/login rejects legacy future-role rows with generic auth failure", async () => {
+    const legacyCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      for (const role of ["SuperAdmin", "Teacher"] as const) {
+        const legacy = await createFutureRoleUserForTest(
+          legacyCtx.db,
+          legacyCtx.org.id,
+          role,
+          `legacy-${role.toLowerCase()}-login`,
+        );
+        const response = await legacyCtx.app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: {
+            username: legacy.user.username,
+            password: "password123",
+          },
+        });
+        expect(response.statusCode, `role=${role}`).toBe(401);
+        const body = response.json();
+        expect(body).toMatchObject({
+          error: {
+            code: "AUTH_INVALID_CREDENTIALS",
+            message: "用户名或密码错误",
+            requestId: expect.any(String),
+          },
+        });
+        expect(JSON.stringify(body)).not.toContain(role);
+        expect(JSON.stringify(body)).not.toContain("unsupported");
+
+        const deadline = Date.now() + 2000;
+        let auditRow: typeof schema.auditLogs.$inferSelect | undefined;
+        while (Date.now() < deadline) {
+          const rows = await legacyCtx.db
+            .select()
+            .from(schema.auditLogs)
+            .where(eq(schema.auditLogs.actorId, legacy.user.id));
+          auditRow = rows.find((r) => r.action === "login.failure");
+          if (auditRow) break;
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        expect(auditRow, `audit row for role=${role}`).toBeDefined();
+        expect(auditRow!.targetType).toBe("login");
+        expect(auditRow!.targetId).toBe(legacy.user.id);
+        const metadata = auditRow!.metadata as Record<string, unknown>;
+        expect(metadata.reason).toBe("unsupported_phase1_role");
+        expect(metadata.legacyRole).toBe(role);
+        expect(metadata.username).toBe(legacy.user.username);
+      }
+    } finally {
+      await legacyCtx.cleanup();
+    }
   });
 });

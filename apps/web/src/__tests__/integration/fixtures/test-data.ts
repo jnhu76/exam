@@ -4,14 +4,12 @@ export const mockUsers = {
     password: "password",
     name: "管理员",
     role: "Admin",
-    organizationSlug: "test-org",
   },
-  teacher: {
-    username: "teacher",
+  candidate: {
+    username: "candidate",
     password: "password",
-    name: "教师",
-    role: "Teacher",
-    organizationSlug: "test-org",
+    name: "考生",
+    role: "Candidate",
   },
 };
 

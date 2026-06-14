@@ -22,9 +22,6 @@ export interface DashboardData extends DashboardStats {
 }
 
 function getOrgId(ctx: RequestContext): string {
-  if (ctx.role === "SuperAdmin") {
-    return ctx.targetOrganizationId ?? ctx.organizationId;
-  }
   return ctx.organizationId;
 }
 

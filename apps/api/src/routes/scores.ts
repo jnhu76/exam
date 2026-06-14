@@ -120,10 +120,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id/scores",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin", "Teacher"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const examId = (request.params as any).id;
@@ -199,7 +196,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireRole(["Candidate", "Admin", "SuperAdmin", "Teacher"]),
+        fastify.requireRole(["Candidate", "Admin"]),
       ],
     },
     async (request, reply) => {

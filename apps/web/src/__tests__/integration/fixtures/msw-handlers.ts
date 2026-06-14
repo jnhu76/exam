@@ -7,13 +7,8 @@ export const authHandlers = [
     const body = (await request.json()) as {
       username: string;
       password: string;
-      organizationSlug: string;
     };
-    if (
-      body.username === "admin" &&
-      body.password === "password" &&
-      body.organizationSlug === "test-org"
-    ) {
+    if (body.username === "admin" && body.password === "password") {
       return HttpResponse.json({
         id: "user-1",
         username: "admin",

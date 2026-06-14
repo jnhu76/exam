@@ -23,7 +23,6 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 // ── Login ─────────────────────────────────────────────────────────
 
 export const LoginRequestSchema = z.object({
-  organizationSlug: z.string().min(1).max(100).optional(),
   username: z.string(),
   password: passwordLoginField(),
 });

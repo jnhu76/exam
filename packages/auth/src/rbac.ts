@@ -1,7 +1,6 @@
 import { Permission, type Role } from "@exam/domain";
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  SuperAdmin: Object.values(Permission),
   Admin: [
     Permission.MANAGE_USERS,
     Permission.MANAGE_CANDIDATE_FIELDS,
@@ -18,26 +17,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.VIEW_ALL_SCORES,
     Permission.EXPORT_SCORES,
     Permission.VIEW_SYSTEM_HEALTH,
-  ],
-  Teacher: [
-    Permission.MANAGE_COURSES,
-    Permission.CREATE_QUESTION,
-    Permission.EDIT_QUESTION,
-    Permission.DELETE_QUESTION,
-    Permission.IMPORT_QUESTIONS,
-    Permission.CREATE_EXAM,
-    Permission.EDIT_EXAM,
-    Permission.PUBLISH_EXAM,
-    Permission.ARCHIVE_EXAM,
-    Permission.DELETE_EXAM,
-    Permission.VIEW_ALL_SCORES,
-    Permission.EXPORT_SCORES,
-  ],
-  Proctor: [
-    Permission.VIEW_EXAM_ROOM,
-    Permission.EXTEND_TIME,
-    Permission.MARK_MISCONDUCT,
-    Permission.FORCE_SUBMIT,
   ],
   Candidate: [Permission.TAKE_EXAM, Permission.VIEW_OWN_SCORE],
 };

@@ -33,7 +33,7 @@ describe("repository tenant isolation", () => {
   let settingsRepo: ReturnType<typeof createSettingsRepo>;
   let courseRepo: ReturnType<typeof createCourseRepo>;
   let questionRepo: ReturnType<typeof createQuestionRepo>;
-  const rootContext = createContext("system", "SuperAdmin", "system");
+  const rootContext = createContext("system", "Admin", "system");
 
   beforeAll(async () => {
     const { db } = await getTestDb();
@@ -106,26 +106,17 @@ describe("repository tenant isolation", () => {
     expect(await courseRepo.findById(alphaContext, course.id)).toBeNull();
   });
 
-  it("requires SuperAdmin to select a target tenant explicitly", async () => {
+  it("Admin repository ops are scoped to organizationId (Phase 1 single-tenant)", async () => {
     const suffix = randomUUID().slice(0, 8);
     const alpha = await organizationRepo.create(rootContext, {
       name: "alpha",
       displayName: "Alpha",
       slug: `alpha-${suffix}`,
     });
-    const superAdminContext = createContext(alpha.id, "SuperAdmin");
+    const adminContext = createContext(alpha.id, "Admin", alpha.id);
 
-    await expect(
-      courseRepo.create(superAdminContext, {
-        name: "Safety",
-        code: "SAFE",
-        description: "",
-      }),
-    ).rejects.toThrow("targetOrganizationId");
-
-    const targetedContext = createContext(alpha.id, "SuperAdmin", alpha.id);
     expect(
-      await courseRepo.create(targetedContext, {
+      await courseRepo.create(adminContext, {
         name: "Safety",
         code: "SAFE",
         description: "",

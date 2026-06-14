@@ -22,6 +22,9 @@ import { eq } from "drizzle-orm";
 import type { Role } from "@exam/domain";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 
+export const LEGACY_ROLES = ["SuperAdmin", "Teacher", "Proctor"] as const;
+export type LegacyRole = (typeof LEGACY_ROLES)[number];
+
 let _counter = 0;
 export function uniquePrefix(): string {
   _counter++;
@@ -133,7 +136,7 @@ export async function buildTestApp(
 export async function createFutureRoleUserForTest(
   db: Database,
   orgId: string,
-  role: Extract<Role, "SuperAdmin" | "Teacher" | "Proctor">,
+  role: LegacyRole,
   usernamePrefix: string,
 ): Promise<{ user: TestUser; token: string }> {
   const now = new Date();

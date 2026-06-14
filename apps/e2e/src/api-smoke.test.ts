@@ -1,12 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  buildTestApp,
-  uniquePrefix,
-} from "@exam/api/src/routes/testHelpers.js";
+import { buildTestApp } from "@exam/api/src/routes/testHelpers.js";
 import type { TestContext } from "@exam/api/src/routes/testHelpers.js";
 import authRoutes from "@exam/api/src/routes/auth.js";
 import settingsRoutes from "@exam/api/src/routes/settings.js";
-import organizationRoutes from "@exam/api/src/routes/organization.js";
 import userRoutes from "@exam/api/src/routes/user.js";
 import candidateRoutes from "@exam/api/src/routes/candidate.js";
 import candidateFieldRoutes from "@exam/api/src/routes/candidateField.js";
@@ -23,14 +19,12 @@ import {
   createExamViaApi,
   publishExamViaApi,
   exportResultsCsvAsAdmin,
-  createFutureRoleUserForTest,
 } from "@exam/api/src/routes/testHelpers.js";
 
 async function buildFullStackApp(): Promise<TestContext> {
   const allRoutes: FastifyPluginAsync = async (fastify) => {
     await fastify.register(authRoutes, { prefix: "/api/auth" });
     await fastify.register(settingsRoutes, { prefix: "/api" });
-    await fastify.register(organizationRoutes, { prefix: "/api" });
     await fastify.register(userRoutes, { prefix: "/api" });
     await fastify.register(candidateRoutes, { prefix: "/api" });
     await fastify.register(candidateFieldRoutes, { prefix: "/api" });
@@ -98,69 +92,6 @@ describe("Smoke — user management CRUD", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Updated Candidate");
-  });
-});
-
-describe("Smoke — organization management", () => {
-  let ctx: TestContext;
-  beforeAll(async () => {
-    ctx = await buildFullStackApp();
-  });
-  afterAll(async () => {
-    await ctx.app.close();
-  });
-
-  it("lists organizations with explicit future SuperAdmin fixture", async () => {
-    const superAdmin = await createFutureRoleUserForTest(
-      ctx.db,
-      ctx.org.id,
-      "SuperAdmin",
-      "e2e-smoke-superadmin",
-    );
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/organizations",
-      cookies: { "auth-token": superAdmin.token },
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("creates, updates, then deletes an organization with explicit future SuperAdmin fixture", async () => {
-    const superAdmin = await createFutureRoleUserForTest(
-      ctx.db,
-      ctx.org.id,
-      "SuperAdmin",
-      "e2e-smoke-superadmin",
-    );
-    const createRes = await ctx.app.inject({
-      method: "POST",
-      url: "/api/organizations",
-      payload: {
-        name: "Smoke Org",
-        displayName: "Smoke Organization",
-        slug: `smoke-org-${uniquePrefix()}`,
-      },
-      cookies: { "auth-token": superAdmin.token },
-    });
-    expect(createRes.statusCode).toBe(201);
-    const orgId = createRes.json().id;
-
-    const updateRes = await ctx.app.inject({
-      method: "PATCH",
-      url: `/api/organizations/${orgId}`,
-      payload: { displayName: "Updated Org" },
-      cookies: { "auth-token": superAdmin.token },
-    });
-    expect(updateRes.statusCode).toBe(200);
-    expect(updateRes.json().displayName).toBe("Updated Org");
-
-    const deleteRes = await ctx.app.inject({
-      method: "DELETE",
-      url: `/api/organizations/${orgId}`,
-      cookies: { "auth-token": superAdmin.token },
-    });
-    expect(deleteRes.statusCode).toBe(204);
   });
 });
 

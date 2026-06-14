@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-Audit report plus PR 1 baseline-alignment notes. It compares current code against `docs/phase-roadmap.md` and `docs/SPEC.md` as the Phase 1 authorities, and records seed/demo/test fixture cleanup completed during `phase1-database-baseline-alignment`.
+Audit report plus PR 1/PR 2 baseline-alignment notes. It compares current code against `docs/phase-roadmap.md` and `docs/SPEC.md` as the Phase 1 authorities, and records seed/demo/test fixture cleanup completed during `phase1-database-baseline-alignment` and the role/auth/RBAC convergence completed during `phase1-admin-candidate-role-boundary`.
 
 Phase 1 target: single-tenant, multi-user Minimal Deliverable Exam System; one internal default organization; product roles Admin + Candidate only; no organizationSlug login; no tenant switcher; no SuperAdmin product path.
 
@@ -15,95 +15,92 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Requirement | Status | Evidence / Gap |
 | --- | --- | --- |
 | Internal default organization | partially-implemented | `packages/db/src/seed.ts:41-99` creates slug `default`; `apps/api/src/config/runtimeConfig.ts:256-259` hardcodes default slug. Production creation policy is still unclear. |
-| No organizationSlug login | partially-implemented | `packages/contracts/src/auth.ts:25-28` and `apps/api/src/routes/auth.ts:87-99` still accept `organizationSlug`, but PR 1 fixtures and E2E seed no longer send it for login. |
-| No tenant switcher | partially-implemented | CI sets singleTenant; runtime still exposes switcher when multiTenant is accepted in `runtimeConfig.ts:222-264`. |
-| No SuperAdmin product path | partially-implemented | `apps/api/src/routes/auth.ts:162-194` blocks SuperAdmin login in singleTenant, and PR 1 default seed/demo/test helpers no longer create SuperAdmin. RBAC/routes/UI still retain future-role residue for later cleanup. |
-| Admin + Candidate roles | partially-implemented | Candidate attempt routes are Candidate-only; admin APIs still allow Teacher/SuperAdmin. |
-| Admin bootstrap | partially-implemented | `/auth/register` exists in `apps/api/src/routes/auth.ts:28-81`, but requires `organizationSlug` and uses SuperAdmin ctx. |
+| No organizationSlug login | aligned-by-PR2 | `LoginRequestSchema` no longer accepts `organizationSlug`; `auth.ts` always resolves `defaultTenantSlug`; web/E2E fixtures send username/password only. |
+| No tenant switcher | partially-implemented | Web/UI no longer exposes a switcher and CI runs with `DEPLOYMENT_MODE=singleTenant`. Residue: `runtimeConfig.ts` still accepts `DEPLOYMENT_MODE=multiTenant` as a future-mode input and `runtimeConfig.tenancy.exposeSuperAdmin` is still emitted by the public config payload (always `false` under singleTenant). multiTenant fail-fast and public-config field cleanup are deferred to PR 5+/Phase 4. See `## 3 → Runtime Config` and `## 3 → Known Residue`. |
+| No SuperAdmin product path | aligned-by-PR2 | `Role` enum and `RoleSchema` no longer include SuperAdmin/Teacher/Proctor; RBAC matrix is Admin + Candidate only; organization CRUD route + UI removed. Residue: legacy DB rows (see `## 3 → Known Residue`) and `runtimeConfig.tenancy.exposeSuperAdmin` field, both deferred to PR 5+/Phase 4. |
+| Admin + Candidate roles | aligned-by-PR2 | Domain `Role`, contracts `RoleSchema`, RBAC, all admin route `requireRole`, web UsersPage role selector, default test helper, and E2E seed are Admin+Candidate only. |
+| Admin bootstrap | partially-implemented | `/auth/register` exists in `apps/api/src/routes/auth.ts:28-81`; bootstrap ctx role is now Admin; still requires `organizationSlug` in register payload (Phase 3 concern). |
 | Local admin reset-password script | missing | No reset script found; required by roadmap and operation manual. |
-| Candidate create/import | partially-implemented | Exists and writes audit; permissions still include SuperAdmin. |
-| CandidateField config | partially-implemented | CRUD/template via ctx exists; permissions still include SuperAdmin. |
-| Course create | partially-implemented | Exists; permissions include Teacher/SuperAdmin. |
-| Question CSV import | partially-implemented | Exists; PR 1 fixes the web template single-choice sample to use option ID `B`; permissions still include future roles. |
-| Exam create/publish | partially-implemented | Exists and writes `exam.publish`; Teacher/SuperAdmin permissions and archive endpoint remain. |
+| Candidate create/import | aligned-by-PR2 | `requireRole(["Admin"])`; SuperAdmin/Teacher residue removed. |
+| CandidateField config | aligned-by-PR2 | `requireRole(["Admin"])`. |
+| Course create | aligned-by-PR2 | `requireRole(["Admin"])`. |
+| Question CSV import | aligned-by-PR2 | `requireRole(["Admin"])`. |
+| Exam create/publish | aligned-by-PR2 | `requireRole(["Admin"])`; archive endpoint remains for Phase 2 cleanup. |
 | Candidate enrollment / assignment | partially-implemented | Enrollment exists; start flow can auto-create enrollment. |
 | Candidate starts/saves/submits | implemented | Save and submit use row locks and protocol fields; needs blocking E2E evidence. |
-| Result visible/export | partially-implemented | Result/export exists; Teacher/SuperAdmin permission residue and export column mismatch remain. |
-| Minimal AuditLog | partially-implemented | login failure, publish, candidate import, submit, export exist; reset-password audit missing. |
+| Result visible/export | aligned-by-PR2 | Score list + export are Admin-only; export field name vs label remains for PR 4. |
+| Minimal AuditLog | partially-implemented | login.success/failure (with `unsupported_role`), publish, candidate import, submit, export exist; reset-password audit missing. |
 | Structured logs/requestId | partially-implemented | Global ErrorResponse has requestId; route-local errors and logger schema are incomplete. |
-| E2E artifacts/blocking CI | partially-implemented | Trace/screenshot/video configured; server.log/upload missing; CI disables E2E. |
+| E2E artifacts/blocking CI | partially-implemented | Trace/screenshot/video configured; server.log/upload missing; CI disables E2E (PR 7 scope). |
 
-## 3. Current Code Evidence
+## 3. Current Code Evidence (post-PR2)
 
 ### Auth / RBAC / Session
 
-- `packages/contracts/src/auth.ts:7-13`: register requires `organizationSlug`.
-- `packages/contracts/src/auth.ts:25-28`: login accepts optional `organizationSlug`.
-- `apps/api/src/routes/auth.ts:87-99`: login resolves organization from request slug or default slug.
-- `apps/api/src/routes/auth.ts:162-194`: SuperAdmin is blocked only at login time in singleTenant.
-- `packages/domain/src/enums.ts`, `packages/contracts/src/user.ts`, and `packages/auth/src/rbac.ts`: SuperAdmin/Teacher/Proctor remain modeled and permissioned.
-- `apps/web/src/pages/admin/UsersPage.tsx:43-58,271-273`: SuperAdmin/Teacher/Proctor are visible/createable in UI.
+- `packages/domain/src/enums.ts:1-5`: `Role = { Admin, Candidate }` only.
+- `packages/contracts/src/user.ts:6`: `RoleSchema = z.enum(["Admin", "Candidate"])`; `CreateUserRequestSchema.role = z.literal("Admin")`.
+- `packages/contracts/src/auth.ts:25-29`: `LoginRequestSchema = { username, password }` (no `organizationSlug`).
+- `packages/auth/src/rbac.ts`: `ROLE_PERMISSIONS` covers Admin and Candidate only.
+- `packages/auth/src/tenantGuard.ts`: SuperAdmin platform-API branch removed; `validateTenantAccess` is now a public-endpoint passthrough.
+- `apps/api/src/plugins/tenant.ts`: `x-target-org` SuperAdmin escalation removed; tenant guard hook only enforces public-endpoint passthrough.
+- `apps/api/src/routes/auth.ts:83-241`: login resolves the default tenant slug only; rejects users whose role is not Admin or Candidate with a generic `AUTH_INVALID_CREDENTIALS` and an `unsupported_role` audit reason.
+- `apps/api/src/plugins/heartbeat.ts:53`: system context role is `"Admin"`.
+- `apps/api/src/routes/{auth,user,system,exam,course,question,scores,export,candidate,candidateField,settings,audit}.ts`: all admin `requireRole` are now `["Admin"]`; candidate-only `["Candidate"]`; shared score endpoint `["Candidate", "Admin"]`.
+- `apps/api/src/routes/organization.ts` and `organization.test.ts`: deleted; `organizationRoutes` is no longer registered in `server.ts`/`openapi/swagger.ts`.
 
 ### Runtime Config
 
-- `apps/api/src/config/runtimeConfig.ts:129-135`: accepts `DEPLOYMENT_MODE=multiTenant`.
-- `apps/api/src/config/runtimeConfig.ts:222-264`: multiTenant enables tenant switcher/SuperAdmin flags.
-- `docker-compose.yml:15`: defaults to `DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-multiTenant}`.
-- `.github/workflows/ci.yml:37-43`: CI uses `DEPLOYMENT_MODE: singleTenant`.
-- `apps/api/src/config/runtimeConfig.ts:266-270`: parses `RATE_LIMIT_DISABLED`; E2E still retries 429, so enforcement needs test.
+- `apps/api/src/config/runtimeConfig.ts`: still parses `DEPLOYMENT_MODE` for future-mode introspection; `singleTenant` keeps `exposeSuperAdmin=false` and `exposeTenantSwitcher=false`. multiTenant fail-fast remains a separate scope (PR 5+/Phase 4).
 
 ### Seed / Bootstrap / Fixtures
 
-- `packages/db/src/seed.ts:21-33`: seeds Phase 1 dev/test Admin + Candidate accounts only.
-- `packages/db/src/seed.ts:68-86`: creates default organization slug `default`.
-- `packages/db/src/demo-seed.ts`: uses the internal default organization slug `default` and Phase 1 Admin + Candidate demo users.
-- `packages/db/src/demo-seed.ts`: default demo exams avoid Phase 2-like strict lockdown/queue admission controls.
-- No local admin reset-password script found under `apps/api/src/scripts/**`, `scripts/**`, or `**/*reset*`.
+- `packages/db/src/seed.ts`: Admin + Candidate users only.
+- `packages/db/src/demo-seed.ts`: default org, Admin + Candidates only, no Phase-2 strict lockdown defaults.
+- `apps/api/src/routes/testHelpers.ts`: default helper exposes Admin + Candidate; `createFutureRoleUserForTest(LegacyRole)` is the explicit, opt-in DB-residue fixture used only by tests that exercise rejection paths.
 
-### Candidate / Import / Export
+### Web UI
 
-- `apps/api/src/routes/candidateField.ts:161-173`: template uses CandidateField via ctx.
-- `apps/api/src/routes/candidate.ts:329-425`: candidate import uses configured fields and writes audit.
-- `apps/api/src/routes/export.ts:15-18`: score export allows Admin/SuperAdmin/Teacher.
-- `apps/api/src/routes/export.ts:35-48`: export headers use CandidateField `name`, while docs examples use labels such as `编号`.
-- `apps/web/src/pages/admin/QuestionImportPage.tsx:177-183`: template uses option ID `B` for the single-choice `standardAnswer` sample.
-- `packages/import-export/src/csv.ts`: only CSV generation is shared; question CSV parsing is duplicated in web.
+- `apps/web/src/contexts/AuthContext.tsx`: login posts `{ username, password }` only.
+- `apps/web/src/pages/admin/UsersPage.tsx`: list filters to Admin/Candidate; create/edit form exposes only the Admin role; toggle is unconditional.
+- `apps/web/src/pages/admin/OrganizationsPage.tsx` and `OrganizationsPage.test.tsx`: deleted.
+- `apps/web/src/App.tsx`, `apps/web/src/components/layout/AppSidebar.tsx`, `apps/web/src/lib/{routes,pageMeta}.ts`: organization route + sidebar entry + page title removed.
 
-### Exam Runtime
+### E2E
 
-- `apps/api/src/routes/attempts.ts:619-702`: save-answer uses transaction, `findByIdForUpdate`, `clientSeq`, `baseVersion`.
-- `apps/api/src/routes/attempts.ts:751-850`: submit is idempotent, row-locked, and finalizes grading.
-- `apps/api/src/routes/attempts.ts:472`: queue endpoint is exposed.
-- `apps/api/src/routes/attempts.ts:886`: restore backend route exists as server-side recovery support; full disrupted recovery UI and operational adjudication are Phase 2.
-- `apps/api/src/routes/exam.ts:443-457`: archive endpoint is exposed; richer lifecycle is Phase 2.
+- `apps/e2e/lib/seed.ts`: login posts `{ username, password }`; seeds use Admin + Candidate.
+- `apps/e2e/src/api-smoke.test.ts`: `Smoke — organization management` describe deleted; `createFutureRoleUserForTest` no longer imported.
 
-### Observability / Audit / E2E
+### Tests Added / Updated
 
-- `apps/api/src/lib/errorResponse.ts:44-55` and `apps/api/src/plugins/errors.ts:40-65`: global requestId response path exists.
-- `apps/api/src/routes/attempts.ts:611-616,869-874`: route-local errors omit requestId.
-- `apps/api/src/server.ts:36`: default Fastify logger only; no custom logger/redaction schema found.
-- `packages/db/src/schema/pg.ts:266-277`: AuditLog table exists.
-- `apps/e2e/e2e/candidate-happy-path.spec.ts`, `resume-attempt.spec.ts`, `submit-flush.spec.ts`: target E2E tests exist.
-- `.github/workflows/ci.yml:83-86`: E2E disabled.
-- `apps/e2e/lib/seed.ts`: E2E login uses username/password only and default Phase 1 control flags.
-- `apps/e2e/src/api-smoke.test.ts`: legacy inactive smoke source was adjusted away from Teacher/SuperAdmin default assumptions; active Playwright testDir remains `apps/e2e/e2e`.
+- `packages/contracts/src/__tests__/contracts.test.ts`: `Phase 1 role model` describe asserts `RoleSchema` accepts Admin/Candidate and rejects SuperAdmin/Teacher/Proctor; `LoginRequestSchema` does not model `organizationSlug`; `CreateUserRequestSchema` accepts Admin and rejects Teacher/SuperAdmin/Candidate.
+- `packages/auth/src/rbac.test.ts`: asserts `Role` exports Admin+Candidate only and that legacy roles return empty permissions.
+- `apps/api/src/routes/auth.test.ts`: `POST /api/auth/login rejects legacy future-role rows with generic auth failure` covers SuperAdmin and Teacher legacy DB rows.
+- `apps/api/src/routes/audit.test.ts`: rebased onto the default organization + scoped reads; cross-org audit metadata test now reflects single-tenant `organizationId` storage.
+- `apps/api/tests/security/tenant-isolation.test.ts`: SuperAdmin describe + cross-org assertion removed.
+- `apps/api/tests/security/rbac-matrix.test.ts`: AC4 redefined as “organizations API removed in Phase 1”.
+- `apps/web/src/pages/admin/UsersPage.test.tsx`: rewritten to assert Admin-only selector and Candidate filtering.
+- `apps/web/src/components/layout/layout.test.tsx`: SuperAdmin/Teacher describe blocks removed.
+
+### Known Residue
+
+- DB `users.role` is `text` (not a Postgres enum), so legacy SuperAdmin/Teacher/Proctor rows can still be inserted directly. They are rejected by Phase 1 login (`unsupported_role`) and cannot be created through any Phase 1 contract or UI. This is recorded as `legacy-db-residue`.
+- `runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload and is always `false` under singleTenant; multiTenant fail-fast is deferred to PR 5+/Phase 4.
 
 ## 4. Gap Table
 
 | Area | Phase 1 Requirement | Current Evidence | Status | Gap | Suggested PR |
 | --- | --- | --- | --- | --- | --- |
-| Login contract | username/password only | auth contract, auth route, E2E seed | partially-implemented | API contract/route still accept organizationSlug, but PR 1 fixtures/E2E seed no longer depend on it. | PR 2 |
-| Runtime mode | `multiTenant` fail-fast | `runtimeConfig.ts`, `docker-compose.yml` | conflicting | multiTenant accepted and Compose defaults to it. | PR 2 |
-| SuperAdmin path | no SuperAdmin product path | seed, RBAC, routes, UsersPage | conflicting | Login guard is insufficient; seed/UI/API still expose it. | PR 1, PR 2 |
-| Teacher/Proctor roles | future only | RBAC/routes/UsersPage | conflicting | Teacher/Proctor are createable/authorized. | PR 2, PR 4 |
-| Admin bootstrap | default-org Admin bootstrap | `apps/api/src/routes/auth.ts:28-81` | partially-implemented | Uses org slug and SuperAdmin ctx. | PR 3 |
+| Login contract | username/password only | auth contract, auth route, E2E seed, web client | aligned-by-PR2 | None. | — |
+| Runtime mode | `multiTenant` fail-fast | `runtimeConfig.ts`, `docker-compose.yml` | conflicting | multiTenant accepted and Compose defaults to it. | PR 5+ |
+| SuperAdmin path | no SuperAdmin product path | seed, RBAC, routes, UsersPage | aligned-by-PR2 | DB residue only; no product surface. | — |
+| Teacher/Proctor roles | future only | RBAC/routes/UsersPage | aligned-by-PR2 | DB residue only. | — |
+| Admin bootstrap | default-org Admin bootstrap | `apps/api/src/routes/auth.ts:28-81` | partially-implemented | Uses org slug in register body. | PR 3 |
 | Admin recovery | local reset-password script | not found | missing | No recovery path independent of seed. | PR 3 |
-| Seed baseline | default org + Admin/Candidates | `packages/db/src/seed.ts` | aligned-by-PR1 | Default seed creates Admin + Candidates only. | PR 1 |
-| Demo baseline | Phase 1 demo matches mock-data | `demo-seed.ts` | aligned-by-PR1 | Demo uses default org, Admin + Candidates, and avoids strict lockdown default exam. | PR 1 |
-| Candidate import | Admin-only | `candidate.ts` | partially-implemented | SuperAdmin allowed. | PR 4 |
-| Question import | Admin-only | `question.ts` | conflicting | Teacher/SuperAdmin allowed. | PR 4 |
-| Result export | Admin-only | `export.ts` | conflicting | Teacher/SuperAdmin can export. | PR 4 |
-| CSV samples | match importer | `QuestionImportPage.tsx` | aligned-by-PR1 | single-choice standardAnswer sample now uses option ID `B`. | PR 1 |
+| Seed baseline | default org + Admin/Candidates | `packages/db/src/seed.ts` | aligned-by-PR1 | Default seed creates Admin + Candidates only. | — |
+| Demo baseline | Phase 1 demo matches mock-data | `demo-seed.ts` | aligned-by-PR1 | Demo uses default org, Admin + Candidates, and avoids strict lockdown default exam. | — |
+| Candidate import | Admin-only | `candidate.ts` | aligned-by-PR2 | None. | — |
+| Question import | Admin-only | `question.ts` | aligned-by-PR2 | None. | — |
+| Result export | Admin-only | `export.ts` | aligned-by-PR2 | Field-name vs label still pending. | PR 4 |
 | Export columns | CandidateField contract stable | `export.ts`, docs | partially-implemented | name vs label mismatch. | PR 4 |
 | Assignment | assigned candidates only | start flow | partially-implemented | auto-enrollment can bypass assignment. | PR 5 |
 | Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
@@ -113,7 +110,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Structured logs | pino fields + redaction | `server.ts` | partially-implemented | default logger only. | PR 6 |
 | AuditLog | minimal action coverage | no reset script audit | partially-implemented | reset action missing; export action naming drift. | PR 3, PR 6 |
 | E2E CI | blocking happy/resume/flush | CI disabled | missing | E2E not blocking. | PR 7 |
-| E2E fixture | Admin + Candidate only | E2E seed/smoke | conflicting | orgSlug/SuperAdmin/Teacher residue. | PR 1, PR 7 |
+| E2E fixture | Admin + Candidate only | E2E seed/smoke | aligned-by-PR2 | None. | — |
 
 ## 5. Data Fixture Alignment Audit
 
@@ -123,10 +120,10 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Seed org | `packages/db/src/seed.ts` | default org only | creates slug `default` with Admin + Candidates. | aligned-by-PR1 | None. | PR 1 |
 | Demo org | `packages/db/src/demo-seed.ts` | default org fixture | creates slug `default`. | aligned-by-PR1 | None. | PR 1 |
 | Multiple org fixtures | `tenant-isolation.test.ts`, candidate tests | not Phase 1 acceptance fixture | creates extra orgs. | future-only | keep as boundary tests, not acceptance data. | PR 1 |
-| E2E orgSlug | `apps/e2e/lib/seed.ts` | no orgSlug login | E2E login sends username/password only. | aligned-by-PR1 | Contract still accepts slug until PR 2. | PR 1 |
-| API test orgSlug | `auth.test.ts`, `audit.test.ts`, `smoke.test.ts` | no orgSlug main path | default login tests avoid slug; register/audit legacy/future tests may still exercise slug-specific paths. | partially-aligned-by-PR1 | remove contract/path support in PR 2. | PR 2 |
-| SuperAdmin seed | `packages/db/src/seed.ts` | no SuperAdmin | default seed excludes SuperAdmin. | aligned-by-PR1 | RBAC/routes/UI residue remains. | PR 1 |
-| Teacher seed | `packages/db/src/seed.ts` | no Teacher seeded, exposed, or required | default seed excludes Teacher. | aligned-by-PR1 | RBAC/routes/UI residue remains. | PR 1 |
+| E2E orgSlug | `apps/e2e/lib/seed.ts` | no orgSlug login | E2E login sends username/password only. | aligned-by-PR1 | None (contract removed in PR 2). | PR 1 |
+| API test orgSlug | `auth.test.ts`, `audit.test.ts`, `smoke.test.ts` | no orgSlug main path | login contract no longer accepts `organizationSlug`; register-only path still uses slug as Phase 3 concern. | aligned-by-PR2 | Register-path slug review tracked under Admin bootstrap. | PR 2 |
+| SuperAdmin seed | `packages/db/src/seed.ts` | no SuperAdmin | default seed excludes SuperAdmin; Role enum/RBAC/routes/UI no longer expose SuperAdmin. | aligned-by-PR2 | Legacy DB rows possible; rejected at login as `unsupported_role`. | PR 1, PR 2 |
+| Teacher seed | `packages/db/src/seed.ts` | no Teacher seeded, exposed, or required | default seed excludes Teacher; Role enum/RBAC/routes/UI no longer expose Teacher. | aligned-by-PR2 | Legacy DB rows possible; rejected at login as `unsupported_role`. | PR 1, PR 2 |
 | Demo users | `packages/db/src/demo-seed.ts` | Admin + Candidates | demo users are Admin + Candidates only. | aligned-by-PR1 | None. | PR 1 |
 | Test helper users | `apps/api/src/routes/testHelpers.ts` | Admin + Candidate helper | default helper creates Admin + Candidate only; future-role helper is explicit. | aligned-by-PR1 | Future role tests must opt in. | PR 1 |
 | Candidate passwords | seed/demo/E2E | dev/test temp only | `candidate123`/weak defaults. | partially-aligned | production safety not enforced. | PR 1, PR 3 |
@@ -137,7 +134,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Question web template | `QuestionImportPage.tsx:177-183` | valid backend sample | uses option id `B`. | aligned-by-PR1 | None. | PR 1 |
 | Mock JSON questions | `docs/mock-data.md:150-183` | clear executable fixture or illustrative sample | omits attachments/gradingRule required by DB. | partially-aligned | clarify or align with schema. | PR 1 |
 | Phase 2 controls | `demo-seed.ts`, E2E seed | not Phase 1 default | default demo/E2E fixtures avoid queue/restrictIp/lockdown dependence. | aligned-by-PR1 | Product endpoints still need PR 5 cleanup. | PR 1, PR 5 |
-| Result export fixture | `export.ts`, docs examples | Admin-only, CandidateField columns | permissions allow Teacher/SuperAdmin; columns use names. | conflicting | permission and column contract mismatch. | PR 4 |
+| Result export fixture | `export.ts`, docs examples | Admin-only, CandidateField columns | export route is now Admin-only; columns still use field names rather than labels. | partially-aligned-by-PR2 | Field-name vs label contract still pending. | PR 4 |
 | Root fixture dirs | `seed/**`, `demo/**`, `fixtures/**`, `test-data/**` | scan if present | not found. | not-found | no action. | PR 0 |
 
 ## 6. Database Baseline Alignment Audit
@@ -199,12 +196,12 @@ Phase 1 test/dev/E2E data should use:
 
 | Finding | Evidence | Impact | Suggested PR | Blocks Phase 1 |
 | --- | --- | --- | --- | --- |
-| Phase 1 roles conflict with code | Seed/RBAC/routes/UI expose SuperAdmin/Teacher/Proctor. | Users and tests can exercise non-Phase 1 paths, hiding Admin/Candidate gaps. | PR 1, PR 2, PR 4 | Yes |
-| Login contract still accepts organizationSlug | `LoginRequestSchema` accepts `organizationSlug`, though PR 1 E2E/default fixtures no longer send it for login. | Cannot fully prove no organizationSlug login until contract/route support is removed. | PR 2, PR 7 | Yes |
-| Runtime can enter forbidden multiTenant mode | `runtimeConfig.ts` accepts multiTenant; Compose defaults to it. | Production compose can boot in Phase 4-only mode. | PR 2 | Yes |
-| Seed/mock/E2E data inconsistent | PR 1 aligns default seed/demo/E2E fixtures to Admin+Candidate default org. | Main fixture baseline now represents Phase 1 acceptance; remaining residue is in auth/RBAC/UI/product paths. | PR 1 | Resolved for fixture baseline |
+| Phase 1 roles conflict with code | Pre-PR2: seed/RBAC/routes/UI exposed SuperAdmin/Teacher/Proctor. Post-PR1+PR2: domain Role enum, contracts, RBAC, routes, UsersPage, default test helpers, and E2E fixtures are Admin+Candidate only. | Resolved at the product surface; legacy DB rows remain `unsupported_role` at login. | PR 1, PR 2 | Resolved for product surface |
+| Login contract still accepts organizationSlug | Pre-PR2: `LoginRequestSchema` accepted `organizationSlug`. Post-PR2: schema removed, `auth.ts` resolves only the default tenant slug, web/E2E send username/password only. | Resolved. | PR 2 | Resolved |
+| Runtime can enter forbidden multiTenant mode | `runtimeConfig.ts` still accepts `DEPLOYMENT_MODE=multiTenant` as a future-mode input; `runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload (always `false` under singleTenant); Compose may default to multiTenant. | multiTenant fail-fast and public-config field cleanup are deferred. | PR 5+/Phase 4 | Yes |
+| Seed/mock/E2E data inconsistent | PR 1 aligned default seed/demo/E2E fixtures to Admin+Candidate default org. | Main fixture baseline represents Phase 1 acceptance. | PR 1 | Resolved for fixture baseline |
 | Missing admin recovery path | No reset-password script found. | Production lockout recovery relies on weak/default seed or manual DB edits. | PR 3 | Yes |
-| Import/export permission residue | Candidate/question/export routes allow SuperAdmin/Teacher. | Future roles can mutate/export Phase 1 data. | PR 4 | Yes |
+| Import/export permission residue | Pre-PR2: candidate/question/export routes allowed SuperAdmin/Teacher. Post-PR2: all admin routes use `requireRole(["Admin"])`; export field-name vs label contract remains. | Permission residue resolved; export field contract still pending. | PR 4 | Resolved for permissions |
 | Phase 2 endpoints exposed in current runtime | queue and archive routes remain exposed; restore exists as backend recovery support. | Users/tests may depend on Phase 2 operation behavior before product scope. | PR 5 | Partially |
 | RequestId/logging incomplete | Route-local errors omit requestId; logger has no standard fields/redaction. | Poor diagnosis and sensitive logging risk. | PR 6 | Yes for release hardening |
 | E2E disabled in CI | `.github/workflows/ci.yml:83-86`. | Phase 1 acceptance signals are not blocking. | PR 7 | Yes |

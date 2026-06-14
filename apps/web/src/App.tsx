@@ -16,7 +16,6 @@ import { getDocumentTitle } from "@/lib/pageMeta";
 import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { SettingsPage } from "@/pages/admin/SettingsPage";
-import { OrganizationsPage } from "@/pages/admin/OrganizationsPage";
 import { CandidateFieldsPage } from "@/pages/admin/CandidateFieldsPage";
 import { UsersPage } from "@/pages/admin/UsersPage";
 import { CandidatesPage } from "@/pages/admin/CandidatesPage";
@@ -46,7 +45,6 @@ export function AppRoutes() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="system" element={<SystemHealthPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="organizations" element={<OrganizationsPage />} />
         <Route path="candidate-fields" element={<CandidateFieldsPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="candidates" element={<CandidatesPage />} />

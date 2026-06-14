@@ -205,7 +205,7 @@ describe("边界输入测试 - 日期时间字段", () => {
 
 describe("边界输入测试 - 枚举字段", () => {
   const enumSchema = z.object({
-    role: z.enum(["Admin", "Teacher", "Candidate", "SuperAdmin"]),
+    role: z.enum(["Admin", "Candidate"]),
     status: z.enum(["draft", "published", "open", "closed", "archived"]),
   });
 

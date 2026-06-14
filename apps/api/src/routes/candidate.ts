@@ -123,10 +123,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidates",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -161,10 +158,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/candidates",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -249,10 +243,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/candidates/:id",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -304,10 +295,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/candidates/import",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Admin", "SuperAdmin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
       config: {
         rateLimit: {
           max: 10,

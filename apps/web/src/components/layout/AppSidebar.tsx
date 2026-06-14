@@ -1,9 +1,7 @@
-import { useMemo } from "react";
 import type { MeResponse } from "@exam/contracts";
 import { Role } from "@exam/domain";
 import {
   BookOpen,
-  Building2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -94,17 +92,8 @@ export function AppSidebar({
   onCollapse,
   onLogout,
 }: AppSidebarProps) {
-  const showManagement =
-    user.role === Role.Admin || user.role === Role.SuperAdmin;
-  const management = useMemo(
-    () => [
-      ...(user.role === Role.SuperAdmin
-        ? [{ label: "机构管理", to: "/admin/organizations", icon: Building2 }]
-        : []),
-      ...managementItems,
-    ],
-    [user.role],
-  );
+  const showManagement = user.role === Role.Admin;
+  const management = managementItems;
 
   const initials = user.name.slice(0, 2);
 
