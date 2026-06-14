@@ -9,9 +9,13 @@
  * Design rules (Phase 1.7 CONFIG-BASELINE):
  * - Only infrastructure + mode config lives here.
  * - Business rules, RBAC matrices, and per-route settings are NOT config.
- * - Secrets (JWT_SECRET, DATABASE_URL) are validated in their owning modules.
+ * - APP_MODE is the authoritative run-mode; NODE_ENV is a fallback/build signal.
+ * - production must fail fast on missing JWT_SECRET / DATABASE_URL.
  */
 
+import { z } from "zod";
+
+export type AppMode = "development" | "test" | "e2e" | "ci" | "production";
 export type AppEnv = "development" | "test" | "production";
 export type DeploymentMode = "singleTenant" | "multiTenant";
 
@@ -44,16 +48,64 @@ export interface SecurityConfig {
   cspEnabled: boolean;
 }
 
+export interface DatabaseConfig {
+  url: string;
+}
+
+export interface AuthSecretConfig {
+  jwtSecret: string;
+  cookieSecure: boolean;
+}
+
+export interface CorsConfig {
+  origin: string | string[];
+}
+
+export interface FeaturesConfig {
+  restoreFrontend: boolean;
+  manualExamOpenClose: boolean;
+  liveScoreList: boolean;
+}
+
+export interface HeartbeatConfig {
+  scanIntervalMs: number;
+  timeoutMs: number;
+}
+
 export interface AppRuntimeConfig {
+  app: {
+    mode: AppMode;
+    isProduction: boolean;
+    isTestLike: boolean;
+  };
   env: AppEnv;
   mode: DeploymentMode;
   port: number;
   host: string;
+  database: DatabaseConfig;
+  authSecret: AuthSecretConfig;
+  cors: CorsConfig;
+  features: FeaturesConfig;
+  heartbeat: HeartbeatConfig;
   apiReference: ApiReferenceConfig;
   tenancy: TenancyConfig;
   auth: AuthConfig;
   rateLimit: RateLimitConfig;
   security: SecurityConfig;
+}
+
+const APP_MODES = ["development", "test", "e2e", "ci", "production"] as const;
+
+const DEFAULT_JWT_SECRET = "development-only-change-me";
+
+function parseAppMode(value: string | undefined): AppMode {
+  if (value && (APP_MODES as readonly string[]).includes(value)) {
+    return value as AppMode;
+  }
+  // Fallback: infer from NODE_ENV (build/toolchain signal), not business authority.
+  if (process.env.NODE_ENV === "production") return "production";
+  if (process.env.NODE_ENV === "test") return "test";
+  return "development";
 }
 
 function parseAppEnv(value: string | undefined): AppEnv {
@@ -71,21 +123,85 @@ function isTruthy(value: string | undefined): boolean {
   return value === "true" || value === "1";
 }
 
+const positiveIntSchema = z
+  .union([z.string(), z.number()])
+  .transform((v) => Number(v))
+  .pipe(z.number().int().positive());
+
+function resolveJwtSecret(mode: AppMode): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+  if (mode === "production") {
+    throw new Error("JWT_SECRET is required in production");
+  }
+  return DEFAULT_JWT_SECRET;
+}
+
+function resolveDatabaseUrl(mode: AppMode): string {
+  if (mode === "test" || mode === "e2e" || mode === "ci") {
+    return (
+      process.env.TEST_DATABASE_URL ??
+      "postgresql://exam:exam@localhost:5432/exam_test"
+    );
+  }
+  const url = process.env.DATABASE_URL;
+  if (!url && mode === "production") {
+    throw new Error("DATABASE_URL is required in production");
+  }
+  return url ?? "postgresql://exam:exam@localhost:5432/exam";
+}
+
+function resolveCorsOrigin(mode: AppMode): string | string[] {
+  if (mode === "production") {
+    const raw = process.env.CORS_ORIGIN;
+    if (!raw) {
+      // CORS_ORIGIN is required in production; fall through to empty list
+      // which @fastify/cors treats as no-reflect. The caller should fail.
+      return [];
+    }
+    return raw.includes(",") ? raw.split(",").map((s) => s.trim()) : raw;
+  }
+  return process.env.CORS_ORIGIN || "http://localhost:5173";
+}
+
 function buildConfig(): AppRuntimeConfig {
+  const mode = parseAppMode(process.env.APP_MODE);
+  const isProduction = mode === "production";
+  const isTestLike = mode === "test" || mode === "e2e" || mode === "ci";
   const env = parseAppEnv(process.env.NODE_ENV);
-  const mode = parseDeploymentMode(process.env.DEPLOYMENT_MODE);
+  const deploymentMode = parseDeploymentMode(process.env.DEPLOYMENT_MODE);
 
   const apiReferenceEnabled =
-    isTruthy(process.env.API_DOCS_ENABLED) && env !== "production";
+    isTruthy(process.env.API_DOCS_ENABLED) && !isProduction;
 
-  const exposeSuperAdmin = mode === "multiTenant";
-  const exposeTenantSwitcher = mode === "multiTenant";
+  const exposeSuperAdmin = deploymentMode === "multiTenant";
+  const exposeTenantSwitcher = deploymentMode === "multiTenant";
+
+  const scanIntervalMs = positiveIntSchema.parse(
+    process.env.HEARTBEAT_SCAN_INTERVAL_MS ?? "30000",
+  );
+  const timeoutMs = positiveIntSchema.parse(
+    process.env.HEARTBEAT_TIMEOUT_MS ?? "60000",
+  );
 
   return {
+    app: { mode, isProduction, isTestLike },
     env,
-    mode,
+    mode: deploymentMode,
     port: Number(process.env.APP_PORT) || 3000,
     host: process.env.HOST || "0.0.0.0",
+    database: { url: resolveDatabaseUrl(mode) },
+    authSecret: {
+      jwtSecret: resolveJwtSecret(mode),
+      cookieSecure: isProduction || isTruthy(process.env.COOKIE_SECURE),
+    },
+    cors: { origin: resolveCorsOrigin(mode) },
+    features: {
+      restoreFrontend: isTruthy(process.env.FEATURE_RESTORE_FRONTEND),
+      manualExamOpenClose: isTruthy(process.env.FEATURE_MANUAL_EXAM_OPEN_CLOSE),
+      liveScoreList: isTruthy(process.env.FEATURE_LIVE_SCORE_LIST),
+    },
+    heartbeat: { scanIntervalMs, timeoutMs },
     apiReference: {
       enabled: apiReferenceEnabled,
       uiPath: "/_dev/api-reference",
@@ -93,7 +209,7 @@ function buildConfig(): AppRuntimeConfig {
       staticCSP: true,
     },
     tenancy: {
-      mode,
+      mode: deploymentMode,
       defaultTenantSlug: "default",
       exposeTenantSwitcher,
       exposeSuperAdmin,

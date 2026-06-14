@@ -8,7 +8,13 @@ import {
   getRuntimeConfig,
 } from "../config/runtimeConfig.js";
 
-const ENV_KEYS = ["API_DOCS_ENABLED", "NODE_ENV", "DEPLOYMENT_MODE"] as const;
+const ENV_KEYS = [
+  "API_DOCS_ENABLED",
+  "NODE_ENV",
+  "DEPLOYMENT_MODE",
+  "JWT_SECRET",
+  "DATABASE_URL",
+] as const;
 
 async function buildAppWithDocs(
   env: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>,
@@ -167,6 +173,8 @@ describe("registerOpenApiDocs", () => {
       const app = await buildAppWithDocs({
         API_DOCS_ENABLED: "true",
         NODE_ENV: "production",
+        JWT_SECRET: "test-secret",
+        DATABASE_URL: "postgresql://test:test@localhost:5432/test",
       });
       try {
         const response = await app.inject({
@@ -183,6 +191,8 @@ describe("registerOpenApiDocs", () => {
       const app = await buildAppWithDocs({
         API_DOCS_ENABLED: "true",
         NODE_ENV: "production",
+        JWT_SECRET: "test-secret",
+        DATABASE_URL: "postgresql://test:test@localhost:5432/test",
       });
       try {
         const response = await app.inject({

@@ -22,6 +22,7 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 import { recordAudit } from "./audit.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post("/register", async (request, reply) => {
@@ -161,9 +162,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
-        secure:
-          process.env.NODE_ENV === "production" ||
-          process.env.COOKIE_SECURE === "true",
+        secure: getRuntimeConfig().authSecret.cookieSecure,
         sameSite: "strict",
         maxAge: 24 * 60 * 60,
         path: "/",

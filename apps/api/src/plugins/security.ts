@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -32,7 +33,7 @@ function originOf(request: FastifyRequest): string | null {
   return null;
 }
 
-function buildCsp(): string {
+function buildCsp(isProduction: boolean, cookieSecure: boolean): string {
   const baseDirectives = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -43,15 +44,14 @@ function buildCsp(): string {
     "connect-src 'self'",
     "form-action 'self'",
   ];
-  const isProd = process.env.NODE_ENV === "production";
-  const scriptSrc = isProd
+  const scriptSrc = isProduction
     ? "script-src 'self'"
     : "script-src 'self' 'unsafe-inline'";
   // style-src keeps 'unsafe-inline' because shadcn/ui + cmdk emit inline style
   // attributes at runtime; revisit in Phase2 when we audit runtime style usage.
   const styleSrc = "style-src 'self' 'unsafe-inline'";
   const directives = [...baseDirectives, scriptSrc, styleSrc];
-  if (process.env.COOKIE_SECURE === "true") {
+  if (cookieSecure) {
     directives.push("upgrade-insecure-requests");
   }
   return directives.join("; ");
@@ -75,6 +75,10 @@ function buildPermissionsPolicy(): string {
 }
 
 export default function setupSecurity(app: FastifyInstance): void {
+  const config = getRuntimeConfig();
+  const isProduction = config.app.isProduction;
+  const cookieSecure = config.authSecret.cookieSecure;
+
   app.addContentTypeParser(
     "application/json",
     { parseAs: "string" },
@@ -93,7 +97,7 @@ export default function setupSecurity(app: FastifyInstance): void {
   );
 
   const allowedOrigins = readAllowedOrigins();
-  const csrfActive = process.env.NODE_ENV === "production";
+  const csrfActive = isProduction;
   if (csrfActive && allowedOrigins.length === 0) {
     app.log.warn(
       "CSRF Origin enforcement fail-closed in production: APP_ORIGIN/ALLOWED_ORIGINS not configured",
@@ -131,8 +135,11 @@ export default function setupSecurity(app: FastifyInstance): void {
     reply.header("X-XSS-Protection", "0");
     reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
     reply.header("Permissions-Policy", buildPermissionsPolicy());
-    reply.header("Content-Security-Policy", buildCsp());
-    if (process.env.COOKIE_SECURE === "true") {
+    reply.header(
+      "Content-Security-Policy",
+      buildCsp(isProduction, cookieSecure),
+    );
+    if (cookieSecure) {
       reply.header(
         "Strict-Transport-Security",
         "max-age=31536000; includeSubDomains",

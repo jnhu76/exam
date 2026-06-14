@@ -10,6 +10,7 @@ import {
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import type { RequestContext } from "@exam/domain";
 import authRoutes from "./auth.js";
+import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
@@ -33,6 +34,7 @@ describe("auth routes", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    resetRuntimeConfigForTest();
   });
 
   it("POST /api/auth/login authenticates within the requested tenant", async () => {
@@ -52,6 +54,7 @@ describe("auth routes", () => {
 
   it("POST /api/auth/login sets Secure cookie when COOKIE_SECURE=true", async () => {
     vi.stubEnv("COOKIE_SECURE", "true");
+    resetRuntimeConfigForTest();
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
@@ -72,6 +75,7 @@ describe("auth routes", () => {
   it("POST /api/auth/login omits Secure flag outside production when COOKIE_SECURE!=true", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("COOKIE_SECURE", "false");
+    resetRuntimeConfigForTest();
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
@@ -92,7 +96,9 @@ describe("auth routes", () => {
   it("POST /api/auth/login sets Secure cookie in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("JWT_SECRET", "test-production-secret");
+    vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
     vi.stubEnv("COOKIE_SECURE", "false");
+    resetRuntimeConfigForTest();
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",

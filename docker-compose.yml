@@ -7,6 +7,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam}
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
+      APP_MODE: production
       APP_PORT: 3000
       HOST: 0.0.0.0
       COOKIE_SECURE: ${COOKIE_SECURE:-false}

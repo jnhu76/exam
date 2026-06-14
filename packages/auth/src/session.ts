@@ -2,12 +2,20 @@ import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { RequestContext } from "@exam/domain";
 
+function isProductionMode(): boolean {
+  // APP_MODE is the authoritative run-mode; NODE_ENV is a fallback.
+  const appMode = process.env.APP_MODE;
+  if (appMode === "production") return true;
+  if (appMode && appMode !== "production") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (secret) {
     return secret;
   }
-  if (process.env.NODE_ENV === "production") {
+  if (isProductionMode()) {
     throw new Error("JWT_SECRET is required in production");
   }
   return "development-only-change-me";

@@ -2,8 +2,10 @@ import { createDatabase, migratePostgres } from "@exam/db";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
-  process.stdout.write("No DATABASE_URL set, skipping migration.\n");
-  process.exit(0);
+  process.stderr.write(
+    "FATAL: DATABASE_URL is required for migrations. Set it in your environment or .env file.\n",
+  );
+  process.exit(1);
 }
 
 const conn = await createDatabase(databaseUrl);

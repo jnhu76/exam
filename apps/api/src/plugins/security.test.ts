@@ -1,8 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import setupSecurity from "./security.js";
+import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
+
+function stubProductionEnv() {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("JWT_SECRET", "test-secret");
+  vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+}
 
 async function buildApp(): Promise<FastifyInstance> {
+  resetRuntimeConfigForTest();
   const app = Fastify();
   setupSecurity(app);
   app.get("/ping", async () => ({ ok: true }));
@@ -45,7 +53,7 @@ describe("security plugin: response headers", () => {
   });
 
   it("CSP in production does not include 'unsafe-eval'", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/ping" });
 
@@ -106,7 +114,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("allows safe (GET) requests without Origin/Referer headers", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/ping" });
@@ -115,7 +123,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("rejects mutating requests without Origin/Referer in production", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
@@ -131,7 +139,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("rejects mutating requests in production when no allowed origin is configured", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv("APP_ORIGIN", "");
     vi.stubEnv("ALLOWED_ORIGINS", "");
     const app = await buildApp();
@@ -149,7 +157,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("rejects mutating requests with disallowed Origin in production", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
@@ -166,7 +174,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("accepts mutating requests with allowed Origin in production", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
@@ -180,7 +188,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("ALLOWED_ORIGINS supports comma-separated multiple origins", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv(
       "ALLOWED_ORIGINS",
       "https://a.example.com,https://b.example.com",
@@ -197,7 +205,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
   });
 
   it("falls back to Referer when Origin is absent", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+    stubProductionEnv();
     vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
