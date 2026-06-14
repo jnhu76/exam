@@ -1,5 +1,7 @@
 # Phase 2 Job Index
 
+> `docs/phase-roadmap.md` is the current phase authority. Phase 2 is Exam Operation. Pass-to-proceed API, service tokens, API keys, webhooks, external integration, optional multiTenant, and SuperAdmin are Phase 4 platformization/integration.
+
 ## Phase 2A — Exam Operation
 
 | Job    | 文件建议                              | 内容                         |
@@ -34,16 +36,15 @@
 | P2C-J6 | `phase2c_job06_retake_policies.md`  | daily_limit / weekly_limit |
 | P2C-J7 | `phase2c_job07_score_strategies.md` | scoreStrategy 完整实现     |
 
-## Phase 2D — Integration & Export
+## Phase 2D — Operation Export
 
-| Job    | 文件建议                                 | 内容                    |
-| ------ | ---------------------------------------- | ----------------------- |
-| P2D-J1 | `phase2d_job01_pass_gate_api.md`         | 达标放行 API            |
-| P2D-J2 | `phase2d_job02_service_token.md`         | API Key / Service Token |
-| P2D-J3 | `phase2d_job03_score_pdf.md`             | 成绩 PDF                |
-| P2D-J4 | `phase2d_job04_attempt_detail_export.md` | 答卷详情导出            |
-| P2D-J5 | `phase2d_job05_auditlog_export.md`       | 审计日志导出            |
-| P2D-J6 | `phase2d_job06_cas_oauth_spike.md`       | CAS/OAuth Spike         |
+| Job    | 文件建议                                 | 内容         |
+| ------ | ---------------------------------------- | ------------ |
+| P2D-J1 | `phase2d_job01_import_job_logs.md`       | 导入作业日志 |
+| P2D-J2 | `phase2d_job02_large_result_export.md`   | 大结果集导出 |
+| P2D-J3 | `phase2d_job03_score_pdf.md`             | 成绩 PDF     |
+| P2D-J4 | `phase2d_job04_attempt_detail_export.md` | 答卷详情导出 |
+| P2D-J5 | `phase2d_job05_auditlog_export.md`       | 审计日志导出 |
 
 ## 建议
 

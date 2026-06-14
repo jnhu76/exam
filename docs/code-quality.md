@@ -212,7 +212,9 @@ Route handler 不允许直接访问 db。所有业务数据访问必须走 repos
 
 - 所有 repository 方法必须接收 `RequestContext`
 - 所有业务查询必须带 `organizationId`
-- SuperAdmin 跨租户操作必须显式传 `targetOrganizationId`
+- Phase 1 的 `organizationId` 来自 internal default organization
+- `tenantGuard` / organization guard 在 Phase 1 表示 organization data boundary guard，不表示可见多租户
+- SuperAdmin 跨租户操作只属于 Phase 4 optional multiTenant，不能作为 Phase 1 当前产品路径要求
 
 ### 禁止
 
@@ -260,7 +262,7 @@ Fastify route handler 只允许做：
 ```
 AppError                    — base domain error
 PermissionDeniedError       — 403
-TenantAccessDeniedError     — 403 cross-tenant
+TenantAccessDeniedError     — 403 cross-tenant（legacy/future domain type；Phase 1 不作为当前产品路径）
 ValidationError             — 400
 NotFoundError               — 404
 InvalidStateTransitionError — 409 state machine
@@ -317,8 +319,18 @@ attemptId, questionId, serverVersion, save result, durationMs
 - 密码
 - 完整 token
 - 完整标准答案
-- 完整身份证号 / 手机号等敏感字段
+- 完整身份证号 / 手机号等敏感身份字段
 - 完整 answer 内容（除非 debug 模式且本地开发）
+
+### E2E artifacts
+
+Phase 1 acceptance requires E2E artifacts for diagnosis:
+
+```txt
+server.log, screenshot, video, Playwright trace
+```
+
+E2E server logs should preserve `requestId` so a failed browser step can be matched to API logs.
 
 ---
 
@@ -326,16 +338,26 @@ attemptId, questionId, serverVersion, save result, durationMs
 
 使用 Zod 校验环境变量，启动时 fail fast。
 
-必须校验：
+Phase 1 runtime config 必须校验：
 
-```
+```txt
+APP_MODE
 DATABASE_URL
-SESSION_SECRET / JWT_SECRET
-NODE_ENV
-APP_PORT
-COOKIE_SECURE
+TEST_DATABASE_URL
+JWT_SECRET
 CORS_ORIGIN
+COOKIE_SECURE
+RATE_LIMIT_DISABLED
+DEFAULT_TENANT_SLUG
+DEPLOYMENT_MODE
 ```
+
+规则：
+
+- `DEPLOYMENT_MODE` 只能为 `singleTenant` 或未设置。
+- `DEPLOYMENT_MODE=multiTenant` 当前必须 fail fast。
+- `DEFAULT_TENANT_SLUG` 仅作为 internal default organization 兼容配置，不代表 organizationSlug login。
+- `JWT_SECRET` 生产环境必须显式设置且不能使用默认弱值。
 
 可在 `apps/api/src/config.ts` 或独立 `packages/config` 中实现。
 
@@ -390,7 +412,19 @@ pnpm audit
 
 ---
 
-## 13.5. Testing Database Strategy
+## 13.5. Testing Strategy
+
+### E2E acceptance
+
+E2E may be disabled temporarily only during transition, but Phase 1 acceptance requires re-enable as blocking CI.
+
+Minimal E2E paths:
+
+1. candidate happy path
+2. resume attempt
+3. submit flush
+
+Artifacts must include `server.log`, screenshot, video, and Playwright trace where available.
 
 ### API Route 测试（apps/api）
 

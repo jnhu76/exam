@@ -2,11 +2,13 @@
 
 ## 概述
 
-本系统支持以下 CSV 数据导入/导出：
+Phase 1 支持以下 CSV 数据导入/导出：
 
-1. **考生导入** — 批量创建/更新 Candidate
-2. **试题导入** — 批量创建 Question
-3. **成绩导出** — 导出考试结果为 CSV
+1. **Candidate CSV import** — Admin 批量创建/更新 Candidate。
+2. **Question CSV import** — Admin 批量创建 Question。
+3. **Result CSV export** — Admin 导出考试结果。
+
+所有数据属于 internal default organization。Phase 1 不使用 organizationSlug，不暴露 tenant switcher，不提供 SuperAdmin 导入/导出路径。
 
 **编码**: UTF-8
 **行分隔符**: `\n` (LF)
@@ -18,54 +20,54 @@
 
 ## 考生导入
 
+### 权限
+
+- Phase 1: Admin。
+- Candidate 不自助注册。
+- Candidate 由 Admin 创建或导入。
+
 ### CSV 模板下载
 
 **端点**: `GET /candidate-fields/template`
+
+模板来自当前部署 / default organization 的 CandidateField 配置。
 
 **响应** (200):
 
 ```json
 {
-  "headers": ["学号", "姓名", "院系", "年级"],
-  "exampleRow": "20240001,张三,计算机系,2024级"
+  "headers": ["用户名", "密码", "姓名", "编号", "部门"],
+  "exampleRow": "cand001,Temp1234,张三,CAND001,研发部"
 }
 ```
 
 ### CSV 格式
 
-**第一行**：字段名称（可自定义，需与后台 CandidateField 配置一致）
+**第一行**：字段名称（可自定义，需与后台 CandidateField 配置一致）。
 
-**示例 1 - 默认字段**（字段名，推荐使用模板下载获取）:
+**示例 1 - 字段名表头**：
 
-```
-username,password,name,studentId,department,grade
-stu001,123456,张三,20240001,计算机系,2024级
-stu002,123456,李四,20240002,软件工程,2024级
-stu003,123456,王五,20240003,信息安全,2023级
-```
-
-也支持使用字段标签（中文）作为表头:
-
-```
-用户名,密码,姓名,学号,院系,年级
-stu001,123456,张三,20240001,计算机系,2024级
-stu002,123456,李四,20240002,软件工程,2024级
+```csv
+username,password,name,candidateNo,department
+cand001,Temp1234,张三,CAND001,研发部
+cand002,Temp1234,李四,CAND002,运营部
+cand003,Temp1234,王五,CAND003,培训部
 ```
 
-**示例 2 - 自定义字段**:
+**示例 2 - 字段标签表头**：
 
+```csv
+用户名,密码,姓名,编号,部门
+cand001,Temp1234,张三,CAND001,研发部
+cand002,Temp1234,李四,CAND002,运营部
 ```
-username,password,name,employeeId,department,position
-EMP001,123456,张三,1001,研发部,工程师
-EMP002,123456,李四,1002,市场部,专员
-```
 
-**字段规则**:
+### 字段规则
 
-- `username`: 必需，唯一标识，3-50 字符，用作登录用户名
-- `password`: 可选（新建时默认 123456，更新时忽略）
-- `name`: 必需，1-100 字符
-- 其他字段: 根据 CandidateField 配置动态
+- `username`: 必需，系统内唯一，3-50 字符，用作登录用户名。
+- `password`: 可选。若未提供 password，新建时使用临时密码；生产环境应要求首次登录修改密码。
+- `name`: 必需，1-100 字符。
+- 其他字段: 根据当前部署 / default organization 的 CandidateField 配置动态决定。
 
 ### 导入端点
 
@@ -77,11 +79,11 @@ EMP002,123456,李四,1002,市场部,专员
 {
   "rows": [
     {
-      "username": "student01",
+      "username": "cand001",
+      "password": "Temp1234",
       "name": "张三",
-      "studentId": "20240001",
-      "department": "计算机系",
-      "grade": "2024级"
+      "candidateNo": "CAND001",
+      "department": "研发部"
     }
   ]
 }
@@ -112,7 +114,7 @@ EMP002,123456,李四,1002,市场部,专员
     },
     {
       "row": 4,
-      "message": "StudentId already exists"
+      "message": "Unique field already exists"
     }
   ]
 }
@@ -120,72 +122,78 @@ EMP002,123456,李四,1002,市场部,专员
 
 ### 行为规则
 
-1. **新增**: 如果 `username` 不存在，则创建新的 User + Candidate + CandidateProfile
-2. **更新**: 如果 `username` 已存在且字段值不完全匹配，更新 CandidateProfile 的 `fields` 和 User 的 `name`
-3. **唯一性**: 检查 CandidateField 配置中 `unique: true` 的字段，不能重复
-4. **必填**: 检查 CandidateField 配置中 `required: true` 的字段，不能为空
-5. **密码**: 如果未提供 `password`，新建用户默认密码为 123456（首次登录需修改）
-6. **身份字段重复**: 如果组织配置了唯一性字段（如学号），导入时会先检查重复
+1. **新增**: 如果 `username` 不存在，则创建新的 User + Candidate + CandidateProfile。
+2. **更新**: 如果 `username` 已存在且字段值不完全匹配，更新 CandidateProfile 的 `fields` 和 User 的 `name`。
+3. **唯一性**: 检查 CandidateField 配置中 `unique: true` 的字段，不能重复。
+4. **必填**: 检查 CandidateField 配置中 `required: true` 的字段，不能为空。
+5. **密码**: 如果未提供 `password`，新建用户使用临时密码；首次登录改密策略按当前实现边界记录。
+6. **Phase 1 审计**: candidate import 应写入最小 AuditLog。
 
 ---
 
 ## 试题导入
 
+### 权限
+
+- Phase 1: Admin。
+- Phase 3 future: scoped Teacher-like role 可获得题库导入权限。
+
+题目归属于 Course，Course 属于 internal default organization。
+
 ### CSV 格式
 
-**第一行**：字段名称（固定列结构，不支持自定义）
+**第一行**：字段名称（固定列结构，不支持自定义）。
 
 **题头**:
 
-```
+```csv
 type,content,optionA,optionB,optionC,optionD,standardAnswer,score,difficulty,tags,gradingRule.multiSelectScoring,gradingRule.fillBlankMatchMode
 ```
 
 **单选题示例** (`single_choice`):
 
-```
-single_choice,下列哪个是质数？,2,3,5,7,B,5,3,数学 基础,all_correct_full,
-single_choice,1+1=?,1,2,3,4,B,5,2,数学 基础,all_correct_full,
+```csv
+single_choice,下列哪个是质数？,1,3,4,6,B,5,2,基础,all_correct_full,
+single_choice,1+1=?,1,2,3,4,B,5,2,基础,all_correct_full,
 ```
 
 **多选题示例** (`multiple_choice`):
 
-```
-multiple_choice,哪些是质数？,2,3,5,7,"B,C",10,4,数学 基础,all_correct_full,
-multiple_choice,2+2=?和3+3=?,,4,5,6,7,"A,D",10,3,数学 基础,partial_half,
+```csv
+multiple_choice,哪些是偶数？,2,3,4,5,"A,C",10,2,基础,partial_half,
+multiple_choice,哪些是成功 HTTP 状态码？,200,201,404,500,"A,B",10,3,网络,partial_half,
 ```
 
 **填空题示例** (`fill_blank`):
 
-```
-fill_blank,中国的首都是____,北京,,,,北京,5,3,地理 基础,exact,fillBlankCaseSensitive
-fill_blank,水的化学式是____,第____周期主族元素是____,,,H2,O,10,4,化学 基础,keyword
+```csv
+fill_blank,HTTP 的默认端口是____,80,,,,80,5,2,网络,,exact
+fill_blank,中国的首都是____,北京,,,,北京,5,2,地理,,exact
 ```
 
 **判断题示例** (`true_false`):
 
-```
-true_false,地球是圆的,,,true,10,2,常识 基础,
-true_false,水是透明的,,,true,10,2,常识 基础,
+```csv
+true_false,HTTP 是无状态协议,,,true,5,2,网络,,
+true_false,一年一定有 366 天,,,false,5,1,常识,,
 ```
 
 ### 字段说明
 
-| 字段                                 | 必填       | 说明                                                                                               |
-| ------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------- |
-| `type`                               | 必填       | 题型：`single_choice`, `multiple_choice`, `fill_blank`, `true_false`                               |
-| `content`                            | 必填       | 题目内容，填空题需包含 `____` 占位符                                                               |
-| `optionA`                            | 选择题必填 | 选项 A 内容                                                                                        |
-| `optionB`                            | 选择题必填 | 选项 B 内容                                                                                        |
-| `optionC`                            | 选择题必填 | 选项 C 内容                                                                                        |
-| `optionD`                            | 选择题必填 | 选项 D 内容                                                                                        |
-| `standardAnswer`                     | 必填       | 正确答案：选择题用 option id (如 "A", "B" 或 "A,C")；填空题为文本；判断题为布尔值 (`true`/`false`) |
-| `score`                              | 必填       | 分值，正整数                                                                                       |
-| `difficulty`                         | 可选       | 难度 1-5，默认 3                                                                                   |
-| `tags`                               | 可选       | 标签，逗号分隔                                                                                     |
-| `gradingRule.multiSelectScoring`     | 可选       | 多选题评分：`all_correct_full`（全对才得分）或 `partial_half`（部分对得一半）                      |
-| `gradingRule.fillBlankMatchMode`     | 可选       | 填空题匹配模式：`exact`（精确匹配）或 `keyword`（关键字匹配）                                      |
-| `gradingRule.fillBlankCaseSensitive` | 可选       | 填空题是否区分大小写，默认 false                                                                   |
+| 字段                             | 必填       | 说明                                                                                               |
+| -------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| `type`                           | 必填       | 题型：`single_choice`, `multiple_choice`, `fill_blank`, `true_false`                               |
+| `content`                        | 必填       | 题目内容，填空题需包含 `____` 占位符                                                               |
+| `optionA`                        | 选择题必填 | 选项 A 内容                                                                                        |
+| `optionB`                        | 选择题必填 | 选项 B 内容                                                                                        |
+| `optionC`                        | 可选       | 选项 C 内容                                                                                        |
+| `optionD`                        | 可选       | 选项 D 内容                                                                                        |
+| `standardAnswer`                 | 必填       | 正确答案：选择题用 option id；填空题为文本；判断题为布尔值 (`true`/`false`)                        |
+| `score`                          | 必填       | 分值，正整数                                                                                       |
+| `difficulty`                     | 可选       | 难度 1-5，默认 3                                                                                   |
+| `tags`                           | 可选       | 标签，空格分隔或按当前实现解析                                                                     |
+| `gradingRule.multiSelectScoring` | 可选       | 多选题评分：`all_correct_full` 或 `partial_half`                                                    |
+| `gradingRule.fillBlankMatchMode` | 可选       | 填空题匹配模式：`exact` 或 `keyword`                                                               |
 
 ### 导入端点
 
@@ -195,19 +203,19 @@ true_false,水是透明的,,,true,10,2,常识 基础,
 
 ```json
 {
-  "courseId": "course-uuid",
+  "courseId": "course-basic",
   "rows": [
     {
       "type": "single_choice",
       "content": "下列哪个是质数？",
-      "optionA": "2",
+      "optionA": "1",
       "optionB": "3",
-      "optionC": "5",
-      "optionD": "7",
+      "optionC": "4",
+      "optionD": "6",
       "standardAnswer": "B",
       "score": 5,
-      "difficulty": 3,
-      "tags": "数学 基础",
+      "difficulty": 2,
+      "tags": "基础",
       "gradingRule": {
         "multiSelectScoring": "all_correct_full",
         "fillBlankMatchMode": "exact"
@@ -218,97 +226,49 @@ true_false,水是透明的,,,true,10,2,常识 基础,
 }
 ```
 
-**参数说明**:
-
-- `courseId`: 目标课程 ID
-- `rows`: 题目行数组
-- `confirm`: `true` 实际创建，`false` 仅验证
-
-**响应** (200):
-
-```json
-{
-  "total": 1,
-  "valid": 1,
-  "warnings": 0,
-  "errors": 0,
-  "details": [
-    {
-      "row": 1,
-      "status": "valid"
-    }
-  ]
-}
-```
-
-**错误响应**:
-
-```json
-{
-  "total": 2,
-  "valid": 1,
-  "warnings": 0,
-  "errors": 1,
-  "details": [
-    {
-      "row": 1,
-      "status": "valid"
-    },
-    {
-      "row": 2,
-      "status": "error",
-      "message": "choice questions require at least two options"
-    }
-  ]
-}
-```
-
 ### 验证规则
 
-1. **选项唯一性**: 选项 ID (A/B/C/D) 不能重复
-2. **选择题至少2个选项**: `single_choice` 和 `multiple_choice` 必须包含 ≥2 个选项
-3. **标准答案引用选项**: 单选题的 `standardAnswer` 必须是有效的 option id，多选题的 `standardAnswer` 必须是有效的 option id 数组
-4. **填空题占位符**: 填空题内容必须包含至少一个 `____` 占位符
-5. **判断题答案**: `standardAnswer` 必须是布尔值 (`true`/`false`)
-6. **填空题答案非空**: `standardAnswer` 不能为空字符串
-7. **正整数分值**: `score` 必须是正整数
-8. **难度范围**: `difficulty` 必须是 1-5 的整数
+1. **选项唯一性**: 选项 ID 不能重复。
+2. **选择题至少 2 个选项**: `single_choice` 和 `multiple_choice` 必须包含 ≥2 个选项。
+3. **标准答案引用选项**: 选择题的 `standardAnswer` 必须是有效 option id。
+4. **填空题占位符**: 填空题内容必须包含至少一个 `____` 占位符。
+5. **判断题答案**: `standardAnswer` 必须是布尔值 (`true`/`false`)。
+6. **正整数分值**: `score` 必须是正整数。
+7. **难度范围**: `difficulty` 必须是 1-5 的整数。
 
 ---
 
 ## 成绩导出
 
+### 权限
+
+- Phase 1: Admin。
+- Phase 3 future: scoped ResultViewer / Teacher-like roles。
+- Phase 4 future: SuperAdmin only if optional multiTenant returns。
+
+SuperAdmin 不出现在 Phase 1 当前权限中。
+
 ### CSV 格式
 
-**导出内容**: 某次考试的 all attempts 成绩（包括多次尝试的最终成绩）
+**导出内容**: 某次考试的结果 CSV。
 
 **列结构**:
 
-```
+```csv
 考生姓名,<field1>,<field2>,...,成绩,及格状态,尝试次数,提交时间
 ```
 
 **示例 - 默认字段**:
 
-```
-考生姓名,学号,院系,年级,成绩,及格状态,尝试次数,提交时间
-张三,20240001,计算机系,2024级,85,及格,1,2024-06-01T10:05:00.000Z
-李四,20240002,软件工程,2024级,72,不及格,2,2024-06-01T10:08:00.000Z
-```
-
-**示例 - 自定义字段**:
-
-```
-考生姓名,工号,部门,职位,成绩,及格状态,尝试次数,提交时间
-张三,1001,研发部,工程师,85,及格,1,2024-06-01T10:05:00.000Z
-李四,1002,市场部,专员,72,不及格,2,2024-06-01T10:08:00.000Z
+```csv
+考生姓名,编号,部门,成绩,及格状态,尝试次数,提交时间
+张三,CAND001,研发部,85,及格,1,2024-06-01T10:05:00.000Z
+李四,CAND002,运营部,72,及格,1,2024-06-01T10:08:00.000Z
 ```
 
 ### 导出端点
 
 **端点**: `GET /exams/:id/export/scores`
-
-**权限**: Admin, SuperAdmin, Teacher
 
 **响应**:
 
@@ -317,18 +277,19 @@ true_false,水是透明的,,,true,10,2,常识 基础,
 
 ### 字段说明
 
-| 字段                | 说明                                                      |
-| ------------------- | --------------------------------------------------------- |
-| `考生姓名`          | Candidate 的 `name` 字段                                  |
-| `field1, field2...` | 组织配置的 CandidateField 的所有字段，按 `sortOrder` 排序 |
-| `成绩`              | 最终得分（number）                                        |
-| `及格状态`          | "及格" 或 "不及格"                                        |
-| `尝试次数`          | 累计考试次数（number）                                    |
-| `提交时间`          | ISO 8601 格式日期时间字符串                               |
+| 字段                | 说明                                                                       |
+| ------------------- | -------------------------------------------------------------------------- |
+| `考生姓名`          | Candidate 的 `name` 字段                                                   |
+| `field1, field2...` | 当前部署 / default organization 的 CandidateField 字段，按 `sortOrder` 排序 |
+| `成绩`              | 最终得分（number）                                                         |
+| `及格状态`          | “及格” 或 “不及格”                                                         |
+| `尝试次数`          | 累计考试次数（number）                                                     |
+| `提交时间`          | ISO 8601 格式日期时间字符串                                                |
 
 ### 导出规则
 
-1. **多尝试取最高分**: 如果同一考生参加了多次考试，导出其最终成绩（由 `scoreStrategy` 决定：`highest`/`latest`/`first`）
-2. **动态列**: 列标题根据组织配置的 CandidateField 动态生成
-3. **空值处理**: 自定义字段空值显示为空字符串
-4. **时间格式**: ISO 8601 格式：`YYYY-MM-DDTHH:mm:ss.sssZ`
+1. **动态列**: 列标题根据系统配置的 CandidateField 动态生成。
+2. **空值处理**: 自定义字段空值显示为空字符串。
+3. **时间格式**: ISO 8601 格式：`YYYY-MM-DDTHH:mm:ss.sssZ`。
+4. **审计**: Phase 1 result CSV export 应写入最小 AuditLog。
+5. **大文件导出**: Phase 1 可以同步 CSV；Phase 2 才是 export job / large export / job log。

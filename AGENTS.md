@@ -2,20 +2,35 @@
 
 ## Project Context
 
-Configurable **LAN/on-premise exam and assessment platform**. It is not hardcoded to a university, school, lab, or single course scenario. Deployments may include departments, training centers, labs, enterprises, associations, or any organization that needs internal exams, certification, access checks, or pass-to-proceed workflows.
+Configurable **LAN/on-premise exam and assessment platform**. It is not hardcoded to a university, school, lab, or single course scenario. Deployments may include departments, training centers, labs, enterprises, associations, or any organization that needs internal exams or certification workflows.
 
-Multi-tenant: each organization runs exams independently. Supports open-book quizzes and strict closed-book proctored exams. Auto-graded, optionally instant results, and Phase 2 exposes a pass-to-proceed API for external systems such as access control or training workflow gates.
+**Phase 1 is a single-tenant, multi-user Minimal Deliverable Exam System.** One deployment represents one organization. The current Phase 1 product path is Admin + Candidate only: Admin configures candidates, courses, questions, exams, assignments, grading, diagnostics, and exports; Candidate logs in, takes assigned exams, submits attempts, and views allowed results.
 
-**Read `docs/SPEC.md` first** — that is the specification document. If your implementation conflicts with it, the spec wins.
+Strict closed-book proctored exam operation is Phase 2+. Teacher-like roles, Proctor, Grader, scoped permissions, invitation, and email account lifecycle are Phase 3. Pass-to-proceed APIs, service tokens, external integrations, optional multiTenant, and SuperAdmin are Phase 4 platformization/integration.
+
+**Read `docs/SPEC.md` and `docs/phase-roadmap.md` first** — they are the specification and phase authority documents. If implementation conflicts with them, the spec and roadmap win.
 
 ## Product Generalization Rules
 
 - Do not hardcode product title such as "校内考试", "校园内网考试平台", "University LAN exam system", or any single deployment scenario.
-- Product title, subtitle, footer, and organization display name come from `OrganizationSettings`; organization display name falls back to `Organization.displayName`.
-- Exam titles come from `Exam.title`, set by Admin/Teacher.
-- Candidate identity comes from per-organization `CandidateField`; never assume Student, 学生, 学号, 工号, department, or class.
+- Product title, subtitle, footer, and organization display name come from deployment settings / `OrganizationSettings`; organization display name falls back to the internal default `Organization.displayName`. This must not imply an organization creation UI in Phase 1.
+- Exam titles come from `Exam.title`, set by Admin in Phase 1. Teacher-like roles are Phase 3 scoped role bundles.
+- Candidate identity comes from the internal default organization's `CandidateField`; never assume Student, 学生, 学号, 工号, department, or class.
 - Course may mean course, training module, certification category, access qualification, or assessment domain. Keep the code generic.
 - Scenario-specific words may appear only in docs, tests, stories, or demo seed data.
+
+## Phase 1.x Single-Tenant Rule
+
+- Phase 1.x is single-tenant, multi-user.
+- Phase 1 product roles are Admin and Candidate only.
+- Teacher / Proctor / Grader are future role bundles, not Phase 1 product roles.
+- organization table and organizationId are kept as internal data boundary.
+- default organization is kept as the only organization.
+- Do not expose organizationSlug login.
+- Do not implement tenant switcher.
+- Do not expose SuperAdmin.
+- Do not allow DEPLOYMENT_MODE=multiTenant as current runnable mode.
+- multiTenant / SuperAdmin / cross-tenant management can only be implemented in Phase 4 platformization, not in current tasks.
 
 ## Tech Stack
 
@@ -179,7 +194,7 @@ packages/
   auth/src/
     session.ts           # session/JWT management
     rbac.ts              # role-based access control
-    tenantGuard.ts       # multi-tenant isolation
+    tenantGuard.ts       # organization data boundary guard
   exam-engine/src/
     timer.ts             # server-side time authority
     answerProtocol.ts    # answer save protocol (versioned, idempotent)
@@ -193,12 +208,12 @@ docs/                    # design documents
 
 - **LAN/on-premise deployment**: no cloud dependencies, no CDN, no external APIs
 - **Offline-capable**: system must work when external internet is unavailable
-- **Multi-tenant**: all business tables have `organizationId`; all repo methods must receive `ctx` — never access db directly from routes
+- **Single-tenant data boundary**: all business tables have `organizationId`; all repo methods must receive `ctx` — never access db directly from routes. organizationId comes from internal default organization.
 - **Security is core**: exam system security is not optional — see SPEC.md §6
 - **Server is time authority**: never trust client timestamps for exam logic
 - **Question snapshot**: ExamAttempt copies questions at creation time via `QuestionSnapshot`; QuestionBank edits don't affect existing attempts
-- **"Pass to proceed"**: external systems can query exam results via API (e.g., access control) [Phase 2]
-- **Candidate is a configurable examinee identity**, not Student — defined per-organization via `CandidateField`
+- **"Pass to proceed"**: external systems can query exam results via API (e.g., access control) [Phase 4]
+- **Candidate is a configurable examinee identity**, not Student — defined by the internal default organization's `CandidateField`
 - **Exam is not CRUD**: all state changes go through command functions (`publishExam`, `startAttempt`, `submitAttempt`, etc.) — never mutate status directly
 - **Answer Save Protocol**: answers use versioned, idempotent saves with conflict detection — see SPEC.md §3.5
 - **Repository pattern**: all db access through `repo.method(ctx, ...)` — `db.select()` directly in routes is forbidden
@@ -216,9 +231,9 @@ docs/                    # design documents
 - ExamAttempt has a `disrupted` state — client heartbeat timeout auto-triggers it; recovery restores answers + remaining time from server
 - `lastActivityAt` on ExamAttempt is the heartbeat field — server uses it to detect disconnected examinees
 - Phase 1 only implements `timed_window` timing mode; other modes deferred to Phase 2
-- Queued entry (`requireQueue` + `batchSize` + `batchInterval`) prevents exam-start traffic spikes
+- Queued entry (`requireQueue` + `batchSize` + `batchInterval`) is Phase 2 exam operation, not Phase 1
 - Degradation deferred to Phase 2; Phase 1 only does basic health check
-- Candidate identity fields are per-organization (`CandidateField`), not global — import templates are dynamically generated
+- Candidate identity fields come from the internal default organization's `CandidateField` — import templates are dynamically generated
 
 ## Dependency Rules
 
@@ -271,20 +286,21 @@ Every Job completion requires:
 
 ## Current Roadmap Authority
 
+- **Current work is documentation realignment for Phase 1 Minimal Deliverable Exam System.**
+- Next work: **Phase 1 singleTenant cleanup**.
+- Then: **E2E re-enable** for happy path / resume / submit-flush as blocking CI.
 - **Phase2 has not started.**
-- **Current work is Phase1.4 UI Foundation Reset.**
-- **UI Reset is a pre-Phase2 foundation task.**
-- **Phase2 can only start after Phase1.4 + Phase1.5 + Phase1.6 + Phase1.7 entry criteria are complete.**
 - **Phase plans control implementation schedule.**
-- **SPEC invariant principles still win over implementation details.**
+- **SPEC and `docs/phase-roadmap.md` win over implementation details.**
+- **Phase 2 does NOT implement multi-tenant.** Multi-tenant is Phase 4 platformization only.
 
 ---
 
-## Phase1.4 UI Foundation Reset
+## Phase1.4 UI Foundation Reset (Historical / Reference)
 
 ### Purpose
 
-Phase1.4 UI Foundation Reset is a **UI foundation stabilization task**. It is NOT:
+Phase1.4 UI Foundation Reset is a **UI foundation stabilization reference**, not the current roadmap authority. It is NOT:
 
 - A visual beautification task
 - A Phase2 implementation task

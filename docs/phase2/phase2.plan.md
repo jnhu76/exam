@@ -1,5 +1,7 @@
 # Phase 2 Plan — LAN Exam Platform
 
+> **Phase realignment note**: `docs/phase-roadmap.md` is the current phase authority. Phase 2 is Exam Operation only. It does not implement multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed API, service tokens, API keys, webhooks, or external integration. Those platformization/integration items move to Phase 4.
+
 ## 0. Phase 2 Entry Criteria
 
 Phase 2 只能在 Phase 1.4 + Phase 1.5 + Phase 1.6 + Phase 1.7 完成后启动。
@@ -12,8 +14,8 @@ Phase 2 只能在 Phase 1.4 + Phase 1.5 + Phase 1.6 + Phase 1.7 完成后启动�
 [ ] Phase1.6 PostgreSQL correctness hardening complete
 [ ] Phase1.7 security baseline complete
 [ ] S03b submit flush complete
-[ ] S01 tenant isolation complete
-[ ] S02 RBAC matrix complete
+[ ] S01 organization data boundary guard complete (Phase 1 singleTenant)
+[ ] S02 Admin/Candidate RBAC baseline complete
 [ ] S03a server-side exam protocol complete
 [ ] PG seed stable
 [ ] PG migrations clean
@@ -25,8 +27,8 @@ Phase 2 只能在 Phase 1.4 + Phase 1.5 + Phase 1.6 + Phase 1.7 完成后启动�
 
 Phase2 可以安全地假设以下 Phase1.7 baseline 已完成：
 
-- [ ] tenant guard
-- [ ] RBAC
+- [ ] organization data boundary guard
+- [ ] Admin/Candidate RBAC baseline
 - [ ] 考试协议（S03a + S03b）
 - [ ] audit baseline（login/logout/audit-logs API）
 - [ ] CSV / security header baseline
@@ -44,12 +46,12 @@ Phase2 可以安全地假设以下 Phase1.7 baseline 已完成：
 - [ ] 5 次失败锁定 15 分钟
 - [ ] mustChangePassword
 - [ ] 首次登录强制改密
-- [ ] 最后 SuperAdmin 不被永久锁死
+- [ ] 本地 Admin reset-password recovery 已记录；SuperAdmin 恢复机制属于 Phase 4 optional multiTenant
 - [ ] Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
 
 ## 1. Phase 2 总目标
 
-Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为“能管、能控、能集成、能正式输出”。
+Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为“能管、能控、可诊断、可恢复”。
 
 主线：
 
@@ -57,7 +59,7 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 2A: Exam Operation      考试运行控制
 2B: Proctor Panel       监考实时面板
 2C: Exam Flexibility    考试模式与组卷增强
-2D: Integration Export  对外集成与正式导出
+2D: Operation Export     运营导出与作业日志
 ```
 
 ## 2. Phase 2A — Exam Operation
@@ -132,20 +134,21 @@ Phase 2 的目标不是继续堆 CRUD，而是让系统从“能考”升级为�
 抽题规则 → 生成试卷 → 冻结 snapshot → 后续题库修改不影响 attempt
 ```
 
-## 5. Phase 2D — Integration & Export
+## 5. Phase 2D — Operation Export
 
-目标：让系统能对外提供结果，并输出正式文件。
+目标：补齐考试运营所需的导出、作业日志和诊断证据。对外集成不属于 Phase 2。
 
 ### Jobs
 
-| Job    | 名称                    | 说明                       |
-| ------ | ----------------------- | -------------------------- |
-| P2D-J1 | Pass Gate API           | 达标放行 API               |
-| P2D-J2 | API Key / Service Token | 外部系统安全访问           |
-| P2D-J3 | Score PDF Export        | 正式成绩单 PDF             |
-| P2D-J4 | Attempt Detail Export   | 答卷详情 PDF/Excel         |
-| P2D-J5 | AuditLog Export         | CSV / JSON                 |
-| P2D-J6 | CAS/OAuth Spike         | 统一身份认证调研与最小接入 |
+| Job    | 名称                 | 说明               |
+| ------ | -------------------- | ------------------ |
+| P2D-J1 | Import Job Logs      | 导入作业日志       |
+| P2D-J2 | Large Result Export  | 大结果集导出       |
+| P2D-J3 | Score PDF Export     | 正式成绩单 PDF     |
+| P2D-J4 | Attempt Detail Export| 答卷详情 PDF/Excel |
+| P2D-J5 | AuditLog Export      | CSV / JSON         |
+
+> Pass Gate API、API Key / Service Token、webhook、CAS/OAuth 正式集成属于 Phase 4 platformization/integration。
 
 ## 6. Phase2 Security Scope
 
@@ -158,9 +161,9 @@ Phase2 自己负责的安全内容（不依赖 Phase1.7 提前完成）：
 [ ] mark misconduct permission
 [ ] WebSocket auth
 [ ] WebSocket organization scope
-[ ] service token / API key security
 [ ] export access control
-[ ] integration audit
+[ ] import/export job audit
+[ ] diagnostics access control
 ```
 
 Phase2 或 Phase1.8 负责的 full 安全内容（Phase1.7 baseline 之上的加固）：
@@ -173,7 +176,7 @@ Phase2 或 Phase1.8 负责的 full 安全内容（Phase1.7 baseline 之上的加
 [ ] 5 次失败锁定 15 分钟
 [ ] mustChangePassword
 [ ] 首次登录强制改密
-[ ] 最后 SuperAdmin 不被永久锁死
+[ ] 本地 Admin recovery 不依赖 SuperAdmin；SuperAdmin 恢复机制属于 Phase 4 optional multiTenant
 [ ] Phase1.3 P0/P1/P2 全量通过（除非 full S04/S07 也已完成）
 ```
 

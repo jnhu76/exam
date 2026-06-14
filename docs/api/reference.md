@@ -1,5 +1,7 @@
 # API 参考文档
 
+> **Phase realignment note**: `docs/SPEC.md` and `docs/phase-roadmap.md` are authoritative for product phase scope. This API reference may include legacy or already-implemented fields such as `organizationSlug`, Teacher, SuperAdmin, queue, or `restrictIp`. Those names do not make them Phase 1 product paths. Phase 1 current product roles are Admin + Candidate; organizationSlug login, tenant switcher, SuperAdmin, optional multiTenant, pass-to-proceed, service tokens, and external integration are Phase 4 unless explicitly re-scoped.
+
 ## 概述
 
 本考试平台采用 RESTful API 设计，所有端点均以 `/api` 为前缀，支持 JSON 格式请求和响应。
