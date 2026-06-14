@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from "fastify";
 import {
   CreateUserRequestSchema,
   UpdateUserRequestSchema,
+  ResetPasswordRequestSchema,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -140,6 +141,56 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };
+    },
+  );
+
+  fastify.post(
+    "/users/:id/reset-password",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+    },
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request.ctx!);
+      const { id } = request.params as { id: string };
+      const data = ResetPasswordRequestSchema.parse(request.body);
+      const repo = createUserRepo(fastify.db);
+
+      const target = await repo.findByOrganizationAndId(ctx, id);
+      if (!target) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      if (target.role !== "Candidate") {
+        return reply
+          .code(400)
+          .send(
+            buildErrorResponse(
+              request.id,
+              "PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED",
+              { targetRole: target.role },
+            ),
+          );
+      }
+
+      const newHash = await hashPassword(data.newPassword);
+      const updated = await repo.update(ctx, id, { passwordHash: newHash });
+      if (!updated) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "candidate.password_reset",
+        "user",
+        id,
+        { username: target.username },
+      );
+      return { ok: true as const };
     },
   );
 

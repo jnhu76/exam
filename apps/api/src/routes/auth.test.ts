@@ -239,13 +239,13 @@ describe("auth routes", () => {
     });
   });
 
-  it("POST /api/auth/register is disabled without a bootstrap token", async () => {
+  it("POST /api/auth/register is disabled in Phase 1 (no public self-register)", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/register",
       payload: {
         organizationSlug: "default",
-        bootstrapToken: "not-configured",
+        bootstrapToken: "anything",
         username: "new-admin",
         password: "admin123",
         name: "New Admin",
@@ -255,8 +255,7 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(403);
     expect(response.json()).toMatchObject({
       error: {
-        code: "PERMISSION_DENIED",
-        message: "无权执行此操作",
+        code: "AUTH_REGISTER_DISABLED",
         requestId: expect.any(String),
       },
     });

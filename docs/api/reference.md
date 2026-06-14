@@ -43,27 +43,19 @@
 
 ### POST /auth/register
 
-**权限**: 公开
+**权限**: 公开（Phase 1 已禁用）
 
-**请求体**:
+> Phase 1 不支持公开注册。该端点始终返回 `403 AUTH_REGISTER_DISABLED`。第一个 Admin 通过本地 `bootstrap:admin` 脚本创建。
 
-```json
-{
-  "organizationSlug": "default",
-  "bootstrapToken": "bootstrap-token-abc-123",
-  "username": "admin",
-  "password": "admin123",
-  "name": "管理员"
-}
-```
-
-**响应** (201):
+**响应** (403):
 
 ```json
 {
-  "id": "user-uuid",
-  "username": "admin",
-  "name": "管理员"
+  "error": {
+    "code": "AUTH_REGISTER_DISABLED",
+    "message": "Phase 1 不支持公开注册",
+    "requestId": "req-..."
+  }
 }
 ```
 
@@ -212,6 +204,35 @@
 ```
 
 **响应** (201): 同 GET /users 单个用户对象
+
+---
+
+### POST /users/:id/reset-password
+
+**权限**: Admin
+
+重置考生密码。只能重置 Candidate 用户密码，不能重置 Admin 密码（Admin 密码恢复使用本地 `reset:admin-password` 脚本）。
+
+**请求体**:
+
+```json
+{
+  "newPassword": "NewCandidatePass123!"
+}
+```
+
+**响应** (200):
+
+```json
+{
+  "ok": true
+}
+```
+
+**错误**:
+
+- `400 PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED` — 目标用户不是 Candidate
+- `404 RESOURCE_NOT_FOUND` — 用户不存在
 
 ---
 
