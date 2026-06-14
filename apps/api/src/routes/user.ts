@@ -175,7 +175,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(data.newPassword);
-      await repo.update(ctx, id, { passwordHash: newHash });
+      const updated = await repo.update(ctx, id, { passwordHash: newHash });
+      if (!updated) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
       recordAudit(
         fastify,
         request,

@@ -164,10 +164,9 @@ async function main() {
         `  name:     ${result.user.name}\n` +
         `  role:     ${result.user.role}\n`,
     );
-    process.exit(0);
   } catch (err) {
     process.stderr.write(`ERROR: ${(err as Error).message}\n`);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     await conn.sql.end();
   }
