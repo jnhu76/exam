@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
   getRuntimeConfig,
   buildPublicConfig,
   resetRuntimeConfigForTest,
   loadRuntimeConfig,
 } from "./runtimeConfig.js";
+
+const REPO_ROOT = resolve(__dirname, "../../../..");
 
 const ENV_KEYS = [
   "DEPLOYMENT_MODE",
@@ -51,18 +55,35 @@ describe("runtimeConfig", () => {
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.mode).toBe("singleTenant");
-      expect(config.tenancy.exposeTenantSwitcher).toBe(false);
-      expect(config.tenancy.exposeSuperAdmin).toBe(false);
+      expect(config.tenancy.requireTenantBoundary).toBe(true);
     });
 
-    it("respects multiTenant mode", () => {
-      process.env.DEPLOYMENT_MODE = "multiTenant";
+    it("accepts DEPLOYMENT_MODE=singleTenant", () => {
+      process.env.DEPLOYMENT_MODE = "singleTenant";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
-      expect(config.mode).toBe("multiTenant");
-      expect(config.tenancy.exposeTenantSwitcher).toBe(true);
-      expect(config.tenancy.exposeSuperAdmin).toBe(true);
-      expect(config.tenancy.requireTenantBoundary).toBe(true);
+      expect(config.mode).toBe("singleTenant");
+    });
+
+    it("rejects DEPLOYMENT_MODE=multiTenant at startup (Phase 1 single-tenant only)", () => {
+      process.env.DEPLOYMENT_MODE = "multiTenant";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow(
+        /Phase 1.*singleTenant|singleTenant.*Phase 1/,
+      );
+    });
+
+    it("multiTenant error message does not leak that it is a runnable mode", () => {
+      process.env.DEPLOYMENT_MODE = "multiTenant";
+      resetRuntimeConfigForTest();
+      try {
+        getRuntimeConfig();
+        throw new Error("expected throw");
+      } catch (e) {
+        const msg = String((e as Error).message);
+        expect(msg).toMatch(/Phase 1/);
+        expect(msg).toMatch(/singleTenant/);
+      }
     });
   });
 
@@ -104,25 +125,38 @@ describe("runtimeConfig", () => {
   });
 
   describe("buildPublicConfig", () => {
-    it("returns correct shape for multiTenant", () => {
-      process.env.DEPLOYMENT_MODE = "multiTenant";
+    it("returns singleTenant shape and never exposes SuperAdmin/tenant switcher", () => {
+      delete process.env.DEPLOYMENT_MODE;
       resetRuntimeConfigForTest();
       const pub = buildPublicConfig();
-      expect(pub.deploymentMode).toBe("multiTenant");
-      expect(pub.features.tenantSwitcher).toBe(true);
-      expect(pub.features.superAdminConsole).toBe(true);
+      expect(pub.deploymentMode).toBe("singleTenant");
       expect(pub.apiReference).toBeDefined();
       expect(pub.apiReference.uiPath).toBe("/_dev/api-reference");
       expect(pub.apiReference.specPath).toBe("/api/openapi.json");
     });
 
-    it("returns correct shape for singleTenant", () => {
+    it("does not contain exposeSuperAdmin / tenantSwitcher / superAdminConsole fields", () => {
       delete process.env.DEPLOYMENT_MODE;
       resetRuntimeConfigForTest();
       const pub = buildPublicConfig();
-      expect(pub.deploymentMode).toBe("singleTenant");
-      expect(pub.features.tenantSwitcher).toBe(false);
-      expect(pub.features.superAdminConsole).toBe(false);
+      const serialized = JSON.stringify(pub);
+      expect(serialized).not.toContain("exposeSuperAdmin");
+      expect(serialized).not.toContain("tenantSwitcher");
+      expect(serialized).not.toContain("superAdminConsole");
+      expect(serialized).not.toContain("multiTenant");
+    });
+
+    it("public config never exposes multiTenant as a current feature", () => {
+      delete process.env.DEPLOYMENT_MODE;
+      resetRuntimeConfigForTest();
+      const pub = buildPublicConfig();
+      expect(pub).not.toHaveProperty("multiTenant");
+      const features = (pub as { features?: Record<string, unknown> }).features;
+      if (features) {
+        expect(features).not.toHaveProperty("tenantSwitcher");
+        expect(features).not.toHaveProperty("superAdminConsole");
+        expect(features).not.toHaveProperty("multiTenant");
+      }
     });
 
     it("never includes sensitive keys", () => {
@@ -500,12 +534,12 @@ describe("runtimeConfig", () => {
   });
 
   describe("DEPLOYMENT_MODE fail-fast", () => {
-    it("unset → singleTenant", () => {
+    it("unset -> singleTenant", () => {
       const config = loadRuntimeConfig({ APP_MODE: "development" });
       expect(config.mode).toBe("singleTenant");
     });
 
-    it("singleTenant → singleTenant", () => {
+    it("singleTenant -> singleTenant", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
         DEPLOYMENT_MODE: "singleTenant",
@@ -513,21 +547,66 @@ describe("runtimeConfig", () => {
       expect(config.mode).toBe("singleTenant");
     });
 
-    it("multiTenant → multiTenant", () => {
+    it("trims whitespace before comparison", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",
-        DEPLOYMENT_MODE: "multiTenant",
+        DEPLOYMENT_MODE: "  singleTenant  ",
       });
-      expect(config.mode).toBe("multiTenant");
+      expect(config.mode).toBe("singleTenant");
     });
 
-    it("invalid value throws", () => {
+    it("trims whitespace and rejects multiTenant", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          DEPLOYMENT_MODE: "  multiTenant  ",
+        }),
+      ).toThrow(/Phase 1/);
+    });
+
+    it("multiTenant -> throws (Phase 1 single-tenant only)", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          DEPLOYMENT_MODE: "multiTenant",
+        }),
+      ).toThrow(/Phase 1.*singleTenant|singleTenant.*Phase 1/);
+    });
+
+    it("invalid value -> throws", () => {
       expect(() =>
         loadRuntimeConfig({
           APP_MODE: "development",
           DEPLOYMENT_MODE: "saas",
         }),
-      ).toThrow(/Invalid DEPLOYMENT_MODE "saas"/);
+      ).toThrow();
+    });
+
+    it("multiTenant error references Phase 1 and singleTenant", () => {
+      try {
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          DEPLOYMENT_MODE: "multiTenant",
+        });
+        throw new Error("expected throw");
+      } catch (e) {
+        const msg = String((e as Error).message);
+        expect(msg).toMatch(/Phase 1/);
+        expect(msg).toMatch(/singleTenant/);
+      }
+    });
+
+    it("error message does not leak the raw env value", () => {
+      try {
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          DEPLOYMENT_MODE: "secret-sensitive-value",
+        });
+        throw new Error("expected throw");
+      } catch (e) {
+        const msg = String((e as Error).message);
+        expect(msg).not.toContain("secret-sensitive-value");
+      }
     });
   });
 
@@ -632,6 +711,25 @@ describe("runtimeConfig", () => {
         DATABASE_URL: "postgresql://p:p@h:5432/proddb",
       });
       expect(url).toBe("postgresql://p:p@h:5432/proddb");
+    });
+  });
+
+  describe("deployed config files do not default to multiTenant", () => {
+    function readFile(rel: string): string {
+      return readFileSync(join(REPO_ROOT, rel), "utf8");
+    }
+
+    it("docker-compose.yml does not default DEPLOYMENT_MODE to multiTenant", () => {
+      const compose = readFile("docker-compose.yml");
+      const line = compose.match(/DEPLOYMENT_MODE:.*$/m)?.[0] ?? "";
+      expect(line).not.toMatch(/multiTenant/);
+      expect(line).not.toMatch(/:-multiTenant/);
+    });
+
+    it(".env.example does not default DEPLOYMENT_MODE to multiTenant", () => {
+      const env = readFile(".env.example");
+      const deployLine = env.match(/^DEPLOYMENT_MODE=.*$/m)?.[0] ?? "";
+      expect(deployLine).not.toMatch(/multiTenant/);
     });
   });
 });

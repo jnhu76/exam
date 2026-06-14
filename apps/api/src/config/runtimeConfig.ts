@@ -17,7 +17,16 @@ import { z } from "zod";
 
 export type AppMode = "development" | "test" | "e2e" | "ci" | "production";
 export type AppEnv = "development" | "test" | "production";
-export type DeploymentMode = "singleTenant" | "multiTenant";
+
+/**
+ * Phase 1 runtime deployment mode.
+ *
+ * Phase 1 is single-tenant only: one internal default organization, no tenant
+ * switcher, no SuperAdmin product path. `multiTenant` is a Phase 4
+ * platformization capability and is NOT a current runnable mode; setting
+ * `DEPLOYMENT_MODE=multiTenant` fails fast at startup.
+ */
+export type DeploymentMode = "singleTenant";
 
 export interface ApiReferenceConfig {
   enabled: boolean;
@@ -126,12 +135,29 @@ function parseAppEnv(value: string | undefined): AppEnv {
   return "development";
 }
 
+/**
+ * Parse DEPLOYMENT_MODE.
+ *
+ * Phase 1 only supports singleTenant (the internal default organization
+ * boundary). `multiTenant` is a Phase 4 platformization capability and is
+ * rejected as a current runnable mode. Unknown values are also rejected.
+ *
+ * The raw input value is intentionally NOT echoed back in the error message to
+ * avoid leaking sensitive configuration.
+ */
 function parseDeploymentMode(value: string | undefined): DeploymentMode {
-  if (value === undefined || value === "") return "singleTenant";
-  if (value === "singleTenant") return "singleTenant";
-  if (value === "multiTenant") return "multiTenant";
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === "") return "singleTenant";
+  if (trimmed === "singleTenant") return "singleTenant";
+  if (trimmed === "multiTenant") {
+    throw new Error(
+      "DEPLOYMENT_MODE=multiTenant is not supported in Phase 1. " +
+        "Phase 1 runtime is single-tenant only (singleTenant). " +
+        "Optional multiTenant is a Phase 4 platformization capability.",
+    );
+  }
   throw new Error(
-    `Invalid DEPLOYMENT_MODE "${value}". Valid values: singleTenant, multiTenant`,
+    "Invalid DEPLOYMENT_MODE. Phase 1 runtime supports singleTenant only.",
   );
 }
 
@@ -219,9 +245,6 @@ export function loadRuntimeConfig(
 
   const apiReferenceEnabled = isTruthy(env.API_DOCS_ENABLED) && !isProduction;
 
-  const exposeSuperAdmin = deploymentMode === "multiTenant";
-  const exposeTenantSwitcher = deploymentMode === "multiTenant";
-
   const scanIntervalMs = positiveIntSchema.parse(
     env.HEARTBEAT_SCAN_INTERVAL_MS ?? "30000",
   );
@@ -256,12 +279,15 @@ export function loadRuntimeConfig(
     tenancy: {
       mode: deploymentMode,
       defaultTenantSlug: "default",
-      exposeTenantSwitcher,
-      exposeSuperAdmin,
+      // Phase 1: internal default organization only.
+      // Not a current multi-tenant runtime mode; always false in Phase 1.
+      exposeTenantSwitcher: false,
+      exposeSuperAdmin: false,
       requireTenantBoundary: true,
     },
     auth: {
-      exposeSuperAdmin,
+      // Phase 1: no SuperAdmin product path; always false.
+      exposeSuperAdmin: false,
     },
     rateLimit: {
       enabled: !isTruthy(env.RATE_LIMIT_DISABLED),
@@ -291,14 +317,17 @@ export function resetRuntimeConfigForTest(): void {
 /**
  * Build a minimal, non-sensitive subset of config for the frontend.
  * NEVER include secrets, internal rate-limit details, or security policy.
+ *
+ * Phase 1: does NOT emit SuperAdmin / tenant-switcher / multiTenant fields.
+ * Those are Phase 4 platformization capabilities, not current features, so
+ * they are omitted entirely (not emitted as `false`) to avoid implying the
+ * capability exists.
  */
 export function buildPublicConfig() {
   const config = getRuntimeConfig();
   return {
     deploymentMode: config.mode,
     features: {
-      tenantSwitcher: config.tenancy.exposeTenantSwitcher,
-      superAdminConsole: config.tenancy.exposeSuperAdmin,
       apiReference: config.apiReference.enabled,
     },
     apiReference: {

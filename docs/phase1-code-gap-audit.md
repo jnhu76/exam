@@ -16,8 +16,8 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | --- | --- | --- |
 | Internal default organization | partially-implemented | `packages/db/src/seed.ts:41-99` creates slug `default`; `apps/api/src/config/runtimeConfig.ts:256-259` hardcodes default slug. Production creation policy is still unclear. |
 | No organizationSlug login | aligned-by-PR2 | `LoginRequestSchema` no longer accepts `organizationSlug`; `auth.ts` always resolves `defaultTenantSlug`; web/E2E fixtures send username/password only. |
-| No tenant switcher | partially-implemented | Web/UI no longer exposes a switcher and CI runs with `DEPLOYMENT_MODE=singleTenant`. Residue: `runtimeConfig.ts` still accepts `DEPLOYMENT_MODE=multiTenant` as a future-mode input and `runtimeConfig.tenancy.exposeSuperAdmin` is still emitted by the public config payload (always `false` under singleTenant). multiTenant fail-fast and public-config field cleanup are deferred to PR 5+/Phase 4. See `## 3 → Runtime Config` and `## 3 → Known Residue`. |
-| No SuperAdmin product path | aligned-by-PR2 | `Role` enum and `RoleSchema` no longer include SuperAdmin/Teacher/Proctor; RBAC matrix is Admin + Candidate only; organization CRUD route + UI removed. Residue: legacy DB rows (see `## 3 → Known Residue`) and `runtimeConfig.tenancy.exposeSuperAdmin` field, both deferred to PR 5+/Phase 4. |
+| No tenant switcher | aligned-by-PR3 | Web/UI no longer exposes a switcher and CI runs with `DEPLOYMENT_MODE=singleTenant`. Resolved by PR3: `runtimeConfig.ts` now rejects `DEPLOYMENT_MODE=multiTenant` at startup (Phase 1 single-tenant only) and `buildPublicConfig` no longer emits `tenantSwitcher`/`superAdminConsole`. See `## 3 → Runtime Config`. |
+| No SuperAdmin product path | aligned-by-PR2 | `Role` enum and `RoleSchema` no longer include SuperAdmin/Teacher/Proctor; RBAC matrix is Admin + Candidate only; organization CRUD route + UI removed. Residue: legacy DB rows (see `## 3 → Known Residue`), rejected at login as `unsupported_phase1_role`. PR3 removed `exposeSuperAdmin` from the public config payload. |
 | Admin + Candidate roles | aligned-by-PR2 | Domain `Role`, contracts `RoleSchema`, RBAC, all admin route `requireRole`, web UsersPage role selector, default test helper, and E2E seed are Admin+Candidate only. |
 | Admin bootstrap | partially-implemented | `/auth/register` exists in `apps/api/src/routes/auth.ts:28-81`; bootstrap ctx role is now Admin; still requires `organizationSlug` in register payload (Phase 3 concern). |
 | Local admin reset-password script | missing | No reset script found; required by roadmap and operation manual. |
@@ -50,7 +50,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 
 ### Runtime Config
 
-- `apps/api/src/config/runtimeConfig.ts`: still parses `DEPLOYMENT_MODE` for future-mode introspection; `singleTenant` keeps `exposeSuperAdmin=false` and `exposeTenantSwitcher=false`. multiTenant fail-fast remains a separate scope (PR 5+/Phase 4).
+- `apps/api/src/config/runtimeConfig.ts`: Phase 1 runtime is single-tenant only. `parseDeploymentMode` rejects `DEPLOYMENT_MODE=multiTenant` at startup with a Phase 1 message (optional multiTenant is a Phase 4 platformization capability, not a current runnable mode); unknown values are also rejected. The `DeploymentMode` type is narrowed to `"singleTenant"`. `buildPublicConfig` no longer emits `tenantSwitcher` or `superAdminConsole` fields (omitted entirely, not emitted as `false`, to avoid implying the capability exists). `tenancy.exposeSuperAdmin` / `auth.exposeSuperAdmin` are locked to `false` constants. CORS origin comma-split already applies to all modes; rate-limit numeric parsing already rejects zero/negative/decimal/NaN (fallback strategy). Resolved by PR3.
 
 ### Seed / Bootstrap / Fixtures
 
@@ -84,14 +84,14 @@ Status legend: `implemented` means the requirement is present in code, not that 
 ### Known Residue
 
 - DB `users.role` is `text` (not a Postgres enum), so legacy SuperAdmin/Teacher/Proctor rows can still be inserted directly. They are rejected by Phase 1 login (`unsupported_phase1_role`) and cannot be created through any Phase 1 contract or UI. This is recorded as `legacy-db-residue`.
-- `runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload and is always `false` under singleTenant; multiTenant fail-fast is deferred to PR 5+/Phase 4.
+- ~~`runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload and is always `false` under singleTenant; multiTenant fail-fast is deferred to PR 5+/Phase 4.~~ Resolved by PR3: `DEPLOYMENT_MODE=multiTenant` now fails fast at startup, and `exposeSuperAdmin`/`tenantSwitcher`/`superAdminConsole` are no longer emitted by the public config payload.
 
 ## 4. Gap Table
 
 | Area | Phase 1 Requirement | Current Evidence | Status | Gap | Suggested PR |
 | --- | --- | --- | --- | --- | --- |
 | Login contract | username/password only | auth contract, auth route, E2E seed, web client | aligned-by-PR2 | None. | — |
-| Runtime mode | `multiTenant` fail-fast | `runtimeConfig.ts`, `docker-compose.yml` | conflicting | multiTenant accepted and Compose defaults to it. | PR 5+ |
+| Runtime mode | `multiTenant` fail-fast | `runtimeConfig.ts`, `docker-compose.yml`, `.env.example` | aligned-by-PR3 | multiTenant rejected at startup; Compose/env default to singleTenant. | — |
 | SuperAdmin path | no SuperAdmin product path | seed, RBAC, routes, UsersPage | aligned-by-PR2 | DB residue only; no product surface. | — |
 | Teacher/Proctor roles | future only | RBAC/routes/UsersPage | aligned-by-PR2 | DB residue only. | — |
 | Admin bootstrap | default-org Admin bootstrap | `apps/api/src/routes/auth.ts:28-81` | partially-implemented | Uses org slug in register body. | PR 3 |
@@ -198,7 +198,7 @@ Phase 1 test/dev/E2E data should use:
 | --- | --- | --- | --- | --- |
 | Phase 1 roles conflict with code | Pre-PR2: seed/RBAC/routes/UI exposed SuperAdmin/Teacher/Proctor. Post-PR1+PR2: domain Role enum, contracts, RBAC, routes, UsersPage, default test helpers, and E2E fixtures are Admin+Candidate only. | Resolved at the product surface; legacy DB rows remain `unsupported_phase1_role` at login. | PR 1, PR 2 | Resolved for product surface |
 | Login contract still accepts organizationSlug | Pre-PR2: `LoginRequestSchema` accepted `organizationSlug`. Post-PR2: schema removed, `auth.ts` resolves only the default tenant slug, web/E2E send username/password only. | Resolved. | PR 2 | Resolved |
-| Runtime can enter forbidden multiTenant mode | `runtimeConfig.ts` still accepts `DEPLOYMENT_MODE=multiTenant` as a future-mode input; `runtimeConfig.tenancy.exposeSuperAdmin` remains in the public config payload (always `false` under singleTenant); Compose may default to multiTenant. | multiTenant fail-fast and public-config field cleanup are deferred. | PR 5+/Phase 4 | Yes |
+| Runtime can enter forbidden multiTenant mode | Pre-PR3: `runtimeConfig.ts` accepted `DEPLOYMENT_MODE=multiTenant`; `runtimeConfig.tenancy.exposeSuperAdmin` was emitted in the public config payload; Compose defaulted to multiTenant. Post-PR3: `DEPLOYMENT_MODE=multiTenant` fails fast at startup with a Phase 1 message; `exposeSuperAdmin`/`tenantSwitcher`/`superAdminConsole` are no longer emitted by the public config payload; Compose and `.env.example` default to singleTenant. | Resolved. Optional multiTenant remains a Phase 4 future capability. | PR3 | Resolved |
 | Seed/mock/E2E data inconsistent | PR 1 aligned default seed/demo/E2E fixtures to Admin+Candidate default org. | Main fixture baseline represents Phase 1 acceptance. | PR 1 | Resolved for fixture baseline |
 | Missing admin recovery path | No reset-password script found. | Production lockout recovery relies on weak/default seed or manual DB edits. | PR 3 | Yes |
 | Import/export permission residue | Pre-PR2: candidate/question/export routes allowed SuperAdmin/Teacher. Post-PR2: all admin routes use `requireRole(["Admin"])`; export field-name vs label contract remains. | Permission residue resolved; export field contract still pending. | PR 4 | Resolved for permissions |
