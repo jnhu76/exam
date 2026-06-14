@@ -41,7 +41,7 @@ Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是
 >   - **P2A-J3 Attempt Heartbeat**：前端 restore UI、心跳调参、超时阈值评估
 >   - **P2A-J4 disrupted 检测与恢复**：监考介入 / 恢复裁决流程
 >
-> 详见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
+> 详见 `docs/archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
 
 ---
 
@@ -133,7 +133,7 @@ not_started → queued → in_progress → submitted → grading → graded
                                      └── disrupted   voided
 ```
 
-> 上图是状态机的**长期目标设计**。当前 Phase 1.7 的实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §3。
+> 上图是状态机的**长期目标设计**。当前 Phase 1.7 的实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
 
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|

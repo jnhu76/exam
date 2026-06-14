@@ -53,7 +53,7 @@
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/adr-db-dual-dialect.md`
+- `docs/archive/phase-1.4/adr-db-dual-dialect.md`
 
 ### Dependencies
 
@@ -347,7 +347,7 @@ Medium
 
 ### Scope
 
-- `docs/phase1.4/adr/adr-redis-mq.md`
+- `docs/archive/phase-1.4/adr/adr-redis-mq.md`
 
 ### Explicit Non-goals
 
@@ -362,7 +362,7 @@ Medium
 
 ### Required Docs / Screenshots
 
-- `docs/phase1.4/adr/adr-redis-mq.md`
+- `docs/archive/phase-1.4/adr/adr-redis-mq.md`
 
 ### Dependencies
 

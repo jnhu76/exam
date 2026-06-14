@@ -109,11 +109,11 @@ Response 能否区分 submitted/grading/graded/disrupted：`/attempts/:id` 与 `
 | `docs/SPEC.md` | L988 / L996 | timed_sync/deadline/untimed → Phase 2 | 一致 |
 | `docs/dev/review-report-2026-06-09.md` | L57（BUG-01） | 「submit+grade 非事务，失败留 submitted」列为 Not Fixed | STALE——实际已修，应标 fixed。注意：该报告无 "I-6" 条目（全仓 grep `I-1..I-6` 零命中） |
 | `docs/todo.md` | L28 | `[x] deadline 强制 409` | 不一致：标完成，但代码不做 submit 409 |
-| `docs/phase1.6/jobs.md` | L29-32 | 验收标准 `now>deadlineAt → submit 409` | 不一致：与代码矛盾 |
-| `docs/phase1.6/phase1.6-bridge-plan.md` | L55, 317, 334 | submit deadline 409 验收 | 不一致：与代码矛盾 |
-| `docs/phase1.6/01-overview.md` | L28, 67 | submit deadline 409 出口标准 | 不一致：与代码矛盾 |
-| `docs/phase1.6/s03a-status-adjustment.md` | L50 | 诚实承认「submit deadline 断言缺失」 | 一致：唯一说真话的文档 |
-| `docs/phase1.6/phase1.6-bridge-plan.md` | L305 | auto-submit → Phase 2 | 一致 |
+| `docs/archive/phase-1.6/jobs.md` | L29-32 | 验收标准 `now>deadlineAt → submit 409` | 不一致：与代码矛盾 |
+| `docs/archive/phase-1.6/phase1.6-bridge-plan.md` | L55, 317, 334 | submit deadline 409 验收 | 不一致：与代码矛盾 |
+| `docs/archive/phase-1.6/01-overview.md` | L28, 67 | submit deadline 409 出口标准 | 不一致：与代码矛盾 |
+| `docs/archive/phase-1.6/s03a-status-adjustment.md` | L50 | 诚实承认「submit deadline 断言缺失」 | 一致：唯一说真话的文档 |
+| `docs/archive/phase-1.6/phase1.6-bridge-plan.md` | L305 | auto-submit → Phase 2 | 一致 |
 | `docs/api/reference.md` | L926-940 | submit 响应 `"status":"completed"` | 不一致：应为 `graded` |
 | `docs/api/reference.md` | L884-922 | save-answer 无 `DEADLINE_EXCEEDED` | 与现状一致（但与 SPEC §3.5 矛盾） |
 | `docs/api/reference.md` | — | restore / `/scores/attempts/:id` / `showResultImmediately` | 未文档化 |
@@ -131,7 +131,7 @@ Response 能否区分 submitted/grading/graded/disrupted：`/attempts/:id` 与 `
 
 ### FIX-2 修正误称 submit 会 409 的文档
 
-- 涉及：`docs/todo.md:28`、`docs/phase1.6/jobs.md:29-32`、`docs/phase1.6/phase1.6-bridge-plan.md:55,317,334`、`docs/phase1.6/01-overview.md:28,67`。
+- 涉及：`docs/todo.md:28`、`docs/archive/phase-1.6/jobs.md:29-32`、`docs/archive/phase-1.6/phase1.6-bridge-plan.md:55,317,334`、`docs/archive/phase-1.6/01-overview.md:28,67`。
 - 修法：把这些「submit deadline→409」验收标准改为反映真实语义（submit 不受 deadline 限制；deadline 仅限制 save-answer）。
 
 ### FIX-3（建议，防死恢复）让 submit 对已 submitted 幂等
@@ -173,7 +173,7 @@ Response 能否区分 submitted/grading/graded/disrupted：`/attempts/:id` 与 `
 
 - 后端：直接阅读 `packages/domain/src/enums.ts`、`attemptStateMachine.ts`、`attemptCommands.ts`、`grading.ts`、`gradingEngine.ts`、`answerProtocol.ts`、`apps/api/src/routes/attempts.ts`、`scores.ts`、`packages/contracts/src/attempt.ts` 及相关测试。
 - 前端：由 explore 子代理审计 `apps/web/src` 下 TakeExam / Result / ExamList / StartExam / AttemptDetail / ScoreList 页面与组件。
-- 文档：由 explore 子代理审计 `docs/SPEC.md`、`docs/dev/review-report-2026-06-09.md`、`docs/phase1.6/*`、`docs/api/reference.md`、`docs/todo.md`。
+- 文档：由 explore 子代理审计 `docs/SPEC.md`、`docs/dev/review-report-2026-06-09.md`、`docs/archive/phase-1.6/*`、`docs/api/reference.md`、`docs/todo.md`。
 - 本文为 review-only 产出，未引入新架构、未新增功能。
 
 ## H. Exit Fix 应用记录 (2026-06-13)

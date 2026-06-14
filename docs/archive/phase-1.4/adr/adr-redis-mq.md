@@ -143,5 +143,5 @@ Exam answers are saved via the Answer Save Protocol directly to PostgreSQL. This
 ## Related
 
 - `docs/SPEC.md` — §3.5 Answer Save Protocol
-- `docs/phase1.4/02-architecture-jobs.md` — A05 job card
-- `docs/phase1.4/adr-db-dual-dialect.md` — DB layer decision
+- `docs/archive/phase-1.4/02-architecture-jobs.md` — A05 job card
+- `docs/archive/phase-1.4/adr-db-dual-dialect.md` — DB layer decision
