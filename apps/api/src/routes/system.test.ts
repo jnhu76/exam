@@ -131,6 +131,8 @@ describe("system routes", () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body).toHaveProperty("deploymentMode");
+      expect(body).toHaveProperty("features");
+      expect(body.features).toHaveProperty("apiReference");
       expect(body).toHaveProperty("apiReference");
       expect(body.apiReference).toHaveProperty("uiPath");
       expect(body.apiReference).toHaveProperty("specPath");

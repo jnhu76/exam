@@ -547,6 +547,23 @@ describe("runtimeConfig", () => {
       expect(config.mode).toBe("singleTenant");
     });
 
+    it("trims whitespace before comparison", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "development",
+        DEPLOYMENT_MODE: "  singleTenant  ",
+      });
+      expect(config.mode).toBe("singleTenant");
+    });
+
+    it("trims whitespace and rejects multiTenant", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "development",
+          DEPLOYMENT_MODE: "  multiTenant  ",
+        }),
+      ).toThrow(/Phase 1/);
+    });
+
     it("multiTenant -> throws (Phase 1 single-tenant only)", () => {
       expect(() =>
         loadRuntimeConfig({

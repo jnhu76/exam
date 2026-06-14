@@ -146,9 +146,10 @@ function parseAppEnv(value: string | undefined): AppEnv {
  * avoid leaking sensitive configuration.
  */
 function parseDeploymentMode(value: string | undefined): DeploymentMode {
-  if (value === undefined || value === "") return "singleTenant";
-  if (value === "singleTenant") return "singleTenant";
-  if (value === "multiTenant") {
+  const trimmed = value?.trim();
+  if (trimmed === undefined || trimmed === "") return "singleTenant";
+  if (trimmed === "singleTenant") return "singleTenant";
+  if (trimmed === "multiTenant") {
     throw new Error(
       "DEPLOYMENT_MODE=multiTenant is not supported in Phase 1. " +
         "Phase 1 runtime is single-tenant only (singleTenant). " +
