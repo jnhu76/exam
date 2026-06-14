@@ -13,6 +13,7 @@ import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { signJWT } from "@exam/auth/src/session.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { seed } from "@exam/db/src/seed.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
@@ -151,27 +152,40 @@ export async function buildTestApp(
     .where(eq(schema.users.id, seedResult.users.candidateId));
   const candidate = candidateRows[0]!;
 
-  const adminToken = signJWT({
-    actorId: admin.id,
-    role: admin.role as Role,
-    organizationId: admin.organizationId,
-  });
-  const teacherToken = signJWT({
-    actorId: teacher.id,
-    role: teacher.role as Role,
-    organizationId: teacher.organizationId,
-  });
-  const candidateToken = signJWT({
-    actorId: candidate.id,
-    role: candidate.role as Role,
-    organizationId: candidate.organizationId,
-  });
+  const { jwtSecret } = getRuntimeConfig().authSecret;
+  const adminToken = signJWT(
+    {
+      actorId: admin.id,
+      role: admin.role as Role,
+      organizationId: admin.organizationId,
+    },
+    jwtSecret,
+  );
+  const teacherToken = signJWT(
+    {
+      actorId: teacher.id,
+      role: teacher.role as Role,
+      organizationId: teacher.organizationId,
+    },
+    jwtSecret,
+  );
+  const candidateToken = signJWT(
+    {
+      actorId: candidate.id,
+      role: candidate.role as Role,
+      organizationId: candidate.organizationId,
+    },
+    jwtSecret,
+  );
 
-  const superAdminToken = signJWT({
-    actorId: superAdmin.id,
-    role: superAdmin.role as Role,
-    organizationId: superAdmin.organizationId,
-  });
+  const superAdminToken = signJWT(
+    {
+      actorId: superAdmin.id,
+      role: superAdmin.role as Role,
+      organizationId: superAdmin.organizationId,
+    },
+    jwtSecret,
+  );
 
   return {
     app,
@@ -238,11 +252,14 @@ export async function createCandidateViaApi(
     userId: string;
     fields: Record<string, unknown>;
   };
-  const token = signJWT({
-    actorId: body.userId,
-    role: "Candidate",
-    organizationId: orgId,
-  });
+  const token = signJWT(
+    {
+      actorId: body.userId,
+      role: "Candidate",
+      organizationId: orgId,
+    },
+    getRuntimeConfig().authSecret.jwtSecret,
+  );
   return {
     candidateProfileId: body.id,
     userId: body.userId,

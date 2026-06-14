@@ -30,7 +30,7 @@ describe("JWT session management", () => {
       organizationId: "123e4567-e89b-12d3-a456-426614174001",
     };
 
-    const token = signJWT(payload, { expiresIn: "1h" });
+    const token = signJWT(payload, undefined, { expiresIn: "1h" });
     const decoded = verifyJWT(token);
     expect(decoded.actorId).toEqual(payload.actorId);
     expect(decoded.role).toEqual(payload.role);

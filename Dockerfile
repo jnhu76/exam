@@ -76,5 +76,7 @@ EXPOSE 3000
 
 ENV APP_PORT=3000
 ENV HOST=0.0.0.0
+ENV NODE_ENV=production
+ENV APP_MODE=production
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

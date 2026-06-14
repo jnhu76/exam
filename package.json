@@ -23,7 +23,7 @@
     "db:seed": "pnpm --filter @exam/api db:seed",
     "db:seed:demo": "pnpm --filter @exam/api db:seed:demo",
     "db:seed:demo:verify": "pnpm --filter @exam/api db:seed:demo:verify",
-    "test:pg": "DATABASE_URL=\"postgresql://exam:exam@localhost:5432/exam_test\" turbo test",
+    "test:pg": "APP_MODE=test TEST_DATABASE_URL=\"postgresql://exam:exam@localhost:5432/exam_test\" DATABASE_URL=\"postgresql://exam:exam@localhost:5432/exam_test\" turbo test",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
     "smoke": "turbo smoke",

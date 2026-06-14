@@ -154,11 +154,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
-      const token = signJWT({
-        actorId: user.id,
-        role: user.role as Role,
-        organizationId: user.organizationId,
-      });
+      const token = signJWT(
+        {
+          actorId: user.id,
+          role: user.role as Role,
+          organizationId: user.organizationId,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
 
       reply.setCookie("auth-token", token, {
         httpOnly: true,
@@ -202,7 +205,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const token = request.cookies["auth-token"];
     if (token) {
       try {
-        const payload = verifyJWT(token);
+        const payload = verifyJWT(
+          token,
+          getRuntimeConfig().authSecret.jwtSecret,
+        );
         const ctx: RequestContext = {
           actorId: payload.actorId,
           organizationId: payload.organizationId,

@@ -5,8 +5,10 @@ import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 
 function stubProductionEnv() {
   vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("APP_MODE", "production");
   vi.stubEnv("JWT_SECRET", "test-secret");
   vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+  vi.stubEnv("CORS_ORIGIN", "https://example.com");
 }
 
 async function buildApp(): Promise<FastifyInstance> {
@@ -115,7 +117,6 @@ describe("security plugin: CSRF Origin/Referer check", () => {
 
   it("allows safe (GET) requests without Origin/Referer headers", async () => {
     stubProductionEnv();
-    vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/ping" });
     expect(res.statusCode).toBe(200);
@@ -124,7 +125,6 @@ describe("security plugin: CSRF Origin/Referer check", () => {
 
   it("rejects mutating requests without Origin/Referer in production", async () => {
     stubProductionEnv();
-    vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -138,27 +138,17 @@ describe("security plugin: CSRF Origin/Referer check", () => {
     await app.close();
   });
 
-  it("rejects mutating requests in production when no allowed origin is configured", async () => {
-    stubProductionEnv();
-    vi.stubEnv("APP_ORIGIN", "");
-    vi.stubEnv("ALLOWED_ORIGINS", "");
-    const app = await buildApp();
-    const res = await app.inject({
-      method: "POST",
-      url: "/mutate",
-      payload: {},
-      headers: { origin: "https://example.com" },
-    });
-    expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({
-      error: { code: "CSRF_ORIGIN_REJECTED" },
-    });
-    await app.close();
+  it("missing CORS_ORIGIN in production fails fast at config build (P0-4)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_MODE", "production");
+    vi.stubEnv("JWT_SECRET", "test-secret");
+    vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+    vi.stubEnv("CORS_ORIGIN", "");
+    await expect(buildApp()).rejects.toThrow(/CORS_ORIGIN is required/);
   });
 
   it("rejects mutating requests with disallowed Origin in production", async () => {
     stubProductionEnv();
-    vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -175,7 +165,6 @@ describe("security plugin: CSRF Origin/Referer check", () => {
 
   it("accepts mutating requests with allowed Origin in production", async () => {
     stubProductionEnv();
-    vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -187,12 +176,12 @@ describe("security plugin: CSRF Origin/Referer check", () => {
     await app.close();
   });
 
-  it("ALLOWED_ORIGINS supports comma-separated multiple origins", async () => {
-    stubProductionEnv();
-    vi.stubEnv(
-      "ALLOWED_ORIGINS",
-      "https://a.example.com,https://b.example.com",
-    );
+  it("CSRF origin uses CORS_ORIGIN comma-separated list (P1)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_MODE", "production");
+    vi.stubEnv("JWT_SECRET", "test-secret");
+    vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+    vi.stubEnv("CORS_ORIGIN", "https://a.example.com,https://b.example.com");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -206,7 +195,6 @@ describe("security plugin: CSRF Origin/Referer check", () => {
 
   it("falls back to Referer when Origin is absent", async () => {
     stubProductionEnv();
-    vi.stubEnv("APP_ORIGIN", "https://example.com");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
@@ -220,6 +208,7 @@ describe("security plugin: CSRF Origin/Referer check", () => {
 
   it("bypasses CSRF Origin check in non-production", async () => {
     vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("APP_MODE", "test");
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",

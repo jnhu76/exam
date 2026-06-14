@@ -3,6 +3,7 @@ import {
   getRuntimeConfig,
   buildPublicConfig,
   resetRuntimeConfigForTest,
+  loadRuntimeConfig,
 } from "./runtimeConfig.js";
 
 const ENV_KEYS = [
@@ -75,6 +76,7 @@ describe("runtimeConfig", () => {
       process.env.NODE_ENV = "production";
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      process.env.CORS_ORIGIN = "https://example.com";
       process.env.API_DOCS_ENABLED = "true";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
@@ -160,17 +162,137 @@ describe("runtimeConfig", () => {
       process.env.NODE_ENV = "production";
       process.env.JWT_SECRET = "test-secret";
       process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      process.env.CORS_ORIGIN = "https://example.com";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("production");
     });
 
-    it("treats unknown APP_MODE as development (not crash)", () => {
+    it("throws on invalid APP_MODE=staging", () => {
       delete process.env.NODE_ENV;
       process.env.APP_MODE = "staging";
       resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow(/Invalid APP_MODE "staging"/);
+    });
+
+    it("throws on invalid APP_MODE=prod", () => {
+      process.env.APP_MODE = "prod";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow(/Invalid APP_MODE "prod"/);
+    });
+
+    it("APP_MODE=production NODE_ENV=development resolves production", () => {
+      process.env.APP_MODE = "production";
+      process.env.NODE_ENV = "development";
+      process.env.JWT_SECRET = "test-secret";
+      process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      process.env.CORS_ORIGIN = "https://example.com";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.app.mode).toBe("production");
+      expect(config.app.isProduction).toBe(true);
+    });
+
+    it("APP_MODE=ci NODE_ENV=production resolves ci", () => {
+      process.env.APP_MODE = "ci";
+      process.env.NODE_ENV = "production";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.app.mode).toBe("ci");
+      expect(config.app.isTestLike).toBe(true);
+    });
+
+    it("APP_MODE unset + NODE_ENV=production resolves production", () => {
+      delete process.env.APP_MODE;
+      process.env.NODE_ENV = "production";
+      process.env.JWT_SECRET = "test-secret";
+      process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      process.env.CORS_ORIGIN = "https://example.com";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.app.mode).toBe("production");
+    });
+
+    it("APP_MODE unset + NODE_ENV=test resolves test", () => {
+      delete process.env.APP_MODE;
+      process.env.NODE_ENV = "test";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.app.mode).toBe("test");
+    });
+
+    it("APP_MODE unset + NODE_ENV unset resolves development", () => {
+      delete process.env.APP_MODE;
+      delete process.env.NODE_ENV;
+      resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("development");
+    });
+  });
+
+  describe("loadRuntimeConfig (pure function)", () => {
+    it("accepts explicit env object without touching process.env", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/testdb",
+      });
+      expect(config.app.mode).toBe("test");
+      expect(config.database.url).toBe("postgresql://t:t@h:5432/testdb");
+    });
+
+    it("throws on invalid APP_MODE", () => {
+      expect(() => loadRuntimeConfig({ APP_MODE: "staging" })).toThrow(
+        /Invalid APP_MODE/,
+      );
+    });
+
+    it("production missing CORS_ORIGIN throws", () => {
+      expect(() =>
+        loadRuntimeConfig({
+          APP_MODE: "production",
+          JWT_SECRET: "s",
+          DATABASE_URL: "postgresql://x",
+        }),
+      ).toThrow(/CORS_ORIGIN is required/);
+    });
+
+    it("production CORS_ORIGIN comma list works", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "production",
+        JWT_SECRET: "s",
+        DATABASE_URL: "postgresql://x",
+        CORS_ORIGIN: "https://a.com,https://b.com",
+      });
+      expect(config.cors.origin).toEqual(["https://a.com", "https://b.com"]);
+    });
+  });
+
+  describe("CORS origin fail-fast", () => {
+    it("production missing CORS_ORIGIN throws", () => {
+      process.env.APP_MODE = "production";
+      process.env.JWT_SECRET = "test-secret";
+      process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      delete process.env.CORS_ORIGIN;
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow(/CORS_ORIGIN is required/);
+    });
+
+    it("production single CORS_ORIGIN string works", () => {
+      process.env.APP_MODE = "production";
+      process.env.JWT_SECRET = "test-secret";
+      process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      process.env.CORS_ORIGIN = "https://example.com";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.cors.origin).toBe("https://example.com");
+    });
+
+    it("development missing CORS_ORIGIN defaults to localhost", () => {
+      process.env.APP_MODE = "development";
+      delete process.env.CORS_ORIGIN;
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.cors.origin).toBe("http://localhost:5173");
     });
   });
 
@@ -254,6 +376,7 @@ describe("runtimeConfig", () => {
       process.env.APP_MODE = "production";
       process.env.JWT_SECRET = "prod-secret";
       process.env.DATABASE_URL = "postgresql://p:p@h:5432/prod";
+      process.env.CORS_ORIGIN = "https://example.com";
       delete process.env.COOKIE_SECURE;
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();

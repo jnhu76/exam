@@ -10,7 +10,7 @@
  * - Only infrastructure + mode config lives here.
  * - Business rules, RBAC matrices, and per-route settings are NOT config.
  * - APP_MODE is the authoritative run-mode; NODE_ENV is a fallback/build signal.
- * - production must fail fast on missing JWT_SECRET / DATABASE_URL.
+ * - production must fail fast on missing JWT_SECRET / DATABASE_URL / CORS_ORIGIN.
  */
 
 import { z } from "zod";
@@ -98,14 +98,26 @@ const APP_MODES = ["development", "test", "e2e", "ci", "production"] as const;
 
 const DEFAULT_JWT_SECRET = "development-only-change-me";
 
-function parseAppMode(value: string | undefined): AppMode {
-  if (value && (APP_MODES as readonly string[]).includes(value)) {
-    return value as AppMode;
+const positiveIntSchema = z
+  .union([z.string(), z.number()])
+  .transform((v) => Number(v))
+  .pipe(z.number().int().positive());
+
+function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
+  const appMode = env.APP_MODE;
+  if (appMode === undefined || appMode === "") {
+    // Fallback: infer from NODE_ENV (build/toolchain signal).
+    if (env.NODE_ENV === "production") return "production";
+    if (env.NODE_ENV === "test") return "test";
+    return "development";
   }
-  // Fallback: infer from NODE_ENV (build/toolchain signal), not business authority.
-  if (process.env.NODE_ENV === "production") return "production";
-  if (process.env.NODE_ENV === "test") return "test";
-  return "development";
+  if ((APP_MODES as readonly string[]).includes(appMode)) {
+    return appMode as AppMode;
+  }
+  // APP_MODE is set but invalid — fail fast.
+  throw new Error(
+    `Invalid APP_MODE "${appMode}". Valid values: ${APP_MODES.join(", ")}`,
+  );
 }
 
 function parseAppEnv(value: string | undefined): AppEnv {
@@ -123,13 +135,8 @@ function isTruthy(value: string | undefined): boolean {
   return value === "true" || value === "1";
 }
 
-const positiveIntSchema = z
-  .union([z.string(), z.number()])
-  .transform((v) => Number(v))
-  .pipe(z.number().int().positive());
-
-function resolveJwtSecret(mode: AppMode): string {
-  const secret = process.env.JWT_SECRET;
+function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
+  const secret = env.JWT_SECRET;
   if (secret) return secret;
   if (mode === "production") {
     throw new Error("JWT_SECRET is required in production");
@@ -137,69 +144,74 @@ function resolveJwtSecret(mode: AppMode): string {
   return DEFAULT_JWT_SECRET;
 }
 
-function resolveDatabaseUrl(mode: AppMode): string {
+function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
   if (mode === "test" || mode === "e2e" || mode === "ci") {
     return (
-      process.env.TEST_DATABASE_URL ??
-      "postgresql://exam:exam@localhost:5432/exam_test"
+      env.TEST_DATABASE_URL ?? "postgresql://exam:exam@localhost:5432/exam_test"
     );
   }
-  const url = process.env.DATABASE_URL;
+  const url = env.DATABASE_URL;
   if (!url && mode === "production") {
     throw new Error("DATABASE_URL is required in production");
   }
   return url ?? "postgresql://exam:exam@localhost:5432/exam";
 }
 
-function resolveCorsOrigin(mode: AppMode): string | string[] {
+function resolveCorsOrigin(
+  env: NodeJS.ProcessEnv,
+  mode: AppMode,
+): string | string[] {
   if (mode === "production") {
-    const raw = process.env.CORS_ORIGIN;
+    const raw = env.CORS_ORIGIN;
     if (!raw) {
-      // CORS_ORIGIN is required in production; fall through to empty list
-      // which @fastify/cors treats as no-reflect. The caller should fail.
-      return [];
+      throw new Error("CORS_ORIGIN is required in production");
     }
     return raw.includes(",") ? raw.split(",").map((s) => s.trim()) : raw;
   }
-  return process.env.CORS_ORIGIN || "http://localhost:5173";
+  return env.CORS_ORIGIN || "http://localhost:5173";
 }
 
-function buildConfig(): AppRuntimeConfig {
-  const mode = parseAppMode(process.env.APP_MODE);
+/**
+ * Pure function: build config from an explicit env object.
+ * All validation and fail-fast logic lives here.
+ */
+export function loadRuntimeConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): AppRuntimeConfig {
+  const mode = parseAppMode(env);
   const isProduction = mode === "production";
   const isTestLike = mode === "test" || mode === "e2e" || mode === "ci";
-  const env = parseAppEnv(process.env.NODE_ENV);
-  const deploymentMode = parseDeploymentMode(process.env.DEPLOYMENT_MODE);
+  const envValue = parseAppEnv(env.NODE_ENV);
+  const deploymentMode = parseDeploymentMode(env.DEPLOYMENT_MODE);
 
-  const apiReferenceEnabled =
-    isTruthy(process.env.API_DOCS_ENABLED) && !isProduction;
+  const apiReferenceEnabled = isTruthy(env.API_DOCS_ENABLED) && !isProduction;
 
   const exposeSuperAdmin = deploymentMode === "multiTenant";
   const exposeTenantSwitcher = deploymentMode === "multiTenant";
 
   const scanIntervalMs = positiveIntSchema.parse(
-    process.env.HEARTBEAT_SCAN_INTERVAL_MS ?? "30000",
+    env.HEARTBEAT_SCAN_INTERVAL_MS ?? "30000",
   );
   const timeoutMs = positiveIntSchema.parse(
-    process.env.HEARTBEAT_TIMEOUT_MS ?? "60000",
+    env.HEARTBEAT_TIMEOUT_MS ?? "60000",
   );
 
   return {
     app: { mode, isProduction, isTestLike },
-    env,
+    env: envValue,
     mode: deploymentMode,
-    port: Number(process.env.APP_PORT) || 3000,
-    host: process.env.HOST || "0.0.0.0",
-    database: { url: resolveDatabaseUrl(mode) },
+    port: Number(env.APP_PORT) || 3000,
+    host: env.HOST || "0.0.0.0",
+    database: { url: resolveDatabaseUrl(env, mode) },
     authSecret: {
-      jwtSecret: resolveJwtSecret(mode),
-      cookieSecure: isProduction || isTruthy(process.env.COOKIE_SECURE),
+      jwtSecret: resolveJwtSecret(env, mode),
+      cookieSecure: isProduction || isTruthy(env.COOKIE_SECURE),
     },
-    cors: { origin: resolveCorsOrigin(mode) },
+    cors: { origin: resolveCorsOrigin(env, mode) },
     features: {
-      restoreFrontend: isTruthy(process.env.FEATURE_RESTORE_FRONTEND),
-      manualExamOpenClose: isTruthy(process.env.FEATURE_MANUAL_EXAM_OPEN_CLOSE),
-      liveScoreList: isTruthy(process.env.FEATURE_LIVE_SCORE_LIST),
+      restoreFrontend: isTruthy(env.FEATURE_RESTORE_FRONTEND),
+      manualExamOpenClose: isTruthy(env.FEATURE_MANUAL_EXAM_OPEN_CLOSE),
+      liveScoreList: isTruthy(env.FEATURE_LIVE_SCORE_LIST),
     },
     heartbeat: { scanIntervalMs, timeoutMs },
     apiReference: {
@@ -219,9 +231,9 @@ function buildConfig(): AppRuntimeConfig {
       exposeSuperAdmin,
     },
     rateLimit: {
-      enabled: !isTruthy(process.env.RATE_LIMIT_DISABLED),
-      max: Number(process.env.RATE_LIMIT_MAX) || 100,
-      timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+      enabled: !isTruthy(env.RATE_LIMIT_DISABLED),
+      max: Number(env.RATE_LIMIT_MAX) || 100,
+      timeWindow: Number(env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
     },
     security: {
       cspEnabled: true,
@@ -233,7 +245,7 @@ let cachedConfig: AppRuntimeConfig | null = null;
 
 export function getRuntimeConfig(): AppRuntimeConfig {
   if (!cachedConfig) {
-    cachedConfig = buildConfig();
+    cachedConfig = loadRuntimeConfig(process.env);
   }
   return cachedConfig;
 }

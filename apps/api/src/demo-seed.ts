@@ -3,8 +3,10 @@ import { migratePostgres } from "@exam/db/src/postgres.js";
 import { seedDemo } from "@exam/db/src/demo-seed.js";
 import { verifyDemoSeed } from "@exam/db/src/demo-seed-verify.js";
 import { hashPassword } from "@exam/auth/src/password.js";
+import { getRuntimeConfig } from "./config/runtimeConfig.js";
 
-const conn = await createDatabase();
+const { database } = getRuntimeConfig();
+const conn = await createDatabase(database.url);
 
 process.stdout.write("Running migrations...\n");
 await migratePostgres(conn.db);

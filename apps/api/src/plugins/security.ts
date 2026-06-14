@@ -4,16 +4,14 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-function readAllowedOrigins(): string[] {
-  const list = process.env.ALLOWED_ORIGINS;
-  if (list) {
-    return list
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+function deriveAllowedOrigins(corsOrigin: string | string[]): string[] {
+  if (Array.isArray(corsOrigin)) {
+    return corsOrigin.map((s) => s.trim()).filter(Boolean);
   }
-  const single = process.env.APP_ORIGIN;
-  return single ? [single] : [];
+  if (typeof corsOrigin === "string" && corsOrigin.length > 0) {
+    return [corsOrigin.trim()].filter(Boolean);
+  }
+  return [];
 }
 
 function originOf(request: FastifyRequest): string | null {
@@ -96,11 +94,11 @@ export default function setupSecurity(app: FastifyInstance): void {
     },
   );
 
-  const allowedOrigins = readAllowedOrigins();
+  const allowedOrigins = deriveAllowedOrigins(config.cors.origin);
   const csrfActive = isProduction;
   if (csrfActive && allowedOrigins.length === 0) {
     app.log.warn(
-      "CSRF Origin enforcement fail-closed in production: APP_ORIGIN/ALLOWED_ORIGINS not configured",
+      "CSRF Origin enforcement fail-closed in production: CORS_ORIGIN not configured",
     );
   }
 

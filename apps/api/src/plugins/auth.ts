@@ -5,8 +5,10 @@ import type { Role, Permission } from "@exam/domain";
 import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const authPlugin: FastifyPluginAsync = async (fastify) => {
+  const jwtSecret = getRuntimeConfig().authSecret.jwtSecret;
   const authenticateFn = async (
     request: FastifyRequest,
     reply: FastifyReply,
@@ -27,7 +29,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
     let payload: Awaited<ReturnType<typeof verifyJWT>>;
     try {
-      payload = verifyJWT(token);
+      payload = verifyJWT(token, jwtSecret);
     } catch {
       return reply
         .code(401)

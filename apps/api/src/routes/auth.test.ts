@@ -95,8 +95,10 @@ describe("auth routes", () => {
 
   it("POST /api/auth/login sets Secure cookie in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("JWT_SECRET", "test-production-secret");
     vi.stubEnv("DATABASE_URL", "postgresql://test:test@localhost:5432/test");
+    vi.stubEnv("CORS_ORIGIN", "https://example.com");
     vi.stubEnv("COOKIE_SECURE", "false");
     resetRuntimeConfigForTest();
     const response = await ctx.app.inject({

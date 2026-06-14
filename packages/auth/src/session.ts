@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import type { RequestContext } from "@exam/domain";
 
+export type JwtPayload = Omit<
+  RequestContext,
+  "permissions" | "sessionId" | "targetOrganizationId"
+>;
+
 function isProductionMode(): boolean {
   // APP_MODE is the authoritative run-mode; NODE_ENV is a fallback.
   const appMode = process.env.APP_MODE;
@@ -10,7 +15,7 @@ function isProductionMode(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-function getJwtSecret(): string {
+function getDefaultJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (secret) {
     return secret;
@@ -22,28 +27,21 @@ function getJwtSecret(): string {
 }
 
 export function signJWT(
-  payload: Omit<
-    RequestContext,
-    "permissions" | "sessionId" | "targetOrganizationId"
-  >,
+  payload: JwtPayload,
+  secret?: string,
   options?: jwt.SignOptions,
 ): string {
-  return jwt.sign(payload, getJwtSecret(), {
+  return jwt.sign(payload, secret ?? getDefaultJwtSecret(), {
     expiresIn: "24h",
     algorithm: "HS256",
     ...options,
   });
 }
 
-export function verifyJWT(
-  token: string,
-): Omit<RequestContext, "permissions" | "sessionId" | "targetOrganizationId"> {
-  return jwt.verify(token, getJwtSecret(), {
+export function verifyJWT(token: string, secret?: string): JwtPayload {
+  return jwt.verify(token, secret ?? getDefaultJwtSecret(), {
     algorithms: ["HS256"],
-  }) as Omit<
-    RequestContext,
-    "permissions" | "sessionId" | "targetOrganizationId"
-  >;
+  }) as JwtPayload;
 }
 
 export function deriveSessionId(token: string): string {
