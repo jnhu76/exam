@@ -10,12 +10,14 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 
 ## 2. Phase 1 Acceptance Checklist
 
+Status legend: `implemented` means the requirement is present in code, not that Phase 1 acceptance is fully verified; `aligned` means evidence matches the Phase 1 baseline; `partially-implemented` or `partially-aligned` means some parts exist but gaps remain; `conflicting` means current code contradicts the Phase 1 requirement; `missing` means no implementation was found; `unknown-needs-test` means the behavior cannot be confirmed without additional tests; other status labels mark narrow audit categories described by their row.
+
 | Requirement | Status | Evidence / Gap |
 | --- | --- | --- |
 | Internal default organization | partially-implemented | `packages/db/src/seed.ts:41-99` creates slug `default`; `apps/api/src/config/runtimeConfig.ts:256-259` hardcodes default slug. Production creation policy is still unclear. |
 | No organizationSlug login | conflicting | `packages/contracts/src/auth.ts:25-28`, `apps/api/src/routes/auth.ts:87-99`, and `apps/e2e/lib/seed.ts:18-23` still support/send `organizationSlug`. |
 | No tenant switcher | partially-implemented | CI sets singleTenant; runtime still exposes switcher when multiTenant is accepted in `runtimeConfig.ts:222-264`. |
-| No SuperAdmin product path | conflicting | `auth.ts:162-194` blocks SuperAdmin login in singleTenant, but seed/RBAC/routes/UI still expose it. |
+| No SuperAdmin product path | conflicting | `apps/api/src/routes/auth.ts:162-194` blocks SuperAdmin login in singleTenant, but seed/RBAC/routes/UI still expose it. |
 | Admin + Candidate roles | partially-implemented | Candidate attempt routes are Candidate-only; admin APIs still allow Teacher/SuperAdmin. |
 | Admin bootstrap | partially-implemented | `/auth/register` exists in `apps/api/src/routes/auth.ts:28-81`, but requires `organizationSlug` and uses SuperAdmin ctx. |
 | Local admin reset-password script | missing | No reset script found; required by roadmap and operation manual. |
@@ -64,7 +66,7 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 - `apps/api/src/routes/candidate.ts:329-425`: candidate import uses configured fields and writes audit.
 - `apps/api/src/routes/export.ts:15-18`: score export allows Admin/SuperAdmin/Teacher.
 - `apps/api/src/routes/export.ts:35-48`: export headers use CandidateField `name`, while docs examples use labels such as `编号`.
-- `apps/web/src/pages/admin/QuestionImportPage.tsx:177-183`: template uses `single_choice,...,2,...`; backend expects option IDs such as `B`.
+- `apps/web/src/pages/admin/QuestionImportPage.tsx:177-183`: template uses `single_choice,...,2,...`; backend expects an option ID such as `B`.
 - `packages/import-export/src/csv.ts`: only CSV generation is shared; question CSV parsing is duplicated in web.
 
 ### Exam Runtime
@@ -72,7 +74,7 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 - `apps/api/src/routes/attempts.ts:619-702`: save-answer uses transaction, `findByIdForUpdate`, `clientSeq`, `baseVersion`.
 - `apps/api/src/routes/attempts.ts:751-850`: submit is idempotent, row-locked, and finalizes grading.
 - `apps/api/src/routes/attempts.ts:472`: queue endpoint is exposed.
-- `apps/api/src/routes/attempts.ts:886`: restore endpoint is exposed, but Phase 1 UI/operations are not productized.
+- `apps/api/src/routes/attempts.ts:886`: restore backend route exists as server-side recovery support; full disrupted recovery UI and operational adjudication are Phase 2.
 - `apps/api/src/routes/exam.ts:443-457`: archive endpoint is exposed; richer lifecycle is Phase 2.
 
 ### Observability / Audit / E2E
@@ -94,7 +96,7 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 | Runtime mode | `multiTenant` fail-fast | `runtimeConfig.ts`, `docker-compose.yml` | conflicting | multiTenant accepted and Compose defaults to it. | PR 2 |
 | SuperAdmin path | no SuperAdmin product path | seed, RBAC, routes, UsersPage | conflicting | Login guard is insufficient; seed/UI/API still expose it. | PR 1, PR 2 |
 | Teacher/Proctor roles | future only | RBAC/routes/UsersPage | conflicting | Teacher/Proctor are createable/authorized. | PR 2, PR 4 |
-| Admin bootstrap | default-org Admin bootstrap | `routes/auth.ts:28-81` | partially-implemented | Uses org slug and SuperAdmin ctx. | PR 3 |
+| Admin bootstrap | default-org Admin bootstrap | `apps/api/src/routes/auth.ts:28-81` | partially-implemented | Uses org slug and SuperAdmin ctx. | PR 3 |
 | Admin recovery | local reset-password script | not found | missing | No recovery path independent of seed. | PR 3 |
 | Seed baseline | default org + Admin/Candidates | `packages/db/src/seed.ts` | conflicting | SuperAdmin/Teacher + weak defaults. | PR 1 |
 | Demo baseline | Phase 1 demo matches mock-data | `demo-seed.ts` | conflicting | demo org, Teachers, strict lockdown. | PR 1 |
@@ -106,7 +108,7 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 | Assignment | assigned candidates only | start flow | partially-implemented | auto-enrollment can bypass assignment. | PR 5 |
 | Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
 | Submit/grading | idempotent row-locked submit | `attempts.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
-| Phase 2 residue | no queue/restore/archive product path | attempts/exam routes | conflicting | Phase 2 endpoints exposed. | PR 5 |
+| Phase boundary residue | no queue/archive workflow; restore backend only | attempts/exam routes | conflicting | Queue/archive product paths are exposed; restore should remain backend recovery support without Phase 2 UI/operation workflow. | PR 5 |
 | Error responses | stable code + requestId | route-local attempt errors | partially-implemented | Some errors bypass shared shape. | PR 6 |
 | Structured logs | pino fields + redaction | `server.ts` | partially-implemented | default logger only. | PR 6 |
 | AuditLog | minimal action coverage | no reset script audit | partially-implemented | reset action missing; export action naming drift. | PR 3, PR 6 |
@@ -124,7 +126,7 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 | E2E orgSlug | `apps/e2e/lib/seed.ts:3-23` | no orgSlug login | sends organizationSlug. | conflicting | E2E contract conflicts. | PR 7 |
 | API test orgSlug | `auth.test.ts`, `audit.test.ts`, `smoke.test.ts` | no orgSlug main path | tests send slug. | conflicting | old login contract in tests. | PR 2 |
 | SuperAdmin seed | `packages/db/src/seed.ts:22-73` | no SuperAdmin | includes superadmin. | conflicting | remove/default-disable. | PR 1 |
-| Teacher seed | `packages/db/src/seed.ts:29-65` | no Teacher required | includes teacher. | conflicting | remove or future-only fixture. | PR 1 |
+| Teacher seed | `packages/db/src/seed.ts:29-65` | no Teacher seeded, exposed, or required | includes teacher. | conflicting | remove or future-only fixture. | PR 1 |
 | Demo users | `packages/db/src/demo-seed.ts:199-233` | Admin + Candidates | SuperAdmin and Teachers. | conflicting | mixed Phase 3/4 demo. | PR 1 |
 | Test helper users | `apps/api/src/routes/testHelpers.ts:36-95` | Admin + Candidate helper | includes teacher/superAdmin tokens. | conflicting | future roles baked into helper. | PR 1 |
 | Candidate passwords | seed/demo/E2E | dev/test temp only | `candidate123`/weak defaults. | partially-aligned | production safety not enforced. | PR 1, PR 3 |
@@ -143,11 +145,11 @@ Scanned areas: auth/RBAC/session, runtime config, seed/bootstrap, candidate/ques
 | Area | File / Path | Current Evidence | Phase 1 Expected Baseline | Status | Required Action | Suggested PR |
 | --- | --- | --- | --- | --- | --- | --- |
 | Organizations schema | `packages/db/src/schema/pg.ts:31-42` | table with unique slug. | keep table as internal boundary. | aligned | no destructive deletion. | none |
-| organizationId fields | `schema/pg.ts` business tables | users/candidateFields/profiles/courses/questions/exams/enrollments/attempts/auditLogs have organizationId. | all business data scoped. | aligned | verify repo filters. | PR 5/6 |
-| CandidateField schema | `schema/pg.ts:62-81` | org+name unique. | belongs to default org. | aligned | no migration for baseline. | none |
-| Candidate JSON uniqueness | `schema/pg.ts:104-122` | JSONB fields; no DB unique on dynamic identity. | unique/required enforced in service/import. | legacy-compatible-no-action | test service-level enforcement. | PR 4 |
-| Users schema | `schema/pg.ts:83-102` | no mustChangePassword/sessionVersion. | local auth baseline plus future first-login policy. | schema-gap | forward migration likely if mustChangePassword is Phase 1 repair. | PR 3 |
-| AuditLog schema | `schema/pg.ts:266-277` | table exists. | minimal audit events. | aligned | add missing writers, not table. | PR 6 |
+| organizationId fields | `packages/db/src/schema/pg.ts` business tables | users/candidateFields/profiles/courses/questions/exams/enrollments/attempts/auditLogs have organizationId. | all business data scoped. | aligned | verify repo filters. | PR 5/6 |
+| CandidateField schema | `packages/db/src/schema/pg.ts:62-81` | org+name unique. | belongs to default org. | aligned | no migration for baseline. | none |
+| Candidate JSON uniqueness | `packages/db/src/schema/pg.ts:104-122` | JSONB fields; no DB unique on dynamic identity. | unique/required enforced in service/import. | legacy-compatible-no-action | test service-level enforcement. | PR 4 |
+| Users schema | `packages/db/src/schema/pg.ts:83-102` | no mustChangePassword/sessionVersion. | local auth baseline plus future first-login policy. | schema-gap | forward migration likely if mustChangePassword is Phase 1 repair. | PR 3 |
+| AuditLog schema | `packages/db/src/schema/pg.ts:266-277` | table exists. | minimal audit events. | aligned | add missing writers, not table. | PR 6 |
 | Historical migration | `packages/db/migrations/postgres/0000_*.sql` | schema-only, no seed INSERTs. | do not edit historical migration. | do-not-edit-historical | use forward migration for schema changes. | PR 1/3 |
 | Default org row | seed only | no migration baseline row; seed creates default. | default org created by bootstrap/startup/seed policy, not UI. | unknown-needs-test | define production owner for default org. | PR 1 |
 | Seed data | `packages/db/src/seed.ts` | creates future role users. | dev/test Admin + Candidates only. | seed-conflict | align seed; do not use as production bootstrap. | PR 1 |
@@ -164,7 +166,7 @@ Phase 1 test/dev/E2E data should use:
 - one default Admin account for dev/test/E2E;
 - multiple Candidate accounts;
 - no SuperAdmin;
-- no Teacher required for Phase 1 acceptance;
+- no Teacher seeded, exposed, or required for Phase 1 acceptance;
 - no organizationSlug login;
 - one `timed_window` exam;
 - explicitly assigned candidates;
@@ -182,7 +184,7 @@ Phase 1 test/dev/E2E data should use:
 - Production does not rely on demo seed.
 - Dev/test/E2E may seed one Admin and multiple Candidates.
 - SuperAdmin is not seeded.
-- Teacher is not required for Phase 1 acceptance.
+- Teacher is not seeded, exposed, or required for Phase 1 acceptance.
 - CandidateField belongs to the default organization.
 - Courses belong to the default organization.
 - Questions belong to Courses and the default organization.
@@ -203,7 +205,7 @@ Phase 1 test/dev/E2E data should use:
 | Seed/mock/E2E data inconsistent | docs use Admin+Candidate default org; seed/demo/E2E use SuperAdmin/Teacher/demo org. | Test data does not represent Phase 1 acceptance. | PR 1 | Yes |
 | Missing admin recovery path | No reset-password script found. | Production lockout recovery relies on weak/default seed or manual DB edits. | PR 3 | Yes |
 | Import/export permission residue | Candidate/question/export routes allow SuperAdmin/Teacher. | Future roles can mutate/export Phase 1 data. | PR 4 | Yes |
-| Phase 2 endpoints exposed in current runtime | queue, restore, archive routes remain exposed. | Users/tests may depend on Phase 2 behavior before product scope. | PR 5 | Partially |
+| Phase 2 endpoints exposed in current runtime | queue and archive routes remain exposed; restore exists as backend recovery support. | Users/tests may depend on Phase 2 operation behavior before product scope. | PR 5 | Partially |
 | RequestId/logging incomplete | Route-local errors omit requestId; logger has no standard fields/redaction. | Poor diagnosis and sensitive logging risk. | PR 6 | Yes for release hardening |
 | E2E disabled in CI | `.github/workflows/ci.yml:83-86`. | Phase 1 acceptance signals are not blocking. | PR 7 | Yes |
 | Save/submit/grading concurrency needs blocking proof | Implementation uses row locks, but CI E2E is disabled. | Regression risk in the most critical exam path. | PR 5, PR 7 | Yes |
@@ -221,6 +223,8 @@ pnpm format:check
 pnpm lint:copy
 ```
 
+The push hook also runs `turbo typecheck`; keep that as an additional submission check rather than a manual audit-doc command.
+
 ### PR 1: phase1-database-baseline-alignment
 
 Scope: align seed/demo/test/E2E fixture data with one default organization and Admin + Candidate default data; remove/default-disable SuperAdmin/Teacher from Phase 1 default seed; clarify production default organization owner; optionally add forward migration only if required by final bootstrap/account design.
@@ -233,7 +237,7 @@ Scope: username/password login only; remove organizationSlug from Phase 1 login/
 
 ### PR 3: phase1-admin-bootstrap-reset
 
-Scope: first Admin bootstrap for the internal default organization; local admin reset-password script; Admin resets Candidate password; reset audit/log evidence; no production reliance on weak seed.
+Scope: first Admin bootstrap for the internal default organization; local Admin account reset-password script; Admin-managed Candidate password reset; reset audit/log evidence; no production reliance on weak seed.
 
 ### PR 4: phase1-import-export-permissions
 
@@ -241,7 +245,7 @@ Scope: Candidate import, Question import, and Result CSV export Admin-only; alig
 
 ### PR 5: phase1-exam-core-flow
 
-Scope: enforce explicit assignment; keep `timed_window` core flow; verify save-answer/submit/grade row lock and idempotency; hide/defer queue/restore/archive product paths as appropriate for Phase 1.
+Scope: enforce explicit assignment; keep `timed_window` core flow; verify save-answer/submit/grade row lock and idempotency; hide/defer queue/archive product paths; keep restore as backend recovery support without Phase 2 UI/operation workflow.
 
 ### PR 6: phase1-audit-logs-requestid
 
