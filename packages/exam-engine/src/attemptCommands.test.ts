@@ -16,7 +16,6 @@ import type {
 } from "@exam/domain";
 import {
   ExamNotOpenError,
-  AttemptDeadlineExceededError,
   InvalidStateTransitionError,
   ValidationError,
   MaxAttemptsReachedError,
@@ -479,15 +478,21 @@ describe("attemptCommands", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it("rejects late submission (past deadline) with AttemptDeadlineExceededError", async () => {
+    it("allows late submission (past deadline) — answers already saved on server", async () => {
+      // Phase 1 fix: submit is not deadline-guarded to avoid dead-state.
+      // save-answer still rejects after deadline — answer protocol handles that.
       const attempt = makeAttempt({
         deadlineAt: new Date("2025-01-01T09:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
 
-      await expect(
-        submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T11:00:00Z")),
-      ).rejects.toThrow(AttemptDeadlineExceededError);
+      const result = await submitAttempt(
+        attRepo,
+        "attempt-1",
+        new Date("2025-01-01T11:00:00Z"),
+      );
+
+      expect(result.status).toBe("submitted");
     });
 
     it("throws ValidationError when submit update returns null", async () => {

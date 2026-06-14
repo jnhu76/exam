@@ -25,7 +25,7 @@ Phase1.4-S03a 与 Phase1.5 已经实际落地以下能力，Phase1.6 不再重�
 
 1. **`POST /attempts/:id/submit` 仍未对同一行加 `FOR UPDATE` 锁**（`apps/api/src/routes/attempts.ts:734` 仍调用 `findByIdAndCandidate`），导致 saveAnswers 与 submit 不锁同一行，存在 lost-update / submit-after-save 竞争窗口
 2. **`exam-engine` 的 `submitAttempt(attemptRepo, attemptId, now)`** 命令内部仍走 `findById` + `update` 两步，事务隔离依靠路由层包裹；row-level lock 必须由路由层在调用 command 前显式获取
-3. **缺少**端到端集成测试断言「`now > deadlineAt` 提交 → HTTP 409 `ATTEMPT_DEADLINE_EXCEEDED`」
+3. ~~缺少端到端集成测试断言「`now > deadlineAt` 提交 → HTTP 409」~~ 已澄清并补测试：Phase 1 中 submit **不**受 deadline 限制；deadline 仅限制 save-answer（返回 `DEADLINE_EXCEEDED`）
 4. **缺少**真正的 PG 并发测试套件（双 client + advisory lock barrier 或 controlled interleaving），现有测试只能覆盖单事务路径
 5. **Phase1.3 P0** 正常考生提交回归未在新事务边界基础上复测
 
@@ -64,7 +64,7 @@ S03a 在协议、错误码、事务边界、attempt-level serialization、并发
 Phase2 可以假设：
 
 - `POST /attempts/:id/answers/:qid` 与 `POST /attempts/:id/submit` 对同一 attempt 行串行化（PG row-level lock）
-- Deadline 超时提交返回 `409 ATTEMPT_DEADLINE_EXCEEDED`
+- Deadline 超时后 save-answer 被拒绝（`DEADLINE_EXCEEDED`）；submit 不受 deadline 限制（Phase 1 语义）
 - Graded / submitted 状态下 save 被拒绝且事务回滚不留半状态
 - PG 并发集成测试套件作为 Phase2 entry gate
 - Phase1.3 P0 正常考生提交场景在新事务边界下回归通过

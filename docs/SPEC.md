@@ -27,6 +27,18 @@
 - 题目快照——组卷后题目冻结，题库修改不影响历史答卷
 - 服务端是数据权威——客户端是展示层，答案以服务端记录为准
 
+> **当前实现边界（Phase 1.7）**：
+>
+> 上述原则是系统**长期不变契约**，不会被 Phase 1.7 削弱。但需要明确当前接线深度：
+>
+> - "答卷可恢复"在 Phase 1.7 仅保证**服务端层面**的能力——答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
+> - **前端恢复入口与监考裁决仍未产品化**：候考人没有自助 restore 按钮，监考也没有恢复 disrupted attempt 的操作面板；attempt 一旦 `disrupted`，前端只跳到结果页提示"答题中断"。
+> - 因此在 disrupted 状态被生产场景大规模触发之前，必须先完成下列前置 Phase 2 项：
+>   - **P2A-J3 Attempt Heartbeat**：前端 restore UI、心跳调参、超时阈值评估
+>   - **P2A-J4 disrupted 检测与恢复**：监考介入 / 恢复裁决流程
+>
+> 详见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
+
 ---
 
 ## 二、核心领域模型
@@ -105,7 +117,7 @@ ExamAttempt 是考试系统的核心实体，取代原来的"一份答卷"概念
 最终认定成绩               — 按 scoreStrategy 从多次中选
 ```
 
-**ExamAttempt 状态机**：
+**ExamAttempt 状态机（目标设计）**：
 
 ```
 not_started → queued → in_progress → submitted → grading → graded
@@ -113,16 +125,18 @@ not_started → queued → in_progress → submitted → grading → graded
                                      └── disrupted   voided
 ```
 
-| 状态 | 含义 |
-|------|------|
-| `not_started` | 已创建，尚未开始 |
-| `queued` | 排队中（requireQueue 时） |
-| `in_progress` | 正在答题 |
-| `disrupted` | 心跳超时自动标记（60s 无心跳） |
-| `submitted` | 已交卷，等待批改 |
-| `grading` | 正在批改 |
-| `graded` | 批改完成 |
-| `voided` | 已作废（监考员或管理员操作） |
+> 上图是状态机的**长期目标设计**。当前 Phase 1.7 的实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/phase1.7/exam-lifecycle-non-e2e-closeout.md` §3。
+
+| 状态 | 含义 | 当前实现接线 |
+|------|------|------|
+| `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
+| `queued` | 排队中（requireQueue 时） | **Phase 2 / planned**：`requireQueue` 入口属于 timed_sync 计时模式（§2.5），仅在内存路径上短暂出现，不持久化 |
+| `in_progress` | 正在答题 | **Phase 1.7 已接线**：`startAttempt` 命令写入 |
+| `disrupted` | 心跳超时自动标记（60s 无心跳） | **Phase 1.7 后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**前端恢复入口与监考裁决仍未产品化**，生产大规模启用前仍依赖 P2A-J3 / P2A-J4（详见 §3.5 与 closeout §2.1） |
+| `submitted` | 已交卷，等待批改 | **Phase 1.7 已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
+| `grading` | 正在批改 | 保留，**当前无写入路径**：`submitAttempt` 内联调用批改后直接落 `graded`；该状态保留以便 Phase 2 异步批改/AI 批改场景启用 |
+| `graded` | 批改完成 | **Phase 1.7 已接线** |
+| `voided` | 已作废（监考员或管理员操作） | **Phase 2 / planned**：`voidAttempt` command 仅作为目标设计，Phase 1.7 未提供管控入口 |
 
 **ExamAttempt 数据结构**：
 
@@ -243,12 +257,14 @@ remainingSeconds = deadlineAt - serverNow
 
 四种计时方式，覆盖从"严格统考"到"随到随考"的全部场景：
 
-| 模式 | 时间规则 | 典型场景 |
-|------|----------|----------|
-| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 |
-| **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 |
-| **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 |
-| **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 |
+| 模式 | 时间规则 | 典型场景 | 当前接线 |
+|------|----------|----------|------|
+| **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **Phase 2 / planned**（依赖监考面板） |
+| **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 | **Phase 1.7 已接线** |
+| **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 | **Phase 2 / planned** |
+| **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 | **Phase 2 / planned** |
+
+> Phase 1.7 仅实现 `timed_window`。其它三种模式作为目标设计保留，**未在当前代码中接线**——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要等待 Phase 2C 显式启动（详见 §七 Phase 2 列表与 closeout §2.4）。
 
 ```
 timed_sync 示例：
@@ -279,9 +295,9 @@ untimed 示例：
 | `shuffleOptions` | 关 | 开 | 选项乱序 |
 | `detectTabSwitch` | 关 | 开 | 切屏检测（Phase 1 仅记录+报告监考员） |
 | `disableCopyPaste` | 关 | 开 | 前端禁用右键/选择/复制 |
-| `requireQueue` | 关 | 开 | 排队分批进入 |
-| `batchSize` | - | 10 | 每批放行人数 |
-| `batchInterval` | - | 3 | 批次间隔秒数 |
+| `requireQueue` | 关 | 开 | 排队分批进入（依赖 `timed_sync`，**Phase 2 / planned**） |
+| `batchSize` | - | 10 | 每批放行人数（同上） |
+| `batchInterval` | - | 3 | 批次间隔秒数（同上） |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
 | `requireLockdown` | 关 | 关 | 强制 Electron 锁屏 [Phase 2] |
 | `showResultImmediately` | 开 | 可配置 | 交卷后是否立即显示成绩 |
@@ -401,6 +417,8 @@ db.select().from(question).where(eq(question.id, id))
 draft → published → open → closed → archived
 ```
 
+> Phase 1.7 当前实现仅接线 `draft → published`（以及内部 archived 字段）。`open` / `closed` 作为运营态属于 Phase 2 范围（与 §2.5 的 `timed_sync` / `deadline` / `untimed` 计时模式与 admin 手动 open/close 入口一同推进）。详见 closeout §2.4。
+
 **ExamAttempt 状态**（见 §2.2）：
 
 ```
@@ -409,20 +427,24 @@ not_started → queued → in_progress → submitted → grading → graded
                                      └── disrupted   voided
 ```
 
+> 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / grading / voided` 保留为目标设计但**当前无写入路径**。完整接线表见 §2.2。
+
 **Command functions**：
 
 ```ts
-publishExam(ctx, examId)
-openExam(ctx, examId)
-closeExam(ctx, examId)
-startAttempt(ctx, examId, candidateId)
-saveAnswer(ctx, attemptId, questionId, payload)
-submitAttempt(ctx, attemptId)
-gradeAttempt(ctx, attemptId)
-markDisrupted(ctx, attemptId)
-restoreAttempt(ctx, attemptId)
-voidAttempt(ctx, attemptId, reason)
+publishExam(ctx, examId)        // Phase 1.7 已接线
+openExam(ctx, examId)           // Phase 2 / planned
+closeExam(ctx, examId)          // Phase 2 / planned
+startAttempt(ctx, examId, candidateId)        // Phase 1.7 已接线
+saveAnswer(ctx, attemptId, questionId, payload) // Phase 1.7 已接线（见 §3.5）
+submitAttempt(ctx, attemptId)   // Phase 1.7 已接线（4-phase 内联批改 → graded）
+gradeAttempt(ctx, attemptId)    // Phase 1.7 已接线（由 submitAttempt 内联调用）
+markDisrupted(ctx, attemptId)   // Phase 1.7 后端已接线：心跳扫描器默认注册并运行，会真实调用此命令；前端恢复入口与监考裁决仍未产品化（属 P2A-J3 / P2A-J4）
+restoreAttempt(ctx, attemptId)  // Phase 1.7 后端路由已存在；前端恢复 UI 与监考介入流程未产品化（属 P2A-J3 / P2A-J4）
+voidAttempt(ctx, attemptId, reason) // Phase 2 / planned（无 admin / proctor 入口）
 ```
+
+> 上述 command 列表是状态机的**目标合约**。被标注 _Phase 2 / planned_ 的命令并不代表 Phase 1.7 已实现，请勿据此假定可在产品中调用；具体接线情况见各命令注释与 closeout §3.
 
 ### 3.4 Server Time Authority：服务端权威计时
 
@@ -507,6 +529,12 @@ SaveAnswerResponse {
 | 服务端重启 | 答案已实时持久化到数据库 → 所有 in_progress 的 attempt 保持原状态 → 考生继续 |
 | 网络中断 | 客户端切入离线模式 → 答案暂存本地 → 恢复后按 serverVersion 批量同步 |
 
+> **Phase 1.7 实现边界**：上表是恢复能力的**目标合约**。当前实现：
+>
+> - "客户端崩溃 / 网络中断"在 attempt 仍处于 `in_progress` 时可正常恢复（前端在加载 attempt 时拉取服务端答案版本）。
+> - 一旦 attempt 被心跳扫描器置为 `disrupted`，**前端没有自助 restore 入口**——会直接跳到结果页提示"答题中断，请联系监考或重新进入"。这条恢复路径需要 P2A-J3（前端 restore UI）+ P2A-J4（监考介入）共同收口。
+> - "服务端重启"路径不依赖前端 UI，已具备能力。
+
 ### 3.6 Question Snapshot：题目快照底座
 
 组卷后必须冻结以下内容，题库后续修改不能影响历史答卷：
@@ -569,6 +597,10 @@ ScoreResult {
 | 监考操作 | 延长考试时间、标记违纪、恢复 disrupted attempt |
 | 成绩 | 修改成绩、导出成绩 |
 | 数据管理 | 导入考生、导入题库、删除题目、修改题目 |
+
+> **当前实现边界（Phase 1.7）**：上表是 AuditLog 作为长期底座原则的**目标覆盖面**，不等于 Phase 1.7 已全部实现。Phase 1.7 当前仅要求**已接线操作的审计保持一致**——即认证、已实现的考试管理 / 考试执行 / 成绩 / 数据管理路径上的操作。
+>
+> 监考类操作的审计——包括延长考试时间、标记违纪、强制交卷、恢复 disrupted attempt——将随 **P2A-J4** 与 Phase 2 监考能力（见 §4.5、§七 Phase 2 列表）一同落地。当前不得因为本节"至少覆盖"列表而提前补实现 proctor intervention 或新增 AuditLog 入口；§3.3 command function 列表中标记为 _Phase 2 / planned_ 的命令同样适用此约束。
 
 审计模型：
 
@@ -691,7 +723,9 @@ Teacher 新建 Exam → 选择 Course
 | 判断 | 二选一 Radio | 同单选 |
 | 填空 | 文本输入框（支持多个空） | 每个空独立，blur 时保存 |
 
-**排队分批进入**（用于闭卷统考）：
+**排队分批进入**（用于闭卷统考，**Phase 2 / planned**）：
+
+> 该子流程依赖 `timed_sync` 计时模式与监考面板触发"开考"动作，两者均归属 Phase 2（见 §2.5、§4.5）。Phase 1.7 不实现该流程，下文为目标设计示意。
 
 ```
 Proctor 点击"开考"

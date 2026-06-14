@@ -216,11 +216,10 @@ describe("gradeAttempt", () => {
     },
   );
 
-  it("throws ValidationError when marking attempt as grading fails", async () => {
+  it("throws ValidationError when persisting graded result fails", async () => {
     const exam = makeExam();
     const attempt = makeAttempt();
     const enrollment = makeEnrollment();
-    const gradingAttempt = { ...attempt, status: "grading" as const };
     const examRepo: ExamRepository = {
       findById: () => exam,
       update: () => exam,
@@ -230,7 +229,7 @@ describe("gradeAttempt", () => {
       findActiveByEnrollment: () => null,
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
-      update: () => gradingAttempt,
+      update: () => null,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
@@ -238,28 +237,21 @@ describe("gradeAttempt", () => {
       update: () => enrollment,
     };
 
-    const failingAttemptRepo: AttemptRepository = {
-      ...attemptRepo,
-      update: () => null,
-    };
-
     await expect(
       gradeAttempt(
         examRepo,
         enrollmentRepo,
-        failingAttemptRepo,
+        attemptRepo,
         "attempt-1",
         new Date(),
       ),
-    ).rejects.toThrow("Failed to update attempt status to grading");
+    ).rejects.toThrow("Failed to persist graded results");
   });
 
   it("throws ValidationError when writing graded result fails", async () => {
     const exam = makeExam();
     const attempt = makeAttempt();
     const enrollment = makeEnrollment();
-    const gradingAttempt = { ...attempt, status: "grading" as const };
-    let callCount = 0;
     const examRepo: ExamRepository = {
       findById: () => exam,
       update: () => exam,
@@ -269,11 +261,7 @@ describe("gradeAttempt", () => {
       findActiveByEnrollment: () => null,
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
-      update: () => {
-        callCount++;
-        if (callCount === 1) return gradingAttempt;
-        return null;
-      },
+      update: () => null,
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
