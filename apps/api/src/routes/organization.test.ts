@@ -1,12 +1,20 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import organizationRoutes from "./organization.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
 
 describe("organization routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let superAdminToken: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(organizationRoutes);
+    const futureSuperAdmin = await createFutureRoleUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "SuperAdmin",
+      "future-superadmin",
+    );
+    superAdminToken = futureSuperAdmin.token;
   });
 
   afterAll(async () => {
@@ -17,7 +25,7 @@ describe("organization routes", () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/organizations",
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -31,7 +39,7 @@ describe("organization routes", () => {
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/organizations",
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.candidateToken },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({
@@ -48,7 +56,7 @@ describe("organization routes", () => {
       method: "POST",
       url: "/api/organizations",
       payload: { name: "Test Org", displayName: "Test Org Display", slug },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -61,7 +69,7 @@ describe("organization routes", () => {
       method: "POST",
       url: "/api/organizations",
       payload: { name: "", displayName: "", slug: "" },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
 
     expect(res.statusCode).toBe(400);
@@ -92,7 +100,7 @@ describe("organization routes", () => {
         displayName: "Duplicate Organization",
         slug: ctx.org.slug,
       },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
 
     expect(res.statusCode).toBe(409);
@@ -109,7 +117,7 @@ describe("organization routes", () => {
       method: "PATCH",
       url: `/api/organizations/${ctx.org.id}`,
       payload: { displayName: "Updated Name" },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -121,7 +129,7 @@ describe("organization routes", () => {
       method: "PATCH",
       url: `/api/organizations/${crypto.randomUUID()}`,
       payload: { displayName: "Missing Organization" },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
 
     expect(res.statusCode).toBe(404);
@@ -142,13 +150,13 @@ describe("organization routes", () => {
         displayName: "ToDelete",
         slug: `to-delete-${Date.now()}`,
       },
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
     const created = createRes.json();
     const delRes = await ctx.app.inject({
       method: "DELETE",
       url: `/api/organizations/${created.id}`,
-      cookies: { "auth-token": ctx.superAdminToken },
+      cookies: { "auth-token": superAdminToken },
     });
     expect(delRes.statusCode).toBe(204);
     expect(delRes.body).toBe("");

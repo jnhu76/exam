@@ -2,16 +2,16 @@ import { randomUUID } from "node:crypto";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
 import dotenv from "dotenv";
+import { eq } from "drizzle-orm";
 
 dotenv.config();
 
 export type HashFunction = (password: string) => string | Promise<string>;
 
 export interface SeedUserIds {
-  superAdminId: string;
   adminId: string;
-  teacherId: string;
   candidateId: string;
+  candidate2Id: string;
 }
 
 export interface SeedResult {
@@ -20,19 +20,14 @@ export interface SeedResult {
 }
 
 export const SEED_CREDENTIALS = {
-  superadmin: {
-    username: "superadmin",
-    password: "admin123",
-    role: "SuperAdmin" as const,
-  },
   admin: { username: "admin", password: "admin123", role: "Admin" as const },
-  teacher: {
-    username: "teacher",
-    password: "teacher123",
-    role: "Teacher" as const,
-  },
   candidate: {
     username: "candidate",
+    password: "candidate123",
+    role: "Candidate" as const,
+  },
+  candidate2: {
+    username: "candidate2",
     password: "candidate123",
     role: "Candidate" as const,
   },
@@ -43,13 +38,6 @@ export const SEED_ORG_NAME = "Default Organization";
 
 const USER_DEFS = [
   {
-    envUsername: "SEED_SUPERADMIN_USERNAME",
-    envPassword: "SEED_SUPERADMIN_PASSWORD",
-    envName: "SEED_SUPERADMIN_NAME",
-    defaults: SEED_CREDENTIALS.superadmin,
-    nameDefault: "Super Admin",
-  },
-  {
     envUsername: "SEED_ADMIN_USERNAME",
     envPassword: "SEED_ADMIN_PASSWORD",
     envName: "SEED_ADMIN_NAME",
@@ -57,18 +45,18 @@ const USER_DEFS = [
     nameDefault: "Admin",
   },
   {
-    envUsername: "SEED_TEACHER_USERNAME",
-    envPassword: "SEED_TEACHER_PASSWORD",
-    envName: "SEED_TEACHER_NAME",
-    defaults: SEED_CREDENTIALS.teacher,
-    nameDefault: "Teacher",
-  },
-  {
     envUsername: "SEED_CANDIDATE_USERNAME",
     envPassword: "SEED_CANDIDATE_PASSWORD",
     envName: "SEED_CANDIDATE_NAME",
     defaults: SEED_CREDENTIALS.candidate,
     nameDefault: "Candidate",
+  },
+  {
+    envUsername: "SEED_CANDIDATE2_USERNAME",
+    envPassword: "SEED_CANDIDATE2_PASSWORD",
+    envName: "SEED_CANDIDATE2_NAME",
+    defaults: SEED_CREDENTIALS.candidate2,
+    nameDefault: "Candidate 2",
   },
 ] as const;
 
@@ -131,10 +119,9 @@ export async function seed(
   return {
     orgId,
     users: {
-      superAdminId: userIds[0]!,
-      adminId: userIds[1]!,
-      teacherId: userIds[2]!,
-      candidateId: userIds[3]!,
+      adminId: userIds[0]!,
+      candidateId: userIds[1]!,
+      candidate2Id: userIds[2]!,
     },
   };
 }

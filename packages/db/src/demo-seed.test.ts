@@ -28,16 +28,18 @@ describe("demo seed", () => {
     const demoOrg = await db
       .select()
       .from(schema.organizations)
-      .where(eq(schema.organizations.slug, "demo"));
+      .where(eq(schema.organizations.slug, "default"));
     const users = await db
       .select()
       .from(schema.users)
       .where(eq(schema.users.organizationId, demoOrg[0]!.id));
-    const usernames = users.map((u) => u.username).sort();
-    expect(usernames).toContain("superadmin");
-    expect(usernames).toContain("admin");
-    expect(usernames).toContain("teacher1");
-    expect(usernames).toContain("candidate1");
+    const activeUsernames = users
+      .filter((u) => u.isActive)
+      .map((u) => u.username)
+      .sort();
+    expect(activeUsernames).toContain("admin");
+    expect(activeUsernames).toContain("candidate1");
+    expect(activeUsernames).toContain("candidate2");
 
     const admin = users.find((u) => u.username === "admin")!;
     expect(await verifyPassword("admin123", admin.passwordHash)).toBe(true);
@@ -62,9 +64,12 @@ describe("demo seed", () => {
     const demoOrg = await db
       .select()
       .from(schema.organizations)
-      .where(eq(schema.organizations.slug, "demo"));
+      .where(eq(schema.organizations.slug, "default"));
     if (demoOrg[0]) {
       const orgId = demoOrg[0].id;
+      await db
+        .delete(schema.auditLogs)
+        .where(eq(schema.auditLogs.organizationId, orgId));
       await db
         .delete(schema.examAttempts)
         .where(eq(schema.examAttempts.organizationId, orgId));

@@ -23,7 +23,6 @@ import settingsRoutes from "../../src/routes/settings.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Permission, Role } from "@exam/domain";
-import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -37,8 +36,6 @@ describe("RBAC Permission Matrix (S02)", () => {
   let org: { id: string };
   let adminId: string;
   let adminToken: string;
-  let superAdminToken: string;
-  let teacherToken: string;
   let candidateToken: string;
   let app: ReturnType<typeof Fastify>;
 
@@ -59,18 +56,6 @@ describe("RBAC Permission Matrix (S02)", () => {
       .where(eq(schema.organizations.id, seedResult.orgId));
     org = orgs[0]!;
 
-    const superAdmin = (
-      await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, seedResult.users.superAdminId))
-    )[0]!;
-    const teacher = (
-      await db
-        .select()
-        .from(schema.users)
-        .where(eq(schema.users.id, seedResult.users.teacherId))
-    )[0]!;
     const candidate = (
       await db
         .select()
@@ -93,20 +78,10 @@ describe("RBAC Permission Matrix (S02)", () => {
       updatedAt: now,
     });
 
-    superAdminToken = signJWT({
-      actorId: superAdmin.id,
-      role: superAdmin.role as Role,
-      organizationId: superAdmin.organizationId,
-    });
     adminToken = signJWT({
       actorId: adminId,
       role: "Admin" as Role,
       organizationId: org.id,
-    });
-    teacherToken = signJWT({
-      actorId: teacher.id,
-      role: teacher.role as Role,
-      organizationId: teacher.organizationId,
     });
     candidateToken = signJWT({
       actorId: candidate.id,
@@ -164,33 +139,6 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC2: Teacher cannot manage organizations", () => {
-    it("Teacher calling POST /api/organizations returns 403", async () => {
-      const res = await app.inject({
-        method: "POST",
-        url: "/api/organizations",
-        payload: {
-          name: "Rogue Org",
-          displayName: "Rogue",
-          slug: "rogue",
-        },
-        cookies: { "auth-token": teacherToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-  });
-
-  describe("AC3: Teacher cannot delete users", () => {
-    it("Teacher calling DELETE /api/users/:id returns 403", async () => {
-      const res = await app.inject({
-        method: "DELETE",
-        url: `/api/users/${randomUUID()}`,
-        cookies: { "auth-token": teacherToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-  });
-
   describe("AC4: Admin cannot create organizations", () => {
     it("Admin calling POST /api/organizations returns 403", async () => {
       const res = await app.inject({
@@ -240,16 +188,6 @@ describe("RBAC Permission Matrix (S02)", () => {
       const body = res.json();
       const permissions = body.ctx.permissions as Permission[];
       expect(permissions.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe("AC8: Proctor permissions exist in rbac mapping", () => {
-    it("Proctor role has proctor-specific permissions", () => {
-      const proctorPermissions = getPermissionsForRole("Proctor");
-      expect(proctorPermissions).toContain("VIEW_EXAM_ROOM");
-      expect(proctorPermissions).toContain("EXTEND_TIME");
-      expect(proctorPermissions).toContain("MARK_MISCONDUCT");
-      expect(proctorPermissions).toContain("FORCE_SUBMIT");
     });
   });
 });

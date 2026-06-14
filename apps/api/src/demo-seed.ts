@@ -26,11 +26,8 @@ if (errors.length > 0) {
 }
 
 process.stdout.write("\nDone! Demo seed verified successfully.\n");
-process.stdout.write("\nDemo accounts:\n");
-process.stdout.write("  SuperAdmin:  superadmin / admin123\n");
+process.stdout.write("\nPhase 1 demo accounts:\n");
 process.stdout.write("  Admin:       admin      / admin123\n");
-process.stdout.write("  Teacher:     teacher1   / teacher123\n");
-process.stdout.write("  Teacher:     teacher2   / teacher123\n");
 process.stdout.write(
   "  Candidate:   candidate1 / candidate123  (in-progress exam)\n",
 );

@@ -361,7 +361,7 @@ describe("candidate field routes", () => {
         unique: false,
         sortOrder: 0,
       },
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.candidateToken },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({

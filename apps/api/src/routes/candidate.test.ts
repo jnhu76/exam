@@ -335,7 +335,7 @@ describe("candidate routes", () => {
         name: "Forbidden",
         fields: {},
       },
-      cookies: { "auth-token": ctx.teacherToken },
+      cookies: { "auth-token": ctx.candidateToken },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({

@@ -177,7 +177,7 @@ export function QuestionImportPage() {
   function downloadTemplate() {
     const header =
       "题型,题目内容,选项A,选项B,选项C,选项D,标准答案,分值,难度,标签";
-    const example1 = "single_choice,1+1=?,1,2,3,4,2,10,1,基础";
+    const example1 = "single_choice,1+1=?,1,2,3,4,B,10,1,基础";
     const example2 = "true_false,地球是圆的,,,,,true,5,1,常识";
     const example3 = "fill_blank,法国首都____,,,,,巴黎,10,2,地理";
     const csv = [header, example1, example2, example3].join("\n");

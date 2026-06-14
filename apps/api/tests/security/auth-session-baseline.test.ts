@@ -118,7 +118,6 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
         method: "POST",
         url: "/api/auth/login",
         payload: {
-          organizationSlug: "default",
           username: adminUsername,
           password: "admin123",
         },

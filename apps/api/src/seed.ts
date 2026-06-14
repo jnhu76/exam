@@ -13,11 +13,10 @@ await migratePostgres(conn.db);
 process.stdout.write("Seeding database...\n");
 await seed(conn.db, hashPassword);
 process.stdout.write(
-  "\nDone! Login credentials:\n" +
-    "  SuperAdmin: superadmin / admin123\n" +
+  "\nDone! Phase 1 dev/test seed credentials:\n" +
     "  Admin:      admin / admin123\n" +
-    "  Teacher:    teacher / teacher123\n" +
-    "  Candidate:  candidate / candidate123\n",
+    "  Candidate:  candidate / candidate123\n" +
+    "  Candidate:  candidate2 / candidate123\n",
 );
 
 await conn.sql.end();

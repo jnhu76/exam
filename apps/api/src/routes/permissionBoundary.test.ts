@@ -1,12 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import {
   buildTestApp,
   createCandidateViaApi,
-  createExamViaApi,
-  publishExamViaApi,
-  submitExamAsCandidate,
-  exportResultsCsvAsAdmin,
   uniquePrefix,
 } from "./testHelpers.js";
 import authRoutes from "./auth.js";
@@ -39,24 +34,6 @@ describe("permission boundary", () => {
   afterAll(async () => {
     await ctx.cleanup();
   });
-
-  function adminRequestContext() {
-    return {
-      actorId: ctx.admin.id,
-      organizationId: ctx.org.id,
-      targetOrganizationId: ctx.org.id,
-      role: "Admin" as const,
-      permissions: [] as import("@exam/domain").Permission[],
-      sessionId: "test",
-    };
-  }
-
-  async function markExamClosed(examId: string) {
-    await createExamRepo(ctx.db).update(adminRequestContext(), examId, {
-      closeAt: new Date(Date.now() - 1000),
-      status: "closed",
-    });
-  }
 
   describe("unauthenticated gets 401 on all protected endpoints", () => {
     it("GET /api/exams returns 401", async () => {
@@ -152,79 +129,6 @@ describe("permission boundary", () => {
         cookies: { "auth-token": candidateToken },
       });
       expect(res.statusCode).toBe(403);
-    });
-  });
-
-  describe("teacher can access exam/scores/export but not users/candidates management", () => {
-    it("GET /api/exams returns 200", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": ctx.teacherToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/exams/:id/scores returns 200", async () => {
-      const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
-        examTitle: "Boundary Teacher Scores Exam",
-        courseCode: "BT-SCORES-101",
-        courseName: "Boundary Teacher Scores Course",
-        questionContent: "Score boundary test?",
-        questionAnswer: true,
-        questionScore: 10,
-        durationMinutes: 60,
-        passingScore: 5,
-        totalScore: 10,
-      });
-      await publishExamViaApi(ctx.app, ctx.adminToken, examId);
-      await submitExamAsCandidate(
-        ctx.app,
-        ctx.adminToken,
-        ctx.org.id,
-        examId,
-        `boundary-score-cand-${uniquePrefix()}`,
-      );
-      await markExamClosed(examId);
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/exams/${examId}/scores`,
-        cookies: { "auth-token": ctx.teacherToken },
-      });
-      expect(res.statusCode, `body: ${res.body}`).toBe(200);
-    });
-
-    it("GET /api/users returns 403", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/users",
-        cookies: { "auth-token": ctx.teacherToken },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
-    it("GET /api/exams/:id/export/scores returns 200", async () => {
-      const examId = await createExamViaApi(ctx.app, ctx.adminToken, {
-        examTitle: "Boundary Teacher Export Exam",
-        courseCode: "BT-EXPORT-101",
-        courseName: "Boundary Teacher Export Course",
-        questionContent: "Export boundary test?",
-        questionAnswer: true,
-        questionScore: 10,
-        durationMinutes: 60,
-        passingScore: 5,
-        totalScore: 10,
-      });
-      await publishExamViaApi(ctx.app, ctx.adminToken, examId);
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/exams/${examId}/export/scores`,
-        cookies: { "auth-token": ctx.teacherToken },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.headers["content-type"]).toContain("text/csv");
     });
   });
 

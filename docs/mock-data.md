@@ -38,6 +38,18 @@
 
 ---
 
+## Dev/Test Seed Credentials
+
+`packages/db/src/seed.ts` 仅用于开发、测试和演示初始化，不是生产恢复机制。默认账号：
+
+| 用户名 | 临时密码 | 角色 |
+| --- | --- | --- |
+| `admin` | `admin123` | Admin |
+| `candidate` | `candidate123` | Candidate |
+| `candidate2` | `candidate123` | Candidate |
+
+---
+
 ## 用户数据 (Phase 1 Mock Users)
 
 ```json

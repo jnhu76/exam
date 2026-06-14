@@ -1,5 +1,5 @@
 import { describe, expect, it, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { getTestDb } from "./testDb.js";
 import { seed } from "./seed.js";
 import { schema } from "./schema/pg.js";
@@ -7,31 +7,56 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { verifyPassword } from "@exam/auth/src/password.js";
 
 describe("seed idempotency", () => {
-  it("creates org and users with real argon2 hashes", async () => {
+  it("creates default org and Phase 1 users with real argon2 hashes", async () => {
     const { db } = await getTestDb();
     const result = await seed(db, hashPassword);
     expect(result.orgId).toBeDefined();
-    expect(result.users.superAdminId).toBeDefined();
     expect(result.users.adminId).toBeDefined();
-    expect(result.users.teacherId).toBeDefined();
     expect(result.users.candidateId).toBeDefined();
-
-    const superAdmin = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, result.users.superAdminId));
-    expect(superAdmin[0]!.role).toBe("SuperAdmin");
-    expect(superAdmin[0]!.isActive).toBe(true);
-    expect(await verifyPassword("admin123", superAdmin[0]!.passwordHash)).toBe(
-      true,
-    );
+    expect(result.users.candidate2Id).toBeDefined();
 
     const admin = await db
       .select()
       .from(schema.users)
       .where(eq(schema.users.id, result.users.adminId));
     expect(admin[0]!.role).toBe("Admin");
+    expect(admin[0]!.isActive).toBe(true);
     expect(await verifyPassword("admin123", admin[0]!.passwordHash)).toBe(true);
+
+    const candidate = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, result.users.candidateId));
+    expect(candidate[0]!.role).toBe("Candidate");
+    expect(
+      await verifyPassword("candidate123", candidate[0]!.passwordHash),
+    ).toBe(true);
+
+    const candidate2 = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, result.users.candidate2Id));
+    expect(candidate2[0]!.role).toBe("Candidate");
+    expect(candidate2[0]!.isActive).toBe(true);
+    expect(
+      await verifyPassword("candidate123", candidate2[0]!.passwordHash),
+    ).toBe(true);
+  });
+
+  it("does not create future role users in the Phase 1 default seed", async () => {
+    const { db } = await getTestDb();
+    const result = await seed(db, hashPassword);
+
+    const seededIds = new Set(Object.values(result.users));
+    const seededRows = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.organizationId, result.orgId));
+    const seededRoles = seededRows
+      .filter((u) => seededIds.has(u.id))
+      .map((u) => u.role)
+      .sort();
+    expect(seededRoles).toEqual(["Admin", "Candidate", "Candidate"]);
   });
 
   it("is idempotent on second run and resets password/isActive", async () => {
@@ -46,6 +71,8 @@ describe("seed idempotency", () => {
     const r2 = await seed(db, hashPassword);
     expect(r2.orgId).toBe(r1.orgId);
     expect(r2.users.adminId).toBe(r1.users.adminId);
+    expect(r2.users.candidateId).toBe(r1.users.candidateId);
+    expect(r2.users.candidate2Id).toBe(r1.users.candidate2Id);
 
     const admin = await db
       .select()
@@ -75,14 +102,18 @@ describe("seed idempotency", () => {
       .where(eq(schema.organizations.slug, "default"));
     expect(orgs).toHaveLength(1);
 
-    const usernames = ["superadmin", "admin", "teacher", "candidate"];
+    const usernames = ["admin", "candidate", "candidate2"];
     for (const username of usernames) {
       const rows = await db
         .select()
         .from(schema.users)
-        .where(eq(schema.users.username, username));
-      const sameOrgRows = rows.filter((u) => u.organizationId === r1!.orgId);
-      expect(sameOrgRows).toHaveLength(1);
+        .where(
+          and(
+            eq(schema.users.organizationId, r1!.orgId),
+            eq(schema.users.username, username),
+          ),
+        );
+      expect(rows).toHaveLength(1);
     }
   });
 

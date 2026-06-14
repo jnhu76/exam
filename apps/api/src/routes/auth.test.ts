@@ -37,12 +37,11 @@ describe("auth routes", () => {
     resetRuntimeConfigForTest();
   });
 
-  it("POST /api/auth/login authenticates within the requested tenant", async () => {
+  it("POST /api/auth/login authenticates admin in default organization", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: ctx.admin.username,
         password: "admin123",
       },
@@ -59,7 +58,6 @@ describe("auth routes", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: ctx.admin.username,
         password: "admin123",
       },
@@ -80,7 +78,6 @@ describe("auth routes", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: ctx.admin.username,
         password: "admin123",
       },
@@ -105,7 +102,6 @@ describe("auth routes", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: ctx.admin.username,
         password: "admin123",
       },
@@ -128,7 +124,7 @@ describe("auth routes", () => {
       username: disableUsername,
       passwordHash: hash,
       name: "To Disable",
-      role: "Teacher",
+      role: "Admin",
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -138,7 +134,7 @@ describe("auth routes", () => {
       actorId: ctx.admin.id,
       organizationId: ctx.org.id,
       targetOrganizationId: ctx.org.id,
-      role: "SuperAdmin",
+      role: "Admin",
       permissions: [],
       sessionId: "test",
     };
@@ -150,7 +146,6 @@ describe("auth routes", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: disableUsername,
         password: "disable123",
       },
@@ -167,7 +162,7 @@ describe("auth routes", () => {
 
     const disableToken = signJWT({
       actorId: disableUserId,
-      role: "Teacher",
+      role: "Admin",
       organizationId: ctx.org.id,
     });
     const meRes = await ctx.app.inject({
@@ -185,20 +180,13 @@ describe("auth routes", () => {
     });
   });
 
-  it("POST /api/auth/login does not reveal unknown tenants or users", async () => {
+  it("POST /api/auth/login does not reveal unknown users or wrong passwords", async () => {
     const attempts = [
       {
-        organizationSlug: "unknown-organization",
-        username: ctx.admin.username,
-        password: "admin123",
-      },
-      {
-        organizationSlug: "default",
         username: "unknown-user",
         password: "admin123",
       },
       {
-        organizationSlug: "default",
         username: ctx.admin.username,
         password: "wrong-password",
       },
@@ -300,7 +288,6 @@ describe("auth routes", () => {
       method: "POST",
       url: "/api/auth/login",
       payload: {
-        organizationSlug: "default",
         username: ctx.admin.username,
         password: "newpass123",
       },

@@ -81,7 +81,7 @@ describe("Password Policy Baseline (S08-lite)", () => {
           username: `pwtest-${randomUUID().slice(0, 8)}`,
           password: "1234567",
           name: "PW Test",
-          role: "Teacher",
+          role: "Admin",
         },
         cookies: { "auth-token": adminToken },
       });
@@ -97,7 +97,7 @@ describe("Password Policy Baseline (S08-lite)", () => {
           username: `pwtest-${randomUUID().slice(0, 8)}`,
           password: "12345678",
           name: "PW Test OK",
-          role: "Teacher",
+          role: "Admin",
         },
         cookies: { "auth-token": adminToken },
       });
