@@ -12,6 +12,7 @@
  * Safety: refuses if an active Admin already exists unless --force is passed.
  */
 
+import { executeInTransaction } from "@exam/db/src/types.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db";
 import type { Database } from "@exam/db/src/types.js";
@@ -48,7 +49,6 @@ export async function bootstrapAdmin(
   organizationId: string,
   params: BootstrapAdminParams,
 ): Promise<BootstrapAdminResult> {
-  const userRepo = createUserRepo(db);
   const systemCtx = {
     organizationId,
     actorId: "system",
@@ -56,21 +56,28 @@ export async function bootstrapAdmin(
     permissions: [],
   };
 
-  const activeAdminCount = await userRepo.countActiveByRole(systemCtx, "Admin");
-  if (activeAdminCount > 0 && !params.force) {
-    throw new Error(
-      `An active Admin already exists in this organization. ` +
-        `Use --force to create an additional Admin.`,
-    );
-  }
-
   const passwordHash = await hashPassword(params.password);
-  const user = await userRepo.createUnique(systemCtx, {
-    username: params.username,
-    passwordHash,
-    name: params.name,
-    role: "Admin",
-    isActive: true,
+
+  const { user } = await executeInTransaction(db, async (tx) => {
+    const txUserRepo = createUserRepo(tx);
+    const activeAdminCount = await txUserRepo.countActiveByRole(
+      systemCtx,
+      "Admin",
+    );
+    if (activeAdminCount > 0 && !params.force) {
+      throw new Error(
+        `An active Admin already exists in this organization. ` +
+          `Use --force to create an additional Admin.`,
+      );
+    }
+    const user = await txUserRepo.createUnique(systemCtx, {
+      username: params.username,
+      passwordHash,
+      name: params.name,
+      role: "Admin",
+      isActive: true,
+    });
+    return { user };
   });
 
   await createAuditLogRepo(db).create(systemCtx, {
@@ -143,8 +150,6 @@ async function resolveDefaultOrgId(db: Database): Promise<string> {
 }
 
 async function main() {
-  const params = parseArgs(process.argv.slice(2));
-
   let databaseUrl: string;
   try {
     databaseUrl = resolveDatabaseUrlFromEnv(process.env);
@@ -155,6 +160,7 @@ async function main() {
 
   const conn = await createDatabase(databaseUrl);
   try {
+    const params = parseArgs(process.argv.slice(2));
     const orgId = await resolveDefaultOrgId(conn.db);
     const result = await bootstrapAdmin(conn.db, orgId, params);
     process.stdout.write(

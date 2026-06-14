@@ -37,7 +37,7 @@ Teacher / Proctor / 权限包 / 邮件邀请 / 邮件找回密码是后续阶段
 
 **步骤**：
 
-1. 运行数据库迁移：`pnpm --filter @exam/api migrate`
+1. 运行数据库迁移：`pnpm db:migrate`
 2. 使用本地 bootstrap-admin 脚本创建第一个管理员：
 
    ```bash

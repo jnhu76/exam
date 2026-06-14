@@ -350,6 +350,7 @@ describe("user routes", () => {
       expect(res.json().error.code).toBe(
         "PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED",
       );
+      expect(res.json().error.details).toMatchObject({ targetRole: "Admin" });
     });
 
     it("reset-password writes audit log with candidate.password_reset action", async () => {

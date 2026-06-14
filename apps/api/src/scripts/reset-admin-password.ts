@@ -117,8 +117,6 @@ async function resolveDefaultOrgId(db: Database): Promise<string> {
 }
 
 async function main() {
-  const params = parseArgs(process.argv.slice(2));
-
   let databaseUrl: string;
   try {
     databaseUrl = resolveDatabaseUrlFromEnv(process.env);
@@ -129,6 +127,7 @@ async function main() {
 
   const conn = await createDatabase(databaseUrl);
   try {
+    const params = parseArgs(process.argv.slice(2));
     const orgId = await resolveDefaultOrgId(conn.db);
     await resetAdminPassword(conn.db, orgId, params);
     process.stdout.write(
