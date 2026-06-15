@@ -137,6 +137,12 @@ describe("score routes", () => {
       url: `/api/exams/${examId}/publish`,
       cookies: { "auth-token": ctx.adminToken },
     });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
     const startResponse = await ctx.app.inject({
       method: "POST",
       url: `/api/attempts/${examId}/start`,
@@ -464,6 +470,12 @@ describe("J8: score list routes", () => {
       url: `/api/exams/${examId}/publish`,
       cookies: { "auth-token": ctx.adminToken },
     });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
     return examId;
   }
 
@@ -584,6 +596,12 @@ describe("J8: score list routes", () => {
       url: `/api/exams/${examId}/publish`,
       cookies: { "auth-token": ctx.adminToken },
     });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -635,6 +653,12 @@ describe("J8: score list routes", () => {
 
     // 创建一个及格和一个不及格的尝试
     await createGradedAttemptForExam(examId, true, ctx.candidateToken, false); // passed
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [tempCandidateId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
     await createGradedAttemptForExam(examId, false, tempToken, false); // failed
     await markExamClosed(examId);
 

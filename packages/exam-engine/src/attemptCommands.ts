@@ -78,18 +78,14 @@ export async function startAttempt(
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
-  let enrollment = await enrollmentRepo.findByExamAndCandidate(
+  const enrollment = await enrollmentRepo.findByExamAndCandidate(
     examId,
     candidateId,
   );
   if (!enrollment) {
-    enrollment = await enrollmentRepo.create({
-      organizationId: exam.organizationId,
-      examId,
-      candidateId,
-      status: "assigned",
-      attemptCount: 0,
-    });
+    throw new ValidationError(
+      "Candidate is not enrolled in this exam. An Admin must assign the candidate first.",
+    );
   }
 
   const activeAttempt = await attemptRepo.findActiveByEnrollment(enrollment.id);

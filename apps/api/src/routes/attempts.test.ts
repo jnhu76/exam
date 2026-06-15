@@ -171,11 +171,51 @@ describe("attempt routes", () => {
       url: `/api/exams/${examId}/publish`,
       cookies: { "auth-token": ctx.adminToken },
     });
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
   });
 
   afterAll(async () => {
     await ctx.cleanup();
   });
+
+  async function enrollCandidateForExam(examId: string) {
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+  }
+
+  async function createPublishEnrollExam(
+    overrides: Parameters<typeof buildExamPayload>[0],
+  ): Promise<string> {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: buildExamPayload(overrides),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    if (res.statusCode !== 201) {
+      throw new Error(
+        `Failed to create exam: ${res.statusCode} ${JSON.stringify(res.json())}`,
+      );
+    }
+    const id = res.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${id}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    await enrollCandidateForExam(id);
+    return id;
+  }
 
   describe("POST /attempts/:examId/start", () => {
     it("starts attempt for candidate", async () => {
@@ -221,6 +261,42 @@ describe("attempt routes", () => {
       });
       expect(res.statusCode).toBe(401);
     });
+
+    it("rejects unassigned candidate (Phase 1 requires explicit enrollment)", async () => {
+      const unassignedUserId = crypto.randomUUID();
+      await ctx.db.insert(schema.users).values({
+        id: unassignedUserId,
+        organizationId: ctx.org.id,
+        username: `unassigned-${uniquePrefix()}`,
+        passwordHash: "$argon2id$dummy",
+        name: "Unassigned Candidate",
+        role: "Candidate",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId: unassignedUserId,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const unassignedToken = signJWT({
+        actorId: unassignedUserId,
+        role: "Candidate",
+        organizationId: ctx.org.id,
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": unassignedToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    });
   });
 
   describe("GET /candidate/exams/:examId", () => {
@@ -244,6 +320,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${resumeExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(resumeExamId);
 
       const startResponse = await ctx.app.inject({
         method: "POST",
@@ -309,6 +386,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${blockedExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(blockedExamId);
 
       const startResponse = await ctx.app.inject({
         method: "POST",
@@ -360,6 +438,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${examId2}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(examId2);
 
       const startRes = await ctx.app.inject({
         method: "POST",
@@ -452,6 +531,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${examId3}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(examId3);
 
       const startRes = await ctx.app.inject({
         method: "POST",
@@ -677,6 +757,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${examId4}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(examId4);
 
       const startRes = await ctx.app.inject({
         method: "POST",
@@ -738,6 +819,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${retryExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(retryExamId);
     });
 
     it("re-grades an attempt stuck in submitted after a crash", async () => {
@@ -806,6 +888,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${deadlineContractExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(deadlineContractExamId);
     });
 
     afterEach(() => {
@@ -891,6 +974,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${deadlineExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(deadlineExamId);
     });
 
     afterEach(() => {
@@ -969,6 +1053,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${ownershipExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(ownershipExamId);
 
       const startRes = await ctx.app.inject({
         method: "POST",
@@ -1029,6 +1114,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${gradedExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(gradedExamId);
 
       const startRes = await ctx.app.inject({
         method: "POST",
@@ -1115,6 +1201,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${fillBlankExamId}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(fillBlankExamId);
 
       const startResponse = await ctx.app.inject({
         method: "POST",
@@ -1194,6 +1281,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${examId5}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(examId5);
 
       const startRes = await ctx.app.inject({
         method: "POST",
@@ -1260,6 +1348,7 @@ describe("attempt routes", () => {
         url: `/api/exams/${examId6}/publish`,
         cookies: { "auth-token": ctx.adminToken },
       });
+      await enrollCandidateForExam(examId6);
 
       const startRes = await ctx.app.inject({
         method: "POST",

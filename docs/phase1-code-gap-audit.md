@@ -103,9 +103,9 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Question import | Admin-only | `question.ts` | aligned-by-PR2 | None. | — |
 | Result export | Admin-only | `export.ts` | aligned-by-PR5 | Export header uses CandidateField.label with fallback to field.name. | — |
 | Export columns | CandidateField contract stable | `export.ts`, docs | aligned-by-PR5 | label/name rule implemented and tested. | — |
-| Assignment | assigned candidates only | start flow | partially-implemented | auto-enrollment can bypass assignment. | PR 5 |
-| Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
-| Submit/grading | idempotent row-locked submit | `attempts.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
+| Assignment | assigned candidates only | start flow | aligned-by-PR6 | `startAttempt` now rejects unassigned candidates; explicit enrollment required. | — |
+| Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Verified: row locks, idempotent clientSeq, conflict detection. | — |
+| Submit/grading | idempotent row-locked submit | `attempts.ts` | implemented | Verified: FOR UPDATE, idempotent re-submit, crash-recovery grading. | — |
 | Phase boundary residue | no queue/archive workflow; restore backend only | attempts/exam routes | conflicting | Queue/archive product paths are exposed; restore should remain backend recovery support without Phase 2 UI/operation workflow. | PR 5 |
 | Error responses | stable code + requestId | route-local attempt errors | partially-implemented | Some errors bypass shared shape. | PR 6 |
 | Structured logs | pino fields + redaction | `server.ts` | partially-implemented | default logger only. | PR 6 |
@@ -204,10 +204,10 @@ Phase 1 test/dev/E2E data should use:
 | Seed/mock/E2E data inconsistent | PR 1 aligned default seed/demo/E2E fixtures to Admin+Candidate default org. | Main fixture baseline represents Phase 1 acceptance. | PR 1 | Resolved for fixture baseline |
 | Missing admin recovery path | No reset-password script found. | Production lockout recovery relies on weak/default seed or manual DB edits. | PR 3 | Yes |
 | Import/export permission residue | Pre-PR2: candidate/question/export routes allowed SuperAdmin/Teacher. Post-PR2: all admin routes use `requireRole(["Admin"])`; export header now uses CandidateField.label. Post-PR5: field-name vs label contract resolved. | Permission residue resolved; export field contract resolved. | PR 2, PR 5 | Resolved |
-| Phase 2 endpoints exposed in current runtime | queue and archive routes remain exposed; restore exists as backend recovery support. | Users/tests may depend on Phase 2 operation behavior before product scope. | PR 5 | Partially |
+| Phase 2 endpoints exposed in current runtime | queue endpoint uses in-memory state (resets on restart); archive endpoint is functional but Phase 2; restore endpoint is Phase 1 disrupted recovery. | Queue/archive are not required for Phase 1 happy path. | PR6 | Partially |
 | RequestId/logging incomplete | Route-local errors omit requestId; logger has no standard fields/redaction. | Poor diagnosis and sensitive logging risk. | PR 6 | Yes for release hardening |
 | E2E disabled in CI | `.github/workflows/ci.yml:83-86`. | Phase 1 acceptance signals are not blocking. | PR 7 | Yes |
-| Save/submit/grading concurrency needs blocking proof | Implementation uses row locks, but CI E2E is disabled. | Regression risk in the most critical exam path. | PR 5, PR 7 | Yes |
+| Save/submit/grading concurrency needs blocking proof | Implementation uses row locks (FOR UPDATE), idempotent submit, crash-recovery grading. PR6 verified via existing concurrency tests. E2E blocking CI is PR8 scope. | Concurrency verified at integration level; E2E blocking deferred. | PR6, PR8 | Partially |
 
 ## 10. Suggested PR Breakdown
 
