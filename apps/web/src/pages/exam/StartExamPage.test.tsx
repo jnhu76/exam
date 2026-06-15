@@ -388,7 +388,7 @@ describe("StartExamPage", () => {
     });
   });
 
-  it("shows queue-wait message from error code", async () => {
+  it("preserves server message for deferred queue error without rendering queue UI", async () => {
     const user = userEvent.setup();
     apiGet.mockResolvedValueOnce({
       id: "exam-1",
@@ -422,9 +422,8 @@ describe("StartExamPage", () => {
     await user.click(screen.getByRole("button", { name: "开始考试" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText("当前仍在排队中，请等待准入后继续。"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("请等待队列准入")).toBeInTheDocument();
     });
+    expect(screen.queryByText("正在排队")).not.toBeInTheDocument();
   });
 });

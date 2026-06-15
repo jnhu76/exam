@@ -32,6 +32,7 @@ function renderPage() {
         <BrandProvider>
           <Routes>
             <Route path="/admin/dashboard" element={<DashboardPage />} />
+            <Route path="/admin/exams/new" element={<div>create exam</div>} />
           </Routes>
         </BrandProvider>
       </AuthProvider>

@@ -12,7 +12,7 @@ export function ExamLayout() {
     return (
       <div className="min-h-screen bg-background">
         <header className="flex h-14 items-center justify-between border-b bg-card px-6">
-          <BrandHeader />
+          <BrandHeader textClassName="text-foreground" />
           <div className="flex items-center gap-2">
             <Skeleton className="h-8 w-20 rounded-md" />
             <Skeleton className="h-8 w-20 rounded-md" />

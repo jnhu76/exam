@@ -27,8 +27,11 @@ import { exportRoutes } from "./routes/export.js";
 import systemRoutes from "./routes/system.js";
 import auditRoutes from "./routes/audit.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
+import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 import { REDACT_CONFIG } from "./lib/logRedaction.js";
+
+loadRootEnv();
 
 const { port, host } = getRuntimeConfig();
 

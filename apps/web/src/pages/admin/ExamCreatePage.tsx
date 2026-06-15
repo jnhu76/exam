@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -57,6 +58,7 @@ export function ExamCreatePage() {
   const [saving, setSaving] = useState(false);
   const [questionDialogOpen, setQuestionDialogOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [config, setConfig] = useState<ExamConfigData>({
     title: "",
     description: "",
@@ -147,6 +149,7 @@ export function ExamCreatePage() {
       return;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       const payload = {
         ...config,
@@ -169,8 +172,10 @@ export function ExamCreatePage() {
         toast.success("考试已保存为草稿");
       }
       void navigate("/admin/exams");
-    } catch {
-      toast.error("保存失败，请稍后重试");
+    } catch (err) {
+      const message = getApiErrorMessage(err, "保存失败，请稍后重试");
+      setSaveError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -205,14 +210,9 @@ export function ExamCreatePage() {
             <h3 className="text-sm font-medium">
               已选题目 ({config.questionIds.length})
             </h3>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled title="Phase 2">
-                随机选题 [Phase 2]
-              </Button>
-              <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
-                手动选题
-              </Button>
-            </div>
+            <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
+              手动选题
+            </Button>
           </div>
 
           {selectedQuestions.length === 0 ? (
@@ -262,6 +262,14 @@ export function ExamCreatePage() {
       </div>
 
       <Separator />
+      {saveError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
+        >
+          {saveError}
+        </div>
+      )}
       <div className="flex justify-end gap-3 pt-4">
         <Button variant="outline" onClick={() => void navigate("/admin/exams")}>
           取消
@@ -279,7 +287,10 @@ export function ExamCreatePage() {
       </div>
 
       <Dialog open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent
+          aria-describedby={undefined}
+          className="max-w-2xl max-h-[80vh] overflow-y-auto"
+        >
           <DialogHeader>
             <DialogTitle>选择题目</DialogTitle>
           </DialogHeader>

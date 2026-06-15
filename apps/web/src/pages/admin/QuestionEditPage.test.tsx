@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -19,6 +19,10 @@ vi.mock("@/lib/api", () => ({
     patch: (...args: unknown[]) => apiPatch(...args),
   },
   setNavigate: () => {},
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 const courses = [
@@ -64,6 +68,10 @@ function renderNew(apiImpl?: (...args: unknown[]) => Promise<unknown>) {
         <BrandProvider>
           <Routes>
             <Route path="/admin/questions/new" element={<QuestionEditPage />} />
+            <Route
+              path="/admin/questions"
+              element={<div>questions list</div>}
+            />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -95,6 +103,10 @@ function renderEdit() {
               path="/admin/questions/:id/edit"
               element={<QuestionEditPage />}
             />
+            <Route
+              path="/admin/questions"
+              element={<div>questions list</div>}
+            />
           </Routes>
         </BrandProvider>
       </AuthProvider>
@@ -113,10 +125,11 @@ describe("QuestionEditPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows loading skeleton while fetching data", () => {
+  it("shows loading skeleton while fetching data", async () => {
     apiGet.mockImplementation(() => new Promise(() => {}));
     renderNew();
     expect(screen.getByRole("status")).toBeInTheDocument();
+    await act(async () => {});
   });
 
   it("shows error state when API fails", async () => {
@@ -166,12 +179,31 @@ describe("QuestionEditPage", () => {
     });
   });
 
-  it("cancel button is clickable and shows saving state recovery", async () => {
+  it("shows specific save error when API rejects", async () => {
+    apiPost.mockRejectedValue(new Error("题目不属于所选课程"));
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+    await user.click(screen.getByText("保存"));
+    expect(await screen.findByText("题目不属于所选课程")).toBeInTheDocument();
+  });
+
+  it("cancel button is clickable and disabled during saving", async () => {
+    let resolveSave: (value: unknown) => void;
+    apiPost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
     const user = userEvent.setup();
     renderNew();
     await screen.findByText("新增题目");
     const cancelBtn = screen.getByText("取消");
     expect(cancelBtn).toBeEnabled();
-    await user.click(cancelBtn);
+    await user.click(screen.getByText("保存"));
+    expect(screen.getByRole("button", { name: "保存中..." })).toBeDisabled();
+    expect(cancelBtn).toBeDisabled();
+    resolveSave!(undefined);
+    await act(async () => {});
   });
 });

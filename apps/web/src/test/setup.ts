@@ -15,6 +15,16 @@ if (typeof window !== "undefined") {
   if (!window.HTMLElement.prototype.scrollIntoView) {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   }
+  if (!HTMLAnchorElement.prototype.click) {
+    HTMLAnchorElement.prototype.click = vi.fn();
+  }
+}
+
+if (!URL.createObjectURL) {
+  URL.createObjectURL = vi.fn(() => "blob:mock");
+}
+if (!URL.revokeObjectURL) {
+  URL.revokeObjectURL = vi.fn();
 }
 
 afterEach(() => {

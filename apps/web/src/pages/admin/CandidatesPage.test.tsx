@@ -1,9 +1,10 @@
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
+import { ApiError } from "@/lib/api";
 import { CandidatesPage } from "./CandidatesPage";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
@@ -13,6 +14,18 @@ const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({
+  ApiError: class ApiError extends Error {
+    constructor(
+      readonly status: number,
+      message: string,
+      readonly code?: string,
+      readonly details?: unknown,
+      readonly requestId?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+    }
+  },
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
@@ -198,28 +211,55 @@ describe("CandidatesPage", () => {
     );
   });
 
-  it("toggles candidate active status", async () => {
+  it("opens confirmation before toggling candidate active status", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("candidate1");
     const toggleBtn = screen.getByRole("button", { name: "禁用" });
     await user.click(toggleBtn);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/Candidate One/)).toBeInTheDocument();
+    const confirm = within(dialog).getByRole("button", { name: "确认" });
+    expect(confirm).toHaveAttribute("data-variant", "destructive");
+    await user.click(confirm);
     expect(apiPatch).toHaveBeenCalledWith(
       "/api/candidates/c1",
       expect.objectContaining({ isActive: false }),
     );
   });
 
-  it("toggles inactive candidate to active", async () => {
+  it("opens confirmation before toggling inactive candidate to active", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("candidate2");
     const toggleBtn = screen.getByRole("button", { name: "启用" });
     await user.click(toggleBtn);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/Candidate Two/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "确认" }));
     expect(apiPatch).toHaveBeenCalledWith(
       "/api/candidates/c2",
       expect.objectContaining({ isActive: true }),
     );
+  });
+
+  it("disables all candidate toggle buttons while one toggle is running", async () => {
+    let resolveToggle: (value: unknown) => void;
+    apiPatch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveToggle = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("candidate1");
+    await user.click(screen.getByRole("button", { name: "禁用" }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "确认" }));
+    expect(screen.getByRole("button", { name: "处理中..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "启用" })).toBeDisabled();
+    resolveToggle!({ ok: true });
+    await act(async () => {});
   });
 
   it("opens import dialog", async () => {
@@ -253,7 +293,7 @@ describe("CandidatesPage", () => {
     expect(screen.queryByText("Candidate One")).not.toBeInTheDocument();
   });
 
-  it("shows empty search result state", async () => {
+  it("shows empty search result state and keeps toolbar visible", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("Candidate One");
@@ -262,6 +302,22 @@ describe("CandidatesPage", () => {
       "不存在",
     );
     expect(screen.getByText("未找到匹配的考生")).toBeInTheDocument();
+    expect(screen.getByLabelText("搜索考生")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "清除考生搜索" }),
+    ).toBeInTheDocument();
+  });
+
+  it("clears search using clear icon and empty state action", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Candidate One");
+    await user.type(screen.getByLabelText("搜索考生"), "不存在");
+    await user.click(screen.getByRole("button", { name: "清除考生搜索" }));
+    expect(screen.getByText("Candidate One")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("搜索考生"), "不存在");
+    await user.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(screen.getByText("Candidate Two")).toBeInTheDocument();
   });
 
   it("shows error state when loading fails", async () => {
@@ -286,8 +342,8 @@ describe("CandidatesPage", () => {
     expect(await screen.findByText("暂无考生")).toBeInTheDocument();
   });
 
-  it("shows save error on API failure", async () => {
-    apiPost.mockRejectedValue(new Error("save failed"));
+  it("preserves USER_ALREADY_EXISTS save error", async () => {
+    apiPost.mockRejectedValue(new Error("用户名已存在"));
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: "新增考生" }));
@@ -298,7 +354,68 @@ describe("CandidatesPage", () => {
     await user.type(inputs[2]!, "Name");
     await user.type(inputs[3]!, "123");
     await user.click(dialogSaveBtn(dialog));
-    expect(await screen.findByText("保存失败，请重试")).toBeInTheDocument();
+    expect(await screen.findByText("用户名已存在")).toBeInTheDocument();
+  });
+
+  it("preserves CANDIDATE_IDENTITY_CONFLICT save error", async () => {
+    apiPost.mockRejectedValue(new Error("身份信息已存在，请检查证件号"));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "新增考生" }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "Name");
+    await user.type(inputs[3]!, "123");
+    await user.click(dialogSaveBtn(dialog));
+    expect(
+      await screen.findByText("身份信息已存在，请检查证件号"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders API field errors from ApiError details", async () => {
+    apiPost.mockRejectedValue(
+      new ApiError(400, "字段校验失败", "VALIDATION_ERROR", {
+        fields: [{ field: "name", message: "姓名不能为空" }],
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "新增考生" }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "Name");
+    await user.type(inputs[3]!, "123");
+    await user.click(dialogSaveBtn(dialog));
+    expect(await screen.findByText("姓名不能为空")).toBeInTheDocument();
+  });
+
+  it("disables save button while saving to prevent duplicate submit", async () => {
+    let resolveSave: (value: unknown) => void;
+    apiPost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "新增考生" }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "Name");
+    await user.type(inputs[3]!, "123");
+    await user.dblClick(dialogSaveBtn(dialog));
+    expect(
+      within(dialog).getByRole("button", { name: "保存中..." }),
+    ).toBeDisabled();
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    resolveSave!({ id: "c3" });
+    await act(async () => {});
   });
 
   it("renders import button", async () => {

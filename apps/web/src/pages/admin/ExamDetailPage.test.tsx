@@ -94,13 +94,15 @@ describe("ExamDetailPage", () => {
       expect(screen.getByText("timed_window")).toBeInTheDocument();
     });
 
-    it("renders tabs for enrollment, scores, and audit log", async () => {
+    it("renders Phase 1 tabs without audit placeholder", async () => {
       renderPage();
       expect(
         await screen.findByRole("tab", { name: "报考" }),
       ).toBeInTheDocument();
       expect(screen.getByRole("tab", { name: "成绩" })).toBeInTheDocument();
-      expect(screen.getByRole("tab", { name: "操作日志" })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("tab", { name: "操作日志" }),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -147,16 +149,6 @@ describe("ExamDetailPage", () => {
     });
   });
 
-  describe("audit log tab", () => {
-    it("shows placeholder for audit log tab", async () => {
-      renderPage();
-      await screen.findByRole("tab", { name: "操作日志" });
-      const user = userEvent.setup();
-      await user.click(screen.getByRole("tab", { name: "操作日志" }));
-      expect(screen.getByText("功能开发中")).toBeInTheDocument();
-    });
-  });
-
   describe("publish and archive", () => {
     it("renders publish button for draft", async () => {
       renderPage();
@@ -181,7 +173,7 @@ describe("ExamDetailPage", () => {
       expect(await screen.findByText("发布失败")).toBeInTheDocument();
     });
 
-    it("archives a published exam", async () => {
+    it("opens confirmation before archiving a published exam", async () => {
       getMock.mockImplementation((path: string) => {
         if (path.includes("/enrollments")) return Promise.resolve([]);
         return Promise.resolve({ ...mockDraftExam, status: "published" });
@@ -191,6 +183,11 @@ describe("ExamDetailPage", () => {
       renderPage();
       await screen.findByText("期末能力测评");
       await user.click(screen.getByText("归档"));
+      const dialog = await screen.findByRole("alertdialog");
+      expect(within(dialog).getByText(/期末能力测评/)).toBeInTheDocument();
+      const confirm = within(dialog).getByRole("button", { name: "确认" });
+      expect(confirm).toHaveAttribute("data-variant", "destructive");
+      await user.click(confirm);
       await waitFor(() => {
         expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/archive");
       });

@@ -236,7 +236,7 @@ describe("ExamConfigForm fields", () => {
     expect(screen.getByText(/及格分不能超过总分/)).toBeInTheDocument();
   });
 
-  it("renders preset buttons", () => {
+  it("does not expose Phase 2 runtime controls", () => {
     render(
       <ExamConfigForm
         courses={[{ id: "course-1", name: "Course 1" }]}
@@ -245,32 +245,12 @@ describe("ExamConfigForm fields", () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByText("开放模式")).toBeInTheDocument();
-    expect(screen.getByText("标准模式")).toBeInTheDocument();
-    expect(screen.getByText("严格模式")).toBeInTheDocument();
-  });
-
-  it("applies strict preset on click", async () => {
-    const onChange = vi.fn();
-    render(
-      <ExamConfigForm
-        courses={[{ id: "course-1", name: "Course 1" }]}
-        data={baseConfig}
-        questions={[]}
-        onChange={onChange}
-      />,
-    );
-    await userEvent.click(screen.getByText("严格模式"));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        controlFlags: expect.objectContaining({
-          detectTabSwitch: true,
-          disableCopyPaste: true,
-          restrictIp: true,
-          requireLockdown: true,
-        }),
-      }),
-    );
+    expect(screen.queryByText("开放模式")).not.toBeInTheDocument();
+    expect(screen.queryByText("严格模式")).not.toBeInTheDocument();
+    expect(screen.queryByText("标准模式")).not.toBeInTheDocument();
+    expect(screen.queryByText(/排队入场/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/限制访问网络/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/要求锁定环境/)).not.toBeInTheDocument();
   });
 
   it("renders retake policy section", () => {

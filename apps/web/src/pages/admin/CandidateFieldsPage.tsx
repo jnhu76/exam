@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -73,6 +74,8 @@ export function CandidateFieldsPage() {
   const [required, setRequired] = useState(false);
   const [unique, setUnique] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -81,6 +84,7 @@ export function CandidateFieldsPage() {
           (a, b) => a.sortOrder - b.sortOrder,
         ),
       );
+      setError(null);
     } catch {
       setError("加载字段配置失败");
     } finally {
@@ -88,6 +92,10 @@ export function CandidateFieldsPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  function setDialogOpen(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) setMutationError(null);
+  }
   function dialog(field?: Field) {
     setEditing(field ?? null);
     setName(field?.name ?? "");
@@ -95,61 +103,85 @@ export function CandidateFieldsPage() {
     setFieldType(field?.fieldType ?? "text");
     setRequired(field?.required ?? false);
     setUnique(field?.unique ?? false);
+    setMutationError(null);
     setOpen(true);
   }
   async function save() {
-    if (!name.trim() || !label.trim()) return;
-    if (editing) {
-      await api.patch(`/api/candidate-fields/${editing.id}`, {
-        label,
-        required,
-        unique,
-        sortOrder: editing.sortOrder,
-      });
-    } else {
-      await api.post("/api/candidate-fields", {
-        name,
-        label,
-        fieldType,
-        required,
-        unique,
-        sortOrder: fields.length,
-      });
+    if (saving || !name.trim() || !label.trim()) return;
+    setSaving(true);
+    setMutationError(null);
+    try {
+      if (editing) {
+        await api.patch(`/api/candidate-fields/${editing.id}`, {
+          label,
+          required,
+          unique,
+          sortOrder: editing.sortOrder,
+        });
+      } else {
+        await api.post("/api/candidate-fields", {
+          name,
+          label,
+          fieldType,
+          required,
+          unique,
+          sortOrder: fields.length,
+        });
+      }
+      setDialogOpen(false);
+      await load();
+    } catch (err) {
+      setMutationError(getApiErrorMessage(err, "保存字段失败，请稍后重试"));
+    } finally {
+      setSaving(false);
     }
-    setOpen(false);
-    await load();
   }
   async function remove(id: string) {
-    await api.delete(`/api/candidate-fields/${id}`);
-    await load();
+    try {
+      setMutationError(null);
+      await api.delete(`/api/candidate-fields/${id}`);
+      await load();
+    } catch (err) {
+      setMutationError(getApiErrorMessage(err, "删除字段失败，请稍后重试"));
+    }
   }
   async function move(field: Field, offset: number) {
     const index = fields.findIndex((item) => item.id === field.id);
     const other = fields[index + offset];
     if (!other) return;
-    await Promise.all([
-      api.patch(`/api/candidate-fields/${field.id}`, {
-        sortOrder: other.sortOrder,
-      }),
-      api.patch(`/api/candidate-fields/${other.id}`, {
-        sortOrder: field.sortOrder,
-      }),
-    ]);
-    await load();
+    try {
+      setMutationError(null);
+      await Promise.all([
+        api.patch(`/api/candidate-fields/${field.id}`, {
+          sortOrder: other.sortOrder,
+        }),
+        api.patch(`/api/candidate-fields/${other.id}`, {
+          sortOrder: field.sortOrder,
+        }),
+      ]);
+      await load();
+    } catch (err) {
+      setMutationError(getApiErrorMessage(err, "调整排序失败，请稍后重试"));
+    }
   }
   async function drop(target: Field) {
     const source = fields.find((field) => field.id === draggingId);
     setDraggingId(null);
     if (!source || source.id === target.id) return;
-    await Promise.all([
-      api.patch(`/api/candidate-fields/${source.id}`, {
-        sortOrder: target.sortOrder,
-      }),
-      api.patch(`/api/candidate-fields/${target.id}`, {
-        sortOrder: source.sortOrder,
-      }),
-    ]);
-    await load();
+    try {
+      setMutationError(null);
+      await Promise.all([
+        api.patch(`/api/candidate-fields/${source.id}`, {
+          sortOrder: target.sortOrder,
+        }),
+        api.patch(`/api/candidate-fields/${target.id}`, {
+          sortOrder: source.sortOrder,
+        }),
+      ]);
+      await load();
+    } catch (err) {
+      setMutationError(getApiErrorMessage(err, "调整排序失败，请稍后重试"));
+    }
   }
   async function download() {
     const { headers } = await api.get<{ headers: string[] }>(
@@ -184,6 +216,14 @@ export function CandidateFieldsPage() {
           </div>
         }
       />
+      {mutationError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
+        >
+          {mutationError}
+        </div>
+      )}
       {fields.length === 0 ? (
         <EmptyState
           icon={<Tags className="size-8" />}
@@ -275,8 +315,8 @@ export function CandidateFieldsPage() {
           </TableBody>
         </Table>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+      <Dialog open={open} onOpenChange={setDialogOpen}>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editing ? "编辑字段" : "添加字段"}</DialogTitle>
           </DialogHeader>
@@ -335,11 +375,22 @@ export function CandidateFieldsPage() {
               唯一身份标识
             </label>
           </FieldGroup>
+          {mutationError && (
+            <p role="alert" className="text-sm text-destructive">
+              {mutationError}
+            </p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              disabled={saving}
+            >
               取消
             </Button>
-            <Button onClick={() => void save()}>保存</Button>
+            <Button onClick={() => void save()} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

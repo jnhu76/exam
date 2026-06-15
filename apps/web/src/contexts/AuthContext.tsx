@@ -14,6 +14,8 @@ type SessionUser = MeResponse;
 export interface AuthContextValue {
   user: SessionUser | null;
   isLoading: boolean;
+  isRestoringSession: boolean;
+  isSubmittingLogin: boolean;
   error: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -36,8 +38,13 @@ export function AuthProvider({
 }) {
   const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(initialUser);
-  const [isLoading, setIsLoading] = useState(restoreSession && !initialUser);
+  const [isRestoringSession, setIsRestoringSession] = useState(
+    restoreSession && !initialUser,
+  );
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isLoading = isRestoringSession || isSubmittingLogin || isLoggingOut;
 
   useEffect(() => {
     setNavigate(navigate);
@@ -47,7 +54,7 @@ export function AuthProvider({
   useEffect(() => {
     if (!restoreSession || initialUser) return;
     let active = true;
-    setIsLoading(true);
+    setIsRestoringSession(true);
     api
       .get<MeResponse>("/api/auth/me")
       .then((nextUser) => {
@@ -57,7 +64,7 @@ export function AuthProvider({
         if (active) setUser(null);
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) setIsRestoringSession(false);
       });
     return () => {
       active = false;
@@ -65,7 +72,7 @@ export function AuthProvider({
   }, [initialUser, restoreSession]);
 
   async function login(username: string, password: string) {
-    setIsLoading(true);
+    setIsSubmittingLogin(true);
     setError(null);
     try {
       const nextUser = await api.post<LoginResponse, LoginRequest>(
@@ -77,12 +84,12 @@ export function AuthProvider({
     } catch (e) {
       setError(e instanceof Error ? e.message : "登录失败");
     } finally {
-      setIsLoading(false);
+      setIsSubmittingLogin(false);
     }
   }
 
   async function logout() {
-    setIsLoading(true);
+    setIsLoggingOut(true);
     setError(null);
     try {
       await api.post<void>("/api/auth/logout");
@@ -91,12 +98,22 @@ export function AuthProvider({
     } catch (e) {
       setError(e instanceof Error ? e.message : "退出失败");
     } finally {
-      setIsLoading(false);
+      setIsLoggingOut(false);
     }
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, error, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isRestoringSession,
+        isSubmittingLogin,
+        error,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

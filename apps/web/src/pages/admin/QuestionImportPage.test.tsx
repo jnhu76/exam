@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -64,10 +64,11 @@ describe("QuestionImportPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows loading skeleton while fetching courses", () => {
+  it("shows loading skeleton while fetching courses", async () => {
     apiGet.mockImplementation(() => new Promise(() => {}));
     renderPage();
     expect(screen.getByRole("status")).toBeInTheDocument();
+    await act(async () => {});
   });
 
   it("shows error state when courses API fails", async () => {

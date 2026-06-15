@@ -22,14 +22,6 @@ interface AttemptResponse {
   examId: string;
 }
 
-interface QueueStatus {
-  examId: string;
-  status: "waiting" | "ready";
-  position: number;
-  waitCount: number;
-  estimatedWaitSeconds: number;
-}
-
 export function StartExamPage() {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
@@ -37,7 +29,6 @@ export function StartExamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
 
   const loadExam = useCallback(async () => {
     if (!examId) return;
@@ -81,9 +72,6 @@ export function StartExamPage() {
           case "EXAM_NOT_OPEN":
             message = "考试当前不在开放时间内。";
             break;
-          case "QUEUE_WAIT_REQUIRED":
-            message = "当前仍在排队中，请等待准入后继续。";
-            break;
           default:
             if (err.message) message = err.message;
             break;
@@ -94,21 +82,6 @@ export function StartExamPage() {
       setIsStarting(false);
     }
   }, [examId, navigate]);
-
-  const pollQueue = useCallback(async () => {
-    if (!examId) return;
-    const status = await api.post<QueueStatus>(`/api/attempts/${examId}/queue`);
-    setQueueStatus(status);
-    if (status.status === "ready") {
-      await enterExam();
-    }
-  }, [enterExam, examId]);
-
-  useEffect(() => {
-    if (queueStatus?.status !== "waiting") return;
-    const interval = setInterval(() => void pollQueue(), 1000);
-    return () => clearInterval(interval);
-  }, [pollQueue, queueStatus?.status]);
 
   async function handleStart() {
     if (!exam) return;
@@ -125,18 +98,6 @@ export function StartExamPage() {
             : "当前无法开始考试。";
       setError(message);
       toast.error(message);
-      return;
-    }
-    if (exam?.controlFlags.requireQueue) {
-      setIsStarting(true);
-      try {
-        await pollQueue();
-      } catch (err) {
-        setIsStarting(false);
-        const msg = err instanceof ApiError ? err.message : "排队失败，请重试";
-        setError(msg);
-        toast.error(msg);
-      }
       return;
     }
     await enterExam();
@@ -225,33 +186,6 @@ export function StartExamPage() {
         >
           {inlineMessage}
         </div>
-      )}
-
-      {queueStatus?.status === "waiting" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">正在排队</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-sm">
-            <p>前方等待人数：{queueStatus.waitCount}</p>
-            <p>预计等待：{queueStatus.estimatedWaitSeconds}秒</p>
-            <div
-              className="h-2 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuenow={Math.max(10, 100 / queueStatus.position)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className="h-full bg-primary transition-all"
-                style={{
-                  width: `${Math.max(10, 100 / queueStatus.position)}%`,
-                }}
-              />
-            </div>
-            <p className="text-muted-foreground">请勿关闭此页面</p>
-          </CardContent>
-        </Card>
       )}
 
       <div className="flex justify-end">

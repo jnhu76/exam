@@ -19,6 +19,7 @@ import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 import { eq } from "drizzle-orm";
 
@@ -150,6 +151,8 @@ async function resolveDefaultOrgId(db: Database): Promise<string> {
 }
 
 async function main() {
+  loadRootEnv();
+
   let databaseUrl: string;
   try {
     databaseUrl = resolveDatabaseUrlFromEnv(process.env);

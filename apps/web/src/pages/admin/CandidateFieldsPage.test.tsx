@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -21,6 +21,10 @@ vi.mock("@/lib/api", () => ({
     patch: (...args: unknown[]) => apiPatch(...args),
   },
   setNavigate: () => {},
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
 }));
 
 const mockFields = [
@@ -143,6 +147,72 @@ describe("CandidateFieldsPage", () => {
     });
   });
 
+  it("shows API error without unhandled rejection", async () => {
+    apiPost.mockRejectedValue(new Error("字段名已存在"));
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "phone");
+    await user.type(inputs[1]!, "手机号");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(await within(dialog).findByText("字段名已存在")).toBeInTheDocument();
+  });
+
+  it("clears dialog mutation error when closing", async () => {
+    apiPost.mockRejectedValue({ message: "字段名已存在" });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "phone");
+    await user.type(inputs[1]!, "手机号");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(await within(dialog).findByText("字段名已存在")).toBeInTheDocument();
+    const cancelBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "取消")!;
+    await user.click(cancelBtn);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText("字段名已存在")).not.toBeInTheDocument();
+  });
+
+  it("disables save while field mutation is running", async () => {
+    let resolveSave: (value: unknown) => void;
+    apiPost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "phone");
+    await user.type(inputs[1]!, "手机号");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.dblClick(saveBtn);
+    expect(
+      within(dialog).getByRole("button", { name: "保存中..." }),
+    ).toBeDisabled();
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    resolveSave!({ id: "cf3" });
+    await act(async () => {});
+  });
+
   it("does not save when name and label are empty", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -247,6 +317,18 @@ describe("CandidateFieldsPage", () => {
     apiGet.mockRejectedValue(new Error("fail"));
     renderPage();
     expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
+  });
+
+  it("recovers after retry succeeds", async () => {
+    apiGet
+      .mockRejectedValueOnce(new Error("fail"))
+      .mockResolvedValueOnce([...mockFields]);
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("employeeId")).toBeInTheDocument();
+    expect(screen.queryByText("加载字段配置失败")).not.toBeInTheDocument();
   });
 
   it("shows empty state when no fields", async () => {

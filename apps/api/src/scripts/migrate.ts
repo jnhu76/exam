@@ -1,5 +1,8 @@
 import { createDatabase, migratePostgres } from "@exam/db";
+import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
+
+loadRootEnv();
 
 let databaseUrl: string;
 try {

@@ -293,6 +293,7 @@ describe("layout shells", () => {
         <Route path="/admin" element={<AdminLayout />}>
           <Route path="*" element={<PlaceholderPage />} />
         </Route>
+        <Route path="/login" element={<div>login page</div>} />
       </Routes>,
       "/admin/dashboard",
     );

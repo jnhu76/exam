@@ -11,7 +11,7 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 export function LoginPage() {
   const branding = useBranding();
-  const { login, isLoading, error } = useAuth();
+  const { login, isSubmittingLogin, error } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -37,7 +37,7 @@ export function LoginPage() {
     >
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <BrandHeader />
+          <BrandHeader textClassName="text-foreground" />
         </CardHeader>
         <CardContent>
           {branding.productSubtitle && (
@@ -46,7 +46,7 @@ export function LoginPage() {
             </p>
           )}
           <form onSubmit={handleSubmit}>
-            <FieldGroup>
+            <FieldGroup data-testid="login-field-group" className="gap-4">
               <Field>
                 <Label htmlFor="username">用户名</Label>
                 <Input
@@ -59,7 +59,7 @@ export function LoginPage() {
                     if (fieldErrors.username)
                       setFieldErrors((prev) => ({ ...prev, username: "" }));
                   }}
-                  disabled={isLoading}
+                  disabled={isSubmittingLogin}
                 />
                 <FieldError>{fieldErrors.username}</FieldError>
               </Field>
@@ -75,7 +75,7 @@ export function LoginPage() {
                     if (fieldErrors.password)
                       setFieldErrors((prev) => ({ ...prev, password: "" }));
                   }}
-                  disabled={isLoading}
+                  disabled={isSubmittingLogin}
                 />
                 <FieldError>{fieldErrors.password}</FieldError>
               </Field>
@@ -87,8 +87,12 @@ export function LoginPage() {
                   {error}
                 </div>
               )}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "登录中..." : "登录"}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSubmittingLogin}
+              >
+                {isSubmittingLogin ? "登录中..." : "登录"}
               </Button>
             </FieldGroup>
           </form>

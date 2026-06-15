@@ -75,8 +75,8 @@ function SidebarLink({
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
-          "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-          isActive && "bg-primary/10 font-medium text-primary",
+          "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
+          isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
         )
       }
     >
@@ -101,13 +101,13 @@ export function AppSidebar({
     <aside
       data-testid="app-sidebar"
       className={cn(
-        "flex min-h-screen shrink-0 flex-col border-r bg-card transition-[width]",
-        collapsed ? "w-14" : "w-56",
+        "flex min-h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width]",
+        collapsed ? "w-14" : "w-[232px]",
       )}
     >
       <div
         className={cn(
-          "border-b px-2",
+          "border-b border-sidebar-border px-2",
           collapsed
             ? "flex min-h-24 flex-col items-center justify-center gap-2 py-2"
             : "flex min-h-14 items-center gap-2",
@@ -116,12 +116,14 @@ export function AppSidebar({
         <BrandHeader
           compact={collapsed}
           className={cn(!collapsed && "flex-1")}
+          textClassName="text-sidebar-foreground"
         />
         {onCollapse && !collapsed && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
+            className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
             data-testid="sidebar-collapse-button"
             aria-label="折叠侧栏"
             onClick={onCollapse}
@@ -134,6 +136,7 @@ export function AppSidebar({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
             data-testid="sidebar-collapse-button"
             aria-label="展开侧栏"
             onClick={onCollapse}
@@ -147,7 +150,7 @@ export function AppSidebar({
         {groups.map((group, gi) => (
           <section key={group.label}>
             {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
                 {group.label}
               </p>
             )}
@@ -160,7 +163,7 @@ export function AppSidebar({
         {showManagement && (
           <section>
             {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">
+              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
                 管理
               </p>
             )}
@@ -172,7 +175,7 @@ export function AppSidebar({
         )}
       </nav>
 
-      <Separator />
+      <Separator className="bg-sidebar-border" />
 
       <div className="p-2">
         <div
@@ -182,17 +185,21 @@ export function AppSidebar({
           )}
         >
           <Avatar className="size-8">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-foreground">
+              {initials}
+            </AvatarFallback>
           </Avatar>
           {!collapsed && (
-            <span className="flex-1 truncate text-sm">{user.name}</span>
+            <span className="flex-1 truncate text-sm text-sidebar-text">
+              {user.name}
+            </span>
           )}
         </div>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="mt-1 w-full justify-center"
+          className="mt-1 w-full justify-center text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
           aria-label="退出登录"
           onClick={onLogout}
         >

@@ -17,7 +17,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
 import {
   Pagination,
   PaginationContent,
@@ -222,9 +221,6 @@ export function ScoreListPage() {
                 <TabsTrigger value="failed">不及格</TabsTrigger>
               </TabsList>
             </Tabs>
-            <div className="w-full md:w-64">
-              <Input placeholder="搜索考生..." />
-            </div>
           </div>
         </CardContent>
       </Card>

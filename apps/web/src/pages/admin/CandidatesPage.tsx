@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
 import { toast } from "sonner";
 import {
   parseImportCsv,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/candidateImport";
 import type { CandidateFieldConfig } from "@/lib/candidateImport";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -34,7 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Plus, Search, Upload, Users } from "lucide-react";
+import { Pencil, Plus, Search, Upload, Users, X } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
@@ -75,6 +77,8 @@ export function CandidatesPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -147,8 +151,9 @@ export function CandidatesPage() {
     return Object.keys(errors).length === 0;
   }
   async function save() {
-    if (!validate()) return;
+    if (saving || !validate()) return;
     setSaveError(null);
+    setSaving(true);
     try {
       if (editing)
         await api.patch(`/api/candidates/${editing.id}`, {
@@ -164,18 +169,26 @@ export function CandidatesPage() {
         });
       setDialogOpen(false);
       await load();
-    } catch {
-      setSaveError("保存失败，请重试");
+    } catch (err) {
+      const serverFieldErrors = getApiFieldErrors(err);
+      setFieldErrors((current) => ({ ...current, ...serverFieldErrors }));
+      setSaveError(getApiErrorMessage(err, "保存失败，请稍后重试"));
+    } finally {
+      setSaving(false);
     }
   }
   async function toggle(candidate: Candidate) {
+    if (togglingId) return;
+    setTogglingId(candidate.id);
     try {
       await api.patch(`/api/candidates/${candidate.id}`, {
         isActive: !candidate.isActive,
       });
       await load();
-    } catch {
-      toast.error("操作失败，请重试");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "操作失败，请稍后重试"));
+    } finally {
+      setTogglingId(null);
     }
   }
   function fieldConfigs(): CandidateFieldConfig[] {
@@ -288,31 +301,64 @@ export function CandidatesPage() {
           </div>
         }
       />
+      <div className="flex items-center gap-2">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="搜索考生"
+            placeholder="搜索考生姓名或用户名..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute right-1 top-1/2 -translate-y-1/2"
+              aria-label="清除考生搜索"
+              onClick={() => setSearch("")}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+      </div>
       {filteredCandidates.length === 0 && search ? (
         <EmptyState
           icon={<Search className="size-8" />}
           title="未找到匹配的考生"
-          description={`没有符合"${search}"的考生`}
+          description={`没有符合「${search}」的考生。`}
+          action={
+            <Button variant="outline" onClick={() => setSearch("")}>
+              清除搜索
+            </Button>
+          }
         />
       ) : filteredCandidates.length === 0 ? (
         <EmptyState
           icon={<Users className="size-8" />}
           title="暂无考生"
-          description="可以手动新增或通过 CSV 批量导入。"
+          description="可以通过「新增考生」或「导入」创建考生。"
+          action={
+            <div className="flex gap-2">
+              <Button onClick={() => open()}>新增考生</Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setImportOpen(true);
+                  setImportSummary("");
+                  setCsv("");
+                }}
+              >
+                导入
+              </Button>
+            </div>
+          }
         />
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索考生姓名或用户名..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -346,13 +392,25 @@ export function CandidatesPage() {
                       >
                         <Pencil />
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void toggle(candidate)}
-                      >
-                        {candidate.isActive ? "禁用" : "启用"}
-                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={togglingId !== null}
+                          >
+                            {togglingId === candidate.id
+                              ? "处理中..."
+                              : candidate.isActive
+                                ? "禁用"
+                                : "启用"}
+                          </Button>
+                        }
+                        title={candidate.isActive ? "确认禁用" : "确认启用"}
+                        description={`确定要${candidate.isActive ? "禁用" : "启用"}考生「${candidate.name}」吗？`}
+                        destructive={candidate.isActive}
+                        onConfirm={() => void toggle(candidate)}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -362,7 +420,7 @@ export function CandidatesPage() {
         </>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editing ? "编辑考生" : "新增考生"}</DialogTitle>
           </DialogHeader>
@@ -430,12 +488,18 @@ export function CandidatesPage() {
                   id={`candidate-field-${field.name}`}
                   type={field.fieldType === "number" ? "number" : "text"}
                   value={values[field.name] ?? ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setValues((current) => ({
                       ...current,
                       [field.name]: e.target.value,
-                    }))
-                  }
+                    }));
+                    if (fieldErrors[`field:${field.name}`]) {
+                      setFieldErrors((prev) => ({
+                        ...prev,
+                        [`field:${field.name}`]: "",
+                      }));
+                    }
+                  }}
                 />
                 <FieldError>{fieldErrors[`field:${field.name}`]}</FieldError>
               </Field>
@@ -443,10 +507,16 @@ export function CandidatesPage() {
           </FieldGroup>
           {saveError && <p className="text-sm text-destructive">{saveError}</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              disabled={saving}
+            >
               取消
             </Button>
-            <Button onClick={() => void save()}>保存</Button>
+            <Button onClick={() => void save()} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

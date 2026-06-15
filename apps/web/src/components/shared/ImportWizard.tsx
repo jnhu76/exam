@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -44,9 +45,9 @@ export function ImportWizard({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{instructions}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">{instructions}</p>
           {warning && <p className="text-sm text-warning">{warning}</p>}
           <FileUpload onText={onCsvChange} />
           <Textarea

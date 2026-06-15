@@ -81,12 +81,16 @@ function renderPage() {
 }
 
 describe("ExamCreatePage smoke", () => {
-  it("renders page title and exam config form", async () => {
+  it("renders page title and exam config form without Phase 2 controls", async () => {
     renderPage();
 
     expect(await screen.findByText("创建考试")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("请输入考试名称")).toBeInTheDocument();
     expect(screen.getByText("时间设置")).toBeInTheDocument();
+    expect(screen.queryByText(/随机选题/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/排队入场/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/限制访问网络/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/要求锁定环境/)).not.toBeInTheDocument();
   });
 
   it("shows question selection dialog and adds question", async () => {
@@ -179,5 +183,19 @@ describe("ExamCreatePage smoke", () => {
     );
     expect(hasCreate).toBe(true);
     expect(hasPublish).toBe(true);
+  });
+
+  it("shows specific API error on save failure", async () => {
+    const user = userEvent.setup();
+    apiPost.mockReset();
+    apiPost.mockRejectedValue(new Error("题目不属于所选课程"));
+
+    renderPage();
+
+    expect(await screen.findByText("创建考试")).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("请输入考试名称"), "Bad Exam");
+    await user.click(screen.getByRole("button", { name: "保存草稿" }));
+
+    expect(await screen.findByText("题目不属于所选课程")).toBeInTheDocument();
   });
 });

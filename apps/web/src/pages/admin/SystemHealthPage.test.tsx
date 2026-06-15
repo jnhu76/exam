@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -67,11 +67,12 @@ describe("SystemHealthPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows loading skeleton while fetching data", () => {
+  it("shows loading skeleton while fetching data", async () => {
     apiGet.mockImplementation(() => new Promise(() => {}));
     const { container } = renderPage();
     const skeletons = container.querySelectorAll("[data-slot='skeleton']");
     expect(skeletons.length).toBeGreaterThan(0);
+    await act(async () => {});
   });
 
   it("shows error state when API fails", async () => {

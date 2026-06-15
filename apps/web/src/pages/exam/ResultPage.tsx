@@ -186,7 +186,7 @@ export function ResultPage() {
                   : result.status === "graded"
                     ? "成绩尚未公布"
                     : result.status === "disrupted"
-                      ? "答题中断，请联系监考或重新进入"
+                      ? "答题中断，请联系管理员或重新进入"
                       : "已交卷，等待成绩公布"}
             </p>
           </CardContent>
