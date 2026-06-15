@@ -241,29 +241,15 @@ describe("attemptCommands", () => {
       expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
     });
 
-    it("creates enrollment if none exists", async () => {
+    it("rejects when no enrollment exists (Phase 1 requires explicit assignment)", async () => {
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
       const enrRepo = makeEnrollmentRepo();
       const attRepo = makeAttemptRepo();
 
-      const result = await startAttempt(
-        examRepo,
-        enrRepo,
-        attRepo,
-        "exam-1",
-        "cand-1",
-        fixedNow,
-      );
-
-      expect(result).toBeDefined();
-      expect(result.candidateId).toBe("cand-1");
-      const newEnrollment = await enrRepo.findByExamAndCandidate(
-        "exam-1",
-        "cand-1",
-      );
-      expect(newEnrollment).toBeDefined();
-      expect(newEnrollment!.status).toBe("started");
+      await expect(
+        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+      ).rejects.toThrow(ValidationError);
     });
 
     it("returns existing in_progress attempt instead of creating new", async () => {
