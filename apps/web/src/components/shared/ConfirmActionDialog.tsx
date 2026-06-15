@@ -9,6 +9,7 @@ type ConfirmActionDialogProps = {
   cancelLabel?: string;
   destructive?: boolean;
   disabled?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel?: () => void;
 };
@@ -21,6 +22,7 @@ export function ConfirmActionDialog({
   cancelLabel = "取消",
   destructive = false,
   disabled = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmActionDialogProps) {
@@ -32,7 +34,7 @@ export function ConfirmActionDialog({
       confirmLabel={confirmLabel}
       cancelLabel={cancelLabel}
       destructive={destructive}
-      confirmDisabled={disabled}
+      confirmDisabled={disabled || confirmDisabled}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />

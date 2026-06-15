@@ -28,19 +28,21 @@ export function ListToolbar({
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-        {search && <div className="min-w-0 flex-1">{search}</div>}
-        {filters && (
+        {search != null && <div className="min-w-0 flex-1">{search}</div>}
+        {filters != null && (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {filters}
           </div>
         )}
       </div>
-      {(summary || actions) && (
+      {(summary != null || actions != null) && (
         <div className="flex shrink-0 items-center justify-between gap-2 lg:justify-end">
-          {summary && (
+          {summary != null && (
             <div className="text-sm text-muted-foreground">{summary}</div>
           )}
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          {actions != null && (
+            <div className="flex items-center gap-2">{actions}</div>
+          )}
         </div>
       )}
     </div>

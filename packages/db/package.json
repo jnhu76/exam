@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@exam/auth": "workspace:*",
+    "@types/node": "^22.19.19",
     "@vitest/coverage-v8": "^4.1.7",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.4",

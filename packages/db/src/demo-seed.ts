@@ -496,6 +496,7 @@ export async function seedDemo(
       .where(
         and(
           eq(schema.questions.organizationId, ids.orgId),
+          eq(schema.questions.courseId, qd.courseId),
           eq(schema.questions.content, qd.content),
         ),
       );

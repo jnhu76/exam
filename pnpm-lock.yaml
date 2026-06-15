@@ -274,6 +274,9 @@ importers:
       '@exam/auth':
         specifier: workspace:*
         version: link:../auth
+      '@types/node':
+        specifier: ^22.19.19
+        version: 22.19.19
       '@vitest/coverage-v8':
         specifier: ^4.1.7
         version: 4.1.7(vitest@4.1.7)

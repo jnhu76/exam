@@ -242,6 +242,38 @@ describe("SubjectiveAnswerInput", () => {
     expect(screen.getByLabelText("主观题答案")).toHaveValue("");
     expect(screen.getByText("0 字")).toBeInTheDocument();
   });
+
+  it("uses unique accessibility ids for multiple instances", () => {
+    render(
+      <>
+        <SubjectiveAnswerInput
+          value=""
+          onChange={() => {}}
+          label="第一题答案"
+          error="第一题不能为空"
+        />
+        <SubjectiveAnswerInput
+          value=""
+          onChange={() => {}}
+          label="第二题答案"
+          error="第二题不能为空"
+        />
+      </>,
+    );
+
+    const firstInput = screen.getByLabelText("第一题答案");
+    const secondInput = screen.getByLabelText("第二题答案");
+
+    expect(firstInput.id).not.toBe(secondInput.id);
+    expect(firstInput).toHaveAttribute(
+      "aria-describedby",
+      `${firstInput.id}-help`,
+    );
+    expect(secondInput).toHaveAttribute(
+      "aria-describedby",
+      `${secondInput.id}-help`,
+    );
+  });
 });
 
 describe("RuntimeActionBar", () => {

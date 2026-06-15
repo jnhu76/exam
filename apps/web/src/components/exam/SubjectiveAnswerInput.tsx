@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { type ChangeEvent, useId } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -8,7 +8,6 @@ type SubjectiveAnswerInputProps = {
   label?: string;
   placeholder?: string;
   maxLength?: number;
-  minRows?: number;
   readOnly?: boolean;
   error?: string;
   className?: string;
@@ -20,12 +19,12 @@ export function SubjectiveAnswerInput({
   label = "主观题答案",
   placeholder = "请输入答案",
   maxLength,
-  minRows = 8,
   readOnly = false,
   error,
   className,
 }: SubjectiveAnswerInputProps) {
-  const inputId = "subjective-answer";
+  const generatedId = useId();
+  const inputId = `${generatedId}-subjective-answer`;
   const helpId = `${inputId}-help`;
   const safeValue = value ?? "";
   const countLabel = maxLength
@@ -53,8 +52,7 @@ export function SubjectiveAnswerInput({
         readOnly={readOnly}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? helpId : undefined}
-        className="resize-y"
-        style={{ minHeight: `${minRows * 1.5}rem` }}
+        className="min-h-48 resize-y"
       />
       {error && (
         <p id={helpId} className="text-sm text-destructive">

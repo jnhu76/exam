@@ -259,6 +259,12 @@ describe("ListToolbar", () => {
     expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
     expect(screen.getByText("共 2 条")).toBeInTheDocument();
   });
+
+  it("renders legitimate falsy ReactNode slots", () => {
+    render(<ListToolbar search={0} filters={0} actions={0} summary={0} />);
+
+    expect(screen.getAllByText("0")).toHaveLength(4);
+  });
 });
 
 describe("RowActions", () => {
@@ -314,6 +320,23 @@ describe("DataTablePagination", () => {
       "page",
     );
   });
+
+  it("normalizes non-positive page sizes", () => {
+    render(
+      <DataTablePagination
+        page={1}
+        pageSize={0}
+        total={3}
+        onPageChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("共 3 条，显示 1-1 条")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "第 1 页" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
 });
 
 describe("FormStack", () => {
@@ -360,6 +383,29 @@ describe("ConfirmActionDialog", () => {
     await user.click(screen.getByRole("button", { name: "删除" }));
     await user.click(screen.getByRole("button", { name: "删除" }));
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("does not confirm when confirm action is disabled", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <ConfirmActionDialog
+        trigger={<button type="button">打开</button>}
+        title="确认删除"
+        description="删除后无法恢复"
+        confirmLabel="删除"
+        confirmDisabled
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "打开" }));
+    const confirmButton = screen.getByRole("button", { name: "删除" });
+
+    expect(confirmButton).toBeDisabled();
+    await user.click(confirmButton);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });
 

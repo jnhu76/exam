@@ -31,10 +31,11 @@ export function DataTablePagination({
   className,
   "aria-label": ariaLabel = "表格分页",
 }: DataTablePaginationProps) {
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const safePageSize = pageSize > 0 ? pageSize : 1;
+  const pageCount = Math.max(1, Math.ceil(total / safePageSize));
   const currentPage = Math.min(Math.max(page, 1), pageCount);
-  const startItem = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(total, currentPage * pageSize);
+  const startItem = total === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
+  const endItem = Math.min(total, currentPage * safePageSize);
   const visiblePages = buildVisiblePages(currentPage, pageCount);
 
   return (
