@@ -79,9 +79,18 @@ export function QuestionNavigator({
         })}
       </div>
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <span>未作答</span>
-        <span>已作答</span>
-        <span>已标记</span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block size-3 rounded-sm border border-border bg-background" />
+          未作答
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block size-3 rounded-sm border border-success bg-success" />
+          已作答
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block size-3 rounded-sm border border-warning bg-warning/10" />
+          已标记
+        </span>
       </div>
     </nav>
   );

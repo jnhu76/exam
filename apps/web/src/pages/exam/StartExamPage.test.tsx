@@ -103,6 +103,8 @@ describe("StartExamPage", () => {
       currentAttempts: 1,
       activeAttemptId: "att-1",
       canStartNewAttempt: false,
+      availabilityStatus: "in_progress",
+      primaryAction: "resume",
     });
 
     renderPage();
@@ -146,6 +148,8 @@ describe("StartExamPage", () => {
       currentAttempts: 1,
       canStartNewAttempt: false,
       blockingReason: "max_attempts_reached",
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "view_result",
     });
 
     renderPage();
@@ -153,7 +157,9 @@ describe("StartExamPage", () => {
     expect(
       await screen.findByText("已达到最大考试次数，无法再次开始考试。"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "开始考试" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "查看成绩" }),
+    ).toBeInTheDocument();
   });
 
   it("shows already-passed blocking reason", async () => {
@@ -180,12 +186,14 @@ describe("StartExamPage", () => {
       currentAttempts: 1,
       canStartNewAttempt: false,
       blockingReason: "already_passed",
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "view_result",
     });
 
     renderPage();
 
     expect(
-      await screen.findByText("本场考试已通过，无需再次参加。"),
+      await screen.findByText("已达到最大考试次数，无法再次开始考试。"),
     ).toBeInTheDocument();
   });
 
@@ -213,6 +221,8 @@ describe("StartExamPage", () => {
       maxAttempts: 2,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockResolvedValueOnce({
       id: "new-att",
@@ -253,6 +263,8 @@ describe("StartExamPage", () => {
       maxAttempts: 1,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
 
     renderPage();
@@ -294,6 +306,8 @@ describe("StartExamPage", () => {
       maxAttempts: 1,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "已达最大考试次数", "MAX_ATTEMPTS_REACHED"),
@@ -334,6 +348,8 @@ describe("StartExamPage", () => {
       maxAttempts: 3,
       currentAttempts: 1,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "已通过考试", "EXAM_ALREADY_PASSED"),
@@ -341,7 +357,7 @@ describe("StartExamPage", () => {
 
     renderPage();
     await screen.findByText("Test");
-    await user.click(screen.getByRole("button", { name: "开始考试" }));
+    await user.click(screen.getByRole("button", { name: "再次考试" }));
 
     await waitFor(() => {
       expect(
@@ -374,6 +390,8 @@ describe("StartExamPage", () => {
       maxAttempts: 3,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "考试尚未开放", "EXAM_NOT_OPEN"),
@@ -412,6 +430,8 @@ describe("StartExamPage", () => {
       maxAttempts: 3,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "请等待队列准入", "QUEUE_WAIT_REQUIRED"),

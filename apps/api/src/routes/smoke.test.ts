@@ -155,7 +155,8 @@ describe("Phase 1.1 regression - critical path", () => {
     expect(exams.length).toBeGreaterThanOrEqual(1);
     const enrolled = exams.find((e: { examId: string }) => e.examId === examId);
     expect(enrolled).toBeDefined();
-    expect(enrolled.isAvailable).toBe(true);
+    expect(enrolled.availabilityStatus).toBe("available");
+    expect(enrolled.primaryAction).toBe("start");
   });
 
   it("candidate can start exam", async () => {

@@ -1,6 +1,61 @@
 import { z } from "zod";
 import { passwordField } from "./passwordPolicy.js";
 
+// ── Candidate Exam Summary (Phase 1 derived contract) ─────────────
+
+export const AvailabilityStatusEnum = z.enum([
+  "available",
+  "in_progress",
+  "resumable",
+  "submitted_pending_grade",
+  "graded",
+  "max_attempts_exhausted",
+  "not_started_yet",
+  "expired",
+  "unavailable",
+]);
+export type AvailabilityStatus = z.infer<typeof AvailabilityStatusEnum>;
+
+export const PrimaryActionEnum = z.enum([
+  "start",
+  "resume",
+  "view_result",
+  "view_history",
+  "none",
+]);
+export type PrimaryAction = z.infer<typeof PrimaryActionEnum>;
+
+export const CandidateExamSummarySchema = z.object({
+  examId: z.string().uuid(),
+  title: z.string(),
+  windowStartAt: z.string().datetime(),
+  windowEndAt: z.string().datetime(),
+  durationMinutes: z.number().int().positive(),
+  totalQuestions: z.number().int().min(0),
+  passingScore: z.number(),
+  totalScore: z.number(),
+  attemptsUsed: z.number().int().min(0),
+  maxAttempts: z.number().int().positive(),
+  latestAttemptId: z.string().uuid().optional(),
+  latestAttemptStatus: z
+    .enum([
+      "not_started",
+      "queued",
+      "in_progress",
+      "disrupted",
+      "submitted",
+      "grading",
+      "graded",
+      "voided",
+    ])
+    .optional(),
+  bestScore: z.number().optional(),
+  bestScorePercent: z.number().optional(),
+  availabilityStatus: AvailabilityStatusEnum,
+  primaryAction: PrimaryActionEnum,
+});
+export type CandidateExamSummary = z.infer<typeof CandidateExamSummarySchema>;
+
 // ── Candidate ─────────────────────────────────────────────────────
 
 export const CandidateSchema = z.object({

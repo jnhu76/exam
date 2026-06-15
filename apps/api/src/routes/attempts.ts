@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   CandidateExamDetailResponseSchema,
+  CandidateExamSummarySchema,
   HeartbeatRequestSchema,
   LoadAttemptParamsSchema,
   LoadAttemptResponseSchema,
@@ -29,6 +30,7 @@ import {
   InvalidStateTransitionError,
   ConflictError,
 } from "@exam/domain";
+import { type AvailabilityStatus, type PrimaryAction } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -322,6 +324,82 @@ function normalizeEnrollment(
   };
 }
 
+function deriveExamState(
+  exam: Exam,
+  enrollment: ExamEnrollment | null,
+  activeAttempt: ExamAttempt | null,
+  now: Date,
+): { availabilityStatus: AvailabilityStatus; primaryAction: PrimaryAction } {
+  const inWindow = now >= exam.openAt && now < exam.closeAt;
+  const beforeWindow = now < exam.openAt;
+  const afterWindow = now >= exam.closeAt;
+  const attemptsUsed = enrollment?.attemptCount ?? 0;
+  const maxAttemptsExhausted =
+    exam.retakePolicy === "max_attempts" && attemptsUsed >= exam.maxAttempts;
+  const alreadyPassed =
+    exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true;
+  const blocked = enrollment?.status === "blocked";
+  const examOpen = exam.status === "published" || exam.status === "open";
+
+  if (!examOpen || blocked) {
+    return { availabilityStatus: "unavailable", primaryAction: "none" };
+  }
+
+  if (beforeWindow) {
+    return { availabilityStatus: "not_started_yet", primaryAction: "none" };
+  }
+
+  if (activeAttempt) {
+    if (activeAttempt.status === "in_progress") {
+      return { availabilityStatus: "in_progress", primaryAction: "resume" };
+    }
+    if (activeAttempt.status === "disrupted") {
+      return { availabilityStatus: "resumable", primaryAction: "resume" };
+    }
+    if (
+      activeAttempt.status === "submitted" ||
+      activeAttempt.status === "grading"
+    ) {
+      return {
+        availabilityStatus: "submitted_pending_grade",
+        primaryAction: "view_history",
+      };
+    }
+  }
+
+  if (maxAttemptsExhausted || alreadyPassed) {
+    if (enrollment?.finalAttemptId) {
+      return {
+        availabilityStatus: "max_attempts_exhausted",
+        primaryAction: "view_result",
+      };
+    }
+    return {
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "none",
+    };
+  }
+
+  if (afterWindow) {
+    if (enrollment?.finalAttemptId) {
+      return {
+        availabilityStatus: "expired",
+        primaryAction: "view_result",
+      };
+    }
+    return { availabilityStatus: "expired", primaryAction: "none" };
+  }
+
+  if (attemptsUsed > 0 && enrollment?.finalScore != null) {
+    return {
+      availabilityStatus: "graded",
+      primaryAction: inWindow ? "start" : "view_result",
+    };
+  }
+
+  return { availabilityStatus: "available", primaryAction: "start" };
+}
+
 function buildCandidateExamDetail(
   exam: Exam,
   enrollment: ExamEnrollment | null,
@@ -349,6 +427,21 @@ function buildCandidateExamDetail(
           ? "already_passed"
           : undefined;
 
+  const now = new Date();
+  const { availabilityStatus, primaryAction } = deriveExamState(
+    exam,
+    enrollment,
+    activeAttempt,
+    now,
+  );
+
+  const bestScore =
+    enrollment?.finalScore != null ? enrollment.finalScore : undefined;
+  const bestScorePercent =
+    bestScore != null && exam.totalScore > 0
+      ? Math.round((bestScore / exam.totalScore) * 100)
+      : undefined;
+
   return CandidateExamDetailResponseSchema.parse({
     id: exam.id,
     title: exam.title,
@@ -362,6 +455,10 @@ function buildCandidateExamDetail(
     ...(activeAttempt ? { activeAttemptId: activeAttempt.id } : {}),
     canStartNewAttempt,
     ...(blockingReason ? { blockingReason } : {}),
+    ...(bestScore != null ? { bestScore } : {}),
+    ...(bestScorePercent != null ? { bestScorePercent } : {}),
+    availabilityStatus,
+    primaryAction,
   });
 }
 
@@ -389,6 +486,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       const examRepo = createExamRepo(fastify.db);
+      const attemptRepo = createAttemptRepo(fastify.db);
       const now = new Date();
 
       return Promise.all(
@@ -399,29 +497,48 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           )) as Exam | null;
           if (!exam) return null;
 
-          const isAvailable =
-            (exam.status === "published" || exam.status === "open") &&
-            now >= exam.openAt &&
-            now < exam.closeAt;
-          const isEnded = now >= exam.closeAt;
+          const latestAttempt = (await attemptRepo.findActiveByExamAndCandidate(
+            ctx,
+            exam.id,
+            candidateProfile.id,
+          )) as ExamAttempt | null;
 
-          return {
+          const { availabilityStatus, primaryAction } = deriveExamState(
+            exam,
+            normalizeEnrollment(enrollment),
+            latestAttempt,
+            now,
+          );
+
+          const bestScore =
+            enrollment.finalScore != null ? enrollment.finalScore : undefined;
+          const bestScorePercent =
+            bestScore != null && exam.totalScore > 0
+              ? Math.round((bestScore / exam.totalScore) * 100)
+              : undefined;
+
+          return CandidateExamSummarySchema.parse({
             examId: exam.id,
             title: exam.title,
+            windowStartAt: exam.openAt.toISOString(),
+            windowEndAt: exam.closeAt.toISOString(),
             durationMinutes: exam.durationMinutes,
+            totalQuestions: exam.questionSnapshot.length,
             passingScore: exam.passingScore,
             totalScore: exam.totalScore,
-            openAt: exam.openAt.toISOString(),
-            closeAt: exam.closeAt.toISOString(),
-            questionCount: exam.questionSnapshot.length,
-            attemptCount: enrollment.attemptCount,
+            attemptsUsed: enrollment.attemptCount,
             maxAttempts: exam.maxAttempts,
-            finalScore: enrollment.finalScore,
-            finalPassed: enrollment.finalPassed,
-            finalAttemptId: enrollment.finalAttemptId,
-            isAvailable,
-            isEnded,
-          };
+            ...(enrollment.finalAttemptId
+              ? { latestAttemptId: enrollment.finalAttemptId }
+              : {}),
+            ...(latestAttempt
+              ? { latestAttemptStatus: latestAttempt.status }
+              : {}),
+            ...(bestScore != null ? { bestScore } : {}),
+            ...(bestScorePercent != null ? { bestScorePercent } : {}),
+            availabilityStatus,
+            primaryAction,
+          });
         }),
       ).then((results) =>
         results.filter(

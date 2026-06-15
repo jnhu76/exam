@@ -18,24 +18,25 @@ describe("ExamListPage", () => {
     getMock.mockReset();
   });
 
-  it("opens the final attempt result from an ended exam", async () => {
+  it("opens the final attempt result from a graded exam", async () => {
     getMock.mockResolvedValue([
       {
         examId: "exam-1",
         title: "能力测验",
+        windowStartAt: "2026-05-01T00:00:00.000Z",
+        windowEndAt: "2026-05-01T01:00:00.000Z",
         durationMinutes: 60,
         passingScore: 6,
         totalScore: 10,
-        openAt: "2026-05-01T00:00:00.000Z",
-        closeAt: "2026-05-01T01:00:00.000Z",
-        questionCount: 1,
-        attemptCount: 1,
+        totalQuestions: 1,
+        attemptsUsed: 1,
         maxAttempts: 1,
-        finalScore: 10,
-        finalPassed: true,
-        finalAttemptId: "attempt-1",
-        isAvailable: false,
-        isEnded: true,
+        latestAttemptId: "attempt-1",
+        latestAttemptStatus: "graded",
+        bestScore: 10,
+        bestScorePercent: 100,
+        availabilityStatus: "max_attempts_exhausted",
+        primaryAction: "view_result",
       },
     ]);
 
@@ -52,7 +53,7 @@ describe("ExamListPage", () => {
     );
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "查看结果" }),
+      await screen.findByRole("button", { name: "查看成绩" }),
     );
 
     expect(screen.getByText("考试结果页")).toBeInTheDocument();

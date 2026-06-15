@@ -1140,5 +1140,47 @@ export async function seedDemo(
   });
   ids.attempts["closed-c4-graded"] = closedAttemptC4Id;
 
+  // ── Patch enrollments with finalAttemptId ──────────────────────
+  await upsertEnrollment(exam1Id, c4, {
+    status: "completed",
+    attemptCount: 1,
+    finalScore: openC4Grading.totalScore,
+    finalPassed: openC4Grading.passed,
+    finalAttemptId: openAttempt4Id,
+  });
+
+  const closedC1FinalAttemptId =
+    closedC1Grading2.totalScore >= closedC1Grading1.totalScore
+      ? closedAttempt2Id
+      : closedAttempt1Id;
+  await upsertEnrollment(exam4Id, c1, {
+    status: "completed",
+    attemptCount: 2,
+    finalScore: closedC1Highest,
+    finalPassed: closedC1Highest >= 15,
+    finalAttemptId: closedC1FinalAttemptId,
+  });
+  await upsertEnrollment(exam4Id, c2, {
+    status: "completed",
+    attemptCount: 1,
+    finalScore: closedC2Grading.totalScore,
+    finalPassed: closedC2Grading.passed,
+    finalAttemptId: closedAttemptC2Id,
+  });
+  await upsertEnrollment(exam4Id, c3, {
+    status: "completed",
+    attemptCount: 1,
+    finalScore: closedC3Grading.totalScore,
+    finalPassed: closedC3Grading.passed,
+    finalAttemptId: closedAttemptC3Id,
+  });
+  await upsertEnrollment(exam4Id, c4, {
+    status: "completed",
+    attemptCount: 1,
+    finalScore: closedC4Grading.totalScore,
+    finalPassed: closedC4Grading.passed,
+    finalAttemptId: closedAttemptC4Id,
+  });
+
   return ids;
 }

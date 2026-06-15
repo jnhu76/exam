@@ -8,25 +8,15 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardList, Clock, Trophy } from "lucide-react";
-
-interface CandidateExam {
-  examId: string;
-  title: string;
-  durationMinutes: number;
-  passingScore: number;
-  totalScore: number;
-  openAt: string;
-  closeAt: string;
-  questionCount: number;
-  attemptCount: number;
-  maxAttempts: number;
-  finalScore: number | null;
-  finalPassed: boolean | null;
-  finalAttemptId: string | null;
-  isAvailable: boolean;
-  isEnded: boolean;
-}
+import {
+  ClipboardList,
+  Clock,
+  Trophy,
+  Play,
+  RotateCcw,
+  Eye,
+} from "lucide-react";
+import type { CandidateExamSummary } from "@exam/contracts";
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString("zh-CN", {
@@ -37,26 +27,116 @@ function formatTime(iso: string): string {
   });
 }
 
+function statusLabel(
+  status: CandidateExamSummary["availabilityStatus"],
+): string {
+  switch (status) {
+    case "available":
+      return "可参加";
+    case "in_progress":
+      return "进行中";
+    case "resumable":
+      return "可恢复";
+    case "submitted_pending_grade":
+      return "待评分";
+    case "graded":
+      return "已评分";
+    case "max_attempts_exhausted":
+      return "次数已用完";
+    case "not_started_yet":
+      return "未开放";
+    case "expired":
+      return "已过期";
+    case "unavailable":
+      return "不可用";
+  }
+}
+
+function statusBadgeVariant(
+  status: CandidateExamSummary["availabilityStatus"],
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "available":
+    case "in_progress":
+    case "resumable":
+      return "default";
+    case "graded":
+    case "max_attempts_exhausted":
+    case "expired":
+      return "secondary";
+    case "submitted_pending_grade":
+      return "outline";
+    default:
+      return "destructive";
+  }
+}
+
 function ExamCard({
   exam,
   onStart,
   onResult,
 }: {
-  exam: CandidateExam;
+  exam: CandidateExamSummary;
   onStart: (examId: string) => void;
   onResult: (attemptId: string) => void;
 }) {
+  const actionLabel = (() => {
+    switch (exam.primaryAction) {
+      case "start":
+        return "开始考试";
+      case "resume":
+        return "继续考试";
+      case "view_result":
+        return "查看成绩";
+      case "view_history":
+        return "查看记录";
+      default:
+        return undefined;
+    }
+  })();
+
+  const actionIcon = (() => {
+    switch (exam.primaryAction) {
+      case "start":
+        return <Play className="mr-1 size-3" />;
+      case "resume":
+        return <RotateCcw className="mr-1 size-3" />;
+      case "view_result":
+      case "view_history":
+        return <Eye className="mr-1 size-3" />;
+      default:
+        return undefined;
+    }
+  })();
+
+  function handleAction() {
+    if (exam.primaryAction === "start" || exam.primaryAction === "resume") {
+      onStart(exam.examId);
+    } else if (
+      (exam.primaryAction === "view_result" ||
+        exam.primaryAction === "view_history") &&
+      exam.latestAttemptId
+    ) {
+      onResult(exam.latestAttemptId);
+    }
+  }
+
   return (
     <Card className="shadow-sm" data-testid={`exam-card-${exam.examId}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{exam.title}</CardTitle>
-          {exam.finalPassed && (
-            <Badge variant="default" className="shrink-0">
-              <Trophy className="mr-1 size-3" />
-              {exam.finalScore}
+          <div className="flex items-center gap-2 shrink-0">
+            {exam.bestScore != null && (
+              <Badge variant="default">
+                <Trophy className="mr-1 size-3" />
+                {exam.bestScore}
+              </Badge>
+            )}
+            <Badge variant={statusBadgeVariant(exam.availabilityStatus)}>
+              {statusLabel(exam.availabilityStatus)}
             </Badge>
-          )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -68,33 +148,26 @@ function ExamCard({
           <span>
             及格分: {exam.passingScore}/{exam.totalScore}
           </span>
-          <span>题目数: {exam.questionCount}</span>
+          <span>题目数: {exam.totalQuestions}</span>
           <span>
-            已考: {exam.attemptCount}/{exam.maxAttempts}次
+            已考: {exam.attemptsUsed}/{exam.maxAttempts}次
           </span>
         </div>
         <div className="text-sm text-muted-foreground">
-          {formatTime(exam.openAt)} — {formatTime(exam.closeAt)}
+          {formatTime(exam.windowStartAt)} — {formatTime(exam.windowEndAt)}
         </div>
         <div className="flex justify-end">
-          {exam.isAvailable ? (
+          {actionLabel && (
             <Button
               size="sm"
-              onClick={() => onStart(exam.examId)}
-              data-testid="exam-start-btn"
+              onClick={handleAction}
+              disabled={exam.primaryAction === "none"}
+              data-testid="exam-action-btn"
             >
-              开始考试
+              {actionIcon}
+              {actionLabel}
             </Button>
-          ) : exam.finalAttemptId ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onResult(exam.finalAttemptId!)}
-              data-testid="exam-result-btn"
-            >
-              查看结果
-            </Button>
-          ) : null}
+          )}
         </div>
       </CardContent>
     </Card>
@@ -103,7 +176,7 @@ function ExamCard({
 
 export function ExamListPage() {
   const navigate = useNavigate();
-  const [exams, setExams] = useState<CandidateExam[]>([]);
+  const [exams, setExams] = useState<CandidateExamSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,7 +184,9 @@ export function ExamListPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await api.get<CandidateExam[]>("/api/candidate/exams");
+      const data = await api.get<CandidateExamSummary[]>(
+        "/api/candidate/exams",
+      );
       setExams(data.filter(Boolean));
     } catch {
       setError("加载考试列表失败");
@@ -135,16 +210,20 @@ export function ExamListPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
 
-  const available = exams.filter((e) => e.isAvailable);
-  const ended = exams.filter((e) => e.isEnded);
+  const canTake = exams.filter(
+    (e) => e.primaryAction === "start" || e.primaryAction === "resume",
+  );
+  const others = exams.filter(
+    (e) => e.primaryAction !== "start" && e.primaryAction !== "resume",
+  );
 
   return (
     <div className="mx-auto max-w-4xl flex flex-col gap-6 p-6">
-      {available.length > 0 && (
+      {canTake.length > 0 && (
         <section className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">可参加的考试</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            {available.map((exam) => (
+            {canTake.map((exam) => (
               <ExamCard
                 key={exam.examId}
                 exam={exam}
@@ -156,11 +235,11 @@ export function ExamListPage() {
         </section>
       )}
 
-      {ended.length > 0 && (
+      {others.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">已结束</h2>
+          <h2 className="text-lg font-semibold">历史考试</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            {ended.map((exam) => (
+            {others.map((exam) => (
               <ExamCard
                 key={exam.examId}
                 exam={exam}

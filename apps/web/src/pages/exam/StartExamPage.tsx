@@ -108,16 +108,26 @@ export function StartExamPage() {
     return <ErrorState message={error ?? "考试不存在"} onRetry={loadExam} />;
   }
 
-  const limitReached = exam.blockingReason === "max_attempts_reached";
-  const alreadyPassed = exam.blockingReason === "already_passed";
   const hasActiveAttempt = Boolean(exam.activeAttemptId);
-  const actionLabel = hasActiveAttempt ? "继续考试" : "开始考试";
+  const actionLabel = (() => {
+    switch (exam.primaryAction) {
+      case "resume":
+        return "继续考试";
+      case "start":
+        return exam.currentAttempts > 0 ? "再次考试" : "开始考试";
+      case "view_result":
+        return "查看成绩";
+      default:
+        return "开始考试";
+    }
+  })();
+
   const inlineMessage = hasActiveAttempt
     ? "检测到未完成的考试记录，将继续上次进度。"
-    : limitReached
+    : exam.availabilityStatus === "max_attempts_exhausted"
       ? "已达到最大考试次数，无法再次开始考试。"
-      : alreadyPassed
-        ? "本场考试已通过，无需再次参加。"
+      : exam.availabilityStatus === "graded" && exam.primaryAction === "start"
+        ? "可重考，当前最高成绩将保留。"
         : error;
 
   return (
@@ -172,8 +182,18 @@ export function StartExamPage() {
         开始后倒计时立即启动，中途不可暂停
       </div>
 
-      <div className="text-sm text-muted-foreground">
-        已考 {exam.currentAttempts}/{exam.maxAttempts} 次
+      <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+        <span>
+          已考 {exam.currentAttempts}/{exam.maxAttempts} 次
+        </span>
+        {exam.bestScore != null && (
+          <span>
+            最高成绩: {exam.bestScore}/{exam.totalScore}
+            {exam.bestScorePercent != null && (
+              <span className="ml-1">({exam.bestScorePercent}%)</span>
+            )}
+          </span>
+        )}
       </div>
 
       {inlineMessage && (
@@ -181,7 +201,10 @@ export function StartExamPage() {
           className={`rounded-md border p-3 text-sm ${
             hasActiveAttempt
               ? "border-primary/30 bg-primary/10 text-primary"
-              : "border-destructive/30 bg-destructive/10 text-destructive"
+              : exam.availabilityStatus === "graded" &&
+                  exam.primaryAction === "start"
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-destructive/30 bg-destructive/10 text-destructive"
           }`}
         >
           {inlineMessage}
@@ -193,7 +216,10 @@ export function StartExamPage() {
           size="lg"
           onClick={() => void handleStart()}
           disabled={
-            isStarting || (!hasActiveAttempt && !exam.canStartNewAttempt)
+            isStarting ||
+            (!hasActiveAttempt &&
+              exam.primaryAction !== "start" &&
+              exam.primaryAction !== "resume")
           }
           data-testid="exam-start-btn"
         >

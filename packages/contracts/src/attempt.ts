@@ -209,6 +209,26 @@ export const CandidateExamDetailResponseSchema = z.object({
   activeAttemptId: z.string().uuid().optional(),
   canStartNewAttempt: z.boolean(),
   blockingReason: z.enum(["max_attempts_reached", "already_passed"]).optional(),
+  bestScore: z.number().optional(),
+  bestScorePercent: z.number().optional(),
+  availabilityStatus: z.enum([
+    "available",
+    "in_progress",
+    "resumable",
+    "submitted_pending_grade",
+    "graded",
+    "max_attempts_exhausted",
+    "not_started_yet",
+    "expired",
+    "unavailable",
+  ]),
+  primaryAction: z.enum([
+    "start",
+    "resume",
+    "view_result",
+    "view_history",
+    "none",
+  ]),
 });
 export type CandidateExamDetailResponse = z.infer<
   typeof CandidateExamDetailResponseSchema
