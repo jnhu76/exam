@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -80,10 +82,132 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # E2E temporarily disabled pending Phase 1.x de-multitenancy cleanup.
-      # Re-enable when: singleTenant login contract stabilized, SuperAdmin
-      # product-path removed, and rate-limit / resume-attempt flakiness fixed.
-      # See: Phase 1.x de-multitenancy cleanup issue.
-
       - name: Coverage
         run: pnpm coverage
+
+  e2e:
+    name: E2E (Playwright Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: verify
+
+    services:
+      postgres:
+        image: postgres:18.4-bookworm
+        env:
+          POSTGRES_USER: exam
+          POSTGRES_PASSWORD: exam
+          POSTGRES_DB: exam_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U exam -d exam_e2e"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_e2e
+      TEST_DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_e2e
+      JWT_SECRET: e2e-test-secret
+      NODE_ENV: test
+      APP_MODE: e2e
+      DEPLOYMENT_MODE: singleTenant
+      E2E_BASE_URL: http://localhost:3000
+      RATE_LIMIT_MAX: "1000"
+      RATE_LIMIT_WINDOW_MS: "60000"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @exam/e2e exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm build
+
+      - name: Stage web assets for API static serving
+        run: |
+          rm -rf apps/api/public
+          mkdir -p apps/api/public
+          cp -R apps/web/dist/. apps/api/public/
+          test -f apps/api/public/index.html
+
+      - name: Run migrations
+        run: pnpm --filter @exam/db db:migrate
+
+      - name: Seed E2E data
+        run: pnpm --filter @exam/db db:seed
+
+      - name: Start API server
+        run: |
+          pnpm --filter @exam/api start > server.log 2>&1 &
+          echo "API_PID=$!" >> $GITHUB_ENV
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "API is healthy"
+              break
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+          curl -sf http://localhost:3000/api/health || (echo "API failed to start" && cat server.log && exit 1)
+          curl -fsS http://localhost:3000/login | grep -q '<!doctype html\|<!DOCTYPE html\|<html' || (echo "SPA fallback not working: /login did not return HTML" && cat server.log && exit 1)
+          echo "SPA fallback verified: /login returns HTML"
+
+      - name: Run E2E tests
+        run: pnpm --filter @exam/e2e test:e2e
+        continue-on-error: false
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Server Log (last 200 lines) ==="
+          tail -200 server.log || true
+          echo "=== Web Log (last 100 lines) ==="
+          tail -100 web.log || true
+
+      - name: Stop servers
+        if: always()
+        run: |
+          kill $API_PID 2>/dev/null || true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report/
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: apps/e2e/test-results/
+          retention-days: 14
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: server.log
+          retention-days: 14

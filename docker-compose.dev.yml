@@ -12,8 +12,10 @@ services:
       HOST: 0.0.0.0
       COOKIE_SECURE: "false"
       CORS_ORIGIN: ${CORS_ORIGIN:-}
-      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-multiTenant}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-200}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
+      RUN_SEED: "1" # Set to "1" to auto-seed on container start
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000} # Max requests per window (CI needs higher)
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000} # Rate limit window in ms
     depends_on:
       db:
         condition: service_healthy
@@ -42,7 +44,7 @@ services:
       POSTGRES_PASSWORD: exam
       POSTGRES_DB: exam
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
       interval: 5s

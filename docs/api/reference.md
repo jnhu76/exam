@@ -1,6 +1,6 @@
 # API 参考文档
 
-> **Phase realignment note**: `docs/SPEC.md` and `docs/phase-roadmap.md` are authoritative for product phase scope. This API reference may include legacy or already-implemented fields such as `organizationSlug`, Teacher, SuperAdmin, queue, or `restrictIp`. Those names do not make them Phase 1 product paths. Phase 1 current product roles are Admin + Candidate; organizationSlug login, tenant switcher, SuperAdmin, optional multiTenant, pass-to-proceed, service tokens, and external integration are Phase 4 unless explicitly re-scoped.
+> **Phase realignment note**: `docs/SPEC.md` and `docs/phase-roadmap.md` are authoritative for product phase scope. Phase 1 current product roles are Admin + Candidate only. The API reference below has been updated to reflect Phase 1 permissions. Fields like `queue`, `restrictIp`, `controlFlags.retakePolicy`, `controlFlags.scoreStrategy` remain in response schemas as structural residue from the exam model but are not Phase 1 product paths. Optional multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed, service tokens, and external integration are Phase 4 capabilities unless explicitly re-scoped.
 
 ## 概述
 
@@ -70,11 +70,12 @@
 
 ```json
 {
-  "organizationSlug": "default",
   "username": "admin",
   "password": "admin123"
 }
 ```
+
+> Phase 1 登录仅接受 `username` 和 `password`。`organizationSlug` 不再接受；系统使用 internal default organization。
 
 **响应** (200):
 
@@ -83,7 +84,7 @@
   "id": "user-uuid",
   "username": "admin",
   "name": "管理员",
-  "role": "Admin | Teacher | Candidate",
+  "role": "Admin | Candidate",
   "organizationId": "org-uuid"
 }
 ```
@@ -121,7 +122,7 @@
   "id": "user-uuid",
   "username": "admin",
   "name": "管理员",
-  "role": "Admin | Teacher | Candidate",
+  "role": "Admin | Candidate",
   "organizationId": "org-uuid"
 }
 ```
@@ -155,7 +156,7 @@
 
 ### GET /users
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **查询参数**:
 
@@ -190,16 +191,16 @@
 
 ### POST /users
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **请求体**:
 
 ```json
 {
-  "username": "teacher1",
+  "username": "admin2",
   "password": "pass123",
-  "name": "张老师",
-  "role": "Teacher"
+  "name": "管理员2",
+  "role": "Admin"
 }
 ```
 
@@ -240,7 +241,7 @@
 
 ### GET /candidates
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **查询参数**: 同 `/users`
 
@@ -272,7 +273,7 @@
 
 ### POST /candidates
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **请求体**:
 
@@ -295,7 +296,7 @@
 
 ### POST /candidates/import
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 **速率限制**: 10 次/分钟
 
 **请求体**:
@@ -336,7 +337,7 @@
 
 ### PATCH /candidates/:id
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **请求体**:
 
@@ -356,7 +357,7 @@
 
 ### DELETE /candidates/:id
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **响应**: 204 No Content
 
@@ -366,7 +367,7 @@
 
 ### GET /candidate-fields
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **响应** (200):
 
@@ -399,7 +400,7 @@
 
 ### GET /candidate-fields/template
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **响应** (200):
 
@@ -414,7 +415,7 @@
 
 ### POST /candidate-fields
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **请求体**:
 
@@ -437,7 +438,7 @@
 
 ### GET /courses
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **查询参数**: 分页
 
@@ -466,7 +467,7 @@
 
 ### POST /courses
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **请求体**:
 
@@ -486,7 +487,7 @@
 
 ### GET /questions
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **查询参数**:
 
@@ -524,7 +525,7 @@
 
 ### POST /questions
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **请求体**:
 
@@ -554,7 +555,7 @@
 
 ### POST /questions/import
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 **速率限制**: 5 次/分钟
 
 **请求体**:
@@ -613,7 +614,7 @@
 
 ### GET /exams
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **查询参数**: 分页
 
@@ -670,7 +671,7 @@
 
 ### POST /exams
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **请求体**:
 
@@ -716,7 +717,7 @@
 
 ### POST /exams/:id/publish
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **响应** (200):
 
@@ -743,7 +744,7 @@
 
 ### POST /exams/:id/archive
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **响应** (200):
 
@@ -758,7 +759,7 @@
 
 ### GET /exams/:id/enrollments
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **响应** (200):
 
@@ -782,7 +783,7 @@
 
 ### POST /exams/:id/enrollments
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **请求体**:
 
@@ -1010,7 +1011,7 @@
 
 ### GET /exams/:id/export/scores
 
-**权限**: Admin, SuperAdmin, Teacher
+**权限**: Admin
 
 **响应**: CSV 文件下载
 
@@ -1056,7 +1057,7 @@
 
 ### GET /admin/settings/branding
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **响应** (200): 同 `GET /settings/branding`
 
@@ -1064,7 +1065,7 @@
 
 ### PATCH /admin/settings/branding
 
-**权限**: Admin, SuperAdmin
+**权限**: Admin
 
 **请求体**:
 
