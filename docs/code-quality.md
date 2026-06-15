@@ -292,6 +292,8 @@ unknown error → 500 + requestId
 
 ### Startup configuration errors
 
+See `docs/SPEC.md` and `docs/phase-roadmap.md` for the authoritative startup-configuration policy.
+
 Startup configuration validation is intentionally outside the domain/runtime HTTP error hierarchy.
 
 Errors thrown while building runtime configuration, validating deployment mode, or checking required production secrets MUST fail fast with a standard `Error`.
