@@ -18,6 +18,7 @@ export function ConfirmDialog({
   confirmLabel = "确认",
   cancelLabel = "取消",
   destructive = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: {
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel?: () => void;
 }) {
@@ -47,6 +49,7 @@ export function ConfirmDialog({
               type="button"
               variant={destructive ? "destructive" : "default"}
               data-variant={destructive ? "destructive" : "default"}
+              disabled={confirmDisabled}
               onClick={onConfirm}
             >
               {confirmLabel}
