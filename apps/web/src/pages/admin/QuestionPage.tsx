@@ -33,6 +33,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { TYPE_LABELS, TYPE_VARIANT } from "@/lib/constants";
 
@@ -254,12 +255,27 @@ export function QuestionPage() {
           }}
         />
 
-        <Input
-          className="w-[200px]"
-          placeholder="搜索题目内容..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <div className="relative w-[260px]">
+          <Input
+            aria-label="搜索当前页题目"
+            className="pr-9"
+            placeholder="搜索当前页题目内容..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute right-1 top-1/2 -translate-y-1/2"
+              aria-label="清除题目搜索"
+              onClick={() => setSearch("")}
+            >
+              <X aria-hidden="true" />
+            </Button>
+          )}
+        </div>
 
         {hasActiveFilter && (
           <Button
@@ -287,8 +303,19 @@ export function QuestionPage() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="size-8" />}
-          title="暂无题目"
-          description="还没有创建任何题目，点击上方按钮创建。"
+          title={hasActiveFilter ? "未找到匹配的题目" : "暂无题目"}
+          description={
+            hasActiveFilter
+              ? "当前筛选或当前页搜索没有匹配题目。"
+              : "还没有创建任何题目，点击上方按钮创建。"
+          }
+          action={
+            hasActiveFilter ? (
+              <Button variant="outline" onClick={clearFilters}>
+                清空筛选
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <>

@@ -3,7 +3,10 @@ import { migratePostgres } from "@exam/db/src/postgres.js";
 import { seedDemo } from "@exam/db/src/demo-seed.js";
 import { verifyDemoSeed } from "@exam/db/src/demo-seed-verify.js";
 import { hashPassword } from "@exam/auth/src/password.js";
+import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
+
+loadRootEnv();
 
 const { database } = getRuntimeConfig();
 const conn = await createDatabase(database.url);

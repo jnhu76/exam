@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { UpdateBrandingRequest } from "@exam/contracts";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { PlatformSettingsForm } from "@/components/settings/PlatformSettingsForm";
 import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
@@ -15,6 +16,7 @@ export function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
@@ -38,6 +40,7 @@ export function SettingsPage() {
       Object.entries(data).filter(([, v]) => v !== ""),
     );
     setIsSaving(true);
+    setSaveError(null);
     try {
       const updated = await api.patch<SettingsData>(
         "/api/admin/settings/branding",
@@ -45,8 +48,8 @@ export function SettingsPage() {
       );
       setSettings(updated);
       window.dispatchEvent(new Event("branding:refresh"));
-    } catch {
-      // error handled by toast
+    } catch (err) {
+      setSaveError(getApiErrorMessage(err, "保存设置失败，请稍后重试"));
     } finally {
       setIsSaving(false);
     }
@@ -62,6 +65,14 @@ export function SettingsPage() {
         title="品牌设置"
         description="配置当前部署显示给用户的名称与页脚。"
       >
+        {saveError && (
+          <div
+            role="alert"
+            className="mb-4 rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
+          >
+            {saveError}
+          </div>
+        )}
         <PlatformSettingsForm
           initialValues={settings ?? undefined}
           onSave={handleSave}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -40,7 +40,8 @@ function renderPage() {
     <MemoryRouter initialEntries={["/admin/users"]}>
       <AuthProvider
         initialUser={{
-          id: "1",
+          id: "u3",
+
           username: "admin",
           name: "Admin",
           role: "Admin",
@@ -151,6 +152,33 @@ describe("UsersPage", () => {
     });
   });
 
+  it("disables save button while saving", async () => {
+    let resolveSave: (value: unknown) => void;
+    apiPost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /新增用户/ }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = getDialogInputs(dialog);
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "New User");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.dblClick(saveBtn);
+    expect(
+      within(dialog).getByRole("button", { name: "保存中..." }),
+    ).toBeDisabled();
+    expect(apiPost).toHaveBeenCalledTimes(1);
+    resolveSave!({ id: "u4" });
+    await act(async () => {});
+  });
+
   it("opens edit dialog for Admin", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -180,12 +208,17 @@ describe("UsersPage", () => {
     });
   });
 
-  it("toggles user active status", async () => {
+  it("opens confirmation before toggling user active status", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("admin1");
     const toggleBtn = screen.getByRole("button", { name: "禁用" });
     await user.click(toggleBtn);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText(/Admin One/)).toBeInTheDocument();
+    const confirm = within(dialog).getByRole("button", { name: "确认" });
+    expect(confirm).toHaveAttribute("data-variant", "destructive");
+    await user.click(confirm);
     expect(apiPatch).toHaveBeenCalledWith(
       "/api/users/u3",
       expect.objectContaining({ isActive: false }),

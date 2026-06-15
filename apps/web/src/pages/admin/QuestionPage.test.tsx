@@ -125,12 +125,12 @@ describe("QuestionPage", () => {
       });
 
       await user.type(screen.getByPlaceholderText("标签，逗号分隔"), "abc");
-      await user.type(screen.getByPlaceholderText("搜索题目内容..."), "题目");
+      await user.type(screen.getByLabelText("搜索当前页题目"), "题目");
       await user.click(screen.getByRole("button", { name: "清空筛选" }));
 
       await waitFor(() => {
         expect(screen.getByPlaceholderText("标签，逗号分隔")).toHaveValue("");
-        expect(screen.getByPlaceholderText("搜索题目内容...")).toHaveValue("");
+        expect(screen.getByLabelText("搜索当前页题目")).toHaveValue("");
         expect(screen.getByText(/第 1 \/ 2 页/)).toBeInTheDocument();
       });
     },

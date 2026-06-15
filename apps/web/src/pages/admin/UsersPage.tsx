@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -65,6 +67,8 @@ export function UsersPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState<EditableRole>("Admin");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -110,7 +114,8 @@ export function UsersPage() {
   }
 
   async function save() {
-    if (!validate()) return;
+    if (saving || !validate()) return;
+    setSaving(true);
     try {
       if (editing) {
         const payload: { name: string; role?: EditableRole } = { name };
@@ -122,17 +127,21 @@ export function UsersPage() {
       setDialogOpen(false);
       await loadUsers();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "保存失败";
-      toast.error(message);
+      toast.error(getApiErrorMessage(err, "保存失败，请稍后重试"));
+    } finally {
+      setSaving(false);
     }
   }
   async function toggle(user: UserRow) {
+    if (togglingId) return;
+    setTogglingId(user.id);
     try {
       await api.patch(`/api/users/${user.id}`, { isActive: !user.isActive });
       await loadUsers();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "操作失败";
-      toast.error(message);
+      toast.error(getApiErrorMessage(err, "操作失败，请稍后重试"));
+    } finally {
+      setTogglingId(null);
     }
   }
 
@@ -187,13 +196,25 @@ export function UsersPage() {
                     >
                       <Pencil />
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void toggle(user)}
-                    >
-                      {user.isActive ? "禁用" : "启用"}
-                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={togglingId === user.id}
+                        >
+                          {togglingId === user.id
+                            ? "处理中..."
+                            : user.isActive
+                              ? "禁用"
+                              : "启用"}
+                        </Button>
+                      }
+                      title={user.isActive ? "确认禁用" : "确认启用"}
+                      description={`确定要${user.isActive ? "禁用" : "启用"}用户「${user.name}」吗？`}
+                      destructive={user.isActive}
+                      onConfirm={() => void toggle(user)}
+                    />
                   </div>
                 </TableCell>
               </TableRow>
@@ -202,7 +223,7 @@ export function UsersPage() {
         </Table>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editing ? "编辑用户" : "新增用户"}</DialogTitle>
           </DialogHeader>
@@ -264,10 +285,16 @@ export function UsersPage() {
             </Field>
           </FieldGroup>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              disabled={saving}
+            >
               取消
             </Button>
-            <Button onClick={() => void save()}>保存</Button>
+            <Button onClick={() => void save()} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

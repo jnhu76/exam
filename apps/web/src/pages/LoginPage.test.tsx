@@ -1,16 +1,20 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LoginPage } from "./LoginPage";
 
-const { apiPost } = vi.hoisted(() => ({
+const { apiGet, apiPost } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
   apiPost: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
-  api: { post: (...args: unknown[]) => apiPost(...args), get: vi.fn() },
+  api: {
+    get: (...args: unknown[]) => apiGet(...args),
+    post: (...args: unknown[]) => apiPost(...args),
+  },
   setNavigate: () => {},
 }));
 
@@ -38,12 +42,56 @@ function renderLogin() {
 }
 
 describe("LoginPage smoke", () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+  });
+
   it("renders username and password fields and login button", () => {
     renderLogin();
 
     expect(screen.getByLabelText("用户名")).toBeInTheDocument();
     expect(screen.getByLabelText("密码")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("does not show login submitting state during session restore", () => {
+    apiGet.mockImplementationOnce(() => new Promise(() => {}));
+
+    render(
+      <MemoryRouter initialEntries={["/login"]}>
+        <AuthProvider restoreSession>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "登录" })).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "登录中..." }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the shared primary button color", () => {
+    renderLogin();
+
+    expect(screen.getByRole("button", { name: "登录" })).toHaveClass(
+      "bg-primary",
+    );
+  });
+
+  it("uses comfortable spacing between login fields and submit button", () => {
+    renderLogin();
+
+    expect(screen.getByTestId("login-field-group")).toHaveClass("gap-4");
+  });
+
+  it("shows dark product title text on the login card", () => {
+    renderLogin();
+
+    expect(screen.getByText("考试平台")).toHaveClass("text-foreground");
   });
 
   it("shows error message when login fails", async () => {
@@ -83,6 +131,7 @@ describe("LoginPage smoke", () => {
       role: "Admin",
       organizationId: "org1",
     });
+    await act(async () => {});
   });
 
   it("navigates to admin dashboard on admin login", async () => {

@@ -107,13 +107,16 @@ describe("ScoreListPage", () => {
     createElementSpy.mockRestore();
   });
 
-  it("shows pass filter tabs", async () => {
+  it("shows pass filter tabs without dead search input", async () => {
     renderPage();
     expect(
       await screen.findByRole("tab", { name: "全部" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "及格" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "不及格" })).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("搜索考生..."),
+    ).not.toBeInTheDocument();
   });
 
   it("shows empty state when no scores", async () => {

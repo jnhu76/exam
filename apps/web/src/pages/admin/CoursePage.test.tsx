@@ -210,7 +210,7 @@ describe("CoursePage", () => {
     expect(screen.queryByText("数学")).not.toBeInTheDocument();
   });
 
-  it("shows empty search result state", async () => {
+  it("shows empty search result state with clear action", async () => {
     const user = userEvent.setup();
     renderPage();
     await screen.findByText("数学");
@@ -219,6 +219,12 @@ describe("CoursePage", () => {
       "不存在",
     );
     expect(screen.getByText("未找到匹配的课程")).toBeInTheDocument();
+    expect(screen.getByLabelText("搜索课程")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "清除课程搜索" }));
+    expect(screen.getByText("数学")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("搜索课程"), "不存在");
+    await user.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(screen.getByText("英语")).toBeInTheDocument();
   });
 
   it("shows error state when loading fails", async () => {

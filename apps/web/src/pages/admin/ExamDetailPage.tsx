@@ -244,13 +244,17 @@ export function ExamDetailPage() {
               </Button>
             )}
             {(exam.status === "published" || exam.status === "closed") && (
-              <Button
-                variant="outline"
-                onClick={() => void handleArchive()}
-                disabled={archiving}
-              >
-                {archiving ? "归档中..." : "归档"}
-              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button variant="outline" disabled={archiving}>
+                    {archiving ? "归档中..." : "归档"}
+                  </Button>
+                }
+                title="确认归档"
+                description={`确定要归档考试「${exam.title}」吗？归档后将从当前考试列表中移出。`}
+                destructive
+                onConfirm={() => void handleArchive()}
+              />
             )}
             <Button
               variant="outline"
@@ -342,7 +346,6 @@ export function ExamDetailPage() {
         <TabsList>
           <TabsTrigger value="enrollment">报考</TabsTrigger>
           <TabsTrigger value="scores">成绩</TabsTrigger>
-          <TabsTrigger value="audit">操作日志</TabsTrigger>
         </TabsList>
 
         <TabsContent value="enrollment" className="flex flex-col gap-4">
@@ -471,25 +474,10 @@ export function ExamDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        <TabsContent value="audit">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">操作日志</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <EmptyState
-                icon={<Users className="size-8" />}
-                title="功能开发中"
-                description="操作日志功能将在后续版本中提供。"
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
             <DialogTitle>添加考生</DialogTitle>
           </DialogHeader>

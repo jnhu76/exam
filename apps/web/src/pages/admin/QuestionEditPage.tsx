@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/apiErrors";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -28,6 +29,7 @@ export function QuestionEditPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -93,7 +95,8 @@ export function QuestionEditPage() {
   }, [loadData]);
 
   async function handleSave() {
-    if (!formData) return;
+    if (!formData || saving) return;
+    setSaveError(null);
     setSaving(true);
     try {
       if (isEdit) {
@@ -102,8 +105,8 @@ export function QuestionEditPage() {
         await api.post("/api/questions", formData);
       }
       void navigate("/admin/questions");
-    } catch {
-      // error handled by api client
+    } catch (err) {
+      setSaveError(getApiErrorMessage(err, "保存失败，请稍后重试"));
     } finally {
       setSaving(false);
     }
@@ -136,10 +139,19 @@ export function QuestionEditPage() {
       </div>
 
       <Separator />
+      {saveError && (
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
+        >
+          {saveError}
+        </div>
+      )}
       <div className="flex justify-end gap-3 pt-4">
         <Button
           variant="outline"
           onClick={() => void navigate("/admin/questions")}
+          disabled={saving}
         >
           取消
         </Button>

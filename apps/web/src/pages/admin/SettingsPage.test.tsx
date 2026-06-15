@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -45,6 +45,18 @@ function renderPage() {
 }
 
 describe("SettingsPage", () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockResolvedValue({
+      productName: "Test Platform",
+      productSubtitle: "Test Subtitle",
+    });
+    vi.mocked(api.patch).mockResolvedValue({
+      id: "s1",
+      organizationId: "org1",
+      productName: "Updated",
+    });
+  });
+
   it("renders page title", async () => {
     renderPage();
     expect(await screen.findByText("平台与机构设置")).toBeInTheDocument();
@@ -98,5 +110,16 @@ describe("SettingsPage", () => {
     const payload = patchCall![1] as Record<string, unknown>;
     expect(payload).not.toHaveProperty("productName");
     expect(payload.productSubtitle).toBe("Test Subtitle");
+  });
+
+  it("shows branding save error inline", async () => {
+    vi.mocked(api.patch).mockRejectedValue(new Error("品牌保存失败"));
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText("产品标题");
+    await user.click(await screen.findByRole("button", { name: "保存设置" }));
+
+    expect(await screen.findByText("品牌保存失败")).toBeInTheDocument();
   });
 });

@@ -5,9 +5,11 @@ import { useBranding } from "./BrandProvider";
 export function BrandHeader({
   compact = false,
   className,
+  textClassName,
 }: {
   compact?: boolean;
   className?: string;
+  textClassName?: string;
 }) {
   const branding = useBranding();
 
@@ -21,7 +23,13 @@ export function BrandHeader({
       )}
     >
       <BrandMark />
-      <span className={cn("text-sm font-semibold", compact && "sr-only")}>
+      <span
+        className={cn(
+          "truncate text-sm font-semibold text-foreground",
+          compact && "sr-only",
+          textClassName,
+        )}
+      >
         {branding.productName}
       </span>
     </div>

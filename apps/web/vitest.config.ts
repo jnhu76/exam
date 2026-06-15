@@ -7,9 +7,20 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  define: {
+    IS_REACT_ACT_ENVIRONMENT: "true",
+  },
   test: {
     environment: "jsdom",
-    setupFiles: ["./src/test/setup.ts"],
+    setupFiles: ["./src/test/react-act-env.ts", "./src/test/setup.ts"],
+    pool: "forks",
+    maxWorkers: 1,
+    server: {
+      deps: {
+        inline: ["react-dom"],
+        fallbackCJS: true,
+      },
+    },
     exclude: ["dist/**", "node_modules/**"],
     environmentOptions: {
       jsdom: {

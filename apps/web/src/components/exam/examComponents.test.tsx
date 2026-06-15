@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ExamTimer } from "./ExamTimer";
@@ -116,7 +116,7 @@ describe("TrueFalseInput", () => {
 });
 
 describe("ExamTimer", () => {
-  it("submits when the server deadline is reached", () => {
+  it("submits when the server deadline is reached", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
     const onTimeout = vi.fn();
@@ -124,7 +124,9 @@ describe("ExamTimer", () => {
       <ExamTimer deadlineAt="2026-06-01T00:00:01Z" onTimeout={onTimeout} />,
     );
 
-    vi.advanceTimersByTime(1000);
+    await act(() => {
+      vi.advanceTimersByTime(1000);
+    });
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 });

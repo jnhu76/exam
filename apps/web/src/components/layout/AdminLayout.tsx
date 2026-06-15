@@ -19,7 +19,7 @@ export function AdminLayout() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <header className="flex h-14 items-center border-b bg-card px-6">
+          <header className="flex h-14 items-center border-b bg-card px-6 shadow-xs">
             <Skeleton className="h-4 w-24" />
           </header>
           <main className="flex flex-col gap-4 p-6">
@@ -38,7 +38,10 @@ export function AdminLayout() {
   const topbarTitle = getPageTitle(location.pathname);
 
   return (
-    <div data-testid="admin-layout" className="flex min-h-screen bg-background">
+    <div
+      data-testid="admin-layout"
+      className="flex min-h-screen bg-background text-sm"
+    >
       <AppSidebar
         user={user}
         collapsed={collapsed}
@@ -51,7 +54,7 @@ export function AdminLayout() {
             {topbarTitle}
           </h2>
         </header>
-        <main className="p-6">
+        <main className="p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

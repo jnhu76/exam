@@ -6,7 +6,7 @@ import { schema } from "./schema/pg.js";
 import dotenv from "dotenv";
 import { eq } from "drizzle-orm";
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 export type HashFunction = (password: string) => string | Promise<string>;
 

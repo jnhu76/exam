@@ -46,6 +46,7 @@ export function ConfirmDialog({
             <Button
               type="button"
               variant={destructive ? "destructive" : "default"}
+              data-variant={destructive ? "destructive" : "default"}
               onClick={onConfirm}
             >
               {confirmLabel}
