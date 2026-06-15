@@ -10,6 +10,7 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import type { PublicBrandingContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get("/settings/branding", async (request) => {
@@ -63,12 +64,9 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
         data as Record<string, string>,
       );
       if (!settings) {
-        return reply.code(500).send({
-          error: {
-            code: "INTERNAL_ERROR",
-            message: "Failed to save settings",
-          },
-        });
+        return reply
+          .code(500)
+          .send(buildErrorResponse(request.id, "INTERNAL_ERROR"));
       }
       recordAudit(
         fastify,

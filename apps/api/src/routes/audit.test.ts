@@ -486,5 +486,51 @@ describe("audit log baseline (S06-lite)", () => {
       expect(rows[0]!.metadata).not.toHaveProperty("actorOrganizationId");
       expect(rows[0]!.metadata).not.toHaveProperty("targetOrganizationId");
     });
+
+    it("recordAudit includes requestId in metadata from request.id", async () => {
+      const { recordAudit } = await import("./audit.js");
+
+      await clearAudits();
+      const targetId3 = crypto.randomUUID();
+      const testRequestId = crypto.randomUUID();
+
+      const fakeRequest = {
+        id: testRequestId,
+        ip: "127.0.0.1",
+        headers: { "user-agent": "vitest" },
+      } as unknown as Parameters<typeof recordAudit>[1];
+
+      recordAudit(
+        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+        fakeRequest,
+        {
+          actorId: adminId,
+          organizationId: orgId,
+          targetOrganizationId: orgId,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        "exam.publish",
+        "exam",
+        targetId3,
+      );
+
+      await waitForAudit(async () => {
+        const rows = await ctx.db
+          .select()
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.targetId, targetId3));
+        return rows.length > 0;
+      });
+
+      const rows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, targetId3));
+      expect(rows.length).toBe(1);
+      expect(rows[0]!.metadata).toHaveProperty("requestId");
+      expect(rows[0]!.metadata.requestId).toBe(testRequestId);
+    });
   });
 });

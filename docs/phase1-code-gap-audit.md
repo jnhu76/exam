@@ -107,10 +107,10 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Verified: row locks, idempotent clientSeq, conflict detection. | — |
 | Submit/grading | idempotent row-locked submit | `attempts.ts` | implemented | Verified: FOR UPDATE, idempotent re-submit, crash-recovery grading. | — |
 | Phase boundary residue | no queue/archive workflow; restore backend only | attempts/exam routes | conflicting | Queue/archive product paths are exposed; restore should remain backend recovery support without Phase 2 UI/operation workflow. | PR 5 |
-| Error responses | stable code + requestId | route-local attempt errors | partially-implemented | Some errors bypass shared shape. | PR 6 |
-| Structured logs | pino fields + redaction | `server.ts` | partially-implemented | default logger only. | PR 6 |
-| AuditLog | minimal action coverage | `audit.ts`, script writers | partially-implemented-by-PR4 | `admin.bootstrap`, `admin.password_reset.local`, `candidate.password_reset` added in PR4; route-local error audit gaps remain. | PR 6 |
-| E2E CI | blocking happy/resume/flush | CI disabled | missing | E2E not blocking. | PR 7 |
+| Error responses | stable code + requestId | route-local attempt errors | aligned-by-PR7 | 4 inline errors fixed to use `buildErrorResponse`; all API errors include requestId. | — |
+| Structured logs | pino fields + redaction | `server.ts` | aligned-by-PR7 | Pino configured with `redact` for password/token/cookie/standardAnswer; logger enriched with actorId/orgId after auth. | — |
+| AuditLog | minimal action coverage | `audit.ts`, script writers | aligned-by-PR7 | `requestId` stored in audit metadata; all critical actions covered; PR4 added admin.bootstrap/reset; sensitive fields excluded. | — |
+| E2E CI | blocking happy/resume/flush | CI disabled | missing | E2E not blocking. | PR 8 |
 | E2E fixture | Admin + Candidate only | E2E seed/smoke | aligned-by-PR2 | None. | — |
 | Test isolation | `buildTestApp` reuses shared `exam_test` DB; some assertions couple on residue from sibling suites | `apps/api/src/routes/user.test.ts` list-pagination test | known | Pre-existing isolation coupling. See `docs/known-test-isolation-issues.md` (K-1). Reproduced on master before PR3/PR4. Not blocking; candidate for dedicated test-isolation PR or Phase 1 exit pass. | test-isolation cleanup |
 

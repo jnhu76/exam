@@ -47,6 +47,7 @@ import {
 import { processSaveAnswer } from "@exam/exam-engine";
 import { recordAudit } from "./audit.js";
 import { formatZodError } from "./helpers.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 interface StoredAnswer extends Omit<AnswerRecord, "savedAt"> {
   savedAt: Date | string;
@@ -533,12 +534,9 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         exam.controlFlags.requireQueue &&
         getQueueStatus(exam, candidateId, new Date()).status !== "ready"
       ) {
-        return reply.code(409).send({
-          error: {
-            code: "QUEUE_WAIT_REQUIRED",
-            message: "Wait for queue admission before starting the exam",
-          },
-        });
+        throw new ValidationError(
+          "Queue admission required before starting this exam",
+        );
       }
 
       const attempt = await startAttempt(
@@ -608,12 +606,9 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const { attemptId, questionId } = parsedParams.data;
       const body = parsedBody.data;
       if (body.attemptId !== attemptId || body.questionId !== questionId) {
-        return reply.code(400).send({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Path and body identifiers must match",
-          },
-        });
+        return reply
+          .code(400)
+          .send(buildErrorResponse(request.id, "VALIDATION_ERROR"));
       }
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
@@ -866,12 +861,9 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const attemptRepo = createAttemptRepo(fastify.db);
       const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
       if (attempt.status !== "in_progress") {
-        return reply.code(409).send({
-          error: {
-            code: "INVALID_STATE_TRANSITION",
-            message: `Cannot heartbeat attempt in ${attempt.status} state`,
-          },
-        });
+        return reply
+          .code(409)
+          .send(buildErrorResponse(request.id, "INVALID_STATE_TRANSITION"));
       }
 
       await attemptRepo.update(ctx, attemptId, {
