@@ -144,6 +144,24 @@ describe("QuestionNavigator", () => {
       screen.getByRole("button", { name: "第 3 题，已标记" }),
     ).toBeInTheDocument();
   });
+
+  it("renders legend with color swatches for each state", () => {
+    render(
+      <QuestionNavigator
+        currentId="q1"
+        onSelect={() => {}}
+        items={[{ id: "q1", number: 1, state: "unanswered" }]}
+      />,
+    );
+
+    expect(screen.getByText("未作答")).toBeInTheDocument();
+    expect(screen.getByText("已作答")).toBeInTheDocument();
+    expect(screen.getByText("已标记")).toBeInTheDocument();
+
+    const legend = screen.getByText("未作答").closest("div")!.parentElement!;
+    const swatches = legend.querySelectorAll("span.inline-block");
+    expect(swatches.length).toBe(3);
+  });
 });
 
 describe("QuestionWorkspace", () => {

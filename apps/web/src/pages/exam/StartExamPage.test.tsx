@@ -446,4 +446,107 @@ describe("StartExamPage", () => {
     });
     expect(screen.queryByText("正在排队")).not.toBeInTheDocument();
   });
+
+  it("shows bestScore when available", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Scored Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 1,
+      bestScore: 85,
+      bestScorePercent: 85,
+      availabilityStatus: "graded",
+      primaryAction: "start",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Scored Exam")).toBeInTheDocument();
+    expect(screen.getByText("最高成绩: 85/100")).toBeInTheDocument();
+    expect(screen.getByText("(85%)")).toBeInTheDocument();
+  });
+
+  it("shows attemptsUsed/maxAttempts", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Count Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 5,
+      currentAttempts: 2,
+      availabilityStatus: "available",
+      primaryAction: "start",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("已考 2/5 次")).toBeInTheDocument();
+  });
+
+  it("shows view_result action for exhausted attempts", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Exhausted Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 1,
+      currentAttempts: 1,
+      canStartNewAttempt: false,
+      blockingReason: "max_attempts_reached",
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "view_result",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Exhausted Exam")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看成绩" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /开始考试|再次考试/ }),
+    ).not.toBeInTheDocument();
+  });
 });
