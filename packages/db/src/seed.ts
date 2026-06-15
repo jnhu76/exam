@@ -125,3 +125,17 @@ export async function seed(
     },
   };
 }
+
+const isMain = process.argv[1]?.endsWith("seed.ts");
+if (isMain) {
+  const { createDatabase } = await import("./database.js");
+  const { hashPassword } = await import("@exam/auth/src/password.js");
+
+  const conn = await createDatabase();
+  process.stdout.write("Seeding database...\n");
+  const result = await seed(conn.db, hashPassword);
+  process.stdout.write(
+    `Done! Created org=${result.orgId}, admin=${result.users.adminId}\n`,
+  );
+  await conn.sql.end();
+}
