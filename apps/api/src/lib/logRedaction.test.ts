@@ -18,6 +18,7 @@ describe("logRedaction", () => {
     expect(SENSITIVE_LOG_PATHS).toContain("accessToken");
     expect(SENSITIVE_LOG_PATHS).toContain("refreshToken");
     expect(SENSITIVE_LOG_PATHS).toContain("authorization");
+    expect(SENSITIVE_LOG_PATHS).toContain("auth-token");
   });
 
   it("covers cookie headers", () => {

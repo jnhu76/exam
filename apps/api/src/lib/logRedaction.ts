@@ -13,6 +13,7 @@ export const SENSITIVE_LOG_PATHS = [
   "accessToken",
   "refreshToken",
   "authorization",
+  "auth-token",
   "req.headers.cookie",
   "req.headers.authorization",
   "standardAnswer",

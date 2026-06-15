@@ -606,9 +606,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const { attemptId, questionId } = parsedParams.data;
       const body = parsedBody.data;
       if (body.attemptId !== attemptId || body.questionId !== questionId) {
-        return reply
-          .code(400)
-          .send(buildErrorResponse(request.id, "VALIDATION_ERROR"));
+        throw new ValidationError("Path and body identifiers must match");
       }
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
@@ -861,9 +859,9 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const attemptRepo = createAttemptRepo(fastify.db);
       const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
       if (attempt.status !== "in_progress") {
-        return reply
-          .code(409)
-          .send(buildErrorResponse(request.id, "INVALID_STATE_TRANSITION"));
+        throw new InvalidStateTransitionError(
+          `Cannot heartbeat attempt in ${attempt.status} state`,
+        );
       }
 
       await attemptRepo.update(ctx, attemptId, {
