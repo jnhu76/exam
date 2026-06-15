@@ -1,5 +1,7 @@
 # Frontend Visual Baseline
 
+> Authority: [SPEC.md](./SPEC.md) defines product invariants; [phase-roadmap.md](./phase-roadmap.md) defines Phase 1 scope and deferred capabilities.
+
 本文档定义 Phase 1 前端产品视觉契约。目标不是装饰，而是把后台和考试端稳定到可长期使用的产品基线。
 
 ## 1. 产品方向

@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
+import { ApiError } from "@/lib/api";
 import { CandidatesPage } from "./CandidatesPage";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
@@ -13,7 +14,18 @@ const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  ApiError: Error,
+  ApiError: class ApiError extends Error {
+    constructor(
+      readonly status: number,
+      message: string,
+      readonly code?: string,
+      readonly details?: unknown,
+      readonly requestId?: string,
+    ) {
+      super(message);
+      this.name = "ApiError";
+    }
+  },
   api: {
     get: (...args: unknown[]) => apiGet(...args),
     post: (...args: unknown[]) => apiPost(...args),
@@ -231,6 +243,25 @@ describe("CandidatesPage", () => {
     );
   });
 
+  it("disables all candidate toggle buttons while one toggle is running", async () => {
+    let resolveToggle: (value: unknown) => void;
+    apiPatch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveToggle = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("candidate1");
+    await user.click(screen.getByRole("button", { name: "禁用" }));
+    const dialog = await screen.findByRole("alertdialog");
+    await user.click(within(dialog).getByRole("button", { name: "确认" }));
+    expect(screen.getByRole("button", { name: "处理中..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "启用" })).toBeDisabled();
+    resolveToggle!({ ok: true });
+    await act(async () => {});
+  });
+
   it("opens import dialog", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -341,6 +372,25 @@ describe("CandidatesPage", () => {
     expect(
       await screen.findByText("身份信息已存在，请检查证件号"),
     ).toBeInTheDocument();
+  });
+
+  it("renders API field errors from ApiError details", async () => {
+    apiPost.mockRejectedValue(
+      new ApiError(400, "字段校验失败", "VALIDATION_ERROR", {
+        fields: [{ field: "name", message: "姓名不能为空" }],
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "新增考生" }));
+    const dialog = await screen.findByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "newuser");
+    await user.type(inputs[1]!, "password123");
+    await user.type(inputs[2]!, "Name");
+    await user.type(inputs[3]!, "123");
+    await user.click(dialogSaveBtn(dialog));
+    expect(await screen.findByText("姓名不能为空")).toBeInTheDocument();
   });
 
   it("disables save button while saving to prevent duplicate submit", async () => {

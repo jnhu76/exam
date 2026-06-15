@@ -319,6 +319,18 @@ describe("CandidateFieldsPage", () => {
     expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
   });
 
+  it("recovers after retry succeeds", async () => {
+    apiGet
+      .mockRejectedValueOnce(new Error("fail"))
+      .mockResolvedValueOnce([...mockFields]);
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByText("加载字段配置失败")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByText("employeeId")).toBeInTheDocument();
+    expect(screen.queryByText("加载字段配置失败")).not.toBeInTheDocument();
+  });
+
   it("shows empty state when no fields", async () => {
     apiGet.mockResolvedValue([]);
     renderPage();

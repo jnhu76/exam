@@ -1,5 +1,7 @@
 # Frontend UI / UX / Action Contract Baseline Audit
 
+> Authority: [SPEC.md](../../SPEC.md) defines product invariants; [phase-roadmap.md](../../phase-roadmap.md) defines Phase 1 scope and deferred capabilities.
+
 **Date:** 2026-06-15  
 **Scope:** PR10 — Frontend baseline audit (no production code changes)  
 **Pages scanned:** 19 page components, 16 shared components, 25 shadcn/ui primitives, 10 exam components, 2 question components, 2 settings components, 9 lib utilities, 2 hooks

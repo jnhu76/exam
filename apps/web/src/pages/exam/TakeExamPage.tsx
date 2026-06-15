@@ -513,10 +513,7 @@ export function TakeExamPage() {
         open={showSubmitDialog}
         onOpenChange={handleSubmitDialogOpenChange}
       >
-        <DialogContent
-          aria-describedby={undefined}
-          showCloseButton={!isFlushing}
-        >
+        <DialogContent showCloseButton={!isFlushing}>
           <DialogHeader>
             <DialogTitle>确认交卷</DialogTitle>
             <DialogDescription>请确认以下答题与保存状态。</DialogDescription>

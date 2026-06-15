@@ -84,6 +84,7 @@ export function CandidateFieldsPage() {
           (a, b) => a.sortOrder - b.sortOrder,
         ),
       );
+      setError(null);
     } catch {
       setError("加载字段配置失败");
     } finally {

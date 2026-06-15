@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -41,12 +42,12 @@ export function ImportWizard({
   const hasErrors = preview.some((row) => row.status === "error");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby={undefined} className="max-w-2xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{instructions}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">{instructions}</p>
           {warning && <p className="text-sm text-warning">{warning}</p>}
           <FileUpload onText={onCsvChange} />
           <Textarea

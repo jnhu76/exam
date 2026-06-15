@@ -45,6 +45,7 @@
   --color-sidebar-foreground: var(--sidebar-text);
   --color-sidebar-accent: var(--sidebar-active);
   --color-sidebar-accent-foreground: #ffffff;
+  --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-text: var(--sidebar-text);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-border: var(--sidebar-border);
@@ -65,6 +66,7 @@
   --sidebar-bg: #102a43;
   --sidebar-active: #1f4e79;
   --sidebar-active-soft: #edf5fa;
+  --sidebar-hover: rgb(255 255 255 / 8%);
   --sidebar-text: #d9e2ec;
   --sidebar-muted: #9fb3c8;
   --sidebar-border: #1b3a57;

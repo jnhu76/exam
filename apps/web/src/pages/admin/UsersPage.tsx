@@ -201,7 +201,7 @@ export function UsersPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={togglingId === user.id}
+                          disabled={togglingId !== null}
                         >
                           {togglingId === user.id
                             ? "处理中..."

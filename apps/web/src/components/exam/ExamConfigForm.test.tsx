@@ -247,6 +247,7 @@ describe("ExamConfigForm fields", () => {
     );
     expect(screen.queryByText("开放模式")).not.toBeInTheDocument();
     expect(screen.queryByText("严格模式")).not.toBeInTheDocument();
+    expect(screen.queryByText("标准模式")).not.toBeInTheDocument();
     expect(screen.queryByText(/排队入场/)).not.toBeInTheDocument();
     expect(screen.queryByText(/限制访问网络/)).not.toBeInTheDocument();
     expect(screen.queryByText(/要求锁定环境/)).not.toBeInTheDocument();

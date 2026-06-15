@@ -75,8 +75,8 @@ function SidebarLink({
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
-          "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-white/8 hover:text-white",
-          isActive && "bg-sidebar-accent font-medium text-white",
+          "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
+          isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
         )
       }
     >
@@ -116,14 +116,14 @@ export function AppSidebar({
         <BrandHeader
           compact={collapsed}
           className={cn(!collapsed && "flex-1")}
-          textClassName="text-white"
+          textClassName="text-sidebar-foreground"
         />
         {onCollapse && !collapsed && (
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="text-sidebar-muted hover:bg-white/8 hover:text-white"
+            className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
             data-testid="sidebar-collapse-button"
             aria-label="折叠侧栏"
             onClick={onCollapse}
@@ -136,7 +136,7 @@ export function AppSidebar({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="text-sidebar-muted hover:bg-white/8 hover:text-white"
+            className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
             data-testid="sidebar-collapse-button"
             aria-label="展开侧栏"
             onClick={onCollapse}
@@ -185,7 +185,7 @@ export function AppSidebar({
           )}
         >
           <Avatar className="size-8">
-            <AvatarFallback className="bg-white/10 text-xs text-white">
+            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -199,7 +199,7 @@ export function AppSidebar({
           type="button"
           variant="ghost"
           size="sm"
-          className="mt-1 w-full justify-center text-sidebar-muted hover:bg-white/8 hover:text-white"
+          className="mt-1 w-full justify-center text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
           aria-label="退出登录"
           onClick={onLogout}
         >

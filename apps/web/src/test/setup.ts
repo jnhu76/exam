@@ -15,7 +15,9 @@ if (typeof window !== "undefined") {
   if (!window.HTMLElement.prototype.scrollIntoView) {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   }
-  HTMLAnchorElement.prototype.click = vi.fn();
+  if (!HTMLAnchorElement.prototype.click) {
+    HTMLAnchorElement.prototype.click = vi.fn();
+  }
 }
 
 if (!URL.createObjectURL) {

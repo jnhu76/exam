@@ -1,5 +1,7 @@
 # PR10 Frontend Action Contract — Round 2
 
+> Authority: [SPEC.md](../../../SPEC.md) defines product invariants; [phase-roadmap.md](../../../phase-roadmap.md) defines Phase 1 scope and deferred capabilities.
+
 **Date:** 2026-06-15
 **Directory:** `docs/audits/pr10-frontend-baseline-round2/`
 **Scope:** 第二轮补充审计。定义下一轮修复应遵守的前端 action contract，不修改生产代码。

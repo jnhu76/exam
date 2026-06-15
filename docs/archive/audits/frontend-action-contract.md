@@ -1,5 +1,7 @@
 # Frontend Action Contract Audit
 
+> Authority: [SPEC.md](../../SPEC.md) defines product invariants; [phase-roadmap.md](../../phase-roadmap.md) defines Phase 1 scope and deferred capabilities.
+
 **Date:** 2026-06-15  
 **Scope:** PR10 — Button behavior, action semantics, state machine contracts  
 **Purpose:** Define expected behavior for every user-facing action and identify gaps
