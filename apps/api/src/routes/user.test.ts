@@ -210,6 +210,14 @@ describe("user routes", () => {
   it("GET /api/users excludes legacy-role rows from items and total via repo-level filter", async () => {
     const legacyCtx = await buildTestApp(userRoutes);
     try {
+      const beforeRes = await legacyCtx.app.inject({
+        method: "GET",
+        url: "/api/users?page=1&pageSize=50",
+        cookies: { "auth-token": legacyCtx.adminToken },
+      });
+      expect(beforeRes.statusCode).toBe(200);
+      const beforeBody = beforeRes.json();
+
       await createFutureRoleUserForTest(
         legacyCtx.db,
         legacyCtx.org.id,
@@ -234,7 +242,7 @@ describe("user routes", () => {
           (u: { role: string }) => u.role === "Admin" || u.role === "Candidate",
         ),
       ).toBe(true);
-      expect(body.total).toBeGreaterThanOrEqual(body.items.length);
+      expect(body.total).toBe(beforeBody.total);
       expect(body.totalPages).toBe(
         body.total === 0 ? 0 : Math.ceil(body.total / body.pageSize),
       );
