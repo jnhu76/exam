@@ -110,7 +110,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Error responses | stable code + requestId | route-local attempt errors | aligned-by-PR7 | 4 inline errors fixed to use `buildErrorResponse`; all API errors include requestId. | — |
 | Structured logs | pino fields + redaction | `server.ts` | aligned-by-PR7 | Pino configured with `redact` for password/token/cookie/standardAnswer; logger enriched with actorId/orgId after auth. | — |
 | AuditLog | minimal action coverage | `audit.ts`, script writers | aligned-by-PR7 | `requestId` stored in audit metadata; all critical actions covered; PR4 added admin.bootstrap/reset; sensitive fields excluded. | — |
-| E2E CI | blocking happy/resume/flush | CI disabled | missing | E2E not blocking. | PR 8 |
+| E2E CI | blocking happy/resume/flush | `.github/workflows/ci.yml` | aligned-by-PR8 | E2E job enabled as blocking CI: Playwright Chromium, 3 specs (candidate-happy-path, resume-attempt, submit-flush), server.log + playwright-report + test-results artifacts uploaded. | — |
 | E2E fixture | Admin + Candidate only | E2E seed/smoke | aligned-by-PR2 | None. | — |
 | Test isolation | `buildTestApp` reuses shared `exam_test` DB; some assertions couple on residue from sibling suites | `apps/api/src/routes/user.test.ts` list-pagination test | known | Pre-existing isolation coupling. See `docs/known-test-isolation-issues.md` (K-1). Reproduced on master before PR3/PR4. Not blocking; candidate for dedicated test-isolation PR or Phase 1 exit pass. | test-isolation cleanup |
 
