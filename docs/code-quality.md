@@ -290,11 +290,38 @@ unknown error → 500 + requestId
 }
 ```
 
+### Startup configuration errors
+
+Startup configuration validation is intentionally outside the domain/runtime HTTP error hierarchy.
+
+Errors thrown while building runtime configuration, validating deployment mode, or checking required production secrets MUST fail fast with a standard `Error`.
+
+Do not use `ValidationError`, `NotFoundError`, `InvalidStateTransitionError`, or other domain errors for startup configuration failures.
+
+Do not add configuration/bootstrap errors to `packages/domain/src/errors.ts`.
+
+Rationale:
+
+- startup configuration failures are not user-input validation errors
+- they are not expected to be serialized as HTTP responses
+- they happen before normal request handling
+- keeping them as plain `Error` avoids coupling infrastructure/bootstrap code to domain error types
+
+Examples:
+
+- invalid `APP_MODE`
+- invalid `DEPLOYMENT_MODE`
+- missing production `DATABASE_URL`
+- missing production `JWT_SECRET`
+- missing production `CORS_ORIGIN`
+
 ### 禁止
 
-- 到处 `throw new Error("xxx")` — 必须使用 domain error types
+- 到处 `throw new Error("xxx")` — 必须使用 domain error types（startup config 失败除外）
 - 直接把数据库错误暴露给前端
 - API response 错误格式不统一
+- 用 `ValidationError` 表示 startup 配置缺失或部署模式错误
+- 在 `packages/domain/src/errors.ts` 中新增 `ConfigurationError` 或类似启动配置错误类型
 
 ---
 
