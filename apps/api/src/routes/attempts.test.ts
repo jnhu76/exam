@@ -1358,4 +1358,217 @@ describe("attempt routes", () => {
       expect(res.json().status).toBe("in_progress");
     });
   });
+
+  describe("CandidateExamSummary availabilityStatus derivation", () => {
+    async function createAndEnrollExam(
+      opts: {
+        title?: string;
+        retakePolicy?: string;
+        maxAttempts?: number;
+        openOffsetMs?: number;
+        closeOffsetMs?: number;
+      } = {},
+    ): Promise<string> {
+      const id = crypto.randomUUID();
+      const snapshot = [
+        {
+          originalQuestionId: questionId,
+          type: "single_choice" as const,
+          content: "Q",
+          attachments: [] as never[],
+          options: [{ id: "a", content: "A" }],
+          standardAnswer: "a",
+          score: 100,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 0,
+        },
+      ];
+      await ctx.db.insert(schema.exams).values({
+        id,
+        organizationId: ctx.org.id,
+        title: opts.title ?? `Summary-${uniquePrefix()}`,
+        description: "",
+        courseId,
+        status: "open",
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + (opts.openOffsetMs ?? -3600000)),
+        closeAt: new Date(Date.now() + (opts.closeOffsetMs ?? 86400000)),
+        passingScore: 60,
+        totalScore: 100,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        questionSnapshot: snapshot,
+        controlFlags: { ...DEFAULT_CONTROL_FLAGS },
+        retakePolicy: (opts.retakePolicy ?? "max_attempts") as
+          | "max_attempts"
+          | "unlimited"
+          | "pass_then_stop",
+        scoreStrategy: "highest",
+        maxAttempts: opts.maxAttempts ?? 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await ctx.db.insert(schema.examEnrollments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        examId: id,
+        candidateId: candidateProfileId,
+        status: "assigned",
+        attemptCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      return id;
+    }
+
+    async function getSummary(
+      examId: string,
+    ): Promise<Record<string, unknown>> {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/candidate/exams",
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(Array.isArray(body)).toBe(true);
+      const exams = body as Array<Record<string, unknown>>;
+      const found = exams.find((e) => e.examId === examId);
+      expect(found).toBeDefined();
+      return found!;
+    }
+
+    async function startAndSubmit(examId: string): Promise<string> {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(startRes.statusCode).toBe(201);
+      const attemptId = startRes.json().id;
+      const submitRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(submitRes.statusCode).toBe(200);
+      return attemptId;
+    }
+
+    it("derives available/start when no attempts inside window", async () => {
+      const freshExamId = await createAndEnrollExam({
+        title: "Available Exam",
+      });
+      const target = await getSummary(freshExamId);
+      expect(target.availabilityStatus).toBe("available");
+      expect(target.primaryAction).toBe("start");
+    });
+
+    it("derives in_progress/resume when active attempt exists", async () => {
+      const inProgressExamId = await createAndEnrollExam({
+        title: "InProgress Exam",
+      });
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${inProgressExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const target = await getSummary(inProgressExamId);
+      expect(target.availabilityStatus).toBe("in_progress");
+      expect(target.primaryAction).toBe("resume");
+    });
+
+    it("derives resumable/resume when disrupted attempt exists", async () => {
+      const disruptedExamId = await createAndEnrollExam({
+        title: "Disrupted Exam",
+      });
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${disruptedExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      await createAttemptRepo(ctx.db).update(candidateCtx, startRes.json().id, {
+        status: "disrupted",
+      });
+      const target = await getSummary(disruptedExamId);
+      expect(target.availabilityStatus).toBe("resumable");
+      expect(target.primaryAction).toBe("resume");
+    });
+
+    it("derives max_attempts_exhausted/view_result after exhausting attempts", async () => {
+      const exhaustExamId = await createAndEnrollExam({
+        title: "Exhaust Exam",
+        maxAttempts: 1,
+      });
+      await startAndSubmit(exhaustExamId);
+      const target = await getSummary(exhaustExamId);
+      expect(target.availabilityStatus).toBe("max_attempts_exhausted");
+      expect(target.primaryAction).toBe("view_result");
+    });
+
+    it("rejects start API when maxAttempts exhausted", async () => {
+      const exhaustExamId = await createAndEnrollExam({
+        title: "Reject Exam",
+        maxAttempts: 1,
+      });
+      await startAndSubmit(exhaustExamId);
+
+      const rejectRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${exhaustExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(rejectRes.statusCode).toBe(409);
+      expect(rejectRes.json().error.code).toBe("MAX_ATTEMPTS_REACHED");
+    });
+
+    it("derives graded/start when graded but attempts remain", async () => {
+      const gradeExamId = await createAndEnrollExam({
+        title: "Grade Exam",
+        maxAttempts: 3,
+      });
+      await startAndSubmit(gradeExamId);
+      const target = await getSummary(gradeExamId);
+      expect(target.availabilityStatus).toBe("graded");
+      expect(target.primaryAction).toBe("start");
+      expect(target.bestScore).toBeDefined();
+    });
+
+    it("derives not_started_yet when before window", async () => {
+      const futureExamId = await createAndEnrollExam({
+        title: "Future Exam",
+        openOffsetMs: 86400000,
+        closeOffsetMs: 172800000,
+      });
+      const target = await getSummary(futureExamId);
+      expect(target.availabilityStatus).toBe("not_started_yet");
+      expect(target.primaryAction).toBe("none");
+    });
+
+    it("derives expired when after window with no attempts", async () => {
+      const expiredExamId = await createAndEnrollExam({
+        title: "Expired Exam",
+        maxAttempts: 3,
+        openOffsetMs: -172800000,
+        closeOffsetMs: -86400000,
+      });
+      const target = await getSummary(expiredExamId);
+      expect(target.availabilityStatus).toBe("expired");
+      expect(target.primaryAction).toBe("none");
+    });
+  });
 });
