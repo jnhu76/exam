@@ -9,5 +9,10 @@ fi
 echo "Running database migrations..."
 node dist/scripts/migrate.js
 
+if [ "$RUN_SEED" = "1" ]; then
+  echo "Running seed..."
+  node dist/seed.js
+fi
+
 echo "Starting server..."
 exec node dist/server.js
