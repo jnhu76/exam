@@ -193,30 +193,6 @@ describe("attempt routes", () => {
     });
   }
 
-  async function createPublishEnrollExam(
-    overrides: Parameters<typeof buildExamPayload>[0],
-  ): Promise<string> {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/exams",
-      payload: buildExamPayload(overrides),
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    if (res.statusCode !== 201) {
-      throw new Error(
-        `Failed to create exam: ${res.statusCode} ${JSON.stringify(res.json())}`,
-      );
-    }
-    const id = res.json().id;
-    await ctx.app.inject({
-      method: "POST",
-      url: `/api/exams/${id}/publish`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    await enrollCandidateForExam(id);
-    return id;
-  }
-
   describe("POST /attempts/:examId/start", () => {
     it("starts attempt for candidate", async () => {
       const res = await ctx.app.inject({
