@@ -2,16 +2,23 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConnectionIndicator } from "./ConnectionIndicator";
+import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ContentCard } from "./ContentCard";
+import { DataTablePagination } from "./DataTablePagination";
 import { DataTableShell } from "./DataTableShell";
 import { DataToolbar } from "./DataToolbar";
 import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
 import { FormSection } from "./FormSection";
+import { FieldStack, FormStack } from "./FormStack";
+import { ListToolbar } from "./ListToolbar";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
 import { PageSection } from "./PageSection";
+import { RowActions } from "./RowActions";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
+import { SearchInput } from "./SearchInput";
 import { StatsCard } from "./StatsCard";
 
 describe("PageHeader", () => {
@@ -181,6 +188,224 @@ describe("ConfirmDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "取消" }));
 
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ContentCard", () => {
+  it("renders children in a content container", () => {
+    render(<ContentCard>内容</ContentCard>);
+    expect(screen.getByText("内容")).toBeInTheDocument();
+  });
+});
+
+describe("SearchInput", () => {
+  it("calls onChange when typing", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    render(<SearchInput value="" onChange={onChange} placeholder="搜索用户" />);
+
+    await user.type(screen.getByRole("searchbox"), "admin");
+
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it("renders icon-only clear button with aria-label and calls onClear", async () => {
+    const user = userEvent.setup();
+    const onClear = vi.fn();
+
+    render(<SearchInput value="admin" onChange={() => {}} onClear={onClear} />);
+
+    const clearButton = screen.getByRole("button", { name: "清除搜索" });
+    expect(clearButton).toBeInTheDocument();
+
+    await user.click(clearButton);
+    expect(onClear).toHaveBeenCalledOnce();
+  });
+
+  it("does not render clear button when empty", () => {
+    render(<SearchInput value="" onChange={() => {}} />);
+    expect(
+      screen.queryByRole("button", { name: "清除搜索" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("treats nullish values as an empty controlled input", () => {
+    render(<SearchInput value={null} onChange={() => {}} />);
+
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(
+      screen.queryByRole("button", { name: "清除搜索" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ListToolbar", () => {
+  it("renders search, filters, actions, and summary slots", () => {
+    render(
+      <ListToolbar
+        search={<input aria-label="关键词" />}
+        filters={<button type="button">筛选</button>}
+        actions={<button type="button">新建</button>}
+        summary="共 2 条"
+      />,
+    );
+
+    expect(
+      screen.getByRole("toolbar", { name: "列表工具栏" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("关键词")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
+    expect(screen.getByText("共 2 条")).toBeInTheDocument();
+  });
+
+  it("renders legitimate falsy ReactNode slots", () => {
+    render(<ListToolbar search={0} filters={0} actions={0} summary={0} />);
+
+    expect(screen.getAllByText("0")).toHaveLength(4);
+  });
+});
+
+describe("RowActions", () => {
+  it("renders children and action slots", () => {
+    render(
+      <RowActions
+        leading={<button type="button">查看</button>}
+        trailing={<button type="button">删除</button>}
+      >
+        <button type="button">编辑</button>
+      </RowActions>,
+    );
+
+    expect(screen.getByRole("group", { name: "行操作" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
+  });
+});
+
+describe("DataTablePagination", () => {
+  it("renders totals and calls onPageChange", async () => {
+    const user = userEvent.setup();
+    const onPageChange = vi.fn();
+
+    render(
+      <DataTablePagination
+        page={1}
+        pageSize={10}
+        total={25}
+        onPageChange={onPageChange}
+      />,
+    );
+
+    expect(screen.getByText("共 25 条，显示 1-10 条")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /下一页/ }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it("marks current page with aria-current", () => {
+    render(
+      <DataTablePagination
+        page={2}
+        pageSize={10}
+        total={25}
+        onPageChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "第 2 页" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("normalizes non-positive page sizes", () => {
+    render(
+      <DataTablePagination
+        page={1}
+        pageSize={0}
+        total={3}
+        onPageChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("共 3 条，显示 1-1 条")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "第 1 页" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+});
+
+describe("FormStack", () => {
+  it("renders form and field stack content", () => {
+    render(
+      <FormStack>
+        <FieldStack>
+          <label htmlFor="name">名称</label>
+          <input id="name" />
+        </FieldStack>
+      </FormStack>,
+    );
+
+    expect(screen.getByLabelText("名称")).toBeInTheDocument();
+  });
+});
+
+describe("ConfirmActionDialog", () => {
+  it("shows title and description and handles confirm and cancel", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+
+    render(
+      <ConfirmActionDialog
+        trigger={<button type="button">删除</button>}
+        title="确认删除"
+        description="删除后无法恢复"
+        confirmLabel="删除"
+        destructive
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+
+    expect(screen.getByText("确认删除")).toBeInTheDocument();
+    expect(screen.getByText("删除后无法恢复")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(onCancel).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    await user.click(screen.getByRole("button", { name: "删除" }));
+    expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it("does not confirm when confirm action is disabled", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <ConfirmActionDialog
+        trigger={<button type="button">打开</button>}
+        title="确认删除"
+        description="删除后无法恢复"
+        confirmLabel="删除"
+        confirmDisabled
+        onConfirm={onConfirm}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "打开" }));
+    const confirmButton = screen.getByRole("button", { name: "删除" });
+
+    expect(confirmButton).toBeDisabled();
+    await user.click(confirmButton);
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 });
 

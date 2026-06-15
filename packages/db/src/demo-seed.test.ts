@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getTestDb } from "./testDb.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
@@ -20,6 +21,51 @@ describe("demo seed", () => {
     const ids = await seedDemo(db, hashPassword);
     const errors = await verifyDemoSeed(db, ids);
     expect(errors).toEqual([]);
+  });
+
+  it("keeps question idempotency scoped by course", async () => {
+    const { db } = await getTestDb();
+    const ids = await seedDemo(db, hashPassword);
+    const skillCourseId = ids.courses["SKILL-201"]!;
+
+    await db.insert(schema.questions).values({
+      id: randomUUID(),
+      organizationId: ids.orgId,
+      courseId: skillCourseId,
+      type: "single_choice",
+      content: "消防通道的宽度不得低于____米",
+      options: [],
+      standardAnswer: "1.2",
+      attachments: [],
+      score: 5,
+      difficulty: 3,
+      tags: ["safety", "regulation"],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+        fillBlankCaseSensitive: false,
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const reseededIds = await seedDemo(db, hashPassword);
+    const safetyCourseId = reseededIds.courses["SAFETY-101"]!;
+    const safetyQuestions = await db
+      .select()
+      .from(schema.questions)
+      .where(
+        and(
+          eq(schema.questions.organizationId, reseededIds.orgId),
+          eq(schema.questions.courseId, safetyCourseId),
+        ),
+      );
+
+    expect(safetyQuestions).toHaveLength(6);
+    expect(reseededIds.questions["safety-fb2"]).toBeDefined();
+    expect(
+      safetyQuestions.some((q) => q.id === reseededIds.questions["safety-fb2"]),
+    ).toBe(true);
   });
 
   it("creates all expected users with real argon2 hashes", async () => {
