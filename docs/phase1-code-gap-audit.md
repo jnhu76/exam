@@ -29,7 +29,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Exam create/publish | aligned-by-PR2 | `requireRole(["Admin"])`; archive endpoint remains for Phase 2 cleanup. |
 | Candidate enrollment / assignment | partially-implemented | Enrollment exists; start flow can auto-create enrollment. |
 | Candidate starts/saves/submits | implemented | Save and submit use row locks and protocol fields; needs blocking E2E evidence. |
-| Result visible/export | aligned-by-PR2 | Score list + export are Admin-only; export field name vs label remains for PR 4. |
+| Result visible/export | aligned-by-PR5 | Score list + export are Admin-only; export header uses CandidateField.label with fallback to field.name. |
 | Minimal AuditLog | partially-implemented | login.success/failure (with `unsupported_phase1_role`), publish, candidate import, submit, export, `admin.bootstrap`, `admin.password_reset.local`, `candidate.password_reset` exist; route-local error audit gaps remain (PR 6). |
 | Structured logs/requestId | partially-implemented | Global ErrorResponse has requestId; route-local errors and logger schema are incomplete. |
 | E2E artifacts/blocking CI | partially-implemented | Trace/screenshot/video configured; server.log/upload missing; CI disables E2E (PR 7 scope). |
@@ -101,8 +101,8 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Demo baseline | Phase 1 demo matches mock-data | `demo-seed.ts` | aligned-by-PR1 | Demo uses default org, Admin + Candidates, and avoids strict lockdown default exam. | — |
 | Candidate import | Admin-only | `candidate.ts` | aligned-by-PR2 | None. | — |
 | Question import | Admin-only | `question.ts` | aligned-by-PR2 | None. | — |
-| Result export | Admin-only | `export.ts` | aligned-by-PR2 | Field-name vs label still pending. | PR 4 |
-| Export columns | CandidateField contract stable | `export.ts`, docs | partially-implemented | name vs label mismatch. | PR 4 |
+| Result export | Admin-only | `export.ts` | aligned-by-PR5 | Export header uses CandidateField.label with fallback to field.name. | — |
+| Export columns | CandidateField contract stable | `export.ts`, docs | aligned-by-PR5 | label/name rule implemented and tested. | — |
 | Assignment | assigned candidates only | start flow | partially-implemented | auto-enrollment can bypass assignment. | PR 5 |
 | Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
 | Submit/grading | idempotent row-locked submit | `attempts.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
@@ -136,7 +136,7 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Question web template | `QuestionImportPage.tsx:177-183` | valid backend sample | uses option id `B`. | aligned-by-PR1 | None. | PR 1 |
 | Mock JSON questions | `docs/mock-data.md:150-183` | clear executable fixture or illustrative sample | omits attachments/gradingRule required by DB. | partially-aligned | clarify or align with schema. | PR 1 |
 | Phase 2 controls | `demo-seed.ts`, E2E seed | not Phase 1 default | default demo/E2E fixtures avoid queue/restrictIp/lockdown dependence. | aligned-by-PR1 | Product endpoints still need PR 5 cleanup. | PR 1, PR 5 |
-| Result export fixture | `export.ts`, docs examples | Admin-only, CandidateField columns | export route is now Admin-only; columns still use field names rather than labels. | partially-aligned-by-PR2 | Field-name vs label contract still pending. | PR 4 |
+| Result export fixture | `export.ts`, docs examples | Admin-only, CandidateField columns | export route is now Admin-only; header uses field.label with fallback to field.name. | aligned-by-PR5 | None. | — |
 | Root fixture dirs | `seed/**`, `demo/**`, `fixtures/**`, `test-data/**` | scan if present | not found. | not-found | no action. | PR 0 |
 
 ## 6. Database Baseline Alignment Audit
@@ -203,7 +203,7 @@ Phase 1 test/dev/E2E data should use:
 | Runtime can enter forbidden multiTenant mode | Pre-PR3: `runtimeConfig.ts` accepted `DEPLOYMENT_MODE=multiTenant`; `runtimeConfig.tenancy.exposeSuperAdmin` was emitted in the public config payload; Compose defaulted to multiTenant. Post-PR3: `DEPLOYMENT_MODE=multiTenant` fails fast at startup with a Phase 1 message; `exposeSuperAdmin`/`tenantSwitcher`/`superAdminConsole` are no longer emitted by the public config payload; Compose and `.env.example` default to singleTenant. | Resolved. Optional multiTenant remains a Phase 4 future capability. | PR3 | Resolved |
 | Seed/mock/E2E data inconsistent | PR 1 aligned default seed/demo/E2E fixtures to Admin+Candidate default org. | Main fixture baseline represents Phase 1 acceptance. | PR 1 | Resolved for fixture baseline |
 | Missing admin recovery path | No reset-password script found. | Production lockout recovery relies on weak/default seed or manual DB edits. | PR 3 | Yes |
-| Import/export permission residue | Pre-PR2: candidate/question/export routes allowed SuperAdmin/Teacher. Post-PR2: all admin routes use `requireRole(["Admin"])`; export field-name vs label contract remains. | Permission residue resolved; export field contract still pending. | PR 4 | Resolved for permissions |
+| Import/export permission residue | Pre-PR2: candidate/question/export routes allowed SuperAdmin/Teacher. Post-PR2: all admin routes use `requireRole(["Admin"])`; export header now uses CandidateField.label. Post-PR5: field-name vs label contract resolved. | Permission residue resolved; export field contract resolved. | PR 2, PR 5 | Resolved |
 | Phase 2 endpoints exposed in current runtime | queue and archive routes remain exposed; restore exists as backend recovery support. | Users/tests may depend on Phase 2 operation behavior before product scope. | PR 5 | Partially |
 | RequestId/logging incomplete | Route-local errors omit requestId; logger has no standard fields/redaction. | Poor diagnosis and sensitive logging risk. | PR 6 | Yes for release hardening |
 | E2E disabled in CI | `.github/workflows/ci.yml:83-86`. | Phase 1 acceptance signals are not blocking. | PR 7 | Yes |
@@ -242,7 +242,7 @@ Scope: first Admin bootstrap for the internal default organization; local Admin 
 
 ### PR 4: phase1-import-export-permissions
 
-Scope: Candidate import, Question import, and Result CSV export Admin-only; align CSV templates/samples with backend importer; resolve export field name vs label contract; remove Teacher/SuperAdmin Phase 1 permission residue.
+Scope: Candidate import, Question import, and Result CSV export Admin-only; align CSV templates/samples with backend importer; resolve export field name vs label contract (completed in PR5); remove Teacher/SuperAdmin Phase 1 permission residue.
 
 ### PR 5: phase1-exam-core-flow
 

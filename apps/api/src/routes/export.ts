@@ -33,11 +33,14 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       const fields = (await candidateFieldRepo.list(ctx)).sort(
         (a, b) => a.sortOrder - b.sortOrder,
       );
-      const fieldNames = fields.map((f) => f.name);
+      const fieldPairs = fields.map((f) => ({
+        key: f.name,
+        label: f.label || f.name,
+      }));
 
       const headers = [
         "考生姓名",
-        ...fieldNames,
+        ...fieldPairs.map((fp) => fp.label),
         "成绩",
         "及格状态",
         "尝试次数",
@@ -46,9 +49,9 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
 
       const rows = results.map((r) => ({
         考生姓名: r.candidateUser.name,
-        ...fieldNames.reduce(
-          (acc, name) => {
-            acc[name] = r.candidateProfile.fields[name] ?? "";
+        ...fieldPairs.reduce(
+          (acc, fp) => {
+            acc[fp.label] = r.candidateProfile.fields[fp.key] ?? "";
             return acc;
           },
           {} as Record<string, unknown>,
