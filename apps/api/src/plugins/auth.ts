@@ -73,6 +73,12 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       permissions: getPermissionsForRole(user.role as Role) as Permission[],
       sessionId: deriveSessionId(token),
     };
+
+    request.log = request.log.child({
+      actorId: payload.actorId,
+      actorRole: user.role,
+      organizationId: payload.organizationId,
+    });
   };
 
   Object.assign(authenticateFn, { _isAuthenticate: true });

@@ -28,11 +28,12 @@ import systemRoutes from "./routes/system.js";
 import auditRoutes from "./routes/audit.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
+import { REDACT_CONFIG } from "./lib/logRedaction.js";
 
 const { port, host } = getRuntimeConfig();
 
 async function main() {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: { level: "info", redact: REDACT_CONFIG } });
 
   await app.register(fastifyCookie);
   await app.register(cors);
