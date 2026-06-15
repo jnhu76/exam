@@ -624,7 +624,7 @@ describe("J8: score list routes", () => {
     await ctx.db.insert(schema.users).values({
       id: tempUserId,
       organizationId: ctx.org.id,
-      username: "temp-candidate-" + Date.now(),
+      username: "temp-candidate-" + uniquePrefix(),
       passwordHash: "not-used",
       name: "Temp Candidate",
       role: "Candidate",

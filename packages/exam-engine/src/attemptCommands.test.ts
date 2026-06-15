@@ -249,7 +249,7 @@ describe("attemptCommands", () => {
 
       await expect(
         startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
-      ).rejects.toThrow(/not.*enroll|not.*assign/i);
+      ).rejects.toThrow(ValidationError);
     });
 
     it("returns existing in_progress attempt instead of creating new", async () => {
