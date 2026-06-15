@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
 import dotenv from "dotenv";
@@ -126,16 +128,28 @@ export async function seed(
   };
 }
 
-const isMain = process.argv[1]?.endsWith("seed.ts");
-if (isMain) {
-  const { createDatabase } = await import("./database.js");
-  const { hashPassword } = await import("@exam/auth/src/password.js");
+const isMain =
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-  const conn = await createDatabase();
-  process.stdout.write("Seeding database...\n");
-  const result = await seed(conn.db, hashPassword);
-  process.stdout.write(
-    `Done! Created org=${result.orgId}, admin=${result.users.adminId}\n`,
-  );
-  await conn.sql.end();
+if (isMain) {
+  let conn:
+    | Awaited<ReturnType<typeof import("./database.js").createDatabase>>
+    | undefined;
+  try {
+    const { createDatabase } = await import("./database.js");
+    const { hashPassword } = await import("@exam/auth/src/password.js");
+
+    conn = await createDatabase();
+    process.stdout.write("Seeding database...\n");
+    const result = await seed(conn.db, hashPassword);
+    process.stdout.write(
+      `Done! Created org=${result.orgId}, admin=${result.users.adminId}\n`,
+    );
+  } catch (err) {
+    process.stderr.write(`Seed failed: ${String(err)}\n`);
+    process.exitCode = 1;
+  } finally {
+    await conn?.sql.end();
+  }
 }

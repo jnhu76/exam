@@ -138,6 +138,13 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Stage web assets for API static serving
+        run: |
+          rm -rf apps/api/public
+          mkdir -p apps/api/public
+          cp -R apps/web/dist/. apps/api/public/
+          test -f apps/api/public/index.html
+
       - name: Run migrations
         run: pnpm --filter @exam/db db:migrate
 
@@ -157,6 +164,8 @@ jobs:
             sleep 2
           done
           curl -sf http://localhost:3000/api/health || (echo "API failed to start" && cat server.log && exit 1)
+          curl -fsS http://localhost:3000/login | grep -q '<!doctype html\|<!DOCTYPE html\|<html' || (echo "SPA fallback not working: /login did not return HTML" && cat server.log && exit 1)
+          echo "SPA fallback verified: /login returns HTML"
 
       - name: Run E2E tests
         run: pnpm --filter @exam/e2e test:e2e
