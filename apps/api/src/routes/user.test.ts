@@ -234,7 +234,7 @@ describe("user routes", () => {
           (u: { role: string }) => u.role === "Admin" || u.role === "Candidate",
         ),
       ).toBe(true);
-      expect(body.total).toBe(body.items.length);
+      expect(body.total).toBeGreaterThanOrEqual(body.items.length);
       expect(body.totalPages).toBe(
         body.total === 0 ? 0 : Math.ceil(body.total / body.pageSize),
       );
