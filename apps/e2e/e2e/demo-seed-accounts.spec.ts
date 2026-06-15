@@ -2,22 +2,29 @@ import { test, expect } from "@playwright/test";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
+interface ApiResult {
+  status: number;
+  body: Record<string, unknown>;
+}
+
 async function adminLogin(
   request: import("@playwright/test").APIRequestContext,
-) {
+): Promise<string> {
   const res = await request.post(`${BASE_URL}/api/auth/login`, {
     data: { username: "admin", password: "admin123" },
   });
-  return res.headers()["set-cookie"]!.match(/auth-token=([^;]+)/)![1];
+  const cookie = res.headers()["set-cookie"] ?? "";
+  const match = cookie.match(/auth-token=([^;]+)/);
+  return match?.[1] ?? "";
 }
 
 async function api(
   request: import("@playwright/test").APIRequestContext,
   method: string,
   path: string,
-  data?: unknown,
+  data?: Record<string, unknown>,
   auth?: string,
-) {
+): Promise<ApiResult> {
   const res = await request.fetch(`${BASE_URL}${path}`, {
     method,
     headers: {
@@ -26,14 +33,23 @@ async function api(
     },
     data: data != null ? JSON.stringify(data) : undefined,
   });
-  return { status: res.status(), body: await res.json() };
+  return {
+    status: res.status(),
+    body: (await res.json()) as Record<string, unknown>,
+  };
+}
+
+interface TestCandidate {
+  username: string;
+  password: string;
+  profileId: string;
 }
 
 async function createCandidate(
   request: import("@playwright/test").APIRequestContext,
   adminToken: string,
   unique: string,
-) {
+): Promise<TestCandidate> {
   const r = await api(
     request,
     "POST",
@@ -47,10 +63,9 @@ async function createCandidate(
     adminToken,
   );
   return {
-    username: r.body.username as string,
+    username: String(r.body.username ?? ""),
     password: "candidate123",
-    profileId: r.body.id as string,
-    userId: r.body.userId as string,
+    profileId: String(r.body.id ?? ""),
   };
 }
 
@@ -58,7 +73,7 @@ async function createExamForTest(
   request: import("@playwright/test").APIRequestContext,
   adminToken: string,
   opts: { title: string; maxAttempts: number; retakePolicy?: string },
-) {
+): Promise<string> {
   const course = await api(
     request,
     "POST",
@@ -76,7 +91,7 @@ async function createExamForTest(
     "POST",
     "/api/questions",
     {
-      courseId: course.body.id,
+      courseId: String(course.body.id ?? ""),
       type: "true_false",
       content: `Q-${opts.title}`,
       standardAnswer: true,
@@ -92,7 +107,7 @@ async function createExamForTest(
     {
       title: opts.title,
       description: "",
-      courseId: course.body.id,
+      courseId: String(course.body.id ?? ""),
       timingMode: "timed_window",
       durationMinutes: 60,
       openAt: new Date(Date.now() - 3600000).toISOString(),
@@ -100,7 +115,7 @@ async function createExamForTest(
       passingScore: 60,
       totalScore: 100,
       questionSelectionMode: "manual",
-      questionIds: [q.body.id],
+      questionIds: [String(q.body.id ?? "")],
       controlFlags: {
         shuffleQuestions: false,
         shuffleOptions: false,
@@ -123,24 +138,60 @@ async function createExamForTest(
   await api(
     request,
     "POST",
-    `/api/exams/${exam.body.id}/publish`,
+    `/api/exams/${String(exam.body.id ?? "")}/publish`,
     {},
     adminToken,
   );
-  return exam.body.id as string;
+
+  return String(exam.body.id ?? "");
 }
 
 async function loginAs(
   page: import("@playwright/test").Page,
   username: string,
   password: string,
-) {
+): Promise<void> {
   await page.goto("/login");
   await page.getByTestId("login-layout").waitFor({ state: "visible" });
   await page.fill("#username", username);
   await page.fill("#password", password);
   await page.getByRole("button", { name: "登录" }).click();
   await page.waitForURL("**/exam/list", { timeout: 15_000 });
+}
+
+async function getCandidateToken(
+  request: import("@playwright/test").APIRequestContext,
+  c: TestCandidate,
+): Promise<string> {
+  const r = await api(request, "POST", "/api/auth/login", {
+    username: c.username,
+    password: c.password,
+  });
+  const cookie = String(r.body.token ?? "");
+  return cookie;
+}
+
+async function startAndSubmit(
+  request: import("@playwright/test").APIRequestContext,
+  cToken: string,
+  examId: string,
+): Promise<string> {
+  const start = await api(
+    request,
+    "POST",
+    `/api/attempts/${examId}/start`,
+    undefined,
+    cToken,
+  );
+  const attemptId = String(start.body.id ?? "");
+  await api(
+    request,
+    "POST",
+    `/api/attempts/${attemptId}/submit`,
+    undefined,
+    cToken,
+  );
+  return attemptId;
 }
 
 test.describe("candidate exam state E2E", () => {
@@ -158,18 +209,11 @@ test.describe("candidate exam state E2E", () => {
       request,
       "POST",
       `/api/exams/${examId}/enrollments`,
-      {
-        candidateIds: [c.profileId],
-      },
+      { candidateIds: [c.profileId] },
       adminToken,
     );
 
-    const cToken = (
-      await api(request, "POST", "/api/auth/login", {
-        username: c.username,
-        password: c.password,
-      })
-    ).body.token;
+    const cToken = await getCandidateToken(request, c);
     await api(
       request,
       "POST",
@@ -199,9 +243,7 @@ test.describe("candidate exam state E2E", () => {
       request,
       "POST",
       `/api/exams/${examId}/enrollments`,
-      {
-        candidateIds: [c.profileId],
-      },
+      { candidateIds: [c.profileId] },
       adminToken,
     );
 
@@ -226,32 +268,12 @@ test.describe("candidate exam state E2E", () => {
       request,
       "POST",
       `/api/exams/${examId}/enrollments`,
-      {
-        candidateIds: [c.profileId],
-      },
+      { candidateIds: [c.profileId] },
       adminToken,
     );
 
-    const cToken = (
-      await api(request, "POST", "/api/auth/login", {
-        username: c.username,
-        password: c.password,
-      })
-    ).body.token;
-    const startRes = await api(
-      request,
-      "POST",
-      `/api/attempts/${examId}/start`,
-      undefined,
-      cToken,
-    );
-    await api(
-      request,
-      "POST",
-      `/api/attempts/${startRes.body.id}/submit`,
-      undefined,
-      cToken,
-    );
+    const cToken = await getCandidateToken(request, c);
+    await startAndSubmit(request, cToken, examId);
 
     await loginAs(page, c.username, c.password);
     const card = page.getByTestId(`exam-card-${examId}`);
@@ -280,47 +302,13 @@ test.describe("candidate exam state E2E", () => {
       request,
       "POST",
       `/api/exams/${examId}/enrollments`,
-      {
-        candidateIds: [c.profileId],
-      },
+      { candidateIds: [c.profileId] },
       adminToken,
     );
 
-    const cToken = (
-      await api(request, "POST", "/api/auth/login", {
-        username: c.username,
-        password: c.password,
-      })
-    ).body.token;
-
-    const a1 = await api(
-      request,
-      "POST",
-      `/api/attempts/${examId}/start`,
-      undefined,
-      cToken,
-    );
-    await api(
-      request,
-      "POST",
-      `/api/attempts/${a1.body.id}/submit`,
-      undefined,
-      cToken,
-    );
-    const a2 = await api(
-      request,
-      "POST",
-      `/api/attempts/${examId}/start`,
-      undefined,
-      cToken,
-    );
-    await api(
-      request,
-      "POST",
-      `/api/attempts/${a2.body.id}/submit`,
-      undefined,
-      cToken,
-    );
+    const cToken = await getCandidateToken(request, c);
+    await startAndSubmit(request, cToken, examId);
+    await startAndSubmit(request, cToken, examId);
 
     const reject = await api(
       request,
@@ -330,7 +318,9 @@ test.describe("candidate exam state E2E", () => {
       cToken,
     );
     expect(reject.status).toBe(409);
-    expect(reject.body.error.code).toBe("MAX_ATTEMPTS_REACHED");
+    const errBody = reject.body as Record<string, unknown>;
+    const err = errBody.error as Record<string, unknown> | undefined;
+    expect(String(err?.code ?? "")).toBe("MAX_ATTEMPTS_REACHED");
 
     await loginAs(page, c.username, c.password);
     await page.waitForTimeout(2000);
