@@ -11,7 +11,7 @@ node dist/scripts/migrate.js
 
 if [ "$RUN_SEED" = "1" ]; then
   echo "Running seed..."
-  node dist/seed.js
+  node dist/seed.js --skip-migrate
 fi
 
 echo "Starting server..."

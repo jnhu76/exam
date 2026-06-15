@@ -13,9 +13,9 @@ services:
       COOKIE_SECURE: "false"
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
-      RUN_SEED: "1"
-      RATE_LIMIT_MAX: "1000"
-      RATE_LIMIT_WINDOW_MS: "60000"
+      RUN_SEED: "1" # Set to "1" to auto-seed on container start
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000} # Max requests per window (CI needs higher)
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000} # Rate limit window in ms
     depends_on:
       db:
         condition: service_healthy
