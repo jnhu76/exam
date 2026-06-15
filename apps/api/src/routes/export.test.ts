@@ -428,6 +428,109 @@ describe("CSV export integration", () => {
     expect(body).not.toContain("studentId");
   });
 
+  it("export header falls back to field.name when label is absent", async () => {
+    const fieldName = `dep-${uniquePrefix()}`;
+
+    await ctx.db
+      .delete(schema.candidateFields)
+      .where(eq(schema.candidateFields.organizationId, ctx.org.id));
+
+    await ctx.db.insert(schema.candidateFields).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      name: fieldName,
+      label: "",
+      fieldType: "text",
+      required: false,
+      unique: true,
+      sortOrder: 0,
+      createdAt: new Date(),
+    });
+
+    const candUsername = `fallback-cand-${uniquePrefix()}`;
+    const candRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: candUsername,
+        password: "password123",
+        name: "Fallback Test Candidate",
+        fields: { [fieldName]: "DEPT001" },
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(candRes.statusCode).toBe(201);
+    const candidateBody = candRes.json();
+    const candidateToken = signJWT({
+      actorId: candidateBody.userId,
+      role: "Candidate",
+      organizationId: ctx.org.id,
+    });
+
+    const fallbackExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Fallback Export Exam",
+      courseCode: "FBK101",
+      courseName: "Fallback Export Course",
+      questionContent: "Fallback test?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, fallbackExamId);
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${fallbackExamId}/enrollments`,
+      payload: { candidateIds: [candidateBody.id] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${fallbackExamId}/start`,
+      cookies: { "auth-token": candidateToken },
+    });
+    expect(startRes.statusCode).toBe(201);
+    const attempt = startRes.json();
+
+    const examDetailRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${fallbackExamId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const questionId = examDetailRes.json().questionIds[0];
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attempt.id}/answers/${questionId}`,
+      payload: {
+        attemptId: attempt.id,
+        questionId,
+        answer: true,
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": candidateToken },
+    });
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attempt.id}/submit`,
+      cookies: { "auth-token": candidateToken },
+    });
+
+    const { body } = await exportResultsCsvAsAdmin(
+      ctx.app,
+      ctx.adminToken,
+      fallbackExamId,
+    );
+    expect(body).toContain(fieldName);
+    expect(body).toContain("DEPT001");
+  });
+
   it("examId filtering — export only returns data for specified exam", async () => {
     const examAId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Filter Exam A",

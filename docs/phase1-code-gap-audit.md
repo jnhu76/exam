@@ -101,8 +101,8 @@ Status legend: `implemented` means the requirement is present in code, not that 
 | Demo baseline | Phase 1 demo matches mock-data | `demo-seed.ts` | aligned-by-PR1 | Demo uses default org, Admin + Candidates, and avoids strict lockdown default exam. | — |
 | Candidate import | Admin-only | `candidate.ts` | aligned-by-PR2 | None. | — |
 | Question import | Admin-only | `question.ts` | aligned-by-PR2 | None. | — |
-| Result export | Admin-only | `export.ts` | aligned-by-PR2 | Field-name vs label still pending. | PR 4 |
-| Export columns | CandidateField contract stable | `export.ts`, docs | partially-implemented | name vs label mismatch. | PR 4 |
+| Result export | Admin-only | `export.ts` | aligned-by-PR5 | Export header uses CandidateField.label with fallback to field.name. | — |
+| Export columns | CandidateField contract stable | `export.ts`, docs | aligned-by-PR5 | label/name rule implemented and tested. | — |
 | Assignment | assigned candidates only | start flow | partially-implemented | auto-enrollment can bypass assignment. | PR 5 |
 | Save-answer | idempotent row-locked protocol | `attempts.ts`, `attemptRepo.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
 | Submit/grading | idempotent row-locked submit | `attempts.ts` | implemented | Needs blocking E2E/integration evidence. | PR 5, PR 7 |
