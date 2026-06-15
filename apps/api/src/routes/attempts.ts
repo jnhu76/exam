@@ -27,6 +27,7 @@ import {
   NotFoundError,
   ValidationError,
   InvalidStateTransitionError,
+  ConflictError,
 } from "@exam/domain";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -534,7 +535,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         exam.controlFlags.requireQueue &&
         getQueueStatus(exam, candidateId, new Date()).status !== "ready"
       ) {
-        throw new ValidationError(
+        throw new ConflictError(
           "Queue admission required before starting this exam",
         );
       }
