@@ -3,7 +3,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type SubjectiveAnswerInputProps = {
-  value: string;
+  value?: string | null;
   onChange: (value: string) => void;
   label?: string;
   placeholder?: string;
@@ -27,9 +27,10 @@ export function SubjectiveAnswerInput({
 }: SubjectiveAnswerInputProps) {
   const inputId = "subjective-answer";
   const helpId = `${inputId}-help`;
+  const safeValue = value ?? "";
   const countLabel = maxLength
-    ? `${value.length} / ${maxLength}`
-    : `${value.length} 字`;
+    ? `${safeValue.length} / ${maxLength}`
+    : `${safeValue.length} 字`;
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(event.target.value);
@@ -45,7 +46,7 @@ export function SubjectiveAnswerInput({
       </div>
       <Textarea
         id={inputId}
-        value={value}
+        value={safeValue}
         onChange={handleChange}
         placeholder={placeholder}
         maxLength={maxLength}

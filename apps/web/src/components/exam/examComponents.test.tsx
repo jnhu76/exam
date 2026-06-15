@@ -235,6 +235,13 @@ describe("SubjectiveAnswerInput", () => {
     expect(screen.getByLabelText("主观题答案")).toHaveAttribute("readonly");
     expect(screen.getByText("答案不能为空")).toBeInTheDocument();
   });
+
+  it("treats nullish values as an empty controlled textarea", () => {
+    render(<SubjectiveAnswerInput value={null} onChange={() => {}} />);
+
+    expect(screen.getByLabelText("主观题答案")).toHaveValue("");
+    expect(screen.getByText("0 字")).toBeInTheDocument();
+  });
 });
 
 describe("RuntimeActionBar", () => {

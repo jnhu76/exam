@@ -7,7 +7,7 @@ type SearchInputProps = Omit<
   React.ComponentProps<typeof Input>,
   "value" | "onChange" | "type"
 > & {
-  value: string;
+  value?: string | null;
   onChange: (value: string) => void;
   onClear?: () => void;
   clearLabel?: string;
@@ -25,18 +25,19 @@ export function SearchInput({
   containerClassName,
   ...props
 }: SearchInputProps) {
-  const canClear = value.length > 0 && !disabled;
+  const safeValue = value ?? "";
+  const canClear = safeValue.length > 0 && !disabled;
 
   return (
     <div className={cn("relative min-w-0", containerClassName)}>
       <SearchIcon
         data-icon="inline-start"
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
+        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
       />
       <Input
         type="search"
-        value={value}
+        value={safeValue}
         disabled={disabled}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}

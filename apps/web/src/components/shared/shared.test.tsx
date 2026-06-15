@@ -229,6 +229,15 @@ describe("SearchInput", () => {
       screen.queryByRole("button", { name: "清除搜索" }),
     ).not.toBeInTheDocument();
   });
+
+  it("treats nullish values as an empty controlled input", () => {
+    render(<SearchInput value={null} onChange={() => {}} />);
+
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(
+      screen.queryByRole("button", { name: "清除搜索" }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("ListToolbar", () => {

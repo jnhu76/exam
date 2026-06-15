@@ -71,7 +71,7 @@ export function QuestionNavigator({
                 <FlagIcon
                   data-icon="inline-end"
                   aria-hidden="true"
-                  className="absolute -top-1 -right-1"
+                  className="absolute -top-1 -right-1 size-3"
                 />
               )}
             </button>
