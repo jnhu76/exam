@@ -122,7 +122,7 @@
   "id": "user-uuid",
   "username": "admin",
   "name": "管理员",
-  "role": "Admin | Candidate",
+  "role": "Admin",
   "organizationId": "org-uuid"
 }
 ```
