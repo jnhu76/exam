@@ -13,6 +13,7 @@ import {
 } from "@exam/domain";
 import { calculateDeadlineAt } from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
+import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
 import {
   transition,
   isTransitionOk,
@@ -90,6 +91,9 @@ export async function startAttempt(
 
   const activeAttempt = await attemptRepo.findActiveByEnrollment(enrollment.id);
   if (activeAttempt) {
+    if (activeAttempt.status === "disrupted") {
+      return restoreAttempt(examRepo, attemptRepo, activeAttempt.id, now);
+    }
     return activeAttempt;
   }
 
@@ -124,6 +128,9 @@ export async function startAttempt(
     lastActivityAt: now,
   });
 
+  if (enrollment.status !== "started") {
+    assertEnrollmentTransition(enrollment.status, "started");
+  }
   const updatedEnrollment = await enrollmentRepo.update(enrollment.id, {
     status: "started",
     attemptCount: attemptNo,

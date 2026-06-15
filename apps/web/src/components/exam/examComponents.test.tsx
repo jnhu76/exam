@@ -5,7 +5,6 @@ import { AnswerPanel } from "./AnswerPanel";
 import { ExamTimer } from "./ExamTimer";
 import { ExamTopbar } from "./ExamTopbar";
 import { QuestionHeader } from "./QuestionHeader";
-import { QuestionNav } from "./QuestionNav";
 import { QuestionNavigator } from "./QuestionNavigator";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { QuestionWorkspace } from "./QuestionWorkspace";
@@ -58,44 +57,6 @@ describe("QuestionRenderer", () => {
     );
     expect(screen.getByText("正确")).toBeInTheDocument();
     expect(screen.getByText("错误")).toBeInTheDocument();
-  });
-});
-
-describe("QuestionNav", () => {
-  it("renders question states and selects a question", async () => {
-    const onSelect = vi.fn();
-    render(
-      <QuestionNav
-        questions={[{ id: "q1" }, { id: "q2" }, { id: "q3" }]}
-        states={["unanswered", "answered", "flagged"]}
-        currentIndex={0}
-        onSelect={onSelect}
-      />,
-    );
-
-    expect(screen.getByText("○")).toBeInTheDocument();
-    expect(screen.getByText("●")).toBeInTheDocument();
-    expect(screen.getByText("◉")).toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "第 2 题，已作答" }),
-    );
-    expect(onSelect).toHaveBeenCalledWith(1);
-  });
-
-  it("uses two columns for long exams", () => {
-    const questions = Array.from({ length: 50 }, (_, index) => ({
-      id: `q${index}`,
-    }));
-    const { container } = render(
-      <QuestionNav
-        questions={questions}
-        states={[]}
-        currentIndex={0}
-        onSelect={() => {}}
-      />,
-    );
-
-    expect(container.firstChild).toHaveClass("grid-cols-2");
   });
 });
 

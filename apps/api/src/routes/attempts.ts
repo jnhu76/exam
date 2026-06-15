@@ -522,6 +522,25 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         candidateId,
       );
       if (activeAttempt) {
+        if (activeAttempt.status === "disrupted") {
+          const restored = await restoreAttempt(
+            examRepoAdapter,
+            attRepoAdapter,
+            activeAttempt.id,
+            new Date(),
+          );
+          recordAudit(
+            fastify,
+            request,
+            ctx,
+            "attempt.restore",
+            "attempt",
+            activeAttempt.id,
+          );
+          return LoadAttemptResponseSchema.parse(
+            toCandidateAttemptResponse(restored),
+          );
+        }
         return LoadAttemptResponseSchema.parse(
           toCandidateAttemptResponse(activeAttempt as ExamAttempt),
         );

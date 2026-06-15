@@ -7,6 +7,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { BookOpen, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 
 interface CourseRow {
@@ -172,28 +174,15 @@ export function CoursePage() {
         />
 
         {courses.length > 0 && (
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              aria-label="搜索课程"
-              placeholder="搜索课程名称、代码或描述..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-9"
-            />
-            {search && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                aria-label="清除课程搜索"
-                onClick={() => setSearch("")}
-              >
-                <X aria-hidden="true" />
-              </Button>
-            )}
-          </div>
+          <SearchInput
+            aria-label="搜索课程"
+            placeholder="搜索课程名称、代码或描述..."
+            value={search}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+            clearLabel="清除课程搜索"
+            containerClassName="max-w-md"
+          />
         )}
 
         {courses.length === 0 ? (
@@ -236,7 +225,7 @@ export function CoursePage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
+                    <RowActions>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -260,7 +249,7 @@ export function CoursePage() {
                         destructive
                         onConfirm={() => void handleDelete(course.id)}
                       />
-                    </div>
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}

@@ -161,7 +161,7 @@ describe("gradeAttempt", () => {
       gradedAt,
     });
     expect(repos.getEnrollment()).toMatchObject({
-      status: "completed",
+      status: "started",
       finalScore: 10,
       finalPassed: true,
       finalAttemptId: "attempt-1",

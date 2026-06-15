@@ -123,7 +123,9 @@ function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
     findActiveByEnrollment(enrollmentId) {
       return (
         store.find(
-          (a) => a.enrollmentId === enrollmentId && a.status === "in_progress",
+          (a) =>
+            a.enrollmentId === enrollmentId &&
+            (a.status === "in_progress" || a.status === "disrupted"),
         ) ?? null
       );
     },
@@ -270,6 +272,38 @@ describe("attemptCommands", () => {
       );
 
       expect(result.id).toBe("attempt-1");
+    });
+
+    it("restores disrupted attempt instead of creating new", async () => {
+      const exam = makeExam();
+      const enrollment = makeEnrollment({ attemptCount: 1 });
+      const disruptedAttempt = makeAttempt({
+        status: "disrupted",
+        answers: [
+          {
+            questionId: "q1",
+            answer: "a",
+            version: 1,
+            savedAt: new Date("2025-01-01T10:15:00Z"),
+          },
+        ],
+      });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([disruptedAttempt]);
+
+      const result = await startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.id).toBe("attempt-1");
+      expect(result.status).toBe("in_progress");
+      expect(result.answers).toHaveLength(1);
     });
 
     it("returns existing in_progress attempt even after max attempts are exhausted", async () => {

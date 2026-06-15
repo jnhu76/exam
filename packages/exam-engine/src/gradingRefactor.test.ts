@@ -3,6 +3,7 @@ import {
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
+  shouldEnrollmentComplete,
 } from "./grading.js";
 import type {
   AttemptRepository,
@@ -252,7 +253,7 @@ describe("finalizeGrading", () => {
       gradingResult: gradingResult.questionResults,
     });
     expect(repos.getEnrollment()).toMatchObject({
-      status: "completed",
+      status: "started",
       finalScore: 10,
       finalPassed: true,
       finalAttemptId: "attempt-1",
@@ -375,5 +376,189 @@ describe("finalizeGrading", () => {
 
     expect(repos.getEnrollment().finalScore).toBe(12);
     expect(repos.getEnrollment().finalAttemptId).toBe("previous-attempt");
+  });
+});
+
+describe("shouldEnrollmentComplete", () => {
+  const baseExam = makeExam();
+  const baseEnrollment = makeEnrollment();
+  const now = new Date("2026-06-01T12:00:00Z");
+
+  it("returns false for unlimited retake with window still open", () => {
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "unlimited" },
+        { ...baseEnrollment, attemptCount: 5 },
+        false,
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true for max_attempts when attemptCount >= maxAttempts", () => {
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "max_attempts", maxAttempts: 2 },
+        { ...baseEnrollment, attemptCount: 2 },
+        false,
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for max_attempts when attemptCount < maxAttempts", () => {
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "max_attempts", maxAttempts: 3 },
+        { ...baseEnrollment, attemptCount: 2 },
+        false,
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true for pass_then_stop when graded attempt passed", () => {
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "pass_then_stop" },
+        baseEnrollment,
+        true,
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for pass_then_stop when graded attempt did not pass", () => {
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "pass_then_stop" },
+        baseEnrollment,
+        false,
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true when exam window has closed", () => {
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "unlimited" },
+        baseEnrollment,
+        false,
+        new Date("2026-06-03T00:00:00Z"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("finalizeGrading — enrollment status by retake policy", () => {
+  const gradingResult: ScoreResult = {
+    attemptId: "attempt-1",
+    totalScore: 10,
+    passed: true,
+    questionResults: [
+      {
+        questionId: "q1",
+        correct: true,
+        score: 10,
+        maxScore: 10,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+      },
+    ],
+    gradedAt: new Date("2026-06-01T12:00:00Z"),
+  };
+
+  it("keeps enrollment started when max_attempts not exhausted", async () => {
+    const exam = {
+      ...makeExam(),
+      retakePolicy: "max_attempts" as const,
+      maxAttempts: 3,
+    };
+    const repos = makeRepos(
+      exam,
+      makeAttempt({ status: "submitted" }),
+      makeEnrollment({ attemptCount: 2 }),
+    );
+
+    await finalizeGrading(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+      "enrollment-1",
+      gradingResult,
+      exam,
+    );
+
+    expect(repos.getEnrollment().status).toBe("started");
+  });
+
+  it("marks enrollment completed when max_attempts exhausted", async () => {
+    const exam = {
+      ...makeExam(),
+      retakePolicy: "max_attempts" as const,
+      maxAttempts: 2,
+    };
+    const repos = makeRepos(
+      exam,
+      makeAttempt({ status: "submitted" }),
+      makeEnrollment({ attemptCount: 2 }),
+    );
+
+    await finalizeGrading(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+      "enrollment-1",
+      gradingResult,
+      exam,
+    );
+
+    expect(repos.getEnrollment().status).toBe("completed");
+  });
+
+  it("marks enrollment completed when pass_then_stop and passed", async () => {
+    const exam = { ...makeExam(), retakePolicy: "pass_then_stop" as const };
+    const repos = makeRepos(
+      exam,
+      makeAttempt({ status: "submitted" }),
+      makeEnrollment({ attemptCount: 1 }),
+    );
+
+    await finalizeGrading(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+      "enrollment-1",
+      gradingResult,
+      exam,
+    );
+
+    expect(repos.getEnrollment().status).toBe("completed");
+  });
+
+  it("keeps enrollment started when pass_then_stop but not passed", async () => {
+    const failResult: ScoreResult = {
+      ...gradingResult,
+      passed: false,
+      totalScore: 3,
+    };
+    const exam = { ...makeExam(), retakePolicy: "pass_then_stop" as const };
+    const repos = makeRepos(
+      exam,
+      makeAttempt({ status: "submitted" }),
+      makeEnrollment({ attemptCount: 1 }),
+    );
+
+    await finalizeGrading(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+      "enrollment-1",
+      failResult,
+      exam,
+    );
+
+    expect(repos.getEnrollment().status).toBe("started");
   });
 });

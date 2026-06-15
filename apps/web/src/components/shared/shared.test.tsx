@@ -12,6 +12,7 @@ import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
 import { FormSection } from "./FormSection";
 import { FieldStack, FormStack } from "./FormStack";
+import { InlineErrorBanner } from "./InlineErrorBanner";
 import { ListToolbar } from "./ListToolbar";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
@@ -351,6 +352,14 @@ describe("FormStack", () => {
     );
 
     expect(screen.getByLabelText("名称")).toBeInTheDocument();
+  });
+});
+
+describe("InlineErrorBanner", () => {
+  it("renders message with role alert", () => {
+    render(<InlineErrorBanner>保存失败</InlineErrorBanner>);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("保存失败")).toBeInTheDocument();
   });
 });
 

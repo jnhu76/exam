@@ -8,6 +8,7 @@ import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FormSection } from "@/components/shared/FormSection";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 
 type SettingsData = UpdateBrandingRequest;
 
@@ -65,14 +66,7 @@ export function SettingsPage() {
         title="品牌设置"
         description="配置当前部署显示给用户的名称与页脚。"
       >
-        {saveError && (
-          <div
-            role="alert"
-            className="mb-4 rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
-          >
-            {saveError}
-          </div>
-        )}
+        {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
         <PlatformSettingsForm
           initialValues={settings ?? undefined}
           onSave={handleSave}

@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table";
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
+import { RowActions } from "@/components/shared/RowActions";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 interface UserRow {
@@ -187,7 +188,7 @@ export function UsersPage() {
                 </TableCell>
                 <TableCell>{user.isActive ? "启用" : "禁用"}</TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <RowActions>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -215,7 +216,7 @@ export function UsersPage() {
                       destructive={user.isActive}
                       onConfirm={() => void toggle(user)}
                     />
-                  </div>
+                  </RowActions>
                 </TableCell>
               </TableRow>
             ))}

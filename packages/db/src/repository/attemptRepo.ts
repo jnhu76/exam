@@ -8,7 +8,7 @@ import {
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
@@ -48,7 +48,7 @@ export function createAttemptRepo(db: Database) {
           and(
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.enrollmentId, enrollmentId),
-            eq(examAttempts.status, "in_progress"),
+            inArray(examAttempts.status, ["in_progress", "disrupted"]),
           ),
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;
@@ -120,7 +120,7 @@ export function createAttemptRepo(db: Database) {
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.examId, examId),
             eq(examAttempts.candidateId, candidateId),
-            eq(examAttempts.status, "in_progress"),
+            inArray(examAttempts.status, ["in_progress", "disrupted"]),
           ),
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;

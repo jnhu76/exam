@@ -159,6 +159,35 @@ describe("attemptRepo custom methods", () => {
     expect(found!.status).toBe("in_progress");
   });
 
+  it("findActiveByEnrollment returns disrupted attempt (resumable)", async () => {
+    const orgIdDisrupted = randomUUID();
+    const idsD = makeIds();
+    const ctxD = createContext(orgIdDisrupted);
+    await seedBaseData(db, orgIdDisrupted, idsD);
+    const enrD = await enrollmentRepo.create(ctxD, {
+      examId: idsD.examId,
+      candidateId: idsD.candidateId,
+      status: "started",
+      attemptCount: 1,
+    });
+    await attemptRepo.create(ctxD, {
+      examId: idsD.examId,
+      enrollmentId: enrD.id,
+      candidateId: idsD.candidateId,
+      attemptNo: 1,
+      status: "disrupted",
+      questionSnapshot: [],
+      answers: [],
+      startedAt: new Date(),
+      deadlineAt: new Date(Date.now() + 3600000),
+      lastActivityAt: new Date(),
+    });
+
+    const found = await attemptRepo.findActiveByEnrollment(ctxD, enrD.id);
+    expect(found).toBeDefined();
+    expect(found!.status).toBe("disrupted");
+  });
+
   it("findActiveByEnrollment returns null when no active attempt", async () => {
     const orgId2 = randomUUID();
     const ids2 = makeIds();

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { Separator } from "@/components/ui/separator";
-import { QuestionNav } from "@/components/exam/QuestionNav";
+import { QuestionNavigator } from "@/components/exam/QuestionNavigator";
 import { ExamTimer } from "@/components/exam/ExamTimer";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -377,13 +377,21 @@ export function TakeExamPage() {
             </span>
           </div>
           <div className="overflow-x-auto xl:overflow-visible">
-            <QuestionNav
-              questions={attempt.questionSnapshot.map((q) => ({
+            <QuestionNavigator
+              items={attempt.questionSnapshot.map((q, i) => ({
                 id: q.originalQuestionId,
+                number: i + 1,
+                state: questionStates[i] ?? "unanswered",
               }))}
-              states={questionStates}
-              currentIndex={currentIndex}
-              onSelect={setCurrentIndex}
+              currentId={
+                attempt.questionSnapshot[currentIndex]?.originalQuestionId ?? ""
+              }
+              onSelect={(id) => {
+                const idx = attempt.questionSnapshot.findIndex(
+                  (q) => q.originalQuestionId === id,
+                );
+                if (idx >= 0) setCurrentIndex(idx);
+              }}
             />
           </div>
         </aside>

@@ -1,10 +1,8 @@
-import type {
-  Exam,
-  ExamStatus,
-  Question,
-  QuestionSnapshot,
-} from "@exam/domain";
-import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
+import type { Exam, Question, QuestionSnapshot } from "@exam/domain";
+import { ValidationError } from "@exam/domain";
+import { assertTransition } from "./examStateMachine.js";
+
+export { assertTransition as assertExamTransition } from "./examStateMachine.js";
 
 export interface ExamRepository {
   findById(examId: string): Promise<Exam | null> | Exam | null;
@@ -12,23 +10,6 @@ export interface ExamRepository {
     examId: string,
     data: Partial<Exam>,
   ): Promise<Exam | null> | Exam | null;
-}
-
-const VALID_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
-  draft: ["published"],
-  published: ["open", "archived"],
-  open: ["closed"],
-  closed: ["archived"],
-  archived: [],
-};
-
-function assertTransition(current: ExamStatus, target: ExamStatus): void {
-  const allowed = VALID_TRANSITIONS[current];
-  if (!allowed || !allowed.includes(target)) {
-    throw new InvalidStateTransitionError(
-      `Cannot transition from ${current} to ${target}`,
-    );
-  }
 }
 
 export function buildQuestionSnapshot(

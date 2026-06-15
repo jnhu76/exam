@@ -7,6 +7,10 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { ListToolbar } from "@/components/shared/ListToolbar";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { RowActions } from "@/components/shared/RowActions";
+import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -74,7 +78,8 @@ export function QuestionPage() {
   const [filterTags, setFilterTags] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
 
   const loadCourses = useCallback(async () => {
     try {
@@ -101,7 +106,7 @@ export function QuestionPage() {
         `/api/questions?${params.toString()}`,
       );
       setQuestions(qData.items);
-      setTotalPages(qData.totalPages);
+      setTotal(qData.total);
     } catch {
       setError("加载题目列表失败");
     } finally {
@@ -185,120 +190,115 @@ export function QuestionPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-3">
-        <Select
-          value={filterCourse}
-          onValueChange={(value) => {
-            setFilterCourse(value);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="按课程筛选" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部课程</SelectItem>
-            {courses.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <ListToolbar
+        aria-label="题目筛选工具栏"
+        filters={
+          <>
+            <Select
+              value={filterCourse}
+              onValueChange={(value) => {
+                setFilterCourse(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="按课程筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部课程</SelectItem>
+                {courses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Select
-          value={filterType}
-          onValueChange={(value) => {
-            setFilterType(value);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="按题型筛选" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部题型</SelectItem>
-            <SelectItem value="single_choice">单选题</SelectItem>
-            <SelectItem value="multiple_choice">多选题</SelectItem>
-            <SelectItem value="fill_blank">填空题</SelectItem>
-            <SelectItem value="true_false">判断题</SelectItem>
-          </SelectContent>
-        </Select>
+            <Select
+              value={filterType}
+              onValueChange={(value) => {
+                setFilterType(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="按题型筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部题型</SelectItem>
+                <SelectItem value="single_choice">单选题</SelectItem>
+                <SelectItem value="multiple_choice">多选题</SelectItem>
+                <SelectItem value="fill_blank">填空题</SelectItem>
+                <SelectItem value="true_false">判断题</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <Select
-          value={filterDifficulty}
-          onValueChange={(value) => {
-            setFilterDifficulty(value);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="按难度筛选" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部难度</SelectItem>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <SelectItem key={value} value={String(value)}>
-                难度 {value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <Select
+              value={filterDifficulty}
+              onValueChange={(value) => {
+                setFilterDifficulty(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue placeholder="按难度筛选" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部难度</SelectItem>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <SelectItem key={value} value={String(value)}>
+                    难度 {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Input
-          className="w-[180px]"
-          placeholder="标签，逗号分隔"
-          value={filterTags}
-          onChange={(e) => {
-            setFilterTags(e.target.value);
-            setPage(1);
-          }}
-        />
-
-        <div className="relative w-[260px]">
-          <Input
+            <Input
+              className="w-[180px]"
+              placeholder="标签，逗号分隔"
+              value={filterTags}
+              onChange={(e) => {
+                setFilterTags(e.target.value);
+                setPage(1);
+              }}
+            />
+          </>
+        }
+        search={
+          <SearchInput
             aria-label="搜索当前页题目"
-            className="pr-9"
             placeholder="搜索当前页题目内容..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
+            onClear={() => setSearch("")}
+            clearLabel="清除题目搜索"
           />
-          {search && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute right-1 top-1/2 -translate-y-1/2"
-              aria-label="清除题目搜索"
-              onClick={() => setSearch("")}
-            >
-              <X aria-hidden="true" />
-            </Button>
-          )}
-        </div>
-
-        {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            aria-label="清空筛选"
-          >
-            <RotateCcw data-icon="inline-start" />
-            清空筛选
-          </Button>
-        )}
-
-        {isTableLoading && (
-          <span
-            className="ml-auto inline-flex items-center gap-2 text-sm text-muted-foreground"
-            aria-live="polite"
-          >
-            <LoaderCircle className="size-4 animate-spin" />
-            加载中…
-          </span>
-        )}
-      </div>
+        }
+        actions={
+          <>
+            {isTableLoading && (
+              <span
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+                aria-live="polite"
+              >
+                <LoaderCircle className="size-4 animate-spin" />
+                加载中…
+              </span>
+            )}
+            {hasActiveFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                aria-label="清空筛选"
+              >
+                <RotateCcw data-icon="inline-start" />
+                清空筛选
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -355,7 +355,7 @@ export function QuestionPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
+                    <RowActions>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -381,33 +381,18 @@ export function QuestionPage() {
                         destructive
                         onConfirm={() => void handleDelete(q.id)}
                       />
-                    </div>
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          <div className="flex items-center justify-end gap-3 text-sm">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              上一页
-            </Button>
-            <span>
-              第 {page} / {totalPages || 1} 页
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              下一页
-            </Button>
-          </div>
+          <DataTablePagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+          />
         </>
       )}
     </div>

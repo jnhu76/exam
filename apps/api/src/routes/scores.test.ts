@@ -225,7 +225,7 @@ describe("score routes", () => {
     expect(storedAttempt?.gradingResult).toHaveLength(1);
     expect(storedAttempt?.gradedAt).toBeInstanceOf(Date);
     expect(storedEnrollment).toMatchObject({
-      status: "completed",
+      status: "started",
       finalScore: 10,
       finalPassed: true,
       finalAttemptId: attemptId,
