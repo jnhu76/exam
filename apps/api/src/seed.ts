@@ -4,11 +4,17 @@ import { seed } from "@exam/db/src/seed.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 
+const skipMigrate = process.argv.includes("--skip-migrate");
+
 const { database } = getRuntimeConfig();
 const conn = await createDatabase(database.url);
 
-process.stdout.write("Running migrations...\n");
-await migratePostgres(conn.db);
+if (!skipMigrate) {
+  process.stdout.write("Running migrations...\n");
+  await migratePostgres(conn.db);
+} else {
+  process.stdout.write("Skipping migrations (--skip-migrate)\n");
+}
 
 process.stdout.write("Seeding database...\n");
 await seed(conn.db, hashPassword);

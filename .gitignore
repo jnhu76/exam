@@ -10,3 +10,4 @@ dist
 coverage/
 .opencode/skills/
 .claude/skills/
+apps/api/public/

@@ -6,7 +6,11 @@ const violations = [];
 
 async function walk(path) {
   for (const entry of await readdir(path, { withFileTypes: true })) {
-    if (["dist", "coverage", "node_modules"].includes(entry.name)) continue;
+    if (
+      ["dist", "coverage", "node_modules"].includes(entry.name) ||
+      (entry.name === "public" && path.includes(join("apps", "api")))
+    )
+      continue;
     const target = join(path, entry.name);
     if (entry.isDirectory()) {
       await walk(target);
