@@ -21,6 +21,17 @@ describe("Button", () => {
     );
   });
 
+  it("distinguishes secondary buttons from outline buttons", () => {
+    render(<Button variant="secondary">次要操作</Button>);
+
+    expect(screen.getByRole("button", { name: "次要操作" })).toHaveClass(
+      "bg-muted",
+    );
+    expect(screen.getByRole("button", { name: "次要操作" })).not.toHaveClass(
+      "border",
+    );
+  });
+
   it("defaults to type button to avoid accidental form submit", async () => {
     const onSubmit = vi.fn((event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();

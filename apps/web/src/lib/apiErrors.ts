@@ -20,6 +20,9 @@ export function getApiErrorMessage(
   fallback = "操作失败，请稍后重试",
 ): string {
   if (error instanceof Error && error.message) return error.message;
+  if (isRecord(error) && typeof error.message === "string" && error.message) {
+    return error.message;
+  }
   return fallback;
 }
 

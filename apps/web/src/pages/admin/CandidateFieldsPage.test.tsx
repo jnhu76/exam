@@ -163,6 +163,30 @@ describe("CandidateFieldsPage", () => {
     expect(await within(dialog).findByText("字段名已存在")).toBeInTheDocument();
   });
 
+  it("clears dialog mutation error when closing", async () => {
+    apiPost.mockRejectedValue({ message: "字段名已存在" });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /添加字段/ }));
+    const dialog = screen.getByRole("dialog");
+    const inputs = dialog.querySelectorAll("input");
+    await user.type(inputs[0]!, "phone");
+    await user.type(inputs[1]!, "手机号");
+    const saveBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "保存")!;
+    await user.click(saveBtn);
+    expect(await within(dialog).findByText("字段名已存在")).toBeInTheDocument();
+    const cancelBtn = within(dialog)
+      .getAllByRole("button")
+      .find((b) => b.textContent === "取消")!;
+    await user.click(cancelBtn);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText("字段名已存在")).not.toBeInTheDocument();
+  });
+
   it("disables save while field mutation is running", async () => {
     let resolveSave: (value: unknown) => void;
     apiPost.mockReturnValue(

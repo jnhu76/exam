@@ -91,6 +91,10 @@ export function CandidateFieldsPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  function setDialogOpen(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) setMutationError(null);
+  }
   function dialog(field?: Field) {
     setEditing(field ?? null);
     setName(field?.name ?? "");
@@ -123,7 +127,7 @@ export function CandidateFieldsPage() {
           sortOrder: fields.length,
         });
       }
-      setOpen(false);
+      setDialogOpen(false);
       await load();
     } catch (err) {
       setMutationError(getApiErrorMessage(err, "保存字段失败，请稍后重试"));
@@ -310,7 +314,7 @@ export function CandidateFieldsPage() {
           </TableBody>
         </Table>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editing ? "编辑字段" : "添加字段"}</DialogTitle>
@@ -378,7 +382,7 @@ export function CandidateFieldsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => setDialogOpen(false)}
               disabled={saving}
             >
               取消
