@@ -170,17 +170,28 @@ GET  /api/exams/:id/export/scores
 
 ### Jobs
 
+> **Job consolidation note**: The original 9 sub-tasks below are all absorbed into a single job **P2.0-J1 — OpenAPI Contract Baseline & Runtime Gate**. This is a mechanical, behavior-preserving job; splitting it further would fragment a single concern across multiple PRs. The sub-task list is retained as a checklist within P2.0-J1's job card.
+
 | Job     | Name                                  | Description                                                                                                  | Discovery Ref |
 | ------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------- |
-| P2.0-J1 | Route Coverage Baseline               | Ensure all server-registered routes appear in OpenAPI, including `GET /api/health`, or are explicitly hidden | 03 §2         |
-| P2.0-J2 | Request Schema Registration           | Register body, params, and query schemas for all implemented APIs                                            | 03 §3         |
-| P2.0-J3 | Response Schema Registration          | Replace generic `{}` responses with typed schemas for all implemented APIs                                   | 03 §3, §4.3   |
-| P2.0-J4 | Union / Conditional Response Modeling | Model SaveAnswer and AttemptResult responses with `oneOf`                                                    | 03 §4.3       |
-| P2.0-J5 | Auth / RBAC Metadata                  | Add security and Admin/Candidate role metadata without changing runtime permissions                          | 03 §5         |
-| P2.0-J6 | Common Error Response Baseline        | Standardize 400/401/403/404/409/429/500 response documentation                                               | 03 §6         |
-| P2.0-J7 | CSV / Binary Response Documentation   | Correctly document score CSV export response content type                                                    | 03 §4.3       |
-| P2.0-J8 | OpenAPI Regression Tests              | Add structural/snapshot tests to prevent generic `{}` regression                                             | 03 §6         |
-| P2.0-J9 | Runtime E2E Matrix Definition         | Define abnormal runtime E2E scenarios for Phase 2A/2C                                                        | 05 §E         |
+| P2.0-J1 | OpenAPI Contract Baseline & Runtime Gate | Consolidated job covering all OpenAPI baseline work: route coverage, request/response schema registration, union/conditional modeling, RBAC metadata, error baseline, regression tests. No runtime behavior change. Absorbs former sub-tasks P2.0-J1 through P2.0-J9 listed below. | 03 §2–§6, 05 §E |
+
+<details>
+<summary>Original sub-task breakdown (absorbed by P2.0-J1, retained as checklist)</summary>
+
+| Sub-task | Description | Discovery Ref |
+| -------- | ----------- | ------------- |
+| Route Coverage Baseline | Ensure all server-registered routes appear in OpenAPI, including `GET /api/health`, or are explicitly hidden | 03 §2 |
+| Request Schema Registration | Register body, params, and query schemas for all implemented APIs | 03 §3 |
+| Response Schema Registration | Replace generic `{}` responses with typed schemas for all implemented APIs | 03 §3, §4.3 |
+| Union / Conditional Response Modeling | Model SaveAnswer and AttemptResult responses with `oneOf` | 03 §4.3 |
+| Auth / RBAC Metadata | Add security and Admin/Candidate role metadata without changing runtime permissions | 03 §5 |
+| Common Error Response Baseline | Standardize 400/401/403/404/409/429/500 response documentation | 03 §6 |
+| CSV / Binary Response Documentation | Correctly document score CSV export response content type | 03 §4.3 |
+| OpenAPI Regression Tests | Add structural/snapshot tests to prevent generic `{}` regression | 03 §6 |
+| Runtime E2E Matrix Definition | Define abnormal runtime E2E scenarios for Phase 2A/2C (executed in P2A-J6) | 05 §E |
+
+</details>
 
 ### Acceptance Criteria
 
@@ -229,17 +240,28 @@ Goal: ensure a candidate can safely complete a full exam from start to result, h
 
 ### Jobs
 
+> **Numbering alignment note**: The job index (`phase2_job_index.md`) is the authoritative task list. The plan job table below has been aligned to match index IDs. Several stabilization-only sub-jobs from earlier drafts were dropped (see notes).
+
 | Job    | Name                             | Description                                                               | Discovery Ref |
 | ------ | -------------------------------- | ------------------------------------------------------------------------- | ------------- |
 | P2A-J1 | Atomic startAttempt              | Make start attempt transaction-safe and enrollment-locked                 | 06 P0-2, 04 §2 |
-| P2A-J2 | Start / Resume Runtime           | Normalize start, restore, and resume behavior                             | 04 §2, §6     |
-| P2A-J3 | Save Answer Runtime              | Keep save-answer versioning, idempotency, conflict handling stable        | 04 §4         |
-| P2A-J4 | Submit Runtime                   | Preserve submit idempotency and save/submit race correctness              | 04 §2         |
-| P2A-J5 | Server-Side Deadline Auto-Submit | Auto-submit expired attempts even if browser crashes                      | 06 P0-1, 04 §6 |
-| P2A-J6 | Client Deadline Awareness        | Disable editing and show final state after deadline                       | 06 P0-5, 01 §4 |
-| P2A-J7 | Exam Open/Close Semantics        | Make open/close status match openAt/closeAt                               | 06 P0-3, 04 §1 |
-| P2A-J8 | Candidate Result Visibility      | Verify submitted, grading, graded, hidden-result states                   | 05 A8         |
-| P2A-J9 | Candidate Runtime E2E            | Cover refresh, disconnect, double-click, deadline crash, save/submit race | 05 §E         |
+| P2A-J2 | Server-Side Deadline Auto-Submit | Auto-submit expired attempts even if browser crashes                      | 06 P0-1, 04 §6 |
+| P2A-J3 | Client Deadline Awareness        | Disable editing and show final state after deadline                       | 06 P0-5, 01 §4 |
+| P2A-J4 | Exam Open/Close Semantics        | Make open/close status match openAt/closeAt                               | 06 P0-3, 04 §1 |
+| P2A-J5 | Restore Runtime Semantics        | restoreAttempt preserves remaining time by adjusting deadlineAt; must be transaction-safe | 04 §6 |
+| P2A-J6 | Candidate Runtime E2E            | Cover refresh, disconnect, double-click, deadline crash, save/submit race | 05 §E         |
+
+<details>
+<summary>Dropped / absorbed sub-jobs from earlier draft</summary>
+
+| Former Job | Reason |
+| ---------- | ------ |
+| Start / Resume Runtime (normalize start behavior) | Absorbed into P2A-J1 (atomic start) and P2A-J5 (restore semantics). Normalization of the start path is implicitly covered by making startAttempt transaction-safe. |
+| Save Answer Runtime (stabilization) | Dropped — no discovery gap exists. Existing save-answer versioning, idempotency, and conflict handling are already tested (`answerProtocol.test.ts`, `attempts.test.ts`, `submit-flush.spec.ts`). If regressions surface during P2A, a stabilization job can be added on demand. |
+| Submit Runtime (stabilization) | Dropped — no discovery gap exists. Submit idempotency and save/submit race are already handled by `findByIdForUpdate` + status check. Covered by P2A-J6 E2E matrix. |
+| Candidate Result Visibility | Absorbed into P2D-J5 (Result Publishing Policy). Candidate-facing result display verification is part of the result publication modes work. |
+
+</details>
 
 ### Acceptance Criteria
 
@@ -289,15 +311,15 @@ Goal: ensure Admin can complete the full operation loop — user/candidate/cours
 
 ### Jobs
 
+> **SPLIT BEFORE CONSTRUCTION**: P2B-J2 absorbs 5 capabilities from earlier drafts. Before construction, it must be split into:
+> - **P2B-J2a** — Publish/Open/Close/Archive Alignment
+> - **P2B-J2b** — Exam Setup + Assignment Validation
+> - **P2B-J2c** — Management Hardening + Score Overview Navigation
+
 | Job    | Name                                      | Description                                                  | Discovery Ref |
 | ------ | ----------------------------------------- | ------------------------------------------------------------ | ------------- |
-| P2B-J1 | Admin Flow Audit                          | Verify admin setup → assignment → publish → result path      | 05 B7-B9      |
-| P2B-J2 | Exam Setup Hardening                      | Improve exam setup and validation flow                       | 01 §3         |
-| P2B-J3 | Assignment Flow Hardening                 | Make enrollment/assignment flow reliable and testable        | 01 §3         |
-| P2B-J4 | Publish/Open/Close/Archive Semantics      | Align admin operations with exam state machine               | 04 §1         |
-| P2B-J5 | User/Question/Course Management Hardening | Fix gaps in existing management flows without rewriting CRUD | 01 §3         |
-| P2B-J6 | Score Overview Entry                      | Ensure admin can navigate from exam to scores/results        | 01 §3         |
-| P2B-J7 | Admin Operation E2E                       | Cover complete admin operation loop                          | 05 §E         |
+| P2B-J1 | Admin Operation Flow Audit                | Verify admin setup → assignment → publish → result path end-to-end; identify gaps for P2B-J2 | 05 B7-B9, 05 §E |
+| P2B-J2 | Admin Operation Hardening (SPLIT BEFORE CONSTRUCTION) | Absorbs exam setup, assignment, publish/open/close/archive, management hardening, and score overview. Must be split before construction (see note above). Depends on P2A-J4 for open/close semantics. | 01 §3, 04 §1 |
 
 ### Acceptance Criteria
 
@@ -354,16 +376,26 @@ Goal: during live exams, Admin can monitor, intervene, and leave audit trails. H
 
 ### Jobs
 
-| Job    | Name                      | Description                                             | Discovery Ref |
-| ------ | ------------------------- | ------------------------------------------------------- | ------------- |
-| P2C-J1 | Heartbeat Runtime         | Stabilize heartbeat update and scan behavior            | 04 §6         |
-| P2C-J2 | Disrupted Detection       | Detect and mark disrupted attempts deterministically    | 04 §6         |
-| P2C-J3 | Polling Proctor Dashboard | Add Admin-operated proctor dashboard using HTTP polling | 06 P1-1, 01 §9 |
-| P2C-J4 | Force Submit              | Add Admin force-submit API/UI with audit                | 06 P1-2, 04 §2 |
-| P2C-J5 | Extend Time               | Add deadline extension API/UI with candidate sync       | 06 P1-3, 04 §2 |
-| P2C-J6 | Misconduct Flag           | Add misconduct flag API/UI with notes and audit         | 06 P1-4       |
-| P2C-J7 | Attempt Timeline          | Surface attempt events for proctor/admin diagnosis      | 05 §D         |
-| P2C-J8 | Proctor Runtime E2E       | Cover disrupted, force submit, extend time, misconduct  | 05 §E         |
+> **Numbering alignment note**: The job index is authoritative. Heartbeat runtime and disrupted detection have been merged into P2C-J1. Attempt timeline has been moved to Phase 2E (P2E-J2). The table below matches the index.
+
+| Job    | Name                                    | Description                                             | Discovery Ref |
+| ------ | --------------------------------------- | ------------------------------------------------------- | ------------- |
+| P2C-J1 | Heartbeat and Disrupted Detection Hardening | Stabilize heartbeat scanner + disrupted detection (transaction, audit, retry) | 04 §6 |
+| P2C-J2 | Force Submit                            | Add Admin force-submit API/UI with audit                | 06 P1-2, 04 §2 |
+| P2C-J3 | Extend Time                             | Add deadline extension API/UI with candidate sync       | 06 P1-3, 04 §2 |
+| P2C-J4 | Misconduct Flag                         | Add misconduct flag API/UI with notes and audit         | 06 P1-4       |
+| P2C-J5 | Polling Proctor Dashboard               | Add Admin-operated proctor dashboard using HTTP polling | 06 P1-1, 01 §9 |
+| P2C-J8 | Proctor Runtime E2E                     | Cover disrupted, force submit, extend time, misconduct  | 05 §E         |
+
+<details>
+<summary>Moved / merged sub-jobs</summary>
+
+| Former Job | Status |
+| ---------- | ------ |
+| Heartbeat Runtime (P2C-J1) + Disrupted Detection (P2C-J2) | Merged into P2C-J1 — heartbeat scanner and disrupted detection are tightly coupled |
+| Attempt Timeline (P2C-J7) | Moved to P2E-J2 — it is an operation evidence/audit concern, not a live proctor action |
+
+</details>
 
 ### Acceptance Criteria
 
@@ -411,16 +443,31 @@ Goal: make scoring usable beyond fully automatic objective questions; establish 
 
 ### Jobs
 
-| Job    | Name                            | Description                                              | Discovery Ref |
-| ------ | ------------------------------- | -------------------------------------------------------- | ------------- |
-| P2D-J1 | Objective Grading Stabilization | Keep current auto-grading behavior stable                | 04 §5         |
-| P2D-J2 | Manual Grading Model            | Define manual grading state and per-question score model | 06 P1-6, 04 §5 |
-| P2D-J3 | Grading Queue API               | List attempts/questions requiring manual grading         | 06 P1-6       |
-| P2D-J4 | Manual Score UI                 | Admin enters scores/comments                             | 06 P1-6       |
-| P2D-J5 | Score Policy                    | Verify score strategy and retake interactions            | 04 §3         |
-| P2D-J6 | Result Publishing Policy        | Add immediate / after-grading / manual-publish behavior  | 04 §3         |
-| P2D-J7 | Result Visibility               | Verify candidate/admin result shapes                     | 05 A8         |
-| P2D-J8 | Grading Audit                   | Audit score changes and grader identity                  | 04 §5         |
+> **Numbering alignment note**: The job index is authoritative. Score policy and result publishing policy have been merged into P2D-J5. Result visibility has been absorbed into P2D-J5 (result publication modes govern candidate visibility). Grading audit renumbered from J8 to J6.
+>
+> **SPLIT BEFORE CONSTRUCTION**: P2D-J5 spans 5 layers (contract, domain, DB, API, frontend) with a breaking migration. Before construction, it must be split into:
+> - **P2D-J5a** — Result Publishing Model + Migration + Backend API
+> - **P2D-J5b** — Candidate ResultPage Visibility
+> - **P2D-J5c** — Admin ExamCreatePage Mode Selector
+
+| Job    | Name                                          | Description                                              | Discovery Ref |
+| ------ | --------------------------------------------- | -------------------------------------------------------- | ------------- |
+| P2D-J1 | Objective Grading Stabilization               | Keep current auto-grading behavior stable with regression tests | 04 §5 |
+| P2D-J2 | Manual Grading Model                          | Define manual grading state and per-question score model | 06 P1-6, 04 §5 |
+| P2D-J3 | Grading Queue API                             | List attempts/questions requiring manual grading         | 06 P1-6       |
+| P2D-J4 | Manual Grading UI                             | Admin enters scores/comments                             | 06 P1-6       |
+| P2D-J5 | Result Publishing Policy (SPLIT BEFORE CONSTRUCTION) | Absorbs score policy verification + result publication modes (immediate / after-grading / manual) + candidate/admin result visibility. Breaking migration: `showResultImmediately` → `resultPublicationMode` enum. Must be split before construction (see note above). | 04 §3, 05 A8 |
+| P2D-J6 | Grading Audit                                 | Audit score changes and grader identity                  | 04 §5         |
+
+<details>
+<summary>Moved / merged sub-jobs</summary>
+
+| Former Job | Status |
+| ---------- | ------ |
+| Score Policy (P2D-J5) + Result Publishing Policy (P2D-J6) | Merged into P2D-J5 — score strategy verification and result publication modes are the same concern |
+| Result Visibility (P2D-J7) | Absorbed into P2D-J5 — result visibility is governed by publication mode |
+
+</details>
 
 ### Acceptance Criteria
 
@@ -665,6 +712,8 @@ For each phase, verify against the specific discovery findings:
 
 ## 12. Deferred Items
 
+### 12.1 Platform Deferred (Cross-Phase)
+
 ```txt
 [ ] MultiTenant product path                          (Phase 4)
 [ ] SuperAdmin UI                                     (Phase 4)
@@ -685,20 +734,58 @@ For each phase, verify against the specific discovery findings:
 [ ] Real-time WebSocket proctor dashboard             (Phase 3, requires ADR-002)
 ```
 
+### 12.2 Phase 2 Parked Gaps (Discovery-Identified, Not in Phase 2 Job Scope)
+
+> These gaps were identified in discovery docs `01`–`06` but are intentionally not assigned Phase 2 jobs. Each has a documented deferral reason. They must not silently disappear — if a later phase picks them up, the job card must reference the discovery source.
+
+| Gap | Discovery Source | Deferral Reason |
+|-----|-----------------|-----------------|
+| **P0-4 Additional timing modes** (`timed_sync`, `deadline`, `untimed`) | 06 P0-4 | Phase 2 first stabilizes the existing `timed_window` operation runtime. Timing mode expansion is a later capability and must not block P2.0 OpenAPI baseline or P2A Candidate Runtime correctness. Revisit after P2A-J6 E2E matrix proves `timed_window` is correct under start, resume, save, submit, deadline, disruption, and result visibility. |
+| **P1-7 Question random selection** (`questionSelectionMode !== "manual"`) | 06 P1-7 | Random selection requires per-candidate question snapshot variation and randomization algorithm. Not blocking for Phase 2 runtime correctness. Deferred to a post-Phase-2 capability spike. |
+| **P1-8 Retake policy expansion** (`daily_limit`, `weekly_limit`) | 06 P1-8 | Current `unlimited`, `max_attempts`, `pass_then_stop` cover Phase 2 scenarios. Time-based retake counting requires time-window query logic that can be added without breaking existing flows. Deferred. |
+| **P2-3 PlaceholderPage cleanup** | 06 P2-3 | Cosmetic. `/admin/*` and `/exam/*` catch-all routes show placeholder. Can be replaced with proper 404 pages in a UI polish pass. Not blocking. |
+| **P2-6 Batch operations** | 06 P2-6 | Individual CRUD is sufficient for Phase 2 cohort sizes. Batch status changes and batch enrollment can be added without schema changes. Deferred. |
+| **P2-7 Server-side pagination consistency** | 06 P2-7 | Some lists load all then paginate client-side (e.g., question filters in exam create). Acceptable for Phase 2 data volumes. Move to server-side pagination when data growth requires it. |
+| **P2-8 Optimistic UI updates** | 06 P2-8 | Most mutations wait for server response. Optimistic updates are a perceived-performance enhancement, not a correctness requirement. Deferred. |
+| **Server restart during attempt** | 05 §E | E2E not covering server restart mid-attempt. In-memory queue (P1-9) is already addressed via ADR (P2F-J1). Attempt persistence across restart is handled by DB-backed attempt state. Not blocking. |
+| **IP restriction UI** | 01 §9 | `controlFlags.restrictIp` exists in schema but no admin UI to configure. Backend enforcement is also not implemented. Full feature requires IP-range validation logic + UI. Deferred to Phase 3 exam operation hardening. |
+| **Queue management UI** | 01 §9 | `controlFlags.requireQueue` exists in schema but no UI. Queue is in-memory (P1-9). Full queue management requires persistent queue (Redis or DB-backed) which is ADR-dependent (P2F-J1 / ADR-003). Deferred. |
+
 Desktop/Electron may have an ADR in Phase 2F, but implementation is deferred.
 
 ---
 
 ## 13. Modification Summary
 
+### Original (pre-P2-PLAN-J1)
+
 1. **Title changed**: From "Exam Runtime Closure" to "Exam Operation Runtime" — reflects that Phase 2 is about the complete operation loop, not just closing gaps.
 2. **Runtime Decision Gate added**: 8 questions that every Phase 2 item must answer before the phase is considered complete.
-3. **OpenAPI elevated to full Contract Baseline Gate**:不再是 runtime critical APIs 小修，而是全量 OpenAPI contract baseline修复. Phase 2.0 now explicitly defines allowed/disallowed change scope.
-4. **Admin Operation and Proctor Runtime split**: Old "Admin / Proctor Operations" is now two independent phases — 2B (Admin Operation) focuses on the setup→publish→result loop; 2C (Proctor Runtime) focuses on live exam monitoring and intervention.
-5. **Candidate Runtime focused on P0 correctness**: Renamed from "Candidate Runtime Correctness" to "Candidate Runtime"; jobs restructured to cover the full candidate lifecycle (start → save → submit → result).
-6. **Grading & Result independent**: Dedicated Phase 2D with objective grading stabilization, manual grading model, grading queue, score policy, result publishing, and grading audit.
-7. **Operation Evidence & Export independent**: Dedicated Phase 2E with audit log viewer, attempt timeline, CSV hardening, import job logs, diagnostics.
-8. **Infra改为 ADR / Optional Upgrade**: Phase 2F is explicitly not an implementation phase; it produces ADRs only.
-9. **Desktop Exam Runtime preserved as future phase**: New §9 documents future desktop scope and constraints; ADR-004 is the only Phase 2 artifact.
-10. **README not modified**: This change is limited to `docs/phase2/phase2.plan.md`.
+3. **OpenAPI elevated to full Contract Baseline Gate**: Phase 2.0 now explicitly defines allowed/disallowed change scope.
+4. **Admin Operation and Proctor Runtime split**: Old "Admin / Proctor Operations" is now two independent phases.
+5. **Candidate Runtime focused on P0 correctness**: Jobs restructured to cover the full candidate lifecycle.
+6. **Grading & Result independent**: Dedicated Phase 2D.
+7. **Operation Evidence & Export independent**: Dedicated Phase 2E.
+8. **Infra改为 ADR / Optional Upgrade**: Phase 2F produces ADRs only.
+9. **Desktop Exam Runtime preserved as future phase**.
+10. **README not modified**.
 11. **No production code, tests, or discovery documents modified**.
+
+### P2-PLAN-J1 Review Repair
+
+12. **Job ID numbering aligned**: All plan job tables now match `phase2_job_index.md` as the authoritative task list. Former plan sub-jobs that were consolidated are documented with absorption notes.
+13. **P0-4 timing modes explicitly deferred**: Added to §12.2 Parked Gaps with reasoning.
+14. **All PARKED gaps documented**: 10 discovery gaps without jobs are now listed in §12.2 with deferral reasons.
+15. **P2B-J2 and P2D-J5 marked SPLIT BEFORE CONSTRUCTION**: Mega-jobs that must be split before implementation begins.
+16. **P2A-J2 disrupted+expired policy defined**: Auto-submit policy for disrupted+expired attempts explicit in job card.
+17. **P2A-J5 restore transaction/lock explicit**: restoreAttempt must run in executeInTransaction with findByIdForUpdate.
+18. **P2C-J2 error semantics unified**: Force-submit idempotent on submitted/graded (200), rejected on voided (409 INVALID_STATE).
+19. **P2C-J3 transaction/lock and closeAt validation**: extendAttemptTime runs in transaction with FOR UPDATE; rejects extension beyond exam.closeAt.
+20. **P2D-J1 classification fixed**: Removed state-machine classification (no state machine change).
+21. **P2D-J2 unique constraint and migration backfill**: Unique constraint (attemptId, questionId) confirmed; migration backfill specified; gradedBy = Admin userId.
+22. **P2D-J5 Result Visibility modeled as state**: Added Result Visibility state entity and migration backfill SQL.
+23. **P2E-J3 seed impact fixed**: No demo seed change; large test data generated in test factory.
+24. **P2E-J5 backward compatibility**: Existing import response fields preserved; logId added in backward-compatible way.
+25. **P2E-J6 scanner metrics source documented**: In-memory counters with single-instance limitation.
+26. **P2B-J1 classification fixed**: Removed docs-only; marked as E2E/regression job + planning/audit job.
+27. **No production code, tests, or discovery documents modified**.
