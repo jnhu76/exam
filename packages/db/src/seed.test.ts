@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { getTestDb } from "./testDb.js";
 import { seed } from "./seed.js";
 import { schema } from "./schema/pg.js";
+import { cleanupOrganizationTestData } from "./testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { verifyPassword } from "@exam/auth/src/password.js";
 
@@ -124,36 +125,7 @@ describe("seed idempotency", () => {
       .from(schema.organizations)
       .where(eq(schema.organizations.slug, "default"));
     if (orgs[0]) {
-      const oid = orgs[0].id;
-      await db
-        .delete(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, oid));
-      await db
-        .delete(schema.examAttempts)
-        .where(eq(schema.examAttempts.organizationId, oid));
-      await db
-        .delete(schema.examEnrollments)
-        .where(eq(schema.examEnrollments.organizationId, oid));
-      await db
-        .delete(schema.questions)
-        .where(eq(schema.questions.organizationId, oid));
-      await db.delete(schema.exams).where(eq(schema.exams.organizationId, oid));
-      await db
-        .delete(schema.courses)
-        .where(eq(schema.courses.organizationId, oid));
-      await db
-        .delete(schema.candidateProfiles)
-        .where(eq(schema.candidateProfiles.organizationId, oid));
-      await db
-        .delete(schema.candidateFields)
-        .where(eq(schema.candidateFields.organizationId, oid));
-      await db
-        .delete(schema.organizationSettings)
-        .where(eq(schema.organizationSettings.organizationId, oid));
-      await db.delete(schema.users).where(eq(schema.users.organizationId, oid));
-      await db
-        .delete(schema.organizations)
-        .where(eq(schema.organizations.id, oid));
+      await cleanupOrganizationTestData(db, orgs[0].id);
     }
   });
 });

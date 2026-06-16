@@ -36,8 +36,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Plus, Search, Upload, Users, X } from "lucide-react";
+import { Pencil, Plus, Search, Upload, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { RowActions } from "@/components/shared/RowActions";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
 interface Field {
@@ -301,30 +303,15 @@ export function CandidatesPage() {
           </div>
         }
       />
-      <div className="flex items-center gap-2">
-        <div className="relative max-w-md flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label="搜索考生"
-            placeholder="搜索考生姓名或用户名..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-9"
-          />
-          {search && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute right-1 top-1/2 -translate-y-1/2"
-              aria-label="清除考生搜索"
-              onClick={() => setSearch("")}
-            >
-              <X aria-hidden="true" />
-            </Button>
-          )}
-        </div>
-      </div>
+      <SearchInput
+        aria-label="搜索考生"
+        placeholder="搜索考生姓名或用户名..."
+        value={search}
+        onChange={setSearch}
+        onClear={() => setSearch("")}
+        clearLabel="清除考生搜索"
+        containerClassName="max-w-md flex-1"
+      />
       {filteredCandidates.length === 0 && search ? (
         <EmptyState
           icon={<Search className="size-8" />}
@@ -383,7 +370,7 @@ export function CandidatesPage() {
                   ))}
                   <TableCell>{candidate.isActive ? "启用" : "禁用"}</TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
+                    <RowActions>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -411,7 +398,7 @@ export function CandidatesPage() {
                         destructive={candidate.isActive}
                         onConfirm={() => void toggle(candidate)}
                       />
-                    </div>
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               ))}

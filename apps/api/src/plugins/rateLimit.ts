@@ -17,6 +17,9 @@ function isApiReferenceRequest(request: FastifyRequest): boolean {
 
 const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
+  if (!config.rateLimit.enabled) {
+    return;
+  }
 
   fastify.register(rateLimit, {
     max: config.rateLimit.max,

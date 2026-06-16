@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   CandidateExamDetailResponseSchema,
+  CandidateExamSummarySchema,
   HeartbeatRequestSchema,
   LoadAttemptParamsSchema,
   LoadAttemptResponseSchema,
@@ -28,7 +29,13 @@ import {
   ValidationError,
   InvalidStateTransitionError,
   ConflictError,
+  PermissionDeniedError,
 } from "@exam/domain";
+import { type AvailabilityStatus, type PrimaryAction } from "@exam/contracts";
+import {
+  deriveCandidateExamState,
+  pickDisplayAttempt,
+} from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -326,28 +333,45 @@ function buildCandidateExamDetail(
   exam: Exam,
   enrollment: ExamEnrollment | null,
   activeAttempt: ExamAttempt | null,
+  resumableAttempt: ExamAttempt | null = null,
+  latestAttempt: ExamAttempt | null = null,
+  finalAttempt: ExamAttempt | null = null,
 ) {
   const currentAttempts = enrollment?.attemptCount ?? 0;
-  const canStartNewAttempt =
-    activeAttempt === null &&
-    !(
-      exam.retakePolicy === "max_attempts" &&
-      currentAttempts >= exam.maxAttempts
-    ) &&
-    !(
-      exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true
-    );
+  const now = new Date();
+  const { availabilityStatus, primaryAction } = deriveCandidateExamState({
+    exam,
+    enrollment,
+    activeAttempt,
+    resumableAttempt,
+    latestAttempt,
+    finalAttempt,
+    now,
+  });
 
-  const blockingReason =
-    activeAttempt !== null
-      ? undefined
-      : exam.retakePolicy === "max_attempts" &&
-          currentAttempts >= exam.maxAttempts
-        ? "max_attempts_reached"
-        : exam.retakePolicy === "pass_then_stop" &&
-            enrollment?.finalPassed === true
-          ? "already_passed"
-          : undefined;
+  const bestScore =
+    enrollment?.finalScore != null ? enrollment.finalScore : undefined;
+  const bestScorePercent =
+    bestScore != null && exam.totalScore > 0
+      ? Math.round((bestScore / exam.totalScore) * 100)
+      : undefined;
+
+  const hasActive = Boolean(activeAttempt) || Boolean(resumableAttempt);
+  const maxAttemptsExhausted =
+    exam.retakePolicy === "max_attempts" && currentAttempts >= exam.maxAttempts;
+  const alreadyPassed =
+    exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true;
+
+  const canStartNewAttempt =
+    !hasActive && !maxAttemptsExhausted && !alreadyPassed;
+
+  const blockingReason = hasActive
+    ? undefined
+    : maxAttemptsExhausted
+      ? "max_attempts_reached"
+      : alreadyPassed
+        ? "already_passed"
+        : undefined;
 
   return CandidateExamDetailResponseSchema.parse({
     id: exam.id,
@@ -362,6 +386,10 @@ function buildCandidateExamDetail(
     ...(activeAttempt ? { activeAttemptId: activeAttempt.id } : {}),
     canStartNewAttempt,
     ...(blockingReason ? { blockingReason } : {}),
+    ...(bestScore != null ? { bestScore } : {}),
+    ...(bestScorePercent != null ? { bestScorePercent } : {}),
+    availabilityStatus,
+    primaryAction,
   });
 }
 
@@ -389,6 +417,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       const examRepo = createExamRepo(fastify.db);
+      const attemptRepo = createAttemptRepo(fastify.db);
       const now = new Date();
 
       return Promise.all(
@@ -399,29 +428,74 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           )) as Exam | null;
           if (!exam) return null;
 
-          const isAvailable =
-            (exam.status === "published" || exam.status === "open") &&
-            now >= exam.openAt &&
-            now < exam.closeAt;
-          const isEnded = now >= exam.closeAt;
+          const allAttempts = (await attemptRepo.findByExamAndCandidate(
+            ctx,
+            exam.id,
+            candidateProfile.id,
+          )) as ExamAttempt[];
 
-          return {
+          const activeAttempt =
+            allAttempts.find((a) => a.status === "in_progress") ?? null;
+          const resumableAttempt =
+            allAttempts.find((a) => a.status === "disrupted") ?? null;
+          const finalAttempt = allAttempts.find(
+            (a) => a.id === enrollment.finalAttemptId,
+          );
+
+          const sortedByTime = [...allAttempts].sort(
+            (a, b) =>
+              (b.submittedAt?.getTime() ?? b.createdAt.getTime()) -
+              (a.submittedAt?.getTime() ?? a.createdAt.getTime()),
+          );
+          const latestAttempt = sortedByTime[0] ?? null;
+
+          const { availabilityStatus, primaryAction } =
+            deriveCandidateExamState({
+              exam,
+              enrollment: normalizeEnrollment(enrollment),
+              activeAttempt,
+              resumableAttempt,
+              latestAttempt,
+              finalAttempt: finalAttempt ?? null,
+              now,
+            });
+
+          const displayAttempt = pickDisplayAttempt({
+            activeAttempt,
+            resumableAttempt,
+            latestAttempt,
+            finalAttempt: finalAttempt ?? null,
+          });
+
+          const bestScore =
+            enrollment.finalScore != null ? enrollment.finalScore : undefined;
+          const bestScorePercent =
+            bestScore != null && exam.totalScore > 0
+              ? Math.round((bestScore / exam.totalScore) * 100)
+              : undefined;
+
+          return CandidateExamSummarySchema.parse({
             examId: exam.id,
             title: exam.title,
+            windowStartAt: exam.openAt.toISOString(),
+            windowEndAt: exam.closeAt.toISOString(),
             durationMinutes: exam.durationMinutes,
+            totalQuestions: exam.questionSnapshot.length,
             passingScore: exam.passingScore,
             totalScore: exam.totalScore,
-            openAt: exam.openAt.toISOString(),
-            closeAt: exam.closeAt.toISOString(),
-            questionCount: exam.questionSnapshot.length,
-            attemptCount: enrollment.attemptCount,
+            attemptsUsed: enrollment.attemptCount,
             maxAttempts: exam.maxAttempts,
-            finalScore: enrollment.finalScore,
-            finalPassed: enrollment.finalPassed,
-            finalAttemptId: enrollment.finalAttemptId,
-            isAvailable,
-            isEnded,
-          };
+            ...(displayAttempt
+              ? {
+                  latestAttemptId: displayAttempt.id,
+                  latestAttemptStatus: displayAttempt.status,
+                }
+              : {}),
+            ...(bestScore != null ? { bestScore } : {}),
+            ...(bestScorePercent != null ? { bestScorePercent } : {}),
+            availabilityStatus,
+            primaryAction,
+          });
         }),
       ).then((results) =>
         results.filter(
@@ -458,15 +532,35 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Enrollment not found");
       }
       const enrollment = normalizeEnrollment(rawEnrollment);
-      const activeAttempt = (await createAttemptRepo(
+      const allAttempts = (await createAttemptRepo(
         fastify.db,
-      ).findActiveByExamAndCandidate(
+      ).findByExamAndCandidate(
         ctx,
         parsed.data.examId,
         candidateProfile.id,
-      )) as ExamAttempt | null;
+      )) as ExamAttempt[];
 
-      return buildCandidateExamDetail(exam, enrollment, activeAttempt);
+      const activeAttempt =
+        allAttempts.find((a) => a.status === "in_progress") ?? null;
+      const resumableAttempt =
+        allAttempts.find((a) => a.status === "disrupted") ?? null;
+      const finalAttempt =
+        allAttempts.find((a) => a.id === enrollment?.finalAttemptId) ?? null;
+      const sortedByTime = [...allAttempts].sort(
+        (a, b) =>
+          (b.submittedAt?.getTime() ?? b.createdAt.getTime()) -
+          (a.submittedAt?.getTime() ?? a.createdAt.getTime()),
+      );
+      const latestAttempt = sortedByTime[0] ?? null;
+
+      return buildCandidateExamDetail(
+        exam,
+        enrollment,
+        activeAttempt,
+        resumableAttempt,
+        latestAttempt,
+        finalAttempt,
+      );
     },
   );
 
@@ -515,6 +609,14 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
+      const enrollment = await enrollmentRepo.findByExamAndCandidate(
+        ctx,
+        examId,
+        candidateId,
+      );
+      if (!enrollment) {
+        throw new PermissionDeniedError("Candidate is not enrolled");
+      }
 
       const activeAttempt = await attemptRepo.findActiveByExamAndCandidate(
         ctx,
@@ -522,6 +624,25 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         candidateId,
       );
       if (activeAttempt) {
+        if (activeAttempt.status === "disrupted") {
+          const restored = await restoreAttempt(
+            examRepoAdapter,
+            attRepoAdapter,
+            activeAttempt.id,
+            new Date(),
+          );
+          recordAudit(
+            fastify,
+            request,
+            ctx,
+            "attempt.restore",
+            "attempt",
+            activeAttempt.id,
+          );
+          return LoadAttemptResponseSchema.parse(
+            toCandidateAttemptResponse(restored),
+          );
+        }
         return LoadAttemptResponseSchema.parse(
           toCandidateAttemptResponse(activeAttempt as ExamAttempt),
         );

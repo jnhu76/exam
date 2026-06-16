@@ -2,8 +2,8 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
-import { eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp } from "./testHelpers.js";
 
@@ -63,48 +63,8 @@ describe("candidate routes", () => {
     identityFieldName = created.name;
   });
 
-  async function deleteAuditLogs(): Promise<void> {
-    await ctx.db
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, organizationId));
-  }
-
-  async function deleteOrganization(): Promise<void> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      await deleteAuditLogs();
-      try {
-        await ctx.db
-          .delete(schema.organizations)
-          .where(eq(schema.organizations.id, organizationId));
-        return;
-      } catch (err) {
-        lastError = err;
-        const constraint =
-          err && typeof err === "object"
-            ? String((err as Record<string, unknown>).constraint_name ?? "")
-            : "";
-        if (constraint !== "audit_logs_organization_id_organizations_id_fk") {
-          throw err;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-    }
-    throw lastError;
-  }
-
   afterAll(async () => {
-    await deleteAuditLogs();
-    await ctx.db
-      .delete(schema.candidateProfiles)
-      .where(eq(schema.candidateProfiles.organizationId, organizationId));
-    await ctx.db
-      .delete(schema.candidateFields)
-      .where(eq(schema.candidateFields.organizationId, organizationId));
-    await ctx.db
-      .delete(schema.users)
-      .where(eq(schema.users.organizationId, organizationId));
-    await deleteOrganization();
+    await cleanupOrganizationTestData(ctx.db, organizationId);
     await ctx.cleanup();
   });
 

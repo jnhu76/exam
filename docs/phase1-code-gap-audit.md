@@ -69,7 +69,8 @@ Status legend: `implemented` means the requirement is present in code, not that 
 ### E2E
 
 - `apps/e2e/lib/seed.ts`: login posts `{ username, password }`; seeds use Admin + Candidate.
-- `apps/e2e/src/api-smoke.test.ts`: `Smoke — organization management` describe deleted; `createFutureRoleUserForTest` no longer imported.
+- `apps/e2e/lib/seed.ts`: login posts `{ username, password }`; seeds use Admin + Candidate.
+- ~~`apps/e2e/src/api-smoke.test.ts`~~: the `Smoke — organization management` describe was deleted earlier; the entire legacy `apps/e2e/src/` suite was later removed as dead code (no run entry). API-level coverage now lives in the `@exam/api` route suite.
 
 ### Tests Added / Updated
 

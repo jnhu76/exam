@@ -55,6 +55,71 @@ describe("auth routes", () => {
     expect(response.json().organizationId).toBe(ctx.org.id);
   });
 
+  it("APP_MODE=e2e does not rate-limit repeated login requests", async () => {
+    vi.stubEnv("APP_MODE", "e2e");
+    vi.stubEnv("RATE_LIMIT_MAX", "1");
+    vi.stubEnv("RATE_LIMIT_WINDOW_MS", "60000");
+    resetRuntimeConfigForTest();
+
+    const e2eCtx = await buildTestApp(authRoutes, {
+      prefix: "/api/auth",
+      rateLimit: true,
+    });
+    try {
+      for (let i = 0; i < 12; i++) {
+        const response = await e2eCtx.app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: {
+            username: e2eCtx.admin.username,
+            password: "admin123",
+          },
+        });
+        expect(response.statusCode).toBe(200);
+      }
+    } finally {
+      await e2eCtx.cleanup();
+    }
+  });
+
+  it("non-e2e mode enforces the route-level login limiter", async () => {
+    vi.stubEnv("APP_MODE", "test");
+    vi.stubEnv("RATE_LIMIT_MAX", "1000");
+    vi.stubEnv("RATE_LIMIT_WINDOW_MS", "60000");
+    resetRuntimeConfigForTest();
+
+    const limitedCtx = await buildTestApp(authRoutes, {
+      prefix: "/api/auth",
+      rateLimit: true,
+    });
+    try {
+      for (let i = 0; i < 10; i++) {
+        const response = await limitedCtx.app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: {
+            username: limitedCtx.admin.username,
+            password: "admin123",
+          },
+        });
+        expect(response.statusCode).toBe(200);
+      }
+
+      const limited = await limitedCtx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: {
+          username: limitedCtx.admin.username,
+          password: "admin123",
+        },
+      });
+      expect(limited.statusCode).toBe(429);
+      expect(limited.json().error.code).toBe("RATE_LIMITED");
+    } finally {
+      await limitedCtx.cleanup();
+    }
+  });
+
   it("POST /api/auth/login sets Secure cookie when COOKIE_SECURE=true", async () => {
     vi.stubEnv("COOKIE_SECURE", "true");
     resetRuntimeConfigForTest();

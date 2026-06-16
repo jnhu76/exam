@@ -66,7 +66,7 @@ const TEST_DB_URL =
 
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,
-  opts?: { prefix?: string },
+  opts?: { prefix?: string; rateLimit?: boolean },
 ): Promise<TestContext> {
   const conn = await createDatabase(TEST_DB_URL);
   await migratePostgres(conn.db);
@@ -82,7 +82,9 @@ export async function buildTestApp(
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);
-  await app.register(rateLimitPlugin);
+  if (opts?.rateLimit) {
+    await app.register(rateLimitPlugin);
+  }
   await app.register(routePlugin, { prefix: opts?.prefix ?? "/api" });
   await app.ready();
 

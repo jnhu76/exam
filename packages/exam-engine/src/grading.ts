@@ -20,6 +20,7 @@ import {
   isTransitionOk,
   type AttemptCommand,
 } from "./attemptStateMachine.js";
+import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
 
 function shouldSelectAttempt(
   strategy: ScoreStrategy,
@@ -37,6 +38,30 @@ function shouldSelectAttempt(
     case "first":
       return false;
   }
+}
+
+export function shouldEnrollmentComplete(
+  exam: Exam,
+  enrollment: ExamEnrollment,
+  gradedPassed: boolean,
+  now: Date,
+): boolean {
+  if (
+    exam.retakePolicy === "max_attempts" &&
+    enrollment.attemptCount >= exam.maxAttempts
+  ) {
+    return true;
+  }
+  if (
+    exam.retakePolicy === "pass_then_stop" &&
+    (gradedPassed || enrollment.finalPassed === true)
+  ) {
+    return true;
+  }
+  if (now >= exam.closeAt) {
+    return true;
+  }
+  return false;
 }
 
 export interface GradingSnapshot {
@@ -134,8 +159,22 @@ export async function finalizeGrading(
     enrollment,
     result.totalScore,
   );
+
+  const targetStatus = shouldEnrollmentComplete(
+    exam,
+    enrollment,
+    result.passed,
+    result.gradedAt,
+  )
+    ? "completed"
+    : "started";
+
+  if (enrollment.status !== targetStatus) {
+    assertEnrollmentTransition(enrollment.status, targetStatus);
+  }
+
   const enrollmentUpdate = await enrollmentRepo.update(enrollment.id, {
-    status: "completed",
+    status: targetStatus,
     ...(selected
       ? {
           finalScore: result.totalScore,

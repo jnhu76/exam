@@ -1,4 +1,44 @@
 services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://exam:exam@db:5432/exam
+      JWT_SECRET: ${JWT_SECRET:-e2e-test-secret}
+      NODE_ENV: development
+      APP_MODE: e2e
+      APP_PORT: 3000
+      HOST: 0.0.0.0
+      COOKIE_SECURE: "false"
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
+      # E2E uses the canonical seed (baseline + demo: candidate1..4).
+      RUN_SEED: "e2e"
+      # APP_MODE=e2e disables the rate-limit plugin in runtimeConfig, but we
+      # also keep these env vars for parity with CI E2E.
+      RATE_LIMIT_DISABLED: "1"
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - exam-net
+    restart: unless-stopped
+
   db:
     image: postgres:18.4-bookworm
     ports:
@@ -6,9 +46,44 @@ services:
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
-      POSTGRES_DB: exam_test
+      POSTGRES_DB: exam
+    volumes:
+      - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam_test"]
-      interval: 2s
+      test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
+      interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 5
+    networks:
+      - exam-net
+    restart: unless-stopped
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.57.0-noble
+    depends_on:
+      app:
+        condition: service_healthy
+    working_dir: /app/apps/e2e
+    volumes:
+      - ./apps/e2e:/app/apps/e2e
+      - ./packages:/app/packages:ro
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+    environment:
+      E2E_BASE_URL: "http://app:3000"
+      HOME: /tmp
+      HTTP_PROXY: ${E2E_PROXY:-}
+      HTTPS_PROXY: ${E2E_PROXY:-}
+    command: >-
+      sh -c "npm install --no-save --no-package-lock @playwright/test@1.57.0 2>/dev/null &&
+             npx playwright test --reporter=list"
+    profiles:
+      - e2e
+    networks:
+      - exam-net
+
+volumes:
+  pgdata:
+
+networks:
+  exam-net:
+    driver: bridge

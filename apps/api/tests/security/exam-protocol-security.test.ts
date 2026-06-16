@@ -275,6 +275,13 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
         cookies: { "auth-token": adminToken },
       });
       const draftExamId = examRes.json().id;
+      const enrollRes = await app.inject({
+        method: "POST",
+        url: `/api/exams/${draftExamId}/enrollments`,
+        payload: { candidateIds: [candidateProfileId] },
+        cookies: { "auth-token": adminToken },
+      });
+      expect([200, 201]).toContain(enrollRes.statusCode);
 
       const startRes = await app.inject({
         method: "POST",

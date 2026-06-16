@@ -184,7 +184,14 @@ function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
 }
 
 function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
-  if (mode === "test" || mode === "e2e" || mode === "ci") {
+  if (mode === "e2e") {
+    return (
+      env.TEST_DATABASE_URL ??
+      env.DATABASE_URL ??
+      "postgresql://exam:exam@localhost:5432/exam_test"
+    );
+  }
+  if (mode === "test" || mode === "ci") {
     return (
       env.TEST_DATABASE_URL ?? "postgresql://exam:exam@localhost:5432/exam_test"
     );
@@ -290,7 +297,7 @@ export function loadRuntimeConfig(
       exposeSuperAdmin: false,
     },
     rateLimit: {
-      enabled: !isTruthy(env.RATE_LIMIT_DISABLED),
+      enabled: mode !== "e2e" && !isTruthy(env.RATE_LIMIT_DISABLED),
       max: parsePositiveInt(env.RATE_LIMIT_MAX, 100),
       timeWindow: parsePositiveInt(env.RATE_LIMIT_WINDOW_MS, 60 * 1000),
     },

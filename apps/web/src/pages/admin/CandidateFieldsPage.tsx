@@ -5,8 +5,10 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -216,14 +218,7 @@ export function CandidateFieldsPage() {
           </div>
         }
       />
-      {mutationError && (
-        <div
-          role="alert"
-          className="rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
-        >
-          {mutationError}
-        </div>
-      )}
+      {mutationError && <InlineErrorBanner>{mutationError}</InlineErrorBanner>}
       {fields.length === 0 ? (
         <EmptyState
           icon={<Tags className="size-8" />}
@@ -266,7 +261,7 @@ export function CandidateFieldsPage() {
                 <TableCell>{field.unique ? "是" : "否"}</TableCell>
                 <TableCell>{field.sortOrder}</TableCell>
                 <TableCell>
-                  <div className="flex gap-1">
+                  <RowActions>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -308,7 +303,7 @@ export function CandidateFieldsPage() {
                       destructive
                       onConfirm={() => void remove(field.id)}
                     />
-                  </div>
+                  </RowActions>
                 </TableCell>
               </TableRow>
             ))}

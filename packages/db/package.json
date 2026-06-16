@@ -19,7 +19,8 @@
     "db:migrate": "drizzle-kit migrate --config drizzle.config.ts",
     "db:push": "drizzle-kit push --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
-    "db:seed": "tsx src/seed.ts"
+    "db:seed": "tsx src/seed.ts",
+    "db:seed:e2e": "tsx src/e2e-seed.ts"
   },
   "devDependencies": {
     "@exam/auth": "workspace:*",

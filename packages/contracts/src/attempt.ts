@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
@@ -209,6 +210,10 @@ export const CandidateExamDetailResponseSchema = z.object({
   activeAttemptId: z.string().uuid().optional(),
   canStartNewAttempt: z.boolean(),
   blockingReason: z.enum(["max_attempts_reached", "already_passed"]).optional(),
+  bestScore: z.number().optional(),
+  bestScorePercent: z.number().optional(),
+  availabilityStatus: AvailabilityStatusEnum,
+  primaryAction: PrimaryActionEnum,
 });
 export type CandidateExamDetailResponse = z.infer<
   typeof CandidateExamDetailResponseSchema

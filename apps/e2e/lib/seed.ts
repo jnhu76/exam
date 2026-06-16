@@ -91,13 +91,17 @@ async function createCandidate(
   token: string,
   unique: string,
 ): Promise<SeededCandidate> {
-  const username = `e2e-${unique}-${Date.now()}`;
+  const stamp = Date.now();
+  const username = `e2e-${unique}-${stamp}`;
   const password = "candidate123";
+  // Demo seed registers `candidateNo` as required+unique on the default org.
+  // Always supply a unique value here so tests work whether or not the demo
+  // seed has been applied (canonical seed:e2e in Docker E2E always applies it).
   const body = await adminPost(request, baseURL, token, "/api/candidates", {
     username,
     password,
     name: `E2E Candidate ${unique}`,
-    fields: {},
+    fields: { candidateNo: `E2E-${unique}-${stamp}` },
   });
   return {
     profileId: body.id as string,

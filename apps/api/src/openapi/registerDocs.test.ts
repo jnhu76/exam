@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import rateLimit from "@fastify/rate-limit";
 import setupSecurity from "../plugins/security.js";
@@ -72,22 +80,39 @@ async function buildAppWithDocsAndRateLimit(
 }
 
 describe("registerOpenApiDocs", () => {
-  let savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> =
-    {};
+  // Snapshot the true entry env once at file load. Vitest 4 / Vite 6 leaves
+  // NODE_ENV="production" at test entry, and the test command may pass
+  // APP_MODE=test. The production-safety-gate tests set NODE_ENV="production"
+  // but do NOT set APP_MODE; if APP_MODE leaks from the runner, parseAppMode
+  // resolves the runner's mode and the gate never engages. So each test starts
+  // from a clean baseline (all ENV_KEYS unset) and sets exactly what it needs;
+  // we restore the true entry values only in afterAll.
+  const entryEnv: Partial<
+    Record<(typeof ENV_KEYS)[number], string | undefined>
+  > = {};
+
+  beforeAll(() => {
+    for (const key of ENV_KEYS) {
+      entryEnv[key] = process.env[key];
+    }
+  });
+
+  afterAll(() => {
+    for (const key of ENV_KEYS) {
+      const original = entryEnv[key];
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    }
+    resetRuntimeConfigForTest();
+  });
 
   beforeEach(() => {
-    savedEnv = {};
     for (const key of ENV_KEYS) {
-      savedEnv[key] = process.env[key];
+      delete process.env[key];
     }
   });
 
   afterEach(() => {
-    for (const key of ENV_KEYS) {
-      const original = savedEnv[key];
-      if (original === undefined) delete process.env[key];
-      else process.env[key] = original;
-    }
     resetRuntimeConfigForTest();
   });
 

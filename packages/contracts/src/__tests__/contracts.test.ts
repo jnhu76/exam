@@ -430,6 +430,8 @@ describe("attempt contracts", () => {
       maxAttempts: 2,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     expect(result.success).toBe(true);
   });

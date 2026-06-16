@@ -7,14 +7,16 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: process.env.CI
+    ? [["list"]]
+    : [["list"], ["html", { open: "never" }]],
   outputDir: "test-results",
 
   use: {
     baseURL,
-    trace: "retain-on-failure",
+    trace: process.env.E2E_TRACE === "1" ? "retain-on-failure" : "off",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    video: "off",
     actionTimeout: 15_000,
     navigationTimeout: 30_000,
   },

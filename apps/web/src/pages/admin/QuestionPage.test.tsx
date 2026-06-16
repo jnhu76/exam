@@ -33,7 +33,7 @@ const { apiGet } = vi.hoisted(() => ({
           tags: ["tag1"],
         },
       ],
-      total: 1,
+      total: 21,
       page: 1,
       pageSize: 20,
       totalPages: 2,
@@ -117,7 +117,7 @@ describe("QuestionPage", () => {
               tags: ["tag1"],
             },
           ],
-          total: 1,
+          total: 21,
           page: 1,
           pageSize: 20,
           totalPages: 2,
@@ -131,7 +131,7 @@ describe("QuestionPage", () => {
       await waitFor(() => {
         expect(screen.getByPlaceholderText("标签，逗号分隔")).toHaveValue("");
         expect(screen.getByLabelText("搜索当前页题目")).toHaveValue("");
-        expect(screen.getByText(/第 1 \/ 2 页/)).toBeInTheDocument();
+        expect(screen.getByText(/共 21 条/)).toBeInTheDocument();
       });
     },
   );

@@ -103,6 +103,8 @@ describe("StartExamPage", () => {
       currentAttempts: 1,
       activeAttemptId: "att-1",
       canStartNewAttempt: false,
+      availabilityStatus: "in_progress",
+      primaryAction: "resume",
     });
 
     renderPage();
@@ -146,6 +148,8 @@ describe("StartExamPage", () => {
       currentAttempts: 1,
       canStartNewAttempt: false,
       blockingReason: "max_attempts_reached",
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "view_result",
     });
 
     renderPage();
@@ -153,7 +157,9 @@ describe("StartExamPage", () => {
     expect(
       await screen.findByText("已达到最大考试次数，无法再次开始考试。"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "开始考试" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "查看成绩" }),
+    ).toBeInTheDocument();
   });
 
   it("shows already-passed blocking reason", async () => {
@@ -180,12 +186,14 @@ describe("StartExamPage", () => {
       currentAttempts: 1,
       canStartNewAttempt: false,
       blockingReason: "already_passed",
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "view_result",
     });
 
     renderPage();
 
     expect(
-      await screen.findByText("本场考试已通过，无需再次参加。"),
+      await screen.findByText("已达到最大考试次数，无法再次开始考试。"),
     ).toBeInTheDocument();
   });
 
@@ -213,6 +221,8 @@ describe("StartExamPage", () => {
       maxAttempts: 2,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockResolvedValueOnce({
       id: "new-att",
@@ -253,6 +263,8 @@ describe("StartExamPage", () => {
       maxAttempts: 1,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
 
     renderPage();
@@ -294,6 +306,8 @@ describe("StartExamPage", () => {
       maxAttempts: 1,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "已达最大考试次数", "MAX_ATTEMPTS_REACHED"),
@@ -334,6 +348,8 @@ describe("StartExamPage", () => {
       maxAttempts: 3,
       currentAttempts: 1,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "已通过考试", "EXAM_ALREADY_PASSED"),
@@ -341,7 +357,7 @@ describe("StartExamPage", () => {
 
     renderPage();
     await screen.findByText("Test");
-    await user.click(screen.getByRole("button", { name: "开始考试" }));
+    await user.click(screen.getByRole("button", { name: "再次考试" }));
 
     await waitFor(() => {
       expect(
@@ -374,6 +390,8 @@ describe("StartExamPage", () => {
       maxAttempts: 3,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "考试尚未开放", "EXAM_NOT_OPEN"),
@@ -412,6 +430,8 @@ describe("StartExamPage", () => {
       maxAttempts: 3,
       currentAttempts: 0,
       canStartNewAttempt: true,
+      availabilityStatus: "available",
+      primaryAction: "start",
     });
     apiPost.mockRejectedValueOnce(
       new ApiError(409, "请等待队列准入", "QUEUE_WAIT_REQUIRED"),
@@ -425,5 +445,108 @@ describe("StartExamPage", () => {
       expect(screen.getByText("请等待队列准入")).toBeInTheDocument();
     });
     expect(screen.queryByText("正在排队")).not.toBeInTheDocument();
+  });
+
+  it("shows bestScore when available", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Scored Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 3,
+      currentAttempts: 1,
+      bestScore: 85,
+      bestScorePercent: 85,
+      availabilityStatus: "graded",
+      primaryAction: "start",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Scored Exam")).toBeInTheDocument();
+    expect(screen.getByText("最高成绩: 85/100")).toBeInTheDocument();
+    expect(screen.getByText("(85%)")).toBeInTheDocument();
+  });
+
+  it("shows attemptsUsed/maxAttempts", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Count Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 5,
+      currentAttempts: 2,
+      availabilityStatus: "available",
+      primaryAction: "start",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("已考 2/5 次")).toBeInTheDocument();
+  });
+
+  it("shows view_result action for exhausted attempts", async () => {
+    apiGet.mockResolvedValueOnce({
+      id: "exam-1",
+      title: "Exhausted Exam",
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+      questionCount: 10,
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: true,
+      },
+      maxAttempts: 1,
+      currentAttempts: 1,
+      canStartNewAttempt: false,
+      blockingReason: "max_attempts_reached",
+      availabilityStatus: "max_attempts_exhausted",
+      primaryAction: "view_result",
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Exhausted Exam")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看成绩" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /开始考试|再次考试/ }),
+    ).not.toBeInTheDocument();
   });
 });

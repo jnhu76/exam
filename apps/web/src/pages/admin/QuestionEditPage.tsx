@@ -5,6 +5,7 @@ import { getApiErrorMessage } from "@/lib/apiErrors";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -139,14 +140,7 @@ export function QuestionEditPage() {
       </div>
 
       <Separator />
-      {saveError && (
-        <div
-          role="alert"
-          className="rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive"
-        >
-          {saveError}
-        </div>
-      )}
+      {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
       <div className="flex justify-end gap-3 pt-4">
         <Button
           variant="outline"

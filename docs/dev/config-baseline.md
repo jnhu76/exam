@@ -55,8 +55,8 @@
 | 文件 | 用途 | 需修复项 |
 |---|---|---|
 | `docker-compose.yml` | 生产部署 | 缺 `APP_MODE: production`；`JWT_SECRET` 无默认需 env |
-| `docker-compose.dev.yml` | 开发 + e2e | 缺 `APP_MODE: development`；e2e service 已加（profile） |
-| `docker-compose.test.yml` | 测试 DB | 仅 DB service，OK |
+| `docker-compose.dev.yml` | 本地开发 DB | 仅 DB service（PostgreSQL），供 `pnpm db:up/down/reset` 与本地 host 测试使用 |
+| `docker-compose.test.yml` | 全栈 + E2E 测试 | app(dev) + DB + e2e service（Playwright，profile 隔离）；E2E 浏览器测试的规范入口 |
 
 ## 4. API config schema 草案
 

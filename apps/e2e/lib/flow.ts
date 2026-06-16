@@ -1,28 +1,42 @@
 import type { Page } from "@playwright/test";
 import type { SeededCandidate } from "./seed";
+import { loginViaUi } from "./login";
 
-export async function candidateLogin(
+export async function loginAsCandidate(
   page: Page,
   candidate: SeededCandidate,
 ): Promise<void> {
-  await page.goto("/login");
-  await page.getByTestId("login-layout").waitFor({ state: "visible" });
-  await page.fill("#username", candidate.username);
-  await page.fill("#password", candidate.password);
-  await page.getByRole("button", { name: "登录" }).click();
-  await page.waitForURL("**/exam/list", { timeout: 15_000 });
+  await loginViaUi(page, candidate.username, candidate.password);
 }
 
-export async function startExamFromList(
+export const candidateLogin = loginAsCandidate;
+
+export async function clickExamPrimaryAction(
+  page: Page,
+  examId: string,
+  expectedAction: string,
+): Promise<void> {
+  const card = page.getByTestId(`exam-card-${examId}`);
+  await card.waitFor({ state: "visible" });
+  const action = card.getByTestId("exam-primary-action");
+  await action.waitFor({ state: "visible" });
+  await action.evaluate((el, expected) => {
+    if (el.getAttribute("data-action") !== expected) {
+      throw new Error(
+        `Expected primary action ${expected}, got ${el.getAttribute(
+          "data-action",
+        )}`,
+      );
+    }
+  }, expectedAction);
+  await action.click();
+}
+
+export async function startAvailableExamFromList(
   page: Page,
   examId: string,
 ): Promise<void> {
-  await page.getByTestId(`exam-card-${examId}`).waitFor({ state: "visible" });
-  await page
-    .getByTestId(`exam-card-${examId}`)
-    .getByTestId("exam-start-btn")
-    .click();
-  // Now on StartExamPage (/exam/:examId/start). Wait for it, then click there.
+  await clickExamPrimaryAction(page, examId, "start");
   await page.waitForURL((url) => /\/exam\/[^/]+\/start$/.test(url.pathname), {
     timeout: 15_000,
   });
@@ -30,6 +44,36 @@ export async function startExamFromList(
   await page.waitForURL((url) => /\/exam\/[^/]+\/take$/.test(url.pathname), {
     timeout: 15_000,
   });
+  await page.getByTestId("take-question-section").waitFor({ state: "visible" });
+}
+
+export async function startExamFromList(
+  page: Page,
+  examId: string,
+): Promise<void> {
+  await startAvailableExamFromList(page, examId);
+}
+
+export async function resumeExamFromList(
+  page: Page,
+  examId: string,
+): Promise<void> {
+  const card = page.getByTestId(`exam-card-${examId}`);
+  await card.waitFor({ state: "visible" });
+  await card.getByTestId("exam-primary-action").click();
+  await page.waitForURL(
+    (url) => /\/exam\/[^/]+\/(start|take)$/.test(url.pathname),
+    {
+      timeout: 15_000,
+    },
+  );
+  const currentUrl = new URL(page.url());
+  if (/\/start$/.test(currentUrl.pathname)) {
+    await page.getByTestId("exam-start-btn").click();
+    await page.waitForURL((url) => /\/exam\/[^/]+\/take$/.test(url.pathname), {
+      timeout: 15_000,
+    });
+  }
   await page.getByTestId("take-question-section").waitFor({ state: "visible" });
 }
 
@@ -47,8 +91,6 @@ export async function waitForSaveSaved(page: Page): Promise<void> {
 export async function submitExam(page: Page): Promise<void> {
   await page.getByTestId("take-submit-btn").click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
-  // confirm-submit-btn is disabled while a save flush is in flight;
-  // Playwright click() auto-waits for it to become enabled.
   await page.getByTestId("confirm-submit-btn").click();
   await page.waitForURL("**/result", { timeout: 30_000 });
 }
