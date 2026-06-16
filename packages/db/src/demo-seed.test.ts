@@ -5,6 +5,7 @@ import { getTestDb } from "./testDb.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
 import { schema } from "./schema/pg.js";
+import { cleanupOrganizationTestData } from "./testCleanup.js";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 
 describe("demo seed", () => {
@@ -112,40 +113,7 @@ describe("demo seed", () => {
       .from(schema.organizations)
       .where(eq(schema.organizations.slug, "default"));
     if (demoOrg[0]) {
-      const orgId = demoOrg[0].id;
-      await db
-        .delete(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, orgId));
-      await db
-        .delete(schema.examAttempts)
-        .where(eq(schema.examAttempts.organizationId, orgId));
-      await db
-        .delete(schema.examEnrollments)
-        .where(eq(schema.examEnrollments.organizationId, orgId));
-      await db
-        .delete(schema.exams)
-        .where(eq(schema.exams.organizationId, orgId));
-      await db
-        .delete(schema.questions)
-        .where(eq(schema.questions.organizationId, orgId));
-      await db
-        .delete(schema.candidateProfiles)
-        .where(eq(schema.candidateProfiles.organizationId, orgId));
-      await db
-        .delete(schema.candidateFields)
-        .where(eq(schema.candidateFields.organizationId, orgId));
-      await db
-        .delete(schema.organizationSettings)
-        .where(eq(schema.organizationSettings.organizationId, orgId));
-      await db
-        .delete(schema.courses)
-        .where(eq(schema.courses.organizationId, orgId));
-      await db
-        .delete(schema.users)
-        .where(eq(schema.users.organizationId, orgId));
-      await db
-        .delete(schema.organizations)
-        .where(eq(schema.organizations.id, orgId));
+      await cleanupOrganizationTestData(db, demoOrg[0].id);
     }
   });
 });

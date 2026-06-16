@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import candidateFieldRoutes from "./candidateField.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 
 describe("candidate field routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -67,21 +68,7 @@ describe("candidate field routes", () => {
   });
 
   afterAll(async () => {
-    await ctx.db
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, organizationId));
-    await ctx.db
-      .delete(schema.candidateProfiles)
-      .where(eq(schema.candidateProfiles.organizationId, organizationId));
-    await ctx.db
-      .delete(schema.candidateFields)
-      .where(eq(schema.candidateFields.organizationId, organizationId));
-    await ctx.db
-      .delete(schema.users)
-      .where(eq(schema.users.organizationId, organizationId));
-    await ctx.db
-      .delete(schema.organizations)
-      .where(eq(schema.organizations.id, organizationId));
+    await cleanupOrganizationTestData(ctx.db, organizationId);
     await ctx.cleanup();
   });
 
@@ -314,21 +301,7 @@ describe("candidate field routes", () => {
         },
       });
     } finally {
-      await ctx.db
-        .delete(schema.auditLogs)
-        .where(eq(schema.auditLogs.organizationId, localOrgId));
-      await ctx.db
-        .delete(schema.candidateProfiles)
-        .where(eq(schema.candidateProfiles.organizationId, localOrgId));
-      await ctx.db
-        .delete(schema.candidateFields)
-        .where(eq(schema.candidateFields.organizationId, localOrgId));
-      await ctx.db
-        .delete(schema.users)
-        .where(eq(schema.users.organizationId, localOrgId));
-      await ctx.db
-        .delete(schema.organizations)
-        .where(eq(schema.organizations.id, localOrgId));
+      await cleanupOrganizationTestData(ctx.db, localOrgId);
     }
   });
 

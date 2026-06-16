@@ -7,6 +7,7 @@ import authRoutes from "./auth.js";
 import auditRoutes from "./audit.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -442,9 +443,7 @@ describe("audit log baseline (S06-lite)", () => {
         await ctx.db
           .delete(schema.auditLogs)
           .where(eq(schema.auditLogs.targetId, targetId));
-        await ctx.db
-          .delete(schema.organizations)
-          .where(eq(schema.organizations.id, otherOrgId));
+        await cleanupOrganizationTestData(ctx.db, otherOrgId);
       }
     });
 

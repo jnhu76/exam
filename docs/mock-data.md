@@ -16,6 +16,8 @@
 - Mock exam 优先覆盖 `timed_window` 主路径。
 - queue / restrictIp / lockdown / random advanced policy 是 Phase 2 examples，不作为 Phase 1 default mock。
 
+Phase 1 singleTenant removes organization selection from public login/UI/API. The database still contains an internal default organization row used as a data-boundary key, so tests and seeds must clean organization-scoped rows child-first.
+
 ---
 
 ## 组织数据 (Internal Default Organization)
