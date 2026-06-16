@@ -1,11 +1,11 @@
-# Phase 2 Plan — Exam Runtime Closure
+# Phase 2 — Exam Operation Runtime
 
 > Phase 2 is not a generic feature expansion phase.
-> It closes the full exam runtime loop: candidate execution, deadline correctness, attempt recovery, admin intervention, grading visibility, audit evidence, and operational export.
+> It is the exam operation runtime closure: closing the full loop from candidate execution, deadline correctness, attempt recovery, admin intervention, proctor runtime, grading, audit evidence, to operational export.
 >
 > Phase 2 does **not** implement multiTenant product paths, SuperAdmin product flows, tenant switcher, organizationSlug login, API keys, service tokens, webhooks, CAS/OAuth, or external integrations. Those belong to later platformization phases.
 >
-> Phase 2 also does **not** make Redis, MQ, WebSocket, or Electron mandatory. They may be introduced only when a concrete Phase 2 pain point requires them and only as ADR / optional spike, not as default dependencies.
+> Phase 2 also does **not** make Redis, MQ, WebSocket, or Electron mandatory. They may be introduced only as ADR / optional spike when a concrete pain point is proven, not as default dependencies.
 
 ---
 
@@ -44,7 +44,9 @@ external auth integration
 
 ---
 
-## 1. Phase 2 Goal
+## 1. Phase 2 Goal & Runtime Decision Gate
+
+### Goal
 
 Phase 2 moves the system from:
 
@@ -55,8 +57,9 @@ can create exams and candidates can complete happy-path attempts
 to:
 
 ```txt
-a real LAN/on-premise exam runtime that is correct under deadline,
-refresh, disconnection, duplicate actions, admin intervention, and result publication.
+a real LAN/on-premise exam operation runtime that is correct under deadline,
+refresh, disconnection, duplicate actions, admin intervention, proctor operation,
+grading, audit, and result publication.
 ```
 
 ### Principles
@@ -72,6 +75,21 @@ refresh, disconnection, duplicate actions, admin intervention, and result public
 [ ] E2E must cover abnormal exam flows, not only happy path.
 ```
 
+### Runtime Decision Gate
+
+Before closing Phase 2, every item must be answerable:
+
+```txt
+1. Can a candidate really complete a full exam from start to result?
+2. Are disconnection, refresh, deadline, duplicate start, duplicate save, and duplicate submit safe?
+3. Can an admin complete the full operation loop from exam creation to assignment, publish/open/close, grading, result, and export?
+4. Does every frontend button have a backend route?
+5. Does every backend API have a frontend entry or a documented reason for being backend-only?
+6. Are docs, OpenAPI, code, and E2E aligned?
+7. Is the state machine enforced by the server instead of relying on frontend behavior?
+8. Are Redis, MQ, WebSocket, and Desktop solving real pain points, or are they premature complexity?
+```
+
 ### Scope Boundary
 
 ```txt
@@ -84,12 +102,32 @@ refresh, disconnection, duplicate actions, admin intervention, and result public
 
 ---
 
-## 2. Phase 2.0 — Contract & Runtime Safety Gate
+## 2. Phase 2.0 — OpenAPI Contract Baseline & Runtime Gate
 
 > **Priority**: P0 — must be completed before any Phase 2 feature work.
-> **Rationale**: Discovery (03-openapi-contract-audit.md) found that most OpenAPI responses are generic `{}`. Phase 2 adds 15+ new APIs; without contract gate, the spec becomes untrustworthy.
+> **Rationale**: Discovery (03-openapi-contract-audit.md) found that most OpenAPI responses are generic `{}`. Phase 2 adds 15+ new APIs; without a full contract baseline, the spec becomes untrustworthy.
 
-Goal: prevent Phase 2 from adding more undocumented routes and unstable runtime behavior.
+Goal: establish a complete, typed OpenAPI contract baseline for all implemented APIs before any Phase 2 runtime work begins.
+
+### Scope of Allowed Changes
+
+Phase 2.0 **may** modify:
+
+- `packages/contracts/*` — Zod schemas, DTO types
+- `apps/api/src/openapi/*` — swagger generation, config, helpers
+- Fastify route schema metadata: `schema.body`, `schema.params`, `schema.querystring`, `schema.response`
+- OpenAPI generation helper and structural tests
+- Documentation
+
+Phase 2.0 **must not** modify:
+
+- Runtime business behavior
+- State-machine semantics
+- DB write behavior
+- Transaction semantics
+- Permission boundary
+- Frontend behavior
+- E2E expectations
 
 ### Current State
 
@@ -102,44 +140,72 @@ Goal: prevent Phase 2 from adding more undocumented routes and unstable runtime 
 
 ### Target State
 
-- Every existing and new Phase 2 API has typed response schemas in OpenAPI
-- Request body schemas registered as Fastify `schema.body` for auto-documentation
-- Role metadata visible via `x-role` extension or `security` schemes
-- Union/conditional responses represented with `oneOf`
-- `GET /api/health` registered in swagger build
+```txt
+[ ] All server-registered API routes appear in OpenAPI or are explicitly documented as intentionally hidden.
+[ ] No implemented API route uses generic `{}` response schema.
+[ ] All request bodies, query params, and path params are documented.
+[ ] Runtime-critical attempt/candidate/score APIs have typed schemas.
+[ ] SaveAnswer and AttemptResult union/conditional responses use oneOf.
+[ ] Protected routes expose security/RBAC metadata.
+[ ] Common error responses are standardized.
+[ ] OpenAPI structural/snapshot tests prevent regression.
+[ ] No runtime business behavior changed.
+```
+
+### Runtime-Critical APIs (highest priority within Phase 2.0)
+
+```txt
+GET  /api/candidate/exams
+GET  /api/candidate/exams/:examId
+POST /api/attempts/:examId/start
+GET  /api/attempts/:id
+POST /api/attempts/:attemptId/answers/:questionId
+POST /api/attempts/:attemptId/submit
+POST /api/attempts/:attemptId/heartbeat
+POST /api/attempts/:attemptId/restore
+GET  /api/scores/attempts/:attemptId
+GET  /api/exams/:id/scores
+GET  /api/exams/:id/export/scores
+```
 
 ### Jobs
 
-| Job     | Name                           | Description                                                                            | Discovery Ref |
-| ------- | ------------------------------ | -------------------------------------------------------------------------------------- | ------------- |
-| P2.0-J1 | Response Schema Registration   | Register Zod response schemas as Fastify `schema.response` for all existing endpoints  | 03 §3, §4.3   |
-| P2.0-J2 | Request Body Schema Registration | Register Zod request schemas as Fastify `schema.body` for all endpoints with body     | 03 §3         |
-| P2.0-J3 | RBAC Metadata in OpenAPI       | Add `x-role` or `security` metadata per route for Admin/Candidate role visibility       | 03 §5         |
-| P2.0-J4 | Runtime Error Taxonomy         | Standardize deadline, submitted, conflict, forbidden, not found responses in OpenAPI   | 03 §6         |
-| P2.0-J5 | Union/Conditional Response Fix | Add `oneOf` for `SaveAnswer` accepted/rejected and `AttemptResultResponse` two shapes  | 03 §4.3       |
-| P2.0-J6 | Health Endpoint Registration   | Register `GET /api/health` in swagger build                                           | 03 §2         |
-| P2.0-J7 | E2E Runtime Matrix Definition  | Define deadline, refresh, double-click, disrupted, force-submit, extend-time E2E cases | 05 §E         |
+| Job     | Name                                  | Description                                                                                                  | Discovery Ref |
+| ------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------- |
+| P2.0-J1 | Route Coverage Baseline               | Ensure all server-registered routes appear in OpenAPI, including `GET /api/health`, or are explicitly hidden | 03 §2         |
+| P2.0-J2 | Request Schema Registration           | Register body, params, and query schemas for all implemented APIs                                            | 03 §3         |
+| P2.0-J3 | Response Schema Registration          | Replace generic `{}` responses with typed schemas for all implemented APIs                                   | 03 §3, §4.3   |
+| P2.0-J4 | Union / Conditional Response Modeling | Model SaveAnswer and AttemptResult responses with `oneOf`                                                    | 03 §4.3       |
+| P2.0-J5 | Auth / RBAC Metadata                  | Add security and Admin/Candidate role metadata without changing runtime permissions                          | 03 §5         |
+| P2.0-J6 | Common Error Response Baseline        | Standardize 400/401/403/404/409/429/500 response documentation                                               | 03 §6         |
+| P2.0-J7 | CSV / Binary Response Documentation   | Correctly document score CSV export response content type                                                    | 03 §4.3       |
+| P2.0-J8 | OpenAPI Regression Tests              | Add structural/snapshot tests to prevent generic `{}` regression                                             | 03 §6         |
+| P2.0-J9 | Runtime E2E Matrix Definition         | Define abnormal runtime E2E scenarios for Phase 2A/2C                                                        | 05 §E         |
 
 ### Acceptance Criteria
 
 ```txt
+[ ] All server-registered routes appear in OpenAPI or are explicitly hidden.
+[ ] No implemented route uses generic `{}` response schema.
 [ ] SaveAnswer accepted/rejected union is represented in OpenAPI oneOf.
 [ ] AttemptResultResponse conditional response (showResultImmediately) is documented.
 [ ] CandidateExamSummary and LoadAttemptResponse shapes are in OpenAPI.
 [ ] GET /api/health appears in OpenAPI spec.
-[ ] Phase 2 APIs expose role/security metadata.
-[ ] No new Phase 2 route returns generic `{}` in OpenAPI.
+[ ] Protected routes expose role/security metadata.
+[ ] Common error responses are standardized and documented.
+[ ] OpenAPI structural/snapshot tests pass and prevent regression.
+[ ] No runtime business behavior changed.
 [ ] pnpm verify passes.
 ```
 
 ---
 
-## 3. Phase 2A — Candidate Runtime Correctness
+## 3. Phase 2A — Candidate Runtime
 
 > **Priority**: P0 — blocking for any real exam usage.
 > **Rationale**: Discovery (06-phase2-gap-analysis.md) found 5 P0 issues affecting whether a candidate can safely complete an exam.
 
-Goal: fix all P0 issues that affect whether a candidate can safely complete an exam.
+Goal: ensure a candidate can safely complete a full exam from start to result, handling all edge cases server-side.
 
 ### Current State
 
@@ -163,14 +229,17 @@ Goal: fix all P0 issues that affect whether a candidate can safely complete an e
 
 ### Jobs
 
-| Job    | Name                      | Description                                                                          | Discovery Ref |
-| ------ | ------------------------- | ------------------------------------------------------------------------------------ | ------------- |
-| P2A-J1 | Deadline Auto-Submit Scanner | Add server-side scanner: when `now > deadlineAt` and status is `in_progress`, submit + grade | 06 P0-1, 04 §6 |
-| P2A-J2 | Atomic startAttempt       | Wrap `startAttempt` in `executeInTransaction` with `SELECT ... FOR UPDATE` on enrollment row | 06 P0-2, 04 §2 |
-| P2A-J3 | Exam Open/Close Semantics | Implement check-on-access: `startAttempt` and `candidateExamState` trigger `openExam()`/`closeExam()` | 06 P0-3, 04 §1 |
-| P2A-J4 | Client Deadline Awareness | `TakeExamPage` reads `deadlineAt`, disables editing, shows "已到截止时间" when deadline passed | 06 P0-5, 01 §4 |
-| P2A-J5 | Restore Time Adjustment   | `restoreAttempt` adjusts `deadlineAt` to preserve remaining time                      | 04 §6         |
-| P2A-J6 | Runtime Race Tests        | Add tests for double-click start, deadline crash, save/submit race, disrupted submit | 05 §E         |
+| Job    | Name                             | Description                                                               | Discovery Ref |
+| ------ | -------------------------------- | ------------------------------------------------------------------------- | ------------- |
+| P2A-J1 | Atomic startAttempt              | Make start attempt transaction-safe and enrollment-locked                 | 06 P0-2, 04 §2 |
+| P2A-J2 | Start / Resume Runtime           | Normalize start, restore, and resume behavior                             | 04 §2, §6     |
+| P2A-J3 | Save Answer Runtime              | Keep save-answer versioning, idempotency, conflict handling stable        | 04 §4         |
+| P2A-J4 | Submit Runtime                   | Preserve submit idempotency and save/submit race correctness              | 04 §2         |
+| P2A-J5 | Server-Side Deadline Auto-Submit | Auto-submit expired attempts even if browser crashes                      | 06 P0-1, 04 §6 |
+| P2A-J6 | Client Deadline Awareness        | Disable editing and show final state after deadline                       | 06 P0-5, 01 §4 |
+| P2A-J7 | Exam Open/Close Semantics        | Make open/close status match openAt/closeAt                               | 06 P0-3, 04 §1 |
+| P2A-J8 | Candidate Result Visibility      | Verify submitted, grading, graded, hidden-result states                   | 05 A8         |
+| P2A-J9 | Candidate Runtime E2E            | Cover refresh, disconnect, double-click, deadline crash, save/submit race | 05 §E         |
 
 ### Acceptance Criteria
 
@@ -181,21 +250,74 @@ Goal: fix all P0 issues that affect whether a candidate can safely complete an e
 [ ] Client disables editing after deadline before local edits appear successful.
 [ ] Candidate result page shows submitted/graded/status-only states correctly.
 [ ] Restore preserves remaining time (deadlineAt adjusted correctly).
+[ ] Exam transitions to open/closed based on openAt/closeAt without manual admin action.
 [ ] Tests cover browser crash at deadline.
 [ ] Tests cover double-click start.
 [ ] Tests cover save/submit race condition.
-[ ] Exam transitions to open/closed based on openAt/closeAt without manual admin action.
 [ ] pnpm verify passes.
 ```
 
 ---
 
-## 4. Phase 2B — Admin / Proctor Operations
+## 4. Phase 2B — Admin Operation
 
 > **Priority**: P1 — core for real exam administration.
-> **Rationale**: Discovery (01 §9, 06 P1-1 through P1-4) found no proctor UI, no force-submit, no extend-time, no misconduct flagging. All have backend infrastructure but zero frontend and no admin API.
+> **Rationale**: The admin must complete the full operation loop from setup to export. Existing CRUD works but the end-to-end flow has gaps.
 
-Goal: allow Admin to monitor and intervene in live exam attempts without introducing new product roles yet.
+Goal: ensure Admin can complete the full operation loop — user/candidate/course/question setup, exam setup, assignment, publish/open/close/archive, score overview, result/export entry.
+
+### Current State
+
+| Gap | Discovery Ref | Detail |
+|-----|---------------|--------|
+| Exam setup flow incomplete | 01 §3 (ExamCreatePage) | Exam creation works but publish→open→close lifecycle has no auto-transition |
+| Assignment flow basic | 01 §3 (ExamDetailPage) | Enrollment add/remove works but no batch assignment validation |
+| Publish/open/close/archive semantics mismatch | 04 §1 | `openExam()`/`closeExam()` exist but no route or scheduler calls them |
+| Score overview entry exists | 01 §3 (ScoreListPage) | Score list and CSV export work; no attempt detail export |
+| No audit log frontend | 06 P1-5, 01 §9 | `GET /api/admin/audit-logs` exists but no `/admin/audit-logs` page |
+
+### Target State
+
+| Fix | Target |
+|-----|--------|
+| Admin flow audit | Verify complete admin path: setup → assignment → publish → result → export |
+| Exam setup hardening | Improve exam setup and validation flow |
+| Assignment flow hardening | Make enrollment/assignment flow reliable and testable |
+| Publish/open/close/archive semantics | Align admin operations with exam state machine |
+| User/question/course management hardening | Fix gaps in existing management flows without rewriting CRUD |
+| Score overview entry | Ensure admin can navigate from exam to scores/results |
+
+### Jobs
+
+| Job    | Name                                      | Description                                                  | Discovery Ref |
+| ------ | ----------------------------------------- | ------------------------------------------------------------ | ------------- |
+| P2B-J1 | Admin Flow Audit                          | Verify admin setup → assignment → publish → result path      | 05 B7-B9      |
+| P2B-J2 | Exam Setup Hardening                      | Improve exam setup and validation flow                       | 01 §3         |
+| P2B-J3 | Assignment Flow Hardening                 | Make enrollment/assignment flow reliable and testable        | 01 §3         |
+| P2B-J4 | Publish/Open/Close/Archive Semantics      | Align admin operations with exam state machine               | 04 §1         |
+| P2B-J5 | User/Question/Course Management Hardening | Fix gaps in existing management flows without rewriting CRUD | 01 §3         |
+| P2B-J6 | Score Overview Entry                      | Ensure admin can navigate from exam to scores/results        | 01 §3         |
+| P2B-J7 | Admin Operation E2E                       | Cover complete admin operation loop                          | 05 §E         |
+
+### Acceptance Criteria
+
+```txt
+[ ] Admin can complete full setup → assignment → publish → score → export flow.
+[ ] Exam publish/open/close/archive transitions are correct and audited.
+[ ] Enrollment add/remove works reliably with validation.
+[ ] Score overview is accessible from exam detail.
+[ ] Existing management flows (user, question, course) have no regressions.
+[ ] pnpm verify passes.
+```
+
+---
+
+## 5. Phase 2C — Proctor Runtime
+
+> **Priority**: P1 — after Admin Operation is stable.
+> **Rationale**: Discovery (01 §9, 05 C1, 06 P1-1 through P1-4) found no proctor UI, no force-submit, no extend-time, no misconduct flagging. All have backend infrastructure but zero frontend and no admin API.
+
+Goal: during live exams, Admin can monitor, intervene, and leave audit trails. HTTP polling first; no WebSocket dependency.
 
 ### Current State
 
@@ -205,30 +327,19 @@ Goal: allow Admin to monitor and intervene in live exam attempts without introdu
 | No force-submit API | 06 P1-2, 04 §2 | `submitAttempt()` works on disrupted attempts, but no admin-initiated endpoint. |
 | No extend-time API | 06 P1-3, 04 §2 | `deadlineAt` is set once at attempt creation. No mechanism to extend. |
 | No misconduct flagging | 06 P1-4 | `MARK_MISCONDUCT` permission defined in RBAC, no API or UI. |
-| Audit log API exists, no frontend | 06 P1-5, 01 §9 | `GET /api/admin/audit-logs` exists but no `/admin/audit-logs` page. |
+| Heartbeat scanner best-effort | 04 §6 | No transaction, no retry, no dead-letter. A failed `markDisrupted` is logged and skipped. |
 
 ### Target State
 
 | Fix | Target |
 |-----|--------|
-| Proctor status API | `GET /admin/exams/:examId/proctor` — aggregated candidate status (active, disrupted, submitted, graded) |
-| Polling proctor dashboard | `/admin/exams/:id/proctor` page with HTTP polling (no WebSocket dependency) |
-| Force submit API + UI | `POST /admin/attempts/:attemptId/force-submit` — Admin can force-submit disrupted/in_progress attempts |
-| Extend time API + UI | `POST /admin/attempts/:attemptId/extend-time` — Admin can extend `deadlineAt` with audit trail |
-| Misconduct flag API + UI | `POST /admin/attempts/:attemptId/misconduct` — Admin can mark misconduct with notes |
-| Audit log viewer | `/admin/audit-logs` page — search, filter, paginate existing audit logs |
-
-### Jobs
-
-| Job    | Name                      | Description                                                | Discovery Ref |
-| ------ | ------------------------- | ---------------------------------------------------------- | ------------- |
-| P2B-J1 | Proctor Status API        | Add exam attempt status summary API for Admin              | 06 P1-1, 05 C1 |
-| P2B-J2 | Polling Proctor Dashboard | Add `/admin/exams/:id/proctor` page using HTTP polling first | 06 P1-1, 01 §9 |
-| P2B-J3 | Force Submit API + UI     | Admin can force-submit in_progress/disrupted attempts      | 06 P1-2, 04 §2 |
-| P2B-J4 | Extend Time API + UI      | Admin can extend deadlineAt with audit trail               | 06 P1-3, 04 §2 |
-| P2B-J5 | Misconduct Flag API + UI  | Admin can mark misconduct and attach notes                 | 06 P1-4       |
-| P2B-J6 | Audit Log Viewer          | Add `/admin/audit-logs` page using existing audit logs API | 06 P1-5, 01 §9 |
-| P2B-J7 | Proctor Operation Tests   | Add route, domain, frontend, and E2E coverage              | 05 §E         |
+| Heartbeat runtime | Stabilize heartbeat update and scan behavior |
+| Disrupted detection | Detect and mark disrupted attempts deterministically |
+| Polling proctor dashboard | Admin-operated proctor dashboard using HTTP polling |
+| Force submit | Admin force-submit API/UI with audit |
+| Extend time | Deadline extension API/UI with candidate sync |
+| Misconduct flag | Misconduct flag API/UI with notes and audit |
+| Attempt timeline | Surface attempt events for proctor/admin diagnosis |
 
 ### Non-Goals
 
@@ -236,10 +347,23 @@ Goal: allow Admin to monitor and intervene in live exam attempts without introdu
 [ ] No camera monitoring
 [ ] No screen recording
 [ ] No public internet remote proctoring
-[ ] No independent Proctor role product path unless explicitly promoted later
+[ ] No independent Proctor role product path (Admin operates proctor functions in Phase 2)
 [ ] No WebSocket dependency for proctor dashboard (HTTP polling first)
 [ ] No real-time candidate status cards via WebSocket (polling is sufficient for Phase 2)
 ```
+
+### Jobs
+
+| Job    | Name                      | Description                                             | Discovery Ref |
+| ------ | ------------------------- | ------------------------------------------------------- | ------------- |
+| P2C-J1 | Heartbeat Runtime         | Stabilize heartbeat update and scan behavior            | 04 §6         |
+| P2C-J2 | Disrupted Detection       | Detect and mark disrupted attempts deterministically    | 04 §6         |
+| P2C-J3 | Polling Proctor Dashboard | Add Admin-operated proctor dashboard using HTTP polling | 06 P1-1, 01 §9 |
+| P2C-J4 | Force Submit              | Add Admin force-submit API/UI with audit                | 06 P1-2, 04 §2 |
+| P2C-J5 | Extend Time               | Add deadline extension API/UI with candidate sync       | 06 P1-3, 04 §2 |
+| P2C-J6 | Misconduct Flag           | Add misconduct flag API/UI with notes and audit         | 06 P1-4       |
+| P2C-J7 | Attempt Timeline          | Surface attempt events for proctor/admin diagnosis      | 05 §D         |
+| P2C-J8 | Proctor Runtime E2E       | Cover disrupted, force submit, extend time, misconduct  | 05 §E         |
 
 ### Acceptance Criteria
 
@@ -250,87 +374,24 @@ Goal: allow Admin to monitor and intervene in live exam attempts without introdu
 [ ] Admin can mark misconduct with audit metadata.
 [ ] All proctor operations are audited (audit log entries created).
 [ ] Polling dashboard works without WebSocket/SSE.
-[ ] Audit log viewer page shows searchable, filterable audit trail.
+[ ] Heartbeat scanner correctly detects and marks disrupted attempts.
 [ ] pnpm verify passes.
 ```
 
 ---
 
-## 5. Phase 2C — Timing & Paper Flexibility
+## 6. Phase 2D — Grading & Result
 
-> **Priority**: P1 — after runtime correctness and admin operations are stable.
-> **Rationale**: Discovery (04 §1, 06 P0-4) found timing modes beyond `timed_window` are defined in enum but unsupported. Random selection is enforced as `manual` only.
-
-Goal: implement exam modes and paper flexibility that are already modeled but not fully supported.
-
-### Current State
-
-| Gap | Discovery Ref | Detail |
-|-----|---------------|--------|
-| Only `timed_window` timing mode | 04 §1, 06 P0-4 | `publishExam` enforces `timingMode === "timed_window"`. `timed_sync`, `deadline`, `untimed` defined in enum but unsupported. |
-| Only `manual` question selection | 06 P1-7 | `publishExam` enforces `questionSelectionMode === "manual"`. Random selection not implemented. |
-| Limited retake policies | 06 P1-8 | Only `unlimited`, `max_attempts`, `pass_then_stop` supported. `daily_limit` and `weekly_limit` not implemented. |
-| Score strategies not tested with retakes | 04 §3 | `highest`, `latest`, `first` exist but not verified with multiple attempts. |
-
-### Target State
-
-| Fix | Target |
-|-----|--------|
-| Timing modes | `timed_sync` (unified start/deadline), `deadline` (close-at only), `untimed` (no deadline) |
-| Random paper builder | Question selection from pool rules → generated paper → frozen snapshot |
-| Random snapshot freeze | Per-attempt question snapshot immutable after creation |
-| Retake policies | `daily_limit`, `weekly_limit` with server-side counting |
-| Score strategies | Verified with multiple retake attempts |
-
-### Core Rule
-
-```txt
-selection rule → generated paper → frozen snapshot → attempt reads snapshot only
-```
-
-Random selection must never make attempts depend on mutable question-bank state.
-
-### Jobs
-
-| Job    | Name                      | Description                                                            | Discovery Ref |
-| ------ | ------------------------- | ---------------------------------------------------------------------- | ------------- |
-| P2C-J1 | Timing Mode Model Cleanup | Define exact semantics for `timed_window`, `timed_sync`, `deadline`, `untimed` | 04 §1, 06 P0-4 |
-| P2C-J2 | timed_sync                | Unified start/deadline semantics for supervised exam sessions          | 06 P0-4       |
-| P2C-J3 | deadline                  | Close-at only mode without per-attempt countdown                       | 06 P0-4       |
-| P2C-J4 | untimed                   | Practice/simulation mode without deadline                              | 06 P0-4       |
-| P2C-J5 | Random Paper Builder      | Build question snapshots from pool rules                               | 06 P1-7       |
-| P2C-J6 | Random Snapshot Freeze    | Freeze per-attempt question snapshot                                   | 06 P1-7       |
-| P2C-J7 | Retake Policies           | Implement `daily_limit` and `weekly_limit`                             | 06 P1-8       |
-| P2C-J8 | Score Strategies          | Verify `highest`/`latest`/`first` with retake flows                   | 04 §3         |
-
-### Acceptance Criteria
-
-```txt
-[ ] Each timing mode has backend tests and E2E coverage.
-[ ] timed_sync: all candidates start at same time, deadline at same time.
-[ ] deadline: exam closes at closeAt regardless of individual start time.
-[ ] untimed: no deadline, candidate completes at own pace.
-[ ] Random question selection creates immutable attempt snapshots.
-[ ] Retake counting is based on persisted attempts, not frontend state.
-[ ] daily_limit and weekly_limit are enforced server-side.
-[ ] Score strategy is verified with multiple attempts.
-[ ] pnpm verify passes.
-```
-
----
-
-## 6. Phase 2D — Grading & Results
-
-> **Priority**: P1 — after timing and paper flexibility.
+> **Priority**: P1 — after Candidate Runtime and Proctor Runtime are stable.
 > **Rationale**: Discovery (04 §5, 06 P1-6) found all grading is auto; no interface for grading essay/subjective questions. Result publication has no policy control.
 
-Goal: make scoring usable beyond fully automatic objective questions.
+Goal: make scoring usable beyond fully automatic objective questions; establish result publication policy.
 
 ### Current State
 
 | Gap | Discovery Ref | Detail |
 |-----|---------------|--------|
-| No manual grading | 04 §5, 06 P1-6 | All grading is auto via `gradeAnswers()`. Subjective questions (essay, code review) cannot be graded. |
+| All grading is auto | 04 §5, 06 P1-6 | `gradeAnswers()` handles single_choice, multiple_choice, true_false, fill_blank. No manual grading. |
 | No partial grading | 04 §5 | Grading happens atomically on submit. No "grade some questions first" workflow. |
 | No grading audit | 04 §5 | `gradingResult` is stored on attempt but individual grading decisions are not auditable. |
 | No result publication policy | 04 §3 | `showResultImmediately` is per-exam; no after-grading or manual publish modes. |
@@ -339,22 +400,27 @@ Goal: make scoring usable beyond fully automatic objective questions.
 
 | Fix | Target |
 |-----|--------|
+| Objective grading stabilization | Keep current auto-grading behavior stable and well-tested |
 | Manual grading model | Grading state for subjective/manual questions with per-question score entry |
 | Grading queue | List attempts/questions requiring manual grading |
 | Manual score UI | Admin enters scores and comments per question |
+| Score policy | Verify score strategy and retake interactions |
 | Result publication policy | Immediate, after-grading, manual publish modes |
+| Result visibility | Verify candidate/admin result shapes |
 | Grading audit | Record grader, score changes, comments, timestamps |
 
 ### Jobs
 
-| Job    | Name                      | Description                                           | Discovery Ref |
-| ------ | ------------------------- | ----------------------------------------------------- | ------------- |
-| P2D-J1 | Manual Grading Model      | Define grading state for subjective/manual questions  | 06 P1-6, 04 §5 |
-| P2D-J2 | Grading Queue API         | List attempts/questions requiring manual grading      | 06 P1-6       |
-| P2D-J3 | Manual Score UI           | Admin enters scores and comments                      | 06 P1-6       |
-| P2D-J4 | Result Publication Policy | Define immediate, after-grading, manual publish modes | 04 §3         |
-| P2D-J5 | Grading Audit             | Record grader, score changes, comments, timestamps    | 04 §5         |
-| P2D-J6 | Score Visibility Tests    | Verify candidate/admin result shapes                  | 05 A8         |
+| Job    | Name                            | Description                                              | Discovery Ref |
+| ------ | ------------------------------- | -------------------------------------------------------- | ------------- |
+| P2D-J1 | Objective Grading Stabilization | Keep current auto-grading behavior stable                | 04 §5         |
+| P2D-J2 | Manual Grading Model            | Define manual grading state and per-question score model | 06 P1-6, 04 §5 |
+| P2D-J3 | Grading Queue API               | List attempts/questions requiring manual grading         | 06 P1-6       |
+| P2D-J4 | Manual Score UI                 | Admin enters scores/comments                             | 06 P1-6       |
+| P2D-J5 | Score Policy                    | Verify score strategy and retake interactions            | 04 §3         |
+| P2D-J6 | Result Publishing Policy        | Add immediate / after-grading / manual-publish behavior  | 04 §3         |
+| P2D-J7 | Result Visibility               | Verify candidate/admin result shapes                     | 05 A8         |
+| P2D-J8 | Grading Audit                   | Audit score changes and grader identity                  | 04 §5         |
 
 ### Acceptance Criteria
 
@@ -365,6 +431,7 @@ Goal: make scoring usable beyond fully automatic objective questions.
 [ ] Admin can view and finalize grading via grading queue.
 [ ] Score changes are auditable with grader identity and timestamps.
 [ ] Result publication modes (immediate, after-grading, manual) work correctly.
+[ ] Score strategy is verified with multiple attempts.
 [ ] pnpm verify passes.
 ```
 
@@ -372,10 +439,10 @@ Goal: make scoring usable beyond fully automatic objective questions.
 
 ## 7. Phase 2E — Operation Evidence & Export
 
-> **Priority**: P2 — after core runtime, admin, timing, and grading are stable.
+> **Priority**: P2 — after core runtime, admin, proctor, and grading are stable.
 > **Rationale**: Discovery (01 §9, 06 P2-1 through P2-4) found audit log API exists but no frontend, no attempt timeline, CSV export is basic, no diagnostics page.
 
-Goal: provide operational evidence for real exam administration.
+Goal: provide operational evidence for real exam administration — audit trail, attempt timeline, export, diagnostics.
 
 ### Current State
 
@@ -393,7 +460,7 @@ Goal: provide operational evidence for real exam administration.
 | Fix | Target |
 |-----|--------|
 | Audit log UI | `/admin/audit-logs` — search, filter, paginate existing audit logs |
-| Attempt timeline | Show candidate attempt events: start, save, heartbeat, disrupt, restore, submit, grade |
+| Attempt timeline view | Show candidate attempt events: start, save, heartbeat, disrupt, restore, submit, grade |
 | CSV hardening | Ensure large score CSV export is permission-checked and tested |
 | Attempt detail export | Export answer details for one attempt |
 | Import job logs | Persist candidate/question import summaries |
@@ -401,14 +468,14 @@ Goal: provide operational evidence for real exam administration.
 
 ### Jobs
 
-| Job    | Name                  | Description                                                                            | Discovery Ref |
-| ------ | --------------------- | -------------------------------------------------------------------------------------- | ------------- |
-| P2E-J1 | Audit Log UI          | Search/filter audit logs in admin UI                                                   | 06 P1-5, 01 §9 |
-| P2E-J2 | Attempt Timeline      | Show candidate attempt events: start, save, heartbeat, disrupt, restore, submit, grade | 05 §D         |
-| P2E-J3 | CSV Export Hardening  | Ensure large score CSV export is permission-checked and tested                         | 01 §3         |
-| P2E-J4 | Attempt Detail Export | Export answer details for one attempt                                                  | 01 §3         |
-| P2E-J5 | Import Job Logs       | Persist candidate/question import summaries                                            | 01 §9         |
-| P2E-J6 | Diagnostics Page      | Show runtime config, DB status, heartbeat scanner status, version info                 | 01 §3         |
+| Job    | Name                  | Description                                                | Discovery Ref |
+| ------ | --------------------- | ---------------------------------------------------------- | ------------- |
+| P2E-J1 | Audit Log Viewer      | Add searchable/filterable audit log UI                     | 06 P1-5, 01 §9 |
+| P2E-J2 | Attempt Timeline View | Show attempt lifecycle events chronologically              | 05 §D         |
+| P2E-J3 | Score CSV Hardening   | Harden CSV export for permission, size, and correctness    | 01 §3         |
+| P2E-J4 | Attempt Detail Export | Export answers/results for one attempt                     | 01 §3         |
+| P2E-J5 | Import Job Logs       | Persist candidate/question import summaries                | 01 §9         |
+| P2E-J6 | Diagnostics Page      | Show config, DB, heartbeat scanner, version/runtime status | 01 §3         |
 
 ### Deferred
 
@@ -419,7 +486,7 @@ Goal: provide operational evidence for real exam administration.
 [ ] External integration
 ```
 
-PDF export may be added only if it remains synchronous and small. Otherwise it requires a job queue decision.
+PDF export may be added only if it remains synchronous and small. Otherwise it requires a job queue ADR.
 
 ### Acceptance Criteria
 
@@ -435,21 +502,22 @@ PDF export may be added only if it remains synchronous and small. Otherwise it r
 
 ---
 
-## 8. Phase 2F — Infrastructure Decision Records
+## 8. Phase 2F — Infra ADR / Optional Upgrade
 
 > **Priority**: ADR only — not implementation work.
 > **Rationale**: Discovery (06 §Redis/MQ assessment) found no Phase 2 pain point requires Redis, MQ, or WebSocket as mandatory infrastructure.
 
-Goal: avoid premature Redis/MQ complexity while leaving clear upgrade paths.
+Goal: avoid premature infrastructure complexity while leaving clear, documented upgrade paths.
 
 ### Default Decision
 
 ```txt
-[ ] PostgreSQL is the source of truth.
+[ ] PostgreSQL remains the source of truth.
 [ ] Redis is not required for Phase 2 single-instance LAN deployment.
-[ ] MQ is not required for Phase 2 unless long-running async jobs are introduced.
-[ ] Job Queue is not required unless PDF/email/bulk jobs become too slow for request lifecycle.
+[ ] MQ is not required unless long-running async jobs are introduced.
+[ ] Job Queue is not required unless export/import/email/auto-submit becomes too slow for request lifecycle.
 [ ] WebSocket/SSE is optional after polling dashboard works.
+[ ] Desktop/Electron is deferred to a future phase.
 ```
 
 ### Revisit Triggers
@@ -470,30 +538,61 @@ Goal: avoid premature Redis/MQ complexity while leaving clear upgrade paths.
 [ ] ADR-001: Redis introduction (if multi-instance needed)
 [ ] ADR-002: WebSocket/SSE introduction (if real-time proctor required)
 [ ] ADR-003: Job queue introduction (if async jobs needed)
-[ ] ADR-004: Electron shell (if lockdown browser needed)
+[ ] ADR-004: Desktop/Electron shell (if lockdown browser needed)
 ```
 
 ---
 
-## 9. Execution Order
+## 9. Future Phase — Desktop Exam Runtime
+
+> This section is preserved for future reference. Desktop/Electron implementation is **not** part of Phase 2.
+
+### Scope (future, Phase 3+)
+
+Desktop exam runtime may include:
+
+- Electron shell wrapping the web exam UI
+- Secure preload / IPC boundary
+- Lockdown mode (restrict clipboard, screen capture, tab switch)
+- Local answer cache for offline resilience
+- Endpoint discovery for LAN server
+- Auto-update and code signing
+- Device diagnostics reporting
+
+### Constraints
+
+- Desktop must reuse the server-side exam protocol (answer save protocol, heartbeat, submit).
+- Desktop must not create a separate answer-save truth source.
+- PostgreSQL / server remains the single source of truth.
+- Desktop is an optional client, not a required runtime component.
+
+### ADR
+
+- ADR-004 (Desktop/Electron) must be written before any implementation spike.
+
+---
+
+## 10. Execution Order
 
 ```
-Phase 2.0 Contract & Runtime Safety Gate          ← blocks all feature work
+Phase 2.0 OpenAPI Contract Baseline & Runtime Gate          ← blocks all feature work
   ↓
-Phase 2A Candidate Runtime Correctness            ← P0, blocking for real exam usage
+Phase 2A Candidate Runtime                                  ← P0, blocking for real exam usage
   ↓
-Phase 2B Admin / Proctor Operations (polling)     ← P1, core for exam administration
+Phase 2B Admin Operation                                    ← P1, core for exam administration
   ↓
-Phase 2C Timing & Paper Flexibility               ← P1, after runtime correctness stable
+Phase 2C Proctor Runtime                                    ← P1, after admin operation stable
   ↓
-Phase 2D Grading & Results                        ← P1, after timing and paper flexibility
+Phase 2D Grading & Result                                   ← P1, after candidate + proctor stable
   ↓
-Phase 2E Operation Evidence & Export              ← P2, after core runtime stable
+Phase 2E Operation Evidence & Export                        ← P2, after core runtime stable
   ↓
-Phase 2F Infra ADR / optional spike              ← ADR only, no implementation unless triggered
+Phase 2F Infra ADR / Optional Upgrade                       ← ADR only, no implementation unless triggered
+  ↓
+Future Phase Desktop Exam Runtime                           ← not in Phase 2 scope
 ```
 
-**Hard rule**: Do not start WebSocket, Redis, MQ, PDF export, or Electron before Phase 2A P0 correctness is done.
+**Hard rule**: Do not start Redis, MQ, WebSocket/SSE, PDF export at scale, or Electron implementation before Phase 2A Candidate Runtime P0 correctness is complete.
 
 **Dependency graph**:
 
@@ -501,17 +600,19 @@ Phase 2F Infra ADR / optional spike              ← ADR only, no implementation
 P2.0 → P2A → P2B → P2C → P2D → P2E
                                    ↓
                                   P2F (ADR, not blocking)
+                                   ↓
+                                  Future: Desktop
 ```
 
-P2B depends on P2A (force-submit requires atomic startAttempt and auto-submit to be stable).
-P2C depends on P2A (timing modes depend on deadline correctness).
-P2D depends on P2C (grading depends on attempt lifecycle being complete).
-P2E depends on P2D (export depends on grading being complete).
-P2F is independent and runs in parallel as ADR documentation.
+- P2B depends on P2A (admin operations require stable candidate runtime).
+- P2C depends on P2B (proctor runtime requires admin operation loop to be complete).
+- P2D depends on P2A (grading depends on attempt lifecycle being complete).
+- P2E depends on P2D (export depends on grading being complete).
+- P2F is independent and runs in parallel as ADR documentation.
 
 ---
 
-## 10. Quality Gate
+## 11. Quality Gate
 
 ### Per-Job Checklist
 
@@ -526,6 +627,12 @@ Every Phase 2 job must answer:
 [ ] Which audit event is recorded?
 [ ] Which frontend page/component changed?
 [ ] Which E2E scenario proves the flow?
+[ ] Does this close one of the 8 Runtime Decision Gate questions?
+[ ] Does this change a state machine transition?
+[ ] Is the state machine enforced server-side?
+[ ] Does OpenAPI match runtime contract?
+[ ] Does E2E cover the abnormal path?
+[ ] Does this introduce infrastructure dependency? If yes, where is the ADR?
 [ ] Does this require Redis/MQ/WebSocket, or can it work with PG + HTTP?
 ```
 
@@ -549,14 +656,14 @@ For each phase, verify against the specific discovery findings:
 |-------|--------------|--------------|
 | P2.0 | 03-openapi-contract-audit.md | OpenAPI spec no longer has generic `{}` for touched routes |
 | P2A | 06-phase2-gap-analysis.md P0 | All P0 gaps closed with tests |
-| P2B | 06-phase2-gap-analysis.md P1-1 through P1-5 | All P1 admin gaps closed with tests |
-| P2C | 06-phase2-gap-analysis.md P0-4, P1-7, P1-8 | Timing modes and random selection working |
+| P2B | 05-user-flow-trace-map.md §B | Admin operation loop complete end-to-end |
+| P2C | 06-phase2-gap-analysis.md P1-1 through P1-5 | All proctor gaps closed with tests |
 | P2D | 06-phase2-gap-analysis.md P1-6 | Manual grading workflow complete |
 | P2E | 01-frontend-inventory.md §9, 05-user-flow-trace-map.md §D | Missing UIs implemented |
 
 ---
 
-## 11. Deferred to Later Phases
+## 12. Deferred Items
 
 ```txt
 [ ] MultiTenant product path                          (Phase 4)
@@ -566,6 +673,7 @@ For each phase, verify against the specific discovery findings:
 [ ] API Key / Service Token                           (Phase 4)
 [ ] Webhooks                                          (Phase 4)
 [ ] CAS/OAuth/SAML                                    (Phase 3)
+[ ] Electron implementation                           (Phase 3+, requires ADR-004)
 [ ] Electron lockdown client                          (Phase 3+)
 [ ] Camera / screen proctoring                        (Phase 3+)
 [ ] AI-assisted grading                               (Phase 3+)
@@ -577,32 +685,20 @@ For each phase, verify against the specific discovery findings:
 [ ] Real-time WebSocket proctor dashboard             (Phase 3, requires ADR-002)
 ```
 
+Desktop/Electron may have an ADR in Phase 2F, but implementation is deferred.
+
 ---
 
-## 12. Modification Summary
+## 13. Modification Summary
 
-This plan was rewritten from the original feature-list style to a discovery-backed Phase 2 Runtime Closure plan. Key changes:
-
-1. **Section numbering aligned**: Sections 0-11 now match the required structure exactly (Entry Criteria → Goal → Contract Gate → 2A-2F → Execution Order → Quality Gate → Deferred).
-
-2. **Discovery references added**: Every gap, job, and acceptance criterion references specific discovery documents (01-frontend-inventory, 02-backend-api-inventory, 03-openapi-contract-audit, 04-state-machine-audit, 05-user-flow-trace-map, 06-phase2-gap-analysis) with section/paragraph citations.
-
-3. **Current / Target / Acceptance Criteria structure**: Each phase now explicitly states what exists today (Current), what it should become (Target), and how to verify (Acceptance Criteria) — no unverified claims.
-
-4. **OpenAPI promoted to P2.0**: Moved from P2 nice-to-have (old §2) to P2.0 Contract Gate with 7 concrete jobs backed by discovery 03 findings (generic `{}` responses, missing health endpoint, no RBAC metadata).
-
-5. **Proctor Panel = HTTP polling first**: Old plan mentioned polling but didn't enforce it. New plan explicitly states WebSocket is not a Phase 2 dependency; polling dashboard must work before any real-time consideration.
-
-6. **Admin/Proctor operations expanded**: Added explicit jobs for proctor status API, force submit, extend time, misconduct flag, audit log viewer — all backed by discovery 06 P1-1 through P1-5.
-
-7. **Timing/Flexibility reordered**: Moved after runtime correctness and admin operations, reflecting dependency reality (P2C depends on P2A deadline correctness).
-
-8. **Grading/Results separated**: Dedicated Phase 2D with explicit manual grading model, grading queue, manual score UI, result publication policy, and grading audit — backed by discovery 04 §5 and 06 P1-6.
-
-9. **Operation Export moved to last**: Phase 2E now explicitly depends on P2D being complete.
-
-10. **Redis/MQ/WebSocket governance tightened**: Phase 2F now requires ADRs before any spike; revisit triggers are backed by discovery 06 Redis/MQ assessment table.
-
-11. **Execution order hardened**: Added dependency graph and hard rule — no WebSocket/Redis/MQ/PDF/Electron before P2A P0 correctness.
-
-12. **Quality gate enhanced**: Added discovery-backed verification table mapping each phase to its source discovery document.
+1. **Title changed**: From "Exam Runtime Closure" to "Exam Operation Runtime" — reflects that Phase 2 is about the complete operation loop, not just closing gaps.
+2. **Runtime Decision Gate added**: 8 questions that every Phase 2 item must answer before the phase is considered complete.
+3. **OpenAPI elevated to full Contract Baseline Gate**:不再是 runtime critical APIs 小修，而是全量 OpenAPI contract baseline修复. Phase 2.0 now explicitly defines allowed/disallowed change scope.
+4. **Admin Operation and Proctor Runtime split**: Old "Admin / Proctor Operations" is now two independent phases — 2B (Admin Operation) focuses on the setup→publish→result loop; 2C (Proctor Runtime) focuses on live exam monitoring and intervention.
+5. **Candidate Runtime focused on P0 correctness**: Renamed from "Candidate Runtime Correctness" to "Candidate Runtime"; jobs restructured to cover the full candidate lifecycle (start → save → submit → result).
+6. **Grading & Result independent**: Dedicated Phase 2D with objective grading stabilization, manual grading model, grading queue, score policy, result publishing, and grading audit.
+7. **Operation Evidence & Export independent**: Dedicated Phase 2E with audit log viewer, attempt timeline, CSV hardening, import job logs, diagnostics.
+8. **Infra改为 ADR / Optional Upgrade**: Phase 2F is explicitly not an implementation phase; it produces ADRs only.
+9. **Desktop Exam Runtime preserved as future phase**: New §9 documents future desktop scope and constraints; ADR-004 is the only Phase 2 artifact.
+10. **README not modified**: This change is limited to `docs/phase2/phase2.plan.md`.
+11. **No production code, tests, or discovery documents modified**.
