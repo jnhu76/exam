@@ -3,7 +3,7 @@ import { passwordField } from "./passwordPolicy.js";
 
 // ── Candidate Exam Summary (Phase 1 derived contract) ─────────────
 
-export const AvailabilityStatusEnum = z.enum([
+export const candidateExamAvailabilityStatuses = [
   "available",
   "in_progress",
   "resumable",
@@ -13,16 +13,20 @@ export const AvailabilityStatusEnum = z.enum([
   "not_started_yet",
   "expired",
   "unavailable",
-]);
-export type AvailabilityStatus = z.infer<typeof AvailabilityStatusEnum>;
+] as const;
 
-export const PrimaryActionEnum = z.enum([
+export const candidateExamPrimaryActions = [
   "start",
   "resume",
   "view_result",
   "view_history",
   "none",
-]);
+] as const;
+
+export const AvailabilityStatusEnum = z.enum(candidateExamAvailabilityStatuses);
+export type AvailabilityStatus = z.infer<typeof AvailabilityStatusEnum>;
+
+export const PrimaryActionEnum = z.enum(candidateExamPrimaryActions);
 export type PrimaryAction = z.infer<typeof PrimaryActionEnum>;
 
 export const CandidateExamSummarySchema = z.object({

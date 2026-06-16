@@ -31,6 +31,10 @@ import {
   ConflictError,
 } from "@exam/domain";
 import { type AvailabilityStatus, type PrimaryAction } from "@exam/contracts";
+import {
+  deriveCandidateExamState,
+  pickDisplayAttempt,
+} from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -324,116 +328,25 @@ function normalizeEnrollment(
   };
 }
 
-function deriveExamState(
-  exam: Exam,
-  enrollment: ExamEnrollment | null,
-  activeAttempt: ExamAttempt | null,
-  now: Date,
-): { availabilityStatus: AvailabilityStatus; primaryAction: PrimaryAction } {
-  const inWindow = now >= exam.openAt && now < exam.closeAt;
-  const beforeWindow = now < exam.openAt;
-  const afterWindow = now >= exam.closeAt;
-  const attemptsUsed = enrollment?.attemptCount ?? 0;
-  const maxAttemptsExhausted =
-    exam.retakePolicy === "max_attempts" && attemptsUsed >= exam.maxAttempts;
-  const alreadyPassed =
-    exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true;
-  const blocked = enrollment?.status === "blocked";
-  const examOpen = exam.status === "published" || exam.status === "open";
-
-  if (!examOpen || blocked) {
-    return { availabilityStatus: "unavailable", primaryAction: "none" };
-  }
-
-  if (beforeWindow) {
-    return { availabilityStatus: "not_started_yet", primaryAction: "none" };
-  }
-
-  if (activeAttempt) {
-    if (activeAttempt.status === "in_progress") {
-      return { availabilityStatus: "in_progress", primaryAction: "resume" };
-    }
-    if (activeAttempt.status === "disrupted") {
-      return { availabilityStatus: "resumable", primaryAction: "resume" };
-    }
-    if (
-      activeAttempt.status === "submitted" ||
-      activeAttempt.status === "grading"
-    ) {
-      return {
-        availabilityStatus: "submitted_pending_grade",
-        primaryAction: "view_history",
-      };
-    }
-  }
-
-  if (maxAttemptsExhausted || alreadyPassed) {
-    if (enrollment?.finalAttemptId) {
-      return {
-        availabilityStatus: "max_attempts_exhausted",
-        primaryAction: "view_result",
-      };
-    }
-    return {
-      availabilityStatus: "max_attempts_exhausted",
-      primaryAction: "none",
-    };
-  }
-
-  if (afterWindow) {
-    if (enrollment?.finalAttemptId) {
-      return {
-        availabilityStatus: "expired",
-        primaryAction: "view_result",
-      };
-    }
-    return { availabilityStatus: "expired", primaryAction: "none" };
-  }
-
-  if (attemptsUsed > 0 && enrollment?.finalScore != null) {
-    return {
-      availabilityStatus: "graded",
-      primaryAction: inWindow ? "start" : "view_result",
-    };
-  }
-
-  return { availabilityStatus: "available", primaryAction: "start" };
-}
-
 function buildCandidateExamDetail(
   exam: Exam,
   enrollment: ExamEnrollment | null,
   activeAttempt: ExamAttempt | null,
+  resumableAttempt: ExamAttempt | null = null,
+  latestAttempt: ExamAttempt | null = null,
+  finalAttempt: ExamAttempt | null = null,
 ) {
   const currentAttempts = enrollment?.attemptCount ?? 0;
-  const canStartNewAttempt =
-    activeAttempt === null &&
-    !(
-      exam.retakePolicy === "max_attempts" &&
-      currentAttempts >= exam.maxAttempts
-    ) &&
-    !(
-      exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true
-    );
-
-  const blockingReason =
-    activeAttempt !== null
-      ? undefined
-      : exam.retakePolicy === "max_attempts" &&
-          currentAttempts >= exam.maxAttempts
-        ? "max_attempts_reached"
-        : exam.retakePolicy === "pass_then_stop" &&
-            enrollment?.finalPassed === true
-          ? "already_passed"
-          : undefined;
-
   const now = new Date();
-  const { availabilityStatus, primaryAction } = deriveExamState(
+  const { availabilityStatus, primaryAction } = deriveCandidateExamState({
     exam,
     enrollment,
     activeAttempt,
+    resumableAttempt,
+    latestAttempt,
+    finalAttempt,
     now,
-  );
+  });
 
   const bestScore =
     enrollment?.finalScore != null ? enrollment.finalScore : undefined;
@@ -441,6 +354,23 @@ function buildCandidateExamDetail(
     bestScore != null && exam.totalScore > 0
       ? Math.round((bestScore / exam.totalScore) * 100)
       : undefined;
+
+  const hasActive = Boolean(activeAttempt) || Boolean(resumableAttempt);
+  const maxAttemptsExhausted =
+    exam.retakePolicy === "max_attempts" && currentAttempts >= exam.maxAttempts;
+  const alreadyPassed =
+    exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true;
+
+  const canStartNewAttempt =
+    !hasActive && !maxAttemptsExhausted && !alreadyPassed;
+
+  const blockingReason = hasActive
+    ? undefined
+    : maxAttemptsExhausted
+      ? "max_attempts_reached"
+      : alreadyPassed
+        ? "already_passed"
+        : undefined;
 
   return CandidateExamDetailResponseSchema.parse({
     id: exam.id,
@@ -497,18 +427,44 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           )) as Exam | null;
           if (!exam) return null;
 
-          const latestAttempt = (await attemptRepo.findActiveByExamAndCandidate(
+          const allAttempts = (await attemptRepo.findByExamAndCandidate(
             ctx,
             exam.id,
             candidateProfile.id,
-          )) as ExamAttempt | null;
+          )) as ExamAttempt[];
 
-          const { availabilityStatus, primaryAction } = deriveExamState(
-            exam,
-            normalizeEnrollment(enrollment),
-            latestAttempt,
-            now,
+          const activeAttempt =
+            allAttempts.find((a) => a.status === "in_progress") ?? null;
+          const resumableAttempt =
+            allAttempts.find((a) => a.status === "disrupted") ?? null;
+          const finalAttempt = allAttempts.find(
+            (a) => a.id === enrollment.finalAttemptId,
           );
+
+          const sortedByTime = [...allAttempts].sort(
+            (a, b) =>
+              (b.submittedAt?.getTime() ?? b.createdAt.getTime()) -
+              (a.submittedAt?.getTime() ?? a.createdAt.getTime()),
+          );
+          const latestAttempt = sortedByTime[0] ?? null;
+
+          const { availabilityStatus, primaryAction } =
+            deriveCandidateExamState({
+              exam,
+              enrollment: normalizeEnrollment(enrollment),
+              activeAttempt,
+              resumableAttempt,
+              latestAttempt,
+              finalAttempt: finalAttempt ?? null,
+              now,
+            });
+
+          const displayAttempt = pickDisplayAttempt({
+            activeAttempt,
+            resumableAttempt,
+            latestAttempt,
+            finalAttempt: finalAttempt ?? null,
+          });
 
           const bestScore =
             enrollment.finalScore != null ? enrollment.finalScore : undefined;
@@ -528,11 +484,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             totalScore: exam.totalScore,
             attemptsUsed: enrollment.attemptCount,
             maxAttempts: exam.maxAttempts,
-            ...(enrollment.finalAttemptId
-              ? { latestAttemptId: enrollment.finalAttemptId }
-              : {}),
-            ...(latestAttempt
-              ? { latestAttemptStatus: latestAttempt.status }
+            ...(displayAttempt
+              ? {
+                  latestAttemptId: displayAttempt.id,
+                  latestAttemptStatus: displayAttempt.status,
+                }
               : {}),
             ...(bestScore != null ? { bestScore } : {}),
             ...(bestScorePercent != null ? { bestScorePercent } : {}),
@@ -575,15 +531,35 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Enrollment not found");
       }
       const enrollment = normalizeEnrollment(rawEnrollment);
-      const activeAttempt = (await createAttemptRepo(
+      const allAttempts = (await createAttemptRepo(
         fastify.db,
-      ).findActiveByExamAndCandidate(
+      ).findByExamAndCandidate(
         ctx,
         parsed.data.examId,
         candidateProfile.id,
-      )) as ExamAttempt | null;
+      )) as ExamAttempt[];
 
-      return buildCandidateExamDetail(exam, enrollment, activeAttempt);
+      const activeAttempt =
+        allAttempts.find((a) => a.status === "in_progress") ?? null;
+      const resumableAttempt =
+        allAttempts.find((a) => a.status === "disrupted") ?? null;
+      const finalAttempt =
+        allAttempts.find((a) => a.id === enrollment?.finalAttemptId) ?? null;
+      const sortedByTime = [...allAttempts].sort(
+        (a, b) =>
+          (b.submittedAt?.getTime() ?? b.createdAt.getTime()) -
+          (a.submittedAt?.getTime() ?? a.createdAt.getTime()),
+      );
+      const latestAttempt = sortedByTime[0] ?? null;
+
+      return buildCandidateExamDetail(
+        exam,
+        enrollment,
+        activeAttempt,
+        resumableAttempt,
+        latestAttempt,
+        finalAttempt,
+      );
     },
   );
 

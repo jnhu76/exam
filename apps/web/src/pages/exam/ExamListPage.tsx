@@ -213,8 +213,14 @@ export function ExamListPage() {
   const canTake = exams.filter(
     (e) => e.primaryAction === "start" || e.primaryAction === "resume",
   );
+  const upcoming = exams.filter(
+    (e) => e.availabilityStatus === "not_started_yet",
+  );
   const others = exams.filter(
-    (e) => e.primaryAction !== "start" && e.primaryAction !== "resume",
+    (e) =>
+      e.primaryAction !== "start" &&
+      e.primaryAction !== "resume" &&
+      e.availabilityStatus !== "not_started_yet",
   );
 
   return (
@@ -240,6 +246,22 @@ export function ExamListPage() {
           <h2 className="text-lg font-semibold">历史考试</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {others.map((exam) => (
+              <ExamCard
+                key={exam.examId}
+                exam={exam}
+                onStart={handleStart}
+                onResult={handleResult}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {upcoming.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-lg font-semibold">即将开始</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {upcoming.map((exam) => (
               <ExamCard
                 key={exam.examId}
                 exam={exam}

@@ -85,22 +85,21 @@ export function StartExamPage() {
 
   async function handleStart() {
     if (!exam) return;
-    if (exam.activeAttemptId) {
-      navigate(routes.exam.take(exam.activeAttemptId));
-      return;
+    switch (exam.primaryAction) {
+      case "resume":
+        if (exam.activeAttemptId) {
+          navigate(routes.exam.take(exam.activeAttemptId));
+        }
+        return;
+      case "start":
+        await enterExam();
+        return;
+      case "view_result":
+        return;
+      case "none":
+      default:
+        return;
     }
-    if (!exam.canStartNewAttempt) {
-      const message =
-        exam.blockingReason === "max_attempts_reached"
-          ? "已达到最大考试次数，无法再次开始考试。"
-          : exam.blockingReason === "already_passed"
-            ? "本场考试已通过，无需再次参加。"
-            : "当前无法开始考试。";
-      setError(message);
-      toast.error(message);
-      return;
-    }
-    await enterExam();
   }
 
   if (isLoading) return <LoadingState />;
