@@ -127,7 +127,9 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       const normalized = normalizeScoreListQuery(request.query);
       const parsedQuery = ScoreListQuerySchema.safeParse(normalized);
       if (!parsedQuery.success) {
-        return reply.code(400).send(formatZodError(parsedQuery.error));
+        return reply
+          .code(400)
+          .send(formatZodError(request.id, parsedQuery.error));
       }
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize, passFilter, sortBy, sortOrder } =
@@ -202,7 +204,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = AttemptScoreParamsSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const attempt = await findVisibleAttempt(

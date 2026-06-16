@@ -513,7 +513,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = StartAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const candidateProfile = await getCandidateProfile(fastify, ctx);
@@ -572,7 +572,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = StartAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const candidateProfile = await getCandidateProfile(fastify, ctx);
@@ -595,7 +595,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = StartAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { examId } = parsed.data;
@@ -700,7 +700,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = LoadAttemptParamsSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const attempt = await getOwnedAttempt(fastify, ctx, parsed.data.id);
@@ -718,11 +718,15 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsedParams = SaveAnswerParamsSchema.safeParse(request.params);
       if (!parsedParams.success) {
-        return reply.code(400).send(formatZodError(parsedParams.error));
+        return reply
+          .code(400)
+          .send(formatZodError(request.id, parsedParams.error));
       }
       const parsedBody = SaveAnswerRequestSchema.safeParse(request.body);
       if (!parsedBody.success) {
-        return reply.code(400).send(formatZodError(parsedBody.error));
+        return reply
+          .code(400)
+          .send(formatZodError(request.id, parsedBody.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId, questionId } = parsedParams.data;
@@ -858,7 +862,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = SubmitAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
@@ -974,7 +978,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = HeartbeatRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
@@ -1002,7 +1006,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const parsed = RestoreAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;

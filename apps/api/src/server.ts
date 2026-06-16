@@ -12,6 +12,7 @@ import nowPlugin from "./plugins/now.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
+import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import authRoutes from "./routes/auth.js";
 import settingsRoutes from "./routes/settings.js";
@@ -42,6 +43,7 @@ async function main() {
   await app.register(cors);
   setupSecurity(app);
   setupErrorHandler(app);
+  await app.register(zodProviderPlugin);
   await app.register(dbPlugin);
   await app.register(nowPlugin);
   await app.register(authPlugin);

@@ -45,11 +45,12 @@ export function buildErrorResponse(
   requestId: string,
   code: ErrorCode,
   details?: unknown,
+  messageOverride?: string,
 ): ErrorResponse {
   return {
     error: {
       code,
-      message: getErrorMessage(code),
+      message: messageOverride ?? getErrorMessage(code),
       ...(details === undefined ? {} : { details }),
       requestId,
     },
