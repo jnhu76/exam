@@ -120,7 +120,7 @@ These are deliberate exceptions from PR-UI-2, not gaps:
 Selector priority (highest to lowest):
 
 1. **`getByRole` / `getByLabelText`** — preferred for all user-observable controls. Examples: `role="button"` + `aria-label="编辑用户"`, `role="alertdialog"`, `role="searchbox"`.
-2. **`getByTestId`** — for controls without a stable role/label or where role is ambiguous. Currently assigned: `take-submit-btn`, `confirm-submit-btn`, `take-question-section`, `exam-start-btn`, `exam-card-*`.
+2. **`getByTestId`** — for controls without a stable role/label or where role is ambiguous. Currently assigned: `take-submit-btn`, `confirm-submit-btn`, `take-question-section`, `exam-start-btn`, `exam-card-*`, `exam-primary-action`.
 3. **Visible text** — acceptable for unambiguous labels (page titles, button text).
 4. **CSS selector** — last resort only.
 

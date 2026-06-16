@@ -103,7 +103,7 @@ describe("ExamListPage", () => {
     getMock.mockResolvedValue([
       makeExam({
         availabilityStatus: "graded",
-        primaryAction: "start",
+        primaryAction: "view_result",
         bestScore: 85,
         bestScorePercent: 85,
         attemptsUsed: 1,
@@ -121,7 +121,11 @@ describe("ExamListPage", () => {
 
     expect(await screen.findByText("已评分")).toBeInTheDocument();
     expect(screen.getByText("85")).toBeInTheDocument();
-    expect(screen.getByText("开始考试")).toBeInTheDocument();
+    expect(screen.getByText("查看成绩")).toBeInTheDocument();
+    expect(screen.getByTestId("exam-primary-action")).toHaveAttribute(
+      "data-action",
+      "view_result",
+    );
   });
 
   it("renders max_attempts_exhausted in 历史考试 section", async () => {

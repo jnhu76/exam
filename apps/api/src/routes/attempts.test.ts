@@ -270,8 +270,8 @@ describe("attempt routes", () => {
         url: `/api/attempts/${examId}/start`,
         cookies: { "auth-token": unassignedToken },
       });
-      expect(res.statusCode).toBe(400);
-      expect(res.json().error.code).toBe("VALIDATION_ERROR");
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe("PERMISSION_DENIED");
     });
   });
 
@@ -1367,6 +1367,7 @@ describe("attempt routes", () => {
         maxAttempts?: number;
         openOffsetMs?: number;
         closeOffsetMs?: number;
+        enroll?: boolean;
       } = {},
     ): Promise<string> {
       const id = crypto.randomUUID();
@@ -1413,16 +1414,18 @@ describe("attempt routes", () => {
         updatedAt: new Date(),
       });
 
-      await ctx.db.insert(schema.examEnrollments).values({
-        id: crypto.randomUUID(),
-        organizationId: ctx.org.id,
-        examId: id,
-        candidateId: candidateProfileId,
-        status: "assigned",
-        attemptCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      if (opts.enroll !== false) {
+        await ctx.db.insert(schema.examEnrollments).values({
+          id: crypto.randomUUID(),
+          organizationId: ctx.org.id,
+          examId: id,
+          candidateId: candidateProfileId,
+          status: "assigned",
+          attemptCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
       return id;
     }
 
@@ -1536,7 +1539,23 @@ describe("attempt routes", () => {
       expect(rejectRes.json().error.code).toBe("MAX_ATTEMPTS_REACHED");
     });
 
-    it("derives graded/start when graded but attempts remain", async () => {
+    it("rejects start API with 403 when candidate is not enrolled", async () => {
+      const notEnrolledExamId = await createAndEnrollExam({
+        title: "Not Enrolled Exam",
+        enroll: false,
+      });
+
+      const rejectRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${notEnrolledExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(rejectRes.statusCode).toBe(403);
+      expect(rejectRes.json().error.code).toBe("PERMISSION_DENIED");
+    });
+
+    it("derives graded/view_result when graded but attempts remain", async () => {
       const gradeExamId = await createAndEnrollExam({
         title: "Grade Exam",
         maxAttempts: 3,
@@ -1544,7 +1563,7 @@ describe("attempt routes", () => {
       await startAndSubmit(gradeExamId);
       const target = await getSummary(gradeExamId);
       expect(target.availabilityStatus).toBe("graded");
-      expect(target.primaryAction).toBe("start");
+      expect(target.primaryAction).toBe("view_result");
       expect(target.bestScore).toBeDefined();
     });
 

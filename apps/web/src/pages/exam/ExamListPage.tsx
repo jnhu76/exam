@@ -162,7 +162,8 @@ function ExamCard({
               size="sm"
               onClick={handleAction}
               disabled={exam.primaryAction === "none"}
-              data-testid="exam-action-btn"
+              data-testid="exam-primary-action"
+              data-action={exam.primaryAction}
             >
               {actionIcon}
               {actionLabel}

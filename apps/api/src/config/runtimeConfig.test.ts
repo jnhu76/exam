@@ -370,6 +370,15 @@ describe("runtimeConfig", () => {
       expect(config.database.url).toBe("postgresql://t:t@h:5432/testdb");
     });
 
+    it("uses DATABASE_URL in e2e mode when TEST_DATABASE_URL is unset", () => {
+      process.env.APP_MODE = "e2e";
+      delete process.env.TEST_DATABASE_URL;
+      process.env.DATABASE_URL = "postgresql://e:e@h:5432/e2edb";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.database.url).toBe("postgresql://e:e@h:5432/e2edb");
+    });
+
     it("uses DATABASE_URL in development", () => {
       process.env.APP_MODE = "development";
       process.env.DATABASE_URL = "postgresql://d:d@h:5432/devdb";
@@ -611,6 +620,27 @@ describe("runtimeConfig", () => {
   });
 
   describe("rate limit positive integer validation", () => {
+    it("APP_MODE=e2e disables rate limiting for deterministic browser tests", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "e2e",
+        RATE_LIMIT_MAX: "1",
+        RATE_LIMIT_WINDOW_MS: "60000",
+      });
+      expect(config.rateLimit.enabled).toBe(false);
+      expect(config.rateLimit.max).toBe(1);
+      expect(config.rateLimit.timeWindow).toBe(60000);
+    });
+
+    it("production keeps rate limiting enabled", () => {
+      const config = loadRuntimeConfig({
+        APP_MODE: "production",
+        DATABASE_URL: "postgresql://p:p@h:5432/proddb",
+        JWT_SECRET: "production-secret",
+        CORS_ORIGIN: "https://example.com",
+      });
+      expect(config.rateLimit.enabled).toBe(true);
+    });
+
     it("valid string number works", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "development",

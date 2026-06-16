@@ -148,7 +148,7 @@ export function AppSidebar({
 
       <nav className="flex-1 flex flex-col gap-1 overflow-y-auto px-2 py-2">
         {groups.map((group, gi) => (
-          <section key={group.label}>
+          <section key={group.label} className="flex flex-col gap-0.5">
             {!collapsed && (
               <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
                 {group.label}
@@ -161,7 +161,7 @@ export function AppSidebar({
           </section>
         ))}
         {showManagement && (
-          <section>
+          <section className="flex flex-col gap-0.5">
             {!collapsed && (
               <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
                 管理

@@ -1,67 +1,196 @@
-import { test, expect } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
+import { loginViaUi } from "../lib/login";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+const CANDIDATE_PASSWORD = "candidate123";
 
-async function adminLogin(
-  request: import("@playwright/test").APIRequestContext,
+type AvailabilityStatus =
+  | "available"
+  | "in_progress"
+  | "resumable"
+  | "submitted_pending_grade"
+  | "graded"
+  | "max_attempts_exhausted"
+  | "not_started_yet"
+  | "expired"
+  | "unavailable";
+
+type PrimaryAction =
+  | "start"
+  | "resume"
+  | "view_result"
+  | "view_history"
+  | "none";
+
+interface CandidateExamSummary {
+  examId: string;
+  title: string;
+  availabilityStatus: AvailabilityStatus;
+  primaryAction: PrimaryAction;
+  attemptsUsed: number;
+  maxAttempts: number;
+  latestAttemptId?: string;
+  bestScore?: number;
+}
+
+interface ApiResult {
+  status: number;
+  body: Record<string, unknown>;
+  text: string;
+}
+
+interface ExpectedSeedState {
+  username: string;
+  availabilityStatus: AvailabilityStatus;
+  primaryAction: PrimaryAction;
+  statusLabel: string;
+  actionLabel: string;
+  requiresBestScore?: boolean;
+}
+
+const SEED_STATES: ExpectedSeedState[] = [
+  {
+    username: "candidate1",
+    availabilityStatus: "in_progress",
+    primaryAction: "resume",
+    statusLabel: "进行中",
+    actionLabel: "继续考试",
+  },
+  {
+    username: "candidate2",
+    availabilityStatus: "available",
+    primaryAction: "start",
+    statusLabel: "可参加",
+    actionLabel: "开始考试",
+  },
+  {
+    username: "candidate3",
+    availabilityStatus: "resumable",
+    primaryAction: "resume",
+    statusLabel: "可恢复",
+    actionLabel: "继续考试",
+  },
+  {
+    username: "candidate4",
+    availabilityStatus: "graded",
+    primaryAction: "view_result",
+    statusLabel: "已评分",
+    actionLabel: "查看成绩",
+    requiresBestScore: true,
+  },
+];
+
+function tokenFromSetCookie(setCookie: string | undefined): string {
+  const token = setCookie?.match(/auth-token=([^;]+)/)?.[1];
+  if (!token) {
+    throw new Error(
+      `auth-token cookie not found in set-cookie=${setCookie ?? ""}`,
+    );
+  }
+  return token;
+}
+
+async function readApiResult(
+  response: Awaited<ReturnType<APIRequestContext["fetch"]>>,
+): Promise<ApiResult> {
+  const text = await response.text();
+  return {
+    status: response.status(),
+    text,
+    body: text ? ((JSON.parse(text) as Record<string, unknown>) ?? {}) : {},
+  };
+}
+
+async function loginByApi(
+  request: APIRequestContext,
+  username: string,
+  password: string,
 ): Promise<string> {
   const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: { username: "admin", password: "admin123" },
+    data: { username, password },
   });
-  const cookie = res.headers()["set-cookie"] ?? "";
-  const match = cookie.match(/auth-token=([^;]+)/);
-  return match?.[1] ?? "";
+  const text = await res.text();
+  if (res.status() !== 200) {
+    throw new Error(
+      `API login failed for ${username}: ${res.status()} ${text}`,
+    );
+  }
+  return tokenFromSetCookie(res.headers()["set-cookie"]);
+}
+
+async function adminLogin(request: APIRequestContext): Promise<string> {
+  return loginByApi(request, "admin", "admin123");
 }
 
 async function apiCall(
-  request: import("@playwright/test").APIRequestContext,
+  request: APIRequestContext,
   method: string,
   path: string,
-  data?: Record<string, unknown>,
-  auth?: string,
-): Promise<{ status: number; body: Record<string, unknown> }> {
+  data: Record<string, unknown> | undefined,
+  auth: string,
+): Promise<ApiResult> {
   const res = await request.fetch(`${BASE_URL}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(auth ? { Cookie: `auth-token=${auth}` } : {}),
+      Cookie: `auth-token=${auth}`,
     },
-    data: data != null ? JSON.stringify(data) : undefined,
+    data,
   });
-  return {
-    status: res.status(),
-    body: (await res.json().catch(() => ({}))) as Record<string, unknown>,
-  };
+  return readApiResult(res);
+}
+
+function assertOk(result: ApiResult, label: string): void {
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(`${label} failed: ${result.status} ${result.text}`);
+  }
+}
+
+function stringField(body: Record<string, unknown>, field: string): string {
+  const value = body[field];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(
+      `Expected response field ${field}, got ${JSON.stringify(body)}`,
+    );
+  }
+  return value;
 }
 
 async function createCandidate(
-  request: import("@playwright/test").APIRequestContext,
+  request: APIRequestContext,
   adminToken: string,
   unique: string,
 ): Promise<{ username: string; password: string; profileId: string }> {
-  const r = await apiCall(
+  const username = `e2e-${unique}-${Date.now()}`;
+  const result = await apiCall(
     request,
     "POST",
     "/api/candidates",
     {
-      username: `e2e-${unique}-${Date.now()}`,
-      password: "candidate123",
+      username,
+      password: CANDIDATE_PASSWORD,
       name: `E2E ${unique}`,
       fields: {},
     },
     adminToken,
   );
+  assertOk(result, "create candidate");
   return {
-    username: String(r.body.username ?? ""),
-    password: "candidate123",
-    profileId: String(r.body.id ?? ""),
+    username,
+    password: CANDIDATE_PASSWORD,
+    profileId: stringField(result.body, "id"),
   };
 }
 
 async function createExamForTest(
-  request: import("@playwright/test").APIRequestContext,
+  request: APIRequestContext,
   adminToken: string,
-  opts: { title: string; maxAttempts: number; retakePolicy?: string },
+  opts: { title: string; maxAttempts: number },
 ): Promise<string> {
   const course = await apiCall(
     request,
@@ -74,13 +203,14 @@ async function createExamForTest(
     },
     adminToken,
   );
+  assertOk(course, "create course");
 
-  const q = await apiCall(
+  const question = await apiCall(
     request,
     "POST",
     "/api/questions",
     {
-      courseId: String(course.body.id ?? ""),
+      courseId: stringField(course.body, "id"),
       type: "true_false",
       content: `Q-${opts.title}`,
       standardAnswer: true,
@@ -88,6 +218,7 @@ async function createExamForTest(
     },
     adminToken,
   );
+  assertOk(question, "create question");
 
   const exam = await apiCall(
     request,
@@ -96,15 +227,15 @@ async function createExamForTest(
     {
       title: opts.title,
       description: "",
-      courseId: String(course.body.id ?? ""),
+      courseId: stringField(course.body, "id"),
       timingMode: "timed_window",
       durationMinutes: 60,
-      openAt: new Date(Date.now() - 3600000).toISOString(),
-      closeAt: new Date(Date.now() + 86400000).toISOString(),
+      openAt: new Date(Date.now() - 3_600_000).toISOString(),
+      closeAt: new Date(Date.now() + 86_400_000).toISOString(),
       passingScore: 60,
       totalScore: 100,
       questionSelectionMode: "manual",
-      questionIds: [String(q.body.id ?? "")],
+      questionIds: [stringField(question.body, "id")],
       controlFlags: {
         shuffleQuestions: false,
         shuffleOptions: false,
@@ -117,39 +248,86 @@ async function createExamForTest(
         requireLockdown: false,
         showResultImmediately: true,
       },
-      retakePolicy: opts.retakePolicy ?? "max_attempts",
+      retakePolicy: "max_attempts",
       scoreStrategy: "highest",
       maxAttempts: opts.maxAttempts,
     },
     adminToken,
   );
+  assertOk(exam, "create exam");
+  const examId = stringField(exam.body, "id");
 
-  await apiCall(
+  const publish = await apiCall(
     request,
     "POST",
-    `/api/exams/${String(exam.body.id ?? "")}/publish`,
+    `/api/exams/${examId}/publish`,
     {},
     adminToken,
   );
-
-  return String(exam.body.id ?? "");
+  assertOk(publish, "publish exam");
+  return examId;
 }
 
-async function getCandidateCookie(
-  request: import("@playwright/test").APIRequestContext,
-  username: string,
-  password: string,
-): Promise<string> {
-  const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: { username, password },
+async function getCandidateSummariesByApi(
+  request: APIRequestContext,
+  token: string,
+): Promise<CandidateExamSummary[]> {
+  const res = await request.get(`${BASE_URL}/api/candidate/exams`, {
+    headers: { Cookie: `auth-token=${token}` },
   });
-  const cookie = res.headers()["set-cookie"] ?? "";
-  const match = cookie.match(/auth-token=([^;]+)/);
-  return match?.[1] ?? "";
+  const text = await res.text();
+  if (res.status() !== 200) {
+    throw new Error(`candidate summaries failed: ${res.status()} ${text}`);
+  }
+  return JSON.parse(text) as CandidateExamSummary[];
+}
+
+function findExpectedSummary(
+  summaries: CandidateExamSummary[],
+  expected: Pick<ExpectedSeedState, "availabilityStatus" | "primaryAction">,
+): CandidateExamSummary {
+  const found = summaries.find(
+    (summary) =>
+      summary.availabilityStatus === expected.availabilityStatus &&
+      summary.primaryAction === expected.primaryAction,
+  );
+  if (!found) {
+    throw new Error(
+      `Expected summary ${expected.availabilityStatus}/${expected.primaryAction}, got ${JSON.stringify(
+        summaries.map((summary) => ({
+          examId: summary.examId,
+          title: summary.title,
+          availabilityStatus: summary.availabilityStatus,
+          primaryAction: summary.primaryAction,
+          attemptsUsed: summary.attemptsUsed,
+          maxAttempts: summary.maxAttempts,
+          bestScore: summary.bestScore,
+        })),
+      )}`,
+    );
+  }
+  return found;
+}
+
+async function expectUiSummary(
+  page: Page,
+  summary: CandidateExamSummary,
+  expected: ExpectedSeedState,
+): Promise<void> {
+  const card = page.getByTestId(`exam-card-${summary.examId}`);
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await expect(card.getByText(expected.statusLabel)).toBeVisible();
+  const action = card.getByTestId("exam-primary-action");
+  await expect(action).toHaveAttribute("data-action", expected.primaryAction);
+  await expect(action).toContainText(expected.actionLabel);
+  if (expected.requiresBestScore) {
+    expect(summary.bestScore).toBeDefined();
+    await expect(card.getByText(String(summary.bestScore))).toBeVisible();
+  }
 }
 
 async function startAndSubmit(
-  request: import("@playwright/test").APIRequestContext,
+  request: APIRequestContext,
   cToken: string,
   examId: string,
 ): Promise<string> {
@@ -160,178 +338,101 @@ async function startAndSubmit(
     undefined,
     cToken,
   );
-  const attemptId = String(start.body.id ?? "");
-  await apiCall(
+  assertOk(start, "start attempt");
+  const attemptId = stringField(start.body, "id");
+  const submit = await apiCall(
     request,
     "POST",
     `/api/attempts/${attemptId}/submit`,
     undefined,
     cToken,
   );
+  assertOk(submit, "submit attempt");
   return attemptId;
 }
 
-async function loginAs(
-  page: import("@playwright/test").Page,
-  username: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login");
-  await page.getByTestId("login-layout").waitFor({ state: "visible" });
+test.describe("demo seed candidate accounts", () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies();
+  });
 
-  const loginResponsePromise = page.waitForResponse(
-    (res) => res.url().includes("/api/auth/login"),
-    { timeout: 15_000 },
-  );
+  for (const expected of SEED_STATES) {
+    test(`${expected.username} has ${expected.availabilityStatus}/${expected.primaryAction}`, async ({
+      page,
+      request,
+    }) => {
+      const token = await loginByApi(
+        request,
+        expected.username,
+        CANDIDATE_PASSWORD,
+      );
+      const summaries = await getCandidateSummariesByApi(request, token);
+      const summary = findExpectedSummary(summaries, expected);
+      expect(summary.availabilityStatus).toBe(expected.availabilityStatus);
+      expect(summary.primaryAction).toBe(expected.primaryAction);
 
-  await page.fill("#username", username);
-  await page.fill("#password", password);
-  await page.getByRole("button", { name: "登录" }).click();
-
-  const loginResponse = await loginResponsePromise;
-  if (loginResponse.status() !== 200) {
-    const body = await loginResponse.text().catch(() => "");
-    throw new Error(
-      `Login failed for ${username}: status=${loginResponse.status()}, body=${body}, url=${page.url()}`,
-    );
+      await loginViaUi(page, expected.username, CANDIDATE_PASSWORD);
+      await expectUiSummary(page, summary, expected);
+    });
   }
 
-  await page.waitForURL("**/exam/list", { timeout: 15_000 });
-}
-
-test.describe("candidate exam state E2E", () => {
-  test("candidate with in_progress attempt sees 进行中/继续考试", async ({
+  test("exhausted 2/2 returns 409 and has no start action", async ({
     page,
     request,
   }) => {
     const adminToken = await adminLogin(request);
-    const c = await createCandidate(request, adminToken, "inprog");
+    const candidate = await createCandidate(request, adminToken, "exhausted");
     const examId = await createExamForTest(request, adminToken, {
-      title: "InProg",
-      maxAttempts: 3,
-    });
-    await apiCall(
-      request,
-      "POST",
-      `/api/exams/${examId}/enrollments`,
-      { candidateIds: [c.profileId] },
-      adminToken,
-    );
-
-    const cToken = await getCandidateCookie(request, c.username, c.password);
-    await apiCall(
-      request,
-      "POST",
-      `/api/attempts/${examId}/start`,
-      undefined,
-      cToken,
-    );
-
-    await loginAs(page, c.username, c.password);
-    const card = page.getByTestId(`exam-card-${examId}`);
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card.getByText("进行中")).toBeVisible();
-    await expect(card.getByText("继续考试")).toBeVisible();
-  });
-
-  test("candidate with no attempts sees 可参加/开始考试", async ({
-    page,
-    request,
-  }) => {
-    const adminToken = await adminLogin(request);
-    const c = await createCandidate(request, adminToken, "avail");
-    const examId = await createExamForTest(request, adminToken, {
-      title: "Avail",
+      title: "Exhausted",
       maxAttempts: 2,
     });
-    await apiCall(
+
+    const enroll = await apiCall(
       request,
       "POST",
       `/api/exams/${examId}/enrollments`,
-      { candidateIds: [c.profileId] },
+      { candidateIds: [candidate.profileId] },
       adminToken,
     );
+    assertOk(enroll, "enroll candidate");
 
-    await loginAs(page, c.username, c.password);
-    const card = page.getByTestId(`exam-card-${examId}`);
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card.getByText("可参加")).toBeVisible();
-    await expect(card.getByText("开始考试")).toBeVisible();
-  });
-
-  test("candidate with graded exam sees 已评分/开始考试 + bestScore on start page", async ({
-    page,
-    request,
-  }) => {
-    const adminToken = await adminLogin(request);
-    const c = await createCandidate(request, adminToken, "graded");
-    const examId = await createExamForTest(request, adminToken, {
-      title: "Graded",
-      maxAttempts: 3,
-    });
-    await apiCall(
+    const candidateToken = await loginByApi(
       request,
-      "POST",
-      `/api/exams/${examId}/enrollments`,
-      { candidateIds: [c.profileId] },
-      adminToken,
+      candidate.username,
+      candidate.password,
     );
+    await startAndSubmit(request, candidateToken, examId);
+    await startAndSubmit(request, candidateToken, examId);
 
-    const cToken = await getCandidateCookie(request, c.username, c.password);
-    await startAndSubmit(request, cToken, examId);
-
-    await loginAs(page, c.username, c.password);
-    const card = page.getByTestId(`exam-card-${examId}`);
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card.getByText("已评分")).toBeVisible();
-    await expect(card.getByText("开始考试")).toBeVisible();
-
-    await page.goto(`/exam/${examId}/start`);
-    await expect(page.getByText("已考 1/3 次")).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByText("最高成绩")).toBeVisible();
-  });
-
-  test("exhausted 2/2: not in 可参加, start API returns 409", async ({
-    page,
-    request,
-  }) => {
-    const adminToken = await adminLogin(request);
-    const c = await createCandidate(request, adminToken, "exh");
-    const examId = await createExamForTest(request, adminToken, {
-      title: "Exhaust",
-      maxAttempts: 2,
-    });
-    await apiCall(
-      request,
-      "POST",
-      `/api/exams/${examId}/enrollments`,
-      { candidateIds: [c.profileId] },
-      adminToken,
+    const summaries = await getCandidateSummariesByApi(request, candidateToken);
+    const summary = summaries.find((item) => item.examId === examId);
+    expect(summary).toEqual(
+      expect.objectContaining({
+        availabilityStatus: "max_attempts_exhausted",
+        primaryAction: "view_result",
+        attemptsUsed: 2,
+        maxAttempts: 2,
+      }),
     );
-
-    const cToken = await getCandidateCookie(request, c.username, c.password);
-    await startAndSubmit(request, cToken, examId);
-    await startAndSubmit(request, cToken, examId);
 
     const reject = await apiCall(
       request,
       "POST",
       `/api/attempts/${examId}/start`,
       undefined,
-      cToken,
+      candidateToken,
     );
     expect(reject.status).toBe(409);
-    const err = reject.body.error as Record<string, unknown> | undefined;
-    expect(String(err?.code ?? "")).toBe("MAX_ATTEMPTS_REACHED");
+    expect(reject.body.error).toEqual(
+      expect.objectContaining({ code: "MAX_ATTEMPTS_REACHED" }),
+    );
 
-    await loginAs(page, c.username, c.password);
+    await loginViaUi(page, candidate.username, candidate.password);
     const card = page.getByTestId(`exam-card-${examId}`);
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.getByText("次数已用完")).toBeVisible();
-
-    const canTakeHeading = page.getByText("可参加的考试");
-    await expect(canTakeHeading).not.toBeVisible();
+    const action = card.getByTestId("exam-primary-action");
+    await expect(action).toHaveAttribute("data-action", "view_result");
+    await expect(action).not.toHaveAttribute("data-action", "start");
   });
 });

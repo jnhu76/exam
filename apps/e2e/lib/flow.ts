@@ -1,33 +1,12 @@
 import type { Page } from "@playwright/test";
 import type { SeededCandidate } from "./seed";
+import { loginViaUi } from "./login";
 
 export async function loginAsCandidate(
   page: Page,
   candidate: SeededCandidate,
 ): Promise<void> {
-  await page.goto("/login");
-  await page.getByTestId("login-layout").waitFor({ state: "visible" });
-
-  const loginResponsePromise = page.waitForResponse(
-    (res) =>
-      res.request().method() === "POST" &&
-      res.url().includes("/api/auth/login"),
-    { timeout: 15_000 },
-  );
-
-  await page.fill("#username", candidate.username);
-  await page.fill("#password", candidate.password);
-  await page.getByRole("button", { name: "登录" }).click();
-
-  const loginResponse = await loginResponsePromise;
-  if (loginResponse.status() !== 200) {
-    const body = await loginResponse.text().catch(() => "");
-    throw new Error(
-      `Login failed for ${candidate.username}: status=${loginResponse.status()}, body=${body}, url=${page.url()}`,
-    );
-  }
-
-  await page.waitForURL("**/exam/list", { timeout: 15_000 });
+  await loginViaUi(page, candidate.username, candidate.password);
 }
 
 export const candidateLogin = loginAsCandidate;
@@ -39,8 +18,17 @@ export async function clickExamPrimaryAction(
 ): Promise<void> {
   const card = page.getByTestId(`exam-card-${examId}`);
   await card.waitFor({ state: "visible" });
-  const action = card.getByTestId("exam-action-btn");
+  const action = card.getByTestId("exam-primary-action");
   await action.waitFor({ state: "visible" });
+  await action.evaluate((el, expected) => {
+    if (el.getAttribute("data-action") !== expected) {
+      throw new Error(
+        `Expected primary action ${expected}, got ${el.getAttribute(
+          "data-action",
+        )}`,
+      );
+    }
+  }, expectedAction);
   await action.click();
 }
 
@@ -72,7 +60,7 @@ export async function resumeExamFromList(
 ): Promise<void> {
   const card = page.getByTestId(`exam-card-${examId}`);
   await card.waitFor({ state: "visible" });
-  await card.getByTestId("exam-action-btn").click();
+  await card.getByTestId("exam-primary-action").click();
   await page.waitForURL(
     (url) => /\/exam\/[^/]+\/(start|take)$/.test(url.pathname),
     {

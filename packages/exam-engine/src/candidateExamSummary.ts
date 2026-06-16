@@ -41,7 +41,6 @@ export function deriveCandidateExamState(
     now,
   } = input;
 
-  const inWindow = now >= exam.openAt && now < exam.closeAt;
   const beforeWindow = now < exam.openAt;
   const afterWindow = now >= exam.closeAt;
   const attemptsUsed = enrollment?.attemptCount ?? 0;
@@ -101,7 +100,7 @@ export function deriveCandidateExamState(
   if (attemptsUsed > 0 && enrollment?.finalScore != null) {
     return {
       availabilityStatus: "graded",
-      primaryAction: inWindow ? "start" : "view_result",
+      primaryAction: "view_result",
     };
   }
 

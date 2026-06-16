@@ -29,6 +29,7 @@ import {
   ValidationError,
   InvalidStateTransitionError,
   ConflictError,
+  PermissionDeniedError,
 } from "@exam/domain";
 import { type AvailabilityStatus, type PrimaryAction } from "@exam/contracts";
 import {
@@ -608,6 +609,14 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
+      const enrollment = await enrollmentRepo.findByExamAndCandidate(
+        ctx,
+        examId,
+        candidateId,
+      );
+      if (!enrollment) {
+        throw new PermissionDeniedError("Candidate is not enrolled");
+      }
 
       const activeAttempt = await attemptRepo.findActiveByExamAndCandidate(
         ctx,

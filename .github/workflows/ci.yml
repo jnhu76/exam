@@ -79,6 +79,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Integration tests
+        run: pnpm test:integration
+
       - name: Build
         run: pnpm build
 
@@ -153,7 +156,9 @@ jobs:
         run: pnpm --filter @exam/db db:migrate
 
       - name: Seed E2E data
-        run: pnpm --filter @exam/db db:seed
+        run: |
+          pnpm --filter @exam/db db:seed
+          pnpm --filter @exam/api db:seed:demo
 
       - name: Start API server
         run: |
@@ -175,42 +180,72 @@ jobs:
         run: pnpm --filter @exam/e2e test:e2e
         continue-on-error: false
 
-      - name: Collect logs on failure
-        if: failure()
-        run: |
-          echo "=== Server Log (last 200 lines) ==="
-          tail -200 server.log || true
-          echo "=== Web Log (last 100 lines) ==="
-          tail -100 web.log || true
-
       - name: Stop servers
         if: always()
         run: |
           kill $API_PID 2>/dev/null || true
 
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: playwright-report
-          path: apps/e2e/playwright-report/
-          retention-days: 1
+      - name: Write E2E failure summary
+        if: failure()
+        run: |
+          {
+            echo "## E2E Failure Summary"
+            echo ""
+            echo "### Server log tail"
+            echo '```text'
+            tail -120 server.log || true
+            echo '```'
+            echo ""
+            echo "### Playwright error contexts"
+            find apps/e2e/test-results -name "error-context.md" -print 2>/dev/null | while IFS= read -r f; do
+              if [ -f "$f" ]; then
+                echo ""
+                echo "#### $f"
+                echo '```text'
+                sed -n '1,160p' "$f" || true
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: test-results
-          path: apps/e2e/test-results/
-          retention-days: 1
+      - name: Prepare E2E failure diagnostics
+        if: failure()
+        run: |
+          rm -rf e2e-diagnostics
+          mkdir -p e2e-diagnostics
 
-      - name: Upload server log
-        if: always()
+          if [ -f server.log ]; then
+            cp server.log e2e-diagnostics/server.log
+            tail -200 server.log > e2e-diagnostics/server-tail.log || true
+          fi
+
+          find apps/e2e/test-results -name "error-context.md" -print -exec sh -c '
+            for f do
+              dest="e2e-diagnostics/$(echo "$f" | sed "s#apps/e2e/test-results/##" | tr "/" "_")"
+              cp "$f" "$dest"
+            done
+          ' sh {} + 2>/dev/null || true
+
+          find apps/e2e/test-results -name "*.png" -print -exec sh -c '
+            for f do
+              dest="e2e-diagnostics/$(echo "$f" | sed "s#apps/e2e/test-results/##" | tr "/" "_")"
+              cp "$f" "$dest"
+            done
+          ' sh {} + 2>/dev/null || true
+
+          {
+            echo "## E2E diagnostics"
+            echo ""
+            echo "### Files"
+            find e2e-diagnostics -type f -maxdepth 1 -printf "%f %s bytes\n" | sort || true
+          } > e2e-diagnostics/summary.md
+
+      - name: Upload E2E failure diagnostics
+        if: failure()
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
-          name: server-log
-          path: server.log
+          name: e2e-failure-diagnostics
+          path: e2e-diagnostics/
           retention-days: 1
+          if-no-files-found: ignore
