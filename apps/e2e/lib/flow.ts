@@ -9,7 +9,9 @@ export async function loginAsCandidate(
   await page.getByTestId("login-layout").waitFor({ state: "visible" });
 
   const loginResponsePromise = page.waitForResponse(
-    (res) => res.url().includes("/api/auth/login"),
+    (res) =>
+      res.request().method() === "POST" &&
+      res.url().includes("/api/auth/login"),
     { timeout: 15_000 },
   );
 
@@ -77,8 +79,8 @@ export async function resumeExamFromList(
       timeout: 15_000,
     },
   );
-  const url = page.url();
-  if (/\/start$/.test(url)) {
+  const currentUrl = new URL(page.url());
+  if (/\/start$/.test(currentUrl.pathname)) {
     await page.getByTestId("exam-start-btn").click();
     await page.waitForURL((url) => /\/exam\/[^/]+\/take$/.test(url.pathname), {
       timeout: 15_000,

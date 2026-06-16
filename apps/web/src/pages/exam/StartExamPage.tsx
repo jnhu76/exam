@@ -89,6 +89,8 @@ export function StartExamPage() {
       case "resume":
         if (exam.activeAttemptId) {
           navigate(routes.exam.take(exam.activeAttemptId));
+        } else {
+          await enterExam();
         }
         return;
       case "start":
