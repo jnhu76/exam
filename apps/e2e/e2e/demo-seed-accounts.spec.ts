@@ -166,7 +166,8 @@ async function createCandidate(
   adminToken: string,
   unique: string,
 ): Promise<{ username: string; password: string; profileId: string }> {
-  const username = `e2e-${unique}-${Date.now()}`;
+  const stamp = Date.now();
+  const username = `e2e-${unique}-${stamp}`;
   const result = await apiCall(
     request,
     "POST",
@@ -175,7 +176,8 @@ async function createCandidate(
       username,
       password: CANDIDATE_PASSWORD,
       name: `E2E ${unique}`,
-      fields: {},
+      // demo-seed declares `candidateNo` required+unique; supply a unique value.
+      fields: { candidateNo: `E2E-${unique}-${stamp}` },
     },
     adminToken,
   );
@@ -322,7 +324,9 @@ async function expectUiSummary(
   await expect(action).toContainText(expected.actionLabel);
   if (expected.requiresBestScore) {
     expect(summary.bestScore).toBeDefined();
-    await expect(card.getByText(String(summary.bestScore))).toBeVisible();
+    const scoreBadge = card.getByTestId("exam-best-score");
+    await expect(scoreBadge).toBeVisible();
+    await expect(scoreBadge).toContainText(String(summary.bestScore));
   }
 }
 

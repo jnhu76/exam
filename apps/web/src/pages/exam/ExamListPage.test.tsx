@@ -120,7 +120,9 @@ describe("ExamListPage", () => {
     );
 
     expect(await screen.findByText("已评分")).toBeInTheDocument();
-    expect(screen.getByText("85")).toBeInTheDocument();
+    const scoreBadge = screen.getByTestId("exam-best-score");
+    expect(scoreBadge).toBeInTheDocument();
+    expect(scoreBadge).toHaveTextContent("85");
     expect(screen.getByText("查看成绩")).toBeInTheDocument();
     expect(screen.getByTestId("exam-primary-action")).toHaveAttribute(
       "data-action",

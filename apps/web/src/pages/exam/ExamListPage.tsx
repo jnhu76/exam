@@ -128,7 +128,7 @@ function ExamCard({
           <CardTitle className="text-lg">{exam.title}</CardTitle>
           <div className="flex items-center gap-2 shrink-0">
             {exam.bestScore != null && (
-              <Badge variant="default">
+              <Badge variant="default" data-testid="exam-best-score">
                 <Trophy className="mr-1 size-3" />
                 {exam.bestScore}
               </Badge>

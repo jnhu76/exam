@@ -101,6 +101,64 @@ if ! docker compose version >/dev/null 2>&1; then
   err "未找到 docker compose（v2 plugin）"; exit 127
 fi
 
+# ----- 0.5. 宿主机端口占用检测 -----
+#
+# docker-compose.test.yml 把 app:3000 / db:5432 直接映射到宿主机同名端口。
+# 如果宿主机上已经有别的进程在监听这两个端口（常见情况：本地 `pnpm dev`、
+# 残留的 `pnpm --filter @exam/api start`、或 docker-compose.dev.yml 的 db），
+# `docker compose up` 不会自动迁走它们：
+#   - 端口冲突时 compose 会报 bind 失败；
+#   - 但若宿主机上的旧进程刚好响应 health 探测，预检/Playwright 可能会无声地
+#     打到“假 app”，看到 rate-limit headers / 401 / 500 等无关行为。
+# 在 compose up 之前显式失败，能把“环境污染”变成可识别错误，而不是污染 E2E。
+APP_HOST_PORT="${APP_PORT:-3000}"
+DB_HOST_PORT="5432"
+
+port_owner() {
+  local port="$1"
+  # ss 优先，回退到 lsof，最后回退到无信息
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp 2>/dev/null | awk -v p=":${port}\$" '$4 ~ p { print $0 }'
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN -nP 2>/dev/null | tail -n +2
+  fi
+}
+
+ensure_host_port_free() {
+  local port="$1" label="$2"
+  local owner
+  owner="$(port_owner "$port" || true)"
+  if [[ -z "$owner" ]]; then
+    return 0
+  fi
+  # compose 项目里自身的容器占用是 OK 的（重复运行同一个 stack）。
+  # 检查是不是已经有同 project_name 的 app 容器在用：如果是，让 compose up 处理。
+  local cid
+  cid="$(compose ps -q app 2>/dev/null || true)"
+  if [[ -n "$cid" ]]; then
+    return 0
+  fi
+  err "宿主机 :${port} (${label}) 已被占用，本脚本不会接管它："
+  while IFS= read -r line; do err "  $line"; done <<< "$owner"
+  err ""
+  err "可能原因："
+  err "  - 本地 'pnpm dev' / 'pnpm --filter @exam/api start' 还在跑"
+  err "  - docker-compose.dev.yml 的 stack 没停"
+  err "  - 其他服务占用了同名端口"
+  err "处理建议（任选其一）："
+  err "  1) 停掉占用进程：lsof -iTCP:${port} -sTCP:LISTEN | tail -n +2"
+  err "  2) 停 dev compose：docker compose -f docker-compose.dev.yml down -v"
+  err "  3) 改用其他端口：APP_PORT=3001 bash scripts/e2e/run.sh"
+  return 1
+}
+
+if ! ensure_host_port_free "$APP_HOST_PORT" "app"; then
+  exit 1
+fi
+if ! ensure_host_port_free "$DB_HOST_PORT" "db"; then
+  exit 1
+fi
+
 # ----- 1. 构建 app 镜像 -----
 if [[ "$DO_BUILD" == "1" ]]; then
   if [[ "$BUILD_NO_CACHE" == "1" ]]; then
@@ -150,6 +208,85 @@ if [[ "$last_status" != "healthy" ]]; then
   exit 1
 fi
 log "app healthy ✓ (entrypoint 已执行 migrate + seed)"
+
+# ----- 3.5. 预检：confirm canonical E2E seed + no rate-limit drift -----
+#
+# 预检走 docker 内网 (http://127.0.0.1:3000 inside the app container) —
+# 与 Playwright 容器的 http://app:3000 走同一条 Fastify 入口、同一份 server，
+# 不依赖宿主机端口映射，避免“主机网络 500 / 内网 200”这种歧义。
+preflight() {
+  log "预检 1/3: GET /api/health (in-network via app container)"
+  if ! compose exec -T app node -e '
+    fetch("http://127.0.0.1:3000/api/health")
+      .then(r => { if (!r.ok) { console.error("status="+r.status); process.exit(1); } })
+      .catch(e => { console.error(e.message); process.exit(1); });
+  ' >/dev/null 2>&1; then
+    err "预检失败: /api/health unreachable inside app container"
+    return 1
+  fi
+
+  log "预检 2/3: 候选账号登录 (admin + candidate1..4，无 429)"
+  if ! compose exec -T \
+      -e PREFLIGHT_USERS='admin:admin123,candidate1:candidate123,candidate2:candidate123,candidate3:candidate123,candidate4:candidate123' \
+      app node -e '
+    const users = process.env.PREFLIGHT_USERS.split(",").map(p => p.split(":"));
+    (async () => {
+      for (const [username, password] of users) {
+        const r = await fetch("http://127.0.0.1:3000/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        if (r.status === 200) continue;
+        const body = await r.text();
+        if (r.status === 401) {
+          console.error("[e2e] demo seed missing: " + username + " returned 401");
+        } else if (r.status === 429) {
+          console.error("[e2e] rate limit active in APP_MODE=e2e: " + username + " returned 429");
+        } else {
+          console.error("[e2e] preflight: " + username + " returned unexpected status=" + r.status);
+        }
+        console.error(body);
+        process.exit(1);
+      }
+    })().catch(e => { console.error(e.stack || e.message); process.exit(1); });
+  '; then
+    return 1
+  fi
+
+  log "预检 3/3: 重复 admin 登录 5 次 (确保 rate-limit 已禁用)"
+  if ! compose exec -T app node -e '
+    (async () => {
+      for (let i = 1; i <= 5; i++) {
+        const r = await fetch("http://127.0.0.1:3000/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: "admin", password: "admin123" }),
+        });
+        if (r.status === 429) {
+          console.error("[e2e] rate limit active in APP_MODE=e2e: admin returned 429 on attempt " + i);
+          process.exit(1);
+        }
+        if (r.status !== 200) {
+          console.error("[e2e] preflight: repeated admin login returned " + r.status + " on attempt " + i);
+          process.exit(1);
+        }
+      }
+    })().catch(e => { console.error(e.stack || e.message); process.exit(1); });
+  '; then
+    return 1
+  fi
+
+  log "预检通过 ✓ (canonical E2E seed + 无速率限制)"
+  return 0
+}
+
+if ! preflight; then
+  err "E2E preflight 失败 — 不会启动 Playwright"
+  warn "app 最近日志："
+  compose logs --tail=200 app || true
+  exit 1
+fi
 
 # ----- 4. 组装 playwright 参数 -----
 PW_ARGS=(npx playwright test --reporter=list)

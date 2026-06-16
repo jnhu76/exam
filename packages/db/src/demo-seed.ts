@@ -1015,7 +1015,12 @@ export async function seedDemo(
     ],
     startedAt: ts(-10 * 60_000),
     deadlineAt: ts(20 * 60_000),
-    lastActivityAt: ts(-1 * 60_000),
+    // lastActivityAt must be newer than the heartbeat timeout (60_000 ms;
+    // see DEFAULT_HEARTBEAT_TIMEOUT_MS in apps/api/src/plugins/heartbeat.ts).
+    // Using ts(0) — i.e. "right now at seed time" — keeps this attempt in
+    // `in_progress` for the lifetime of the E2E run rather than flipping to
+    // `disrupted` on the first heartbeat scan tick.
+    lastActivityAt: ts(0),
   });
   ids.attempts["open-c1-inprogress"] = openAttempt1Id;
 

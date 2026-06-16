@@ -42,13 +42,64 @@ Phase 1 singleTenant removes organization selection from public login/UI/API. Th
 
 ## Dev/Test Seed Credentials
 
-`packages/db/src/seed.ts` 仅用于开发、测试和演示初始化，不是生产恢复机制。默认账号：
+`packages/db/src/seed.ts` 仅用于开发、测试和演示初始化，不是生产恢复机制。
 
-| 用户名 | 临时密码 | 角色 |
-| --- | --- | --- |
-| `admin` | `admin123` | Admin |
-| `candidate` | `candidate123` | Candidate |
-| `candidate2` | `candidate123` | Candidate |
+### Baseline seed (admin + candidate)
+
+| 用户名 | 临时密码 | 角色 | 用途 |
+| --- | --- | --- | --- |
+| `admin` | `admin123` | Admin | 管理员入口 |
+| `candidate` | `candidate123` | Candidate | 默认考生 |
+| `candidate2` | `candidate123` | Candidate | 第二考生（demo seed 复用） |
+
+### Demo / E2E seed (candidate1..4)
+
+`packages/db/src/demo-seed.ts` 在 baseline 之上加上 4 个考生 + 课程 + 考试 + 试做记录，
+以便 E2E 覆盖 `availabilityStatus` × `primaryAction` 全状态。Demo seed 幂等地复用
+baseline 的 `candidate2` 用户（不会重复创建），只为它补充 CandidateProfile / 报名 /
+试做。Demo seed 也会单独创建 `candidate1` / `candidate3` / `candidate4` 三个考生。
+
+| 账号 | 密码 | 期望 availabilityStatus | 期望 primaryAction |
+| --- | --- | --- | --- |
+| `candidate1` | `candidate123` | `in_progress` | `resume` |
+| `candidate2` | `candidate123` | `available` | `start` |
+| `candidate3` | `candidate123` | `resumable` | `resume` |
+| `candidate4` | `candidate123` | `graded` | `view_result` |
+
+### Canonical commands
+
+```bash
+# 仅 baseline
+pnpm --filter @exam/api db:seed
+# baseline + demo + 校验（CI E2E 与本地 Docker E2E 都用这一个命令）
+pnpm --filter @exam/api db:seed:e2e
+# 等价根别名
+pnpm seed:e2e
+# 本地 Docker E2E（容器入口 RUN_SEED=e2e 自动跑 db:seed:e2e）
+bash ./scripts/e2e/run.sh
+```
+
+> CI E2E (`.github/workflows/ci.yml`) 与本地 Docker E2E (`scripts/e2e/run.sh` +
+> `docker-compose.test.yml`) 共用同一条 canonical E2E seed 命令；
+> Docker 容器内 `APP_MODE=e2e` 自动禁用 rate-limit 插件。
+
+### Docker E2E 端口与环境污染说明
+
+`docker-compose.test.yml` 将 `app:3000` 与 `db:5432` 直接映射到宿主机同名端口。
+`scripts/e2e/run.sh` 在 `docker compose up` 之前会显式检查宿主机 `:3000` /
+`:5432` 是否已被其他进程占用（本地 `pnpm dev`、`pnpm --filter @exam/api start`、
+`docker-compose.dev.yml` 的 db、或其他服务），如果占用就 fail-fast，避免
+“宿主机 500 / 容器内网 200” 这类歧义（最常见原因是宿主机上残留的 dev server
+仍在响应 login，且仍带着 `x-ratelimit-*` headers，但 `APP_MODE` 与 runtimeConfig
+状态可能与 Docker app 不一致）。
+
+不要同时跑两份 stack：开 Docker E2E 前请先停掉：
+
+```bash
+docker compose -f docker-compose.dev.yml down -v
+# 或换端口
+APP_PORT=3001 bash ./scripts/e2e/run.sh
+```
 
 ---
 

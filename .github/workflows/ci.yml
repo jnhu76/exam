@@ -156,9 +156,7 @@ jobs:
         run: pnpm --filter @exam/db db:migrate
 
       - name: Seed E2E data
-        run: |
-          pnpm --filter @exam/db db:seed
-          pnpm --filter @exam/api db:seed:demo
+        run: pnpm --filter @exam/api db:seed:e2e
 
       - name: Start API server
         run: |
