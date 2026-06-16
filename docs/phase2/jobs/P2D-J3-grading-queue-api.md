@@ -41,12 +41,12 @@ Add backend API endpoints for the grading queue: list attempts needing manual gr
 
 ```txt
 Admin opens grading queue
-  -> GET /admin/grading-queue?status=pending_manual
+  -> GET /api/admin/grading-queue?status=pending_manual
   -> sees list of attempts/questions needing grading
   -> clicks an entry
-  -> GET /admin/attempts/:id/grading-details
+  -> GET /api/admin/attempts/:id/grading-details
   -> enters score and comment
-  -> POST /admin/attempts/:id/grade-question
+  -> POST /api/admin/attempts/:id/grade-question
   -> queue updates
 ```
 
@@ -56,9 +56,9 @@ No grading queue API.
 
 ## 7. Target Behavior
 
-- `GET /admin/grading-queue` lists attempts with pending_manual status.
-- `GET /admin/attempts/:id/grading-details` returns attempt + questions needing manual grading.
-- `POST /admin/attempts/:id/grade-question` saves score and comment.
+- `GET /api/admin/grading-queue` lists attempts with pending_manual status.
+- `GET /api/admin/attempts/:id/grading-details` returns attempt + questions needing manual grading.
+- `POST /api/admin/attempts/:id/grade-question` saves score and comment.
 - When all questions graded, attempt transitions to fully_graded.
 
 ## 8. Scope
@@ -104,7 +104,7 @@ Can run in parallel with: P2D-J5
 
 | Layer | Required Content |
 |---|---|
-| Route | GET /admin/grading-queue, GET /admin/attempts/:id/grading-details, POST /admin/attempts/:id/grade-question |
+| Route | GET /api/admin/grading-queue, GET /api/admin/attempts/:id/grading-details, POST /api/admin/attempts/:id/grade-question |
 | Request Schema | `{ questionId, score, comment? }` |
 | Response Schema | `GradingQueueItem[]`, `GradingDetailsResponse` |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -120,9 +120,9 @@ Can run in parallel with: P2D-J5
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| GET /admin/grading-queue | query filters | queue items | - | Admin |
-| GET /admin/attempts/:id/grading-details | - | details | NOT_FOUND | Admin |
-| POST /admin/attempts/:id/grade-question | `{ questionId, score, comment? }` | updated attempt | NOT_FOUND, FORBIDDEN, VALIDATION_ERROR | Admin |
+| GET /api/admin/grading-queue | query filters | queue items | - | Admin |
+| GET /api/admin/attempts/:id/grading-details | - | details | NOT_FOUND | Admin |
+| POST /api/admin/attempts/:id/grade-question | `{ questionId, score, comment? }` | updated attempt | NOT_FOUND, FORBIDDEN, VALIDATION_ERROR | Admin |
 
 ## 14. Error Contract
 

@@ -55,8 +55,8 @@ showResultImmediate boolean controls visibility. No manual publish.
 ## 7. Target Behavior
 
 - Replace `showResultImmediate` with `resultPublicationMode` enum: `immediate`, `after_grading`, `manual`.
-- `GET /scores/attempts/:id` checks mode and attempt status before returning full result.
-- Admin can publish results manually via `POST /admin/exams/:id/publish-results`.
+- `GET /api/scores/attempts/:id` checks mode and attempt status before returning full result.
+- Admin can publish results manually via `POST /api/admin/exams/:id/publish-results`.
 - Backward compatibility: existing exams default to `immediate`.
 
 ## 8. Scope
@@ -105,7 +105,7 @@ Can run in parallel with: P2D-J2, P2D-J3, P2D-J4
 
 | Layer | Required Content |
 |---|---|
-| Route | GET /scores/attempts/:id, POST /admin/exams/:id/publish-results |
+| Route | GET /api/scores/attempts/:id, POST /api/admin/exams/:id/publish-results |
 | Request Schema | none for GET, empty body for POST |
 | Response Schema | AttemptResultResponse (conditional on mode) |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -121,8 +121,8 @@ Can run in parallel with: P2D-J2, P2D-J3, P2D-J4
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| GET /scores/attempts/:id | - | conditional result | NOT_FOUND, FORBIDDEN | Candidate/Admin |
-| POST /admin/exams/:id/publish-results | - | `{ ok: true }` | NOT_FOUND, FORBIDDEN | Admin |
+| GET /api/scores/attempts/:id | - | conditional result | NOT_FOUND, FORBIDDEN | Candidate/Admin |
+| POST /api/admin/exams/:id/publish-results | - | `{ ok: true }` | NOT_FOUND, FORBIDDEN | Admin |
 
 ## 14. Error Contract
 

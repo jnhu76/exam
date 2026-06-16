@@ -101,7 +101,7 @@ Can run in parallel with: P2A-J2, P2A-J3, P2A-J5
 
 | Layer | Required Content |
 |---|---|
-| Route | POST /attempts/:examId/start, GET /candidate/exams |
+| Route | POST /api/attempts/:examId/start, GET /api/candidate/exams |
 | Request Schema | existing |
 | Response Schema | existing |
 | OpenAPI | already in P2.0-J1 |

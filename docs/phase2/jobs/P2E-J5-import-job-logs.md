@@ -53,7 +53,7 @@ Import returns response but no persistence.
 ## 7. Target Behavior
 
 - New table `import_job_logs` stores: id, type, status, total, created, updated, errors, metadata, createdAt.
-- `GET /admin/import-logs` returns paginated import history.
+- `GET /api/admin/import-logs` returns paginated import history.
 - Import endpoints create log entry before processing and update on completion.
 
 ## 8. Scope
@@ -100,7 +100,7 @@ Can run in parallel with: P2E-J1, P2E-J2, P2E-J3, P2E-J4, P2E-J6
 
 | Layer | Required Content |
 |---|---|
-| Route | GET /admin/import-logs, POST /candidates/import, POST /questions/import |
+| Route | GET /api/admin/import-logs, POST /api/candidates/import, POST /api/questions/import |
 | Request Schema | existing for imports |
 | Response Schema | import summary + log id |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -116,9 +116,9 @@ Can run in parallel with: P2E-J1, P2E-J2, P2E-J3, P2E-J4, P2E-J6
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| GET /admin/import-logs | query params | log items | - | Admin |
-| POST /candidates/import | existing | existing + logId | - | Admin |
-| POST /questions/import | existing | existing + logId | - | Admin |
+| GET /api/admin/import-logs | query params | log items | - | Admin |
+| POST /api/candidates/import | existing | existing + logId | - | Admin |
+| POST /api/questions/import | existing | existing + logId | - | Admin |
 
 ### Backward Compatibility
 
@@ -222,7 +222,7 @@ pnpm verify
 ```txt
 1. Modified files: schema, candidate.ts, question.ts, audit.ts, ImportLogsPage.tsx, tests
 2. Behavior changed: import operations now persist logs
-3. API / contract changes: GET /admin/import-logs, import responses include logId
+3. API / contract changes: GET /api/admin/import-logs, import responses include logId
 4. DB / migration changes: yes (import_job_logs table)
 5. Tests added/updated: import log tests
 6. Verification commands and results: pnpm verify passed

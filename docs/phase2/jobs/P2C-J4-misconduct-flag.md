@@ -43,7 +43,7 @@ Add an admin API and UI to flag exam misconduct with notes, persisted on the att
 Admin views proctor dashboard
   -> sees suspicious activity
   -> clicks "Flag Misconduct"
-  -> POST /admin/attempts/:id/misconduct
+  -> POST /api/admin/attempts/:id/misconduct
   -> misconduct flag + notes persisted on attempt
   -> audit log recorded
   -> badge shown on attempt in dashboard and detail views
@@ -102,7 +102,7 @@ Can run in parallel with: P2C-J2, P2C-J3
 
 | Layer | Required Content |
 |---|---|
-| Route | POST /admin/attempts/:attemptId/misconduct |
+| Route | POST /api/admin/attempts/:attemptId/misconduct |
 | Request Schema | `{ notes: string, severity: enum }` |
 | Response Schema | `LoadAttemptResponse` or `{ ok: true }` |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -118,7 +118,7 @@ Can run in parallel with: P2C-J2, P2C-J3
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| POST /admin/attempts/:id/misconduct | `{ notes, severity }` | `{ ok: true }` | NOT_FOUND, FORBIDDEN | Admin |
+| POST /api/admin/attempts/:id/misconduct | `{ notes, severity }` | `{ ok: true }` | NOT_FOUND, FORBIDDEN | Admin |
 
 ## 14. Error Contract
 
@@ -224,7 +224,7 @@ pnpm verify
 ```txt
 1. Modified files: attempts.ts, schema, contracts, frontend, tests
 2. Behavior changed: admin can flag misconduct
-3. API / contract changes: POST /admin/attempts/:id/misconduct
+3. API / contract changes: POST /api/admin/attempts/:id/misconduct
 4. DB / migration changes: yes (misconduct fields)
 5. Tests added/updated: misconduct flag tests
 6. Verification commands and results: pnpm verify passed

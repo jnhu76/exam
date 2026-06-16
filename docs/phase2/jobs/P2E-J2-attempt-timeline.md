@@ -41,7 +41,7 @@ Build backend API and frontend UI to display a chronological timeline of attempt
 
 ```txt
 Admin opens attempt detail page
-  -> GET /admin/attempts/:id/timeline
+  -> GET /api/admin/attempts/:id/timeline
   -> sees chronological events: start, save, heartbeat, disrupt, restore, submit, grade
   -> clicks event to see metadata
 ```
@@ -52,7 +52,7 @@ No attempt timeline API or UI.
 
 ## 7. Target Behavior
 
-- `GET /admin/attempts/:id/timeline` returns ordered events from audit_logs filtered by attemptId.
+- `GET /api/admin/attempts/:id/timeline` returns ordered events from audit_logs filtered by attemptId.
 - Events mapped to human-readable labels.
 - Visual timeline component on AttemptDetailPage.
 
@@ -88,7 +88,7 @@ Can run in parallel with: P2E-J1, P2E-J3, P2E-J4, P2E-J5, P2E-J6
 | Layer | Files / Modules | Expected Change |
 |---|---|---|
 | contracts | audit.ts | Timeline event schema |
-| api routes | attempts.ts | GET /admin/attempts/:id/timeline |
+| api routes | attempts.ts | GET /api/admin/attempts/:id/timeline |
 | frontend | AttemptDetailPage.tsx | Timeline component |
 | e2e | attempt-timeline.spec.ts | Timeline test |
 
@@ -96,7 +96,7 @@ Can run in parallel with: P2E-J1, P2E-J3, P2E-J4, P2E-J5, P2E-J6
 
 | Layer | Required Content |
 |---|---|
-| Route | GET /admin/attempts/:id/timeline |
+| Route | GET /api/admin/attempts/:id/timeline |
 | Request Schema | none |
 | Response Schema | `{ events: [{ timestamp, action, actor, metadata }] }` |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -112,7 +112,7 @@ Can run in parallel with: P2E-J1, P2E-J3, P2E-J4, P2E-J5, P2E-J6
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| GET /admin/attempts/:id/timeline | - | timeline events | NOT_FOUND, FORBIDDEN | Admin |
+| GET /api/admin/attempts/:id/timeline | - | timeline events | NOT_FOUND, FORBIDDEN | Admin |
 
 ## 14. Error Contract
 
@@ -203,7 +203,7 @@ pnpm verify
 ```txt
 1. Modified files: attempts.ts, audit.ts, AttemptDetailPage.tsx, tests
 2. Behavior changed: admin can view attempt timeline
-3. API / contract changes: GET /admin/attempts/:id/timeline
+3. API / contract changes: GET /api/admin/attempts/:id/timeline
 4. Tests added/updated: timeline tests
 5. Verification commands and results: pnpm verify passed
 ```

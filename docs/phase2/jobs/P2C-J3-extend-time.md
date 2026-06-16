@@ -43,7 +43,7 @@ Add an admin API and UI to extend a candidate's attempt deadline, with candidate
 Admin views proctor dashboard
   -> sees active attempt
   -> clicks "Extend Time"
-  -> POST /admin/attempts/:id/extend-time
+  -> POST /api/admin/attempts/:id/extend-time
   -> deadlineAt updated in DB
   -> audit log recorded
   -> candidate UI sees updated deadline on next heartbeat/poll
@@ -104,7 +104,7 @@ Can run in parallel with: P2C-J2, P2C-J4
 
 | Layer | Required Content |
 |---|---|
-| Route | POST /admin/attempts/:attemptId/extend-time |
+| Route | POST /api/admin/attempts/:attemptId/extend-time |
 | Request Schema | `{ additionalMinutes: number }` |
 | Response Schema | `LoadAttemptResponse` |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -120,7 +120,7 @@ Can run in parallel with: P2C-J2, P2C-J4
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| POST /admin/attempts/:id/extend-time | `{ additionalMinutes }` | `LoadAttemptResponse` | NOT_FOUND, FORBIDDEN, INVALID_STATE | Admin |
+| POST /api/admin/attempts/:id/extend-time | `{ additionalMinutes }` | `LoadAttemptResponse` | NOT_FOUND, FORBIDDEN, INVALID_STATE | Admin |
 
 ## 14. Error Contract
 
@@ -242,7 +242,7 @@ pnpm verify
 ```txt
 1. Modified files: attempts.ts, contracts, frontend, tests
 2. Behavior changed: admin can extend attempt deadline
-3. API / contract changes: POST /admin/attempts/:id/extend-time
+3. API / contract changes: POST /api/admin/attempts/:id/extend-time
 4. Tests added/updated: extend-time tests
 5. Verification commands and results: pnpm verify passed
 ```

@@ -43,7 +43,7 @@ Add an admin API and UI to force-submit a candidate's attempt, with state transi
 Admin views proctor dashboard
   -> sees disrupted/abandoned attempt
   -> clicks "Force Submit"
-  -> POST /admin/attempts/:id/force-submit
+  -> POST /api/admin/attempts/:id/force-submit
   -> submitAttempt() + gradeAttempt() called
   -> attempt becomes graded
   -> audit log records force-submit
@@ -102,8 +102,8 @@ Can run in parallel with: P2C-J3, P2C-J4
 
 | Layer | Required Content |
 |---|---|
-| Route | POST /admin/attempts/:attemptId/force-submit |
-| Request Schema | `{ attemptId: string, reason?: string }` |
+| Route | POST /api/admin/attempts/:attemptId/force-submit |
+| Request Schema | `{ reason?: string }` |
 | Response Schema | `LoadAttemptResponse` (graded) |
 | OpenAPI | Document in P2.0-J1 baseline |
 | Domain Command | submitAttempt + gradeAttempt |
@@ -118,7 +118,7 @@ Can run in parallel with: P2C-J3, P2C-J4
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| POST /admin/attempts/:id/force-submit | `{ reason? }` | `LoadAttemptResponse` | NOT_FOUND, FORBIDDEN, INVALID_STATE | Admin |
+| POST /api/admin/attempts/:id/force-submit | `{ reason? }` | `LoadAttemptResponse` | NOT_FOUND, FORBIDDEN, INVALID_STATE | Admin |
 
 ## 14. Error Contract
 
@@ -243,7 +243,7 @@ pnpm verify
 ```txt
 1. Modified files: attempts.ts, contracts, frontend, tests
 2. Behavior changed: admin can force-submit attempts
-3. API / contract changes: POST /admin/attempts/:id/force-submit
+3. API / contract changes: POST /api/admin/attempts/:id/force-submit
 4. State-machine changes: in_progress/disrupted -> graded via admin
 5. Tests added/updated: force-submit tests
 6. Verification commands and results: pnpm verify passed

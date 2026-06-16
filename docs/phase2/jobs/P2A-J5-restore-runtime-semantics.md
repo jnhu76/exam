@@ -99,7 +99,7 @@ Can run in parallel with: P2A-J2, P2A-J3, P2A-J4
 
 | Layer | Required Content |
 |---|---|
-| Route | POST /attempts/:examId/start (restore path) |
+| Route | POST /api/attempts/:examId/start (restore path) |
 | Request Schema | existing |
 | Response Schema | LoadAttemptResponse (deadlineAt now adjusted) |
 | OpenAPI | already in P2.0-J1 |

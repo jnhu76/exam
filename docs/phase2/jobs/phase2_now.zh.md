@@ -187,7 +187,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **验收：** 管理员可强制提交 in_progress/disrupted attempt；幂等；审计记录管理员身份和原因。`pnpm verify` 通过。
 
-**API：** `POST /admin/attempts/:id/force-submit`，仅 Admin。
+**API：** `POST /api/admin/attempts/:id/force-submit`，仅 Admin。
 
 ---
 
@@ -201,7 +201,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **验收：** 管理员可延长 in_progress/disrupted attempt 的 deadline；候选考人在轮询间隔内看到更新；审计记录。`pnpm verify` 通过。
 
-**API：** `POST /admin/attempts/:id/extend-time`，仅 Admin。
+**API：** `POST /api/admin/attempts/:id/extend-time`，仅 Admin。
 
 ---
 
@@ -217,7 +217,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **DB 变更：** 需要 migration 加违纪字段。
 
-**API：** `POST /admin/attempts/:id/misconduct`，仅 Admin。
+**API：** `POST /api/admin/attempts/:id/misconduct`，仅 Admin。
 
 ---
 
@@ -233,7 +233,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **验收：** 管理员可查看 dashboard；状态卡片分组；操作按钮连接 P2C-J2/J3/J4 API。`pnpm verify` 通过。
 
-**API：** `GET /admin/exams/:id/candidates/status`，仅 Admin。
+**API：** `GET /api/admin/exams/:id/candidates/status`，仅 Admin。
 
 ---
 
@@ -288,9 +288,9 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 **验收：** 管理员可列出待评分 attempt；可按题输入分数；全部评分后 attempt 转为 `fully_graded`。`pnpm verify` 通过。
 
 **API：**
-- `GET /admin/grading-queue`
-- `GET /admin/attempts/:id/grading-details`
-- `POST /admin/attempts/:id/grade-question`
+- `GET /api/admin/grading-queue`
+- `GET /api/admin/attempts/:id/grading-details`
+- `POST /api/admin/attempts/:id/grade-question`
 
 ---
 
@@ -318,7 +318,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **DB 变更：** 加 `resultPublicationMode` 和 `resultsPublishedAt` 字段。
 
-**API：** `POST /admin/exams/:id/publish-results`。
+**API：** `POST /api/admin/exams/:id/publish-results`。
 
 ---
 
@@ -358,7 +358,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **验收：** 时间线按序展示关键事件；事件有可读标签；元数据可展开。`pnpm verify` 通过。
 
-**API：** `GET /admin/attempts/:id/timeline`。
+**API：** `GET /api/admin/attempts/:id/timeline`。
 
 ---
 
@@ -384,7 +384,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **验收：** 管理员可导出 JSON/CSV；含答案和评分结果；审计记录。`pnpm verify` 通过。
 
-**API：** `GET /admin/attempts/:id/export`。
+**API：** `GET /api/admin/attempts/:id/export`。
 
 ---
 
@@ -400,7 +400,7 @@ P2F-J1（ADR 文档）与所有 Job 并行，无依赖
 
 **DB 变更：** 新表 `import_job_logs`。
 
-**API：** `GET /admin/import-logs`。
+**API：** `GET /api/admin/import-logs`。
 
 ---
 

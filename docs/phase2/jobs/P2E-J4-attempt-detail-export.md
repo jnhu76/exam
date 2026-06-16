@@ -97,7 +97,7 @@ Can run in parallel with: P2E-J1, P2E-J2, P2E-J3, P2E-J5, P2E-J6
 
 | Layer | Required Content |
 |---|---|
-| Route | GET /admin/attempts/:id/export |
+| Route | GET /api/admin/attempts/:id/export |
 | Request Schema | query: `{ format?: json|csv }` |
 | Response Schema | attempt export data |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -113,7 +113,7 @@ Can run in parallel with: P2E-J1, P2E-J2, P2E-J3, P2E-J5, P2E-J6
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| GET /admin/attempts/:id/export | query format | export data | NOT_FOUND, FORBIDDEN | Admin |
+| GET /api/admin/attempts/:id/export | query format | export data | NOT_FOUND, FORBIDDEN | Admin |
 
 ## 14. Error Contract
 
@@ -203,7 +203,7 @@ pnpm verify
 ```txt
 1. Modified files: attempts.ts, contracts, AttemptDetailPage.tsx, tests
 2. Behavior changed: admin can export attempt detail
-3. API / contract changes: GET /admin/attempts/:id/export
+3. API / contract changes: GET /api/admin/attempts/:id/export
 4. Tests added/updated: export tests
 5. Verification commands and results: pnpm verify passed
 ```

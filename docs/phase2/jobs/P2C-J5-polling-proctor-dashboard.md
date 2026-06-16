@@ -41,7 +41,7 @@ Build an admin proctor dashboard using HTTP polling that displays candidate stat
 
 ```txt
 Admin navigates to /admin/exams/:id/proctor
-  -> Dashboard polls GET /admin/exams/:id/candidates/status every 5s
+  -> Dashboard polls GET /api/admin/exams/:id/candidates/status every 5s
   -> Displays cards: active, disrupted, submitted, graded
   -> Admin clicks action on a card
   -> Action API called
@@ -55,7 +55,7 @@ No proctor dashboard. No candidate status polling API.
 ## 7. Target Behavior
 
 - New route `/admin/exams/:id/proctor` with ProctorDashboardPage.
-- Polling API `GET /admin/exams/:id/candidates/status` returns:
+- Polling API `GET /api/admin/exams/:id/candidates/status` returns:
   - candidate info, attempt status, deadlineAt, lastActivityAt, misconduct flag.
 - Status cards grouped by status.
 - Action buttons wired to P2C-J2/J3/J4 APIs.
@@ -96,7 +96,7 @@ Can run in parallel with: nothing
 | Layer | Files / Modules | Expected Change |
 |---|---|---|
 | contracts | exam.ts | Candidate status response schema |
-| api routes | exam.ts | GET /admin/exams/:id/candidates/status |
+| api routes | exam.ts | GET /api/admin/exams/:id/candidates/status |
 | frontend | ProctorDashboardPage.tsx | Dashboard UI with cards and actions |
 | e2e | proctor-runtime.spec.ts | Dashboard tests |
 
@@ -104,7 +104,7 @@ Can run in parallel with: nothing
 
 | Layer | Required Content |
 |---|---|
-| Route | GET /admin/exams/:id/candidates/status |
+| Route | GET /api/admin/exams/:id/candidates/status |
 | Request Schema | query: `{ page?, pageSize? }` |
 | Response Schema | `{ candidates: [{ candidateId, name, status, deadlineAt, lastActivityAt, misconduct }] }` |
 | OpenAPI | Document in P2.0-J1 baseline |
@@ -120,7 +120,7 @@ Can run in parallel with: nothing
 
 | API | Request | Response | Error Shape | RBAC |
 |---|---|---|---|---|
-| GET /admin/exams/:id/candidates/status | query params | candidate status array | NOT_FOUND, FORBIDDEN | Admin |
+| GET /api/admin/exams/:id/candidates/status | query params | candidate status array | NOT_FOUND, FORBIDDEN | Admin |
 
 ## 14. Error Contract
 
@@ -215,7 +215,7 @@ pnpm verify
 ```txt
 1. Modified files: exam.ts, contracts, ProctorDashboardPage.tsx, tests
 2. Behavior changed: admin can monitor live exam via polling dashboard
-3. API / contract changes: GET /admin/exams/:id/candidates/status
+3. API / contract changes: GET /api/admin/exams/:id/candidates/status
 4. Tests added/updated: dashboard tests
 5. Verification commands and results: pnpm verify passed
 ```

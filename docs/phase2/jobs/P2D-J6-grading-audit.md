@@ -41,7 +41,7 @@ Ensure all score changes and grader identity are recorded in the audit log with 
 
 ```txt
 Admin enters score on grading detail page
-  -> POST /admin/attempts/:id/grade-question
+  -> POST /api/admin/attempts/:id/grade-question
   -> backend records score, comment, graderId, gradedAt
   -> audit log records grading.score_entered with metadata
   -> admin can view audit trail
