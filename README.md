@@ -24,13 +24,20 @@ The web dev server proxies `/api/*` requests to the API server automatically.
 
 ### Test Users (basic seed)
 
-By default, `pnpm db:seed` creates the following test users:
+By default, `pnpm db:seed` creates the following test users (Phase 1 = Admin +
+Candidate only):
 
-| Username    | Password       | Role       |
-| ----------- | -------------- | ---------- |
-| `admin`     | `admin123`     | SuperAdmin |
-| `teacher`   | `teacher123`   | Teacher    |
-| `candidate` | `candidate123` | Candidate  |
+| Username     | Password       | Role       |
+| ------------ | -------------- | ---------- |
+| `admin`      | `admin123`     | Admin      |
+| `candidate`  | `candidate123` | Candidate  |
+| `candidate2` | `candidate123` | Candidate  |
+
+> **Phase 1 scope**: only `Admin` and `Candidate` are runnable roles. Other
+> roles (`SuperAdmin`, `Teacher`, `Proctor`, `Grader`) exist in the schema/DB
+> layer but are **not active in Phase 1** — their product paths, login, and UI
+> are deferred to later phases. Demo-seed rows for those roles are kept for
+> forward compatibility but cannot log in.
 
 You can customize these users by setting environment variables in your `.env` file (copy from `.env.example`):
 
@@ -44,15 +51,15 @@ SEED_ADMIN_USERNAME="admin"
 SEED_ADMIN_PASSWORD="admin123"
 SEED_ADMIN_NAME="Admin"
 
-# Teacher user
-SEED_TEACHER_USERNAME="teacher"
-SEED_TEACHER_PASSWORD="teacher123"
-SEED_TEACHER_NAME="Teacher"
-
 # Candidate user
 SEED_CANDIDATE_USERNAME="candidate"
 SEED_CANDIDATE_PASSWORD="candidate123"
 SEED_CANDIDATE_NAME="Candidate"
+
+# Second candidate user
+SEED_CANDIDATE2_USERNAME="candidate2"
+SEED_CANDIDATE2_PASSWORD="candidate123"
+SEED_CANDIDATE2_NAME="Candidate 2"
 ```
 
 ### Demo Seed
@@ -74,14 +81,16 @@ pnpm db:seed:demo:verify
 
 | Username | Password | Role | Purpose |
 |---|---|---|---|
-| `superadmin` | `admin123` | SuperAdmin | Organization management, all admin features |
-| `admin` | `admin123` | Admin | All admin features except org management |
-| `teacher1` | `teacher123` | Teacher | Course/question/exam management |
-| `teacher2` | `teacher123` | Teacher | Teacher permission checks |
-| `candidate1` | `candidate123` | Candidate | In-progress exam, retake history |
-| `candidate2` | `candidate123` | Candidate | Assigned but not started |
-| `candidate3` | `candidate123` | Candidate | Disrupted/recovery case |
-| `candidate4` | `candidate123` | Candidate | Graded result case |
+| `admin` | `admin123` | Admin | All admin features (config, questions, exams, grading) |
+| `candidate1` | `candidate123` | Candidate | In-progress exam (resume) |
+| `candidate2` | `candidate123` | Candidate | Available / start |
+| `candidate3` | `candidate123` | Candidate | Resumable / resume |
+| `candidate4` | `candidate123` | Candidate | Graded / view result |
+
+> **Phase 1 scope**: demo seed creates Admin + Candidate accounts only.
+> `SuperAdmin` / `Teacher` / `Proctor` / `Grader` roles are **not seeded and
+> not active in Phase 1** (deferred to later phases). Schema/DB columns for
+> those roles are retained for forward compatibility.
 
 #### Demo Data
 
@@ -100,7 +109,7 @@ Requires a running PostgreSQL instance. Use `pnpm db:up` to start one via Docker
 
 ```bash
 pnpm install
-pnpm db:up       # Start PostgreSQL container (port 15432)
+pnpm db:up       # Start PostgreSQL container (port 5432)
 pnpm db:migrate  # Run migrations
 pnpm db:seed     # Seed with test users
 pnpm dev         # Start API + Web with hot reload
@@ -108,7 +117,7 @@ pnpm dev         # Start API + Web with hot reload
 
 - Web: http://localhost:5173
 - API: http://localhost:3000
-- Database: PostgreSQL 18 on `localhost:15432`
+- Database: PostgreSQL 18 on `localhost:5432`
 
 ### Mode 2: Docker Compose (Full Stack)
 
@@ -127,14 +136,14 @@ docker compose down -v   # remove database data
 
 ## Docker Files Reference
 
-| File                      | Purpose                                                    |
-| ------------------------- | ---------------------------------------------------------- |
-| `Dockerfile`              | Multi-stage build: base → builder → production runner      |
-| `docker-compose.yml`      | Production: app + PostgreSQL 18                            |
-| `docker-compose.dev.yml`  | Development: app + PostgreSQL 18                           |
-| `docker-compose.test.yml` | Testing: PostgreSQL 18 only (for host-based test runs)     |
-| `docker-entrypoint.sh`    | Runs migrations before starting the server                 |
-| `.env.example`            | Environment variable template                              |
+| File                      | Purpose                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `Dockerfile`              | Multi-stage build: base → builder → production runner                         |
+| `docker-compose.yml`      | Production: app + PostgreSQL 18                                               |
+| `docker-compose.dev.yml`  | Local development DB: PostgreSQL 18 only (for `pnpm db:up` / host test runs)  |
+| `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + E2E service (Playwright, profile) |
+| `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
+| `.env.example`            | Environment variable template                                                 |
 
 ## Development Commands
 
@@ -149,7 +158,7 @@ docker compose down -v   # remove database data
 | `pnpm db:push`           | Push schema changes to database                             |
 | `pnpm db:migrate`        | Run database migrations                                     |
 | `pnpm db:studio`         | Open Drizzle Studio                                         |
-| `pnpm db:up`             | Start PostgreSQL container (dev, port 15432)               |
+| `pnpm db:up`             | Start PostgreSQL container (dev, port 5432)                |
 | `pnpm db:down`           | Stop PostgreSQL container                                   |
 | `pnpm db:reset`          | Reset dev database (down + up + migrate)                   |
 | `pnpm test:pg`           | Run tests against PostgreSQL                                |
@@ -218,12 +227,12 @@ packages/
 | `SEED_ADMIN_USERNAME`     | `admin`                | Admin username                    |
 | `SEED_ADMIN_PASSWORD`     | `admin123`             | Admin password                    |
 | `SEED_ADMIN_NAME`         | `Admin`                | Admin display name                |
-| `SEED_TEACHER_USERNAME`   | `teacher`              | Teacher username                  |
-| `SEED_TEACHER_PASSWORD`   | `teacher123`           | Teacher password                  |
-| `SEED_TEACHER_NAME`       | `Teacher`              | Teacher display name              |
 | `SEED_CANDIDATE_USERNAME` | `candidate`            | Candidate username                |
 | `SEED_CANDIDATE_PASSWORD` | `candidate123`         | Candidate password                |
 | `SEED_CANDIDATE_NAME`     | `Candidate`            | Candidate display name            |
+| `SEED_CANDIDATE2_USERNAME`| `candidate2`           | Second candidate username         |
+| `SEED_CANDIDATE2_PASSWORD`| `candidate123`         | Second candidate password         |
+| `SEED_CANDIDATE2_NAME`    | `Candidate 2`          | Second candidate display name     |
 
 ## Testing
 
@@ -238,6 +247,48 @@ pnpm coverage
 pnpm --filter web test
 pnpm --filter db test
 ```
+
+> **Note**: DB-dependent tests (`@exam/db`, `@exam/api`) require a running
+> PostgreSQL. Start one with `pnpm db:up` (uses `docker-compose.dev.yml`,
+> PostgreSQL 18 on port `5432`) and set `DATABASE_URL` /
+> `TEST_DATABASE_URL` to point at it. In CI, GitHub Actions `services: postgres`
+> provides this instead.
+
+### E2E Tests (Playwright, browser)
+
+E2E browser tests live in `apps/e2e/e2e/*.spec.ts` and cover the candidate
+exam lifecycle (happy-path, resume, submit-flush, demo-seed accounts). They run
+in two environments:
+
+**CI** — the `e2e` job in `.github/workflows/ci.yml` builds the app, seeds
+(`db:seed` + `db:seed:demo`), starts the API, and runs `playwright test` with
+`APP_MODE=e2e` (rate limiting disabled).
+
+**Local via Docker** (canonical browser entry — requires Docker, no local
+Playwright install needed):
+
+```bash
+# 1. Start the full stack + DB (app must be healthy for E2E to target it)
+docker compose -f docker-compose.test.yml up -d --build
+
+# 2. Run the E2E service (Playwright image) against the running app
+docker compose -f docker-compose.test.yml --profile e2e run --rm e2e
+
+# 3. Tear down
+docker compose -f docker-compose.test.yml down -v
+```
+
+The E2E service uses the official `mcr.microsoft.com/playwright` image and
+targets `http://app:3000` inside the compose network.
+
+> **Local Playwright residue**: if you previously ran `sudo playwright install`
+> locally, `apps/e2e/node_modules/playwright-core` may be root-owned and block
+> `pnpm install` with `EPERM`. Clean it up (needs sudo):
+> ```bash
+> sudo rm -rf apps/e2e/node_modules
+> pnpm install
+> ```
+> After that, prefer the Docker entry above — local browsers are not required.
 
 ## Build
 

@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
@@ -33,19 +41,36 @@ const ENV_KEYS = [
 ] as const;
 
 describe("runtimeConfig", () => {
-  let savedEnv: Record<string, string | undefined> = {};
+  // Snapshot the true entry env once at file load. Vitest 4 / Vite 6 leaves
+  // NODE_ENV="production" at test entry, and the test command may pass
+  // APP_MODE=test. Tests below set these explicitly and rely on a deterministic
+  // clean baseline (mode keys unset) — NOT on whatever the runner leaves
+  // behind — so we capture entry values once and restore only those.
+  const entryEnv: Record<string, string | undefined> = {};
+
+  beforeAll(() => {
+    for (const key of ENV_KEYS) {
+      entryEnv[key] = process.env[key];
+    }
+  });
+
+  afterAll(() => {
+    for (const key of ENV_KEYS) {
+      if (entryEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = entryEnv[key];
+    }
+    resetRuntimeConfigForTest();
+  });
 
   beforeEach(() => {
+    // Start every test from a clean baseline: no leaked mode secrets. Tests
+    // set the exact env they need; nothing should depend on the runner's env.
     for (const key of ENV_KEYS) {
-      savedEnv[key] = process.env[key];
+      delete process.env[key];
     }
   });
 
   afterEach(() => {
-    for (const key of ENV_KEYS) {
-      if (savedEnv[key] === undefined) delete process.env[key];
-      else process.env[key] = savedEnv[key];
-    }
     resetRuntimeConfigForTest();
   });
 
@@ -104,6 +129,25 @@ describe("runtimeConfig", () => {
       process.env.API_DOCS_ENABLED = "true";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
+      expect(config.apiReference.enabled).toBe(false);
+    });
+
+    // Regression: this gate previously broke when the test runner leaked a
+    // stale APP_MODE (e.g. APP_MODE=test from the CI test command), because
+    // parseAppMode honors APP_MODE over NODE_ENV. The gate must engage based
+    // on the explicit production env, regardless of what the runner leaves in
+    // process.env between tests. See beforeEach clean-baseline isolation.
+    it("engages the production gate even when APP_MODE is unset (clean baseline)", () => {
+      process.env.NODE_ENV = "production";
+      process.env.JWT_SECRET = "test-secret";
+      process.env.DATABASE_URL = "postgresql://test:test@localhost:5432/test";
+      process.env.CORS_ORIGIN = "https://example.com";
+      process.env.API_DOCS_ENABLED = "true";
+      // APP_MODE intentionally left unset (the clean-baseline contract).
+      delete process.env.APP_MODE;
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.app.isProduction).toBe(true);
       expect(config.apiReference.enabled).toBe(false);
     });
 
@@ -405,6 +449,20 @@ describe("runtimeConfig", () => {
       const config = getRuntimeConfig();
       expect(config.heartbeat.scanIntervalMs).toBe(30000);
       expect(config.heartbeat.timeoutMs).toBe(60000);
+    });
+
+    // Regression: this test previously threw "JWT_SECRET is required in
+    // production" because a leaked NODE_ENV=production (vitest 4 / Vite 6 entry
+    // state) survived into this test after APP_MODE was deleted. The
+    // clean-baseline beforeEach now guarantees mode resolves to development,
+    // so the JWT_SECRET fail-fast must NOT fire here.
+    it("resolves to a non-production mode when mode keys are unset (clean baseline)", () => {
+      delete process.env.APP_MODE;
+      delete process.env.NODE_ENV;
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.app.isProduction).toBe(false);
+      expect(config.app.mode).toBe("development");
     });
 
     it("parses string to number", () => {

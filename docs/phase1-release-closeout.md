@@ -78,7 +78,7 @@
 | `apps/api/src/routes/settings.ts:23` | **Allowed** | Used in public branding query only |
 | `apps/api/src/config/runtimeConfig.ts:152-160` | **Allowed** | Rejects multiTenant at startup |
 | `docker-compose.yml:15` | **Allowed** | Defaults to `singleTenant` |
-| `docker-compose.dev.yml:15` | **Allowed** | Defaults to `singleTenant` |
+| `docker-compose.test.yml:15` | **Allowed** | Defaults to `singleTenant` |
 | `.env.example:20` | **Allowed** | Defaults to `singleTenant` |
 | Test files | **Allowed** | Runtime guard tests asserting rejection |
 | `packages/db/src/repository/organizationRepo.ts:74` | **Allowed** | Internal error for multi-org (unreachable in Phase 1) |
@@ -113,7 +113,7 @@
 | E2E tests exist | ✅ | 3 blocking specs: happy-path, resume, submit-flush |
 | Playwright config | ✅ | `apps/e2e/playwright.config.ts` — Chromium, workers=1, traces on failure |
 | E2E seed Admin + Candidate only | ✅ | `apps/e2e/lib/seed.ts` creates only Admin and Candidate |
-| Smoke tests | ✅ | `apps/e2e/src/smoke.test.ts` + `api-smoke.test.ts` — full API coverage |
+| Smoke tests | ℹ️ | API-level coverage now lives in the `@exam/api` suite (e.g. `smoke.test.ts`, `candidateInvariant.test.ts`). The standalone `apps/e2e/src/*` Vitest smoke files were dead code (no run entry) and have been removed. |
 | E2E artifacts | ✅ | server.log, playwright-report, test-results configured in playwright.config |
 
 **Verdict**: E2E tests are realistic, cover the 3 required paths, and use Admin + Candidate only. CI pipeline runs verify + e2e jobs with PostgreSQL.
@@ -204,7 +204,7 @@
 
 | Path | Test File | Status |
 |------|-----------|--------|
-| Admin happy path (login → create → publish → assign) | `apps/e2e/src/smoke.test.ts` (API-level) + seed.ts (admin API calls) | ✅ Covered |
+| Admin happy path (login → create → publish → assign) | `apps/api` route suite (API-level) + `apps/e2e/lib/seed.ts` (admin API calls) | ✅ Covered |
 | Candidate exam submit (login → list → start → answer → submit → score) | `apps/e2e/e2e/candidate-happy-path.spec.ts` | ✅ Covered |
 | Resume + submit flush (answer → reload → resume → submit; answer → immediate submit) | `apps/e2e/e2e/resume-attempt.spec.ts` + `apps/e2e/e2e/submit-flush.spec.ts` | ✅ Covered |
 
@@ -233,7 +233,7 @@ These gaps are acceptable for Phase 1 minimal E2E baseline.
 
 | Item | Severity | Reason |
 |------|----------|--------|
-| `apps/e2e/src/e2e/browser.spec.ts:78` uses `storageState: "e2e/.auth/candidate.json"` while `auth.setup.ts` writes to `src/e2e/.auth/candidate.json` — path mismatch | Low | Test bug in Docker-mode auth state; may cause candidate auth test to run without proper auth state. Not blocking for Phase 1 E2E (separate test suite). |
+| ~~`apps/e2e/src/e2e/browser.spec.ts:78` storageState path mismatch~~ | Resolved | The entire legacy `apps/e2e/src/` suite (`browser.spec.ts`, `auth.spec.ts`, `auth.setup.ts`) + `playwright.docker.config.ts` + dead Vitest smoke files were removed as dead code (zero references, no run entry). Only the active `apps/e2e/e2e/*.spec.ts` suite + `playwright.config.ts` remain. |
 | `docs/mock-data.md` Organization mock includes fields from `organizationSettings` table | Low | Doc-level illustration mismatch; no runtime impact. |
 | Queue/archive endpoints still exist in routes | Low | Structural residue; not Phase 1 product paths. Phase 2 scope. |
 | `docs/api/reference.md` still documents queue endpoint and Phase 2 exam fields | Low | Acknowledged in disclaimer as structural residue. |
@@ -260,7 +260,7 @@ These gaps are acceptable for Phase 1 minimal E2E baseline.
 | `pnpm verify` | ❌ FAILS | Fails at `@exam/db#test` due to missing PostgreSQL; all other steps pass |
 | `pnpm test:e2e` | ⏭ Not run | Requires running server + Chromium; CI-only capability |
 
-**Note**: `pnpm verify` fails because `@exam/db` and `@exam/api` test suites require PostgreSQL (not available locally). All non-DB packages pass. This is expected — the test architecture uses in-memory SQLite for most tests and PostgreSQL for seed/integration tests. The DB-dependent tests pass in Docker CI with `docker-compose.test.yml`.
+**Note**: `pnpm verify` fails because `@exam/db` and `@exam/api` test suites require PostgreSQL (not available locally). All non-DB packages pass. This is expected — the test architecture uses in-memory SQLite for most tests and PostgreSQL for seed/integration tests. The DB-dependent tests run against the local PostgreSQL container started via `docker-compose.dev.yml` (`pnpm db:up`), and in CI via GitHub Actions `services: postgres`.
 
 ---
 

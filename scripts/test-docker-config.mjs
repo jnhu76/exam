@@ -48,13 +48,10 @@ const tests = {
     }
   },
 
-  "docker-compose.test.yml uses PG 16": () => {
-    const compose = readFile("docker-compose.test.yml");
-    if (compose.includes("postgres:18") || compose.includes("postgres:17")) {
-      throw new Error("Test compose should use PostgreSQL 16");
-    }
-    if (!compose.includes("postgres:16")) {
-      throw new Error("Test compose should explicitly use PostgreSQL 16");
+  "docker-compose.dev.yml uses PostgreSQL 18": () => {
+    const compose = readFile("docker-compose.dev.yml");
+    if (!compose.includes("postgres:18")) {
+      throw new Error("Dev compose (local DB) should use PostgreSQL 18");
     }
   },
 

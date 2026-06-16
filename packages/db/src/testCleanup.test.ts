@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { getTestDb } from "./testDb.js";
-import { cleanupOrganizationTestData } from "./testCleanup.js";
+import {
+  cleanupOrganizationChildData,
+  cleanupOrganizationTestData,
+} from "./testCleanup.js";
 import { schema } from "./schema/pg.js";
 
 describe("cleanupOrganizationTestData", () => {
@@ -83,5 +86,89 @@ describe("cleanupOrganizationTestData", () => {
     expect(otherAudits).toHaveLength(1);
 
     await cleanupOrganizationTestData(db, otherOrganizationId);
+  });
+});
+
+describe("cleanupOrganizationChildData", () => {
+  it("removes child rows but keeps the organization and its users intact", async () => {
+    const { db } = await getTestDb();
+    const organizationId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const now = new Date();
+
+    await db.insert(schema.organizations).values({
+      id: organizationId,
+      name: "Child Cleanup Org",
+      displayName: "Child Cleanup Org",
+      slug: `child-cleanup-${organizationId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.users).values({
+      id: userId,
+      organizationId,
+      username: `child-cleanup-user-${organizationId}`,
+      passwordHash: "hash",
+      name: "Child Cleanup User",
+      role: "Admin",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.auditLogs).values({
+      id: crypto.randomUUID(),
+      organizationId,
+      actorId: userId,
+      action: "child.test",
+      targetType: "organization",
+      targetId: organizationId,
+      metadata: {},
+      ipAddress: null,
+      userAgent: null,
+      createdAt: now,
+    });
+
+    await cleanupOrganizationChildData(db, organizationId);
+
+    const orgRow = await db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, organizationId));
+    const userRow = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
+    const auditRows = await db
+      .select()
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.organizationId, organizationId));
+
+    expect(orgRow).toHaveLength(1);
+    expect(userRow).toHaveLength(1);
+    expect(auditRows).toEqual([]);
+
+    await cleanupOrganizationTestData(db, organizationId);
+  });
+
+  it("is idempotent and safe to run on an already-cleaned organization", async () => {
+    const { db } = await getTestDb();
+    const organizationId = crypto.randomUUID();
+    const now = new Date();
+
+    await db.insert(schema.organizations).values({
+      id: organizationId,
+      name: "Idempotent Child Org",
+      displayName: "Idempotent Child Org",
+      slug: `idempotent-child-${organizationId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await cleanupOrganizationChildData(db, organizationId);
+    await expect(
+      cleanupOrganizationChildData(db, organizationId),
+    ).resolves.toBeUndefined();
+
+    await cleanupOrganizationTestData(db, organizationId);
   });
 });

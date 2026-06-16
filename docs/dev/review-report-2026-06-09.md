@@ -103,10 +103,10 @@ Total tests: **739** (177 API + 306 web + 33 domain + 26 db + 87 exam-engine + 6
 
 | Test Suite | Tests | Coverage |
 |---|---|---|
-| `apps/e2e/smoke.test.ts` | 5 | Health check, system info, auth flow, full exam lifecycle (create→publish→submit→score), candidate import |
-| `apps/e2e/api-smoke.test.ts` | 26 | User CRUD, organization CRUD, candidate fields, settings/branding, course+question CRUD, exam archive lifecycle, exam submission+score+CSV export, RBAC role restrictions, system dashboard+health |
-| `apps/e2e/src/e2e/browser.spec.ts` | ~20 | Playwright browser E2E: auth (login/logout/redirect), admin navigation (sidebar links), admin CRUD (courses/users), candidate exam flow, exam lifecycle — **requires browser runtime, not runnable on WSL Ubuntu 26.04** |
-| `apps/api/smoke.test.ts` | 8 | Phase 1.1 regression — critical path: publish, enroll, start, delete constraint, password change |
+| `apps/e2e/e2e/*.spec.ts` | 4 files | Playwright browser E2E (Docker): candidate happy-path, resume-attempt, submit-flush, demo-seed-accounts — runs via `docker-compose.test.yml` e2e service or CI |
+| `apps/api` route suite (e.g. `smoke.test.ts`) | many | Phase 1.1 regression — critical path: publish, enroll, start, delete constraint, password change, plus full API coverage |
+
+> **Note**: The legacy `apps/e2e/src/*` Vitest smoke files (`smoke.test.ts`, `api-smoke.test.ts`) and the old `apps/e2e/src/e2e/browser.spec.ts` Playwright suite + `playwright.docker.config.ts` were removed as dead code (zero references, no run entry, referenced removed Phase 1 routes). API-level smoke coverage now lives in the `@exam/api` route test suite.
 
 ## 5. CI Pipeline
 
@@ -139,14 +139,14 @@ Vitest `coverage.thresholds` enforces minimum coverage at test time (web: 80/70/
 | `apps/web/src/components/question/__tests__/MultipleChoiceInput.test.tsx` | New |
 | `apps/web/src/components/settings/__tests__/PasswordChangeForm.test.tsx` | New |
 | `apps/web/src/components/shared/__tests__/ImportWizard.test.tsx` | New |
-| `apps/e2e/src/api-smoke.test.ts` | New: 26 backend API smoke tests |
-| `apps/e2e/src/e2e/browser.spec.ts` | New: Playwright browser E2E tests |
+| `apps/e2e/src/api-smoke.test.ts` | New: 26 backend API smoke tests *(removed as dead code in a later cleanup; API coverage now lives in the `@exam/api` route suite)* |
+| `apps/e2e/src/e2e/browser.spec.ts` | New: Playwright browser E2E tests *(removed as dead code in a later cleanup; active E2E is `apps/e2e/e2e/*.spec.ts`)* |
 | `apps/e2e/playwright.config.ts` | New: Playwright config with webServer setup |
 | `apps/e2e/package.json` | Added `@playwright/test`, `test:e2e:browser` script |
 
 ## 7. Known Limitations
 
-- **Playwright browser tests** (`apps/e2e/src/e2e/browser.spec.ts`) are written but cannot run on WSL Ubuntu 26.04 — Playwright does not support this platform. Tests are ready for CI or any environment with a browser runtime.
+- **Playwright browser E2E** runs via Docker (`docker-compose.test.yml` e2e service, Playwright image) or CI; the local WSL environment cannot host a browser. The legacy `apps/e2e/src/e2e/browser.spec.ts` was removed as dead code; the active suite is `apps/e2e/e2e/*.spec.ts`.
 - **SEC-01 through SEC-05** deferred to Phase 1 hardening sprint.
 - **BUG-01 through BUG-04, UX-01 through UX-08, DATA-01 through DATA-04** deferred — tracked in this report for prioritization.
 - **QUAL-01 through QUAL-08** deferred — code quality improvements for future backlog.

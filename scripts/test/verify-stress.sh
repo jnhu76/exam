@@ -18,11 +18,23 @@
 
 set -euo pipefail
 
+usage() {
+  sed -n '3,18p' "$0"
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 ITERATIONS="${1:-3}"
 NO_CACHE="${2:-}"
 
 if ! [[ "$ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERROR: iterations must be a positive integer, got: $ITERATIONS" >&2
+  echo "Run with --help for usage." >&2
   exit 2
 fi
 
