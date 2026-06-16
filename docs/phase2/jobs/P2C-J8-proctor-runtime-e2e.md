@@ -78,7 +78,7 @@ Production code
 ## 10. Dependencies
 
 ```txt
-Depends on: P2C-J2, P2C-J3, P2C-J4, P2C-J5
+Depends on: P2C-J1, P2C-J2, P2C-J3, P2C-J4, P2C-J5
 Blocks: P2D-J1
 Can run in parallel with: nothing
 ```

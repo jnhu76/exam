@@ -52,7 +52,7 @@ Import returns response but no persistence.
 
 ## 7. Target Behavior
 
-- New table `import_job_logs` stores: id, type, status, total, created, updated, errors, metadata, createdAt.
+- New table `import_job_logs` stores: id, organizationId, type, status, total, created, updated, errors, metadata, createdAt.
 - `GET /api/admin/import-logs` returns paginated import history.
 - Import endpoints create log entry before processing and update on completion.
 

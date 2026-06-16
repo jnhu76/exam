@@ -8,18 +8,18 @@ Implement result publication policy modes: immediate, after-grading, and manual 
 
 ```txt
 [ ] docs-only planning job
-[x] OpenAPI / contract job
+[ ] OpenAPI / contract job
 [x] backend state-machine job
-[ ] backend API / route job
+[x] backend API / route job
 [x] DB / repository / transaction job
-[x] frontend UI job
+[ ] frontend UI job
 [ ] E2E / regression job
 [ ] infra ADR job
 ```
 
 ## 3. Problem / Gap
 
-- Current behavior: showResultImmediate is a boolean per exam. No after-grading or manual publish modes.
+- Current behavior: showResultImmediately is a boolean per exam. No after-grading or manual publish modes.
 - Impact: Admin cannot control result visibility timing.
 - Discovery source: 04-state-machine-audit.md
 - Why this must be fixed now: Required for result control and admin workflow.
@@ -50,11 +50,11 @@ Admin sets resultPublicationMode on exam
 
 ## 6. Current Behavior
 
-showResultImmediate boolean controls visibility. No manual publish.
+showResultImmediately boolean controls visibility. No manual publish.
 
 ## 7. Target Behavior
 
-- Replace `showResultImmediate` with `resultPublicationMode` enum: `immediate`, `after_grading`, `manual`.
+- Replace `showResultImmediately` with `resultPublicationMode` enum: `immediate`, `after_grading`, `manual`.
 - `GET /api/scores/attempts/:id` checks mode and attempt status before returning full result.
 - Admin can publish results manually via `POST /api/admin/exams/:id/publish-results`.
 - Backward compatibility: existing exams default to `immediate`.
@@ -146,8 +146,8 @@ Can run in parallel with: P2D-J2, P2D-J3, P2D-J4
 ### Current Transition
 
 ```txt
-showResultImmediately = true  -> result visible immediately after grading
-showResultImmediately = false -> result never visible (or manually toggled)
+showResultImmediatelyly = true  -> result visible immediately after grading
+showResultImmediatelyly = false -> result never visible (or manually toggled)
 ```
 
 ### Target Transition
@@ -165,7 +165,7 @@ ALTER TABLE exams ADD COLUMN resultPublicationMode TEXT NOT NULL DEFAULT 'immedi
 ALTER TABLE exams ADD COLUMN resultsPublishedAt TIMESTAMPTZ;
 
 UPDATE exams
-SET resultPublicationMode = CASE WHEN "showResultImmediately" THEN 'immediate' ELSE 'manual' END;
+SET resultPublicationMode = CASE WHEN "showResultImmediatelyly" THEN 'immediate' ELSE 'manual' END;
 ```
 
 Result visibility is a state (hidden → visible) governed by the publication mode and attempt grading status.
@@ -199,7 +199,7 @@ Migration backfill SQL:
 ```sql
 ALTER TABLE exams ADD COLUMN resultPublicationMode TEXT NOT NULL DEFAULT 'immediate';
 ALTER TABLE exams ADD COLUMN resultsPublishedAt TIMESTAMPTZ;
-UPDATE exams SET resultPublicationMode = CASE WHEN "showResultImmediately" THEN 'immediate' ELSE 'manual' END;
+UPDATE exams SET resultPublicationMode = CASE WHEN "showResultImmediatelyly" THEN 'immediate' ELSE 'manual' END;
 ```
 
 ## 18. Concurrency / Idempotency / Race Cases
@@ -240,13 +240,13 @@ loading, error, empty, status-only result, full result.
 [x] Manual mode hides results until admin publishes.
 [x] Admin can publish results for an exam.
 [x] Result visibility is modeled as a state entity (hidden → visible).
-[x] Migration backfill converts showResultImmediately to resultPublicationMode correctly.
+[x] Migration backfill converts showResultImmediatelyly to resultPublicationMode correctly.
 [x] pnpm verify passes.
 ```
 
 ## 24. Regression Risks
 
-- Risk 1: Migration must preserve existing showResultImmediate behavior.
+- Risk 1: Migration must preserve existing showResultImmediately behavior.
 
 ## 25. Rollback / Compatibility
 
@@ -258,7 +258,7 @@ Limited to result publishing policy only.
 
 ## 27. Review Guardrails
 
-Must not break existing showResultImmediate behavior.
+Must not break existing showResultImmediately behavior.
 
 ## 28. Verification Commands
 

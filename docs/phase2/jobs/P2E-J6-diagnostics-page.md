@@ -109,7 +109,7 @@ Can run in parallel with: P2E-J1, P2E-J2, P2E-J3, P2E-J4, P2E-J5
 |---|---|
 | Route | GET /api/system/diagnostics |
 | Request Schema | none |
-| Response Schema | `{ version, uptime, dbLatency, heartbeatStatus, deadlineScannerStatus, config }` |
+| Response Schema | `{ version, uptime, dbLatency, heartbeatStatus: { interval, timeout, lastScanAt, disruptedCount }, deadlineScannerStatus: { interval, lastScanAt, autoSubmitCount }, config: { examDefaultDuration, heartbeatInterval, deadlineScanInterval } }` |
 | OpenAPI | Document in P2.0-J1 baseline |
 | Domain Command | N/A |
 | Repository | N/A (reads from memory/metrics) |

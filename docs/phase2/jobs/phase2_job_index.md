@@ -29,7 +29,7 @@
 | P2D-J2 | Manual Grading Model | 2D | backend state-machine job, DB / repository / transaction job, OpenAPI / contract job | P2D-J1 | P2D-J3, P2D-J4 | Domain model for manual scores; per-question grading state | Medium | M |
 | P2D-J3 | Grading Queue API | 2D | backend API / route job, OpenAPI / contract job | P2D-J2 | P2D-J4, P2D-J6 | List attempts/questions needing manual grading | Medium | M |
 | P2D-J4 | Manual Grading UI | 2D | frontend UI job | P2D-J3 | P2D-J6 | Admin score input per question; comments | Medium | M |
-| P2D-J5 | Result Publishing Policy (SPLIT BEFORE CONSTRUCTION) | 2D | backend state-machine job, DB / repository / transaction job, OpenAPI / contract job, frontend UI job | P2D-J1 | P2D-J6 | Immediate / after-grading / manual publish modes. Breaking migration: showResultImmediately → resultPublicationMode. Split into P2D-J5a/J5b/J5c before construction. | Medium | M |
+| P2D-J5 | Result Publishing Policy (SPLIT BEFORE CONSTRUCTION) | 2D | backend state-machine job, backend API / route job, DB / repository / transaction job, OpenAPI / contract job, frontend UI job | P2D-J1 | P2D-J6 | Immediate / after-grading / manual publish modes + score policy verification + candidate/admin result visibility. Breaking migration: showResultImmediately → resultPublicationMode. Split into P2D-J5a/J5b/J5c before construction. | Medium | M |
 | P2D-J6 | Grading Audit | 2D | backend API / route job | P2D-J3, P2D-J5 | P2E-J1 | Record grader, score changes, timestamps | Low | S |
 | P2E-J1 | Audit Log Viewer | 2E | frontend UI job | P2D-J6 | — | Searchable/filterable audit log UI | Low | M |
 | P2E-J2 | Attempt Timeline | 2E | backend API / route job, frontend UI job | P2D-J6 | — | Show attempt lifecycle events chronologically | Low | M |

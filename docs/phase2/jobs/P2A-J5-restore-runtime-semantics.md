@@ -103,11 +103,11 @@ Can run in parallel with: P2A-J2, P2A-J3, P2A-J4
 | Request Schema | existing |
 | Response Schema | LoadAttemptResponse (deadlineAt now adjusted) |
 | OpenAPI | already in P2.0-J1 |
-| Domain Command | restoreAttempt |
-| Repository | attemptRepo.update |
+| Domain Command | restoreAttempt (wrapped in executeInTransaction) |
+| Repository | attemptRepo.findByIdForUpdate, attemptRepo.update |
 | DB Tables | exam_attempts |
-| Transaction | No (single update) |
-| Locking | No |
+| Transaction | YES |
+| Locking | YES (findByIdForUpdate) |
 | Audit | attempt.restore (already exists) |
 | Tests | Unit and route tests |
 

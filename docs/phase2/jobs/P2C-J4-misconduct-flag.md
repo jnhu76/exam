@@ -68,7 +68,7 @@ This job may modify:
 apps/api/src/routes/attempts.ts
 packages/contracts/src/attempt.ts
 packages/db/src/schema/pg.ts (misconduct columns or JSONB)
-apps/web/src/pages/ (proctor dashboard, attempt detail)
+apps/web/src/pages/ (proctor dashboard, attempt detail, result views)
 ```
 
 ## 9. Non-Scope

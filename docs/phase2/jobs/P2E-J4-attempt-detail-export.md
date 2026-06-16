@@ -98,7 +98,7 @@ Can run in parallel with: P2E-J1, P2E-J2, P2E-J3, P2E-J5, P2E-J6
 | Layer | Required Content |
 |---|---|
 | Route | GET /api/admin/attempts/:id/export |
-| Request Schema | query: `{ format?: json|csv }` |
+| Request Schema | query: `{ format?: "json" \| "csv" }` |
 | Response Schema | attempt export data |
 | OpenAPI | Document in P2.0-J1 baseline |
 | Domain Command | N/A (read-only) |
