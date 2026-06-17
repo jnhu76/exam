@@ -94,8 +94,13 @@ describe("demo seed", () => {
 
   it("creates graded attempts with grading results", async () => {
     const { db } = await getTestDb();
-    await seedDemo(db, hashPassword);
-    const allAttempts = await db.select().from(schema.examAttempts);
+    const ids = await seedDemo(db, hashPassword);
+    // Scope to the demo org only: this test must assert demo-seed behavior,
+    // not unrelated graded attempts left in the shared DB by other tests.
+    const allAttempts = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.organizationId, ids.orgId));
     const gradedAttempts = allAttempts.filter((a) => a.status === "graded");
     expect(gradedAttempts.length).toBeGreaterThanOrEqual(5);
     for (const attempt of gradedAttempts) {
@@ -103,6 +108,30 @@ describe("demo seed", () => {
       expect(attempt.gradingResult).toBeDefined();
       const results = attempt.gradingResult as Array<unknown>;
       expect(results.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("regression: keeps non-empty gradingResult on every graded attempt across a double seedDemo run", async () => {
+    const { db } = await getTestDb();
+    // First run seeds; second run exercises the idempotent update path of
+    // upsertAttempt, which re-writes gradingResult from a freshly rebuilt
+    // snapshot. Graded attempts must never end up with an empty
+    // gradingResult, even on the second run.
+    const firstIds = await seedDemo(db, hashPassword);
+    await seedDemo(db, hashPassword);
+
+    const attempts = await db
+      .select()
+      .from(schema.examAttempts)
+      .where(eq(schema.examAttempts.organizationId, firstIds.orgId));
+    const gradedAttempts = attempts.filter((a) => a.status === "graded");
+    expect(gradedAttempts.length).toBeGreaterThanOrEqual(5);
+    for (const attempt of gradedAttempts) {
+      expect(Array.isArray(attempt.gradingResult)).toBe(true);
+      expect((attempt.gradingResult as Array<unknown>).length).toBeGreaterThan(
+        0,
+      );
+      expect(attempt.score).toBeDefined();
     }
   });
 

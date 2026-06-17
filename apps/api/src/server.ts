@@ -12,6 +12,7 @@ import nowPlugin from "./plugins/now.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
+import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import authRoutes from "./routes/auth.js";
@@ -50,6 +51,7 @@ async function main() {
   await app.register(tenantPlugin);
   await app.register(rateLimitPlugin);
   await app.register(heartbeatPlugin);
+  await app.register(deadlineScannerPlugin);
 
   await registerOpenApiDocs(app);
 

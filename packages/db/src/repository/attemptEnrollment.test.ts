@@ -232,6 +232,186 @@ describe("attemptRepo custom methods", () => {
     expect(found.length).toBeGreaterThanOrEqual(1);
     expect(found[0]!.attemptNo).toBe(1);
   });
+
+  describe("listExpirableByDeadline", () => {
+    it("returns in_progress attempts whose deadlineAt <= before", async () => {
+      const orgL = randomUUID();
+      const idsL = makeIds();
+      const ctxL = createContext(orgL);
+      await seedBaseData(db, orgL, idsL);
+      const enrL = await enrollmentRepo.create(ctxL, {
+        examId: idsL.examId,
+        candidateId: idsL.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      const pastDeadline = new Date(Date.now() - 60_000);
+      await attemptRepo.create(ctxL, {
+        examId: idsL.examId,
+        enrollmentId: enrL.id,
+        candidateId: idsL.candidateId,
+        attemptNo: 1,
+        status: "in_progress",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(Date.now() - 3600_000),
+        deadlineAt: pastDeadline,
+        lastActivityAt: new Date(),
+      });
+
+      const before = new Date();
+      const found = await attemptRepo.listExpirableByDeadline(ctxL, before);
+
+      expect(found.some((a) => a.enrollmentId === enrL.id)).toBe(true);
+      const ours = found.find((a) => a.enrollmentId === enrL.id)!;
+      expect(ours.status).toBe("in_progress");
+    });
+
+    it("returns disrupted attempts whose deadlineAt <= before", async () => {
+      const orgD = randomUUID();
+      const idsD = makeIds();
+      const ctxD = createContext(orgD);
+      await seedBaseData(db, orgD, idsD);
+      const enrD = await enrollmentRepo.create(ctxD, {
+        examId: idsD.examId,
+        candidateId: idsD.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      await attemptRepo.create(ctxD, {
+        examId: idsD.examId,
+        enrollmentId: enrD.id,
+        candidateId: idsD.candidateId,
+        attemptNo: 1,
+        status: "disrupted",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(Date.now() - 3600_000),
+        deadlineAt: new Date(Date.now() - 60_000),
+        lastActivityAt: new Date(),
+      });
+
+      const before = new Date();
+      const found = await attemptRepo.listExpirableByDeadline(ctxD, before);
+
+      expect(found.some((a) => a.enrollmentId === enrD.id)).toBe(true);
+      const ours = found.find((a) => a.enrollmentId === enrD.id)!;
+      expect(ours.status).toBe("disrupted");
+    });
+
+    it("does NOT return attempts whose deadlineAt is still in the future", async () => {
+      const orgF = randomUUID();
+      const idsF = makeIds();
+      const ctxF = createContext(orgF);
+      await seedBaseData(db, orgF, idsF);
+      const enrF = await enrollmentRepo.create(ctxF, {
+        examId: idsF.examId,
+        candidateId: idsF.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      await attemptRepo.create(ctxF, {
+        examId: idsF.examId,
+        enrollmentId: enrF.id,
+        candidateId: idsF.candidateId,
+        attemptNo: 1,
+        status: "in_progress",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(),
+        deadlineAt: new Date(Date.now() + 3600_000),
+        lastActivityAt: new Date(),
+      });
+
+      const before = new Date();
+      const found = await attemptRepo.listExpirableByDeadline(ctxF, before);
+
+      expect(found.some((a) => a.enrollmentId === enrF.id)).toBe(false);
+    });
+
+    it("does NOT return submitted / graded / voided attempts even if deadline passed", async () => {
+      const orgS = randomUUID();
+      const idsS = makeIds();
+      const ctxS = createContext(orgS);
+      await seedBaseData(db, orgS, idsS);
+      const enrS = await enrollmentRepo.create(ctxS, {
+        examId: idsS.examId,
+        candidateId: idsS.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      const pastDeadline = new Date(Date.now() - 60_000);
+      let nextNo = 2;
+      for (const status of ["submitted", "grading", "graded", "voided"]) {
+        await attemptRepo.create(ctxS, {
+          examId: idsS.examId,
+          enrollmentId: enrS.id,
+          candidateId: idsS.candidateId,
+          attemptNo: nextNo++,
+          status: status as never,
+          questionSnapshot: [],
+          answers: [],
+          startedAt: new Date(Date.now() - 3600_000),
+          deadlineAt: pastDeadline,
+          lastActivityAt: new Date(),
+          ...(status === "graded"
+            ? {
+                gradingResult: [
+                  {
+                    questionId: "q1",
+                    score: 0,
+                    maxScore: 10,
+                    correct: false,
+                    candidateAnswer: null,
+                    standardAnswer: "a",
+                  },
+                ],
+                score: 0,
+                passed: false,
+                gradedAt: new Date(),
+              }
+            : {}),
+        });
+      }
+
+      const before = new Date();
+      const found = await attemptRepo.listExpirableByDeadline(ctxS, before);
+      const ours = found.filter((a) => a.enrollmentId === enrS.id);
+      expect(ours).toEqual([]);
+    });
+
+    it("respects tenant boundary (does not leak other orgs)", async () => {
+      const orgA = randomUUID();
+      const orgB = randomUUID();
+      const idsA = makeIds();
+      const idsB = makeIds();
+      const ctxA = createContext(orgA);
+      const ctxB = createContext(orgB);
+      await seedBaseData(db, orgA, idsA);
+      await seedBaseData(db, orgB, idsB);
+      const enrA = await enrollmentRepo.create(ctxA, {
+        examId: idsA.examId,
+        candidateId: idsA.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      await attemptRepo.create(ctxA, {
+        examId: idsA.examId,
+        enrollmentId: enrA.id,
+        candidateId: idsA.candidateId,
+        attemptNo: 1,
+        status: "in_progress",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(Date.now() - 3600_000),
+        deadlineAt: new Date(Date.now() - 60_000),
+        lastActivityAt: new Date(),
+      });
+
+      const found = await attemptRepo.listExpirableByDeadline(ctxB, new Date());
+      expect(found.some((a) => a.enrollmentId === enrA.id)).toBe(false);
+    });
+  });
 });
 
 describe("enrollmentRepo custom methods", () => {
