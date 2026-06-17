@@ -240,6 +240,10 @@ function createEnrollmentRepoAdapter(
       (await repo.findByExamAndCandidate(ctx, examId, candidateId)) as
         | import("@exam/domain").ExamEnrollment
         | null,
+    findByExamAndCandidateForUpdate: async (examId, candidateId) =>
+      (await repo.findByExamAndCandidateForUpdate(ctx, examId, candidateId)) as
+        | import("@exam/domain").ExamEnrollment
+        | null,
     create: async (input) =>
       (await repo.create(
         ctx,
@@ -641,82 +645,85 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const { examId } = parsed.data;
-      const examRepo = createExamRepo(fastify.db);
-      const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const attemptRepo = createAttemptRepo(fastify.db);
-
-      const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
-      const enrRepoAdapter = createEnrollmentRepoAdapter(enrollmentRepo, ctx);
-      const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
-
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
-      const enrollment = await enrollmentRepo.findByExamAndCandidate(
-        ctx,
-        examId,
-        candidateId,
-      );
-      if (!enrollment) {
-        throw new PermissionDeniedError("Candidate is not enrolled");
-      }
 
-      const activeAttempt = await attemptRepo.findActiveByExamAndCandidate(
-        ctx,
-        examId,
-        candidateId,
-      );
-      if (activeAttempt) {
-        if (activeAttempt.status === "disrupted") {
-          const restored = await restoreAttempt(
-            examRepoAdapter,
-            attRepoAdapter,
-            activeAttempt.id,
-            new Date(),
-          );
-          recordAudit(
-            fastify,
-            request,
-            ctx,
-            "attempt.restore",
-            "attempt",
-            activeAttempt.id,
-          );
-          return LoadAttemptResponseSchema.parse(
-            toCandidateAttemptResponse(restored),
-          );
-        }
-        return LoadAttemptResponseSchema.parse(
-          toCandidateAttemptResponse(activeAttempt as ExamAttempt),
-        );
-      }
-
+      const examRepo = createExamRepo(fastify.db);
       const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
       if (
         exam.controlFlags.requireQueue &&
-        getQueueStatus(exam, candidateId, new Date()).status !== "ready"
+        getQueueStatus(exam, candidateId, fastify.now()).status !== "ready"
       ) {
         throw new ConflictError(
           "Queue admission required before starting this exam",
         );
       }
 
-      const attempt = await startAttempt(
-        examRepoAdapter,
-        enrRepoAdapter,
-        attRepoAdapter,
-        examId,
-        candidateId,
-        new Date(),
+      const { attempt, isNew } = await executeInTransaction(
+        fastify.db,
+        async (tx) => {
+          const examRepoTx = createExamRepo(tx);
+          const enrollmentRepo = createEnrollmentRepo(tx);
+          const attemptRepo = createAttemptRepo(tx);
+
+          const examRepoAdapter = createExamRepoAdapter(examRepoTx, ctx);
+          const enrRepoAdapter = createEnrollmentRepoAdapter(
+            enrollmentRepo,
+            ctx,
+          );
+          const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
+
+          const enrollment =
+            await enrollmentRepo.findByExamAndCandidateForUpdate(
+              ctx,
+              examId,
+              candidateId,
+            );
+          if (!enrollment) {
+            throw new PermissionDeniedError("Candidate is not enrolled");
+          }
+
+          const activeAttempt = await attemptRepo.findActiveByExamAndCandidate(
+            ctx,
+            examId,
+            candidateId,
+          );
+          if (activeAttempt) {
+            if (activeAttempt.status === "disrupted") {
+              const restored = await restoreAttempt(
+                examRepoAdapter,
+                attRepoAdapter,
+                activeAttempt.id,
+                fastify.now(),
+              );
+              return { attempt: restored, isNew: false } as const;
+            }
+            return {
+              attempt: activeAttempt as ExamAttempt,
+              isNew: false,
+            } as const;
+          }
+
+          const attempt = await startAttempt(
+            examRepoAdapter,
+            enrRepoAdapter,
+            attRepoAdapter,
+            examId,
+            candidateId,
+            fastify.now(),
+          );
+          return { attempt, isNew: true } as const;
+        },
       );
 
       recordAudit(
         fastify,
         request,
         ctx,
-        "attempt.start",
+        isNew ? "attempt.start" : "attempt.restore",
         "attempt",
         attempt.id,
       );
@@ -726,8 +733,17 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           (entry) => entry.candidateId !== candidateId,
         ),
       );
+      if (isNew) {
+        return reply
+          .code(201)
+          .send(
+            LoadAttemptResponseSchema.parse(
+              toCandidateAttemptResponse(attempt),
+            ),
+          );
+      }
       return reply
-        .code(201)
+        .code(200)
         .send(
           LoadAttemptResponseSchema.parse(toCandidateAttemptResponse(attempt)),
         );

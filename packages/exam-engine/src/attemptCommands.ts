@@ -45,6 +45,10 @@ export interface EnrollmentRepository {
     examId: string,
     candidateId: string,
   ): Promise<ExamEnrollment | null> | ExamEnrollment | null;
+  findByExamAndCandidateForUpdate(
+    examId: string,
+    candidateId: string,
+  ): Promise<ExamEnrollment | null> | ExamEnrollment | null;
   create(
     input: Omit<ExamEnrollment, "id" | "createdAt" | "updatedAt"> & {
       id?: string;
@@ -79,7 +83,7 @@ export async function startAttempt(
     throw new ExamNotOpenError("Current time is outside exam open window");
   }
 
-  const enrollment = await enrollmentRepo.findByExamAndCandidate(
+  const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
     examId,
     candidateId,
   );

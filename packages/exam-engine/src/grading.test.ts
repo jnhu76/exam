@@ -123,6 +123,7 @@ function makeRepos(
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,
+    findByExamAndCandidateForUpdate: () => storedEnrollment,
     create: () => storedEnrollment,
     update: (_id, data) => {
       storedEnrollment = { ...storedEnrollment, ...data };
@@ -233,6 +234,7 @@ describe("gradeAttempt", () => {
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
+      findByExamAndCandidateForUpdate: () => enrollment,
       create: () => enrollment,
       update: () => enrollment,
     };
@@ -272,6 +274,7 @@ describe("gradeAttempt", () => {
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
+      findByExamAndCandidateForUpdate: () => enrollment,
       create: () => enrollment,
       update: () => null,
     };

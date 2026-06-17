@@ -33,6 +33,27 @@ export function createEnrollmentRepo(db: Database) {
         (rows[0] as typeof examEnrollments.$inferSelect | undefined) ?? null
       );
     },
+    async findByExamAndCandidateForUpdate(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+      candidateId: string,
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select()
+        .from(examEnrollments)
+        .for("update")
+        .where(
+          and(
+            eq(examEnrollments.organizationId, orgId),
+            eq(examEnrollments.examId, examId),
+            eq(examEnrollments.candidateId, candidateId),
+          ),
+        );
+      return (
+        (rows[0] as typeof examEnrollments.$inferSelect | undefined) ?? null
+      );
+    },
     async findByCandidate(
       ctx: TenantContext | RequestContext,
       candidateId: string,
