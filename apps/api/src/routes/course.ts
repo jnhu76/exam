@@ -191,6 +191,9 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          204: z.null(),
+        },
       },
     },
     async (request: any, reply: any) => {
