@@ -1,4 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
+import { ErrorResponseSchema } from "@exam/contracts";
 import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -8,11 +10,23 @@ import { ensureTargetOrg } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const cookieAuth = [{ cookieAuth: [] }] as const;
+
 export const exportRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id/export/scores",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: z.string(),
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const { id: examId } = request.params as { id: string };
@@ -67,7 +81,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       reply.header("Content-Type", "text/csv; charset=utf-8");
       reply.header(
         "Content-Disposition",
-        `attachment; filename="scores-${examId}-${Date.now()}.csv"`,
+        `attachment; filename="scores-$:examId-${Date.now()}.csv"`,
       );
 
       const auditRepo = createAuditLogRepo(fastify.db);

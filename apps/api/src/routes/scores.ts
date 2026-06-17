@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   AttemptResultResponseSchema,
   AttemptScoreParamsSchema,
   ScoreListQuerySchema,
   ScoreListResponseSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import type {
   Exam,
@@ -16,6 +18,10 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { formatZodError, ensureTargetOrg } from "./helpers.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
+
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const cookieAuth = [{ cookieAuth: [] }] as const;
 
 function normalizeScalarQueryValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -121,6 +127,17 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id/scores",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        querystring: ScoreListQuerySchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ScoreListResponseSchema,
+          400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const examId = (request.params as any).id;
@@ -147,12 +164,16 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       });
       const access = canOpenScoreList(exam, gradedCount, new Date());
       if (!access.allowed) {
-        return reply.code(409).send({
-          error: {
-            code: "INVALID_STATE_TRANSITION",
-            message: access.message,
-          },
-        });
+        return reply
+          .code(409)
+          .send(
+            buildErrorResponse(
+              request.id,
+              "RESOURCE_CONFLICT",
+              { reason: "EXAM_NOT_FINISHED" },
+              access.message ?? undefined,
+            ),
+          );
       }
       const offset = (page - 1) * pageSize;
       const statsResult = await attemptRepo.getGradedStats(ctx, examId);
@@ -200,6 +221,15 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.authenticate,
         fastify.requireRole(["Candidate", "Admin"]),
       ],
+      schema: {
+        params: AttemptScoreParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate", "Admin"],
+        response: {
+          200: AttemptResultResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = AttemptScoreParamsSchema.safeParse(request.params);

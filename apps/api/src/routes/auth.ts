@@ -1,10 +1,15 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   LoginRequestSchema,
   LoginResponseSchema,
   MeResponseSchema,
   ChangePasswordRequestSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
+
+const okResponseSchema = z.object({ ok: z.literal(true) });
+const cookieAuth = [{ cookieAuth: [] }] as const;
 import {
   hashPassword,
   verifyPassword,
@@ -31,7 +36,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post(
     "/login",
-    { config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } } },
+    {
+      config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } },
+      schema: {
+        body: LoginRequestSchema,
+        response: {
+          200: LoginResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
       const tenancy = getRuntimeConfig().tenancy;
@@ -217,7 +231,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get(
     "/me",
-    { preHandler: fastify.authenticate },
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        security: cookieAuth,
+        response: {
+          200: MeResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const userRepo = createUserRepo(fastify.db);
       const ctx = request.ctx!;
@@ -242,7 +265,18 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.patch(
     "/me/password",
-    { preHandler: fastify.authenticate },
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        security: cookieAuth,
+        body: ChangePasswordRequestSchema,
+        response: {
+          200: okResponseSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const parsed = ChangePasswordRequestSchema.safeParse(request.body);
       if (!parsed.success) {
