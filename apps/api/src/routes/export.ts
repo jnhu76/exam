@@ -81,7 +81,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       reply.header("Content-Type", "text/csv; charset=utf-8");
       reply.header(
         "Content-Disposition",
-        `attachment; filename="scores-$:examId-${Date.now()}.csv"`,
+        `attachment; filename="scores-${examId}-${Date.now()}.csv"`,
       );
 
       const auditRepo = createAuditLogRepo(fastify.db);

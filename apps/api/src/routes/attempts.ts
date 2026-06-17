@@ -973,7 +973,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           return { alreadyGraded: true } as const;
         }
         throw new InvalidStateTransitionError(
-          `Cannot submit attempt in $:status state`,
+          `Cannot submit attempt in ${status} state`,
         );
       });
 
