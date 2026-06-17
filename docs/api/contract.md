@@ -170,5 +170,6 @@ The following items are intentionally left out of this document's scope:
   OpenAPI.
 - Future API reference / settings UI should consume generated OpenAPI, not the
   hand-written reference.
-- Remove or adopt `apps/api/src/openapi/routeMeta.ts` (currently unused
-  shared helpers).
+- Adopt `apps/api/src/openapi/routeMeta.ts` — replace inline `cookieAuth` /
+  `idParamsSchema` / `x-role` definitions across route files with imports
+  from this shared module to reduce duplication.
