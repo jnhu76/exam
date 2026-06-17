@@ -74,7 +74,7 @@ const FIELD_TYPE_OPTIONS: Array<{
  * and downloading a CSV import template that reflects the current field configuration.
  */
 /**
- * Admin page for configuring candidate identity fields (e.g., student ID, department).
+ * Admin page for configuring candidate identity fields (e.g., examinee ID, department).
  * Supports create, edit, reorder via drag-and-drop, and CSV template download.
  */
 export function CandidateFieldsPage() {

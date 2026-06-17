@@ -133,7 +133,7 @@ export type UpdateCandidateRequest = z.infer<
 // ── Candidate Field ───────────────────────────────────────────────
 
 /**
- * Schema for a candidate identity field definition, such as student ID or department.
+ * Schema for a candidate identity field definition, such as examinee ID or department.
  * Fields define what identity data candidates must provide.
  */
 export const CandidateFieldSchema = z.object({
@@ -148,7 +148,7 @@ export const CandidateFieldSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
-/** Represents a candidate identity field definition (e.g., student ID, department). */
+/** Represents a candidate identity field definition (e.g., examinee ID, department). */
 export type CandidateFieldDTO = z.infer<typeof CandidateFieldSchema>;
 
 /**
