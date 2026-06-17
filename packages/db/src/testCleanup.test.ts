@@ -87,6 +87,84 @@ describe("cleanupOrganizationTestData", () => {
 
     await cleanupOrganizationTestData(db, otherOrganizationId);
   });
+
+  it("retries past a late-landing fire-and-forget audit insert (FK race)", async () => {
+    // Reproduces the candidateField.test.ts cleanup race: a production route
+    // writes its audit log via the fire-and-forget recordAudit() helper, whose
+    // insert is NOT awaited by the request. When the test tears the org down in
+    // a finally block, that pending insert can commit between this helper's
+    // audit_logs delete and its organizations delete, triggering an
+    // audit_logs_organization_id_organizations_id_fk violation. The helper must
+    // retry the full delete tree so a later attempt sweeps the late insert.
+    const { db } = await getTestDb();
+    const organizationId = crypto.randomUUID();
+    const now = new Date();
+
+    await db.insert(schema.organizations).values({
+      id: organizationId,
+      name: "FK Race Org",
+      displayName: "FK Race Org",
+      slug: `fk-race-${organizationId}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.auditLogs).values({
+      id: crypto.randomUUID(),
+      organizationId,
+      actorId: crypto.randomUUID(),
+      action: "race.before",
+      targetType: "organization",
+      targetId: organizationId,
+      metadata: {},
+      ipAddress: null,
+      userAgent: null,
+      createdAt: now,
+    });
+
+    // Fire a small, realistic burst of "late-landing" audit inserts concurrent
+    // with cleanup, mimicking one or two fire-and-forget recordAudit() calls
+    // whose inserts commit during teardown (the candidateField.test.ts
+    // scenario: a single POST writes one audit row that is not awaited).
+    // recordAudit swallows its own insert errors (.catch), so inserts that fail
+    // because the org is already gone are fine. The cleanup retry window must
+    // outlast this finite burst.
+    const lateInserts = Promise.all(
+      Array.from({ length: 2 }, (_, i) =>
+        (async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20 * (i + 1)));
+          await db
+            .insert(schema.auditLogs)
+            .values({
+              id: crypto.randomUUID(),
+              organizationId,
+              actorId: crypto.randomUUID(),
+              action: "race.late",
+              targetType: "organization",
+              targetId: organizationId,
+              metadata: {},
+              ipAddress: null,
+              userAgent: null,
+              createdAt: new Date(),
+            })
+            .catch(() => {
+              /* mirrors recordAudit fire-and-forget error swallowing */
+            });
+        })(),
+      ),
+    );
+
+    // Must not throw despite the concurrent inserts racing the org delete.
+    await expect(
+      cleanupOrganizationTestData(db, organizationId),
+    ).resolves.toBeUndefined();
+    await lateInserts;
+
+    const orgRow = await db
+      .select()
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, organizationId));
+    expect(orgRow).toEqual([]);
+  });
 });
 
 describe("cleanupOrganizationChildData", () => {

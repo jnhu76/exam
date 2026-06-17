@@ -556,7 +556,16 @@ export async function seedDemo(
         .from(schema.questions)
         .where(eq(schema.questions.id, qid(tag)));
       const q = rows[0];
-      if (!q) continue;
+      // Fail loud instead of silently skipping: a missing question row would
+      // otherwise produce an empty snapshot, which in turn yields an empty
+      // gradingResult for graded attempts. Graded attempts MUST carry a
+      // gradingResult whose length matches the seeded exam questions.
+      if (!q) {
+        throw new Error(
+          `demo-seed: question row not found for tag '${tag}' ` +
+            `(id=${qid(tag)}); cannot build a non-empty question snapshot`,
+        );
+      }
       snapshots.push({
         originalQuestionId: q.id,
         type: q.type as QuestionSnapshot["type"],
@@ -978,6 +987,21 @@ export async function seedDemo(
       lastActivityAt?: Date;
     },
   ): Promise<string> {
+    // Invariant: a graded attempt MUST carry a non-empty gradingResult that is
+    // consistent with its seeded exam questions. This guards against silent
+    // data corruption (e.g. an empty question snapshot producing
+    // gradingResult: []) that would make the demo seed ungradeable.
+    if (data.status === "graded") {
+      if (
+        !Array.isArray(data.gradingResult) ||
+        data.gradingResult.length === 0
+      ) {
+        throw new Error(
+          `demo-seed: graded attempt (enrollmentId=${enrollmentId}, ` +
+            `attemptNo=${attemptNo}) must have a non-empty gradingResult`,
+        );
+      }
+    }
     const existing = await db
       .select()
       .from(schema.examAttempts)

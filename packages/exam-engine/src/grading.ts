@@ -246,3 +246,43 @@ export async function gradeAttempt(
 
   return result;
 }
+
+export async function gradeAttemptIdempotent(
+  examRepo: ExamRepository,
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+  now: Date,
+): Promise<ScoreResult> {
+  const snapshot = await readGradingSnapshot(
+    examRepo,
+    enrollmentRepo,
+    attemptRepo,
+    attemptId,
+  );
+  if (!snapshot) {
+    throw new ValidationError("Attempt not found");
+  }
+
+  if (snapshot.attempt.status === "graded") {
+    return {
+      attemptId: snapshot.attempt.id,
+      totalScore: snapshot.attempt.score ?? 0,
+      passed: snapshot.attempt.passed ?? false,
+      questionResults: snapshot.attempt.gradingResult ?? [],
+      gradedAt: snapshot.attempt.gradedAt ?? now,
+    };
+  }
+
+  const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+  await finalizeGrading(
+    enrollmentRepo,
+    attemptRepo,
+    attemptId,
+    snapshot.enrollment.id,
+    result,
+    snapshot.exam,
+  );
+
+  return result;
+}
