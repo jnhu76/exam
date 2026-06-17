@@ -610,7 +610,10 @@ describe("J8: score list routes", () => {
     });
 
     expect(response.statusCode).toBe(409);
-    expect(response.json().error.message).toMatch(/not finished yet/i);
+    const body = response.json();
+    expect(body.error.message).toMatch(/not finished yet/i);
+    expect(body.error.requestId).toEqual(expect.any(String));
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
   });
 
   it("J8-A-2: filters by pass/fail status", async () => {

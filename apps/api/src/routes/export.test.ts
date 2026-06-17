@@ -54,10 +54,23 @@ describe("CSV export integration", () => {
     await ctx.cleanup();
   });
 
-  it("returns 404 ErrorResponse v0 with RESOURCE_NOT_FOUND and requestId for non-existent exam", async () => {
+  it("returns 400 VALIDATION_ERROR for a malformed (non-uuid) exam id", async () => {
+    // P2.0-J1 contract hardening: path params are validated by the route
+    // schema, so a non-uuid id is now a 400 before the handler runs.
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/exams/nonexistent/export/scores",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 404 ErrorResponse with RESOURCE_NOT_FOUND for a valid uuid that does not exist", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${crypto.randomUUID()}/export/scores`,
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(404);
