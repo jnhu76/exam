@@ -6,6 +6,7 @@ import authPlugin from "../../src/plugins/auth.js";
 import tenantPlugin from "../../src/plugins/tenant.js";
 import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
+import zodProviderPlugin from "../../src/plugins/zodProvider.js";
 import setupSecurity from "../../src/plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
@@ -204,6 +205,7 @@ describe("Tenant Isolation (S01)", () => {
     app = Fastify();
     setupSecurity(app);
     setupErrorHandler(app);
+    await app.register(zodProviderPlugin);
     await app.register(fastifyCookie);
     await app.register(createDbPlugin(db));
     await app.register(authPlugin);

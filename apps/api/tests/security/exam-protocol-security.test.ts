@@ -8,6 +8,7 @@ import tenantPlugin from "../../src/plugins/tenant.js";
 import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import nowPlugin from "../../src/plugins/now.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
+import zodProviderPlugin from "../../src/plugins/zodProvider.js";
 import setupSecurity from "../../src/plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
@@ -181,6 +182,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     app = Fastify();
     setupSecurity(app);
     setupErrorHandler(app);
+    await app.register(zodProviderPlugin);
     await app.register(fastifyCookie);
     await app.register(createDbPlugin(db));
     await app.register(nowPlugin);
