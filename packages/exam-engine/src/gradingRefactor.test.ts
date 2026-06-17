@@ -133,6 +133,7 @@ function makeRepos(
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,
+    findByExamAndCandidateForUpdate: () => storedEnrollment,
     create: () => storedEnrollment,
     update: (_id, data) => {
       storedEnrollment = { ...storedEnrollment, ...data };
@@ -178,6 +179,7 @@ describe("readGradingSnapshot", () => {
       { findById: () => makeExam(), update: () => makeExam() },
       {
         findByExamAndCandidate: () => makeEnrollment(),
+        findByExamAndCandidateForUpdate: () => makeEnrollment(),
         create: () => makeEnrollment(),
         update: () => null,
       },

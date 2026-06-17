@@ -189,6 +189,13 @@ function makeEnrollmentRepo(
         ) ?? null
       );
     },
+    findByExamAndCandidateForUpdate(examId, candidateId) {
+      return (
+        store.find(
+          (e) => e.examId === examId && e.candidateId === candidateId,
+        ) ?? null
+      );
+    },
     create(input) {
       const enr: ExamEnrollment = {
         id: input.id ?? "enr-new",
@@ -467,6 +474,76 @@ describe("attemptCommands", () => {
       );
 
       expect(result.questionSnapshot).toEqual(snapshot);
+    });
+
+    it("uses findByExamAndCandidateForUpdate for enrollment lookup (transaction-safe)", async () => {
+      const exam = makeExam();
+      const enrollment = makeEnrollment();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo();
+
+      const enrRepo: EnrollmentRepository = {
+        findByExamAndCandidate: () => null,
+        findByExamAndCandidateForUpdate: () => enrollment,
+        create: (input) => ({
+          id: "enr-new",
+          organizationId: input.organizationId,
+          examId: input.examId,
+          candidateId: input.candidateId,
+          status: input.status,
+          attemptCount: input.attemptCount,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+        update: (_id, data) => ({ ...enrollment, ...data }) as ExamEnrollment,
+      };
+
+      const result = await startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.status).toBe("in_progress");
+      expect(result.candidateId).toBe("cand-1");
+    });
+
+    it("returns existing attempt when findByExamAndCandidateForUpdate finds active attempt", async () => {
+      const exam = makeExam();
+      const enrollment = makeEnrollment({ attemptCount: 1 });
+      const existingAttempt = makeAttempt();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo([existingAttempt]);
+
+      const enrRepo: EnrollmentRepository = {
+        findByExamAndCandidate: () => null,
+        findByExamAndCandidateForUpdate: () => enrollment,
+        create: (input) => ({
+          id: "enr-new",
+          organizationId: input.organizationId,
+          examId: input.examId,
+          candidateId: input.candidateId,
+          status: input.status,
+          attemptCount: input.attemptCount,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+        update: (_id, data) => ({ ...enrollment, ...data }) as ExamEnrollment,
+      };
+
+      const result = await startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+
+      expect(result.id).toBe("attempt-1");
     });
   });
 

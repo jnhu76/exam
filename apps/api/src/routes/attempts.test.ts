@@ -230,6 +230,65 @@ describe("attempt routes", () => {
       expect(res2.json().id).toBe(attemptId);
     });
 
+    it("double-click start creates only one active attempt in DB", async () => {
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "DoubleClick Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const dcExamId = examRes.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${dcExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${dcExamId}/enrollments`,
+        payload: { candidateIds: [candidateProfileId] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const [res1, res2] = await Promise.all([
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${dcExamId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        }),
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${dcExamId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        }),
+      ]);
+
+      const codes = [res1.statusCode, res2.statusCode].sort();
+      expect(codes).toEqual([200, 201]);
+      expect(res1.json().id).toBe(res2.json().id);
+
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const allAttempts = await createAttemptRepo(
+        ctx.db,
+      ).findByExamAndCandidate(candidateCtx, dcExamId, candidateProfileId);
+      const activeAttempts = allAttempts.filter(
+        (a) => a.status === "in_progress",
+      );
+      expect(activeAttempts).toHaveLength(1);
+    });
+
     it("returns 401 without auth", async () => {
       const res = await ctx.app.inject({
         method: "POST",
