@@ -8,7 +8,7 @@ import {
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
@@ -136,6 +136,23 @@ export function createAttemptRepo(db: Database) {
           and(
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.status, "in_progress"),
+          ),
+        )) as AttemptSelect[];
+    },
+    async listExpirableByDeadline(
+      ctx: TenantContext | RequestContext,
+      before: Date,
+    ): Promise<AttemptSelect[]> {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      return (await db
+        .select()
+        .from(examAttempts)
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            inArray(examAttempts.status, ["in_progress", "disrupted"]),
+            isNotNull(examAttempts.deadlineAt),
+            lte(examAttempts.deadlineAt, before),
           ),
         )) as AttemptSelect[];
     },

@@ -8,6 +8,8 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { scanDatabaseForDisruptedAttempts } from "../plugins/heartbeat.js";
+import { scanDatabaseForExpiredAttempts } from "../plugins/deadlineScanner.js";
+import { autoSubmitAndGrade } from "../plugins/deadlineScanner.js";
 import { getSaveAnswerMessage } from "@exam/contracts";
 
 async function ensureCandidateProfile(ctx: TestContext): Promise<string> {
@@ -228,6 +230,65 @@ describe("attempt routes", () => {
 
       expect(res2.statusCode).toBe(200);
       expect(res2.json().id).toBe(attemptId);
+    });
+
+    it("double-click start creates only one active attempt in DB", async () => {
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "DoubleClick Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const dcExamId = examRes.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${dcExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${dcExamId}/enrollments`,
+        payload: { candidateIds: [candidateProfileId] },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const [res1, res2] = await Promise.all([
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${dcExamId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        }),
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${dcExamId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        }),
+      ]);
+
+      const codes = [res1.statusCode, res2.statusCode].sort();
+      expect(codes).toEqual([200, 201]);
+      expect(res1.json().id).toBe(res2.json().id);
+
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const allAttempts = await createAttemptRepo(
+        ctx.db,
+      ).findByExamAndCandidate(candidateCtx, dcExamId, candidateProfileId);
+      const activeAttempts = allAttempts.filter(
+        (a) => a.status === "in_progress",
+      );
+      expect(activeAttempts).toHaveLength(1);
     });
 
     it("returns 401 without auth", async () => {
@@ -1588,6 +1649,266 @@ describe("attempt routes", () => {
       const target = await getSummary(expiredExamId);
       expect(target.availabilityStatus).toBe("expired");
       expect(target.primaryAction).toBe("none");
+    });
+  });
+
+  describe("deadline scanner — scanDatabaseForExpiredAttempts", () => {
+    const candidateCtx = () => ({
+      actorId: ctx.candidate.id,
+      organizationId: ctx.org.id,
+      role: "Candidate" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+      targetOrganizationId: ctx.org.id,
+    });
+
+    async function createStartedAttemptWithQuestion(
+      examTitle: string,
+    ): Promise<{ attemptId: string; questionId: string }> {
+      const exam = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: examTitle,
+          courseId,
+          questionIds: [questionId],
+          durationMinutes: 1,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const localExamId = exam.json().id;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${localExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(localExamId);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${localExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+
+      const examDetail = (
+        await ctx.app.inject({
+          method: "GET",
+          url: `/api/exams/${localExamId}`,
+          cookies: { "auth-token": ctx.adminToken },
+        })
+      ).json();
+      const localQuestionId = examDetail.questionIds[0];
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${localQuestionId}`,
+        payload: {
+          attemptId,
+          questionId: localQuestionId,
+          answer: true,
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      return { attemptId, questionId: localQuestionId };
+    }
+
+    async function backdateDeadline(attemptId: string): Promise<void> {
+      const past = new Date(Date.now() - 60_000);
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: past, status: "in_progress" })
+        .where(eq(schema.examAttempts.id, attemptId));
+    }
+
+    it("auto-submits and grades an expired in_progress attempt end-to-end", async () => {
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit InProgress Exam",
+      );
+      await backdateDeadline(attemptId);
+
+      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+
+      expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("graded");
+      expect(attempt?.submittedAt).toBeDefined();
+      expect(attempt?.gradedAt).toBeDefined();
+      expect(attempt?.score).toBeDefined();
+    });
+
+    it("records exactly one attempt.autoSubmit audit event on a successful auto-submit", async () => {
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit Audit Exam",
+      );
+      await backdateDeadline(attemptId);
+
+      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+
+      const auditRows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      const autoSubmitRows = auditRows.filter(
+        (r) => r.action === "attempt.autoSubmit",
+      );
+      expect(autoSubmitRows).toHaveLength(1);
+      expect(autoSubmitRows[0]!.targetType).toBe("attempt");
+    });
+
+    it("does NOT write a phantom attempt.autoSubmit audit when the row is already submitted at lock time (race no-op)", async () => {
+      // Reproduces the scanner race: another submitter (manual or concurrent
+      // scanner) wins and moves the attempt to `submitted` before this scanner
+      // takes the row lock. autoSubmitAndGrade must perform no state change
+      // (return false) and must NOT emit a phantom attempt.autoSubmit audit.
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit Race Exam",
+      );
+      await backdateDeadline(attemptId);
+      const scannerCtx = {
+        actorId: "system:deadline-scanner",
+        organizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "system:deadline-scanner",
+        targetOrganizationId: ctx.org.id,
+      };
+
+      // Pre-empt the scanner exactly as a concurrent winner would.
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "submitted", submittedAt: new Date() })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const stateChanged = await autoSubmitAndGrade(
+        ctx.db,
+        scannerCtx,
+        attemptId,
+        new Date(),
+      );
+
+      expect(stateChanged).toBe(false);
+
+      const auditRows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      const autoSubmitRows = auditRows.filter(
+        (r) => r.action === "attempt.autoSubmit",
+      );
+      expect(autoSubmitRows).toHaveLength(0);
+
+      // Row remains as the winner left it; scanner did not auto-grade it.
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("submitted");
+    });
+
+    it("is idempotent: second scan does not re-grade or duplicate audit", async () => {
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit Idempotent Exam",
+      );
+      await backdateDeadline(attemptId);
+
+      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      const firstAttempt = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      const firstGradedAt = firstAttempt?.gradedAt;
+
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: new Date(Date.now() - 60_000) })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const second = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+
+      expect(second.submittedCount).toBe(0);
+
+      const afterSecond = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      expect(afterSecond?.status).toBe("graded");
+      expect(afterSecond?.gradedAt?.getTime()).toBe(firstGradedAt?.getTime());
+
+      const auditRows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      const autoSubmitCount = auditRows.filter(
+        (r) => r.action === "attempt.autoSubmit",
+      ).length;
+      expect(autoSubmitCount).toBe(1);
+    });
+
+    it("auto-submits a disrupted attempt whose deadline has passed", async () => {
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit Disrupted Exam",
+      );
+      await backdateDeadline(attemptId);
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "disrupted" })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("graded");
+    });
+
+    it("does not touch a voided attempt whose deadline has passed", async () => {
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit Voided Exam",
+      );
+      await backdateDeadline(attemptId);
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "voided" })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("voided");
+      expect(result.submittedCount).toBe(0);
+    });
+
+    it("does not auto-submit an in_progress attempt whose deadline is still future", async () => {
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        "Deadline AutoSubmit Future Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: new Date(Date.now() + 3600_000) })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        candidateCtx(),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("in_progress");
     });
   });
 });

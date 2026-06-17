@@ -3,9 +3,13 @@ import type { PublicBrandingContext, RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it } from "vitest";
 import { getTestDb } from "../testDb.js";
 import { createCourseRepo } from "./courseRepo.js";
+import { createEnrollmentRepo } from "./enrollmentRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { createQuestionRepo } from "./questionRepo.js";
 import { createSettingsRepo } from "./settingsRepo.js";
+import { schema } from "../schema/pg.js";
+import { executeInTransaction } from "../types.js";
+import { eq, and } from "drizzle-orm";
 
 const permissions: RequestContext["permissions"] = [];
 
@@ -212,5 +216,41 @@ describe("repository tenant isolation", () => {
     });
     expect(branding).not.toHaveProperty("timezone");
     expect(branding).not.toHaveProperty("organizationId");
+  });
+});
+
+describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
+  const rootContext = createContext("system", "Admin", "system");
+  let db: Awaited<ReturnType<typeof getTestDb>>["db"];
+  let orgId: string;
+  let ctx: RequestContext;
+
+  beforeAll(async () => {
+    const testDb = await getTestDb();
+    db = testDb.db;
+    const orgRepo = createOrganizationRepo(db);
+    const suffix = randomUUID().slice(0, 8);
+    const org = await orgRepo.create(rootContext, {
+      name: `forupdate-${suffix}`,
+      displayName: `ForUpdate ${suffix}`,
+      slug: `forupdate-${suffix}`,
+    });
+    orgId = org.id;
+    ctx = createContext(orgId);
+  });
+
+  it("returns null when no enrollment exists", async () => {
+    const repo = createEnrollmentRepo(db);
+    const result = await repo.findByExamAndCandidateForUpdate(
+      ctx,
+      randomUUID(),
+      randomUUID(),
+    );
+    expect(result).toBeNull();
+  });
+
+  it("exists as a method on the repo", async () => {
+    const repo = createEnrollmentRepo(db);
+    expect(typeof repo.findByExamAndCandidateForUpdate).toBe("function");
   });
 });

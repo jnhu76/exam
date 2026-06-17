@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradeAttempt } from "./grading.js";
+import { gradeAttempt, gradeAttemptIdempotent } from "./grading.js";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -123,6 +123,7 @@ function makeRepos(
   };
   const enrollmentRepo: EnrollmentRepository = {
     findByExamAndCandidate: () => storedEnrollment,
+    findByExamAndCandidateForUpdate: () => storedEnrollment,
     create: () => storedEnrollment,
     update: (_id, data) => {
       storedEnrollment = { ...storedEnrollment, ...data };
@@ -233,6 +234,7 @@ describe("gradeAttempt", () => {
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
+      findByExamAndCandidateForUpdate: () => enrollment,
       create: () => enrollment,
       update: () => enrollment,
     };
@@ -272,6 +274,7 @@ describe("gradeAttempt", () => {
     };
     const enrollmentRepo: EnrollmentRepository = {
       findByExamAndCandidate: () => enrollment,
+      findByExamAndCandidateForUpdate: () => enrollment,
       create: () => enrollment,
       update: () => null,
     };
@@ -285,5 +288,105 @@ describe("gradeAttempt", () => {
         new Date(),
       ),
     ).rejects.toThrow("Failed to update enrollment");
+  });
+});
+
+describe("gradeAttemptIdempotent", () => {
+  const fixedGradedAt = new Date("2026-06-01T12:00:00Z");
+
+  it("returns the existing ScoreResult without re-grading when already graded", async () => {
+    const attempt = makeAttempt({
+      status: "graded",
+      score: 7,
+      passed: true,
+      gradedAt: fixedGradedAt,
+      gradingResult: [
+        {
+          questionId: "q1",
+          score: 7,
+          maxScore: 10,
+          correct: true,
+          candidateAnswer: "prev-candidate",
+          standardAnswer: "a",
+        },
+      ],
+    });
+    const repos = makeRepos(makeExam(), attempt, makeEnrollment());
+    let updateCalls = 0;
+    const spiedAttemptRepo: AttemptRepository = {
+      ...repos.attemptRepo,
+      update: async (id, data) => {
+        updateCalls++;
+        return repos.attemptRepo.update(id, data);
+      },
+    };
+
+    const result = await gradeAttemptIdempotent(
+      repos.examRepo,
+      repos.enrollmentRepo,
+      spiedAttemptRepo,
+      "attempt-1",
+      new Date("2026-06-05T00:00:00Z"),
+    );
+
+    expect(result.totalScore).toBe(7);
+    expect(result.passed).toBe(true);
+    expect(result.gradedAt).toEqual(fixedGradedAt);
+    expect(result.questionResults[0]!.candidateAnswer).toBe("prev-candidate");
+    expect(updateCalls).toBe(0);
+  });
+
+  it("grades normally when attempt is submitted (not yet graded)", async () => {
+    const attempt = makeAttempt({ status: "submitted" });
+    const repos = makeRepos(makeExam(), attempt, makeEnrollment());
+
+    const result = await gradeAttemptIdempotent(
+      repos.examRepo,
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+      fixedGradedAt,
+    );
+
+    expect(result.totalScore).toBe(10);
+    expect(result.passed).toBe(true);
+    expect(repos.getAttempt().status).toBe("graded");
+    expect(repos.getAttempt().gradedAt).toEqual(fixedGradedAt);
+  });
+
+  it("rejects attempts in non-submittable/non-graded states (in_progress)", async () => {
+    const repos = makeRepos(
+      makeExam(),
+      makeAttempt({ status: "in_progress" }),
+      makeEnrollment(),
+    );
+
+    await expect(
+      gradeAttemptIdempotent(
+        repos.examRepo,
+        repos.enrollmentRepo,
+        repos.attemptRepo,
+        "attempt-1",
+        new Date(),
+      ),
+    ).rejects.toThrow(InvalidStateTransitionError);
+  });
+
+  it("throws ValidationError when attempt not found", async () => {
+    const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
+    const missingAttemptRepo: AttemptRepository = {
+      ...repos.attemptRepo,
+      findById: () => null,
+    };
+
+    await expect(
+      gradeAttemptIdempotent(
+        repos.examRepo,
+        repos.enrollmentRepo,
+        missingAttemptRepo,
+        "nonexistent",
+        new Date(),
+      ),
+    ).rejects.toThrow("Attempt not found");
   });
 });
