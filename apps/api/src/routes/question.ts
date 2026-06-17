@@ -5,6 +5,9 @@ import {
   QuestionImportRequestSchema,
   UpdateQuestionRequestSchema,
   PaginationParamsSchema,
+  QuestionSchema,
+  QuestionImportResultSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
@@ -18,6 +21,14 @@ import {
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 const cookieAuth = [{ cookieAuth: [] }] as const;
+const questionListResponseSchema = z.object({
+  items: z.array(QuestionSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  totalPages: z.number().int().nonnegative(),
+});
+
 const questionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -36,6 +47,9 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         querystring: questionListQuerySchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          200: questionListResponseSchema,
+        },
       },
     },
     async (request: any) => {
@@ -104,6 +118,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          200: QuestionSchema,
+          404: ErrorResponseSchema,
+        },
       },
     },
     async (request: any, reply: any) => {
@@ -143,6 +161,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         body: CreateQuestionRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          201: QuestionSchema,
+          400: ErrorResponseSchema,
+        },
       },
     },
     async (request: any, reply: any) => {
@@ -222,6 +244,11 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         body: UpdateQuestionRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          200: QuestionSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
       },
     },
     async (request: any, reply: any) => {
@@ -297,6 +324,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          204: z.null(),
+          404: ErrorResponseSchema,
+        },
       },
     },
     async (request: any, reply: any) => {
@@ -323,6 +354,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         body: QuestionImportRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
+        response: {
+          200: QuestionImportResultSchema,
+          400: ErrorResponseSchema,
+        },
       },
     },
     async (request: any, reply: any) => {
