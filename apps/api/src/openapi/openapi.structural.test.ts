@@ -255,6 +255,38 @@ describe("OpenAPI structural baseline — security & x-role metadata", () => {
   });
 });
 
+describe("OpenAPI structural baseline — no generic 2xx success responses", () => {
+  it("has no generic or missing 2xx response schemas (except 204)", async () => {
+    const s = await spec();
+    const violations: string[] = [];
+
+    for (const [path, pathItem] of Object.entries(s.paths ?? {})) {
+      if (!pathItem) continue;
+      for (const method of ["get", "post", "put", "patch", "delete"] as const) {
+        const op = (pathItem as Record<string, unknown>)[method] as
+          | { responses?: Record<string, unknown> }
+          | undefined;
+        if (!op?.responses) continue;
+
+        for (const [status, resp] of Object.entries(op.responses)) {
+          if (!/^2\d\d$/.test(status)) continue;
+          if (status === "204") continue;
+
+          const schema = responseSchema(op, status);
+          if (isGeneric(schema)) {
+            violations.push(`${method.toUpperCase()} ${path} ${status}`);
+          }
+        }
+      }
+    }
+
+    expect(
+      violations,
+      `Generic or missing 2xx response schemas found: ${violations.join(", ")}`,
+    ).toEqual([]);
+  });
+});
+
 describe("OpenAPI structural baseline — common errors documented", () => {
   it("documents validation error (400) on a mutating candidate route", async () => {
     const s = await spec();
