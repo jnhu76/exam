@@ -14,11 +14,20 @@ type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;
 
+/**
+ * Creates the exam attempt repository with CRUD plus lookup methods
+ * for finding attempts by enrollment, candidate, and status.
+ * @param db - Database instance.
+ */
 export function createAttemptRepo(db: Database) {
   const repo = createAsyncTenantCrudRepo(db, examAttempts);
 
   return {
     ...repo,
+    /**
+     * Finds an attempt by `id` with `FOR UPDATE` row lock, scoped to the tenant.
+     * Used for optimistic concurrency during answer saves and submissions.
+     */
     async findByIdForUpdate(
       ctx: TenantContext | RequestContext,
       attemptId: string,
@@ -36,6 +45,10 @@ export function createAttemptRepo(db: Database) {
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;
     },
+    /**
+     * Finds the most recent active attempt (in_progress or disrupted) for a
+     * given enrollment, scoped to the tenant.
+     */
     async findActiveByEnrollment(
       ctx: TenantContext | RequestContext,
       enrollmentId: string,
@@ -53,6 +66,9 @@ export function createAttemptRepo(db: Database) {
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;
     },
+    /**
+     * Finds an attempt by enrollment ID and attempt number, scoped to the tenant.
+     */
     async findByEnrollmentAndAttemptNo(
       ctx: TenantContext | RequestContext,
       enrollmentId: string,
@@ -71,6 +87,9 @@ export function createAttemptRepo(db: Database) {
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;
     },
+    /**
+     * Finds all attempts for a given exam and candidate, scoped to the tenant.
+     */
     async findByExamAndCandidate(
       ctx: TenantContext | RequestContext,
       examId: string,
@@ -88,6 +107,9 @@ export function createAttemptRepo(db: Database) {
           ),
         )) as AttemptSelect[];
     },
+    /**
+     * Finds a specific attempt by ID and candidate profile ID, scoped to the tenant.
+     */
     async findByIdAndCandidate(
       ctx: TenantContext | RequestContext,
       attemptId: string,
@@ -106,6 +128,10 @@ export function createAttemptRepo(db: Database) {
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;
     },
+    /**
+     * Finds the most recent active attempt (in_progress or disrupted) for a
+     * specific exam and candidate, scoped to the tenant.
+     */
     async findActiveByExamAndCandidate(
       ctx: TenantContext | RequestContext,
       examId: string,
@@ -125,6 +151,10 @@ export function createAttemptRepo(db: Database) {
         );
       return (rows[0] as AttemptSelect | undefined) ?? null;
     },
+    /**
+     * Lists all in-progress attempts across the tenant organization.
+     * Used by heartbeat scanning and proctoring.
+     */
     async listInProgress(
       ctx: TenantContext | RequestContext,
     ): Promise<AttemptSelect[]> {
@@ -139,6 +169,11 @@ export function createAttemptRepo(db: Database) {
           ),
         )) as AttemptSelect[];
     },
+    /**
+     * Lists graded attempts for an exam with optional pass/fail filter,
+     * sorting, and pagination. Joins with candidate profiles and users
+     * to include candidate name.
+     */
     async listGradedByExam(
       ctx: TenantContext | RequestContext,
       examId: string,
@@ -186,6 +221,10 @@ export function createAttemptRepo(db: Database) {
 
       return sortAndPaginateGraded(allResults, options);
     },
+    /**
+     * Returns aggregate statistics (count, avg, max, min, pass rate) for
+     * graded attempts on a given exam, scoped to the tenant.
+     */
     async getGradedStats(ctx: TenantContext | RequestContext, examId: string) {
       const orgId = resolveOptionalOrganizationId(ctx);
       const baseWhere = and(
@@ -217,6 +256,10 @@ export function createAttemptRepo(db: Database) {
         .where(baseWhere);
       return buildStats(rows[0] as StatsRow);
     },
+    /**
+     * Counts graded attempts for an exam with optional pass/fail filter,
+     * scoped to the tenant.
+     */
     async countGradedByExam(
       ctx: TenantContext | RequestContext,
       examId: string,
@@ -247,6 +290,7 @@ export function createAttemptRepo(db: Database) {
   };
 }
 
+/** Sorts and paginates joined graded-attempt results in memory. */
 function sortAndPaginateGraded(
   allResults: Array<{
     attempt: AttemptSelect;
@@ -282,6 +326,7 @@ function sortAndPaginateGraded(
   return allResults.slice(offset);
 }
 
+/** Builds a stats summary from raw aggregate query results. */
 function buildStats(result: {
   count: number;
   avg: number | null;

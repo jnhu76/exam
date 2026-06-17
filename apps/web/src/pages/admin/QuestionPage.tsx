@@ -41,6 +41,8 @@ import {
 } from "lucide-react";
 import { TYPE_LABELS, TYPE_VARIANT } from "@/lib/constants";
 
+/** Row shape returned by the questions list API. */
+/** A question record for the admin question list table. */
 interface QuestionRow {
   id: string;
   courseId: string;
@@ -51,12 +53,16 @@ interface QuestionRow {
   tags: string[];
 }
 
+/** Minimal course representation used to populate the course filter. */
+/** A course record used for course name lookup in the question table. */
 interface CourseRow {
   id: string;
   name: string;
   code: string;
 }
 
+/** Generic paginated API response wrapper. */
+/** Generic paginated API response wrapper. */
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -65,6 +71,11 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+/** Admin page for browsing, filtering, and managing the question bank. */
+/**
+ * Admin question management page with server-side filtering by course, type,
+ * difficulty, and tags, plus client-side search and pagination.
+ */
 export function QuestionPage() {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
@@ -81,6 +92,7 @@ export function QuestionPage() {
   const [pageSize] = useState(20);
   const [total, setTotal] = useState(0);
 
+  /** Fetches courses once on mount for the filter dropdown. */
   const loadCourses = useCallback(async () => {
     try {
       const cData = await api.get<PaginatedResponse<CourseRow>>("/api/courses");
@@ -90,6 +102,7 @@ export function QuestionPage() {
     }
   }, []);
 
+  /** Fetches questions with the current filter and pagination parameters. */
   const loadQuestions = useCallback(async () => {
     setIsTableLoading(true);
     setError(null);
@@ -133,6 +146,7 @@ export function QuestionPage() {
     void loadQuestions();
   }, [loadQuestions, isInitialLoading]);
 
+  /** Deletes a question by id and refreshes the table. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/questions/${id}`);
@@ -142,14 +156,17 @@ export function QuestionPage() {
     }
   }
 
+  /** Client-side content search applied to the current page of results. */
   const filtered = questions.filter((q) => {
     if (search && !q.content.toLowerCase().includes(search.toLowerCase()))
       return false;
     return true;
   });
 
+  /** Maps course ids to names for display in the table. */
   const courseMap = new Map(courses.map((c) => [c.id, c.name]));
 
+  /** Resets all filter, search, and pagination state to defaults. */
   function clearFilters() {
     setFilterCourse("all");
     setFilterType("all");
@@ -159,6 +176,7 @@ export function QuestionPage() {
     setPage(1);
   }
 
+  /** Whether any filter or search criterion is currently active. */
   const hasActiveFilter =
     filterCourse !== "all" ||
     filterType !== "all" ||

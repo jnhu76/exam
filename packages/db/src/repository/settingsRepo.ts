@@ -18,8 +18,10 @@ type BrandingUpdate = {
   timezone?: string;
 };
 
+/** Creates a repository for the `organizationSettings` table with branding lookups. */
 export function createSettingsRepo(db: Database) {
   return {
+    /** Fetches the organization settings for the tenant, or null if not configured. */
     async get(ctx: RequestContext) {
       const rows = await db
         .select()
@@ -29,6 +31,10 @@ export function createSettingsRepo(db: Database) {
         );
       return rows[0] ?? null;
     },
+    /**
+     * Upserts organization settings for the tenant. Creates on first call,
+     * updates on subsequent calls. Returns the resulting settings row.
+     */
     async upsert(ctx: RequestContext, input: BrandingUpdate) {
       const tenantId = resolveOrganizationId(ctx);
       const timestamp = now();
@@ -54,6 +60,7 @@ export function createSettingsRepo(db: Database) {
         .where(eq(organizationSettings.organizationId, tenantId));
       return rows[0] ?? null;
     },
+    /** Deletes the organization settings for the tenant. Returns true if deleted. */
     async delete(ctx: RequestContext) {
       const result = await db
         .delete(organizationSettings)
@@ -62,6 +69,11 @@ export function createSettingsRepo(db: Database) {
         );
       return (result.count ?? 0) > 0;
     },
+    /**
+     * Fetches the public branding view (product name, subtitle, footer,
+     * organization display name) for login page display. Falls back to
+     * organization-level defaults when settings are not configured.
+     */
     async getPublicBranding(ctx: PublicBrandingContext): Promise<BrandingView> {
       if (!ctx.organizationId) {
         throw new ValidationError(

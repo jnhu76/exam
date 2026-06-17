@@ -1,5 +1,11 @@
+/** CSV value prefixes that can trigger formula injection and must be escaped. */
 const DANGEROUS_PREFIXES = new Set(["=", "+", "-", "@", "\t", "\r", "\n"]);
 
+/**
+ * Escapes a value for safe inclusion in a CSV cell.
+ * Prepends a single quote for formula-injection prefixes and wraps in quotes
+ * when the value contains commas, quotes, or newlines.
+ */
 export function escapeCSVValue(value: unknown): string {
   const str = String(value ?? "");
   let body = str;
@@ -17,6 +23,10 @@ export function escapeCSVValue(value: unknown): string {
   return body;
 }
 
+/**
+ * Generates a CSV string from headers and rows. Accepts arrays or objects;
+ * for objects, values are mapped using the header keys.
+ */
 export function generateCSV(
   headers: string[],
   rows: (unknown[] | Record<string, unknown>)[],

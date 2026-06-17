@@ -5,6 +5,7 @@ import type {
   SaveAnswerResponse,
 } from "@exam/domain";
 
+/** State required by the answer save protocol to evaluate an incoming save request. */
 export interface AnswerState {
   attemptStatus: AttemptStatus;
   answers: AnswerRecord[];
@@ -13,11 +14,13 @@ export interface AnswerState {
   now?: Date;
 }
 
+/** Response from the answer save protocol, including newly created answer and updated idempotency map when accepted. */
 export type ProcessSaveResult = SaveAnswerResponse & {
   newAnswer?: AnswerRecord;
   newClientSeqMap?: Map<string, AnswerRecord>;
 };
 
+/** Processes a single answer save request using versioned, idempotent conflict detection. */
 export function processSaveAnswer(
   state: AnswerState,
   request: SaveAnswerRequest,

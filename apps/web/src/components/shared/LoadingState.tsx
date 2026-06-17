@@ -1,6 +1,7 @@
 import { LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Centered loading indicator with a spinning icon and customizable label text. */
 export function LoadingState({
   label = "加载中...",
   className,

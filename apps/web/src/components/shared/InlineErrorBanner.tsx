@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/** Props for the InlineErrorBanner component. */
 type InlineErrorBannerProps = {
   children: ReactNode;
   className?: string;
 };
 
+/** Styled inline error message banner with a destructive border and background. */
 export function InlineErrorBanner({
   children,
   className,

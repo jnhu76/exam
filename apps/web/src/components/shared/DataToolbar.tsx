@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Horizontal toolbar for data table pages, providing slots for filter children,
+ * action buttons, and a summary line with responsive layout.
+ */
 export function DataToolbar({
   children,
   actions,

@@ -21,6 +21,10 @@ const AttachmentSchema = z.object({
   name: z.string(),
 });
 
+/**
+ * Schema for a question's grading rule, configuring multi-select scoring mode,
+ * fill-blank matching mode, and case sensitivity.
+ */
 export const GradingRuleSchema = z.object({
   multiSelectScoring: z.enum(["all_correct_full", "partial_half"]),
   fillBlankMatchMode: z.enum(["exact", "keyword"]),
@@ -33,6 +37,11 @@ const StandardAnswerSchema = z
     message: "standardAnswer is required",
   });
 
+/**
+ * Internal validation function that enforces type-specific constraints on questions.
+ * Validates option uniqueness, minimum option count for choice questions, standardAnswer
+ * format per type, and fill-blank placeholder requirements.
+ */
 function validateQuestionType(
   question: {
     type: z.infer<typeof QuestionTypeEnum>;
@@ -123,6 +132,10 @@ function validateQuestionType(
   }
 }
 
+/**
+ * Schema for a question entity in the question bank, including content, options,
+ * standard answer, attachments, scoring, difficulty, tags, and grading rules.
+ */
 export const QuestionSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -139,8 +152,14 @@ export const QuestionSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
+
+/** Represents a question entity with all metadata, content, and grading configuration. */
 export type QuestionDTO = z.infer<typeof QuestionSchema>;
 
+/**
+ * Request schema for creating a new question, with type-specific validation
+ * enforced via superRefine (option counts, standardAnswer format, etc.).
+ */
 export const CreateQuestionRequestSchema = z
   .object({
     courseId: z.string().uuid(),
@@ -158,8 +177,13 @@ export const CreateQuestionRequestSchema = z
     }),
   })
   .superRefine(validateQuestionType);
+
+/** Type for a create-question request. */
 export type CreateQuestionRequest = z.infer<typeof CreateQuestionRequestSchema>;
 
+/**
+ * Request schema for updating an existing question. All fields are optional.
+ */
 export const UpdateQuestionRequestSchema = z.object({
   courseId: z.string().uuid().optional(),
   type: QuestionTypeEnum.optional(),
@@ -172,10 +196,15 @@ export const UpdateQuestionRequestSchema = z.object({
   tags: z.array(z.string()).optional(),
   gradingRule: GradingRuleSchema.optional(),
 });
+
+/** Type for an update-question request. */
 export type UpdateQuestionRequest = z.infer<typeof UpdateQuestionRequestSchema>;
 
 // ── Question Import ───────────────────────────────────────────────
 
+/**
+ * Schema for a single row in a question import batch, supporting choice options as A-D columns.
+ */
 export const QuestionImportRowSchema = z.object({
   type: QuestionTypeEnum,
   content: z.string().min(1),
@@ -192,15 +221,27 @@ export const QuestionImportRowSchema = z.object({
     fillBlankMatchMode: "exact",
   }),
 });
+
+/** Type for a single question import row. */
 export type QuestionImportRow = z.infer<typeof QuestionImportRowSchema>;
 
+/**
+ * Request schema for batch-importing questions into a course.
+ * Accepts 1 to 500 raw rows that will be validated against QuestionImportRowSchema.
+ */
 export const QuestionImportRequestSchema = z.object({
   courseId: z.string().uuid(),
   rows: z.array(z.record(z.unknown())).min(1).max(500),
   confirm: z.boolean().default(false),
 });
+
+/** Type for a question import request. */
 export type QuestionImportRequest = z.infer<typeof QuestionImportRequestSchema>;
 
+/**
+ * Response schema for a question import result, summarizing valid, warning, and error counts
+ * with per-row detail messages.
+ */
 export const QuestionImportResultSchema = z.object({
   total: z.number().int(),
   valid: z.number().int(),
@@ -214,4 +255,6 @@ export const QuestionImportResultSchema = z.object({
     }),
   ),
 });
+
+/** Type for a question import result. */
 export type QuestionImportResult = z.infer<typeof QuestionImportResultSchema>;

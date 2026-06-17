@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 
+/** Candidate data used in the enrollment picker list. */
 export interface CandidateItem {
   id: string;
   userId: string;
@@ -11,6 +12,7 @@ export interface CandidateItem {
   fields: Record<string, unknown>;
 }
 
+/** Props for the EnrollmentPicker component. */
 interface EnrollmentPickerProps {
   candidates: CandidateItem[];
   enrolledCandidateIds: Set<string>;
@@ -21,6 +23,10 @@ interface EnrollmentPickerProps {
   isLoadingMore?: boolean;
 }
 
+/**
+ * Searchable, multi-select candidate picker for exam enrollment.
+ * Filters by name/username, supports select-all, and marks already-enrolled candidates.
+ */
 export function EnrollmentPicker({
   candidates,
   enrolledCandidateIds,

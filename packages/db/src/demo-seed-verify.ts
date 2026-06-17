@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
 
+/** Shape of demo seed IDs used for verification lookups. */
 interface DemoIds {
   orgId: string;
   settingsId: string;
@@ -14,6 +15,11 @@ interface DemoIds {
   attempts: Record<string, string>;
 }
 
+/**
+ * Verifies the demo seed data integrity by checking organizations, users,
+ * candidate profiles, courses, questions, exams, enrollments, and attempts.
+ * @returns An array of error messages; empty array means verification passed.
+ */
 export async function verifyDemoSeed(
   db: Database,
   ids: DemoIds,
@@ -21,6 +27,7 @@ export async function verifyDemoSeed(
   const errors: string[] = [];
   const now = Date.now();
 
+  /** Appends a message to the error list when a condition is false. */
   function assert(condition: boolean, message: string): void {
     if (!condition) errors.push(message);
   }

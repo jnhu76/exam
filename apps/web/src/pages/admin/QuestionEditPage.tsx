@@ -14,12 +14,19 @@ import {
 } from "@/components/question/QuestionForm";
 import { QuestionPreview } from "@/components/question/QuestionPreview";
 
+/** Minimal course representation used to populate the course selector. */
+/** A course record used in the course selector dropdown. */
 interface CourseRow {
   id: string;
   name: string;
   code: string;
 }
 
+/** Admin page for creating or editing a single question with live preview. */
+/**
+ * Admin page for creating or editing a question, with a side-by-side
+ * form and live preview panel.
+ */
 export function QuestionEditPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -32,6 +39,7 @@ export function QuestionEditPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  /** Loads available courses and, when editing, fetches the existing question data. */
   const loadData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -95,6 +103,7 @@ export function QuestionEditPage() {
     loadData();
   }, [loadData]);
 
+  /** Persists the question (create or update) and navigates back to the list. */
   async function handleSave() {
     if (!formData || saving) return;
     setSaveError(null);

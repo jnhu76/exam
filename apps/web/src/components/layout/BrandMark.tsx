@@ -1,6 +1,7 @@
 import { ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Decorative logo mark icon used in the brand header and sidebar. */
 export function BrandMark({ className }: { className?: string }) {
   return (
     <span

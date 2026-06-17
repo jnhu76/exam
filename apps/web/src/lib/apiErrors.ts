@@ -1,13 +1,16 @@
+/** Shape of a single field-level validation error detail from the API. */
 interface ValidationFieldDetail {
   field: string;
   message: string;
   code?: string;
 }
 
+/** Returns true if value is a plain object (Record). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/** Returns true if value matches the ValidationFieldDetail shape. */
 function isValidationFieldDetail(
   value: unknown,
 ): value is ValidationFieldDetail {
@@ -15,6 +18,7 @@ function isValidationFieldDetail(
   return typeof value.field === "string" && typeof value.message === "string";
 }
 
+/** Extracts a human-readable error message from an unknown error value. */
 export function getApiErrorMessage(
   error: unknown,
   fallback = "操作失败，请稍后重试",
@@ -26,6 +30,7 @@ export function getApiErrorMessage(
   return fallback;
 }
 
+/** Extracts per-field validation errors from an API error's details object. */
 export function getApiFieldErrors(error: unknown): Record<string, string> {
   if (!isRecord(error) || !isRecord(error.details)) return {};
   const fields = error.details.fields;

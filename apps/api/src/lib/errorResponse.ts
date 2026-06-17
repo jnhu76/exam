@@ -7,6 +7,7 @@ import {
 } from "@exam/contracts";
 import type { ZodError } from "zod";
 
+/** Legacy string error codes mapped to the current {@link ErrorCode} domain values. */
 const legacyCodeMap: Readonly<Record<string, ErrorCode>> = {
   UNAUTHORIZED: "AUTH_REQUIRED",
   INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
@@ -22,6 +23,12 @@ const legacyCodeMap: Readonly<Record<string, ErrorCode>> = {
   INTERNAL_SERVER_ERROR: "INTERNAL_ERROR",
 };
 
+/**
+ * Derive a canonical {@link ErrorCode} from an HTTP status code.
+ *
+ * 4xx codes map to specific domain errors; anything else falls back to
+ * `"INTERNAL_ERROR"`.
+ */
 function codeForStatus(statusCode: number): ErrorCode {
   if (statusCode === 401) return "AUTH_REQUIRED";
   if (statusCode === 403) return "PERMISSION_DENIED";
@@ -32,6 +39,16 @@ function codeForStatus(statusCode: number): ErrorCode {
   return "INTERNAL_ERROR";
 }
 
+/**
+ * Normalise an arbitrary error code string (possibly a legacy code) into
+ * a valid {@link ErrorCode}. When the code is already valid it is returned
+ * as-is; when it is a recognised legacy alias the mapped value is used;
+ * otherwise the status code determines the fallback.
+ *
+ * @param code - Raw error code from the caller (may be `undefined`).
+ * @param statusCode - HTTP status code associated with the response.
+ * @returns A valid {@link ErrorCode}.
+ */
 export function normalizeErrorCode(
   code: string | undefined,
   statusCode: number,
@@ -41,6 +58,16 @@ export function normalizeErrorCode(
   return codeForStatus(statusCode);
 }
 
+/**
+ * Build a standardised {@link ErrorResponse} payload.
+ *
+ * @param requestId - Correlation ID for the current request.
+ * @param code - Canonical error code.
+ * @param details - Optional structured details (e.g. validation fields).
+ * @param messageOverride - Optional human-readable message; when omitted the
+ *   default message for `code` is used.
+ * @returns A fully-formed `ErrorResponse` object.
+ */
 export function buildErrorResponse(
   requestId: string,
   code: ErrorCode,
@@ -57,6 +84,12 @@ export function buildErrorResponse(
   };
 }
 
+/**
+ * Extract field-level validation details from a Zod error.
+ *
+ * @param error - The thrown `ZodError`.
+ * @returns A {@link ValidationErrorDetails} object listing each failing field.
+ */
 export function getValidationErrorDetails(
   error: ZodError,
 ): ValidationErrorDetails {
@@ -69,6 +102,14 @@ export function getValidationErrorDetails(
   };
 }
 
+/**
+ * Convenience wrapper that builds a `VALIDATION_ERROR` response directly
+ * from a Zod error.
+ *
+ * @param requestId - Correlation ID for the current request.
+ * @param error - The thrown `ZodError`.
+ * @returns A fully-formed `ErrorResponse` with validation details attached.
+ */
 export function buildValidationErrorResponse(
   requestId: string,
   error: ZodError,

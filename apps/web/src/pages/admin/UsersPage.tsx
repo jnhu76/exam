@@ -39,6 +39,7 @@ import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
+/** User row shape as returned by the users list API. */
 interface UserRow {
   id: string;
   username: string;
@@ -46,17 +47,25 @@ interface UserRow {
   role: "Admin" | "Candidate";
   isActive: boolean;
 }
+
+/** Generic paginated response containing a list of items. */
 interface Page<T> {
   items: T[];
 }
+
+/** Display labels for user roles. */
 const roleLabels: Record<string, string> = {
   Admin: "管理员",
   Candidate: "候选人",
 };
 
+/** The subset of roles that admins can create or edit via the dialog. */
 type EditableRole = "Admin";
+
+/** Roles available for selection in the user create/edit form. */
 const EDITABLE_ROLES: EditableRole[] = ["Admin"];
 
+/** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,6 +80,7 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  /** Fetches all non-candidate users from the API. */
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -88,6 +98,7 @@ export function UsersPage() {
   }, []);
   useEffect(() => void loadUsers(), [loadUsers]);
 
+  /** Opens the create/edit dialog, optionally pre-filling with an existing user. */
   function open(user?: UserRow) {
     setEditing(user ?? null);
     setUsername(user?.username ?? "");
@@ -102,6 +113,7 @@ export function UsersPage() {
     setDialogOpen(true);
   }
 
+  /** Validates the form fields and returns true if valid. */
   function validate() {
     const errors: Record<string, string> = {};
     if (!name.trim()) errors.name = "请输入姓名";
@@ -114,6 +126,7 @@ export function UsersPage() {
     return Object.keys(errors).length === 0;
   }
 
+  /** Saves a new or updated user and refreshes the user list. */
   async function save() {
     if (saving || !validate()) return;
     setSaving(true);
@@ -133,6 +146,8 @@ export function UsersPage() {
       setSaving(false);
     }
   }
+
+  /** Toggles the active/inactive status of a user account. */
   async function toggle(user: UserRow) {
     if (togglingId) return;
     setTogglingId(user.id);

@@ -10,10 +10,27 @@ import { ensureTargetOrg } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+/**
+ * Zod schema for route parameters that expect a UUID `id`.
+ */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
+/**
+ * Fastify plugin that registers data export routes.
+ * Currently exposes `GET /exams/:id/export/scores` for CSV export of
+ * graded exam attempt scores.
+ */
 export const exportRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /exams/:id/export/scores
+   *
+   * Exports graded attempt scores for the specified exam as a CSV file.
+   * Admin-only. The CSV includes candidate name, custom fields, score,
+   * pass status, attempt number, and submission time.
+   */
   fastify.get(
     "/exams/:id/export/scores",
     {

@@ -5,8 +5,10 @@ import {
   TriangleAlert,
 } from "lucide-react";
 
+/** Visual save-status states for the answer save indicator. */
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
+/** Configuration mapping each save state to its icon, label, and CSS classes. */
 const statusConfig = {
   idle: {
     icon: CircleDashed,
@@ -37,6 +39,10 @@ const statusConfig = {
   }
 >;
 
+/**
+ * Inline indicator showing the current answer save status
+ * (idle, saving, saved, or error) with an icon and label.
+ */
 export function SaveIndicator({
   state,
   status,

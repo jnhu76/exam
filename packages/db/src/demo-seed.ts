@@ -20,16 +20,20 @@ import { gradeAnswers } from "@exam/domain";
 
 export type HashFunction = (password: string) => Promise<string>;
 
+/** Internal slug for the default demo organization. */
 const DEMO_ORG_SLUG = "default";
 
+/** Returns a Date offset by `offsetMs` from now. */
 function ts(offsetMs = 0): Date {
   return new Date(Date.now() + offsetMs);
 }
 
+/** Generates a random UUID (tag parameter is unused, kept for readability). */
 function uuid(_tag: string): string {
   return randomUUID();
 }
 
+/** IDs of all entities created by the demo seed. */
 export interface DemoIds {
   orgId: string;
   settingsId: string;
@@ -42,6 +46,7 @@ export interface DemoIds {
   attempts: Record<string, string>;
 }
 
+/** Returns default control flags with all restrictions disabled. */
 function makeDefaultControlFlags(): ControlFlags {
   return {
     shuffleQuestions: false,
@@ -57,6 +62,7 @@ function makeDefaultControlFlags(): ControlFlags {
   };
 }
 
+/** Returns a grading rule with sensible defaults, merged with optional overrides. */
 function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
   return {
     multiSelectScoring: "all_correct_full",
@@ -66,6 +72,14 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
   };
 }
 
+/**
+ * Seeds a full demo dataset: organization, settings, candidate fields, users,
+ * candidate profiles, courses, questions, exams, enrollments, and attempts.
+ * Idempotent — re-running upserts on conflict.
+ * @param db - Database instance.
+ * @param hashFn - Password hashing function.
+ * @returns IDs of all seeded entities for verification.
+ */
 export async function seedDemo(
   db: Database,
   hashFn: HashFunction,

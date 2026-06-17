@@ -7,10 +7,23 @@ import {
   resolveOrganizationId,
 } from "./baseRepo.js";
 
+/**
+ * Creates a repository for the `auditLogs` table.
+ *
+ * Extends the base tenant-scoped CRUD repo with paginated filtered listing
+ * by action type, scoped to the caller's organization.
+ *
+ * @param db - Drizzle database connection.
+ * @returns Object with base CRUD methods plus `listPaginatedFiltered`.
+ */
 export function createAuditLogRepo(db: Database) {
   const base = createAsyncTenantCrudRepo(db, auditLogs);
   return {
     ...base,
+    /**
+     * Lists audit log entries with pagination and optional action filter.
+     * Ordered by `createdAt` descending, scoped to the tenant's organization.
+     */
     async listPaginatedFiltered(
       ctx: TenantContext | RequestContext,
       page: number,

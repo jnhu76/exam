@@ -14,14 +14,23 @@ const AttemptStatusEnum = z.enum([
   "voided",
 ]);
 
+/**
+ * Zod enum of reasons a save-answer request may be rejected by the server.
+ */
 export const SaveAnswerRejectReasonEnum = z.enum([
   "STALE_VERSION",
   "ATTEMPT_ALREADY_SUBMITTED",
   "ATTEMPT_CLOSED",
   "DEADLINE_EXCEEDED",
 ] as const);
+
+/** Discriminated reason why the server rejected a save-answer request. */
 export type SaveAnswerRejectReason = z.infer<typeof SaveAnswerRejectReasonEnum>;
 
+/**
+ * Schema for a frozen snapshot of a question copied into an attempt at creation time.
+ * Edits to the original question do not affect existing snapshots.
+ */
 export const QuestionSnapshotSchema = z.object({
   originalQuestionId: z.string(),
   type: z.enum([
@@ -54,6 +63,10 @@ export const QuestionSnapshotSchema = z.object({
   order: z.number().int(),
 });
 
+/**
+ * Candidate-safe question snapshot that omits the standardAnswer field.
+ * Used when returning attempt data to candidates.
+ */
 export const CandidateQuestionSnapshotSchema = QuestionSnapshotSchema.omit({
   standardAnswer: true,
 });
@@ -65,6 +78,9 @@ const AnswerRecordSchema = z.object({
   savedAt: z.string().datetime(),
 });
 
+/**
+ * Schema for an exam attempt record, including status, question snapshots, answers, scores, and timing.
+ */
 export const AttemptSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -84,15 +100,27 @@ export const AttemptSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
+
+/** Represents a single exam attempt including all question snapshots, answers, and scoring data. */
 export type AttemptDTO = z.infer<typeof AttemptSchema>;
 
+/**
+ * Response schema for loading an attempt, with question snapshots stripped of standardAnswer
+ * to prevent candidates from seeing correct answers.
+ */
 export const LoadAttemptResponseSchema = AttemptSchema.extend({
   questionSnapshot: z.array(CandidateQuestionSnapshotSchema),
 });
+
+/** Type for the load-attempt response with candidate-safe question snapshots. */
 export type LoadAttemptResponse = z.infer<typeof LoadAttemptResponseSchema>;
 
 // ── Save Answer (§3.5) ───────────────────────────────────────────
 
+/**
+ * Request schema for saving an answer with versioned conflict detection.
+ * Uses baseVersion for optimistic concurrency control.
+ */
 export const SaveAnswerRequestSchema = z.object({
   attemptId: z.string().uuid(),
   questionId: z.string().uuid(),
@@ -101,8 +129,13 @@ export const SaveAnswerRequestSchema = z.object({
   clientSavedAt: z.string().datetime(),
   baseVersion: z.number().int().min(0),
 });
+
+/** Type for a save-answer request with client-side version metadata. */
 export type SaveAnswerRequestDTO = z.infer<typeof SaveAnswerRequestSchema>;
 
+/**
+ * Response when the server accepts a save-answer request.
+ */
 export const SaveAnswerAcceptedSchema = z
   .object({
     accepted: z.literal(true),
@@ -111,6 +144,9 @@ export const SaveAnswerAcceptedSchema = z
   })
   .strict();
 
+/**
+ * Response when the server rejects a save-answer request due to a version conflict or attempt state issue.
+ */
 export const SaveAnswerRejectedSchema = z
   .object({
     accepted: z.literal(false),
@@ -126,22 +162,37 @@ export const SaveAnswerRejectedSchema = z
   })
   .strict();
 
+/**
+ * Discriminated union of accepted and rejected save-answer responses,
+ * keyed on the `accepted` field.
+ */
 export const SaveAnswerResponseSchema = z.discriminatedUnion("accepted", [
   SaveAnswerAcceptedSchema,
   SaveAnswerRejectedSchema,
 ]);
+
+/** Type for a save-answer response (accepted or rejected). */
 export type SaveAnswerResponseDTO = z.infer<typeof SaveAnswerResponseSchema>;
 
 // ── Route Params ─────────────────────────────────────────────────
 
+/**
+ * Route params schema for endpoints that operate on a specific attempt by UUID.
+ */
 export const AttemptIdParamsSchema = z.object({
   attemptId: z.string().uuid(),
 });
 
+/**
+ * Route params schema for the load-attempt endpoint, identified by attempt `id`.
+ */
 export const LoadAttemptParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
+/**
+ * Route params schema for save-answer endpoints, requiring both attemptId and questionId.
+ */
 export const SaveAnswerParamsSchema = z.object({
   attemptId: z.string().uuid(),
   questionId: z.string().uuid(),
@@ -149,34 +200,58 @@ export const SaveAnswerParamsSchema = z.object({
 
 // ── Start Attempt ─────────────────────────────────────────────────
 
+/**
+ * Request schema for starting a new exam attempt. Requires the exam UUID.
+ */
 export const StartAttemptRequestSchema = z.object({
   examId: z.string().uuid(),
 });
+
+/** Type for a start-attempt request. */
 export type StartAttemptRequest = z.infer<typeof StartAttemptRequestSchema>;
 
 // ── Heartbeat ─────────────────────────────────────────────────────
 
+/**
+ * Request schema for sending a periodic heartbeat to indicate the candidate is still active.
+ */
 export const HeartbeatRequestSchema = z.object({
   attemptId: z.string().uuid(),
 });
+
+/** Type for a heartbeat request. */
 export type HeartbeatRequest = z.infer<typeof HeartbeatRequestSchema>;
 
 // ── Submit ────────────────────────────────────────────────────────
 
+/**
+ * Request schema for submitting an attempt for grading.
+ */
 export const SubmitAttemptRequestSchema = z.object({
   attemptId: z.string().uuid(),
 });
+
+/** Type for a submit-attempt request. */
 export type SubmitAttemptRequest = z.infer<typeof SubmitAttemptRequestSchema>;
 
 // ── Restore ───────────────────────────────────────────────────────
 
+/**
+ * Request schema for restoring a disrupted attempt, recovering saved answers and remaining time from the server.
+ */
 export const RestoreAttemptRequestSchema = z.object({
   attemptId: z.string().uuid(),
 });
+
+/** Type for a restore-attempt request. */
 export type RestoreAttemptRequest = z.infer<typeof RestoreAttemptRequestSchema>;
 
 // ── Queue ─────────────────────────────────────────────────────────
 
+/**
+ * Response schema for queue status when an exam uses batched entry (requireQueue mode).
+ * Shows the candidate's position and estimated wait time.
+ */
 export const QueueStatusResponseSchema = z.object({
   examId: z.string().uuid(),
   status: z.enum(["waiting", "ready"]),
@@ -184,8 +259,14 @@ export const QueueStatusResponseSchema = z.object({
   waitCount: z.number().int().min(0),
   estimatedWaitSeconds: z.number().int().min(0),
 });
+
+/** Type for queue status response. */
 export type QueueStatusResponse = z.infer<typeof QueueStatusResponseSchema>;
 
+/**
+ * Detailed exam view for a candidate, including exam metadata, control flags, attempt history,
+ * availability status, and the recommended primary action.
+ */
 export const CandidateExamDetailResponseSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),
@@ -215,6 +296,8 @@ export const CandidateExamDetailResponseSchema = z.object({
   availabilityStatus: AvailabilityStatusEnum,
   primaryAction: PrimaryActionEnum,
 });
+
+/** Type for a candidate's detailed exam view response. */
 export type CandidateExamDetailResponse = z.infer<
   typeof CandidateExamDetailResponseSchema
 >;

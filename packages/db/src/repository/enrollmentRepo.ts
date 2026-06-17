@@ -8,11 +8,15 @@ import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 
+/** Creates a tenant-scoped CRUD repository for `examEnrollments` with candidate/exam lookups. */
 export function createEnrollmentRepo(db: Database) {
   const repo = createAsyncTenantCrudRepo(db, examEnrollments);
 
   return {
     ...repo,
+    /**
+     * Finds an enrollment by exam and candidate profile ID, scoped to the tenant.
+     */
     async findByExamAndCandidate(
       ctx: TenantContext | RequestContext,
       examId: string,
@@ -33,6 +37,10 @@ export function createEnrollmentRepo(db: Database) {
         (rows[0] as typeof examEnrollments.$inferSelect | undefined) ?? null
       );
     },
+    /**
+     * Finds an enrollment by exam and candidate with `FOR UPDATE` row lock,
+     * scoped to the tenant. Used for concurrency-safe enrollment updates.
+     */
     async findByExamAndCandidateForUpdate(
       ctx: TenantContext | RequestContext,
       examId: string,
@@ -54,6 +62,9 @@ export function createEnrollmentRepo(db: Database) {
         (rows[0] as typeof examEnrollments.$inferSelect | undefined) ?? null
       );
     },
+    /**
+     * Lists all enrollments for a given candidate profile, scoped to the tenant.
+     */
     async findByCandidate(
       ctx: TenantContext | RequestContext,
       candidateId: string,

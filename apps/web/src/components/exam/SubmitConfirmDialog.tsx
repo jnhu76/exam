@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+/** Props for the SubmitConfirmDialog component. */
 type SubmitConfirmDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -19,6 +20,10 @@ type SubmitConfirmDialogProps = {
   confirmDisabled?: boolean;
 };
 
+/**
+ * Confirmation dialog shown before exam submission, displaying answer
+ * statistics (total, answered, unanswered, flagged) and requiring explicit confirm.
+ */
 export function SubmitConfirmDialog({
   open,
   onOpenChange,

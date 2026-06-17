@@ -14,11 +14,13 @@ import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/shared/FieldError";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
+/** A question's ID and its configured score value. */
 interface QuestionScore {
   id: string;
   score: number;
 }
 
+/** Complete exam configuration data used by the create/edit form. */
 export interface ExamConfigData {
   title: string;
   description: string;
@@ -47,6 +49,7 @@ export interface ExamConfigData {
   maxAttempts: number;
 }
 
+/** Props for the ExamConfigForm component. */
 interface ExamConfigFormProps {
   courses: Array<{ id: string; name: string }>;
   questions?: QuestionScore[];
@@ -54,6 +57,10 @@ interface ExamConfigFormProps {
   onChange: (data: ExamConfigData) => void;
 }
 
+/**
+ * Multi-section form for creating or editing exam configuration,
+ * including basic info, time windows, scores, retake policy, and control flags.
+ */
 export function ExamConfigForm({
   courses,
   questions = [],

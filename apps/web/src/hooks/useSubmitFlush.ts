@@ -1,22 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+/** Debounce delay before a pending save is sent to the server. */
 const DEBOUNCE_MS = 1500;
+/** Maximum time to wait for all in-flight saves during flush. */
 const FLUSH_TIMEOUT_MS = 10_000;
 
+/** Lifecycle status of a per-question save operation. */
 export type SaveStatus = "idle" | "pending" | "inflight" | "saved" | "failed";
 
+/** Result returned by the flush method after draining all pending saves. */
 export interface FlushResult {
   pendingCount: number;
   failedQuestionIds: string[];
   timedOut: boolean;
 }
 
+/** Internal entry tracking a debounced save timer and its save function. */
 interface PendingEntry {
   timer: ReturnType<typeof setTimeout>;
   save: () => Promise<void>;
   generation: number;
 }
 
+/** Public interface of the useSubmitFlush hook. */
 export interface UseSubmitFlush {
   scheduleSave: (questionId: string, save: () => Promise<void>) => void;
   flush: () => Promise<FlushResult>;
@@ -24,6 +30,10 @@ export interface UseSubmitFlush {
   failedQuestionIds: string[];
 }
 
+/**
+ * Manages debounced, per-question answer saves with generation-based
+ * cancellation, status tracking, and a flush-all method for exam submission.
+ */
 export function useSubmitFlush(): UseSubmitFlush {
   const pendingRef = useRef(new Map<string, PendingEntry>());
   const inflightRef = useRef(new Map<string, Promise<void>>());

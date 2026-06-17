@@ -1,6 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Generic bordered section with optional title, description, actions,
+ * content area, and footer. Used to group page content into logical blocks.
+ */
 export function PageSection({
   title,
   description,

@@ -16,6 +16,7 @@ import type {
 
 // ── Organization ──────────────────────────────────────────────────
 
+/** Internal organization record. Represents the top-level tenant boundary. */
 export interface Organization {
   id: string;
   name: string;
@@ -25,6 +26,12 @@ export interface Organization {
   updatedAt: Date;
 }
 
+/**
+ * Organization-level display and localization settings.
+ *
+ * Overrides the defaults from `Organization` when set. Fields are optional;
+ * unset values fall back to the organization record.
+ */
 export interface OrganizationSettings {
   id: string;
   organizationId: string;
@@ -37,6 +44,7 @@ export interface OrganizationSettings {
   updatedAt: Date;
 }
 
+/** Resolved branding view combining organization defaults with organization settings overrides. */
 export interface BrandingView {
   productName: string;
   productSubtitle?: string;
@@ -46,6 +54,7 @@ export interface BrandingView {
 
 // ── User ──────────────────────────────────────────────────────────
 
+/** Platform user account with role and organization membership. */
 export interface User {
   id: string;
   organizationId: string;
@@ -60,6 +69,7 @@ export interface User {
 
 // ── Candidate ─────────────────────────────────────────────────────
 
+/** Candidate profile linked to a user, holding dynamic identity fields. */
 export interface Candidate {
   id: string;
   organizationId: string;
@@ -69,6 +79,7 @@ export interface Candidate {
   updatedAt: Date;
 }
 
+/** Metadata definition for a single candidate identity field. */
 export interface CandidateField {
   id: string;
   organizationId: string;
@@ -83,6 +94,7 @@ export interface CandidateField {
 
 // ── Course ────────────────────────────────────────────────────────
 
+/** Course (or training module) that groups questions and exams. */
 export interface Course {
   id: string;
   organizationId: string;
@@ -95,6 +107,7 @@ export interface Course {
 
 // ── Question ──────────────────────────────────────────────────────
 
+/** A question in the question bank, with content, options, answer, and grading metadata. */
 export interface Question {
   id: string;
   organizationId: string;
@@ -112,12 +125,14 @@ export interface Question {
   updatedAt: Date;
 }
 
+/** A single answer option for a choice-type question. */
 export interface Option {
   id: string;
   content: string;
   isCorrect?: boolean;
 }
 
+/** File or image attachment linked to a question. */
 export interface Attachment {
   url: string;
   type: "image" | "file";
@@ -126,6 +141,12 @@ export interface Attachment {
 
 // ── Question Snapshot (§3.6) ─────────────────────────────────────
 
+/**
+ * Immutable snapshot of a question at exam creation time.
+ *
+ * Stored in `ExamAttempt.questionSnapshot` so that later edits to the
+ * question bank do not affect in-progress or completed attempts.
+ */
 export interface QuestionSnapshot {
   originalQuestionId: string;
   type: QuestionType;
@@ -138,6 +159,7 @@ export interface QuestionSnapshot {
   order: number;
 }
 
+/** Answer option within a question snapshot (no correctness flag — grading uses standardAnswer). */
 export interface OptionSnapshot {
   id: string;
   content: string;
@@ -145,6 +167,7 @@ export interface OptionSnapshot {
 
 // ── Grading Rule ──────────────────────────────────────────────────
 
+/** Grading configuration for a question, controlling multi-select and fill-blank behavior. */
 export interface GradingRule {
   multiSelectScoring: MultiSelectScoring;
   fillBlankMatchMode: FillBlankMatchMode;
@@ -153,6 +176,12 @@ export interface GradingRule {
 
 // ── Control Flags (§2.6) ─────────────────────────────────────────
 
+/**
+ * Runtime control flags for an exam session.
+ *
+ * Controls shuffle, anti-cheat, queue, IP restriction, lockdown, and
+ * result-display behavior. Not all flags are used in Phase 1.
+ */
 export interface ControlFlags {
   shuffleQuestions: boolean;
   shuffleOptions: boolean;
@@ -168,6 +197,13 @@ export interface ControlFlags {
 
 // ── Exam ──────────────────────────────────────────────────────────
 
+/**
+ * Core exam entity.
+ *
+ * Holds all configuration for an exam: timing, scoring, question selection,
+ * control flags, and the question snapshot. State transitions go through
+ * command functions, not direct mutation.
+ */
 export interface Exam {
   id: string;
   organizationId: string;
@@ -194,6 +230,12 @@ export interface Exam {
 
 // ── Exam Enrollment (§2.2) ───────────────────────────────────────
 
+/**
+ * Tracks a candidate's enrollment in an exam.
+ *
+ * Records attempt count, final score (computed by `ScoreStrategy`), and
+ * pass/fail status.
+ */
 export interface ExamEnrollment {
   id: string;
   organizationId: string;
@@ -210,6 +252,13 @@ export interface ExamEnrollment {
 
 // ── Exam Attempt (§2.2) ──────────────────────────────────────────
 
+/**
+ * A single attempt by a candidate to take an exam.
+ *
+ * Contains the question snapshot at attempt creation, answer records,
+ * grading results, and timing metadata. The `lastActivityAt` field
+ * serves as the heartbeat for disconnect detection.
+ */
 export interface ExamAttempt {
   id: string;
   organizationId: string;
@@ -234,6 +283,7 @@ export interface ExamAttempt {
 
 // ── Answer Record ─────────────────────────────────────────────────
 
+/** A single saved answer within an attempt, versioned for conflict detection. */
 export interface AnswerRecord {
   questionId: string;
   answer: unknown;
@@ -243,6 +293,7 @@ export interface AnswerRecord {
 
 // ── Save Answer Request/Response (§3.5) ───────────────────────────
 
+/** Client request to save or update an answer during an exam attempt. */
 export interface SaveAnswerRequest {
   attemptId: string;
   questionId: string;
@@ -252,6 +303,7 @@ export interface SaveAnswerRequest {
   baseVersion: number;
 }
 
+/** Server response when an answer save is accepted (no conflict). */
 export interface SaveAnswerAcceptedResponse {
   accepted: true;
   serverVersion: number;
@@ -259,6 +311,7 @@ export interface SaveAnswerAcceptedResponse {
   conflict?: undefined;
 }
 
+/** Server response when an answer save is rejected due to a version conflict. */
 export interface SaveAnswerRejectedResponse {
   accepted: false;
   serverVersion: number;
@@ -269,12 +322,14 @@ export interface SaveAnswerRejectedResponse {
   };
 }
 
+/** Discriminated union of accepted/rejected answer save responses. */
 export type SaveAnswerResponse =
   | SaveAnswerAcceptedResponse
   | SaveAnswerRejectedResponse;
 
 // ── Score Result (§3.7) ──────────────────────────────────────────
 
+/** Aggregated score result for a completed attempt. */
 export interface ScoreResult {
   attemptId: string;
   totalScore: number;
@@ -283,6 +338,7 @@ export interface ScoreResult {
   gradedAt: Date;
 }
 
+/** Per-question scoring result including the candidate's answer and the standard answer. */
 export interface QuestionScoreResult {
   questionId: string;
   score: number;
@@ -294,6 +350,7 @@ export interface QuestionScoreResult {
 
 // ── Audit Log (§3.8) ─────────────────────────────────────────────
 
+/** Audit log entry recording an actor's action on a target entity. */
 export interface AuditLog {
   id: string;
   organizationId: string;
@@ -309,6 +366,11 @@ export interface AuditLog {
 
 // ── Request Context (§3.1) ───────────────────────────────────────
 
+/**
+ * Authenticated request context carrying the actor's identity,
+ * organization, role, and permissions. Passed to all repository and
+ * command functions as the first argument (`ctx`).
+ */
 export interface RequestContext {
   actorId: string;
   organizationId: string;
@@ -318,6 +380,7 @@ export interface RequestContext {
   targetOrganizationId?: string;
 }
 
+/** Lightweight context for public branding endpoints that do not require authentication. */
 export interface PublicBrandingContext {
   purpose: "public_branding";
   organizationId?: string;

@@ -4,6 +4,10 @@ import { FillBlankInput } from "./FillBlankInput";
 import { TrueFalseInput } from "./TrueFalseInput";
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 
+/**
+ * Dispatches to the appropriate input component based on question type
+ * (single_choice, multiple_choice, fill_blank, true_false).
+ */
 export function QuestionRenderer({
   question,
   answer,

@@ -14,7 +14,13 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+/** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/**
+ * Zod schema for the branding settings response returned by the
+ * `PATCH /admin/settings/branding` endpoint.
+ */
 const brandingSettingsResponseSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -27,7 +33,19 @@ const brandingSettingsResponseSchema = z.object({
   updatedAt: z.string(),
 });
 
+/**
+ * Fastify plugin that registers branding and organization settings routes.
+ * Provides a public branding view endpoint and admin endpoints for reading
+ * and updating branding settings.
+ */
 const settingsRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /settings/branding
+   *
+   * Returns the public branding view for the organization identified by
+   * the `organizationSlug` query parameter. Unauthenticated — used by
+   * login pages and public-facing UIs to display organization branding.
+   */
   fastify.get(
     "/settings/branding",
     {
@@ -55,11 +73,22 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * Zod schema for the admin branding settings response. Returns either
+   * the full `OrganizationSettings` or an empty object when no settings
+   * have been configured yet.
+   */
   const adminSettingsResponseSchema = z.union([
     OrganizationSettingsSchema,
     z.object({}).strict(),
   ]);
 
+  /**
+   * GET /admin/settings/branding
+   *
+   * Returns the full branding settings for the current organization.
+   * Admin-only. Returns an empty object if no settings exist yet.
+   */
   fastify.get(
     "/admin/settings/branding",
     {
@@ -85,6 +114,12 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * PATCH /admin/settings/branding
+   *
+   * Creates or updates branding settings for the current organization.
+   * Admin-only. Records an audit log entry on success.
+   */
   fastify.patch(
     "/admin/settings/branding",
     {

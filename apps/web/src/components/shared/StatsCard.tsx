@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 
+/**
+ * Dashboard statistics card displaying a label, numeric value,
+ * optional icon, and optional trend line.
+ */
 export function StatsCard({
   label,
   value,

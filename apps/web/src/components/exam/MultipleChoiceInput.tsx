@@ -1,3 +1,7 @@
+/**
+ * Checkbox-based input for multiple-choice questions.
+ * Allows toggling individual options and returns a sorted array of selected IDs.
+ */
 export function MultipleChoiceInput({
   options,
   value,

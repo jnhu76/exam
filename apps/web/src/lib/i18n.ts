@@ -5,7 +5,11 @@ import {
 } from "@exam/contracts";
 import { ApiError } from "./api";
 
-// 接入用户偏好或 Accept-Language 时改为传入实际 locale。
+/**
+ * Resolves a user-facing error message from an unknown error value.
+ * Uses the contracts error code map for ApiError instances, falling back
+ * to the generic operationFailed message.
+ */
 export function resolveErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code && isErrorCode(error.code)) {

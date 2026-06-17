@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/** Displays an error message with an icon, optional retry button, and extra action slot. */
 export function ErrorState({
   message,
   onRetry,

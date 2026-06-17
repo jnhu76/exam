@@ -36,6 +36,7 @@ import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
 import { SystemHealthPage } from "@/pages/admin/SystemHealthPage";
 
+/** Top-level route definitions for admin, candidate exam, and login views. */
 export function AppRoutes() {
   return (
     <Routes>
@@ -74,6 +75,7 @@ export function AppRoutes() {
   );
 }
 
+/** Synchronizes the document title with the current route and branding. */
 export function AppTitle() {
   const location = useLocation();
   const branding = useBranding();
@@ -85,6 +87,10 @@ export function AppTitle() {
   return null;
 }
 
+/**
+ * Root application component. Wraps the app in ErrorBoundary, BrowserRouter,
+ * BrandProvider, and AuthProvider, then renders routes and the toast layer.
+ */
 export default function App() {
   return (
     <ErrorBoundary>

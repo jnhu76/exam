@@ -1,6 +1,7 @@
 import { getStatusMeta, type StatusTone } from "@/lib/statusMeta";
 import { cn } from "@/lib/utils";
 
+/** CSS class mapping from StatusTone to background/text color utilities. */
 const toneClasses: Record<StatusTone, string> = {
   primary: "bg-primary-soft text-primary-soft-foreground",
   secondary: "bg-secondary text-secondary-foreground",
@@ -11,6 +12,10 @@ const toneClasses: Record<StatusTone, string> = {
   muted: "bg-neutral-soft text-muted-foreground",
 };
 
+/**
+ * Inline badge that displays a status label with a color-coded background
+ * and optional icon, resolved from the status metadata lookup.
+ */
 export function StatusBadge({
   status,
   className,

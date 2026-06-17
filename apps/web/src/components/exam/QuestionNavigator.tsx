@@ -1,14 +1,17 @@
 import { FlagIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** Visual state of a question in the navigator grid. */
 export type QuestionNavigatorState = "unanswered" | "answered" | "flagged";
 
+/** A single question entry in the navigator with its display state. */
 export type QuestionNavigatorItem = {
   id: string;
   number: number;
   state: QuestionNavigatorState;
 };
 
+/** Props for the QuestionNavigator component. */
 type QuestionNavigatorProps = {
   items: QuestionNavigatorItem[];
   currentId: string;
@@ -16,6 +19,7 @@ type QuestionNavigatorProps = {
   className?: string;
 };
 
+/** Display metadata (label and CSS classes) for each navigator state. */
 const stateMeta = {
   unanswered: {
     label: "未作答",
@@ -36,6 +40,10 @@ const stateMeta = {
   { label: string; className: string }
 >;
 
+/**
+ * Grid-based question navigator showing numbered buttons with
+ * color-coded states (unanswered, answered, flagged) and a legend.
+ */
 export function QuestionNavigator({
   items,
   currentId,

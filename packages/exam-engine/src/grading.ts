@@ -22,6 +22,10 @@ import {
 } from "./attemptStateMachine.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
 
+/**
+ * Determines whether this attempt's score should replace the current final score
+ * on the enrollment, based on the exam's score strategy (latest, highest, or first).
+ */
 function shouldSelectAttempt(
   strategy: ScoreStrategy,
   enrollment: ExamEnrollment,
@@ -40,6 +44,11 @@ function shouldSelectAttempt(
   }
 }
 
+/**
+ * Determines whether the enrollment should transition to completed status.
+ * Completes when max attempts are exhausted, the candidate passes a pass_then_stop exam,
+ * or the exam window has closed.
+ */
 export function shouldEnrollmentComplete(
   exam: Exam,
   enrollment: ExamEnrollment,
@@ -64,12 +73,17 @@ export function shouldEnrollmentComplete(
   return false;
 }
 
+/** Snapshot of data required for grading an attempt: the attempt, its exam, and the enrollment. */
 export interface GradingSnapshot {
   attempt: ExamAttempt;
   exam: Exam;
   enrollment: ExamEnrollment;
 }
 
+/**
+ * Reads the grading snapshot for a given attempt: loads the attempt, its exam,
+ * and the candidate's enrollment. Returns null if the attempt does not exist.
+ */
 export async function readGradingSnapshot(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
@@ -97,6 +111,10 @@ export async function readGradingSnapshot(
   return { attempt, exam, enrollment };
 }
 
+/**
+ * Computes the grading result by delegating to the domain-gradeAnswers function.
+ * Returns a ScoreResult with per-question scores, total, and pass/fail.
+ */
 export function computeGradingResult(
   attempt: ExamAttempt,
   exam: Exam,
@@ -111,6 +129,11 @@ export function computeGradingResult(
   );
 }
 
+/**
+ * Persists the grading results: transitions the attempt to graded, updates the
+ * enrollment's final score per the score strategy, and transitions the enrollment
+ * to completed if the exam is finished.
+ */
 export async function finalizeGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
@@ -190,6 +213,10 @@ export async function finalizeGrading(
   return true;
 }
 
+/**
+ * Grades an attempt end-to-end: reads the grading snapshot, computes the result,
+ * and finalizes the enrollment. Returns the ScoreResult.
+ */
 export async function gradeAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,

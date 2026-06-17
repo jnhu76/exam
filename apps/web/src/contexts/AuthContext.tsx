@@ -9,8 +9,10 @@ import type { LoginRequest, LoginResponse, MeResponse } from "@exam/contracts";
 import { useNavigate } from "react-router";
 import { api, setNavigate } from "@/lib/api";
 
+/** User shape returned by the /api/auth/me endpoint. */
 type SessionUser = MeResponse;
 
+/** Public interface of the authentication context value. */
 export interface AuthContextValue {
   user: SessionUser | null;
   isLoading: boolean;
@@ -23,10 +25,15 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** Returns the default landing path for a given user role. */
 function dashboardFor(user: SessionUser): string {
   return user.role === "Candidate" ? "/exam/list" : "/admin/dashboard";
 }
 
+/**
+ * Provides authentication state and actions (login, logout) to the
+ * component tree. Optionally restores an existing session on mount.
+ */
 export function AuthProvider({
   children,
   initialUser = null,
@@ -119,6 +126,7 @@ export function AuthProvider({
   );
 }
 
+/** Hook to access the auth context; must be used inside AuthProvider. */
 export function useAuthContext(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {

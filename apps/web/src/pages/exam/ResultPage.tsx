@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+/** Formats an answer value into a human-readable Chinese string. */
 function formatAnswer(answer: unknown): string {
   if (answer === undefined || answer === null || answer === "") return "未作答";
   if (typeof answer === "string") return answer;
@@ -30,6 +31,7 @@ function formatAnswer(answer: unknown): string {
   return String(answer);
 }
 
+/** Maps a question type key to its Chinese display label. */
 function formatQuestionType(type: string): string {
   const labels: Record<string, string> = {
     single_choice: "单选题",
@@ -40,6 +42,7 @@ function formatQuestionType(type: string): string {
   return labels[type] ?? type;
 }
 
+/** Renders an answer value as text, with optional truncation for long fill-blank answers. */
 function AnswerText({
   answer,
   truncate,
@@ -55,12 +58,14 @@ function AnswerText({
   );
 }
 
+/** Displays the scored result of a single exam attempt, including per-question breakdown or a pending-status message. */
 export function ResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const [result, setResult] = useState<AttemptResultResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches the attempt result from the scores API. */
   const loadResult = useCallback(async () => {
     if (!attemptId) return;
     setError(null);

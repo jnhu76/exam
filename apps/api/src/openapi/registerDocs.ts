@@ -5,6 +5,14 @@ import swaggerUiPlugin from "@fastify/swagger-ui";
 import { openApiConfig } from "./config.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
+/**
+ * Register the Swagger/OpenAPI UI and spec routes on the Fastify instance.
+ *
+ * No-op when the runtime config has `apiReference.enabled` set to `false`
+ * (the default in production).
+ *
+ * @param app - The Fastify application instance.
+ */
 export async function registerOpenApiDocs(app: FastifyInstance): Promise<void> {
   const config = getRuntimeConfig();
 

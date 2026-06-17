@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+/**
+ * Shell layout for candidate-facing exam pages. Renders a top header
+ * with branding, exam list link, user info, and logout.
+ * Redirects non-candidate users to /login.
+ */
 export function ExamLayout() {
   const { user, isLoading, logout } = useAuth();
   if (isLoading) {

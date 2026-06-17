@@ -2,6 +2,11 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { validateTenantAccess } from "@exam/auth/src/tenantGuard.js";
 
+/**
+ * Pre-handler hook that validates the authenticated actor's tenant access
+ * for the current request. Skips validation if no request context is
+ * present. Replies with the error status from the tenant guard on failure.
+ */
 const tenantGuardHook = async (
   request: FastifyRequest,
   reply: FastifyReply,
@@ -27,6 +32,12 @@ const tenantGuardHook = async (
   }
 };
 
+/**
+ * Fastify plugin that automatically inserts the {@link tenantGuardHook}
+ * into any route whose preHandler chain includes the authenticate function.
+ * The tenant guard runs immediately after authentication to enforce
+ * organization-level data boundaries.
+ */
 const tenantPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onRoute", (routeOptions) => {
     const preHandlers = routeOptions.preHandler;

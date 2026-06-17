@@ -2,6 +2,10 @@ import { cn } from "@/lib/utils";
 import { BrandMark } from "./BrandMark";
 import { useBranding } from "./BrandProvider";
 
+/**
+ * Displays the product logo mark and name. Supports a compact mode
+ * (icon only, name hidden with sr-only) for collapsed sidebars.
+ */
 export function BrandHeader({
   compact = false,
   className,

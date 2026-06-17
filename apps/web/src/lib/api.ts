@@ -5,14 +5,20 @@ import {
   type ErrorResponse,
 } from "@exam/contracts";
 
+/** Base URL for API requests, derived from the VITE_API_BASE_URL env var. */
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 let navigateFn: ((path: string) => void) | null = null;
 
+/**
+ * Registers a navigation callback so the API layer can redirect to
+ * /login on 401 responses.
+ */
 export function setNavigate(fn: (path: string) => void) {
   navigateFn = fn;
 }
 
+/** Typed error thrown by the API client on non-2xx responses or network failure. */
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -26,10 +32,12 @@ export class ApiError extends Error {
   }
 }
 
+/** Shape of the JSON body returned by the server on error responses. */
 type ErrorBody = Partial<ErrorResponse> & {
   message?: string;
 };
 
+/** Executes an HTTP request, handles error parsing, and throws ApiError. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     const hasBody = init?.body !== undefined;
@@ -85,6 +93,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
+/** HTTP client with get, post, patch, and delete helpers that use cookie-based auth. */
 export const api = {
   baseURL: baseUrl,
   get<T>(path: string): Promise<T> {

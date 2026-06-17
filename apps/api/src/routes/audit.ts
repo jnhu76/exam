@@ -10,6 +10,18 @@ import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg } from "./helpers.js";
 
+/**
+ * Records an audit log entry asynchronously. Failures are logged but do
+ * not propagate to the caller (fire-and-forget).
+ *
+ * @param fastify - The Fastify instance (provides `db` and `log`).
+ * @param request - The incoming HTTP request (provides `id`, `ip`, headers).
+ * @param ctx - The request context carrying actor and organization info.
+ * @param action - A string describing the action performed (e.g. `"branding.update"`).
+ * @param targetType - The type of entity acted upon (e.g. `"organization"`, `"exam"`).
+ * @param targetId - The identifier of the entity acted upon.
+ * @param metadata - Optional key-value pairs for additional context.
+ */
 export function recordAudit(
   fastify: FastifyInstance,
   request: FastifyRequest,
@@ -50,7 +62,12 @@ export function recordAudit(
     });
 }
 
+/** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/**
+ * Zod schema for a single audit log item in API responses.
+ */
 const auditLogItemSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -63,6 +80,9 @@ const auditLogItemSchema = z.object({
   userAgent: z.string().nullable(),
   createdAt: z.string(),
 });
+/**
+ * Zod schema for the paginated audit log list response.
+ */
 const auditLogListResponseSchema = z.object({
   items: z.array(auditLogItemSchema),
   total: z.number().int(),
@@ -71,7 +91,18 @@ const auditLogListResponseSchema = z.object({
   totalPages: z.number().int(),
 });
 
+/**
+ * Fastify plugin that registers the audit log routes.
+ * Currently exposes `GET /admin/audit-logs` for querying paginated,
+ * filterable audit log entries.
+ */
 const auditRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /admin/audit-logs
+   *
+   * Returns a paginated list of audit log entries for the current
+   * organization. Admin-only. Supports filtering by action type.
+   */
   fastify.get(
     "/admin/audit-logs",
     {

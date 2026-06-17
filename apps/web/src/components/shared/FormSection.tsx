@@ -1,6 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Bordered card section with a title, optional description, action slot,
+ * and a content grid. Used to group related form controls.
+ */
 export function FormSection({
   title,
   description,

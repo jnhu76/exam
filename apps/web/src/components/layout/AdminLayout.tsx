@@ -5,6 +5,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
 
+/**
+ * Shell layout for the admin console. Renders a collapsible sidebar,
+ * a top bar with the current page title, and an <Outlet> for child routes.
+ * Redirects unauthenticated or candidate-role users to /login.
+ */
 export function AdminLayout() {
   const { user, logout, isLoading } = useAuth();
   const [collapsed, setCollapsed] = useState(false);

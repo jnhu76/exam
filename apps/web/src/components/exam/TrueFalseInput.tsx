@@ -1,3 +1,7 @@
+/**
+ * Radio-button input for true/false (judgment) questions,
+ * offering "正确" (true) and "错误" (false) options.
+ */
 export function TrueFalseInput({
   value,
   onChange,

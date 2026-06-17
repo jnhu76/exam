@@ -21,6 +21,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+/** Color-tone classification for status badges. */
 export type StatusTone =
   | "primary"
   | "secondary"
@@ -30,12 +31,14 @@ export type StatusTone =
   | "info"
   | "muted";
 
+/** Display metadata for a single status: label, tone, and icon. */
 export interface StatusMeta {
   label: string;
   tone: StatusTone;
   icon: LucideIcon;
 }
 
+/** Lookup table mapping status keys to their display label, tone, and icon. */
 export const statusMeta = {
   draft: { label: "草稿", tone: "muted", icon: FilePenLine },
   published: { label: "已发布", tone: "primary", icon: Send },
@@ -70,12 +73,15 @@ export const statusMeta = {
   not_passed: { label: "不及格", tone: "destructive", icon: XCircle },
 } as const satisfies Record<string, StatusMeta>;
 
+/** Union of all recognized status keys. */
 export type StatusKey = keyof typeof statusMeta;
 
+/** Returns true if the given string is a known status key. */
 export function isStatusKey(status: string): status is StatusKey {
   return status in statusMeta;
 }
 
+/** Returns the display metadata for a status key, falling back to "unknown". */
 export function getStatusMeta(status: string): StatusMeta {
   return isStatusKey(status) ? statusMeta[status] : statusMeta.unknown;
 }

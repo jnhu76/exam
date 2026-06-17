@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+/** Props for the QuestionHeader component. */
 type QuestionHeaderProps = {
   number: number;
   typeLabel: string;
@@ -11,6 +12,10 @@ type QuestionHeaderProps = {
   className?: string;
 };
 
+/**
+ * Displays the question number, type badge, score badge, and optional
+ * description/meta line above the question content area.
+ */
 export function QuestionHeader({
   number,
   typeLabel,

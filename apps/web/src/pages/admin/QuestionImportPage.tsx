@@ -26,12 +26,14 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
 import { TYPE_LABELS } from "@/lib/constants";
 
+/** Minimal course representation used to populate the course selector. */
 interface CourseRow {
   id: string;
   name: string;
   code: string;
 }
 
+/** A single parsed row from the uploaded CSV file. */
 interface ImportRow {
   type: string;
   content: string;
@@ -45,6 +47,7 @@ interface ImportRow {
   tags?: string;
 }
 
+/** Summary and per-row details returned by the import validation endpoint. */
 interface ImportResult {
   total: number;
   valid: number;
@@ -57,6 +60,7 @@ interface ImportResult {
   }>;
 }
 
+/** Admin page for bulk-importing questions from a CSV file into a selected course. */
 export function QuestionImportPage() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -68,6 +72,7 @@ export function QuestionImportPage() {
   const [importing, setImporting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
+  /** Fetches the course list and selects the first course by default. */
   const loadCourses = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -88,12 +93,17 @@ export function QuestionImportPage() {
     loadCourses();
   }, [loadCourses]);
 
+  /** Parses raw CSV text into structured import rows and resets prior results. */
   function loadCsv(text: string) {
     setParsedRows(parseCSV(text));
     setImportResult(null);
     setConfirmed(false);
   }
 
+  /**
+   * Parses a CSV string into an array of {@link ImportRow} objects.
+   * Expects a header row followed by data rows with at least 4 columns.
+   */
   function parseCSV(text: string): ImportRow[] {
     const lines = text.split("\n").filter((l) => l.trim());
     if (lines.length < 2) return [];
@@ -121,6 +131,10 @@ export function QuestionImportPage() {
     return rows;
   }
 
+  /**
+   * Splits a single CSV line into columns, handling quoted fields and
+   * escaped double-quotes per RFC 4180.
+   */
   function parseCSVLine(line: string): string[] {
     const result: string[] = [];
     let current = "";
@@ -146,6 +160,10 @@ export function QuestionImportPage() {
     return result;
   }
 
+  /**
+   * Converts a raw answer string into the appropriate typed value based on
+   * the question type (boolean for true/false, array for multiple-choice).
+   */
   function parseStandardAnswer(answer: string, type: string): unknown {
     if (type === "true_false") {
       return answer.toLowerCase() === "true" || answer === "是";
@@ -156,6 +174,10 @@ export function QuestionImportPage() {
     return answer;
   }
 
+  /**
+   * Submits the parsed rows to the import endpoint for validation or
+   * confirmed insertion, and stores the result.
+   */
   async function handleImport(confirm: boolean) {
     if (!selectedCourse || parsedRows.length === 0) return;
     setImporting(true);
@@ -174,6 +196,7 @@ export function QuestionImportPage() {
     }
   }
 
+  /** Downloads a sample CSV template file with example question rows. */
   function downloadTemplate() {
     const header =
       "题型,题目内容,选项A,选项B,选项C,选项D,标准答案,分值,难度,标签";

@@ -8,7 +8,10 @@ import {
   ErrorResponseSchema,
 } from "@exam/contracts";
 
+/** Generic success response schema used for mutation endpoints that return only a confirmation. */
 const okResponseSchema = z.object({ ok: z.literal(true) });
+
+/** OpenAPI security scheme requiring cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 import {
   hashPassword,
@@ -27,6 +30,12 @@ import {
 import { recordAudit } from "./audit.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
+/**
+ * Fastify plugin that registers authentication routes.
+ *
+ * Provides login, logout, current-user retrieval, and password change
+ * for the internal default organization. Registration is disabled in Phase 1.
+ */
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/register",
@@ -37,6 +46,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * POST /register — always returns 403.
+     *
+     * Registration is disabled in Phase 1; this endpoint exists
+     * to return a clear "registration disabled" error to any client
+     * that attempts self-service account creation.
+     */
     async (request, reply) => {
       return reply
         .code(403)
@@ -56,6 +72,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * POST /login — authenticate a user and issue an auth-token cookie.
+     *
+     * Resolves the default organization, verifies credentials, and
+     * signs a JWT stored in an httpOnly cookie. Only Admin and
+     * Candidate roles are supported in Phase 1.
+     */
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
       const tenancy = getRuntimeConfig().tenancy;
@@ -220,6 +243,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * POST /logout — clear the auth-token cookie and record an audit event.
+     *
+     * Attempts to verify the existing token for audit logging but
+     * clears the cookie regardless of token validity.
+     */
     async (request, reply) => {
       const token = request.cookies["auth-token"];
       if (token) {
@@ -261,6 +290,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * GET /me — return the currently authenticated user's profile.
+     *
+     * Requires a valid auth-token cookie. Returns user id, username,
+     * name, role, and organizationId, or 404 if the user no longer exists.
+     */
     async (request, reply) => {
       const userRepo = createUserRepo(fastify.db);
       const ctx = request.ctx!;
@@ -297,6 +332,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * PATCH /me/password — change the authenticated user's password.
+     *
+     * Verifies the current password before hashing and persisting
+     * the new one. Returns 400 if the current password is invalid,
+     * or 404 if the user record is missing.
+     */
     async (request, reply) => {
       const parsed = ChangePasswordRequestSchema.safeParse(request.body);
       if (!parsed.success) {

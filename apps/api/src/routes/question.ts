@@ -19,8 +19,13 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 
+/** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/** OpenAPI security scheme: HTTP-only cookie authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/** Zod schema for the paginated question list response. */
 const questionListResponseSchema = z.object({
   items: z.array(QuestionSchema),
   total: z.number().int().nonnegative(),
@@ -29,6 +34,7 @@ const questionListResponseSchema = z.object({
   totalPages: z.number().int().nonnegative(),
 });
 
+/** Zod schema for query parameters when listing questions, including filters for courseId, type, difficulty, and tags. */
 const questionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -38,6 +44,7 @@ const questionListQuerySchema = z.object({
   tags: z.string().optional(),
 });
 
+/** Fastify plugin that registers all question CRUD and import routes. */
 const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions",
@@ -52,6 +59,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** List questions with pagination and optional filters (courseId, type, difficulty, tags). */
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -124,6 +132,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Get a single question by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -167,6 +176,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Create a new question. Validates that the referenced courseId exists. Returns 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = CreateQuestionRequestSchema.safeParse(request.body);
@@ -251,6 +261,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Update an existing question by ID. Validates courseId and question existence. Returns 404 if not found, 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -330,6 +341,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Delete a question by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -360,6 +372,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Import questions in bulk from CSV-like rows. Validates each row; creates questions only when confirm=true. Rate-limited to 5 requests per minute. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = QuestionImportRequestSchema.safeParse(request.body);

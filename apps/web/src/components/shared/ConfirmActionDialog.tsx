@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 
+/** Props for the ConfirmActionDialog component. */
 type ConfirmActionDialogProps = {
   trigger: ReactNode;
   title: string;
@@ -14,6 +15,10 @@ type ConfirmActionDialogProps = {
   onCancel?: () => void;
 };
 
+/**
+ * Convenience wrapper around ConfirmDialog for destructive or confirmable
+ * actions, accepting a trigger element and forwarding confirm/cancel callbacks.
+ */
 export function ConfirmActionDialog({
   trigger,
   title,

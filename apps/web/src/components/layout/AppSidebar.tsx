@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { BrandHeader } from "./BrandHeader";
 
+/** Props for the AppSidebar component. */
 interface AppSidebarProps {
   user: MeResponse;
   collapsed: boolean;
@@ -30,6 +31,7 @@ interface AppSidebarProps {
   onLogout: () => void;
 }
 
+/** Sidebar navigation group definitions (overview, question bank, exams). */
 const groups = [
   {
     label: "概览",
@@ -52,6 +54,7 @@ const groups = [
   },
 ];
 
+/** Sidebar navigation items visible only to Admin-role users. */
 const managementItems = [
   { label: "用户管理", to: "/admin/users", icon: UserRoundCog },
   { label: "考生管理", to: "/admin/candidates", icon: Users },
@@ -60,6 +63,7 @@ const managementItems = [
   { label: "系统健康", to: "/admin/system", icon: Monitor },
 ];
 
+/** A single navigation link in the sidebar with icon and active state styling. */
 function SidebarLink({
   collapsed,
   item,
@@ -86,6 +90,10 @@ function SidebarLink({
   );
 }
 
+/**
+ * Collapsible admin sidebar with grouped navigation links,
+ * user avatar, and logout button. Shows management items only for Admin role.
+ */
 export function AppSidebar({
   user,
   collapsed,

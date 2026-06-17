@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 
+/** Displays a countdown timer that fires onTimeout when the deadline is reached. */
 export function ExamTimer({
   deadlineAt,
   onTimeout,
@@ -41,6 +42,7 @@ export function ExamTimer({
   );
 }
 
+/** Computes remaining seconds from a deadline ISO string to now. */
 function getRemainingSeconds(deadlineAt: string): number {
   const diff = new Date(deadlineAt).getTime() - Date.now();
   if (diff <= 0) return 0;

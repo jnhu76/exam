@@ -4,6 +4,11 @@ import rateLimit from "@fastify/rate-limit";
 import { AppError } from "@exam/domain";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
+/**
+ * Checks whether the incoming request targets the API reference UI path.
+ * When the API reference feature is enabled, requests to its UI path
+ * are exempted from rate limiting.
+ */
 function isApiReferenceRequest(request: FastifyRequest): boolean {
   const config = getRuntimeConfig();
   if (!config.apiReference.enabled) {
@@ -15,6 +20,12 @@ function isApiReferenceRequest(request: FastifyRequest): boolean {
   return pathOnly === uiPath || pathOnly.startsWith(`${uiPath}/`);
 }
 
+/**
+ * Fastify plugin that registers IP-based rate limiting when enabled in
+ * runtime config. API reference UI requests are excluded from the limit.
+ * Returns a structured `AppError` with code `RATE_LIMITED` when the
+ * limit is exceeded.
+ */
 const rateLimitPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
   if (!config.rateLimit.enabled) {

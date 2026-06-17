@@ -29,12 +29,18 @@ import {
   Upload,
 } from "lucide-react";
 
+/** Admin dashboard page displaying stats cards, quick actions, and recent exams. */
+/**
+ * Admin dashboard page showing summary statistics (question count, active exams,
+ * candidate count, today's exams), quick-action buttons, and a table of recent exams.
+ */
 export function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches dashboard summary data from the system API. */
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -161,6 +167,8 @@ export function DashboardPage() {
   );
 }
 
+/** Skeleton placeholder shown while the dashboard data is loading. */
+/** Placeholder skeleton shown while the dashboard data is loading. */
 function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">

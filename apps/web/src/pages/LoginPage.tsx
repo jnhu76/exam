@@ -9,6 +9,10 @@ import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/shared/FieldError";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
+/**
+ * Login page with username/password form, field validation,
+ * and branding header. Redirects to the appropriate dashboard on success.
+ */
 export function LoginPage() {
   const branding = useBranding();
   const { login, isSubmittingLogin, error } = useAuth();

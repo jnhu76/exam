@@ -42,6 +42,8 @@ import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
+/** Candidate custom field definition with display metadata. */
+/** Configuration of a candidate identity or metadata field. */
 interface Field {
   id: string;
   name: string;
@@ -51,6 +53,8 @@ interface Field {
   unique: boolean;
   sortOrder: number;
 }
+/** A candidate record with identity fields and custom field values. */
+/** A candidate (examinee) record with identity fields. */
 interface Candidate {
   id: string;
   username: string;
@@ -58,10 +62,18 @@ interface Candidate {
   isActive: boolean;
   fields: Record<string, unknown>;
 }
+/** Generic paginated API response wrapper. */
+/** Generic paginated response wrapper. */
 interface Page<T> {
   items: T[];
 }
 
+/** Admin candidate management page with search, CRUD, enable/disable, and CSV import. */
+/**
+ * Admin page for managing candidates (examinees).
+ * Supports listing, searching, creating, editing, enabling/disabling candidates,
+ * and bulk-importing via CSV with a preview wizard.
+ */
 export function CandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
@@ -81,6 +93,7 @@ export function CandidatesPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  /** Fetches the candidate list and field definitions in parallel. */
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -98,6 +111,7 @@ export function CandidatesPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  /** Candidates filtered by the current search term (matches name or username). */
   const filteredCandidates = useMemo(
     () =>
       search
@@ -109,6 +123,7 @@ export function CandidatesPage() {
         : candidates,
     [candidates, search],
   );
+  /** Opens the create/edit dialog, pre-filling form state from the given candidate or defaults. */
   function open(candidate?: Candidate) {
     setEditing(candidate ?? null);
     setUsername(candidate?.username ?? "");
@@ -126,6 +141,7 @@ export function CandidatesPage() {
     setFieldErrors({});
     setDialogOpen(true);
   }
+  /** Builds the fields payload object from form values, coercing number fields. */
   function payloadFields() {
     return Object.fromEntries(
       fields.map((field) => [
@@ -136,6 +152,7 @@ export function CandidatesPage() {
       ]),
     );
   }
+  /** Validates the candidate form fields and sets field-level error messages. Returns true if valid. */
   function validate() {
     const errors: Record<string, string> = {};
     if (!name.trim()) errors.name = "请输入姓名";
@@ -152,6 +169,7 @@ export function CandidatesPage() {
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
+  /** Validates and persists the candidate via create or update API, then reloads the list. */
   async function save() {
     if (saving || !validate()) return;
     setSaveError(null);
@@ -179,6 +197,7 @@ export function CandidatesPage() {
       setSaving(false);
     }
   }
+  /** Toggles the active/disabled status of a candidate. */
   async function toggle(candidate: Candidate) {
     if (togglingId) return;
     setTogglingId(candidate.id);
@@ -193,6 +212,7 @@ export function CandidatesPage() {
       setTogglingId(null);
     }
   }
+  /** Converts field definitions to the CandidateFieldConfig format used by the import parser. */
   function fieldConfigs(): CandidateFieldConfig[] {
     return fields.map((f) => ({
       name: f.name,
@@ -202,12 +222,15 @@ export function CandidatesPage() {
       unique: f.unique,
     }));
   }
+  /** Parses the raw CSV input into structured import rows. */
   function importRows() {
     return parseImportCsv(csv, fieldConfigs()).rows;
   }
+  /** Returns true if the CSV input exceeded the maximum import row limit. */
   function importTruncated(): boolean {
     return parseImportCsv(csv, fieldConfigs()).truncated;
   }
+  /** Builds preview rows for the import wizard, marking each as error, update, or create. */
   function previewRows(): ImportPreviewRow[] {
     const rows = importRows();
     const seenUsernames = new Set<string>();
@@ -256,6 +279,7 @@ export function CandidatesPage() {
       };
     });
   }
+  /** Submits the parsed CSV rows to the import API and displays a summary. */
   async function importCsv() {
     try {
       const result = await api.post<{

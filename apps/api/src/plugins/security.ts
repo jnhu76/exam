@@ -2,8 +2,16 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
+/**
+ * HTTP methods that are considered safe (read-only) and are exempt from
+ * CSRF origin enforcement. Only state-changing methods require origin checks.
+ */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+/**
+ * Normalizes the CORS origin configuration (string or string array) into a
+ * trimmed, non-empty string array suitable for origin-matching checks.
+ */
 function deriveAllowedOrigins(corsOrigin: string | string[]): string[] {
   if (Array.isArray(corsOrigin)) {
     return corsOrigin.map((s) => s.trim()).filter(Boolean);
@@ -14,6 +22,11 @@ function deriveAllowedOrigins(corsOrigin: string | string[]): string[] {
   return [];
 }
 
+/**
+ * Extracts the origin of a request by reading the `Origin` header first,
+ * falling back to parsing the `Referer` header. Returns `null` if neither
+ * header is present or parseable.
+ */
 function originOf(request: FastifyRequest): string | null {
   const origin = request.headers["origin"];
   if (typeof origin === "string" && origin.length > 0) {
@@ -31,6 +44,12 @@ function originOf(request: FastifyRequest): string | null {
   return null;
 }
 
+/**
+ * Builds a Content-Security-Policy header string. In production mode inline
+ * scripts are disabled; in development `'unsafe-inline'` is allowed for
+ * convenience. Adds `upgrade-insecure-requests` when secure cookies are
+ * enabled.
+ */
 function buildCsp(isProduction: boolean, cookieSecure: boolean): string {
   const baseDirectives = [
     "default-src 'self'",
@@ -55,6 +74,10 @@ function buildCsp(isProduction: boolean, cookieSecure: boolean): string {
   return directives.join("; ");
 }
 
+/**
+ * Builds a Permissions-Policy header that disables browser features
+ * not needed by the exam platform (camera, microphone, geolocation, etc.).
+ */
 function buildPermissionsPolicy(): string {
   const disabled = [
     "accelerometer",
@@ -72,6 +95,12 @@ function buildPermissionsPolicy(): string {
   return disabled.map((feature) => `${feature}=()`).join(", ");
 }
 
+/**
+ * Registers security-related Fastify hooks and headers: custom JSON body
+ * parser, CSRF origin enforcement in production, and response security
+ * headers (`X-Content-Type-Options`, `X-Frame-Options`, CSP,
+ * Permissions-Policy, HSTS when cookies are secure).
+ */
 export default function setupSecurity(app: FastifyInstance): void {
   const config = getRuntimeConfig();
   const isProduction = config.app.isProduction;

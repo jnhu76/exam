@@ -10,16 +10,23 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+/** Props for the ErrorBoundary component. */
 interface Props {
   children: ReactNode;
 }
 
+/** Internal state tracking caught errors and their component stack info. */
 interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
 }
 
+/**
+ * React error boundary that catches rendering errors and displays a
+ * user-friendly error card with a reload button. Shows component stack
+ * in development mode.
+ */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);

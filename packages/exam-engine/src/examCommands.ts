@@ -4,6 +4,7 @@ import { assertTransition } from "./examStateMachine.js";
 
 export { assertTransition as assertExamTransition } from "./examStateMachine.js";
 
+/** Repository interface for persisting exam records. */
 export interface ExamRepository {
   findById(examId: string): Promise<Exam | null> | Exam | null;
   update(
@@ -12,6 +13,10 @@ export interface ExamRepository {
   ): Promise<Exam | null> | Exam | null;
 }
 
+/**
+ * Builds a snapshot of the questions assigned to an exam, preserving order and copying
+ * question data to prevent later bank edits from affecting existing attempts.
+ */
 export function buildQuestionSnapshot(
   questionIds: string[],
   questions: Question[],
@@ -36,6 +41,10 @@ export function buildQuestionSnapshot(
   });
 }
 
+/**
+ * Publishes an exam: validates all preconditions (questions, scores, timing, policies),
+ * builds the question snapshot, and transitions the exam to published status.
+ */
 export async function publishExam(
   repo: ExamRepository,
   examId: string,
@@ -97,6 +106,7 @@ export async function publishExam(
   return updated;
 }
 
+/** Transitions an exam from published to open status, making it available for candidates. */
 export async function openExam(
   repo: ExamRepository,
   examId: string,
@@ -113,6 +123,7 @@ export async function openExam(
   return updated;
 }
 
+/** Transitions an exam from open to closed status, preventing further attempts. */
 export async function closeExam(
   repo: ExamRepository,
   examId: string,
@@ -129,6 +140,7 @@ export async function closeExam(
   return updated;
 }
 
+/** Transitions an exam to archived status, making it read-only. */
 export async function archiveExam(
   repo: ExamRepository,
   examId: string,

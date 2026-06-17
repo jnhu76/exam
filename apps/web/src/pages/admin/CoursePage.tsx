@@ -37,6 +37,8 @@ import {
 import { BookOpen, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 
+/** A course record with name, code, and description. */
+/** A single course record returned from the API. */
 interface CourseRow {
   id: string;
   name: string;
@@ -46,6 +48,8 @@ interface CourseRow {
   updatedAt: string;
 }
 
+/** Generic paginated API response wrapper. */
+/** Paginated API response with metadata. */
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -54,6 +58,12 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+/** Admin course management page with search, create, edit, and delete operations. */
+/**
+ * Admin page for managing courses.
+ * Supports listing, searching, creating, editing, and deleting courses
+ * with inline form validation and toast feedback.
+ */
 export function CoursePage() {
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,6 +77,7 @@ export function CoursePage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
 
+  /** Fetches the course list from the API, optionally showing a loading indicator. */
   const loadCourses = useCallback(async (opts?: { showLoading?: boolean }) => {
     if (opts?.showLoading !== false) setIsLoading(true);
     setError(null);
@@ -84,6 +95,7 @@ export function CoursePage() {
     loadCourses();
   }, [loadCourses]);
 
+  /** Resets the form and opens the dialog for creating a new course. */
   function openCreate() {
     setEditingCourse(null);
     setFormName("");
@@ -93,6 +105,7 @@ export function CoursePage() {
     setDialogOpen(true);
   }
 
+  /** Populates the form with the given course's data and opens the edit dialog. */
   function openEdit(course: CourseRow) {
     setEditingCourse(course);
     setFormName(course.name);
@@ -102,6 +115,7 @@ export function CoursePage() {
     setDialogOpen(true);
   }
 
+  /** Validates the course form fields and returns true if valid. */
   function validate() {
     const errors: Record<string, string> = {};
     if (!formName.trim()) errors.name = "请输入课程名称";
@@ -110,6 +124,7 @@ export function CoursePage() {
     return Object.keys(errors).length === 0;
   }
 
+  /** Validates and persists the course via create or update API, then reloads the list. */
   async function handleSave() {
     if (!validate()) return;
     setSaving(true);
@@ -137,6 +152,7 @@ export function CoursePage() {
     }
   }
 
+  /** Deletes the course with the given id and reloads the list. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/courses/${id}`);
@@ -319,6 +335,8 @@ export function CoursePage() {
   );
 }
 
+/** Displays text with line clamping and a tooltip when content is truncated. */
+/** Renders text truncated to two lines with a tooltip when content overflows. */
 function TruncatedCell({ text }: { text: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [truncated, setTruncated] = useState(false);

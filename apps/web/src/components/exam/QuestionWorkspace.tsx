@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/** Props for the QuestionWorkspace component. */
 type QuestionWorkspaceProps = {
   header?: ReactNode;
   question: ReactNode;
@@ -9,6 +10,10 @@ type QuestionWorkspaceProps = {
   className?: string;
 };
 
+/**
+ * Layout shell for the exam question view, arranging header, question content,
+ * answer area, and optional footer in a vertical flex column.
+ */
 export function QuestionWorkspace({
   header,
   question,

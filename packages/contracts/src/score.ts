@@ -2,6 +2,9 @@ import { z } from "zod";
 
 // ── Score List ────────────────────────────────────────────────────
 
+/**
+ * Schema for a per-question score result, including scores, correctness, and answer comparison.
+ */
 export const QuestionScoreResultSchema = z.object({
   questionId: z.string(),
   score: z.number(),
@@ -11,6 +14,10 @@ export const QuestionScoreResultSchema = z.object({
   standardAnswer: z.unknown(),
 });
 
+/**
+ * Schema for the complete score result of an attempt, including per-question results
+ * and overall pass/fail status.
+ */
 export const ScoreResultSchema = z.object({
   attemptId: z.string().uuid(),
   totalScore: z.number(),
@@ -18,8 +25,13 @@ export const ScoreResultSchema = z.object({
   questionResults: z.array(QuestionScoreResultSchema),
   gradedAt: z.string().datetime(),
 });
+
+/** Represents the complete grading result for a single attempt. */
 export type ScoreResultDTO = z.infer<typeof ScoreResultSchema>;
 
+/**
+ * Route params schema for fetching score details for a specific attempt.
+ */
 export const AttemptScoreParamsSchema = z.object({
   attemptId: z.string().uuid(),
 });
@@ -35,6 +47,10 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
   order: z.number().int(),
 });
 
+/**
+ * Response variant when the exam's showResultImmediately flag is false.
+ * Only returns attempt status and exam title without score details.
+ */
 const HiddenAttemptResultSchema = z.object({
   attemptId: z.string().uuid(),
   status: z.enum([
@@ -51,6 +67,10 @@ const HiddenAttemptResultSchema = z.object({
   examTitle: z.string(),
 });
 
+/**
+ * Response variant when the exam's showResultImmediately flag is true.
+ * Includes full score details, per-question results, and pass/fail status.
+ */
 const VisibleAttemptResultSchema = z.object({
   attemptId: z.string().uuid(),
   status: z.literal("graded"),
@@ -63,12 +83,22 @@ const VisibleAttemptResultSchema = z.object({
   questionResults: z.array(AttemptQuestionResultSchema),
 });
 
+/**
+ * Discriminated union of attempt result responses, keyed on showResultImmediately.
+ * Hidden variant omits scores; visible variant includes full grading details.
+ */
 export const AttemptResultResponseSchema = z.discriminatedUnion(
   "showResultImmediately",
   [HiddenAttemptResultSchema, VisibleAttemptResultSchema],
 );
+
+/** Type for an attempt result response (hidden or visible variant). */
 export type AttemptResultResponse = z.infer<typeof AttemptResultResponseSchema>;
 
+/**
+ * Schema for a single row in the score list, including candidate and exam identifiers,
+ * score, pass status, and attempt number.
+ */
 export const ScoreListItemSchema = z.object({
   attemptId: z.string().uuid(),
   candidateId: z.string().uuid(),
@@ -81,8 +111,13 @@ export const ScoreListItemSchema = z.object({
   attemptNo: z.number().int(),
   submittedAt: z.string().datetime().optional(),
 });
+
+/** Type for a single score list row. */
 export type ScoreListItem = z.infer<typeof ScoreListItemSchema>;
 
+/**
+ * Query schema for listing scores with pagination, pass/fail filtering, search, and sorting.
+ */
 export const ScoreListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -93,8 +128,14 @@ export const ScoreListQuerySchema = z.object({
     .default("submittedAt"),
   sortOrder: z.enum(["asc", "desc"]).default("desc"),
 });
+
+/** Type for a score list query. */
 export type ScoreListQuery = z.infer<typeof ScoreListQuerySchema>;
 
+/**
+ * Schema for aggregate statistics across a score list, including average, min, max scores
+ * and pass rate.
+ */
 export const ScoreListStatsSchema = z.object({
   averageScore: z.number(),
   maxScore: z.number(),
@@ -102,8 +143,13 @@ export const ScoreListStatsSchema = z.object({
   passRate: z.number(),
   totalGraded: z.number().int(),
 });
+
+/** Type for score list aggregate statistics. */
 export type ScoreListStats = z.infer<typeof ScoreListStatsSchema>;
 
+/**
+ * Response schema for the paginated score list, including items, aggregate stats, and pagination.
+ */
 export const ScoreListResponseSchema = z.object({
   items: z.array(ScoreListItemSchema),
   stats: ScoreListStatsSchema,
@@ -111,12 +157,19 @@ export const ScoreListResponseSchema = z.object({
   page: z.number().int(),
   pageSize: z.number().int(),
 });
+
+/** Type for the paginated score list response. */
 export type ScoreListResponse = z.infer<typeof ScoreListResponseSchema>;
 
 // ── Export ────────────────────────────────────────────────────────
 
+/**
+ * Request schema for exporting scores for a given exam. Currently supports CSV format.
+ */
 export const ExportScoresRequestSchema = z.object({
   examId: z.string().uuid(),
   format: z.enum(["csv"]).default("csv"),
 });
+
+/** Type for an export-scores request. */
 export type ExportScoresRequest = z.infer<typeof ExportScoresRequestSchema>;
