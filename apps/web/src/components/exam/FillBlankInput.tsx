@@ -1,3 +1,8 @@
+/**
+ * Input component for fill-in-the-blank questions. Supports single-blank
+ * (string value) and multi-blank (record value) modes, with auto-detection
+ * of blank count from the question content.
+ */
 export function FillBlankInput({
   content,
   blanks,

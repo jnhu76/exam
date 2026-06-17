@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
+/**
+ * Password change form with current/new/confirm fields and minimum-length
+ * validation. Optionally wraps in a Card or renders as a bare <form>.
+ */
 export function PasswordChangeForm({
   cardWrapper = true,
 }: {

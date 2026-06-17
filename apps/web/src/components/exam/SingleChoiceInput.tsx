@@ -1,3 +1,7 @@
+/**
+ * Radio-button input for single-choice questions.
+ * Renders a list of options and reports the selected option ID.
+ */
 export function SingleChoiceInput({
   options,
   value,

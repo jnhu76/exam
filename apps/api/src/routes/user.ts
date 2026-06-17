@@ -14,8 +14,13 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+/** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/** OpenAPI security scheme requiring cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/** Zod schema for a single user item in list/detail responses. */
 const userItemSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -26,6 +31,8 @@ const userItemSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+/** Zod schema for a paginated user list response. */
 const userListResponseSchema = z.object({
   items: z.array(userItemSchema),
   total: z.number().int(),
@@ -33,10 +40,19 @@ const userListResponseSchema = z.object({
   pageSize: z.number().int(),
   totalPages: z.number().int(),
 });
+
+/** Generic success response schema used for mutation endpoints that return only a confirmation. */
 const okResponseSchema = z.object({ ok: z.literal(true) });
 
+/** Roles supported in Phase 1 — used to filter the user list to Admin and Candidate only. */
 const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate"] as const;
 
+/**
+ * Fastify plugin that registers user management routes.
+ *
+ * Provides list, create, update, delete, and password-reset endpoints.
+ * All routes require Admin role authentication.
+ */
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/users",
@@ -49,6 +65,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: userListResponseSchema },
       },
     },
+    /**
+     * GET /users — list users with pagination (Admin and Candidate roles only).
+     *
+     * Returns paginated user records. Only Admin and Candidate roles
+     * are included, filtered by PHASE1_SUPPORTED_ROLES.
+     */
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -90,6 +112,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 201: userItemSchema },
       },
     },
+    /**
+     * POST /users — create a new user.
+     *
+     * Hashes the provided password and creates a user with the given role.
+     * The username must be unique within the organization.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateUserRequestSchema.parse(request.body);
@@ -132,6 +160,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * PATCH /users/:id — update a user's name, role, or active status.
+     *
+     * Prevents self-deactivation and protects the last active Admin
+     * from being disabled or downgraded.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
@@ -206,6 +240,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * POST /users/:id/reset-password — reset a candidate user's password.
+     *
+     * Only targets users with the Candidate role. Admin password
+     * resets are not allowed through this endpoint.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
@@ -262,6 +302,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 204: z.null(), 404: ErrorResponseSchema },
       },
     },
+    /**
+     * DELETE /users/:id — permanently delete a user.
+     *
+     * Removes the user record from the organization.
+     * Returns 404 if the user does not exist.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };

@@ -37,6 +37,11 @@ loadRootEnv();
 
 const { port, host } = getRuntimeConfig();
 
+/**
+ * Entry point for the API server. Creates a Fastify instance, registers
+ * all plugins (auth, DB, rate-limiting, etc.), mounts route modules,
+ * serves static assets from `public/`, and starts listening.
+ */
 async function main() {
   const app = Fastify({ logger: { level: "info", redact: REDACT_CONFIG } });
 
@@ -55,6 +60,12 @@ async function main() {
 
   await registerOpenApiDocs(app);
 
+  /**
+   * GET /api/health
+   *
+   * Simple liveness probe. Returns `{ status: "ok" }` when the server
+   * is running and can accept requests.
+   */
   app.get("/api/health", async () => {
     return { status: "ok" };
   });

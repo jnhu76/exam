@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+/** Props for the ExamTopbar component. */
 type ExamTopbarProps = {
   title: string;
   remainingTime: ReactNode;
@@ -10,6 +11,10 @@ type ExamTopbarProps = {
   className?: string;
 };
 
+/**
+ * Top navigation bar for the exam runtime, displaying the exam title,
+ * remaining time badge, save status, and network status indicators.
+ */
 export function ExamTopbar({
   title,
   remainingTime,

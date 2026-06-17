@@ -13,6 +13,11 @@ import {
 
 // Extract Zod issues from a Zod type-provider validation error. The provider
 // wraps each Zod issue under validation[i].params.issue.
+/**
+ * Extracts individual `ZodIssue` objects from a Fastify Zod type-provider
+ * validation error. The provider wraps each issue under `validation[i].params.issue`.
+ * Returns an empty array if the error shape does not match.
+ */
 function extractValidationIssues(error: unknown): ZodIssue[] {
   if (typeof error !== "object" || error === null) return [];
   const validation = (error as { validation?: unknown[] }).validation;
@@ -25,6 +30,11 @@ function extractValidationIssues(error: unknown): ZodIssue[] {
     .filter((issue): issue is ZodIssue => issue != null);
 }
 
+/**
+ * Checks whether an error represents a database unique-constraint violation.
+ * Matches PostgreSQL error code `23505`, SQLite constraint codes, and
+ * common duplicate-key message patterns.
+ */
 function isConstraintError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as Record<string, unknown>;
@@ -40,6 +50,11 @@ function isConstraintError(err: unknown): boolean {
   return false;
 }
 
+/**
+ * Type guard that identifies errors with a numeric `statusCode` in the
+ * 4xx range (400–499), indicating a client-caused error that can be
+ * safely surfaced to the caller.
+ */
 function isClientError(
   err: unknown,
 ): err is Error & { statusCode: number; code: string } {
@@ -54,6 +69,13 @@ function isClientError(
   );
 }
 
+/**
+ * Installs the global Fastify error handler that converts thrown errors
+ * into structured JSON responses. Handles Zod validation errors (400),
+ * `AppError` domain errors, generic 4xx client errors, unique-constraint
+ * conflicts (409), response-serialization failures (500), and any
+ * unhandled errors (500).
+ */
 export function setupErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     // Runtime-first contract: Zod route-schema validation failures -> 400.

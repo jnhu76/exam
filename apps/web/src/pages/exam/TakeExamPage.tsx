@@ -44,6 +44,7 @@ type SaveRejectionDisplay = {
   description: string;
 };
 
+/** Maps a save-rejection reason to its display icon, title, and description. */
 function getSaveRejectionDisplay(
   rejection: SaveRejection,
 ): SaveRejectionDisplay {
@@ -85,6 +86,7 @@ type AttemptData = Omit<
 
 type QuestionState = "unanswered" | "answered" | "flagged";
 
+/** Active exam-taking page with question navigation, answer saving, and timed submission. */
 export function TakeExamPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
@@ -108,6 +110,7 @@ export function TakeExamPage() {
   const submittingRef = useRef(false);
   const { scheduleSave, flush } = useSubmitFlush();
 
+  /** Loads the in-progress attempt data and initializes answer/state maps. */
   const loadAttempt = useCallback(async () => {
     if (!attemptId) return;
     setIsLoading(true);
@@ -151,6 +154,7 @@ export function TakeExamPage() {
     ? answers.get(currentQuestion.originalQuestionId)
     : undefined;
 
+  /** Updates local answer state and schedules a versioned save to the server via the Answer Save Protocol. */
   async function saveAnswer(questionId: string, answer: unknown) {
     if (!attemptId) return;
 
@@ -224,6 +228,7 @@ export function TakeExamPage() {
     });
   }
 
+  /** Submits the attempt to the server and navigates to the result page. */
   const handleSubmit = useCallback(async () => {
     if (!attemptId || submittingRef.current) return;
     submittingRef.current = true;
@@ -238,6 +243,7 @@ export function TakeExamPage() {
     }
   }, [attemptId, navigate]);
 
+  /** Flushes all pending answer saves and records the flush result. */
   const runSubmitFlush = useCallback(async () => {
     setIsFlushing(true);
     setFlushResult(null);
@@ -248,11 +254,13 @@ export function TakeExamPage() {
     }
   }, [flush]);
 
+  /** Opens the submit confirmation dialog and triggers a pending-save flush. */
   const openSubmitDialog = useCallback(async () => {
     setShowSubmitDialog(true);
     await runSubmitFlush();
   }, [runSubmitFlush]);
 
+  /** Handles exam timer expiry by flushing saves then auto-submitting. */
   const handleTimeout = useCallback(async () => {
     try {
       await flush();
@@ -261,6 +269,7 @@ export function TakeExamPage() {
     }
   }, [flush, handleSubmit]);
 
+  /** Controls the submit dialog open/close state, preventing close while flushing. */
   const handleSubmitDialogOpenChange = useCallback(
     (open: boolean) => {
       if (!open && isFlushing) return;
@@ -269,6 +278,7 @@ export function TakeExamPage() {
     [isFlushing],
   );
 
+  /** Toggles the flagged/unanswered/answered state of the current question. */
   function toggleFlag() {
     setQuestionStates((prev) => {
       const next = [...prev];
@@ -282,16 +292,19 @@ export function TakeExamPage() {
     });
   }
 
+  /** Navigates to the previous question. */
   function handlePrev() {
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   }
 
+  /** Navigates to the next question. */
   function handleNext() {
     if (attempt && currentIndex < attempt.questionSnapshot.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   }
 
+  /** Sends a heartbeat to the server to keep the attempt alive and update connectivity status. */
   const handleHeartbeat = useCallback(async () => {
     if (!attemptId) return;
     try {

@@ -10,8 +10,10 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { FormSection } from "@/components/shared/FormSection";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 
+/** Branding settings data shape, reusing the contract type directly. */
 type SettingsData = UpdateBrandingRequest;
 
+/** Admin page for managing platform branding and the current admin's password. */
 export function SettingsPage() {
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -19,6 +21,7 @@ export function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  /** Fetches the current branding settings from the API. */
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -36,6 +39,7 @@ export function SettingsPage() {
     loadSettings();
   }, [loadSettings]);
 
+  /** Saves updated branding settings and dispatches a global refresh event. */
   async function handleSave(data: SettingsData) {
     const filtered = Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== ""),

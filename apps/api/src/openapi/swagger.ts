@@ -22,8 +22,16 @@ import { exportRoutes } from "../routes/export.js";
 import systemRoutes from "../routes/system.js";
 import auditRoutes from "../routes/audit.js";
 
+/** Default API route prefix used when registering route plugins. */
 const routePrefix = "/api";
 
+/**
+ * Build a throwaway Fastify instance pre-loaded with all route plugins and
+ * the Swagger plugin. The returned instance can be used to generate the
+ * OpenAPI spec via `app.swagger()` and must be closed afterwards.
+ *
+ * @returns A ready Fastify instance with the Swagger plugin registered.
+ */
 export async function buildSwaggerApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
@@ -73,6 +81,7 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   return app;
 }
 
+/** Minimal representation of a single HTTP operation within an OpenAPI path item. */
 export interface PathOperation {
   responses: Record<
     string,
@@ -83,6 +92,7 @@ export interface PathOperation {
   >;
 }
 
+/** Minimal representation of an OpenAPI path item containing one or more HTTP operations. */
 export interface PathItem {
   get?: PathOperation;
   post?: PathOperation;
@@ -91,6 +101,7 @@ export interface PathItem {
   delete?: PathOperation;
 }
 
+/** Minimal representation of a complete OpenAPI specification document. */
 export interface OpenAPISpecDocument {
   openapi: string;
   info: {
@@ -104,6 +115,13 @@ export interface OpenAPISpecDocument {
   };
 }
 
+/**
+ * Generate the OpenAPI specification document by bootstrapping a Swagger-
+ * enabled Fastify instance, extracting the generated spec, and tearing
+ * the instance down.
+ *
+ * @returns A parsed {@link OpenAPISpecDocument}.
+ */
 export async function generateOpenAPISpec(): Promise<OpenAPISpecDocument> {
   const app = await buildSwaggerApp();
   try {

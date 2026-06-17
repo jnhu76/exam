@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Page-level header with a title, optional description, status badge,
+ * and action buttons. Responsive layout stacks vertically on small screens.
+ */
 export function PageHeader({
   title,
   description,

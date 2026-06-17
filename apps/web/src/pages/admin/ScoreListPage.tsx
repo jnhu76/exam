@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/pagination";
 import { FileText } from "lucide-react";
 
+/** Aggregate score statistics for an exam. */
 interface ScoreListStats {
   averageScore: number;
   maxScore: number;
@@ -35,6 +36,7 @@ interface ScoreListStats {
   totalGraded: number;
 }
 
+/** A single candidate's score record for an exam attempt. */
 interface ScoreListItem {
   attemptId: string;
   candidateId: string;
@@ -48,6 +50,7 @@ interface ScoreListItem {
   submittedAt?: string;
 }
 
+/** Paginated response containing score items and aggregate stats. */
 interface ScoreListResponse {
   items: ScoreListItem[];
   stats: ScoreListStats;
@@ -56,6 +59,7 @@ interface ScoreListResponse {
   pageSize: number;
 }
 
+/** Admin page for viewing per-candidate scores, stats, and pass/fail filters for a specific exam. */
 export function ScoreListPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -70,6 +74,7 @@ export function ScoreListPage() {
     | "passed"
     | "failed";
 
+  /** Fetches the score list for the current exam with pagination and pass filter. */
   const loadScores = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);

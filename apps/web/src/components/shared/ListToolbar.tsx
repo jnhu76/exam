@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/** Props for the ListToolbar component. */
 type ListToolbarProps = {
   search?: ReactNode;
   filters?: ReactNode;
@@ -10,6 +11,10 @@ type ListToolbarProps = {
   "aria-label"?: string;
 };
 
+/**
+ * Toolbar for list pages with slots for search input, filter controls,
+ * action buttons, and a summary line. Responsive layout adapts to screen size.
+ */
 export function ListToolbar({
   search,
   filters,

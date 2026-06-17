@@ -1,9 +1,17 @@
+/** Product roles within the platform. */
 export const Role = {
   Admin: "Admin",
   Candidate: "Candidate",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
+/**
+ * RBAC permission keys.
+ *
+ * Each key represents a single permission grant that can be assigned to a role.
+ * Permissions are grouped by domain: organization, users, question bank, course,
+ * exam, proctor, candidate, scores, and system.
+ */
 export const Permission = {
   // Organization
   MANAGE_ORGANIZATION: "MANAGE_ORGANIZATION",
@@ -39,6 +47,14 @@ export const Permission = {
 } as const;
 export type Permission = (typeof Permission)[keyof typeof Permission];
 
+/**
+ * Question type enum.
+ *
+ * Determines the answer format and grading strategy.
+ * `single_choice` and `true_false` use exact-match grading;
+ * `multiple_choice` uses set comparison with configurable partial scoring;
+ * `fill_blank` uses configurable string matching.
+ */
 export const QuestionType = {
   SingleChoice: "single_choice",
   MultipleChoice: "multiple_choice",
@@ -47,6 +63,11 @@ export const QuestionType = {
 } as const;
 export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
 
+/**
+ * Exam attempt lifecycle status.
+ *
+ * Transitions: not_started → queued → in_progress → disrupted | submitted → grading → graded | voided.
+ */
 export const AttemptStatus = {
   NotStarted: "not_started",
   Queued: "queued",
@@ -59,6 +80,12 @@ export const AttemptStatus = {
 } as const;
 export type AttemptStatus = (typeof AttemptStatus)[keyof typeof AttemptStatus];
 
+/**
+ * Candidate enrollment status for an exam.
+ *
+ * Tracks whether a candidate has been assigned, has started, completed, or
+ * is blocked from an exam.
+ */
 export const EnrollmentStatus = {
   Assigned: "assigned",
   Started: "started",
@@ -68,6 +95,12 @@ export const EnrollmentStatus = {
 export type EnrollmentStatus =
   (typeof EnrollmentStatus)[keyof typeof EnrollmentStatus];
 
+/**
+ * Exam lifecycle status.
+ *
+ * Transitions: draft → published → open → closed → archived.
+ * Only `draft` exams can be edited.
+ */
 export const ExamStatus = {
   Draft: "draft",
   Published: "published",
@@ -77,6 +110,14 @@ export const ExamStatus = {
 } as const;
 export type ExamStatus = (typeof ExamStatus)[keyof typeof ExamStatus];
 
+/**
+ * Exam timing strategy.
+ *
+ * - `timed_sync`: all candidates start and end simultaneously (Phase 2).
+ * - `timed_window`: each candidate has a fixed duration within an open window (Phase 1).
+ * - `deadline`: candidates must submit before a fixed deadline (Phase 2).
+ * - `untimed`: no time constraints (Phase 2).
+ */
 export const TimingMode = {
   TimedSync: "timed_sync",
   TimedWindow: "timed_window",
@@ -85,6 +126,7 @@ export const TimingMode = {
 } as const;
 export type TimingMode = (typeof TimingMode)[keyof typeof TimingMode];
 
+/** How questions are selected for an exam paper: manually curated or randomly drawn. */
 export const QuestionSelectionMode = {
   Manual: "manual",
   Random: "random",
@@ -92,6 +134,7 @@ export const QuestionSelectionMode = {
 export type QuestionSelectionMode =
   (typeof QuestionSelectionMode)[keyof typeof QuestionSelectionMode];
 
+/** Which attempt score counts as the final score when a candidate has multiple attempts. */
 export const ScoreStrategy = {
   Highest: "highest",
   Latest: "latest",
@@ -99,6 +142,11 @@ export const ScoreStrategy = {
 } as const;
 export type ScoreStrategy = (typeof ScoreStrategy)[keyof typeof ScoreStrategy];
 
+/**
+ * Retake policy for an exam.
+ *
+ * Controls how many times a candidate may re-attempt after the first try.
+ */
 export const RetakePolicy = {
   Unlimited: "unlimited",
   MaxAttempts: "max_attempts",
@@ -108,6 +156,12 @@ export const RetakePolicy = {
 } as const;
 export type RetakePolicy = (typeof RetakePolicy)[keyof typeof RetakePolicy];
 
+/**
+ * Multi-select question scoring mode.
+ *
+ * - `all_correct_full`: full score only if every selected option is correct.
+ * - `partial_half`: half score if some selections are correct and none are wrong.
+ */
 export const MultiSelectScoring = {
   AllCorrectFull: "all_correct_full",
   PartialHalf: "partial_half",
@@ -115,6 +169,7 @@ export const MultiSelectScoring = {
 export type MultiSelectScoring =
   (typeof MultiSelectScoring)[keyof typeof MultiSelectScoring];
 
+/** Fill-blank answer matching mode: exact string equality or keyword containment. */
 export const FillBlankMatchMode = {
   Exact: "exact",
   Keyword: "keyword",
@@ -122,6 +177,12 @@ export const FillBlankMatchMode = {
 export type FillBlankMatchMode =
   (typeof FillBlankMatchMode)[keyof typeof FillBlankMatchMode];
 
+/**
+ * Answer save conflict reason.
+ *
+ * Returned when the server rejects a save due to a version mismatch or state
+ * violation.
+ */
 export const ConflictReason = {
   StaleVersion: "STALE_VERSION",
   AttemptAlreadySubmitted: "ATTEMPT_ALREADY_SUBMITTED",

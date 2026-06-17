@@ -1,5 +1,6 @@
 import { Permission, type Role } from "@exam/domain";
 
+/** Static mapping of each role to its granted permissions. */
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   Admin: [
     Permission.MANAGE_USERS,
@@ -21,6 +22,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   Candidate: [Permission.TAKE_EXAM, Permission.VIEW_OWN_SCORE],
 };
 
+/** Returns the list of permissions granted to the given role. */
 export function getPermissionsForRole(role: Role): Permission[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }

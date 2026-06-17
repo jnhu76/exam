@@ -34,6 +34,7 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 
+/** Convert an Exam domain entity to the API response shape with ISO date strings. */
 function toExamResponse(exam: Exam) {
   return {
     id: exam.id,
@@ -59,6 +60,11 @@ function toExamResponse(exam: Exam) {
   };
 }
 
+/**
+ * Fetch all participants enrolled in a given exam.
+ * Resolves candidate and user details for display names and custom fields.
+ * Optionally accepts pre-fetched enrollments to avoid duplicate DB queries.
+ */
 async function getExamParticipants(
   db: Database,
   ctx: RequestContext,
@@ -118,6 +124,7 @@ async function getExamParticipants(
   });
 }
 
+/** Adapter that bridges the exam-engine ExamRepository interface to the local exam repo with a bound RequestContext. */
 function createExamRepoAdapter(
   repo: ReturnType<typeof createExamRepo>,
   ctx: RequestContext,
@@ -133,6 +140,7 @@ function createExamRepoAdapter(
   };
 }
 
+/** Determine whether scores can be viewed for an exam based on its status, close time, and graded attempt count. */
 function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   const examEnded =
     exam.status === "closed" ||
@@ -159,6 +167,7 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   };
 }
 
+/** Determine whether an exam can be deleted. Only draft exams are deletable. */
 function getDeleteMeta(exam: Exam) {
   if (exam.status === "draft") {
     return {
@@ -173,14 +182,22 @@ function getDeleteMeta(exam: Exam) {
   };
 }
 
+/** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/** Zod schema for route params containing a UUID `examId`. */
 const examIdParamsSchema = z.object({ examId: z.string().uuid() });
+
+/** Zod schema for route params containing both `examId` and `enrollmentId` UUIDs. */
 const enrollmentIdParamsSchema = z.object({
   examId: z.string().uuid(),
   enrollmentId: z.string().uuid(),
 });
+
+/** OpenAPI security scheme: HTTP-only cookie authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
+/** Zod schema for a single exam list item, extending ExamSchema with participant count, graded attempt count, and UI action metadata. */
 const examListItemSchema = ExamSchema.extend({
   participantCount: z.number().int().nonnegative(),
   gradedAttemptCount: z.number().int().nonnegative(),
@@ -190,6 +207,7 @@ const examListItemSchema = ExamSchema.extend({
   deleteDisabledReason: z.string().nullable(),
 });
 
+/** Zod schema for the paginated exam list response. */
 const examListResponseSchema = z.object({
   items: z.array(examListItemSchema),
   total: z.number().int().nonnegative(),
@@ -198,6 +216,7 @@ const examListResponseSchema = z.object({
   totalPages: z.number().int().nonnegative(),
 });
 
+/** Zod schema for a single exam participant entry with candidate info, status, and score. */
 const examParticipantSchema = z.object({
   candidateId: z.string().uuid(),
   name: z.string(),
@@ -207,6 +226,7 @@ const examParticipantSchema = z.object({
   passed: z.boolean().nullable(),
 });
 
+/** Zod schema for the exam detail response, extending ExamSchema with aggregated stats and participant list. */
 const examDetailResponseSchema = ExamSchema.extend({
   stats: z.object({
     participantCount: z.number().int().nonnegative(),
@@ -216,6 +236,7 @@ const examDetailResponseSchema = ExamSchema.extend({
   participants: z.array(examParticipantSchema),
 });
 
+/** Zod schema for a single enrollment item with candidate display name and attempt/score details. */
 const enrollmentItemSchema = z.object({
   id: z.string().uuid(),
   examId: z.string().uuid(),
@@ -227,16 +248,19 @@ const enrollmentItemSchema = z.object({
   finalPassed: z.boolean().nullable(),
 });
 
+/** Zod schema for a single enrollment list item, extending enrollmentItemSchema with optional candidate identity string. */
 const enrollmentListItemSchema = enrollmentItemSchema.extend({
   candidateIdentity: z.string().optional(),
 });
 
+/** Zod schema for the enrollment batch-add response, reporting counts of added/skipped enrollments. */
 const enrollmentAddResponseSchema = z.object({
   added: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
   enrollments: z.array(enrollmentItemSchema),
 });
 
+/** Fastify plugin that registers all exam CRUD, state-transition, and enrollment routes. */
 const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
@@ -251,6 +275,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** List exams with pagination. Each item includes participant count, graded attempt count, and UI action metadata. */
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -305,6 +330,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Get exam detail by ID, including aggregated stats and participant list. Returns 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -346,6 +372,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Create a new exam in draft status. Validates courseId and question ownership. Returns 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = CreateExamRequestSchema.safeParse(request.body);
@@ -432,6 +459,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Update an existing draft exam by ID. Only draft exams can be updated. Returns 404 if not found, 400 on validation error. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -504,6 +532,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Publish a draft exam, transitioning it to published status and snapshotting questions. Throws ExamAlreadyPublishedError if not in draft state. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -550,6 +579,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Archive a closed exam, transitioning it to archived status. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -574,6 +604,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Delete a draft exam by ID. Only draft exams can be deleted; returns 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -610,6 +641,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** List all enrollments for a given exam, including candidate display names and identity fields. Returns 404 if exam not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
@@ -672,6 +704,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Batch enroll candidates into an exam. Skips already-enrolled or non-existent candidates. Returns counts of added and skipped. */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
@@ -764,6 +797,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Remove an enrollment from an exam. Only enrollments with status "assigned" can be removed. Returns 404 if not found, 409 if already started. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId, enrollmentId } = request.params as {

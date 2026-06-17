@@ -26,6 +26,13 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 
+/**
+ * Validate candidate field values against configured candidate fields.
+ *
+ * Ensures exactly one unique (identity) field is configured, that all
+ * required fields are present, and that field types match expectations.
+ * Throws {@link ValidationError} on validation failure.
+ */
 function validateCandidateFields(
   configuredFields: Awaited<
     ReturnType<ReturnType<typeof createCandidateFieldRepo>["list"]>
@@ -102,6 +109,11 @@ function validateCandidateFields(
   }
 }
 
+/**
+ * Find an existing candidate whose unique (identity) field matches the given value.
+ *
+ * Returns the first matching candidate or null if no match is found.
+ */
 function findByIdentity(
   candidates: Awaited<
     ReturnType<ReturnType<typeof createCandidateRepo>["list"]>
@@ -122,7 +134,10 @@ function findByIdentity(
   );
 }
 
+/** OpenAPI security scheme requiring cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/** Zod schema for a single candidate item in list/detail responses. */
 const candidateItemSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -132,8 +147,9 @@ const candidateItemSchema = z.object({
   username: z.string(),
   isActive: z.boolean(),
   createdAt: z.string(),
-  updatedAt: z.string(),
 });
+
+/** Zod schema for a paginated candidate list response. */
 const candidateListResponseSchema = z.object({
   items: z.array(candidateItemSchema),
   total: z.number().int(),
@@ -141,8 +157,16 @@ const candidateListResponseSchema = z.object({
   pageSize: z.number().int(),
   totalPages: z.number().int(),
 });
+
+/** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
+/**
+ * Fastify plugin that registers candidate management routes.
+ *
+ * Provides list, create, update, and import endpoints for candidates.
+ * All routes require Admin role authentication.
+ */
 const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidates",
@@ -155,6 +179,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: candidateListResponseSchema },
       },
     },
+    /**
+     * GET /candidates — list candidates with pagination.
+     *
+     * Returns paginated candidate records enriched with user-level
+     * name, username, and isActive status. Requires Admin role.
+     */
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -196,6 +226,13 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 201: candidateItemSchema, 409: ErrorResponseSchema },
       },
     },
+    /**
+     * POST /candidates — create a single candidate.
+     *
+     * Validates custom candidate fields, checks identity uniqueness,
+     * creates a User record and associated CandidateProfile in a
+     * transaction. Returns 409 on username or identity conflict.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateCandidateRequestSchema.parse(request.body);
@@ -295,6 +332,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * PATCH /candidates/:id — update an existing candidate's fields, name, or active status.
+     *
+     * When updating fields, validates them against configured candidate fields
+     * and checks identity uniqueness against other candidates.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
@@ -369,6 +412,13 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * POST /candidates/import — bulk import candidates from rows.
+     *
+     * Creates new candidates or updates existing ones (matched by identity
+     * field or username). Returns a summary of created, updated, and errored rows.
+     * Rate-limited to 10 requests per minute.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const parsed = CandidateImportRequestSchema.safeParse(request.body);

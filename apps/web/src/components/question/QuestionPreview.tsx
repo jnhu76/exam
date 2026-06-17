@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
+/** Props for the QuestionPreview component. */
 interface QuestionPreviewProps {
   type: string;
   content: string;
@@ -12,6 +13,10 @@ interface QuestionPreviewProps {
   standardAnswer: unknown;
 }
 
+/**
+ * Read-only preview of a question as it would appear to candidates,
+ * rendering options as disabled radio/checkbox inputs or blank fields.
+ */
 export function QuestionPreview({
   type,
   content,

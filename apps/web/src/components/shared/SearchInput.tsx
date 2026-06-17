@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+/** Props for the SearchInput component. */
 type SearchInputProps = Omit<
   React.ComponentProps<typeof Input>,
   "value" | "onChange" | "type"
@@ -14,6 +15,10 @@ type SearchInputProps = Omit<
   containerClassName?: string;
 };
 
+/**
+ * Search input with a leading search icon and an optional clear button.
+ * Accepts controlled value/onChange and supports placeholder customization.
+ */
 export function SearchInput({
   value,
   onChange,

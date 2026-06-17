@@ -8,19 +8,23 @@ import { eq } from "drizzle-orm";
 
 dotenv.config({ quiet: true });
 
+/** Function signature for a password hashing function used during seeding. */
 export type HashFunction = (password: string) => string | Promise<string>;
 
+/** IDs of the seed users created by {@link seed}. */
 export interface SeedUserIds {
   adminId: string;
   candidateId: string;
   candidate2Id: string;
 }
 
+/** Return value of {@link seed}, containing the organization ID and user IDs. */
 export interface SeedResult {
   orgId: string;
   users: SeedUserIds;
 }
 
+/** Default credentials for seed users (admin, candidate, candidate2). */
 export const SEED_CREDENTIALS = {
   admin: { username: "admin", password: "admin123", role: "Admin" as const },
   candidate: {
@@ -35,9 +39,12 @@ export const SEED_CREDENTIALS = {
   },
 };
 
+/** Default slug for the seed organization. */
 export const SEED_ORG_SLUG = "default";
+/** Default display name for the seed organization. */
 export const SEED_ORG_NAME = "Default Organization";
 
+/** Internal user definitions with env-var overrides and defaults. */
 const USER_DEFS = [
   {
     envUsername: "SEED_ADMIN_USERNAME",
@@ -62,6 +69,14 @@ const USER_DEFS = [
   },
 ] as const;
 
+/**
+ * Seeds the baseline database with a default organization and three users
+ * (admin, candidate, candidate2). Idempotent — re-running upserts on
+ * conflict by username.
+ * @param db - Database instance.
+ * @param hashFn - Password hashing function.
+ * @returns Created organization ID and user IDs.
+ */
 export async function seed(
   db: Database,
   hashFn: HashFunction,
@@ -128,6 +143,7 @@ export async function seed(
   };
 }
 
+/** Detects whether this file is the entry point (directly invoked). */
 const isMain =
   process.argv[1] !== undefined &&
   resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));

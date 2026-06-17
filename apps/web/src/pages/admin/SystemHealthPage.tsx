@@ -10,28 +10,40 @@ import { cn } from "@/lib/utils";
 import { getStatusMeta } from "@/lib/statusMeta";
 import { Activity, Database, HardDrive, RefreshCw } from "lucide-react";
 
+/** Union type representing the possible health statuses from the system API. */
 type HealthStatus = SystemHealthResponse["status"];
 
+/** Auto-refresh interval for the health data polling loop. */
 const REFRESH_INTERVAL_MS = 10_000;
 
+/**
+ * Maps a percentage value (CPU, memory) to a health status level.
+ * >95% is critical, >80% is degraded, otherwise ok.
+ */
 function getStatusLevel(value: number): HealthStatus {
   if (value > 95) return "critical";
   if (value > 80) return "degraded";
   return "ok";
 }
 
+/**
+ * Maps a database response time in milliseconds to a health status level.
+ * >1000ms is critical, >500ms is degraded, otherwise ok.
+ */
 function getDbStatusLevel(ms: number): HealthStatus {
   if (ms > 1000) return "critical";
   if (ms > 500) return "degraded";
   return "ok";
 }
 
+/** Admin page that displays real-time CPU, memory, and database health metrics with auto-refresh. */
 export function SystemHealthPage() {
   const [data, setData] = useState<SystemHealthResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(null);
 
+  /** Fetches the latest system health snapshot from the API. */
   const loadHealth = useCallback(async () => {
     setError(null);
     try {
@@ -126,6 +138,7 @@ export function SystemHealthPage() {
   );
 }
 
+/** Displays a single health metric as a card with value, unit, and color-coded status. */
 function MetricCard({
   title,
   value,
@@ -170,6 +183,7 @@ function MetricCard({
   );
 }
 
+/** Placeholder skeleton shown while the initial health data is loading. */
 function SystemHealthSkeleton() {
   return (
     <div className="flex flex-col gap-6">

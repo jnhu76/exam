@@ -11,7 +11,10 @@ import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 
+/** OpenAPI security scheme: HTTP-only cookie authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/** Zod schema for a single course item returned in list and detail responses. */
 const courseItemSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -21,6 +24,8 @@ const courseItemSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+/** Zod schema for the paginated course list response. */
 const courseListResponseSchema = z.object({
   items: z.array(courseItemSchema),
   total: z.number().int(),
@@ -28,8 +33,11 @@ const courseListResponseSchema = z.object({
   pageSize: z.number().int(),
   totalPages: z.number().int(),
 });
+
+/** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
+/** Fastify plugin that registers all course CRUD routes. */
 const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/courses",
@@ -42,6 +50,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: courseListResponseSchema },
       },
     },
+    /** List courses with pagination. Returns paginated course items. */
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -77,6 +86,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: courseItemSchema },
       },
     },
+    /** Get a single course by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -110,6 +120,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 201: courseItemSchema },
       },
     },
+    /** Create a new course. Returns 409 if the course code already exists. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const data = CreateCourseRequestSchema.parse(request.body);
@@ -155,6 +166,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: courseItemSchema },
       },
     },
+    /** Update an existing course by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -196,6 +208,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /** Delete a course by ID. Returns 409 if the course still contains questions, 404 if not found. */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };

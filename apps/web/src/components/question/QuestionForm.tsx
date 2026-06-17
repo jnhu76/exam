@@ -15,12 +15,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
+/** A single option within a question, with an ID, display content, and correctness flag. */
 interface Option {
   id: string;
   content: string;
   isCorrect?: boolean;
 }
 
+/** Complete form data shape for creating or editing a question. */
 export interface QuestionFormData {
   courseId: string;
   type: "single_choice" | "multiple_choice" | "fill_blank" | "true_false";
@@ -37,12 +39,14 @@ export interface QuestionFormData {
   };
 }
 
+/** Props for the QuestionForm component. */
 interface QuestionFormProps {
   courses: Array<{ id: string; name: string }>;
   initial?: Partial<QuestionFormData>;
   onChange: (data: QuestionFormData) => void;
 }
 
+/** Default form values for a new question. */
 const defaultForm: QuestionFormData = {
   courseId: "",
   type: "single_choice",
@@ -62,6 +66,11 @@ const defaultForm: QuestionFormData = {
   },
 };
 
+/**
+ * Full-featured form for creating or editing questions, supporting
+ * single-choice, multiple-choice, fill-blank, and true/false types
+ * with options, standard answers, scoring, and grading rules.
+ */
 export function QuestionForm({
   courses,
   initial,

@@ -11,22 +11,26 @@ import type {
   TenantContext,
 } from "../types.js";
 
+/** Extracts `organizationId` from a tenant or request context. */
 export function resolveOrganizationId(
   ctx: TenantContext | RequestContext,
 ): string {
   return ctx.organizationId;
 }
 
+/** Extracts `organizationId` from a tenant or request context (alias for resolveOrganizationId). */
 export function resolveOptionalOrganizationId(
   ctx: TenantContext | RequestContext,
 ): string {
   return ctx.organizationId;
 }
 
+/** Returns the current date/time. */
 export function now(): Date {
   return new Date();
 }
 
+/** Drizzle table type with required `id`, `organizationId`, `createdAt`, and optional `updatedAt` columns. */
 type TenantTable = PgTable<TableConfig> & {
   id: AnyPgColumn;
   organizationId: AnyPgColumn;
@@ -38,10 +42,18 @@ export type { TenantTable };
 
 type PgDrizzleTable = PgTable<TableConfig>;
 
+/** Casts a tenant table to a plain Drizzle table type for generic operations. */
 function asDrizzleTable<T extends TenantTable>(t: T): PgDrizzleTable {
   return t as PgDrizzleTable;
 }
 
+/**
+ * Creates a generic CRUD repository for a tenant-scoped Drizzle table.
+ * All operations filter by `organizationId` from the provided context.
+ * `id`, `organizationId`, `createdAt`, and `updatedAt` are managed automatically.
+ * @param db - Database instance.
+ * @param table - Drizzle table definition with tenant columns.
+ */
 export function createAsyncTenantCrudRepo<T extends TenantTable>(
   db: Database,
   table: T,
@@ -69,6 +81,10 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
   }
 
   return {
+    /**
+     * Creates a new row with auto-generated `id`, `organizationId`, and timestamps.
+     * Returns the created row read from the database.
+     */
     async create(
       ctx: TenantContext | RequestContext,
       input: CreateInput,
@@ -91,13 +107,16 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
       }
       return created;
     },
+    /** Finds a single row by `id` scoped to the tenant's `organizationId`. */
     findById,
+    /** Lists all rows for the tenant's organization. */
     async list(ctx: TenantContext | RequestContext): Promise<Select[]> {
       return db
         .select()
         .from(tbl)
         .where(eq(table.organizationId, orgId(ctx))) as Promise<Select[]>;
     },
+    /** Returns the total row count for the tenant's organization. */
     async count(ctx: TenantContext | RequestContext): Promise<number> {
       return (
         await db
@@ -106,6 +125,10 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
           .where(eq(table.organizationId, orgId(ctx)))
       ).length;
     },
+    /**
+     * Lists rows for the tenant's organization with pagination.
+     * @returns `{ items, total }` where `total` is the unpaginated count.
+     */
     async listPaginated(
       ctx: TenantContext | RequestContext,
       page: number,
@@ -128,6 +151,10 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
       ).length;
       return { items, total };
     },
+    /**
+     * Updates a row by `id` scoped to the tenant, setting `updatedAt`.
+     * Returns the updated row or null if not found.
+     */
     async update(
       ctx: TenantContext | RequestContext,
       entityId: string,
@@ -145,6 +172,10 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
         );
       return findById(ctx, entityId);
     },
+    /**
+     * Deletes a row by `id` scoped to the tenant's organization.
+     * Returns true if at least one row was deleted.
+     */
     async delete(
       ctx: TenantContext | RequestContext,
       entityId: string,
@@ -159,6 +190,7 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
   };
 }
 
+/** Interface for tenant-scoped async CRUD repositories. */
 export interface AsyncTenantRepo<Select, CreateInput, UpdateInput> {
   create(ctx: TenantContext, input: CreateInput): Promise<Select>;
   findById(ctx: TenantContext, id: string): Promise<Select | null>;
@@ -171,6 +203,7 @@ export interface AsyncTenantRepo<Select, CreateInput, UpdateInput> {
   delete(ctx: TenantContext, id: string): Promise<boolean>;
 }
 
+/** Interface for platform-level (cross-tenant) async CRUD repositories. */
 export interface AsyncPlatformRepo<Select, CreateInput, UpdateInput> {
   create(ctx: PlatformContext, input: CreateInput): Promise<Select>;
   findById(ctx: PlatformContext, id: string): Promise<Select | null>;
@@ -183,6 +216,7 @@ export interface AsyncPlatformRepo<Select, CreateInput, UpdateInput> {
   delete(ctx: PlatformContext, id: string): Promise<boolean>;
 }
 
+/** Interface for authentication-lookup repositories that only need `findById`. */
 export interface AsyncAuthLookupRepo<Select> {
   findById(ctx: AuthLookupContext, id: string): Promise<Select | null>;
 }

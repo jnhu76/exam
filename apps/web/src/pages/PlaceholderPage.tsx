@@ -1,3 +1,4 @@
+/** Placeholder page displayed for routes not yet implemented. */
 export function PlaceholderPage() {
   return (
     <div className="text-sm text-muted-foreground">

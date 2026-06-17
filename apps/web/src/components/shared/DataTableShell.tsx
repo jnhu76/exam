@@ -1,6 +1,10 @@
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Standard shell for data table pages, providing an optional title, description,
+ * toolbar slot, content area, and footer within a bordered card container.
+ */
 export function DataTableShell({
   title,
   description,

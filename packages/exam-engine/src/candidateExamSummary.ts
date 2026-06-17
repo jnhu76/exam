@@ -1,5 +1,6 @@
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
 
+/** The computed availability status of an exam for a specific candidate. */
 export type AvailabilityStatus =
   | "available"
   | "in_progress"
@@ -11,6 +12,7 @@ export type AvailabilityStatus =
   | "expired"
   | "unavailable";
 
+/** The primary action a candidate can take on an exam given its current state. */
 export type PrimaryAction =
   | "start"
   | "resume"
@@ -18,6 +20,7 @@ export type PrimaryAction =
   | "view_history"
   | "none";
 
+/** Input data required to derive the candidate-facing exam summary state. */
 export interface DeriveCandidateExamSummaryInput {
   exam: Exam;
   enrollment: ExamEnrollment | null;
@@ -28,6 +31,10 @@ export interface DeriveCandidateExamSummaryInput {
   now: Date;
 }
 
+/**
+ * Derives the availability status and primary action for a candidate viewing an exam.
+ * Returns a deterministic state based on enrollment, attempt, and exam window conditions.
+ */
 export function deriveCandidateExamState(
   input: DeriveCandidateExamSummaryInput,
 ): { availabilityStatus: AvailabilityStatus; primaryAction: PrimaryAction } {
@@ -107,6 +114,10 @@ export function deriveCandidateExamState(
   return { availabilityStatus: "available", primaryAction: "start" };
 }
 
+/**
+ * Selects the best attempt to display to a candidate, preferring active, then resumable,
+ * then latest, then final.
+ */
 export function pickDisplayAttempt(
   input: Pick<
     DeriveCandidateExamSummaryInput,

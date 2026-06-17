@@ -17,17 +17,22 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
+/** Creates a primary key column. */
 const id = () => text("id").primaryKey();
+/** Creates a non-null organization_id column referencing the organizations table. */
 const organizationId = () => text("organization_id").notNull();
+/** Creates a non-null `created_at` timestamp with timezone. */
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true, mode: "date" })
     .defaultNow()
     .notNull();
+/** Creates a non-null `updated_at` timestamp with timezone. */
 const updatedAt = () =>
   timestamp("updated_at", { withTimezone: true, mode: "date" })
     .defaultNow()
     .notNull();
 
+/** Organizations table — stores tenant organizations. */
 export const organizations = pgTable(
   "organizations",
   {
@@ -41,6 +46,7 @@ export const organizations = pgTable(
   (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)],
 );
 
+/** Organization settings table — stores per-organization branding and configuration. */
 export const organizationSettings = pgTable(
   "organization_settings",
   {
@@ -59,6 +65,7 @@ export const organizationSettings = pgTable(
   ],
 );
 
+/** Candidate fields table — defines configurable identity fields for candidates. */
 export const candidateFields = pgTable(
   "candidate_fields",
   {
@@ -80,6 +87,7 @@ export const candidateFields = pgTable(
   ],
 );
 
+/** Users table — stores user accounts (Admin, Candidate roles). */
 export const users = pgTable(
   "users",
   {
@@ -101,6 +109,7 @@ export const users = pgTable(
   ],
 );
 
+/** Candidate profiles table — stores candidate-specific field values per user. */
 export const candidateProfiles = pgTable(
   "candidate_profiles",
   {
@@ -121,6 +130,7 @@ export const candidateProfiles = pgTable(
   ],
 );
 
+/** Courses table — stores course definitions grouped by code. */
 export const courses = pgTable(
   "courses",
   {
@@ -137,6 +147,7 @@ export const courses = pgTable(
   ],
 );
 
+/** Questions table — stores question bank items with options, scoring, and grading rules. */
 export const questions = pgTable("questions", {
   id: id(),
   organizationId: organizationId().references(() => organizations.id),
@@ -158,6 +169,7 @@ export const questions = pgTable("questions", {
   updatedAt: updatedAt(),
 });
 
+/** Exams table — stores exam configurations including timing, scoring, and question snapshots. */
 export const exams = pgTable("exams", {
   id: id(),
   organizationId: organizationId().references(() => organizations.id),
@@ -189,6 +201,7 @@ export const exams = pgTable("exams", {
   updatedAt: updatedAt(),
 });
 
+/** Exam enrollments table — tracks candidate qualification, attempt counts, and final scores per exam. */
 export const examEnrollments = pgTable(
   "exam_enrollments",
   {
@@ -217,6 +230,7 @@ export const examEnrollments = pgTable(
   ],
 );
 
+/** Exam attempts table — stores individual attempt data including answers, snapshots, and grading results. */
 export const examAttempts = pgTable(
   "exam_attempts",
   {
@@ -263,6 +277,7 @@ export const examAttempts = pgTable(
   ],
 );
 
+/** Audit logs table — records user actions for compliance and debugging. */
 export const auditLogs = pgTable("audit_logs", {
   id: id(),
   organizationId: organizationId().references(() => organizations.id),
@@ -276,6 +291,7 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: createdAt(),
 });
 
+/** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
   organizationSettings,

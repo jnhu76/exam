@@ -23,6 +23,7 @@ import { eq } from "drizzle-orm";
 import type { Role } from "@exam/domain";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 
+/** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
   "SuperAdmin",
   "Teacher",
@@ -31,14 +32,22 @@ export const LEGACY_ROLES = [
   "ContentManager",
   "ResultViewer",
 ] as const;
+/** Union type of the legacy role string literals. */
 export type LegacyRole = (typeof LEGACY_ROLES)[number];
 
 let _counter = 0;
+/**
+ * Generates a unique string prefix using the current timestamp and an
+ * incrementing counter, useful for creating non-colliding test data.
+ */
 export function uniquePrefix(): string {
   _counter++;
   return `${Date.now().toString(36)}-${_counter}`;
 }
 
+/**
+ * Fastify plugin that decorates the instance with a database connection.
+ */
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
     fastify.decorate("db", db);
@@ -49,6 +58,11 @@ type TestUser = typeof schema.users.$inferSelect;
 
 type TestOrganization = typeof schema.organizations.$inferSelect;
 
+/**
+ * Context returned by buildTestApp, containing the Fastify instance,
+ * database, cleanup function, seeded org/users, auth tokens, and
+ * a time-override helper for deterministic test scenarios.
+ */
 export interface TestContext {
   app: ReturnType<typeof Fastify>;
   db: Database;
@@ -65,6 +79,11 @@ const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
   "postgresql://exam:exam@localhost:5432/exam_test";
 
+/**
+ * Builds a fully configured Fastify test application with a fresh Postgres
+ * database, seeded data, auth/tenant/rateLimit plugins, and the provided
+ * route plugin. Returns a TestContext with tokens and cleanup.
+ */
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,
   opts?: { prefix?: string; rateLimit?: boolean },
@@ -144,6 +163,10 @@ export async function buildTestApp(
   };
 }
 
+/**
+ * Creates a user with a future/legacy role (e.g. Teacher, Proctor) for
+ * testing role-gated endpoints. Returns the user row and a signed JWT token.
+ */
 export async function createFutureRoleUserForTest(
   db: Database,
   orgId: string,
@@ -178,6 +201,12 @@ export async function createFutureRoleUserForTest(
   return { user, token };
 }
 
+/**
+ * Creates a candidate via the POST /api/candidates API endpoint using
+ * an admin token. Populates required candidate fields from the org's
+ * CandidateField config. Returns the candidate profile ID, user ID,
+ * and a signed candidate JWT token.
+ */
 export async function createCandidateViaApi(
   app: TestContext["app"],
   adminToken: string,
@@ -238,6 +267,11 @@ export async function createCandidateViaApi(
 
 type FastifyInstance = TestContext["app"];
 
+/**
+ * Creates a complete exam via the API: course, question, and exam entities.
+ * Returns the created exam ID. All entities are created with unique prefixed
+ * course codes to avoid collisions in parallel tests.
+ */
 export async function createExamViaApi(
   app: FastifyInstance,
   adminToken: string,
@@ -313,6 +347,10 @@ export async function createExamViaApi(
   return examRes.json().id;
 }
 
+/**
+ * Publishes an exam via the POST /api/exams/:id/publish endpoint.
+ * Returns the API response body.
+ */
 export async function publishExamViaApi(
   app: FastifyInstance,
   adminToken: string,
@@ -329,6 +367,12 @@ export async function publishExamViaApi(
   return res.json();
 }
 
+/**
+ * End-to-end helper that creates a candidate, enrolls them in an exam,
+ * starts an attempt, saves an answer, and submits. Returns the submitted
+ * attempt response. Useful for integration/E2E tests requiring a completed
+ * exam cycle.
+ */
 export async function submitExamAsCandidate(
   app: FastifyInstance,
   adminToken: string,
@@ -403,6 +447,10 @@ export async function submitExamAsCandidate(
   return submitRes.json();
 }
 
+/**
+ * Exports exam results as CSV via the GET /api/exams/:id/export/scores
+ * endpoint using an admin token. Returns response headers and body.
+ */
 export async function exportResultsCsvAsAdmin(
   app: FastifyInstance,
   adminToken: string,

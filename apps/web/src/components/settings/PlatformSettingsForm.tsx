@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
+/** Available timezone options for the platform settings form. */
 const TIMEZONE_OPTIONS = [
   "Asia/Shanghai",
   "Asia/Tokyo",
@@ -27,8 +28,13 @@ const TIMEZONE_OPTIONS = [
   "UTC",
 ];
 
+/** Form values type derived from the branding update contract. */
 export type SettingsFormValues = UpdateBrandingRequest;
 
+/**
+ * Form for editing platform branding settings: product title, subtitle,
+ * footer, organization display name, and default timezone.
+ */
 export function PlatformSettingsForm({
   initialValues,
   onSave,

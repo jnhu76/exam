@@ -22,6 +22,12 @@ export const SENSITIVE_LOG_PATHS = [
   "req.body.currentPassword",
 ] as const;
 
+/**
+ * Pino redaction configuration object consumed by the logger plugin.
+ *
+ * Mirrors {@link SENSITIVE_LOG_PATHS} but formatted as the `{ paths, remove }`
+ * shape that Pino's redaction API expects.
+ */
 export const REDACT_CONFIG = {
   paths: SENSITIVE_LOG_PATHS as unknown as string[],
   remove: true,

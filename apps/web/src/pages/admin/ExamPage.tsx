@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 
+/** Row shape returned by the exams list API. */
 interface ExamRow {
   id: string;
   title: string;
@@ -42,6 +43,7 @@ interface ExamRow {
   deleteDisabledReason: string | null;
 }
 
+/** Generic paginated API response wrapper. */
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -50,12 +52,14 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+/** Admin page for listing, viewing, and deleting exams. */
 export function ExamPage() {
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches the exam list from the API and updates local state. */
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -73,6 +77,7 @@ export function ExamPage() {
     loadExams();
   }, [loadExams]);
 
+  /** Deletes an exam by id and refreshes the list. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/exams/${id}`);

@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { getStatusMeta, type StatusTone } from "@/lib/statusMeta";
 
+/** CSS class mapping from StatusTone to a background-color utility. */
 const dotClasses: Record<StatusTone, string> = {
   primary: "bg-primary",
   secondary: "bg-secondary-foreground",
@@ -11,8 +12,10 @@ const dotClasses: Record<StatusTone, string> = {
   muted: "bg-muted-foreground",
 };
 
+/** Supported connection status values. */
 type ConnectionStatus = "connected" | "degraded" | "offline";
 
+/** Displays a colored dot and label indicating the current network connection status. */
 export function ConnectionIndicator({ status }: { status: ConnectionStatus }) {
   const view = getStatusMeta(status);
   return (

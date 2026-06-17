@@ -9,16 +9,30 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 60_000;
 
+/**
+ * Minimal representation of an active exam attempt used by the heartbeat
+ * scanner. Only the fields required to evaluate staleness are included.
+ */
 export interface DisruptedCandidate {
   id: string;
   status: string;
   lastActivityAt?: Date | null;
 }
 
+/**
+ * Result returned by the heartbeat scan, indicating how many active
+ * attempts were marked as disrupted during the scan cycle.
+ */
 export interface ScanResult {
   markedCount: number;
 }
 
+/**
+ * Scans a list of active attempts and invokes `onDisrupted` for each
+ * in-progress attempt whose `lastActivityAt` is older than
+ * `heartbeatTimeoutMs` relative to the provided `now` timestamp.
+ * Returns the total number of attempts marked as disrupted.
+ */
 export async function scanForDisruptedAttempts(
   activeAttempts: DisruptedCandidate[],
   now: Date,
@@ -41,11 +55,20 @@ export async function scanForDisruptedAttempts(
   return { markedCount };
 }
 
+/**
+ * Parses an environment variable as a positive integer. Returns `fallback`
+ * if the value is undefined, not a number, or not a positive integer.
+ */
 function readPositiveInteger(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * Creates a synthetic `RequestContext` representing the system heartbeat
+ * actor, used when the background scanner needs to interact with
+ * repositories that require a context.
+ */
 function createSystemContext(organizationId: string): RequestContext {
   return {
     actorId: "system:heartbeat",
@@ -57,6 +80,11 @@ function createSystemContext(organizationId: string): RequestContext {
   };
 }
 
+/**
+ * Wraps a database attempt repository into the `AttemptRepository` interface
+ * expected by the exam engine's `markDisrupted` function, binding all
+ * calls to the provided system context.
+ */
 function createAttemptRepoAdapter(
   repo: ReturnType<typeof createAttemptRepo>,
   ctx: RequestContext,
@@ -89,6 +117,11 @@ function createAttemptRepoAdapter(
   };
 }
 
+/**
+ * Iterates over all organizations and scans their in-progress attempts for
+ * staleness. Each stale attempt is marked as disrupted via the exam engine.
+ * Returns the aggregate count of disrupted attempts across all organizations.
+ */
 export async function scanDatabaseForDisruptedAttempts(
   fastify: Parameters<FastifyPluginAsync>[0],
   now = new Date(),
@@ -128,6 +161,12 @@ export async function scanDatabaseForDisruptedAttempts(
   return { markedCount };
 }
 
+/**
+ * Fastify plugin that starts a periodic background scanner to detect
+ * exam candidates whose heartbeat has timed out and marks their attempts
+ * as disrupted. The interval is read from runtime config and the timer
+ * is unref'd so it does not keep the process alive.
+ */
 const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
   const { scanIntervalMs, timeoutMs: heartbeatTimeoutMs } =
     getRuntimeConfig().heartbeat;

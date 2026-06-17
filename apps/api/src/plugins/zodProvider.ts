@@ -19,6 +19,16 @@ import {
 //
 // Registered in both server.ts and the test app builder so behavior is
 // identical across runtime and tests.
+/**
+ * Fastify plugin that registers the Zod validator and serializer compilers.
+ *
+ * Once registered, route option schemas (`params`, `querystring`, `body`,
+ * `response`) authored as Zod schemas become the single source of truth for
+ * runtime validation/serialization and for OpenAPI generation.
+ *
+ * Malformed requests produce a `400 VALIDATION_ERROR` response; response
+ * payloads are serialised to the declared schema.
+ */
 const zodProviderPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);

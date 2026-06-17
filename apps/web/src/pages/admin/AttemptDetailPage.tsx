@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { TYPE_LABELS } from "@/lib/constants";
 
+/** Per-question grading result for a single exam attempt. */
 interface QuestionResult {
   questionId: string;
   score: number;
@@ -30,6 +31,7 @@ interface QuestionResult {
   order: number;
 }
 
+/** Attempt result returned when grading is complete and results are visible. */
 interface VisibleAttemptResult {
   attemptId: string;
   status: "graded";
@@ -42,6 +44,7 @@ interface VisibleAttemptResult {
   questionResults: QuestionResult[];
 }
 
+/** Union of the visible attempt result and the hidden (not-yet-graded) response. */
 type AttemptResultResponse =
   | VisibleAttemptResult
   | {
@@ -51,6 +54,7 @@ type AttemptResultResponse =
       examTitle: string;
     };
 
+/** Converts an answer value to a display-friendly string. */
 function formatAnswer(value: unknown): string {
   if (value == null) return "—";
   if (typeof value === "string") return value;
@@ -58,6 +62,11 @@ function formatAnswer(value: unknown): string {
   return String(value);
 }
 
+/**
+ * Displays a graded exam attempt's score summary and per-question answer details.
+ * Shows the earned score, passing threshold, and a table of each question with
+ * the candidate's answer, standard answer, and points awarded.
+ */
 export function AttemptDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();

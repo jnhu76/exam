@@ -66,12 +66,21 @@ const candidateExamListResponseSchema = z.array(CandidateExamSummarySchema);
 const heartbeatResponseSchema = z.object({ ok: z.literal(true) });
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
+/**
+ * Represents a stored answer with client-side sequencing metadata.
+ * Extends AnswerRecord with a flexible savedAt type (Date or ISO string)
+ * and optional clientSeq / clientSeqHistory for idempotent save deduplication.
+ */
 interface StoredAnswer extends Omit<AnswerRecord, "savedAt"> {
   savedAt: Date | string;
   clientSeq?: number;
   clientSeqHistory?: StoredAnswerReceipt[];
 }
 
+/**
+ * Receipt of a single client-side answer save, recording the clientSeq,
+ * answer payload, version, and timestamp for conflict detection.
+ */
 interface StoredAnswerReceipt {
   clientSeq: number;
   answer: unknown;
@@ -79,18 +88,33 @@ interface StoredAnswerReceipt {
   savedAt: Date | string;
 }
 
+/**
+ * A StoredAnswer that has been normalized so savedAt is always a Date.
+ * Used after normalizeAnswers() for consistent server-side processing.
+ */
 interface NormalizedStoredAnswer extends AnswerRecord {
   clientSeq?: number;
   clientSeqHistory?: StoredAnswerReceipt[];
 }
 
+/**
+ * A candidate's entry in the in-memory exam queue, tracking when they joined.
+ */
 interface QueueEntry {
   candidateId: string;
   joinedAt: Date;
 }
 
+/**
+ * In-memory exam admission queues keyed by examId.
+ * Used for batch-release queue gating when requireQueue is enabled.
+ */
 const examQueues = new Map<string, QueueEntry[]>();
 
+/**
+ * Converts StoredAnswer[] (which may have string dates) to NormalizedStoredAnswer[]
+ * with all savedAt fields guaranteed to be Date objects.
+ */
 function normalizeAnswers(answers: StoredAnswer[]): NormalizedStoredAnswer[] {
   return answers.map((a) => ({
     ...a,
@@ -109,6 +133,10 @@ function normalizeAnswers(answers: StoredAnswer[]): NormalizedStoredAnswer[] {
   }));
 }
 
+/**
+ * Serializes an ExamAttempt domain object into the API response shape,
+ * converting Date fields to ISO strings and conditionally including score/passed.
+ */
 function toAttemptResponse(attempt: ExamAttempt) {
   return {
     id: attempt.id,
@@ -136,6 +164,11 @@ function toAttemptResponse(attempt: ExamAttempt) {
   };
 }
 
+/**
+ * Computes the queue admission status for a candidate, adding them to the
+ * in-memory queue if not already present. Returns position, wait count,
+ * and estimated wait based on batch release intervals.
+ */
 function getQueueStatus(exam: Exam, candidateId: string, now: Date) {
   const queue = examQueues.get(exam.id) ?? [];
   const existing = queue.find((entry) => entry.candidateId === candidateId);
@@ -167,6 +200,10 @@ function getQueueStatus(exam: Exam, candidateId: string, now: Date) {
   });
 }
 
+/**
+ * Serializes an ExamAttempt for candidate-facing responses, stripping
+ * standardAnswer and other admin-only fields from the question snapshot.
+ */
 function toCandidateAttemptResponse(attempt: ExamAttempt) {
   return {
     ...toAttemptResponse(attempt),
@@ -183,6 +220,10 @@ function toCandidateAttemptResponse(attempt: ExamAttempt) {
   };
 }
 
+/**
+ * Adapts the DB exam repo to the ExamRepository interface expected by
+ * the exam-engine command functions, binding the request context.
+ */
 function createExamRepoAdapter(
   repo: ReturnType<typeof createExamRepo>,
   ctx: RequestContext,
@@ -199,6 +240,10 @@ function createExamRepoAdapter(
   };
 }
 
+/**
+ * Adapts the DB attempt repo to the AttemptRepository interface expected by
+ * the exam-engine command functions, binding the request context.
+ */
 function createAttemptRepoAdapter(
   repo: ReturnType<typeof createAttemptRepo>,
   ctx: RequestContext,
@@ -231,6 +276,10 @@ function createAttemptRepoAdapter(
   };
 }
 
+/**
+ * Adapts the DB enrollment repo to the EnrollmentRepository interface expected
+ * by the exam-engine command functions, binding the request context.
+ */
 function createEnrollmentRepoAdapter(
   repo: ReturnType<typeof createEnrollmentRepo>,
   ctx: RequestContext,
@@ -258,6 +307,10 @@ function createEnrollmentRepoAdapter(
   };
 }
 
+/**
+ * Builds a lookup map from "questionId:clientSeq" to AnswerRecord,
+ * used for idempotent answer deduplication during the save protocol.
+ */
 function buildClientSeqMap(answers: StoredAnswer[]): Map<string, AnswerRecord> {
   const map = new Map<string, AnswerRecord>();
   for (const answer of answers) {
@@ -279,6 +332,10 @@ function buildClientSeqMap(answers: StoredAnswer[]): Map<string, AnswerRecord> {
   return map;
 }
 
+/**
+ * Retrieves the candidate profile for the currently authenticated user.
+ * Throws NotFoundError if no profile exists for the user.
+ */
 async function getCandidateProfile(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
@@ -293,6 +350,10 @@ async function getCandidateProfile(
   return candidateProfile;
 }
 
+/**
+ * Retrieves an attempt owned by the current candidate, verifying both
+ * existence and candidate ownership. Throws NotFoundError otherwise.
+ */
 async function getOwnedAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
@@ -310,6 +371,10 @@ async function getOwnedAttempt(
   return attempt;
 }
 
+/**
+ * Normalizes a raw DB enrollment row into the ExamEnrollment domain type,
+ * casting status and conditionally including nullable final score/passed/attemptId fields.
+ */
 function normalizeEnrollment(
   enrollment: Awaited<
     ReturnType<
@@ -342,6 +407,11 @@ function normalizeEnrollment(
   };
 }
 
+/**
+ * Builds the candidate-facing exam detail response by deriving availability
+ * status, primary action, best score, and attempt limits from the exam,
+ * enrollment, and attempt state.
+ */
 function buildCandidateExamDetail(
   exam: Exam,
   enrollment: ExamEnrollment | null,
@@ -406,7 +476,17 @@ function buildCandidateExamDetail(
   });
 }
 
+/**
+ * Fastify plugin registering all candidate-facing attempt routes:
+ * exam list, exam detail, queue, start, load, save answers, submit,
+ * heartbeat, and restore.
+ */
 const attemptRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /candidate/exams — Returns a summary list of all exams the
+   * authenticated candidate is enrolled in, with availability status
+   * and best score per exam.
+   */
   fastify.get(
     "/candidate/exams",
     {
@@ -523,6 +603,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * GET /candidate/exams/:examId — Returns the full detail view for a
+   * single exam the candidate is enrolled in, including attempt limits,
+   * best score, availability status, and primary action.
+   */
   fastify.get(
     "/candidate/exams/:examId",
     {
@@ -591,6 +676,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * POST /attempts/:examId/queue — Joins the candidate into the exam's
+   * admission queue and returns their current position and estimated wait.
+   */
   fastify.post(
     "/attempts/:examId/queue",
     {
@@ -623,6 +712,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * POST /attempts/:examId/start — Starts a new attempt or restores an
+   * existing one. Returns 201 for a new attempt, 200 for a restored one.
+   * If the exam requires queue admission, the candidate must be "ready" first.
+   */
   fastify.post(
     "/attempts/:examId/start",
     {
@@ -724,6 +818,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * GET /attempts/:id — Loads a single attempt owned by the current
+   * candidate, including the question snapshot and all saved answers.
+   */
   fastify.get(
     "/attempts/:id",
     {
@@ -751,6 +849,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * POST /attempts/:attemptId/answers/:questionId — Saves a single
+   * answer for a question within an in-progress attempt. Uses the
+   * versioned, idempotent Answer Save Protocol with conflict detection.
+   */
   fastify.post(
     "/attempts/:attemptId/answers/:questionId",
     {
@@ -905,6 +1008,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * POST /attempts/:attemptId/submit — Submits an in-progress or disrupted
+   * attempt for grading. Transitions the attempt to submitted, runs the
+   * grading engine, and returns the graded result.
+   */
   fastify.post(
     "/attempts/:attemptId/submit",
     {
@@ -1030,6 +1138,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * POST /attempts/:attemptId/heartbeat — Updates the lastActivityAt
+   * timestamp on an in-progress attempt to prevent disruption timeout.
+   */
   fastify.post(
     "/attempts/:attemptId/heartbeat",
     {
@@ -1067,6 +1179,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * POST /attempts/:attemptId/restore — Explicitly restores a disrupted
+   * attempt back to in-progress, restoring saved answers and remaining time.
+   */
   fastify.post(
     "/attempts/:attemptId/restore",
     {

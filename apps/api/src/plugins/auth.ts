@@ -7,8 +7,20 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
+/**
+ * Fastify plugin that registers authentication and authorization decorators
+ * on the Fastify instance. Provides {@link authenticate} for JWT-based
+ * request authentication and {@link requirePermission}/{@link requireRole}
+ * for route-level authorization guards.
+ */
 const authPlugin: FastifyPluginAsync = async (fastify) => {
   const jwtSecret = getRuntimeConfig().authSecret.jwtSecret;
+  /**
+   * Pre-handler that authenticates a request via the `auth-token` cookie.
+   * Verifies the JWT, loads the user from the database, and populates
+   * `request.ctx` with the authenticated actor's context. Replies 401 on
+   * missing/invalid token or inactive user.
+   */
   const authenticateFn = async (
     request: FastifyRequest,
     reply: FastifyReply,
@@ -84,6 +96,11 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
   Object.assign(authenticateFn, { _isAuthenticate: true });
   fastify.decorate("authenticate", authenticateFn);
 
+  /**
+   * Returns a pre-handler that checks whether the authenticated actor holds
+   * the specified permission. Replies 401 if no context is present, or 403
+   * if the permission is not in the actor's role permission set.
+   */
   fastify.decorate("requirePermission", (permission: Permission) => {
     return async (request, reply) => {
       const ctx = request.ctx;
@@ -101,6 +118,11 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     };
   });
 
+  /**
+   * Returns a pre-handler that checks whether the authenticated actor's role
+   * is one of the allowed roles. Replies 401 if no context is present, or
+   * 403 if the role is not in the allowed list.
+   */
   fastify.decorate("requireRole", (roles: Role[]) => {
     return async (request, reply) => {
       const ctx = request.ctx;

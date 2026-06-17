@@ -20,6 +20,7 @@ import {
   type AttemptCommand,
 } from "./attemptStateMachine.js";
 
+/** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
   findById(attemptId: string): Promise<ExamAttempt | null> | ExamAttempt | null;
   findActiveByEnrollment(
@@ -40,6 +41,7 @@ export interface AttemptRepository {
   ): Promise<ExamAttempt | null> | ExamAttempt | null;
 }
 
+/** Repository interface for persisting exam enrollment records. */
 export interface EnrollmentRepository {
   findByExamAndCandidate(
     examId: string,
@@ -60,11 +62,14 @@ export interface EnrollmentRepository {
   ): Promise<ExamEnrollment | null> | ExamEnrollment | null;
 }
 
+/** Exam statuses that are considered open for candidate participation. */
 const OPEN_STATUSES: Set<string> = new Set(["published", "open"]);
 
+/** Error message returned when a candidate is not enrolled in the exam. */
 const NOT_ENROLLED_MESSAGE =
   "Candidate is not enrolled in this exam. An Admin must assign the candidate first.";
 
+/** Starts a new attempt or restores a disrupted attempt for the given candidate. */
 export async function startAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
@@ -84,15 +89,24 @@ export async function startAttempt(
   return attempt;
 }
 
+/** Result returned when starting or restoring an attempt. */
 export interface StartAttemptResult {
   attempt: ExamAttempt;
   isNew: boolean;
 }
 
+/** Options for customizing the un-assigned candidate error behavior. */
 export interface StartAttemptOptions {
   unassignedErrorFactory?: (message: string) => Error;
 }
 
+/**
+ * Starts or restores an exam attempt for the given candidate.
+ *
+ * If an active in-progress attempt exists, returns it directly.
+ * If a disrupted attempt exists, restores it to in_progress.
+ * Otherwise, validates eligibility and creates a new attempt.
+ */
 export async function startOrRestoreAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
@@ -184,6 +198,10 @@ export async function startOrRestoreAttempt(
   return { attempt, isNew: true };
 }
 
+/**
+ * Submits an in-progress or disrupted attempt, transitioning it to the submitted state.
+ * Records the submission timestamp.
+ */
 export async function submitAttempt(
   attemptRepo: AttemptRepository,
   attemptId: string,
@@ -210,6 +228,10 @@ export async function submitAttempt(
   return submitted;
 }
 
+/**
+ * Marks an attempt as disrupted (e.g., client heartbeat timeout).
+ * Only applies to in_progress attempts.
+ */
 export async function markDisrupted(
   attemptRepo: AttemptRepository,
   attemptId: string,
@@ -233,6 +255,10 @@ export async function markDisrupted(
   return disrupted;
 }
 
+/**
+ * Restores a disrupted attempt to in_progress state, refreshing the last activity timestamp.
+ * Used for recovery after a client disconnection.
+ */
 export async function restoreAttempt(
   examRepo: ExamRepository,
   attemptRepo: AttemptRepository,

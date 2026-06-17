@@ -45,6 +45,10 @@ const ControlFlagsSchema = z.object({
   showResultImmediately: z.boolean().default(true),
 });
 
+/**
+ * Schema for an exam entity, containing all configuration including timing, scoring,
+ * question selection, control flags, and retake policies.
+ */
 export const ExamSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -67,15 +71,26 @@ export const ExamSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
+
+/** Represents a complete exam entity with all configuration and metadata. */
 export type ExamDTO = z.infer<typeof ExamSchema>;
 
+/**
+ * Request schema for enrolling candidates into an exam.
+ */
 export const EnrollCandidatesRequestSchema = z.object({
   candidateIds: z.array(z.string().uuid()).min(1),
 });
+
+/** Type for an enroll-candidates request. */
 export type EnrollCandidatesRequest = z.infer<
   typeof EnrollCandidatesRequestSchema
 >;
 
+/**
+ * Request schema for creating a new exam. Phase 1 supports only `timed_window` timing
+ * and `manual` question selection.
+ */
 export const CreateExamRequestSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),
@@ -93,8 +108,14 @@ export const CreateExamRequestSchema = z.object({
   scoreStrategy: ScoreStrategyEnum.default("highest"),
   maxAttempts: z.number().int().min(1).default(1),
 });
+
+/** Type for a create-exam request. */
 export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
 
+/**
+ * Request schema for updating an existing exam. All fields are optional;
+ * only provided fields will be updated.
+ */
 export const UpdateExamRequestSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
@@ -110,10 +131,16 @@ export const UpdateExamRequestSchema = z.object({
   scoreStrategy: ScoreStrategyEnum.optional(),
   maxAttempts: z.number().int().min(1).optional(),
 });
+
+/** Type for an update-exam request. */
 export type UpdateExamRequest = z.infer<typeof UpdateExamRequestSchema>;
 
 // ── Exam Enrollment ───────────────────────────────────────────────
 
+/**
+ * Schema for an exam enrollment record, tracking a candidate's enrollment status,
+ * attempt count, and final score for a specific exam.
+ */
 export const ExamEnrollmentSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -127,4 +154,6 @@ export const ExamEnrollmentSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
+
+/** Represents a candidate's enrollment in an exam with attempt tracking. */
 export type ExamEnrollmentDTO = z.infer<typeof ExamEnrollmentSchema>;

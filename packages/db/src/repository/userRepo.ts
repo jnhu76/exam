@@ -9,6 +9,7 @@ import type { TenantContext } from "../types.js";
 import { UserAlreadyExistsError, type RequestContext } from "@exam/domain";
 import { and, eq, inArray } from "drizzle-orm";
 
+/** Extracts the PostgreSQL constraint name from an error object. */
 function getConstraintName(err: unknown): string | undefined {
   if (typeof err !== "object" || err === null) return undefined;
   const error = err as Record<string, unknown>;
@@ -22,9 +23,18 @@ function getConstraintName(err: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Creates a tenant-scoped user repository with username uniqueness checks
+ * and role-based queries.
+ * @param db - Database instance.
+ */
 export function createUserRepo(db: Database) {
   const repo = createAsyncTenantCrudRepo(db, users);
 
+  /**
+   * Finds a user by organization ID and username, scoped to the tenant.
+   * Used for authentication and uniqueness checks.
+   */
   async function findByOrganizationAndUsername(
     ctx: TenantContext | RequestContext,
     username: string,
@@ -42,6 +52,9 @@ export function createUserRepo(db: Database) {
   return {
     ...repo,
     findByOrganizationAndUsername,
+    /**
+     * Finds a user by organization ID and user ID, scoped to the tenant.
+     */
     async findByOrganizationAndId(
       ctx: TenantContext | RequestContext,
       id: string,
@@ -53,6 +66,10 @@ export function createUserRepo(db: Database) {
         .where(and(eq(users.organizationId, orgId), eq(users.id, id)));
       return (rows[0] as typeof users.$inferSelect | undefined) ?? null;
     },
+    /**
+     * Lists users filtered by roles with pagination, scoped to the tenant.
+     * @returns `{ items, total }` where `total` is the unpaginated count of matching users.
+     */
     async listPaginatedByRoles(
       ctx: TenantContext | RequestContext,
       roles: readonly string[],
@@ -79,6 +96,9 @@ export function createUserRepo(db: Database) {
         .length;
       return { items, total };
     },
+    /**
+     * Counts active users with the given role, scoped to the tenant.
+     */
     async countActiveByRole(
       ctx: TenantContext | RequestContext,
       role: string,
@@ -96,6 +116,11 @@ export function createUserRepo(db: Database) {
         );
       return rows.length;
     },
+    /**
+     * Creates a user with a pre-check for username uniqueness. Throws
+     * `UserAlreadyExistsError` if the username is already taken in the tenant,
+     * including on unique-constraint violations from the database.
+     */
     async createUnique(
       ctx: TenantContext | RequestContext,
       input: Parameters<typeof repo.create>[1],

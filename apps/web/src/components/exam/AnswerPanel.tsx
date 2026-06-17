@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+/** Props for the AnswerPanel component. */
 type AnswerPanelProps = {
   title?: string;
   description?: ReactNode;
@@ -16,6 +17,10 @@ type AnswerPanelProps = {
   className?: string;
 };
 
+/**
+ * Card-based container for the answer input area during an exam.
+ * Renders a title, optional description, answer children, and an optional footer.
+ */
 export function AnswerPanel({
   title = "作答区",
   description,

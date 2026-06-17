@@ -2,6 +2,7 @@ import { FlagIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/** Props for the RuntimeActionBar component. */
 type RuntimeActionBarProps = {
   onPrevious: () => void;
   onNext: () => void;
@@ -14,6 +15,10 @@ type RuntimeActionBarProps = {
   className?: string;
 };
 
+/**
+ * Bottom action bar for the exam runtime, providing previous/next navigation,
+ * flag-toggle, and submit buttons.
+ */
 export function RuntimeActionBar({
   onPrevious,
   onNext,

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { CandidateExamSummary } from "@exam/contracts";
 
+/** Formats an ISO datetime string to a localized zh-CN short date-time display. */
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString("zh-CN", {
     month: "2-digit",
@@ -27,6 +28,7 @@ function formatTime(iso: string): string {
   });
 }
 
+/** Maps an exam availability status to its Chinese display label. */
 function statusLabel(
   status: CandidateExamSummary["availabilityStatus"],
 ): string {
@@ -52,6 +54,7 @@ function statusLabel(
   }
 }
 
+/** Returns the shadcn Badge variant for a given exam availability status. */
 function statusBadgeVariant(
   status: CandidateExamSummary["availabilityStatus"],
 ): "default" | "secondary" | "destructive" | "outline" {
@@ -71,6 +74,7 @@ function statusBadgeVariant(
   }
 }
 
+/** Renders a single exam summary card with metadata, status badge, and a primary action button. */
 function ExamCard({
   exam,
   onStart,
@@ -109,6 +113,7 @@ function ExamCard({
     }
   })();
 
+  /** Dispatches navigation to the start or result page based on the primary action. */
   function handleAction() {
     if (exam.primaryAction === "start" || exam.primaryAction === "resume") {
       onStart(exam.examId);
@@ -175,12 +180,14 @@ function ExamCard({
   );
 }
 
+/** Candidate-facing page that lists all assigned exams grouped by availability status. */
 export function ExamListPage() {
   const navigate = useNavigate();
   const [exams, setExams] = useState<CandidateExamSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches the list of exams assigned to the current candidate from the API. */
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -200,10 +207,12 @@ export function ExamListPage() {
     loadExams();
   }, [loadExams]);
 
+  /** Navigates to the pre-exam start page for the given exam. */
   function handleStart(examId: string) {
     navigate(routes.exam.start(examId));
   }
 
+  /** Navigates to the result page for the given attempt. */
   function handleResult(attemptId: string) {
     navigate(routes.exam.result(attemptId));
   }

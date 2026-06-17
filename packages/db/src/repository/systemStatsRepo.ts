@@ -3,6 +3,7 @@ import { and, eq, gte } from "drizzle-orm";
 import type { Database } from "../types.js";
 import { schema } from "../schema/pg.js";
 
+/** Aggregate dashboard statistics for the organization. */
 export interface DashboardStats {
   totalQuestions: number;
   activeExams: number;
@@ -10,6 +11,7 @@ export interface DashboardStats {
   todayAttempts: number;
 }
 
+/** Summary of a recent exam for dashboard display. */
 export interface RecentExam {
   id: string;
   title: string;
@@ -17,16 +19,23 @@ export interface RecentExam {
   participantCount: number;
 }
 
+/** Dashboard data combining stats and recent exams. */
 export interface DashboardData extends DashboardStats {
   recentExams: RecentExam[];
 }
 
+/** Extracts `organizationId` from request context. */
 function getOrgId(ctx: RequestContext): string {
   return ctx.organizationId;
 }
 
+/** Creates a repository for dashboard statistics and health checks. */
 export function createSystemStatsRepo(db: Database) {
   return {
+    /**
+     * Returns aggregate dashboard stats: total questions, active (open) exams,
+     * total candidate profiles, and today's started attempts, all scoped to the tenant.
+     */
     async getDashboardStats(ctx: RequestContext): Promise<DashboardStats> {
       const orgId = getOrgId(ctx);
 
@@ -77,6 +86,10 @@ export function createSystemStatsRepo(db: Database) {
       return { totalQuestions, activeExams, totalCandidates, todayAttempts };
     },
 
+    /**
+     * Returns the 10 most recent exams for the tenant, with `participantCount`
+     * set to 0 (placeholder — enrollment count not yet computed).
+     */
     async getRecentExams(ctx: RequestContext): Promise<RecentExam[]> {
       const orgId = getOrgId(ctx);
 
@@ -92,6 +105,10 @@ export function createSystemStatsRepo(db: Database) {
       return rows.map((exam) => ({ ...exam, participantCount: 0 }));
     },
 
+    /**
+     * Pings the database with a lightweight query and returns the round-trip
+     * time in milliseconds (to two decimal places).
+     */
     async pingDb(): Promise<number> {
       const start = performance.now();
       await db

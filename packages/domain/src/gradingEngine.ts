@@ -113,6 +113,16 @@ function gradeFillBlank(
   return makeResult(question, candidateAnswer, correct ? question.score : 0);
 }
 
+/**
+ * Grade a single question against a candidate's answer.
+ *
+ * Dispatches to the appropriate grading strategy based on question type:
+ * - `single_choice` / `true_false`: exact value match.
+ * - `multiple_choice`: set comparison with configurable partial scoring.
+ * - `fill_blank`: string matching with exact or keyword mode.
+ *
+ * @returns A {@link QuestionScoreResult} with the awarded score and correctness flag.
+ */
 export function gradeQuestion(
   question: QuestionSnapshot,
   candidateAnswer: unknown,
@@ -128,6 +138,19 @@ export function gradeQuestion(
   }
 }
 
+/**
+ * Grade all questions in an attempt and compute the total score.
+ *
+ * Matches answers to questions by `questionId`, grades each, sums the
+ * scores, and determines pass/fail against `passingScore`.
+ *
+ * @param attemptId - The attempt being graded.
+ * @param questions - The question snapshots for the attempt.
+ * @param answers - The candidate's saved answer records.
+ * @param passingScore - Minimum total score to pass.
+ * @param gradedAt - Timestamp of grading (server authority).
+ * @returns A {@link ScoreResult} with per-question results and the pass/fail flag.
+ */
 export function gradeAnswers(
   attemptId: string,
   questions: QuestionSnapshot[],

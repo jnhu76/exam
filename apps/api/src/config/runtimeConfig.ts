@@ -112,6 +112,14 @@ const positiveIntSchema = z
   .transform((v) => Number(v))
   .pipe(z.number().int().positive());
 
+/**
+ * Resolve the application runtime mode from `APP_MODE`, falling back to
+ * `NODE_ENV` when `APP_MODE` is unset. Throws if `APP_MODE` is set to
+ * an invalid value.
+ *
+ * @param env - Process environment to read from.
+ * @returns The resolved {@link AppMode}.
+ */
 function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
   const appMode = env.APP_MODE;
   if (appMode === undefined || appMode === "") {
@@ -129,6 +137,13 @@ function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
   );
 }
 
+/**
+ * Map a `NODE_ENV` string to the narrow {@link AppEnv} union. Unrecognised
+ * values default to `"development"`.
+ *
+ * @param value - Raw `NODE_ENV` string (may be `undefined`).
+ * @returns The resolved {@link AppEnv}.
+ */
 function parseAppEnv(value: string | undefined): AppEnv {
   if (value === "production") return "production";
   if (value === "test") return "test";
@@ -161,10 +176,26 @@ function parseDeploymentMode(value: string | undefined): DeploymentMode {
   );
 }
 
+/**
+ * Check whether a string environment variable represents a truthy value.
+ *
+ * Recognised truthy values: `"true"` and `"1"` (case-sensitive).
+ *
+ * @param value - Raw environment variable string (may be `undefined`).
+ * @returns `true` when the value is truthy; `false` otherwise.
+ */
 function isTruthy(value: string | undefined): boolean {
   return value === "true" || value === "1";
 }
 
+/**
+ * Parse a positive integer from a string environment variable, falling back
+ * to a default when the value is missing, empty, non-numeric, or non-positive.
+ *
+ * @param value - Raw environment variable string (may be `undefined`).
+ * @param fallback - Default value returned when parsing fails or the value is absent.
+ * @returns A positive integer, either parsed or the fallback.
+ */
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (value === undefined || value === "") return fallback;
   const trimmed = value.trim();
@@ -174,6 +205,15 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return n;
 }
 
+/**
+ * Resolve the JWT signing secret from `JWT_SECRET`. In production mode an
+ * unset value causes a fast startup failure; in non-production modes a
+ * development-only placeholder is used.
+ *
+ * @param env - Process environment to read from.
+ * @param mode - Current {@link AppMode}.
+ * @returns The resolved JWT secret string.
+ */
 function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
   const secret = env.JWT_SECRET;
   if (secret) return secret;
@@ -183,6 +223,16 @@ function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
   return DEFAULT_JWT_SECRET;
 }
 
+/**
+ * Resolve the database connection URL. E2E and test/CI modes prefer
+ * `TEST_DATABASE_URL`, falling back to `DATABASE_URL` (e2e only) and
+ * then to a localhost default. Production requires `DATABASE_URL` or
+ * fails fast.
+ *
+ * @param env - Process environment to read from.
+ * @param mode - Current {@link AppMode}.
+ * @returns The resolved database connection URL.
+ */
 function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
   if (mode === "e2e") {
     return (
@@ -203,6 +253,16 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
   return url ?? "postgresql://exam:exam@localhost:5432/exam";
 }
 
+/**
+ * Resolve the CORS origin(s) from `CORS_ORIGIN`. In production, the value
+ * is required and a missing value triggers a fast failure. In non-production
+ * modes the default is `http://localhost:5173`. Comma-separated values are
+ * split into an array; a single origin is returned as a plain string.
+ *
+ * @param env - Process environment to read from.
+ * @param mode - Current {@link AppMode}.
+ * @returns A single origin string, or an array when multiple origins are configured.
+ */
 function resolveCorsOrigin(
   env: NodeJS.ProcessEnv,
   mode: AppMode,

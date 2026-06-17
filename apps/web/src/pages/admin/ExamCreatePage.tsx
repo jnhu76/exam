@@ -33,11 +33,15 @@ import { Separator } from "@/components/ui/separator";
 import { BookOpen, Trash2 } from "lucide-react";
 import { TYPE_LABELS } from "@/lib/constants";
 
+/** A course record used in the course selector dropdown. */
+/** Minimal course representation used in the exam creation form. */
 interface CourseRow {
   id: string;
   name: string;
 }
 
+/** A question record shown in the exam question picker dialog. */
+/** Minimal question representation used in the exam creation form. */
 interface QuestionRow {
   id: string;
   type: string;
@@ -45,11 +49,22 @@ interface QuestionRow {
   score: number;
 }
 
+/** Generic paginated API response wrapper. */
+/** Paginated API response wrapper. */
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
 }
 
+/**
+ * Admin page for creating a new exam with configuration form,
+ * manual question selection dialog, and draft/publish actions.
+ */
+/**
+ * Admin page for creating a new exam.
+ * Provides a two-column layout with the ExamConfigForm for metadata/settings
+ * and a question picker for manual question selection, plus draft/publish actions.
+ */
 export function ExamCreatePage() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -88,6 +103,7 @@ export function ExamCreatePage() {
     maxAttempts: 1,
   });
 
+  /** Fetches available courses and questions, defaulting to the first course. */
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -114,6 +130,7 @@ export function ExamCreatePage() {
     loadData();
   }, [loadData]);
 
+  /** Adds a question to the selected question list if not already present. */
   function addQuestion(qId: string) {
     if (!config.questionIds.includes(qId)) {
       setConfig((prev) => ({
@@ -123,6 +140,7 @@ export function ExamCreatePage() {
     }
   }
 
+  /** Removes a question from the selected question list. */
   function removeQuestion(qId: string) {
     setConfig((prev) => ({
       ...prev,
@@ -130,6 +148,7 @@ export function ExamCreatePage() {
     }));
   }
 
+  /** Validates the form, creates the exam, and optionally publishes it. */
   async function handleSave(asDraft: boolean) {
     const errors: Record<string, string> = {};
     if (!config.title.trim()) errors.title = "请输入考试名称";

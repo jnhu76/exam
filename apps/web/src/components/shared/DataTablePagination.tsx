@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 
+/** Props for the DataTablePagination component. */
 type DataTablePaginationProps = {
   page: number;
   pageSize: number;
@@ -17,12 +18,17 @@ type DataTablePaginationProps = {
   "aria-label"?: string;
 };
 
+/** Computes a window of up to 3 visible page numbers around the current page. */
 function buildVisiblePages(page: number, pageCount: number) {
   const start = Math.max(1, page - 1);
   const end = Math.min(pageCount, start + 2);
   return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }
 
+/**
+ * Pagination controls for data tables, showing item count summary,
+ * page numbers, and previous/next navigation buttons.
+ */
 export function DataTablePagination({
   page,
   pageSize,

@@ -1,15 +1,27 @@
 import type { SaveAnswerRejectReason } from "./attempt.js";
 
+/** Default locale used for error and status messages. */
 export const DEFAULT_LOCALE = "zh-CN" as const;
 
+/** List of locales supported by the message registry. Currently only zh-CN. */
 export const SUPPORTED_LOCALES = ["zh-CN"] as const;
 
+/** Union type of all supported locale identifiers. */
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
+/**
+ * Type guard that checks whether a given string is a supported locale.
+ * @param locale - The locale string to check.
+ * @returns `true` if the locale is in the supported locales list.
+ */
 export function isSupportedLocale(locale: string): locale is SupportedLocale {
   return (SUPPORTED_LOCALES as readonly string[]).includes(locale);
 }
 
+/**
+ * Registry of all application error messages keyed by error code.
+ * Each value is the user-facing Chinese (zh-CN) message for that error code.
+ */
 export const errorMessages = {
   AUTH_REQUIRED: "请先登录",
   AUTH_INVALID_CREDENTIALS: "用户名或密码错误",
@@ -41,12 +53,21 @@ export const errorMessages = {
   PASSWORD_RESET_TARGET_ROLE_NOT_ALLOWED: "不能重置该角色用户的密码",
 } as const;
 
+/** Union type of all valid error message codes. */
 export type ErrorCode = keyof typeof errorMessages;
 
+/**
+ * Type guard that checks whether a string is a valid error code.
+ * @param code - The string to check.
+ * @returns `true` if the code exists in the errorMessages registry.
+ */
 export function isErrorCode(code: string): code is ErrorCode {
   return Object.hasOwn(errorMessages, code);
 }
 
+/**
+ * Fallback messages used when no locale-specific message is found for a given code.
+ */
 export const fallbackMessages = {
   unknownError: "未知错误",
   operationFailed: "操作失败，请重试",
@@ -56,10 +77,22 @@ const localeCatalogs: Record<SupportedLocale, typeof errorMessages> = {
   "zh-CN": errorMessages,
 };
 
+/**
+ * Returns the error message string for the given error code in the default locale.
+ * @param code - A valid error code from the errorMessages registry.
+ * @returns The localized error message string.
+ */
 export function getErrorMessage(code: ErrorCode): string {
   return errorMessages[code];
 }
 
+/**
+ * Returns the error message for a given code and locale, falling back to the
+ * default locale and then to the unknown error message if the code is unrecognized.
+ * @param code - The error code to look up.
+ * @param locale - The locale to use (defaults to zh-CN).
+ * @returns The localized error message string.
+ */
 export function getMessageForLocale(
   code: string,
   locale: SupportedLocale = DEFAULT_LOCALE,
@@ -71,6 +104,10 @@ export function getMessageForLocale(
   return message ?? fallbackMessages.unknownError;
 }
 
+/**
+ * Validation messages for candidate identity fields.
+ * Includes a static configuration message and per-field label functions.
+ */
 export const candidateFieldValidationMessages = {
   configurationInvalid: "身份字段配置无效",
   required: (label: string) => `${label}为必填项`,
@@ -78,6 +115,9 @@ export const candidateFieldValidationMessages = {
   textRequired: (label: string) => `${label}必须为文本`,
 };
 
+/**
+ * User-facing messages for each save-answer rejection reason.
+ */
 export const saveAnswerMessages: Record<SaveAnswerRejectReason, string> = {
   STALE_VERSION: "服务器上存在更新的答案版本",
   ATTEMPT_ALREADY_SUBMITTED: "考试已提交，不能继续保存答案",
@@ -85,6 +125,11 @@ export const saveAnswerMessages: Record<SaveAnswerRejectReason, string> = {
   DEADLINE_EXCEEDED: "考试时间已到",
 };
 
+/**
+ * Returns the user-facing message for a given save-answer rejection reason.
+ * @param reason - The rejection reason from the save-answer protocol.
+ * @returns The corresponding error message string.
+ */
 export function getSaveAnswerMessage(reason: SaveAnswerRejectReason): string {
   return saveAnswerMessages[reason];
 }

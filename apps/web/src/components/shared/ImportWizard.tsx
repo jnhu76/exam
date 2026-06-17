@@ -10,12 +10,17 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { FileUpload } from "./FileUpload";
 
+/** A single row in the import preview list, showing its status and message. */
 export interface ImportPreviewRow {
   row: number;
   status: "create" | "update" | "error";
   message: string;
 }
 
+/**
+ * Multi-step import dialog that accepts CSV text via file upload or paste,
+ * shows a parsed preview with per-row status, and confirms the import action.
+ */
 export function ImportWizard({
   open,
   onOpenChange,

@@ -11,8 +11,13 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+/** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/** OpenAPI security scheme requiring cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/** Zod schema for a single candidate field item in list/detail responses. */
 const candidateFieldItemSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
@@ -24,9 +29,19 @@ const candidateFieldItemSchema = z.object({
   sortOrder: z.number().int(),
   createdAt: z.string(),
 });
+
+/** Zod schema for the candidate field list response (array of field items). */
 const candidateFieldListResponseSchema = z.array(candidateFieldItemSchema);
+
+/** Zod schema for the import template response containing header column names. */
 const templateResponseSchema = z.object({ headers: z.array(z.string()) });
 
+/**
+ * Fastify plugin that registers candidate field management routes.
+ *
+ * Provides CRUD operations and an import template endpoint for
+ * candidate identity/custom fields. All routes require Admin role.
+ */
 const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate-fields",
@@ -38,6 +53,11 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: candidateFieldListResponseSchema },
       },
     },
+    /**
+     * GET /candidate-fields — list all candidate fields for the organization.
+     *
+     * Returns candidate fields ordered by their stored sort order.
+     */
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const repo = createCandidateFieldRepo(fastify.db);
@@ -60,6 +80,12 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 201: candidateFieldItemSchema, 409: ErrorResponseSchema },
       },
     },
+    /**
+     * POST /candidate-fields — create a new candidate field.
+     *
+     * Returns 409 if a unique (identity) field already exists and
+     * the new field is also marked unique.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateCandidateFieldRequestSchema.parse(request.body);
@@ -103,6 +129,12 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * PATCH /candidate-fields/:id — update an existing candidate field.
+     *
+     * Returns 404 if the field does not exist, or 409 if setting
+     * unique would conflict with another existing identity field.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
@@ -157,6 +189,13 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
+    /**
+     * DELETE /candidate-fields/:id — delete a candidate field.
+     *
+     * Returns 409 if the field is a unique identity field and
+     * candidates already exist, since removing it would leave
+     * candidates without an identity. Returns 404 if not found.
+     */
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
@@ -198,6 +237,12 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
         response: { 200: templateResponseSchema },
       },
     },
+    /**
+     * GET /candidate-fields/template — return import template headers.
+     *
+     * Returns the column headers for a candidate import file:
+     * username, password, name, followed by configured custom field names.
+     */
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
       const fields = (

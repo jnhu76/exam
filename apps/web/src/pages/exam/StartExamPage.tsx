@@ -22,6 +22,7 @@ interface AttemptResponse {
   examId: string;
 }
 
+/** Pre-exam page that displays exam details and initiates or resumes an attempt. */
 export function StartExamPage() {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ export function StartExamPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches the candidate exam detail from the API. */
   const loadExam = useCallback(async () => {
     if (!examId) return;
     setIsLoading(true);
@@ -50,6 +52,7 @@ export function StartExamPage() {
     loadExam();
   }, [loadExam]);
 
+  /** Creates a new attempt via the API and navigates to the exam-taking page. */
   const enterExam = useCallback(async () => {
     if (!examId) return;
     setIsStarting(true);
@@ -83,6 +86,7 @@ export function StartExamPage() {
     }
   }, [examId, navigate]);
 
+  /** Handles the primary action: start a new attempt, resume an active one, or view results. */
   async function handleStart() {
     if (!exam) return;
     switch (exam.primaryAction) {

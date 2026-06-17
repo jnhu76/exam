@@ -20,9 +20,14 @@ import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { formatZodError, ensureTargetOrg } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+/** Zod schema for route params containing a UUID `id` field. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
+/**
+ * Extracts a single scalar value from a query parameter that may be an
+ * array (e.g. `?page=1&page=2` → `"1"`).
+ */
 function normalizeScalarQueryValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value[0];
@@ -30,6 +35,10 @@ function normalizeScalarQueryValue(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Normalizes score-list query parameters by extracting scalar values
+ * for known keys (page, pageSize, passFilter, search, sortBy, sortOrder).
+ */
 function normalizeScoreListQuery(query: unknown) {
   if (typeof query !== "object" || query === null) {
     return {};
@@ -53,6 +62,10 @@ function normalizeScoreListQuery(query: unknown) {
   return result;
 }
 
+/**
+ * Finds an attempt visible to the current user. Admins can see any attempt;
+ * candidates can only see their own attempts.
+ */
 async function findVisibleAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
   ctx: RequestContext,
@@ -75,6 +88,10 @@ async function findVisibleAttempt(
     : null;
 }
 
+/**
+ * Enriches grading results with question metadata (type, content, order)
+ * from the attempt's question snapshot.
+ */
 function buildQuestionResults(
   attempt: ExamAttempt,
   results: QuestionScoreResult[],
@@ -99,6 +116,11 @@ function buildQuestionResults(
   });
 }
 
+/**
+ * Determines whether the score list for an exam can be opened.
+ * The exam must be finished (closed/archived or past closeAt) and have
+ * at least one graded attempt.
+ */
 function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
   const examEnded =
     exam.status === "closed" ||
@@ -122,7 +144,15 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
   return { allowed: true, message: null };
 }
 
+/**
+ * Fastify plugin registering score-list and individual attempt result routes.
+ */
 const scoreRoutes: FastifyPluginAsync = async (fastify) => {
+  /**
+   * GET /exams/:id/scores — Returns a paginated list of graded attempt
+   * scores for an exam. Admin-only. Includes stats (pass/fail counts)
+   * and supports sorting and filtering.
+   */
   fastify.get(
     "/exams/:id/scores",
     {
@@ -214,6 +244,11 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * GET /scores/attempts/:attemptId — Returns the detailed result for a
+   * single graded attempt. Visible to the owning candidate (if
+   * showResultImmediately is enabled) and to admins.
+   */
   fastify.get(
     "/scores/attempts/:attemptId",
     {

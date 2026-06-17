@@ -32,6 +32,8 @@ import {
   type CandidateItem,
 } from "@/components/exam/EnrollmentPicker";
 
+/** Full exam detail including stats and participant list. */
+/** Full exam detail including configuration, statistics, and participant summaries. */
 interface ExamDetail {
   id: string;
   title: string;
@@ -64,6 +66,8 @@ interface ExamDetail {
   }>;
 }
 
+/** An enrollment record linking a candidate to an exam with status and scores. */
+/** An enrollment record linking a candidate to an exam with attempt and score data. */
 interface EnrollmentItem {
   id: string;
   examId: string;
@@ -76,6 +80,15 @@ interface EnrollmentItem {
   finalPassed: boolean | null;
 }
 
+/**
+ * Admin exam detail page showing configuration, stats cards,
+ * enrollment management with add/remove, and a scores tab.
+ */
+/**
+ * Admin page for viewing and managing a single exam's details.
+ * Displays exam configuration, statistics, enrollment management (add/remove candidates),
+ * and provides publish and archive lifecycle actions.
+ */
 export function ExamDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -96,6 +109,7 @@ export function ExamDetailPage() {
   const [addingEnrollment, setAddingEnrollment] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
+  /** Fetches the full exam detail from the API. */
   const loadExam = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
@@ -114,6 +128,7 @@ export function ExamDetailPage() {
     loadExam();
   }, [loadExam]);
 
+  /** Fetches the enrollment list for this exam. */
   const loadEnrollments = useCallback(async () => {
     if (!id) return;
     try {
@@ -130,6 +145,7 @@ export function ExamDetailPage() {
     loadEnrollments();
   }, [loadEnrollments]);
 
+  /** Opens the add-candidate dialog and loads the first page of available candidates. */
   async function handleOpenAddDialog() {
     setAddDialogOpen(true);
     setCandidatePage(1);
@@ -146,6 +162,7 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Loads the next page of candidates for infinite-scroll in the enrollment picker. */
   async function handleLoadMoreCandidates() {
     const nextPage = candidatePage + 1;
     setLoadingMoreCandidates(true);
@@ -164,6 +181,7 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Submits the selected candidates as new enrollments for this exam. */
   async function handleAddEnrollments() {
     if (!id || selectedCandidateIds.size === 0) return;
     setAddingEnrollment(true);
@@ -182,6 +200,7 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Removes a single enrollment by id and refreshes the exam and enrollment data. */
   async function handleRemoveEnrollment(enrollmentId: string) {
     if (!id) return;
     try {
@@ -194,6 +213,7 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Publishes the exam, making it available to enrolled candidates. */
   async function handlePublish() {
     if (!id || publishing) return;
     setPublishError(null);
@@ -211,6 +231,7 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Archives the exam, removing it from the active exam list. */
   async function handleArchive() {
     if (!id || archiving) return;
     setArchiving(true);

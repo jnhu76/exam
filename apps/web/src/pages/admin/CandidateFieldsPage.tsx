@@ -45,6 +45,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+/** Configuration of a single candidate identity or metadata field. */
+/** Candidate field configuration with metadata for display and ordering. */
 interface Field {
   id: string;
   name: string;
@@ -55,6 +57,8 @@ interface Field {
   sortOrder: number;
 }
 
+/** Available field type options for the candidate field form. */
+/** Available field type choices for the candidate field form. */
 const FIELD_TYPE_OPTIONS: Array<{
   value: Field["fieldType"];
   label: string;
@@ -64,6 +68,15 @@ const FIELD_TYPE_OPTIONS: Array<{
   { value: "select", label: "选项" },
 ];
 
+/**
+ * Admin page for managing candidate identity and metadata fields.
+ * Supports creating, editing, reordering (drag or arrow buttons), deleting fields,
+ * and downloading a CSV import template that reflects the current field configuration.
+ */
+/**
+ * Admin page for configuring candidate identity fields (e.g., examinee ID, department).
+ * Supports create, edit, reorder via drag-and-drop, and CSV template download.
+ */
 export function CandidateFieldsPage() {
   const [fields, setFields] = useState<Field[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +91,7 @@ export function CandidateFieldsPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  /** Fetches all candidate fields from the API and sorts them by sortOrder. */
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -94,10 +108,12 @@ export function CandidateFieldsPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
+  /** Opens or closes the add/edit dialog and clears mutation errors on close. */
   function setDialogOpen(nextOpen: boolean) {
     setOpen(nextOpen);
     if (!nextOpen) setMutationError(null);
   }
+  /** Populates the dialog form with the given field's data (or defaults for a new field) and opens it. */
   function dialog(field?: Field) {
     setEditing(field ?? null);
     setName(field?.name ?? "");
@@ -108,6 +124,7 @@ export function CandidateFieldsPage() {
     setMutationError(null);
     setOpen(true);
   }
+  /** Validates and persists the field via create or update API, then reloads the list. */
   async function save() {
     if (saving || !name.trim() || !label.trim()) return;
     setSaving(true);
@@ -138,6 +155,7 @@ export function CandidateFieldsPage() {
       setSaving(false);
     }
   }
+  /** Deletes the field with the given id and reloads the list. */
   async function remove(id: string) {
     try {
       setMutationError(null);
@@ -147,6 +165,7 @@ export function CandidateFieldsPage() {
       setMutationError(getApiErrorMessage(err, "删除字段失败，请稍后重试"));
     }
   }
+  /** Swaps the sort order of a field with its neighbor at the given offset (-1 or +1). */
   async function move(field: Field, offset: number) {
     const index = fields.findIndex((item) => item.id === field.id);
     const other = fields[index + offset];
@@ -166,6 +185,7 @@ export function CandidateFieldsPage() {
       setMutationError(getApiErrorMessage(err, "调整排序失败，请稍后重试"));
     }
   }
+  /** Handles drag-and-drop reorder by swapping sort orders between source and target fields. */
   async function drop(target: Field) {
     const source = fields.find((field) => field.id === draggingId);
     setDraggingId(null);
@@ -185,6 +205,7 @@ export function CandidateFieldsPage() {
       setMutationError(getApiErrorMessage(err, "调整排序失败，请稍后重试"));
     }
   }
+  /** Downloads a CSV import template whose headers match the current field configuration. */
   async function download() {
     const { headers } = await api.get<{ headers: string[] }>(
       "/api/candidate-fields/template",

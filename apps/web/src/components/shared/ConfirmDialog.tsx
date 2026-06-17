@@ -11,6 +11,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Generic confirmation dialog built on AlertDialog, with a trigger element,
+ * title, description, and customizable confirm/cancel labels and styling.
+ */
 export function ConfirmDialog({
   trigger,
   title,

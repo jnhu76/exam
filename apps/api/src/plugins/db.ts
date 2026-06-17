@@ -10,6 +10,11 @@ declare module "fastify" {
   }
 }
 
+/**
+ * Fastify plugin that creates a database connection from runtime config
+ * and decorates the Fastify instance with a `db` property for use by
+ * repository functions throughout the application.
+ */
 const dbPlugin: FastifyPluginAsync = async (fastify) => {
   const { database } = getRuntimeConfig();
   const conn = await createDatabase(database.url);

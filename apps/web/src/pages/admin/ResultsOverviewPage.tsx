@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Gauge, Eye } from "lucide-react";
 
+/** Exam row shape as returned by the exams list API, including score-view permissions. */
 interface ExamRow {
   id: string;
   title: string;
@@ -38,12 +39,14 @@ interface ExamRow {
   scoreViewDisabledReason: string | null;
 }
 
+/** Admin page for browsing published/closed exams and navigating to their score lists. */
 export function ResultsOverviewPage() {
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /** Fetches exams and filters to those whose scores may be viewable. */
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -71,10 +74,12 @@ export function ResultsOverviewPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExams} />;
 
+  /** Returns whether the admin can view scores for the given exam. */
   function gradable(exam: ExamRow) {
     return exam.canViewScores;
   }
 
+  /** Returns the reason why scores cannot be viewed, or empty string if allowed. */
   function gradableReason(exam: ExamRow) {
     return exam.scoreViewDisabledReason ?? "";
   }

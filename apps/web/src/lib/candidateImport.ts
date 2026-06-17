@@ -1,3 +1,4 @@
+/** Configuration for a custom candidate field used during CSV import. */
 export interface CandidateFieldConfig {
   name: string;
   label: string;
@@ -6,6 +7,7 @@ export interface CandidateFieldConfig {
   unique: boolean;
 }
 
+/** A single parsed CSV row with core identity fields and custom field values. */
 export interface ParsedImportRow {
   username: string;
   password: string;
@@ -13,11 +15,13 @@ export interface ParsedImportRow {
   fields: Record<string, string | number>;
 }
 
+/** An existing candidate record used for duplicate detection during import. */
 export interface ExistingCandidate {
   username: string;
   fields: Record<string, unknown>;
 }
 
+/** Parses a single CSV line into an array of field values, handling quoted fields. */
 export function parseCsvLine(line: string): string[] {
   const values: string[] = [];
   let value = "";
@@ -42,6 +46,10 @@ export function parseCsvLine(line: string): string[] {
   return values;
 }
 
+/**
+ * Maps raw CSV header names to internal field names,
+ * resolving both English and Chinese column headers.
+ */
 export function resolveHeaders(
   rawHeaders: string[],
   fieldConfigs: CandidateFieldConfig[],
@@ -64,14 +72,20 @@ export function resolveHeaders(
   return headerMap;
 }
 
+/** Maximum number of data rows allowed in a single CSV import. */
 export const MAX_IMPORT_ROWS = 500;
 
+/** Result of parsing a CSV file for candidate import. */
 export interface ParseImportCsvResult {
   rows: ParsedImportRow[];
   truncated: boolean;
   totalLines: number;
 }
 
+/**
+ * Parses a full CSV string into import rows, applying header mapping
+ * and field type coercion. Truncates at MAX_IMPORT_ROWS.
+ */
 export function parseImportCsv(
   csv: string,
   fieldConfigs: CandidateFieldConfig[],
@@ -107,6 +121,10 @@ export function parseImportCsv(
   return { rows, truncated, totalLines: totalDataLines };
 }
 
+/**
+ * Detects whether a parsed import row duplicates an existing candidate
+ * by checking the unique identity field or username.
+ */
 // TODO: follow-up — iterate all unique fields if CandidateField constraint is relaxed to allow multiple
 export function detectDuplicate(
   row: ParsedImportRow,

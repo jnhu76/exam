@@ -9,13 +9,24 @@ import { jsonSchemaTransform } from "fastify-type-provider-zod";
 //
 // Auth is HTTP-only cookie "auth-token" carrying a JWT.
 
-// Cast away the provider-internal `Schema` type from the transform signature
-// so tsc can emit declarations (the provider does not export that type).
+/**
+ * Cast `jsonSchemaTransform` from `fastify-type-provider-zod` so that
+ * TypeScript can emit declarations without requiring the provider-internal
+ * `Schema` type (which is not exported).
+ */
 const transform = jsonSchemaTransform as (input: {
   schema: unknown;
   url: string;
 }) => unknown;
 
+/**
+ * OpenAPI configuration object passed to `@fastify/swagger`.
+ *
+ * Defines the document metadata (title, version, description), the
+ * cookie-based security scheme, and the Zod-to-JSON-Schema transform
+ * that converts route-level Zod schemas into OpenAPI-compatible JSON
+ * Schema.
+ */
 export const openApiConfig = {
   openapi: {
     openapi: "3.0.3",

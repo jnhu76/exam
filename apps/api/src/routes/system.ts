@@ -13,13 +13,21 @@ import {
   buildPublicConfig,
 } from "../config/runtimeConfig.js";
 
+/** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
+/**
+ * Zod schema for the `GET /system/info` response.
+ */
 const systemInfoResponseSchema = z.object({
   version: z.string(),
   uptime: z.number(),
 });
 
+/**
+ * Zod schema for the `GET /system/public-config` response.
+ * Exposes non-sensitive deployment configuration to unauthenticated clients.
+ */
 const publicConfigResponseSchema = z.object({
   deploymentMode: z.string(),
   features: z.object({ apiReference: z.boolean() }),
@@ -30,6 +38,12 @@ const publicConfigResponseSchema = z.object({
   }),
 });
 
+/**
+ * Returns the aggregate CPU usage percentage across all cores as a
+ * number between 0 and 100.
+ *
+ * @returns CPU usage percentage rounded to the nearest integer.
+ */
 function getCpuUsage(): number {
   const cpus = os.cpus();
   let totalIdle = 0;
@@ -46,15 +60,30 @@ function getCpuUsage(): number {
   return Math.min(100, Math.round((totalActive / totalTick) * 100));
 }
 
+/**
+ * Returns the memory usage percentage as a number between 0 and 100.
+ *
+ * @returns Memory usage percentage rounded to the nearest integer.
+ */
 function getMemoryUsage(): number {
   const total = os.totalmem();
   const free = os.freemem();
   return Math.min(100, Math.round(((total - free) / total) * 100));
 }
 
+/**
+ * Fastify plugin that registers system information and health check routes.
+ * Provides unauthenticated system info and public config, plus authenticated
+ * admin endpoints for health monitoring and dashboard statistics.
+ */
 const systemRoutes: FastifyPluginAsync = async (fastify) => {
   const anyDb = fastify.db;
 
+  /**
+   * GET /system/info
+   *
+   * Returns the application version and uptime. Unauthenticated.
+   */
   fastify.get(
     "/system/info",
     {
@@ -70,6 +99,12 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * GET /system/public-config
+   *
+   * Returns non-sensitive deployment configuration (mode, feature flags,
+   * API reference paths). Unauthenticated — safe for pre-login pages.
+   */
   fastify.get(
     "/system/public-config",
     {
@@ -82,6 +117,12 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * GET /system/health
+   *
+   * Returns CPU, memory, DB response time, and an overall status indicator.
+   * Admin-only.
+   */
   fastify.get("/system/health", {
     preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     schema: {
@@ -100,6 +141,12 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  /**
+   * GET /system/dashboard
+   *
+   * Returns aggregate statistics (question count, active exams, candidate
+   * count, today's attempts) and a list of recent exams. Admin-only.
+   */
   fastify.get("/system/dashboard", {
     preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
     schema: {

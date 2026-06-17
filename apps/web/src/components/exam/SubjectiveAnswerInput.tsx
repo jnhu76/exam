@@ -2,6 +2,7 @@ import { type ChangeEvent, useId } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
+/** Props for the SubjectiveAnswerInput component. */
 type SubjectiveAnswerInputProps = {
   value?: string | null;
   onChange: (value: string) => void;
@@ -13,6 +14,10 @@ type SubjectiveAnswerInputProps = {
   className?: string;
 };
 
+/**
+ * Textarea input for subjective (open-ended) questions with label,
+ * character count, optional maxLength, and error display.
+ */
 export function SubjectiveAnswerInput({
   value,
   onChange,
