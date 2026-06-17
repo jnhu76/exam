@@ -55,11 +55,22 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  const adminSettingsResponseSchema = z.union([
+    OrganizationSettingsSchema,
+    z.object({}).strict(),
+  ]);
+
   fastify.get(
     "/admin/settings/branding",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
-      schema: { security: cookieAuth, "x-role": ["Admin"] },
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: adminSettingsResponseSchema,
+        },
+      },
     },
     async (request) => {
       const settingsRepo = createSettingsRepo(fastify.db);
