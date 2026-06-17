@@ -1,7 +1,9 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateCandidateFieldRequestSchema,
   UpdateCandidateFieldRequestSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
@@ -9,11 +11,32 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const candidateFieldItemSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  name: z.string(),
+  label: z.string(),
+  fieldType: z.enum(["text", "number", "select"]),
+  required: z.boolean(),
+  unique: z.boolean(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+});
+const candidateFieldListResponseSchema = z.array(candidateFieldItemSchema);
+const templateResponseSchema = z.object({ headers: z.array(z.string()) });
+
 const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate-fields",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: candidateFieldListResponseSchema },
+      },
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -30,6 +53,12 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidate-fields",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateCandidateFieldRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 201: candidateFieldItemSchema, 409: ErrorResponseSchema },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -62,6 +91,17 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidate-fields/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateCandidateFieldRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: candidateFieldItemSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -106,6 +146,16 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidate-fields/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          204: z.null(),
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -142,6 +192,11 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidate-fields/template",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: templateResponseSchema },
+      },
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);

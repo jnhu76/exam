@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateCourseRequestSchema,
   UpdateCourseRequestSchema,
@@ -10,11 +11,36 @@ import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const courseItemSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  name: z.string(),
+  code: z.string(),
+  description: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+const courseListResponseSchema = z.object({
+  items: z.array(courseItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+const idParamsSchema = z.object({ id: z.string().uuid() });
+
 const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/courses",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: PaginationParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: courseListResponseSchema },
+      },
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -44,6 +70,12 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     "/courses/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: courseItemSchema },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -71,6 +103,12 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     "/courses",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateCourseRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 201: courseItemSchema },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -109,6 +147,13 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     "/courses/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateCourseRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: courseItemSchema },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -142,6 +187,11 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     "/courses/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);

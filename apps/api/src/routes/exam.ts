@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateExamRequestSchema,
   UpdateExamRequestSchema,
@@ -170,11 +171,24 @@ function getDeleteMeta(exam: Exam) {
   };
 }
 
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const examIdParamsSchema = z.object({ examId: z.string().uuid() });
+const enrollmentIdParamsSchema = z.object({
+  examId: z.string().uuid(),
+  enrollmentId: z.string().uuid(),
+});
+const cookieAuth = [{ cookieAuth: [] }] as const;
+
 const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: PaginationParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -220,6 +234,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -252,6 +271,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -327,6 +351,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -390,6 +420,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id/publish",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -428,6 +463,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id/archive",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -444,6 +484,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -471,6 +516,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:examId/enrollments",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: examIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -522,6 +572,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:examId/enrollments",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: examIdParamsSchema,
+        body: EnrollCandidatesRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -604,6 +660,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:examId/enrollments/:enrollmentId",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: enrollmentIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
