@@ -45,7 +45,7 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import {
-  startAttempt,
+  startOrRestoreAttempt,
   submitAttempt,
   restoreAttempt,
   readGradingSnapshot,
@@ -665,57 +665,31 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const { attempt, isNew } = await executeInTransaction(
         fastify.db,
         async (tx) => {
-          const examRepoTx = createExamRepo(tx);
-          const enrollmentRepo = createEnrollmentRepo(tx);
-          const attemptRepo = createAttemptRepo(tx);
-
-          const examRepoAdapter = createExamRepoAdapter(examRepoTx, ctx);
+          const examRepoAdapter = createExamRepoAdapter(
+            createExamRepo(tx),
+            ctx,
+          );
           const enrRepoAdapter = createEnrollmentRepoAdapter(
-            enrollmentRepo,
+            createEnrollmentRepo(tx),
             ctx,
           );
-          const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
-
-          const enrollment =
-            await enrollmentRepo.findByExamAndCandidateForUpdate(
-              ctx,
-              examId,
-              candidateId,
-            );
-          if (!enrollment) {
-            throw new PermissionDeniedError("Candidate is not enrolled");
-          }
-
-          const activeAttempt = await attemptRepo.findActiveByExamAndCandidate(
+          const attRepoAdapter = createAttemptRepoAdapter(
+            createAttemptRepo(tx),
             ctx,
-            examId,
-            candidateId,
           );
-          if (activeAttempt) {
-            if (activeAttempt.status === "disrupted") {
-              const restored = await restoreAttempt(
-                examRepoAdapter,
-                attRepoAdapter,
-                activeAttempt.id,
-                fastify.now(),
-              );
-              return { attempt: restored, isNew: false } as const;
-            }
-            return {
-              attempt: activeAttempt as ExamAttempt,
-              isNew: false,
-            } as const;
-          }
 
-          const attempt = await startAttempt(
+          return startOrRestoreAttempt(
             examRepoAdapter,
             enrRepoAdapter,
             attRepoAdapter,
             examId,
             candidateId,
             fastify.now(),
+            {
+              unassignedErrorFactory: (message) =>
+                new PermissionDeniedError(message),
+            },
           );
-          return { attempt, isNew: true } as const;
         },
       );
 

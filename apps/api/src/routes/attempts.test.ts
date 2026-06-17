@@ -255,17 +255,21 @@ describe("attempt routes", () => {
         cookies: { "auth-token": ctx.adminToken },
       });
 
-      const res1 = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${dcExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      const res2 = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${dcExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
+      const [res1, res2] = await Promise.all([
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${dcExamId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        }),
+        ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${dcExamId}/start`,
+          cookies: { "auth-token": ctx.candidateToken },
+        }),
+      ]);
 
+      const codes = [res1.statusCode, res2.statusCode].sort();
+      expect(codes).toEqual([200, 201]);
       expect(res1.json().id).toBe(res2.json().id);
 
       const candidateCtx = {

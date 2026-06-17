@@ -62,6 +62,9 @@ export interface EnrollmentRepository {
 
 const OPEN_STATUSES: Set<string> = new Set(["published", "open"]);
 
+const NOT_ENROLLED_MESSAGE =
+  "Candidate is not enrolled in this exam. An Admin must assign the candidate first.";
+
 export async function startAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
@@ -70,6 +73,35 @@ export async function startAttempt(
   candidateId: string,
   now: Date,
 ): Promise<ExamAttempt> {
+  const { attempt } = await startOrRestoreAttempt(
+    examRepo,
+    enrollmentRepo,
+    attemptRepo,
+    examId,
+    candidateId,
+    now,
+  );
+  return attempt;
+}
+
+export interface StartAttemptResult {
+  attempt: ExamAttempt;
+  isNew: boolean;
+}
+
+export interface StartAttemptOptions {
+  unassignedErrorFactory?: (message: string) => Error;
+}
+
+export async function startOrRestoreAttempt(
+  examRepo: ExamRepository,
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  examId: string,
+  candidateId: string,
+  now: Date,
+  options: StartAttemptOptions = {},
+): Promise<StartAttemptResult> {
   const exam = await examRepo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
@@ -88,17 +120,23 @@ export async function startAttempt(
     candidateId,
   );
   if (!enrollment) {
-    throw new ValidationError(
-      "Candidate is not enrolled in this exam. An Admin must assign the candidate first.",
-    );
+    throw options.unassignedErrorFactory
+      ? options.unassignedErrorFactory(NOT_ENROLLED_MESSAGE)
+      : new ValidationError(NOT_ENROLLED_MESSAGE);
   }
 
   const activeAttempt = await attemptRepo.findActiveByEnrollment(enrollment.id);
   if (activeAttempt) {
     if (activeAttempt.status === "disrupted") {
-      return restoreAttempt(examRepo, attemptRepo, activeAttempt.id, now);
+      const restored = await restoreAttempt(
+        examRepo,
+        attemptRepo,
+        activeAttempt.id,
+        now,
+      );
+      return { attempt: restored, isNew: false };
     }
-    return activeAttempt;
+    return { attempt: activeAttempt, isNew: false };
   }
 
   if (
@@ -143,7 +181,7 @@ export async function startAttempt(
     throw new ValidationError("Enrollment not found after update");
   }
 
-  return attempt;
+  return { attempt, isNew: true };
 }
 
 export async function submitAttempt(
