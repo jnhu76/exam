@@ -225,4 +225,60 @@ describe("deadline scanner — scanExpiredAttempts", () => {
     expect(result.failedCount).toBe(0);
     expect(onExpired).not.toHaveBeenCalled();
   });
+
+  it("does NOT increment submittedCount when onExpired returns false (no-op race)", async () => {
+    const now = new Date("2025-01-01T11:30:00Z");
+    const onExpired = vi.fn(async () => false);
+
+    const result = await scanExpiredAttempts(
+      [
+        makeAttempt({
+          id: "noop-1",
+          deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        }),
+        makeAttempt({
+          id: "noop-2",
+          status: "disrupted",
+          deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        }),
+      ],
+      now,
+      onExpired,
+    );
+
+    expect(result.submittedCount).toBe(0);
+    expect(result.failedCount).toBe(0);
+    expect(onExpired).toHaveBeenCalledTimes(2);
+  });
+
+  it("increments submittedCount when onExpired returns true or void", async () => {
+    const now = new Date("2025-01-01T11:30:00Z");
+    const onExpired = vi.fn(async (id: string) => {
+      if (id === "ret-true") return true;
+      if (id === "ret-void") return undefined;
+      return false;
+    });
+
+    const result = await scanExpiredAttempts(
+      [
+        makeAttempt({
+          id: "ret-true",
+          deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        }),
+        makeAttempt({
+          id: "ret-void",
+          deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        }),
+        makeAttempt({
+          id: "ret-false",
+          deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        }),
+      ],
+      now,
+      onExpired,
+    );
+
+    expect(result.submittedCount).toBe(2);
+    expect(result.failedCount).toBe(0);
+  });
 });

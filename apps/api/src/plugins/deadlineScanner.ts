@@ -59,7 +59,7 @@ export interface ScanResult {
 export async function scanExpiredAttempts(
   attempts: ExpiredAttemptCandidate[],
   now: Date,
-  onExpired: (attemptId: string) => Promise<void>,
+  onExpired: (attemptId: string) => Promise<boolean | void>,
   options: { onError?: (attemptId: string, err: unknown) => void } = {},
 ): Promise<ScanResult> {
   const expired = selectExpiredAttempts(attempts, now);
@@ -68,8 +68,10 @@ export async function scanExpiredAttempts(
 
   for (const attempt of expired) {
     try {
-      await onExpired(attempt.id);
-      submittedCount++;
+      const result = await onExpired(attempt.id);
+      if (result !== false) {
+        submittedCount++;
+      }
     } catch (err) {
       failedCount++;
       options.onError?.(attempt.id, err);
@@ -239,7 +241,7 @@ export async function scanDatabaseForExpiredAttempts(
       })),
       now,
       async (attemptId) => {
-        await autoSubmitAndGrade(db, ctx, attemptId, now);
+        return autoSubmitAndGrade(db, ctx, attemptId, now);
       },
       {
         onError: (attemptId, err) => {
