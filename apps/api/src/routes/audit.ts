@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type {
   FastifyInstance,
   FastifyPluginAsync,
@@ -49,11 +50,38 @@ export function recordAudit(
     });
 }
 
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const auditLogItemSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  actorId: z.string(),
+  action: z.string(),
+  targetType: z.string(),
+  targetId: z.string(),
+  metadata: z.record(z.unknown()),
+  ipAddress: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  createdAt: z.string(),
+});
+const auditLogListResponseSchema = z.object({
+  items: z.array(auditLogItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+
 const auditRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/audit-logs",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: AuditLogQuerySchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: auditLogListResponseSchema },
+      },
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);

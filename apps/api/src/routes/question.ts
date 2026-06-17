@@ -1,9 +1,13 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateQuestionRequestSchema,
   QuestionImportRequestSchema,
   UpdateQuestionRequestSchema,
   PaginationParamsSchema,
+  QuestionSchema,
+  QuestionImportResultSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
@@ -15,11 +19,38 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const questionListResponseSchema = z.object({
+  items: z.array(QuestionSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  totalPages: z.number().int().nonnegative(),
+});
+
+const questionListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  courseId: z.string().uuid().optional(),
+  type: z.string().optional(),
+  difficulty: z.coerce.number().int().optional(),
+  tags: z.string().optional(),
+});
+
 const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: questionListQuerySchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: questionListResponseSchema,
+        },
+      },
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -83,6 +114,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     "/questions/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: QuestionSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -117,6 +157,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     "/questions",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateQuestionRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          201: QuestionSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -190,6 +239,17 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     "/questions/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateQuestionRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: QuestionSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -260,6 +320,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     "/questions/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          204: z.null(),
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -281,6 +350,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
       config: { rateLimit: { max: 5, timeWindow: 60 * 1000 } },
+      schema: {
+        body: QuestionImportRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: QuestionImportResultSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);

@@ -20,11 +20,11 @@ export type BrandingViewDTO = z.infer<typeof BrandingViewSchema>;
 export const OrganizationSettingsSchema = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
-  productName: z.string().optional(),
-  productSubtitle: z.string().optional(),
-  footerText: z.string().optional(),
-  organizationDisplayName: z.string().optional(),
-  timezone: z.string().optional(),
+  productName: z.string().nullable(),
+  productSubtitle: z.string().nullable(),
+  footerText: z.string().nullable(),
+  organizationDisplayName: z.string().nullable(),
+  timezone: z.string().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

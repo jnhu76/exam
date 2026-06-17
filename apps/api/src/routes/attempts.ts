@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CandidateExamDetailResponseSchema,
   CandidateExamSummarySchema,
@@ -11,9 +12,11 @@ import {
   SaveAnswerRequestSchema,
   SaveAnswerAcceptedSchema,
   SaveAnswerRejectedSchema,
+  SaveAnswerResponseSchema,
   StartAttemptRequestSchema,
   SubmitAttemptRequestSchema,
   getSaveAnswerMessage,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import type {
   RequestContext,
@@ -56,6 +59,12 @@ import { processSaveAnswer } from "@exam/exam-engine";
 import { recordAudit } from "./audit.js";
 import { formatZodError } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+
+// Wire response schemas (Zod) — single source of truth for serialization +
+// OpenAPI. SaveAnswer is an accepted/rejected union.
+const candidateExamListResponseSchema = z.array(CandidateExamSummarySchema);
+const heartbeatResponseSchema = z.object({ ok: z.literal(true) });
+const cookieAuth = [{ cookieAuth: [] }] as const;
 
 interface StoredAnswer extends Omit<AnswerRecord, "savedAt"> {
   savedAt: Date | string;
@@ -398,6 +407,11 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidate/exams",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: { 200: candidateExamListResponseSchema },
+      },
     },
     async (request) => {
       const ctx = request["ctx"] as RequestContext;
@@ -509,11 +523,20 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidate/exams/:examId",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: StartAttemptRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: CandidateExamDetailResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = StartAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const candidateProfile = await getCandidateProfile(fastify, ctx);
@@ -568,11 +591,20 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:examId/queue",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: StartAttemptRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: QueueStatusResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = StartAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const candidateProfile = await getCandidateProfile(fastify, ctx);
@@ -591,11 +623,21 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:examId/start",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: StartAttemptRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: LoadAttemptResponseSchema,
+          201: LoadAttemptResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = StartAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { examId } = parsed.data;
@@ -696,11 +738,20 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: LoadAttemptParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: LoadAttemptResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = LoadAttemptParamsSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const attempt = await getOwnedAttempt(fastify, ctx, parsed.data.id);
@@ -714,15 +765,29 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:attemptId/answers/:questionId",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: SaveAnswerParamsSchema,
+        body: SaveAnswerRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: SaveAnswerResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsedParams = SaveAnswerParamsSchema.safeParse(request.params);
       if (!parsedParams.success) {
-        return reply.code(400).send(formatZodError(parsedParams.error));
+        return reply
+          .code(400)
+          .send(formatZodError(request.id, parsedParams.error));
       }
       const parsedBody = SaveAnswerRequestSchema.safeParse(request.body);
       if (!parsedBody.success) {
-        return reply.code(400).send(formatZodError(parsedBody.error));
+        return reply
+          .code(400)
+          .send(formatZodError(request.id, parsedBody.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId, questionId } = parsedParams.data;
@@ -854,11 +919,20 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:attemptId/submit",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: SubmitAttemptRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: LoadAttemptResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = SubmitAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
@@ -970,11 +1044,20 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:attemptId/heartbeat",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: HeartbeatRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: heartbeatResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = HeartbeatRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
@@ -998,11 +1081,20 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
     "/attempts/:attemptId/restore",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        params: RestoreAttemptRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: LoadAttemptResponseSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const parsed = RestoreAttemptRequestSchema.safeParse(request.params);
       if (!parsed.success) {
-        return reply.code(400).send(formatZodError(parsed.error));
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;

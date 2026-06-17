@@ -1,11 +1,30 @@
 import type { FastifyInstance } from "fastify";
 import { AppError } from "@exam/domain";
-import { ZodError } from "zod";
+import { ZodError, type ZodIssue } from "zod";
+import {
+  hasZodFastifySchemaValidationErrors,
+  isResponseSerializationError,
+} from "fastify-type-provider-zod";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
   normalizeErrorCode,
 } from "../lib/errorResponse.js";
+
+// Extract Zod issues from a Zod type-provider validation error. The provider
+// wraps each Zod issue under validation[i].params.issue.
+function extractValidationIssues(error: unknown): ZodIssue[] {
+  if (typeof error !== "object" || error === null) return [];
+  const validation = (error as { validation?: unknown[] }).validation;
+  if (!Array.isArray(validation)) return [];
+  return validation
+    .map((entry) => {
+      const issue = (entry as { params?: { issue?: unknown } })?.params?.issue;
+      return issue as ZodIssue;
+    })
+    .filter((issue): issue is ZodIssue => issue != null);
+}
+
 function isConstraintError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as Record<string, unknown>;
@@ -37,6 +56,16 @@ function isClientError(
 
 export function setupErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
+    // Runtime-first contract: Zod route-schema validation failures -> 400.
+    // The Zod type provider wraps each Zod issue under validation[i].params.
+    if (hasZodFastifySchemaValidationErrors(error)) {
+      const issues = extractValidationIssues(error);
+      const synthetic = new ZodError(issues);
+      return reply
+        .code(400)
+        .send(buildValidationErrorResponse(request.id, synthetic));
+    }
+    // Handlers may also throw raw ZodErrors (e.g. .parse() in handlers).
     if (error instanceof ZodError) {
       return reply
         .code(400)
@@ -58,6 +87,18 @@ export function setupErrorHandler(app: FastifyInstance): void {
       return reply
         .code(409)
         .send(buildErrorResponse(request.id, "RESOURCE_CONFLICT"));
+    }
+    // Response serialization failure: the handler returned a payload that does
+    // not match the declared response schema. This is a server/contract bug,
+    // not a client error -> 500 with logging.
+    if (isResponseSerializationError(error)) {
+      request.log.error(
+        { err: error, url: request.url, method: request.method },
+        "Response serialization error",
+      );
+      return reply
+        .code(500)
+        .send(buildErrorResponse(request.id, "INTERNAL_ERROR"));
     }
     request.log.error({ err: error }, "Unhandled request error");
     return reply

@@ -7,6 +7,7 @@ import authPlugin from "../plugins/auth.js";
 import tenantPlugin from "../plugins/tenant.js";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import nowPlugin from "../plugins/now.js";
+import zodProviderPlugin from "../plugins/zodProvider.js";
 import { setupErrorHandler } from "../plugins/errors.js";
 import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -77,6 +78,7 @@ export async function buildTestApp(
   const app = Fastify();
   setupSecurity(app);
   setupErrorHandler(app);
+  await app.register(zodProviderPlugin);
   await app.register(fastifyCookie);
   await app.register(createDbPlugin(db));
   await app.register(nowPlugin);

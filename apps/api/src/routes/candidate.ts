@@ -1,9 +1,12 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateCandidateRequestSchema,
   CandidateImportRequestSchema,
+  CandidateImportResultSchema,
   UpdateCandidateRequestSchema,
   candidateFieldValidationMessages,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -119,11 +122,38 @@ function findByIdentity(
   );
 }
 
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const candidateItemSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  userId: z.string().uuid(),
+  fields: z.record(z.unknown()),
+  name: z.string(),
+  username: z.string(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+const candidateListResponseSchema = z.object({
+  items: z.array(candidateItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+const idParamsSchema = z.object({ id: z.string().uuid() });
+
 const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidates",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: PaginationParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: candidateListResponseSchema },
+      },
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -159,6 +189,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidates",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateCandidateRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 201: candidateItemSchema, 409: ErrorResponseSchema },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -234,6 +270,9 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
 
       return reply.code(201).send({
         ...candidate,
+        name: data.name,
+        username: data.username,
+        isActive: true,
         createdAt: candidate.createdAt.toISOString(),
         updatedAt: candidate.updatedAt.toISOString(),
       });
@@ -244,6 +283,17 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
     "/candidates/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateCandidateRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: candidateItemSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -284,8 +334,15 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "candidate.update", "candidate", id);
+      const user = await createUserRepo(fastify.db).findById(
+        ctx,
+        updated.userId,
+      );
       return {
         ...updated,
+        name: user?.name ?? "",
+        username: user?.username ?? "",
+        isActive: user?.isActive ?? false,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };
@@ -300,6 +357,15 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         rateLimit: {
           max: 10,
           timeWindow: 60 * 1000,
+        },
+      },
+      schema: {
+        body: CandidateImportRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: CandidateImportResultSchema,
+          400: ErrorResponseSchema,
         },
       },
     },

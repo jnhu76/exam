@@ -1,10 +1,15 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   LoginRequestSchema,
   LoginResponseSchema,
   MeResponseSchema,
   ChangePasswordRequestSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
+
+const okResponseSchema = z.object({ ok: z.literal(true) });
+const cookieAuth = [{ cookieAuth: [] }] as const;
 import {
   hashPassword,
   verifyPassword,
@@ -23,15 +28,34 @@ import { recordAudit } from "./audit.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.post("/register", async (request, reply) => {
-    return reply
-      .code(403)
-      .send(buildErrorResponse(request.id, "AUTH_REGISTER_DISABLED"));
-  });
+  fastify.post(
+    "/register",
+    {
+      schema: {
+        response: {
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      return reply
+        .code(403)
+        .send(buildErrorResponse(request.id, "AUTH_REGISTER_DISABLED"));
+    },
+  );
 
   fastify.post(
     "/login",
-    { config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } } },
+    {
+      config: { rateLimit: { max: 10, timeWindow: 60 * 1000 } },
+      schema: {
+        body: LoginRequestSchema,
+        response: {
+          200: LoginResponseSchema,
+          401: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const data = LoginRequestSchema.parse(request.body);
       const tenancy = getRuntimeConfig().tenancy;
@@ -187,37 +211,56 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
-  fastify.post("/logout", async (request, reply) => {
-    const token = request.cookies["auth-token"];
-    if (token) {
-      try {
-        const payload = verifyJWT(
-          token,
-          getRuntimeConfig().authSecret.jwtSecret,
-        );
-        const ctx: RequestContext = {
-          actorId: payload.actorId,
-          organizationId: payload.organizationId,
-          targetOrganizationId: payload.organizationId,
-          role: payload.role,
-          permissions: [],
-          sessionId: "logout",
-        };
-        recordAudit(fastify, request, ctx, "logout", "user", payload.actorId);
-      } catch (err) {
-        fastify.log.warn(
-          { err, event: "logout.invalid_token" },
-          "logout: invalid or expired token",
-        );
+  fastify.post(
+    "/logout",
+    {
+      schema: {
+        response: {
+          204: z.null(),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = request.cookies["auth-token"];
+      if (token) {
+        try {
+          const payload = verifyJWT(
+            token,
+            getRuntimeConfig().authSecret.jwtSecret,
+          );
+          const ctx: RequestContext = {
+            actorId: payload.actorId,
+            organizationId: payload.organizationId,
+            targetOrganizationId: payload.organizationId,
+            role: payload.role,
+            permissions: [],
+            sessionId: "logout",
+          };
+          recordAudit(fastify, request, ctx, "logout", "user", payload.actorId);
+        } catch (err) {
+          fastify.log.warn(
+            { err, event: "logout.invalid_token" },
+            "logout: invalid or expired token",
+          );
+        }
       }
-    }
-    reply.clearCookie("auth-token", { path: "/" });
-    return reply.code(204).send();
-  });
+      reply.clearCookie("auth-token", { path: "/" });
+      return reply.code(204).send();
+    },
+  );
 
   fastify.get(
     "/me",
-    { preHandler: fastify.authenticate },
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        security: cookieAuth,
+        response: {
+          200: MeResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const userRepo = createUserRepo(fastify.db);
       const ctx = request.ctx!;
@@ -242,7 +285,18 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.patch(
     "/me/password",
-    { preHandler: fastify.authenticate },
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        security: cookieAuth,
+        body: ChangePasswordRequestSchema,
+        response: {
+          200: okResponseSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
     async (request, reply) => {
       const parsed = ChangePasswordRequestSchema.safeParse(request.body);
       if (!parsed.success) {

@@ -1,7 +1,12 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import swaggerPlugin from "@fastify/swagger";
+import { z } from "zod";
+import {
+  serializerCompiler,
+  validatorCompiler,
+} from "fastify-type-provider-zod";
 
-import { openApiConfig, addCommonResponseSchemas } from "./config.js";
+import { openApiConfig } from "./config.js";
 
 import authRoutes from "../routes/auth.js";
 import settingsRoutes from "../routes/settings.js";
@@ -22,6 +27,11 @@ const routePrefix = "/api";
 export async function buildSwaggerApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
+  // Zod is the runtime contract source — register the same compilers the
+  // runtime app uses so the spec reflects runtime-validated schemas.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+
   const authenticate = async () => {};
   Object.assign(authenticate, { _isAuthenticate: true });
   app.decorate("authenticate", authenticate);
@@ -31,8 +41,6 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   app.decorateRequest("ctx", null as never);
 
   await app.register(swaggerPlugin as never, openApiConfig);
-
-  addCommonResponseSchemas(app);
 
   await app.register(authRoutes, { prefix: "/api/auth" });
   await app.register(settingsRoutes, { prefix: routePrefix });
@@ -47,6 +55,19 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   await app.register(exportRoutes, { prefix: routePrefix });
   await app.register(systemRoutes, { prefix: routePrefix });
   await app.register(auditRoutes, { prefix: routePrefix });
+
+  // Mirror server.ts: GET /api/health (public liveness probe).
+  app.get(
+    "/api/health",
+    {
+      schema: {
+        response: {
+          200: z.object({ status: z.string() }),
+        },
+      },
+    },
+    async () => ({ status: "ok" }),
+  );
 
   await app.ready();
   return app;

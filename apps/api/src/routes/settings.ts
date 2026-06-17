@@ -1,9 +1,11 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   BrandingQuerySchema,
   BrandingViewSchema,
   OrganizationSettingsSchema,
   UpdateBrandingRequestSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { createSettingsRepo } from "@exam/db/src/repository/settingsRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
@@ -12,29 +14,63 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const brandingSettingsResponseSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  productName: z.string().nullable(),
+  productSubtitle: z.string().nullable(),
+  footerText: z.string().nullable(),
+  organizationDisplayName: z.string().nullable(),
+  timezone: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 const settingsRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get("/settings/branding", async (request) => {
-    const query = BrandingQuerySchema.parse(request.query);
-    const orgRepo = createOrganizationRepo(fastify.db);
-    const settingsRepo = createSettingsRepo(fastify.db);
+  fastify.get(
+    "/settings/branding",
+    {
+      schema: {
+        querystring: BrandingQuerySchema,
+        response: { 200: BrandingViewSchema },
+      },
+    },
+    async (request) => {
+      const query = BrandingQuerySchema.parse(request.query);
+      const orgRepo = createOrganizationRepo(fastify.db);
+      const settingsRepo = createSettingsRepo(fastify.db);
 
-    const org = await orgRepo.resolveBrandingTenant(
-      { purpose: "public_branding" } as PublicBrandingContext,
-      query.organizationSlug,
-    );
+      const org = await orgRepo.resolveBrandingTenant(
+        { purpose: "public_branding" } as PublicBrandingContext,
+        query.organizationSlug,
+      );
 
-    const branding = await settingsRepo.getPublicBranding({
-      purpose: "public_branding",
-      organizationId: org.id,
-    });
+      const branding = await settingsRepo.getPublicBranding({
+        purpose: "public_branding",
+        organizationId: org.id,
+      });
 
-    return BrandingViewSchema.parse(branding);
-  });
+      return BrandingViewSchema.parse(branding);
+    },
+  );
+
+  const adminSettingsResponseSchema = z.union([
+    OrganizationSettingsSchema,
+    z.object({}).strict(),
+  ]);
 
   fastify.get(
     "/admin/settings/branding",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: adminSettingsResponseSchema,
+        },
+      },
     },
     async (request) => {
       const settingsRepo = createSettingsRepo(fastify.db);
@@ -53,6 +89,15 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
     "/admin/settings/branding",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        body: UpdateBrandingRequestSchema,
+        response: {
+          200: brandingSettingsResponseSchema,
+          500: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const rawCtx = request.ctx!;

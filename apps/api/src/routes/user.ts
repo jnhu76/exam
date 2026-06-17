@@ -1,8 +1,10 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateUserRequestSchema,
   UpdateUserRequestSchema,
   ResetPasswordRequestSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -12,6 +14,27 @@ import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const cookieAuth = [{ cookieAuth: [] }] as const;
+const userItemSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  username: z.string(),
+  name: z.string(),
+  role: z.enum(["Admin", "Candidate"]),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+const userListResponseSchema = z.object({
+  items: z.array(userItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  totalPages: z.number().int(),
+});
+const okResponseSchema = z.object({ ok: z.literal(true) });
+
 const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate"] as const;
 
 const userRoutes: FastifyPluginAsync = async (fastify) => {
@@ -19,6 +42,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     "/users",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: PaginationParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 200: userListResponseSchema },
+      },
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -54,6 +83,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     "/users",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateUserRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 201: userItemSchema },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -85,6 +120,17 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     "/users/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateUserRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: userItemSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -148,6 +194,17 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     "/users/:id/reset-password",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: ResetPasswordRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: okResponseSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);
@@ -198,6 +255,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     "/users/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: { 204: z.null(), 404: ErrorResponseSchema },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx!);

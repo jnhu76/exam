@@ -1,57 +1,20 @@
-import type { FastifyInstance } from "fastify";
+import { jsonSchemaTransform } from "fastify-type-provider-zod";
 
-export const errorResponseSchema = {
-  type: "object",
-  properties: {
-    error: {
-      type: "object",
-      properties: {
-        code: { type: "string" },
-        message: { type: "string" },
-        details: { type: "object" },
-        requestId: { type: "string" },
-      },
-      required: ["code", "message", "requestId"],
-    },
-  },
-  required: ["error"],
-} as const;
+// P2.0-J1 — Runtime-first API contract.
+//
+// Route option schemas are authored as Zod (see routes/*.ts) and serve as the
+// single source of truth for both runtime validation/serialization (via the
+// validator/serializer compilers registered in zodProviderPlugin) and OpenAPI
+// generation (via the `jsonSchemaTransform` below).
+//
+// Auth is HTTP-only cookie "auth-token" carrying a JWT.
 
-const genericSuccessSchema = {
-  type: "object",
-};
-
-const noContentResponse = {
-  description: "No content",
-};
-
-const csvSuccessResponse = {
-  description: "CSV file download",
-  content: {
-    "text/csv": {
-      schema: { type: "string" },
-    },
-  },
-};
-
-function isMarkedAuthHook(hook: unknown): boolean {
-  if (
-    (typeof hook !== "function" && typeof hook !== "object") ||
-    hook === null
-  ) {
-    return false;
-  }
-  return (
-    "_isAuthenticate" in hook &&
-    (hook as { _isAuthenticate?: unknown })._isAuthenticate === true
-  );
-}
-
-function hasMarkedAuthHook(hooks: unknown): boolean {
-  if (!hooks) return false;
-  const hookList = Array.isArray(hooks) ? hooks : [hooks];
-  return hookList.some(isMarkedAuthHook);
-}
+// Cast away the provider-internal `Schema` type from the transform signature
+// so tsc can emit declarations (the provider does not export that type).
+const transform = jsonSchemaTransform as (input: {
+  schema: unknown;
+  url: string;
+}) => unknown;
 
 export const openApiConfig = {
   openapi: {
@@ -63,88 +26,17 @@ export const openApiConfig = {
         "Configurable LAN/on-premise exam and assessment platform API",
     },
     components: {
-      schemas: {
-        ErrorResponse: errorResponseSchema,
+      securitySchemes: {
+        cookieAuth: {
+          type: "apiKey",
+          in: "cookie",
+          name: "auth-token",
+          description: "HTTP-only session cookie set by POST /api/auth/login.",
+        },
       },
     },
   },
-} as const;
-
-export function addCommonResponseSchemas(app: FastifyInstance): void {
-  app.addHook("onRoute", (routeOptions) => {
-    if (!routeOptions.schema) routeOptions.schema = {};
-    if (!routeOptions.schema.response) routeOptions.schema.response = {};
-
-    const response = routeOptions.schema.response as Record<string, unknown>;
-    const method = routeOptions.method;
-    const methods = Array.isArray(method) ? method : [method];
-    const hasAuth =
-      hasMarkedAuthHook(routeOptions.preHandler) ||
-      hasMarkedAuthHook(routeOptions.onRequest) ||
-      hasMarkedAuthHook(routeOptions.preValidation);
-    const path = String(routeOptions.url ?? routeOptions.path ?? "");
-    const hasIdParam = path.includes(":id") || path.includes("{id}");
-
-    if (hasAuth && !methods.includes("HEAD") && !path.includes("/auth/login")) {
-      if (!response["401"]) response["401"] = errorResponseSchema;
-    }
-
-    if (path.includes("/auth/login") && !response["401"]) {
-      response["401"] = errorResponseSchema;
-    }
-
-    const adminPaths = [
-      "/exams",
-      "/questions",
-      "/candidates",
-      "/users",
-      "/settings",
-      "/courses",
-      "/export",
-      "/scores",
-      "/admin",
-    ];
-    if (hasAuth && adminPaths.some((p) => path.includes(p))) {
-      if (!response["403"]) response["403"] = errorResponseSchema;
-    }
-
-    if (hasIdParam && !response["404"]) {
-      response["404"] = errorResponseSchema;
-    }
-
-    if (methods.includes("DELETE") && !response["204"]) {
-      response["204"] = noContentResponse;
-    }
-
-    if (path.includes("/export/scores") && !response["200"]) {
-      response["200"] = csvSuccessResponse;
-    }
-
-    if (
-      methods.includes("GET") &&
-      !response["200"] &&
-      !path.includes("/export")
-    ) {
-      response["200"] = genericSuccessSchema;
-    }
-
-    if (
-      (methods.includes("POST") || methods.includes("PATCH")) &&
-      !response["200"] &&
-      !response["201"]
-    ) {
-      response["200"] = genericSuccessSchema;
-    }
-
-    if (
-      (methods.includes("POST") || methods.includes("PATCH")) &&
-      !response["400"]
-    ) {
-      response["400"] = errorResponseSchema;
-    }
-
-    if (methods.includes("POST") && path.includes("/publish")) {
-      if (response["409"] === undefined) response["409"] = errorResponseSchema;
-    }
-  });
-}
+  // Read Zod route schemas directly off route options and convert them to
+  // OpenAPI/JSON-Schema.
+  transform,
+};

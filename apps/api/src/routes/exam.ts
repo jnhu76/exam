@@ -1,9 +1,12 @@
 import { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import {
   CreateExamRequestSchema,
   UpdateExamRequestSchema,
   PaginationParamsSchema,
   EnrollCandidatesRequestSchema,
+  ExamSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -170,11 +173,83 @@ function getDeleteMeta(exam: Exam) {
   };
 }
 
+const idParamsSchema = z.object({ id: z.string().uuid() });
+const examIdParamsSchema = z.object({ examId: z.string().uuid() });
+const enrollmentIdParamsSchema = z.object({
+  examId: z.string().uuid(),
+  enrollmentId: z.string().uuid(),
+});
+const cookieAuth = [{ cookieAuth: [] }] as const;
+
+const examListItemSchema = ExamSchema.extend({
+  participantCount: z.number().int().nonnegative(),
+  gradedAttemptCount: z.number().int().nonnegative(),
+  canViewScores: z.boolean(),
+  scoreViewDisabledReason: z.string().nullable(),
+  canDelete: z.boolean(),
+  deleteDisabledReason: z.string().nullable(),
+});
+
+const examListResponseSchema = z.object({
+  items: z.array(examListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  totalPages: z.number().int().nonnegative(),
+});
+
+const examParticipantSchema = z.object({
+  candidateId: z.string().uuid(),
+  name: z.string(),
+  fields: z.record(z.unknown()),
+  status: z.enum(["assigned", "started", "completed", "blocked"]),
+  score: z.number().nullable(),
+  passed: z.boolean().nullable(),
+});
+
+const examDetailResponseSchema = ExamSchema.extend({
+  stats: z.object({
+    participantCount: z.number().int().nonnegative(),
+    completedCount: z.number().int().nonnegative(),
+    passedCount: z.number().int().nonnegative(),
+  }),
+  participants: z.array(examParticipantSchema),
+});
+
+const enrollmentItemSchema = z.object({
+  id: z.string().uuid(),
+  examId: z.string().uuid(),
+  candidateId: z.string().uuid(),
+  candidateDisplayName: z.string(),
+  status: z.enum(["assigned", "started", "completed", "blocked"]),
+  attemptCount: z.number().int().nonnegative(),
+  finalScore: z.number().nullable(),
+  finalPassed: z.boolean().nullable(),
+});
+
+const enrollmentListItemSchema = enrollmentItemSchema.extend({
+  candidateIdentity: z.string().optional(),
+});
+
+const enrollmentAddResponseSchema = z.object({
+  added: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  enrollments: z.array(enrollmentItemSchema),
+});
+
 const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        querystring: PaginationParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: examListResponseSchema,
+        },
+      },
     },
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -220,6 +295,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: examDetailResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -252,6 +336,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        body: CreateExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          201: ExamSchema,
+          400: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -327,6 +420,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: UpdateExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -390,6 +494,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id/publish",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -428,6 +541,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id/archive",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -444,6 +565,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:id",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          204: z.null(),
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -471,6 +600,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:examId/enrollments",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: examIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: z.array(enrollmentListItemSchema),
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -522,6 +660,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:examId/enrollments",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: examIdParamsSchema,
+        body: EnrollCandidatesRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: enrollmentAddResponseSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
     },
     async (request, reply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
@@ -604,6 +753,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     "/exams/:examId/enrollments/:enrollmentId",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: enrollmentIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          204: z.null(),
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
     },
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
