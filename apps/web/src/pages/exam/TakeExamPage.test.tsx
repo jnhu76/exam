@@ -492,7 +492,7 @@ describe("TakeExamPage S03b submit flush", () => {
     ).toBeEnabled();
   });
 
-  it("timer timeout flushes pending saves before submit", async () => {
+  it("deadline-passed page auto-submits immediately without waiting for user action", async () => {
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,
       deadlineAt: new Date(Date.now() - 1000).toISOString(),
@@ -507,12 +507,9 @@ describe("TakeExamPage S03b submit flush", () => {
       ],
     });
 
-    let resolveSave!: (value: unknown) => void;
     apiPost.mockImplementation(async (path: string) => {
       if (path.includes("/answers/")) {
-        return new Promise((resolve) => {
-          resolveSave = resolve;
-        });
+        return { accepted: true, serverVersion: 1, savedAt: "now" };
       }
       if (path.includes("/submit")) {
         return { score: 10 };
@@ -522,29 +519,7 @@ describe("TakeExamPage S03b submit flush", () => {
 
     renderPage();
 
-    const user = userEvent.setup();
-    const input = await screen.findByLabelText("第1空答案");
-    await user.type(input, "A");
-
-    await waitFor(
-      () => {
-        expect(
-          apiPost.mock.calls.some(
-            (call: unknown[]) =>
-              typeof call[0] === "string" && call[0].includes("/answers/"),
-          ),
-        ).toBe(true);
-      },
-      { timeout: 2500 },
-    );
-    expect(
-      apiPost.mock.calls.some(
-        (call: unknown[]) =>
-          typeof call[0] === "string" && call[0].includes("/submit"),
-      ),
-    ).toBe(false);
-
-    resolveSave({ accepted: true, serverVersion: 1, savedAt: "now" });
+    await screen.findByLabelText("第1空答案");
 
     await waitFor(() => {
       expect(
@@ -796,5 +771,90 @@ describe("TakeExamPage S03b submit flush", () => {
     expect(
       within(dialog).getByRole("button", { name: "确认交卷" }),
     ).toBeEnabled();
+  });
+});
+
+describe("TakeExamPage deadline awareness", () => {
+  it("shows deadline overlay and disables inputs when deadline has passed", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      deadlineAt: new Date(Date.now() - 1000).toISOString(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    renderPage();
+
+    const input = await screen.findByLabelText("第1空答案");
+    expect(input).toBeDisabled();
+
+    expect(screen.getByTestId("deadline-overlay")).toBeInTheDocument();
+    expect(screen.getByText("考试时间已到，答题已结束")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "交卷" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("auto-submits after flushing pending saves when deadline passes", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      deadlineAt: new Date(Date.now() - 1000).toISOString(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        apiPost.mock.calls.some(
+          (call: unknown[]) =>
+            typeof call[0] === "string" && call[0].includes("/submit"),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("overlay is non-dismissible - no close button or escape handling", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      deadlineAt: new Date(Date.now() - 1000).toISOString(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "true_false",
+          content: "地球是圆的",
+          score: 10,
+          options: null,
+          standardAnswer: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    const overlay = await screen.findByTestId("deadline-overlay");
+    expect(overlay).toBeInTheDocument();
+
+    expect(
+      within(overlay).queryByRole("button", { name: /关闭|close/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(overlay).queryByRole("button", { name: "继续答题" }),
+    ).not.toBeInTheDocument();
   });
 });

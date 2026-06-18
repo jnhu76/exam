@@ -12,10 +12,12 @@ export function QuestionRenderer({
   question,
   answer,
   onChange,
+  disabled = false,
 }: {
   question: CandidateQuestionSnapshot;
   answer: unknown;
   onChange: (answer: unknown) => void;
+  disabled?: boolean;
 }) {
   switch (question.type) {
     case "single_choice":
@@ -24,6 +26,7 @@ export function QuestionRenderer({
           options={question.options}
           value={answer as string | undefined}
           onChange={onChange}
+          disabled={disabled}
         />
       );
     case "multiple_choice":
@@ -32,6 +35,7 @@ export function QuestionRenderer({
           options={question.options}
           value={(answer as string[]) ?? []}
           onChange={onChange}
+          disabled={disabled}
         />
       );
     case "fill_blank":
@@ -41,6 +45,7 @@ export function QuestionRenderer({
           blanks={Array.isArray(question.options) ? question.options : []}
           value={(answer as Record<string, string> | string | undefined) ?? {}}
           onChange={onChange}
+          disabled={disabled}
         />
       );
     case "true_false":
@@ -48,6 +53,7 @@ export function QuestionRenderer({
         <TrueFalseInput
           value={answer as boolean | undefined}
           onChange={onChange}
+          disabled={disabled}
         />
       );
     default:

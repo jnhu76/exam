@@ -6,17 +6,19 @@ export function SingleChoiceInput({
   options,
   value,
   onChange,
+  disabled = false,
 }: {
   options: { id: string; content: string }[];
   value: string | undefined;
   onChange: (answer: unknown) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2">
       {options.map((option) => (
         <label
           key={option.id}
-          className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${value === option.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+          className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${value === option.id ? "border-primary bg-primary/5" : !disabled && "hover:bg-muted/50"}`}
         >
           <input
             type="radio"
@@ -24,6 +26,7 @@ export function SingleChoiceInput({
             value={option.id}
             checked={value === option.id}
             onChange={() => onChange(option.id)}
+            disabled={disabled}
             className="size-4 accent-primary"
           />
           <span>{option.content}</span>
