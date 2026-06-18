@@ -50,7 +50,7 @@ services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      - "5432:5432"
+      - "${DB_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
