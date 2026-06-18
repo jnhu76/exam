@@ -13,11 +13,7 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
-import {
-  submitAttempt,
-  gradeAttemptIdempotent,
-  type EnrollmentRepository,
-} from "@exam/exam-engine";
+import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
   createAttemptRepoAdapter,

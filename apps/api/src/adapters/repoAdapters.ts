@@ -26,7 +26,7 @@ export function createExamRepoAdapter(
       (await repo.update(
         ctx,
         examId,
-        data as Record<string, unknown>,
+        data as Parameters<typeof repo.update>[2],
       )) as Exam | null,
   };
 }

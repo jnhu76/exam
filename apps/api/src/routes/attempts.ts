@@ -52,7 +52,6 @@ import {
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
-  type AttemptRepository as AttemptRepoInterface,
 } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
 import {
