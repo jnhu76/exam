@@ -877,4 +877,21 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     });
     expect(res.statusCode).toBe(200);
   });
+
+  // ADR-005 construction hard rule: PATCH must reconcile first, so a stale
+  // `published` exam whose openAt already passed (logically `open`) is rejected
+  // — it cannot be edited as if still published.
+  it("PATCH rejects a stale published (now open) exam -> 409 EXAM_UPDATE_NOT_ALLOWED", async () => {
+    const examId = await createOpenExam("PATCH Stale");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {
+        closeAt: new Date(Date.now() + 172_800_000).toISOString(),
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
 });

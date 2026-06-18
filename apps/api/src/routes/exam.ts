@@ -31,6 +31,7 @@ import {
   InvalidStateTransitionError,
   ExamAlreadyPublishedError,
   ExamNotDraftError,
+  ValidationError,
   ExamCloseNotAllowedError,
   ExamUnpublishNotAllowedError,
   ExamExtendNotAllowedError,
@@ -465,10 +466,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           200: ExamSchema,
           400: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
-    /** Update an existing draft exam by ID. Only draft exams can be updated. Returns 404 if not found, 400 on validation error. */
+    /**
+     * Update an existing exam by ID. ADR-005 Slice 2 §3.7 + construction hard
+     * rule: draft = full edit; published = schedule fields only (openAt/closeAt);
+     * other states rejected. Lock -> reconcile -> guard -> mutate in ONE tx so a
+     * stale persisted status cannot be acted on.
+     */
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
@@ -479,66 +486,72 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const data = parsed.data;
-      const repo = createExamRepo(fastify.db);
 
-      const existing = (await repo.findById(ctx, id)) as Exam | null;
-      if (!existing) {
-        return reply
-          .code(404)
-          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-      }
+      const result = await executeInTransaction(
+        fastify.db,
+        async (tx): Promise<{ exam: Exam } | null> => {
+          const repo = createExamRepo(tx);
 
-      // ADR-005 Slice 2 §3.7: PATCH allowed in draft (full edit) and published
-      // (schedule fields only: openAt/closeAt). Rejected for other states.
-      if (existing.status !== "draft" && existing.status !== "published") {
-        throw new ExamUpdateNotAllowedError();
-      }
-      if (existing.status === "published") {
-        // Published exams may only edit the schedule. Any other field is
-        // rejected — questions/controlFlags/score policy are frozen post-publish.
-        const allowed = new Set(["openAt", "closeAt"]);
-        const forbidden = Object.keys(data).filter((k) => !allowed.has(k));
-        if (forbidden.length > 0) {
-          return reply.code(409).send(
-            buildErrorResponse(request.id, "EXAM_UPDATE_NOT_ALLOWED", {
-              forbiddenFields: forbidden,
-            }),
+          // 1. Lock the exam row.
+          const existing = (await repo.findByIdForUpdate(
+            ctx,
+            id,
+          )) as Exam | null;
+          if (!existing) return null;
+
+          // 2. Reconcile status by now (published->open / open->closed lazily).
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            new Date(),
           );
-        }
-      }
-      if (existing.status === "draft" && data.questionIds) {
-        const questionChecks = await Promise.all(
-          data.questionIds.map((questionId) =>
-            createQuestionRepo(fastify.db).findById(ctx, questionId),
-          ),
-        );
-        if (questionChecks.some((q) => q?.courseId !== existing.courseId)) {
-          return reply.code(400).send(
-            buildErrorResponse(request.id, "VALIDATION_ERROR", {
-              fields: [
-                {
-                  field: "questionIds",
-                  code: "QUESTION_COURSE_MISMATCH",
-                  message: "题目不属于所选课程",
-                },
-              ],
-            }),
-          );
-        }
-      }
+          const exam = reconciled?.exam ?? existing;
 
-      const updateData: Record<string, unknown> = { ...data };
-      if (data.openAt) updateData.openAt = new Date(data.openAt);
-      if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
+          // 3. State guard on the RECONCILED status.
+          if (exam.status !== "draft" && exam.status !== "published") {
+            throw new ExamUpdateNotAllowedError();
+          }
+          if (exam.status === "published") {
+            // Published exams may only edit the schedule. Any other field is
+            // rejected — questions/controlFlags/score policy are frozen.
+            const allowed = new Set(["openAt", "closeAt"]);
+            const forbidden = Object.keys(data).filter((k) => !allowed.has(k));
+            if (forbidden.length > 0) {
+              throw new ExamUpdateNotAllowedError();
+            }
+          }
+          if (exam.status === "draft" && data.questionIds) {
+            const questionChecks = await Promise.all(
+              data.questionIds.map((questionId) =>
+                createQuestionRepo(tx).findById(ctx, questionId),
+              ),
+            );
+            if (questionChecks.some((q) => q?.courseId !== exam.courseId)) {
+              throw new ValidationError("题目不属于所选课程");
+            }
+          }
 
-      const updated = (await repo.update(ctx, id, updateData)) as Exam | null;
-      if (!updated) {
+          // 4. Mutate.
+          const updateData: Record<string, unknown> = { ...data };
+          if (data.openAt) updateData.openAt = new Date(data.openAt);
+          if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
+          const updated = (await repo.update(
+            ctx,
+            id,
+            updateData,
+          )) as Exam | null;
+          if (!updated) return null;
+          return { exam: updated };
+        },
+      );
+
+      if (!result) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "exam.update", "exam", id);
-      return toExamResponse(updated);
+      return toExamResponse(result.exam);
     },
   );
 
