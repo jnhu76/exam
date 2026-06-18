@@ -305,5 +305,15 @@ describe("examCommands", () => {
       expect(second?.exam.status).toBe("open");
       expect(second?.transition).toBeUndefined();
     });
+
+    it("transitions published → open → closed in one call when past closeAt", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "published", openAt, closeAt }));
+      const now = new Date("2025-01-01T13:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("closed");
+      expect(result?.transition).toBe("closed");
+    });
   });
 });

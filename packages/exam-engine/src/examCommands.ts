@@ -156,22 +156,24 @@ export async function checkAndUpdateExamStatus(
   examId: string,
   now: Date,
 ): Promise<CheckAndUpdateResult | null> {
-  const exam = await repo.findById(examId);
+  let exam = await repo.findById(examId);
   if (!exam) {
     return null;
   }
 
+  let transition: "open" | "closed" | undefined;
+
   if (exam.status === "published" && now >= exam.openAt) {
-    const updated = await openExam(repo, examId);
-    return { exam: updated, transition: "open" };
+    exam = await openExam(repo, examId);
+    transition = "open";
   }
 
   if (exam.status === "open" && now >= exam.closeAt) {
-    const updated = await closeExam(repo, examId);
-    return { exam: updated, transition: "closed" };
+    exam = await closeExam(repo, examId);
+    transition = "closed";
   }
 
-  return { exam };
+  return { exam, ...(transition ? { transition } : {}) };
 }
 
 /** Transitions an exam to archived status, making it read-only. */
