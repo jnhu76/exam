@@ -253,7 +253,7 @@ mutate** rule, all record audit. Error envelope is the existing
   - `draft|published|canceled|archived`, or reconciled-not-`open` →
     `EXAM_CLOSE_NOT_ALLOWED`.
   - `open` with unfinalized attempts remaining → `EXAM_CLOSE_NOT_ALLOWED` with
-    `details.reason = "ACTIVE_ATTEMPTS_EXIST"` and
+    `details.reason = "UNRESOLVED_ATTEMPTS_EXIST"` and
     `details.activeAttemptCount`.
 - Idempotency: **200 + current exam, no duplicate audit** when already `closed`
   AND no unfinalized attempts.
@@ -397,7 +397,7 @@ type SubmitSource = "candidate" | "deadline_scanner" | "proctor" | "system";
   while unfinalized attempts remain.
 - **Scores/export require `examEnded` AND no unfinalized attempts**. Concretely,
   `canOpenScoreList` (or a sibling guard) must additionally reject with
-  `EXAM_NOT_FINISHED` / `details.reason = "ACTIVE_ATTEMPTS_EXIST"` when
+  `EXAM_NOT_FINISHED` / `details.reason = "UNRESOLVED_ATTEMPTS_EXIST"` when
   unfinalized attempts exist, even if `now >= closeAt`. This prevents exporting
   partial results while candidates are still mid-exam.
 - `cancel` (deferred) would carry its own export marker; until it ships, the
@@ -408,7 +408,7 @@ type SubmitSource = "candidate" | "deadline_scanner" | "proctor" | "system";
 | Code | HTTP | Where |
 | --- | --- | --- |
 | `EXAM_UNPUBLISH_NOT_ALLOWED` | 409 | unpublish |
-| `EXAM_CLOSE_NOT_ALLOWED` | 409 | close (incl. `details.reason = "ACTIVE_ATTEMPTS_EXIST"`) |
+| `EXAM_CLOSE_NOT_ALLOWED` | 409 | close (incl. `details.reason = "UNRESOLVED_ATTEMPTS_EXIST"`) |
 | `EXAM_EXTEND_NOT_ALLOWED` | 409 | extend |
 | `EXAM_UPDATE_NOT_ALLOWED` | 409 | PATCH non-editable state / non-schedule field on published |
 | `ATTEMPT_LATE_ENTRY_CLOSED` | 409 | new startAttempt past cutoff |
@@ -454,7 +454,7 @@ and testable; later slices depend on earlier ones.
 ### Slice 1 — Close baseline (unblocks P2B-J1)
 
 - `POST /api/exams/:id/close` with the lock-reconcile-assert-mutate rule.
-- Close active-attempt guard (`ACTIVE_ATTEMPTS_EXIST` rejection).
+- Close active-attempt guard (`UNRESOLVED_ATTEMPTS_EXIST` rejection).
 - Scores/export guard extended to also require no unfinalized attempts.
 - Minimal UI: `exam-detail-close-btn`.
 - **Replaces the `endingSoonSec` workaround; admin full-loop E2E can resume
@@ -572,7 +572,7 @@ attempts (P2C-J2) so `close` can then succeed.
 1. Confirm `canceled` (US spelling) when Slice 4 ships; cancel itself is now
    deferred, lowering the immediate stakes.
 2. Confirm the `close` idempotency choice (200 vs 409).
-3. Confirm the close active-attempt policy (reject with `ACTIVE_ATTEMPTS_EXIST`
+3. Confirm the close active-attempt policy (reject with `UNRESOLVED_ATTEMPTS_EXIST`
    vs allow-and-defer-resolution). This ADR chose reject.
 4. Confirm `extendMinutes` (relative) over absolute `closeAt`.
 5. Confirm the `minSubmitAfterStartMinutes > durationMinutes` rejection (vs

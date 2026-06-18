@@ -15,6 +15,7 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
   archiveExam,
@@ -609,58 +610,88 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { id } = request.params as { id: string };
       const reason = (request.body?.reason ?? undefined) as string | undefined;
 
-      const repo = createExamRepo(fastify.db);
-      const attemptRepo = createAttemptRepo(fastify.db);
+      // ADR-005 construction hard rule: lock -> reconcile -> unresolved guard
+      // -> assert -> mutate run INSIDE ONE transaction so the FOR UPDATE row
+      // lock spans the whole decision and the deadline scanner cannot race it.
+      // The tx-scoped repos below share one connection; the audit write stays
+      // outside the tx (best-effort, matching the attempts.ts convention).
+      const result = await executeInTransaction(
+        fastify.db,
+        async (
+          tx,
+        ): Promise<{
+          closed: Exam;
+          fromStatus: string;
+          unresolvedCount: number;
+        } | null> => {
+          const repo = createExamRepo(tx);
+          const attemptRepo = createAttemptRepo(tx);
 
-      // 1. Lock the exam row.
-      const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
-      if (!locked) {
+          // 1. Lock the exam row.
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) {
+            return null;
+          }
+
+          // 2. Reconcile status by now (published->open / open->closed lazily).
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            new Date(),
+          );
+          const exam = reconciled?.exam ?? locked;
+
+          // 3. Unresolved-attempts guard: reject if active/in-flight attempts
+          //    remain (review decision #3).
+          const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+            ctx,
+            id,
+          );
+          if (unresolvedCount > 0) {
+            throw new ExamCloseNotAllowedError({
+              reason: "UNRESOLVED_ATTEMPTS_EXIST",
+              activeAttemptCount: unresolvedCount,
+            });
+          }
+
+          // 4 + 5. Assert + mutate via the engine. closeExam is idempotent for
+          //    `closed` (returns as-is). A non-open, non-closed reconciled
+          //    status raises InvalidStateTransitionError; surfaced uniformly as
+          //    EXAM_CLOSE_NOT_ALLOWED (no UNRESOLVED reason) per ADR-005 §3.3.
+          let closed: Exam;
+          try {
+            closed = await closeExam(createExamRepoAdapter(repo, ctx), id);
+          } catch (err) {
+            if (err instanceof InvalidStateTransitionError) {
+              throw new ExamCloseNotAllowedError();
+            }
+            throw err;
+          }
+          return {
+            closed,
+            fromStatus: exam.status,
+            unresolvedCount,
+          };
+        },
+      );
+
+      if (!result) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      // 2. Reconcile status by now (published->open / open->closed lazily).
-      const now = new Date();
-      const reconciled = await checkAndUpdateExamStatus(
-        createExamRepoAdapter(repo, ctx),
-        id,
-        now,
-      );
-      const exam = reconciled?.exam ?? locked;
-
-      // 3. Unresolved-attempts guard: reject if active/in-flight attempts
-      //    remain (only meaningful for an open exam, but cheap to check).
-      const unresolved = await attemptRepo.countUnresolvedByExam(ctx, id);
-      if (unresolved > 0) {
-        throw new ExamCloseNotAllowedError({
-          reason: "UNRESOLVED_ATTEMPTS_EXIST",
-          activeAttemptCount: unresolved,
-        });
-      }
-
-      // 4 + 5. Assert + mutate via the engine. closeExam is idempotent for
-      //    `closed` (returns as-is). A non-open, non-closed reconciled status
-      //    raises InvalidStateTransitionError; we surface it uniformly as
-      //    EXAM_CLOSE_NOT_ALLOWED (no UNRESOLVED reason) per ADR-005 §3.3.
-      const wasAlreadyClosed = exam.status === "closed";
-      let closed: Exam;
-      try {
-        closed = await closeExam(createExamRepoAdapter(repo, ctx), id);
-      } catch (err) {
-        if (err instanceof InvalidStateTransitionError) {
-          throw new ExamCloseNotAllowedError();
-        }
-        throw err;
-      }
+      const { closed, fromStatus } = result;
 
       // 6. Audit — only for a genuine transition (idempotent close writes no
-      //    duplicate audit, review decision #2).
-      if (!wasAlreadyClosed) {
+      //    duplicate audit, review decision #2). activeAttemptCount included
+      //    per ADR-005 §Audit events (will be 0 here since the guard passed).
+      if (fromStatus !== "closed") {
         recordAudit(fastify, request, ctx, "exam.close", "exam", id, {
           reason,
-          fromStatus: exam.status,
+          fromStatus,
           toStatus: "closed",
+          activeAttemptCount: result.unresolvedCount,
         });
       }
       return toExamResponse(closed);
