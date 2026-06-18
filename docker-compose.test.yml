@@ -20,6 +20,14 @@ services:
       RATE_LIMIT_DISABLED: "1"
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-1000}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      # Fast background scanners for E2E only (P2A-J6 abnormal-path specs).
+      # These override the production defaults (heartbeat timeout 60s / scan
+      # 30s, deadline scan 30s) so that disconnect/restore and deadline-crash
+      # E2E tests are deterministic without multi-minute wall-clock waits.
+      # Production deployments keep the defaults via docker-compose.yml.
+      HEARTBEAT_TIMEOUT_MS: ${HEARTBEAT_TIMEOUT_MS:-15000}
+      HEARTBEAT_SCAN_INTERVAL_MS: ${HEARTBEAT_SCAN_INTERVAL_MS:-5000}
+      DEADLINE_SCAN_INTERVAL_MS: ${DEADLINE_SCAN_INTERVAL_MS:-5000}
     depends_on:
       db:
         condition: service_healthy
@@ -42,7 +50,7 @@ services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      - "5432:5432"
+      - "${DB_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam

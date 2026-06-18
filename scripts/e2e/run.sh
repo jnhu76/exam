@@ -33,7 +33,12 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-COMPOSE_FILE="docker-compose.test.yml"
+# COMPOSE_FILE may be overridden by the caller (colon-separated, compose v2
+# syntax) to layer an override file — e.g. to remap host ports when :3000 or
+# :5432 are already in use:
+#   COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
+#     bash scripts/e2e/run.sh
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.test.yml}"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-exam-e2e}"
 
 DO_BUILD=1
@@ -72,7 +77,14 @@ while (( "$#" )); do
 done
 
 compose() {
-  docker compose -f "$COMPOSE_FILE" -p "$PROJECT_NAME" "$@"
+  # Support colon-separated COMPOSE_FILE (e.g. base:override) by emitting
+  # one -f flag per path, matching `docker compose` multi-file semantics.
+  local -a files=()
+  local IFS=':'
+  read -r -a files <<< "$COMPOSE_FILE"
+  local -a fflags=()
+  for f in "${files[@]}"; do fflags+=("-f" "$f"); done
+  docker compose "${fflags[@]}" -p "$PROJECT_NAME" "$@"
 }
 
 log()  { printf '\033[1;36m[e2e]\033[0m %s\n' "$*"; }
@@ -112,7 +124,10 @@ fi
 #     打到“假 app”，看到 rate-limit headers / 401 / 500 等无关行为。
 # 在 compose up 之前显式失败，能把“环境污染”变成可识别错误，而不是污染 E2E。
 APP_HOST_PORT="${APP_PORT:-3000}"
-DB_HOST_PORT="5432"
+# DB_HOST_PORT mirrors the default host-side port published by
+# docker-compose.test.yml (5432). Override via DB_HOST_PORT=5433 in
+# combination with docker-compose.test.override.yml when :5432 is taken.
+DB_HOST_PORT="${DB_HOST_PORT:-5432}"
 
 port_owner() {
   local port="$1"

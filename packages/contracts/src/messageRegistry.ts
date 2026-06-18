@@ -123,6 +123,7 @@ export const saveAnswerMessages: Record<SaveAnswerRejectReason, string> = {
   ATTEMPT_ALREADY_SUBMITTED: "考试已提交，不能继续保存答案",
   ATTEMPT_CLOSED: "考试已结束",
   DEADLINE_EXCEEDED: "考试时间已到",
+  CONFLICTING_PAYLOAD: "答案数据冲突，请刷新页面后重试",
 };
 
 /**

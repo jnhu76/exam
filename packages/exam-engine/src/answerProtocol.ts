@@ -63,10 +63,30 @@ export function processSaveAnswer(
   const idempotencyKey = `${request.questionId}:${request.clientSeq}`;
   const existingBySeq = state.clientSeqMap.get(idempotencyKey);
   if (existingBySeq) {
+    // Same idempotency key: if the payload is identical (same answer,
+    // same baseVersion), it's a safe replay — return the prior result.
+    // If the payload differs, the client is misusing this key — reject
+    // as a conflicting payload to prevent silent data loss.
+    //
+    // NOTE: `===` assumes primitive answer values (boolean, string,
+    // number, null). For structured answers (arrays in multi-select,
+    // objects) this check must be upgraded to stable deep equality or
+    // canonical serialization to avoid rejecting legitimate replays.
+    if (existingBySeq.answer === request.answer) {
+      return {
+        accepted: true,
+        serverVersion: existingBySeq.version,
+        savedAt: existingBySeq.savedAt.toISOString(),
+      };
+    }
     return {
-      accepted: true,
+      accepted: false,
       serverVersion: existingBySeq.version,
-      savedAt: existingBySeq.savedAt.toISOString(),
+      savedAt: new Date().toISOString(),
+      conflict: {
+        reason: "CONFLICTING_PAYLOAD" as const,
+        latestAnswer: existingBySeq.answer,
+      },
     };
   }
 
