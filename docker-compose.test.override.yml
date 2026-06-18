@@ -1,0 +1,19 @@
+# docker-compose.test.override.yml
+#
+# Local-only override for docker-compose.test.yml used by
+# scripts/e2e/run.sh (P2A-J6 candidate-runtime E2E).
+#
+# Remaps both published ports to avoid collisions when the host already has
+# services bound to :3000 or :5432. The app <-> db internal traffic stays on
+# the docker network (db:5432); only the host-published ports change.
+#
+# Usage:
+#   COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
+#     bash scripts/e2e/run.sh
+services:
+  app:
+    ports:
+      - "3300:3000"
+  db:
+    ports:
+      - "5433:5432"

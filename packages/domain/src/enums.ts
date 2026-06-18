@@ -188,6 +188,7 @@ export const ConflictReason = {
   AttemptAlreadySubmitted: "ATTEMPT_ALREADY_SUBMITTED",
   AttemptClosed: "ATTEMPT_CLOSED",
   DeadlineExceeded: "DEADLINE_EXCEEDED",
+  ConflictingPayload: "CONFLICTING_PAYLOAD",
 } as const;
 export type ConflictReason =
   (typeof ConflictReason)[keyof typeof ConflictReason];

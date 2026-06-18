@@ -189,5 +189,122 @@ describe("answerProtocol", () => {
       expect(result.newClientSeqMap?.get("q1:2")).toBeDefined();
       expect(result.newClientSeqMap?.get("q1:2")?.answer).toBe("b");
     });
+
+    it("rejects same clientSeq with different answer as CONFLICTING_PAYLOAD", () => {
+      // Existing saved answer for q1 at clientSeq=2 has answer="b".
+      const existing = makeAnswerRecord({
+        answer: "b",
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      // Request reuses clientSeq=2 but sends a DIFFERENT answer.
+      const request = makeRequest({
+        clientSeq: 2,
+        answer: "c",
+        baseVersion: 1,
+      });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
+      expect(result.conflict?.latestAnswer).toBe("b");
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("accepts identical array answer replay (structural equality)", () => {
+      const existing = makeAnswerRecord({
+        answer: ["a", "b", "c"],
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      const request = makeRequest({
+        clientSeq: 2,
+        answer: ["a", "b", "c"],
+        baseVersion: 1,
+      });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(true);
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("rejects different array answer as CONFLICTING_PAYLOAD", () => {
+      const existing = makeAnswerRecord({
+        answer: ["a", "b", "c"],
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      const request = makeRequest({
+        clientSeq: 2,
+        answer: ["a", "b", "d"],
+        baseVersion: 1,
+      });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("accepts identical object answer replay (structural equality)", () => {
+      const objAnswer = { optionId: "opt1", value: "custom" };
+      const existing = makeAnswerRecord({
+        answer: objAnswer,
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      const request = makeRequest({
+        clientSeq: 2,
+        answer: { optionId: "opt1", value: "custom" },
+        baseVersion: 1,
+      });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(true);
+      expect(result.serverVersion).toBe(2);
+    });
+
+    it("rejects different object answer as CONFLICTING_PAYLOAD", () => {
+      const existing = makeAnswerRecord({
+        answer: { optionId: "opt1", value: "old" },
+        version: 2,
+        savedAt: new Date("2025-01-01T10:01:00Z"),
+      });
+      const state = makeState({
+        answers: [existing],
+        clientSeqMap: new Map([["q1:2", existing]]),
+      });
+      const request = makeRequest({
+        clientSeq: 2,
+        answer: { optionId: "opt1", value: "new" },
+        baseVersion: 1,
+      });
+
+      const result = processSaveAnswer(state, request);
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
+      expect(result.serverVersion).toBe(2);
+    });
   });
 });

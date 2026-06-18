@@ -5,6 +5,58 @@ import type {
   SaveAnswerResponse,
 } from "@exam/domain";
 
+/**
+ * Stable structural equality for answer values.
+ *
+ * - Primitives (boolean, string, number, null, undefined): Object.is
+ * - Arrays: element-by-element, ordered comparison
+ * - Plain objects: sorted-key comparison
+ *
+ * Designed for the Answer Save Protocol idempotency check where the same
+ * clientSeq must only be accepted if the payload is structurally identical.
+ */
+function answersEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!answersEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  if (
+    a !== null &&
+    b !== null &&
+    typeof a === "object" &&
+    typeof b === "object" &&
+    !Array.isArray(a) &&
+    !Array.isArray(b)
+  ) {
+    const keysA = Object.keys(a as Record<string, unknown>);
+    const keysB = Object.keys(b as Record<string, unknown>);
+    if (keysA.length !== keysB.length) return false;
+    const sortedA = [...keysA].sort();
+    const sortedB = [...keysB].sort();
+    for (let i = 0; i < sortedA.length; i++) {
+      if (sortedA[i] !== sortedB[i]) return false;
+      const key = sortedA[i] as string;
+      if (
+        !answersEqual(
+          (a as Record<string, unknown>)[key],
+          (b as Record<string, unknown>)[key],
+        )
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
+
 /** State required by the answer save protocol to evaluate an incoming save request. */
 export interface AnswerState {
   attemptStatus: AttemptStatus;
@@ -63,10 +115,25 @@ export function processSaveAnswer(
   const idempotencyKey = `${request.questionId}:${request.clientSeq}`;
   const existingBySeq = state.clientSeqMap.get(idempotencyKey);
   if (existingBySeq) {
+    // Same idempotency key: if the payload is structurally identical,
+    // it's a safe replay — return the prior result.
+    // If the payload differs, the client is misusing this key — reject
+    // as a conflicting payload to prevent silent data loss.
+    if (answersEqual(existingBySeq.answer, request.answer)) {
+      return {
+        accepted: true,
+        serverVersion: existingBySeq.version,
+        savedAt: existingBySeq.savedAt.toISOString(),
+      };
+    }
     return {
-      accepted: true,
+      accepted: false,
       serverVersion: existingBySeq.version,
-      savedAt: existingBySeq.savedAt.toISOString(),
+      savedAt: new Date().toISOString(),
+      conflict: {
+        reason: "CONFLICTING_PAYLOAD" as const,
+        latestAnswer: existingBySeq.answer,
+      },
     };
   }
 

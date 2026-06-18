@@ -22,6 +22,7 @@ export const SaveAnswerRejectReasonEnum = z.enum([
   "ATTEMPT_ALREADY_SUBMITTED",
   "ATTEMPT_CLOSED",
   "DEADLINE_EXCEEDED",
+  "CONFLICTING_PAYLOAD",
 ] as const);
 
 /** Discriminated reason why the server rejected a save-answer request. */

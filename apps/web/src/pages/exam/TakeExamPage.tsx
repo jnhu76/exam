@@ -139,12 +139,18 @@ export function TakeExamPage() {
 
       const answerMap = new Map<string, unknown>();
       const versionMap = new Map<string, number>();
+      const clientSeqMap = new Map<string, number>();
       for (const a of data.answers) {
         answerMap.set(a.questionId, a.answer);
         versionMap.set(a.questionId, a.version);
+        // Restore clientSeq counter so the next save for this question
+        // uses a fresh clientSeq (>= current version) and is not treated
+        // as an idempotent replay by the server.
+        clientSeqMap.set(a.questionId, a.version);
       }
       setAnswers(answerMap);
       versionsRef.current = versionMap;
+      clientSeqsRef.current = clientSeqMap;
 
       const states: QuestionState[] = data.questionSnapshot.map((q) => {
         if (answerMap.has(q.originalQuestionId)) return "answered";
