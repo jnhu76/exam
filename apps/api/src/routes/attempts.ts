@@ -52,11 +52,14 @@ import {
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
-  type ExamRepository,
   type AttemptRepository as AttemptRepoInterface,
-  type EnrollmentRepository,
 } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
+import {
+  createExamRepoAdapter,
+  createAttemptRepoAdapter,
+  createEnrollmentRepoAdapter,
+} from "../adapters/repoAdapters.js";
 import { recordAudit } from "./audit.js";
 import { formatZodError } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -222,95 +225,6 @@ function toCandidateAttemptResponse(attempt: ExamAttempt, now: Date) {
       gradingRule: q.gradingRule,
       order: q.order,
     })),
-  };
-}
-
-/**
- * Adapts the DB exam repo to the ExamRepository interface expected by
- * the exam-engine command functions, binding the request context.
- */
-function createExamRepoAdapter(
-  repo: ReturnType<typeof createExamRepo>,
-  ctx: RequestContext,
-): ExamRepository {
-  return {
-    findById: async (examId) =>
-      (await repo.findById(ctx, examId)) as Exam | null,
-    update: async (examId, data) =>
-      (await repo.update(
-        ctx,
-        examId,
-        data as Record<string, unknown>,
-      )) as Exam | null,
-  };
-}
-
-/**
- * Adapts the DB attempt repo to the AttemptRepository interface expected by
- * the exam-engine command functions, binding the request context.
- */
-function createAttemptRepoAdapter(
-  repo: ReturnType<typeof createAttemptRepo>,
-  ctx: RequestContext,
-): AttemptRepoInterface {
-  return {
-    findById: async (id) =>
-      (await repo.findById(ctx, id)) as ExamAttempt | null,
-    findByIdForUpdate: async (id) =>
-      (await repo.findByIdForUpdate(ctx, id)) as ExamAttempt | null,
-    findActiveByEnrollment: async (enrollmentId) =>
-      (await repo.findActiveByEnrollment(
-        ctx,
-        enrollmentId,
-      )) as ExamAttempt | null,
-    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) =>
-      (await repo.findByEnrollmentAndAttemptNo(
-        ctx,
-        enrollmentId,
-        attemptNo,
-      )) as ExamAttempt | null,
-    create: async (input) =>
-      (await repo.create(
-        ctx,
-        input as Parameters<typeof repo.create>[1],
-      )) as ExamAttempt,
-    update: async (id, data) =>
-      (await repo.update(
-        ctx,
-        id,
-        data as Parameters<typeof repo.update>[2],
-      )) as ExamAttempt | null,
-  };
-}
-
-/**
- * Adapts the DB enrollment repo to the EnrollmentRepository interface expected
- * by the exam-engine command functions, binding the request context.
- */
-function createEnrollmentRepoAdapter(
-  repo: ReturnType<typeof createEnrollmentRepo>,
-  ctx: RequestContext,
-): EnrollmentRepository {
-  return {
-    findByExamAndCandidate: async (examId, candidateId) =>
-      (await repo.findByExamAndCandidate(ctx, examId, candidateId)) as
-        | import("@exam/domain").ExamEnrollment
-        | null,
-    findByExamAndCandidateForUpdate: async (examId, candidateId) =>
-      (await repo.findByExamAndCandidateForUpdate(ctx, examId, candidateId)) as
-        | import("@exam/domain").ExamEnrollment
-        | null,
-    create: async (input) =>
-      (await repo.create(
-        ctx,
-        input as Parameters<typeof repo.create>[1],
-      )) as import("@exam/domain").ExamEnrollment,
-    update: async (id, data) =>
-      (await repo.update(
-        ctx,
-        id,
-        data as Parameters<typeof repo.update>[2],
-      )) as import("@exam/domain").ExamEnrollment | null,
   };
 }
 
