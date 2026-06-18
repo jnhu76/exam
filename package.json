@@ -30,7 +30,15 @@
     "test:e2e": "turbo test:e2e",
     "e2e:docker": "bash scripts/e2e/run.sh",
     "smoke": "turbo smoke",
-    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm test && pnpm coverage && pnpm build",
+    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm verify:nodb-tests && pnpm verify:db-tests && pnpm build",
+    "test:db": "pnpm --filter @exam/db test",
+    "test:api": "pnpm --filter @exam/api test",
+    "coverage:db": "pnpm --filter @exam/db coverage",
+    "coverage:api": "pnpm --filter @exam/api coverage",
+    "test:nodb": "turbo test --filter=!@exam/db --filter=!@exam/api",
+    "coverage:nodb": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
+    "verify:db-tests": "pnpm test:db && pnpm test:api && pnpm coverage:db && pnpm coverage:api",
+    "verify:nodb-tests": "pnpm test:nodb && pnpm coverage:nodb",
     "prepare": "husky"
   },
   "lint-staged": {

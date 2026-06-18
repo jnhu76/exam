@@ -59,6 +59,70 @@
 
 ---
 
+### BUG-FLAKE-002 — 跨 package / 跨 task 共享 `exam_test` DB 导致 seed/cleanup 互相覆盖
+
+**状态**: 已缓解（Option A：DB-touching turbo 任务严格串行化）。Option B（per-task 独立 DB/schema）为后续根因修复。
+
+**失败链**:
+
+```txt
+turbo 在单次调用里并发调度多个 DB-touching 任务
+  @exam/db#test        与  @exam/db#coverage   并发  → 同 package 两任务共享同一 PG
+  @exam/db#test        与  @exam/api#coverage  并发  → 跨 package 共享 default 组织
+  @exam/api#test       与  @exam/api#coverage  并发
+
+任一组合都会触发：
+  - 一方 afterAll cleanupOrganizationTestData() 删除 default 组织
+  - 另一方 buildTestApp() / seed() 依赖 default 组织存在
+  - 结果：auth.test.ts 登录返回 401；users 插入 FK violation（organization_id 不存在）
+```
+
+**已知不是的原因**:
+
+- 不是单 package 内并行（`fileParallelism: false` 已分别作用于 `apps/api` 与 `packages/db`，见 BUG-FLAKE-001 A′ 方案）
+- 不是产品代码 bug（seed / cleanup / 路由均未改动）
+- 不是迁移问题（schema 早已就位）
+
+**根因**: `@exam/db` 与 `@exam/api` 是仅有的两个使用共享 `exam_test` PostgreSQL 实例的 package。`fileParallelism: false` 只消除 *单 package 内* 的文件并行，**不**消除 turbo 在单次调用里跨 package / 跨 task（test vs coverage）的并发。当 `turbo run test coverage`（或任何把 DB-touching 任务放进同一次调度的命令）执行时，多个任务会并发写同一个 `default` 组织及其清理钩子，互相覆盖。
+
+**当前缓解（Option A，现行）**:
+
+1. `turbo.json` 保留同名 task 的 `db → api` 依赖（`@exam/api#test dependsOn @exam/db#test` 等），保证单次 `turbo test` / `turbo coverage` 内 db 先于 api。
+2. **`package.json` 新增分阶段脚本**，把 DB-touching 任务排成严格串行链，避免任何交叉：
+   - `test:db` / `test:api` / `coverage:db` / `coverage:api`：单 package filter，不经过 turbo 并发调度。
+   - `test:nodb` / `coverage:nodb`：`turbo test --filter=!@exam/db --filter=!@exam/api`，非 DB package 仍可并行。
+   - `verify:db-tests`：`test:db && test:api && coverage:db && coverage:api`（DB 任务总顺序）。
+   - `verify:nodb-tests`：`test:nodb && coverage:nodb`。
+   - `verify` 改为：静态检查 → `verify:nodb-tests` → `verify:db-tests` → `build`。
+3. 影响范围：仅 `@exam/db` 与 `@exam/api`（唯一两个使用 `exam_test` PG 的 package）。其余 package（web/contracts/domain/import-export/exam-engine/auth）不受影响，仍并行。
+4. 兼容：`pnpm test` / `pnpm coverage` / `pnpm test:integration` 行为不变（仍走 turbo，受同名 `dependsOn` 保护）；CI 的 `pnpm test` → `pnpm test:integration` → `pnpm build` → `pnpm coverage` 分步串行本就安全，Option A 是对 `pnpm verify` 单命令路径与未来组合调用的额外保险。
+
+**Option B（后续根因修复，待启动）**:
+
+- 给每个 DB-touching 测试任务 / worker 分配独立的 PostgreSQL database 或 schema（例如 `exam_test_db_test`、`exam_test_api_coverage`，或 per-worker `SET search_path`），从源头解除"共享 default 组织 + 共享 schema"约束。
+- 完成后可恢复 turbo 对 DB 任务的并行调度，并 review 是否回滚 Option A 的串行脚本（`verify` 可改回 `pnpm test && pnpm coverage`）。
+- 推荐基础设施：扩展 `@exam/db` 提供 `withIsolatedTestDb(taskName)` / `withTestSchema(workerId)` helper，并在 `apps/api`、`packages/db` 的 vitest setup 里调用。
+
+**禁止做（仍然有效）**:
+
+- 用 sleep / 随机重试 / 全局 timeout 掩盖竞争（Option A 是确定性任务排序，不是退避）
+- 删除 seed 测试的 cleanup 钩子（除非能证明所有 seed 测试完全幂等且不依赖干净 DB）
+- 改 seed 业务行为来迁就测试调度
+
+**验证命令**:
+
+```bash
+pnpm --filter @exam/db test
+pnpm --filter @exam/api test
+pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行链
+```
+
+**复发记录**:
+
+- 2026-06-17：P2A-J2 PR review 阶段，`turbo run test coverage --force` 复现 `@exam/db#coverage` 失败（seed idempotency / demo-seed 在并发下被对方 cleanup 覆盖）。应用 Option A。
+
+---
+
 ## 2026-06-13 — `attempts.test.ts` 后台扫描测试 5s timeout
 
 **已升级到 BUG-FLAKE-001（见上）。** 本节保留作为升级前的原始上下文。
