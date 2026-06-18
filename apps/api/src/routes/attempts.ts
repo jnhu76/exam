@@ -527,16 +527,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
       return Promise.all(
         enrollments.map(async (enrollment) => {
-          const examRaw = (await examRepo.findById(
-            ctx,
-            enrollment.examId,
-          )) as Exam | null;
-          if (!examRaw) return null;
-
           const examAdapter = createExamRepoAdapter(examRepo, ctx);
           const result = await checkAndUpdateExamStatus(
             examAdapter,
-            examRaw.id,
+            enrollment.examId,
             now,
           );
           if (!result) return null;
@@ -782,9 +776,24 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const candidateId = candidateProfile.id;
 
       const examRepo = createExamRepo(fastify.db);
-      const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
-      if (!exam) {
+      const statusResult = await checkAndUpdateExamStatus(
+        createExamRepoAdapter(examRepo, ctx),
+        examId,
+        fastify.now(),
+      );
+      if (!statusResult) {
         throw new NotFoundError("Exam not found");
+      }
+      const { exam, transition } = statusResult;
+      if (transition) {
+        recordAudit(
+          fastify,
+          request,
+          ctx,
+          `exam.${transition}`,
+          "exam",
+          examId,
+        );
       }
       if (
         exam.controlFlags.requireQueue &&
@@ -792,22 +801,6 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       ) {
         throw new ConflictError(
           "Queue admission required before starting this exam",
-        );
-      }
-
-      const statusResult = await checkAndUpdateExamStatus(
-        createExamRepoAdapter(examRepo, ctx),
-        examId,
-        fastify.now(),
-      );
-      if (statusResult?.transition) {
-        recordAudit(
-          fastify,
-          request,
-          ctx,
-          `exam.${statusResult.transition}`,
-          "exam",
-          examId,
         );
       }
 

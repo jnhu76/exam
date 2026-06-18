@@ -315,19 +315,7 @@ describe("exam auto-transition on access", () => {
       .select({ status: schema.exams.status })
       .from(schema.exams)
       .where(eq(schema.exams.id, examId));
-    expect(examAfterFirst[0]?.status).toBe("open");
-
-    const listRes2 = await ctx.app.inject({
-      method: "GET",
-      url: "/api/candidate/exams",
-      cookies: { "auth-token": ctx.candidateToken },
-    });
-    expect(listRes2.statusCode).toBe(200);
-    const examAfter = await ctx.db
-      .select({ status: schema.exams.status })
-      .from(schema.exams)
-      .where(eq(schema.exams.id, examId));
-    expect(examAfter[0]?.status).toBe("closed");
+    expect(examAfterFirst[0]?.status).toBe("closed");
   });
 
   it("published exam auto-opens on candidate start attempt", async () => {
