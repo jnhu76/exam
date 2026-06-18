@@ -1337,7 +1337,9 @@ describe("attempt routes", () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
-      expect(res.json()).toEqual({ ok: true });
+      const body = res.json();
+      expect(body.ok).toBe(true);
+      expect(typeof body.serverNow).toBe("string");
     });
 
     it("marks stale attempts as disrupted during the background scan", async () => {
@@ -1491,8 +1493,10 @@ describe("attempt routes", () => {
         openOffsetMs?: number;
         closeOffsetMs?: number;
         enroll?: boolean;
+        now?: Date;
       } = {},
     ): Promise<string> {
+      const now = opts.now ?? new Date();
       const id = crypto.randomUUID();
       const snapshot = [
         {
@@ -1519,8 +1523,8 @@ describe("attempt routes", () => {
         status: "open",
         timingMode: "timed_window",
         durationMinutes: 60,
-        openAt: new Date(Date.now() + (opts.openOffsetMs ?? -3600000)),
-        closeAt: new Date(Date.now() + (opts.closeOffsetMs ?? 86400000)),
+        openAt: new Date(now.getTime() + (opts.openOffsetMs ?? -3600000)),
+        closeAt: new Date(now.getTime() + (opts.closeOffsetMs ?? 86400000)),
         passingScore: 60,
         totalScore: 100,
         questionSelectionMode: "manual",
@@ -1533,8 +1537,8 @@ describe("attempt routes", () => {
           | "pass_then_stop",
         scoreStrategy: "highest",
         maxAttempts: opts.maxAttempts ?? 3,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
       });
 
       if (opts.enroll !== false) {
@@ -1545,8 +1549,8 @@ describe("attempt routes", () => {
           candidateId: candidateProfileId,
           status: "assigned",
           attemptCount: 0,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: now,
+          updatedAt: now,
         });
       }
       return id;
