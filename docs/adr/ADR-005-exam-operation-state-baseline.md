@@ -6,6 +6,13 @@ Proposed (design-first; **not yet implemented**). Awaiting review before any
 production code. This ADR is the authority for the forthcoming implementation
 that unblocks the paused P2B-J1 admin full-loop E2E.
 
+> **Revision 2** incorporates mandatory review feedback: rename to "three-axis
+> state model"; mandatory lock-reconcile-assert-mutate transaction rule; close
+> active-attempt policy; defer `cancel`; stale-state protection on
+> `unpublish`/`extend`; PATCH-published restricted to schedule fields; runtime
+> policy validation; submitAttempt guard ordering; implementation sliced into
+> 4 phases.
+
 ## Context
 
 The P2B-J1 admin-flow audit (spike, commit `61ad5c9` on `feat/new-task`) tried
@@ -47,68 +54,67 @@ first, so the implementation has one authority to build against.
 ### Why a design-first baseline (not direct implementation)
 
 P2B-J2 (admin hardening) and P2C (proctor runtime) both depend on exam
-operation semantics. Building `close` without `cancel`/`extend`/`unpublish`,
-or building the timing policy without a `submit source` discriminator, would
-force rework. This ADR fixes the **state model, API surface, error contract,
-and audit events** in one place. Phase 2B/2C jobs then implement slices of it.
+operation semantics. Building `close` without `extend`/`unpublish`, or building
+the timing policy without a `submit source` discriminator, would force rework.
+This ADR fixes the **state model, API surface, error contract, and audit
+events** in one place. Phase 2B/2C jobs then implement slices of it.
 
 ### Conventions confirmed from the codebase (binding for this ADR)
 
 | Concern | Existing convention | ADR decision |
 | --- | --- | --- |
-| Spelling of cancel | Codebase uses **US** `canceled` (30) over `cancelled` (0). `packages/domain/src/enums.ts` and all routes use `canceled`. | Use **`canceled`** for the new state, error code `EXAM_CANCEL_NOT_ALLOWED`, audit action `exam.cancel`. The prompting spec wrote `cancelled`; we follow the codebase. |
-| Exam status enum | `packages/domain/src/enums.ts:104` `ExamStatus = {draft, published, open, closed, archived}` (5 states). | **Extend** to 6 by adding `Canceled`. Doc comment updated. |
-| Error code format | `SCREAMING_SNAKE_CASE` in `packages/contracts/src/messageRegistry.ts` (`EXAM_NOT_DRAFT`, `EXAM_NOT_OPEN`, `ATTEMPT_CLOSED`, …). | New codes follow this exactly (e.g. `EXAM_CLOSE_NOT_ALLOWED`). |
+| Spelling of cancel | Codebase uses **US** `canceled` (30) over `cancelled` (0). | Use **`canceled`** for the state and any related code. (Cancel op itself is **deferred** — see §Layer 3.5.) |
+| Exam status enum | `packages/domain/src/enums.ts:104` `ExamStatus = {draft, published, open, closed, archived}` (5 states). | **Extend** to 6 by adding `Canceled` — **only when the cancel op is implemented** (Slice 4, deferred). |
+| Error code format | `SCREAMING_SNAKE_CASE` in `packages/contracts/src/messageRegistry.ts`. | New codes follow this exactly. |
 | Error response shape | `{ code, message, requestId, details }`. | No second format introduced. |
-| Audit action format | **dot.case**: `"exam.publish"`, `"exam.archive"`, `"enrollment.add"` (`apps/api/src/routes/exam.ts:558,589`). | New actions use dot.case: `exam.unpublish`, `exam.close`, `exam.extend`, `exam.cancel`. **Not** the SCREAMING form from the prompting spec. |
-| Audit write helper | `recordAudit(fastify, request, ctx, action, targetType, targetId, metadata)` (`apps/api/src/routes/audit.ts:25`). `actorId` comes from `ctx`. | `fromStatus`/`toStatus`/`reason` go in `metadata`; `targetId = examId`; actor from `ctx.actorId`. |
-| State machine file | `packages/exam-engine/src/examStateMachine.ts` (`EXAM_VALID_TRANSITIONS`, `assertTransition`). | Same file/shape extended; commands added in `examCommands.ts`. |
+| Audit action format | **dot.case**: `"exam.publish"`, `"exam.archive"`, `"enrollment.add"`. | New actions use dot.case. |
+| Audit write helper | `recordAudit(fastify, request, ctx, action, targetType, targetId, metadata)`. `actorId` from `ctx`. | `fromStatus`/`toStatus`/`reason` go in `metadata`. |
+| State machine file | `packages/exam-engine/src/examStateMachine.ts`. | Same file/shape extended. |
+| Attempt "active" states | `in_progress`, `disrupted` (plus `submitted`/`grading` are in-flight to graded). | "Unfinalized" = not yet `graded`/`voided`. |
 
 ### Related decisions (referenced, **not modified**)
 
-- **ADR-001 (Redis)**: Deferred. This baseline adds **no Redis dependency**.
-  Admin close/extend are synchronous HTTP writes; auto-close runs on the
-  existing in-process scanner.
-- **ADR-002 (WebSocket/SSE)**: Deferred. Admin operation status changes are
-  **HTTP polling** (Phase 2C proctor dashboard will poll). No WS/SSE introduced.
-- **ADR-003 (Job Queue)**: Deferred. Deadline auto-submit stays on the existing
-  DB-backed scanner, not a queue.
-- **ADR-004 (Desktop/Electron)**: Deferred. Orthogonal runtime surface.
-
-These four remain `Deferred`. ADR-005 neither supersedes nor amends them.
+ADR-001/002/003/004 (Redis, WS/SSE, Job Queue, Desktop) remain `Deferred` and
+orthogonal. This baseline adds no Redis, no WS/SSE, no queue; admin close/
+extend are synchronous HTTP writes; auto-close runs on the existing in-process
+scanner.
 
 ## Decision
 
-Adopt a **three-layer state model** and a **stateful admin operation surface**
-plus a **candidate runtime timing policy**, as specified below. Implement in
-slices under Phase 2B (admin ops) and 2C (proctor runtime) jobs, after this ADR
-is reviewed.
+Adopt a **three-axis state model**, a **stateful admin operation surface**, and
+a **candidate runtime timing policy**, with a mandatory
+**lock-reconcile-assert-mutate** transaction rule binding every admin
+operation. Implement in **4 slices** (see §Implementation Slices) after this
+ADR is reviewed.
 
-## Layer 1 — Three-state model
+## Layer 1 — Three-axis state model
 
-The platform must distinguish three independent state axes. Conflating them is
-the root cause of the P2B-J1 blockers.
+The platform must distinguish three **independent state axes**. Conflating
+them is the root cause of the P2B-J1 blockers.
 
 ### 1.1 Exam lifecycle state (entity: `Exam`)
 
 | State | Meaning | Editable? | Candidates can take? |
 | --- | --- | --- | --- |
 | `draft` | Created, not released. Full edit. | yes | no |
-| `published` | Released, not currently open. Limited edit (schedule). | schedule only | no |
+| `published` | Released, not currently open. Limited edit (schedule only). | schedule only | no |
 | `open` | Window is live; candidates may start/resume. | no (use close/extend) | yes |
-| `closed` | Normal end. Scores/export allowed. | no | no |
-| `canceled` | Abnormal cancellation. | no | no |
+| `closed` | Normal end. Scores/export allowed **only when no unfinalized attempts remain**. | no | no |
+| `canceled` | Abnormal cancellation. *(Deferred — see §3.5.)* | no | no |
 | `archived` | Read-only historical. | no | no |
 
-Source: `packages/domain/src/enums.ts` `ExamStatus` (extend with `Canceled`).
+Source: `packages/domain/src/enums.ts` `ExamStatus` (extend with `Canceled`
+only in Slice 4).
 
 ### 1.2 Attempt state (entity: `ExamAttempt`)
 
 Existing, unchanged in this baseline:
-`not_started → queued → in_progress → disrupted | submitted → grading → graded | voided`
-(`packages/domain/src/enums.ts:71`, machine in
-`attemptStateMachine.ts`). Note `voided` already exists — a precedent for the
-future invalidation surface.
+`not_started → queued → in_progress → disrupted | submitted → grading → graded | voided`.
+
+**Finalized** states (attempt is settled): `graded`, `voided`.
+**Unfinalized** ("active") states: `in_progress`, `disrupted`, `submitted`,
+`grading`. The close guard (§3.3) and scores/export gate (§Close & Export
+Policy) key off this distinction.
 
 ### 1.3 Candidate / session / device operational state
 
@@ -116,12 +122,30 @@ Not a single enum — derived from `ExamAttempt` fields:
 - **session liveness** — `lastActivityAt` heartbeat vs `HEARTBEAT_TIMEOUT_MS`
   → live / disconnected (`disrupted`).
 - **device** — implicit via the authenticated session cookie; no per-candidate
-  device binding exists in Phase 1/2.
+  device binding in Phase 1/2.
 - **resume eligibility** — `in_progress | disrupted` attempt exists for the
   enrollment.
 
-This layer is **observed**, not transitioned by a dedicated machine. Future
-proctor/device jobs (§Future) add explicit state here.
+This axis is **observed**, not transitioned by a dedicated machine. Future
+proctor/device jobs add explicit state here.
+
+## Mandatory transaction rule (lock → reconcile → assert → mutate)
+
+**Every admin operation must**, inside a single transaction:
+
+1. **Lock** the exam row (e.g. `SELECT ... FOR UPDATE` via the repo) so no
+   concurrent admin op or scanner races the decision.
+2. **Reconcile** status by `now` — run the access-time reconciliation
+   (`checkAndUpdateExamStatus`) **before** asserting the requested transition.
+   This guarantees a *stale* persisted status cannot be acted on: if `now`
+   says the exam should be `open`/`closed`, the row is advanced first.
+3. **Assert** the transition against the reconciled status via the state
+   machine.
+4. **Mutate** the row (status / `closeAt` / timing fields) and commit.
+
+This rule is what makes stale-state protection (§3.2, §3.4) and the close
+active-attempt guard (§3.3) correct. Any admin op that skips this sequence is
+a bug.
 
 ## Layer 2 — Exam lifecycle transitions
 
@@ -130,21 +154,21 @@ draft
   -> published      via publish
 
 published
-  -> draft          via unpublish
+  -> draft          via unpublish   (stale-guarded: see §3.2)
   -> open           via auto-open / access-time reconciliation
-  -> canceled       via cancel
+  -> canceled       via cancel       (DEFERRED — Slice 4)
   -> archived       via archive
 
 open
-  -> closed         via admin close
+  -> closed         via admin close  (active-attempt-guarded: see §3.3)
   -> closed         via auto-close / access-time reconciliation
-  -> open           via extend closeAt
-  -> canceled       via cancel
+  -> open           via extend closeAt (stale-guarded: see §3.4)
+  -> canceled       via cancel       (DEFERRED — Slice 4)
 
 closed
   -> archived       via archive
 
-canceled
+canceled            (DEFERRED)
   -> archived       via archive
 
 archived
@@ -158,104 +182,100 @@ open      -> draft
 closed    -> draft
 canceled  -> draft
 archived  -> anything mutable
-draft     -> archived        (must publish first; current machine already forbids)
-open      -> archived        (must close first; current machine already forbids)
+draft     -> archived        (must publish first)
+open      -> archived        (must close first)
 ```
-
-### Diff vs current machine (`examStateMachine.ts`)
-
-| Transition | Current | Target | Action |
-| --- | --- | --- | --- |
-| `published -> draft` | missing | add (unpublish) | new |
-| `open -> closed` (admin) | missing (auto-only) | add (admin close) | new |
-| `open -> open` (extend) | n/a (not a status change) | update `closeAt` only | new op |
-| `published -> canceled` | missing | add | new state |
-| `open -> canceled` | missing | add | new state |
-| `canceled -> archived` | missing | add | new state |
-| `published -> archived` | present | **keep** | unchanged |
-| `closed -> archived` | present | **keep** | unchanged |
-| `open -> closed` (auto) | present | keep | unchanged |
-
-**Archive behavior diff (prompt §4.6, "report the diff first"):** current
-machine allows `published -> archived` and `closed -> archived` only. Target
-adds `canceled -> archived`. We **do not** allow `open -> archived` or
-`draft -> archived` (consistent with current).
 
 ## Layer 3 — Admin operation API surface
 
-All admin-only (`preHandler: [authenticate, requireRole(["Admin"])]`), all
-under `/api/exams/:id`, all return `ExamSchema` (or specific fields noted), all
-record audit. Error envelope is the existing `{code,message,requestId,details}`.
+All admin-only, under `/api/exams/:id`, all run the **lock-reconcile-assert-
+mutate** rule, all record audit. Error envelope is the existing
+`{code,message,requestId,details}`.
 
 ### 3.1 `POST /api/exams/:id/publish` — exists, verify
 
 - Allowed: `draft -> published` (and `draft -> open` when `openAt <= now` and
-  current behavior already auto-opens — keep as-is).
-- Reject: `open|closed|canceled|archived` → `EXAM_ALREADY_PUBLISHED` /
-  `INVALID_STATE_TRANSITION` (existing).
+  current behavior auto-opens — keep as-is).
+- Reject: `open|closed|canceled|archived` → existing codes.
 - Audit: `exam.publish` (existing).
 
-### 3.2 `POST /api/exams/:id/unpublish` — **new**
+### 3.2 `POST /api/exams/:id/unpublish` — **new** (Slice 2)
 
-- Allowed: `published -> draft`.
-- Reject: `draft|open|closed|canceled|archived` → `EXAM_UNPUBLISH_NOT_ALLOWED`.
+- Allowed: `published -> draft` **only if, after reconciliation, the exam is
+  still `published`** (i.e. `now < openAt`). Stale-state protection: if
+  reconciliation advanced the exam to `open` (because `openAt` already
+  passed), `unpublish` is rejected.
+- Reject: `draft|open|closed|canceled|archived`, or reconciled-to-`open` →
+  `EXAM_UNPUBLISH_NOT_ALLOWED`.
 - Hard rule: **never** `open -> draft`.
 - Audit: `exam.unpublish`, metadata `{fromStatus:"published", toStatus:"draft"}`.
 
-### 3.3 `POST /api/exams/:id/close` — **new** (unblocks P2B-J1)
+### 3.3 `POST /api/exams/:id/close` — **new** (Slice 1; unblocks P2B-J1)
 
 - Body: `{ "reason"?: string }`.
-- Allowed: `open -> closed`.
+- Allowed: `open -> closed` **only when no unfinalized attempts exist** for the
+  exam (i.e. no `in_progress | disrupted | submitted | grading` rows). This is
+  the **close active-attempt policy (MVP)**: admin must let active attempts be
+  resolved first (candidate submits, deadline scanner auto-submits, or a future
+  P2C-J2 force-submit).
+- Reject:
+  - `draft|published|canceled|archived`, or reconciled-not-`open` →
+    `EXAM_CLOSE_NOT_ALLOWED`.
+  - `open` with unfinalized attempts remaining → `EXAM_CLOSE_NOT_ALLOWED` with
+    `details.reason = "ACTIVE_ATTEMPTS_EXIST"` and
+    `details.activeAttemptCount`.
 - Idempotency: **200 + current exam, no duplicate audit** when already `closed`
-  (chosen to match idempotent-read conventions; see Alternatives).
-- Reject: `draft|published|canceled|archived` → `EXAM_CLOSE_NOT_ALLOWED`.
-- **Does NOT force-submit active attempts** in this baseline. Closing ends the
-  exam lifecycle; in-progress attempts are left to the deadline scanner / future
-  proctor force-submit. Documented explicitly.
+  AND no unfinalized attempts.
+- **Does NOT force-submit active attempts** in this baseline.
 - Audit: `exam.close`, metadata `{reason?, fromStatus:"open", toStatus:"closed"}`.
-- **Expected effect**: after `close`, `examEnded` is true → scores/export
-  return 200 (replaces the `endingSoonSec` workaround).
+- **Expected effect**: once `closed` and no active attempts remain, `examEnded`
+  is true → scores/export return 200 (replaces the `endingSoonSec` workaround).
 
-### 3.4 `POST /api/exams/:id/extend` — **new**
+### 3.4 `POST /api/exams/:id/extend` — **new** (Slice 2)
 
-- Body (chosen form): `{ "extendMinutes": number, "reason"?: string }`.
-  Preferred over `closeAt` to avoid generic PATCH semantics mid-`open`.
-- Allowed: `open -> open` (updates `closeAt` only).
+- Body: `{ "extendMinutes": number, "reason"?: string }`.
+- Allowed: `open -> open` (updates `closeAt` only) **only if, after
+  reconciliation, the exam is still `open`** (i.e. `now < closeAt`). Stale-state
+  protection: if reconciliation advanced the exam to `closed` (because
+  `closeAt` already passed), `extend` is rejected — a stale `open` exam cannot
+  be revived by extending its `closeAt`.
 - Rules: `extendMinutes` integer > 0; new `closeAt > old closeAt`; new
   `closeAt > now`.
-- Reject: `draft|published|closed|canceled|archived` → `EXAM_EXTEND_NOT_ALLOWED`.
-- Audit: `exam.extend`, metadata `{extendMinutes, oldCloseAt, newCloseAt, reason?}`.
+- Reject: `draft|published|closed|canceled|archived`, or reconciled-to-`closed`
+  → `EXAM_EXTEND_NOT_ALLOWED`.
+- Audit: `exam.extend`, metadata
+  `{extendMinutes, oldCloseAt, newCloseAt, reason?}`.
 
-### 3.5 `POST /api/exams/:id/cancel` — **new**
+### 3.5 `POST /api/exams/:id/cancel` — **DEFERRED** (Slice 4)
 
-- Body: `{ "reason": string }` (required).
-- Allowed: `published -> canceled`, `open -> canceled`.
-- Reject: `draft|closed|canceled|archived` → `EXAM_CANCEL_NOT_ALLOWED`.
-- **Does not convert to draft. Does not delete/void attempts.** First
-  implementation only flips status + audit + reason.
-- Scores/export policy for `canceled`: **least invasive** — `examEnded` is
-  satisfied (`status === canceled` counts as ended), so scores/export are
-  allowed **admin-only**. Attempt rows carry no special cancellation marker in
-  this baseline (future: add `cancellationMarker` to export rows).
-- Audit: `exam.cancel`, metadata `{reason, fromStatus, toStatus:"canceled"}`.
+`cancel` is **not in the first implementation**. It is deferred because its
+semantics (attempt voiding, result/export behavior with a cancellation marker)
+are not yet decided. If it lands later, the ADR will be amended to specify,
+at minimum:
 
-> **Fallback if `canceled` churn is too large:** ship 3.2/3.3/3.4 first
-> (unpublish/close/extend) and defer `cancel` to a follow-up. The close
-> operation alone unblocks P2B-J1. Decision recorded at implementation time.
+- allowed: `published -> canceled`, `open -> canceled`;
+- rejected: `draft|closed|canceled|archived` → `EXAM_CANCEL_NOT_ALLOWED`;
+- attempt behavior (void vs leave) must be explicit and tested;
+- result/export behavior must use an explicit **cancellation marker** — silent
+  normal scores/export for `canceled` exams is **not allowed**.
 
-### 3.6 `POST /api/exams/:id/archive` — exists, verify/extend
+Until then, admins end exams via `close` (Slice 1).
 
-- Allowed: `published -> archived`, `closed -> archived`, **`canceled -> archived`** (new).
-- Reject: `draft|open|archived` → `INVALID_STATE_TRANSITION` (existing).
+### 3.6 `POST /api/exams/:id/archive` — exists, verify (no `canceled` until Slice 4)
+
+- Allowed: `published -> archived`, `closed -> archived`.
+- Reject: `draft|open|archived` (and `canceled -> archived` is **not** added
+  until `cancel` ships in Slice 4).
 - Audit: `exam.archive` (existing).
 
 ### 3.7 `PATCH /api/exams/:id` — clarify, keep draft-default
 
 - `draft` → full edit (current).
-- `published` → **schedule-only** (`openAt`, `closeAt`) with rules
-  `openAt` in future if not yet open, `closeAt > openAt`. (New allowance.)
-- `open|closed|canceled|archived` → reject generic PATCH → `EXAM_UPDATE_NOT_ALLOWED`.
-  Use the dedicated operations (close/extend).
+- `published` → **schedule fields only**: `openAt`, `closeAt`. **No** question,
+  `controlFlags`, score-policy, or other mutation after publish. Rules: if the
+  exam is not yet open, `openAt` may be in the future; `closeAt > openAt`.
+- `open|closed|canceled|archived` → reject generic PATCH →
+  `EXAM_UPDATE_NOT_ALLOWED`. Use the dedicated operations (close/extend).
 
 ## Layer 4 — Candidate runtime timing policy
 
@@ -266,13 +286,27 @@ latestStartOffsetMinutes : integer | null   (null = disabled)
 minSubmitAfterStartMinutes: integer | null   (null = disabled)
 ```
 
-Validation: `null` or integer `>= 0`. Added across: DB migration + schema
+Validation: `null` or integer `>= 0`. Added across DB migration + schema
 (snake_case `latest_start_offset_minutes`, `min_submit_after_start_minutes`),
-`packages/contracts/src/exam.ts` (create/update/response Zod), OpenAPI output.
-Admin UI is a **documented follow-up** if it would bloat the PR; **API must be
-complete**.
+contracts Zod (create/update/response), OpenAPI. Admin UI is a **documented
+follow-up** if it bloats the PR; **API must be complete**.
 
-### 4.2 Late-entry cutoff (`latestStartOffsetMinutes`)
+### 4.2 Validation rules (binding)
+
+- `latestStartAt = openAt + latestStartOffsetMinutes` **must be before
+  `closeAt`** (when `latestStartOffsetMinutes != null`). Reject otherwise at
+  create/update with a validation error.
+- `minSubmitAfterStartMinutes` **should not exceed `durationMinutes`** unless
+  explicitly allowed; default behavior: reject at create/update if
+  `minSubmitAfterStartMinutes > durationMinutes` (it would make manual submit
+  impossible). A future flag may lift this; none exists now.
+- **Non-`timed_window` exams**: Phase 1 only supports `timed_window`. Both
+  fields are **ignored** (treated as `null`) for any non-`timed_window` timing
+  mode; the create/update validator rejects setting them when
+  `timingMode !== "timed_window"`. (When `timed_sync` etc. ship, their policy
+  is defined then — out of scope here.)
+
+### 4.3 Late-entry cutoff (`latestStartOffsetMinutes`)
 
 Applies **only to creating a new attempt**:
 
@@ -292,7 +326,7 @@ scanner, admin/proctor/system ops.
 4. Only when creating a **new** attempt → apply `latestStartOffsetMinutes`.
 5. Create attempt.
 
-### 4.3 Minimum manual submit duration (`minSubmitAfterStartMinutes`)
+### 4.4 Minimum manual submit duration (`minSubmitAfterStartMinutes`) + guard ordering
 
 Applies **only** to candidate manual submit:
 
@@ -303,9 +337,19 @@ if source == "candidate" and now < earliestSubmitAt:
 details: { earliestSubmitAt, remainingSeconds }
 ```
 
+**Guard ordering inside `submitAttempt` (binding):**
+1. Load attempt.
+2. **Idempotent already-submitted path first**: if the attempt is already
+   `submitted`/`grading`/`graded`, return success/idempotent without running
+   the early-submit check. (A re-submit after the deadline scanner already
+   submitted must not be re-rejected by the early-submit guard.)
+3. Run state-machine transition assertion.
+4. Only for a genuine `in_progress -> submitted` transition with
+   `source == "candidate"` → apply `minSubmitAfterStartMinutes`.
+
 Must **not** block: `deadline_scanner`, `proctor`, `system` submit sources.
 
-### 4.4 Submit source discriminator (command layer only)
+### 4.5 Submit source discriminator (command layer only)
 
 ```ts
 type SubmitSource = "candidate" | "deadline_scanner" | "proctor" | "system";
@@ -316,20 +360,31 @@ type SubmitSource = "candidate" | "deadline_scanner" | "proctor" | "system";
 - No silent default to `"candidate"` for internal callers — source is explicit
   at the command boundary.
 
+## Close & export policy (binding)
+
+- **Close requires no active attempts** (§3.3). An exam cannot reach `closed`
+  while unfinalized attempts remain.
+- **Scores/export require `examEnded` AND no unfinalized attempts**. Concretely,
+  `canOpenScoreList` (or a sibling guard) must additionally reject with
+  `EXAM_NOT_FINISHED` / `details.reason = "ACTIVE_ATTEMPTS_EXIST"` when
+  unfinalized attempts exist, even if `now >= closeAt`. This prevents exporting
+  partial results while candidates are still mid-exam.
+- `cancel` (deferred) would carry its own export marker; until it ships, the
+  only ended-with-results path is `closed`.
+
 ## Error contract (new codes, existing format)
 
 | Code | HTTP | Where |
 | --- | --- | --- |
 | `EXAM_UNPUBLISH_NOT_ALLOWED` | 409 | unpublish |
-| `EXAM_CLOSE_NOT_ALLOWED` | 409 | close |
+| `EXAM_CLOSE_NOT_ALLOWED` | 409 | close (incl. `details.reason = "ACTIVE_ATTEMPTS_EXIST"`) |
 | `EXAM_EXTEND_NOT_ALLOWED` | 409 | extend |
-| `EXAM_CANCEL_NOT_ALLOWED` | 409 | cancel |
-| `EXAM_UPDATE_NOT_ALLOWED` | 409 | PATCH non-editable state |
+| `EXAM_UPDATE_NOT_ALLOWED` | 409 | PATCH non-editable state / non-schedule field on published |
 | `ATTEMPT_LATE_ENTRY_CLOSED` | 409 | new startAttempt past cutoff |
 | `ATTEMPT_SUBMIT_TOO_EARLY` | 409 | candidate submit before min duration |
 
-All in `packages/contracts/src/messageRegistry.ts` with localized messages
-(`packages/domain/src/errors.ts` classes as needed). No second error format.
+`EXAM_CANCEL_NOT_ALLOWED` and the `canceled` enum value are **not** added until
+Slice 4 (cancel deferred). No second error format.
 
 ## Audit events (dot.case, existing helper)
 
@@ -337,55 +392,107 @@ All in `packages/contracts/src/messageRegistry.ts` with localized messages
 | --- | --- | --- |
 | `exam.publish` | publish | (existing) |
 | `exam.unpublish` | unpublish | `{fromStatus, toStatus}` |
-| `exam.close` | close | `{reason?, fromStatus, toStatus}` |
+| `exam.close` | close | `{reason?, fromStatus, toStatus, activeAttemptCount?}` |
 | `exam.extend` | extend | `{extendMinutes, oldCloseAt, newCloseAt, reason?}` |
-| `exam.cancel` | cancel | `{reason, fromStatus, toStatus}` |
-| `exam.archive` | archive | (existing, extend for `canceled -> archived`) |
+| `exam.archive` | archive | (existing) |
 
-`actorId` from `ctx.actorId`; no noisy audit for rejected candidate submits.
+`exam.cancel` is **not** added until Slice 4. `actorId` from `ctx`; no noisy
+audit for rejected candidate submits.
 
 ## Admin UI controls (minimal, with stable testids)
 
 ```
 draft      : publish, edit
-published  : unpublish, edit-schedule, cancel, archive (if allowed)
-open       : close, extend, cancel
+published  : unpublish, edit-schedule, archive (if allowed)
+open       : close, extend
 closed     : scores, export, archive
-canceled   : archive
+canceled   : (deferred)
 archived   : read-only
 ```
 
 New `data-testid`s: `exam-detail-unpublish-btn`, `exam-detail-close-btn`,
-`exam-detail-extend-btn`, `exam-detail-cancel-btn`. Dialogs: close (reason
-optional), extend (`extendMinutes` required), cancel (`reason` required). No
-full proctor/session UI in this baseline.
+`exam-detail-extend-btn`. (`exam-detail-cancel-btn` deferred with cancel.)
+Dialogs: close (reason optional), extend (`extendMinutes` required). No full
+proctor/session UI in this baseline.
+
+## Implementation Slices
+
+Implementation is split into 4 slices. Each slice is independently shippable
+and testable; later slices depend on earlier ones.
+
+### Slice 1 — Close baseline (unblocks P2B-J1)
+
+- `POST /api/exams/:id/close` with the lock-reconcile-assert-mutate rule.
+- Close active-attempt guard (`ACTIVE_ATTEMPTS_EXIST` rejection).
+- Scores/export guard extended to also require no unfinalized attempts.
+- Minimal UI: `exam-detail-close-btn`.
+- **Replaces the `endingSoonSec` workaround; admin full-loop E2E can resume
+  (setup → publish → candidate take+submit → admin close → scores → export).**
+
+### Slice 2 — Unpublish / schedule / extend
+
+- `POST /api/exams/:id/unpublish` (stale-guarded).
+- `POST /api/exams/:id/extend` (stale-guarded).
+- PATCH clarification: `published` schedule-only (`openAt`/`closeAt`).
+- UI: `exam-detail-unpublish-btn`, `exam-detail-extend-btn`.
+
+### Slice 3 — Timing policy
+
+- Fields `latestStartOffsetMinutes` + `minSubmitAfterStartMinutes` (DB, schema,
+  contracts, OpenAPI).
+- Late-entry cutoff in `startAttempt` (new-attempt-only).
+- Min-submit guard in `submitAttempt` with the binding guard ordering
+  (idempotent-already-submitted first).
+- `SubmitSource` discriminator across all submit call sites.
+- Validation rules (§4.2).
+
+### Slice 4 — Cancel (likely deferred further)
+
+- `canceled` enum value + `exam.cancel` op + `EXAM_CANCEL_NOT_ALLOWED`.
+- **Only** if/when attempt-voiding and cancellation-marker export semantics
+  are decided. This ADR must be amended with those decisions before Slice 4
+  ships. Default assumption: **Slice 4 does not ship** in this work cycle.
+
+## Boundary / non-collision with existing Phase 2C jobs
+
+This baseline operates on the **exam lifecycle** axis. It must not collide with
+the per-**attempt** proctor operations already scoped in Phase 2C:
+
+| Operation | Entity / field | Axis | Owner job | Collides? |
+| --- | --- | --- | --- | --- |
+| `POST /api/exams/:id/extend` (§3.4) | `Exam.closeAt` | exam window (all) | this ADR (P2B) | no |
+| `POST /api/admin/attempts/:id/extend-time` | `ExamAttempt.deadlineAt` | per-attempt | P2C-J3 | no |
+| `POST /api/admin/attempts/:id/force-submit` | attempt submit | per-attempt | P2C-J2 | no |
+| `POST /api/exams/:id/close` (§3.3) | `Exam.status` open→closed | exam lifecycle | this ADR (P2B) | no |
+
+`exam.extend` extends the **exam window**; `attempt.extendTime` (P2C-J3) extends
+a **candidate's deadline**. The API paths and audit actions are kept distinct.
+`exam.close` ends the **exam lifecycle** and does **not** submit attempts;
+P2C-J2 force-submit closes a single attempt. `close`'s active-attempt guard
+(§3.3) means the two converge only when an admin force-submits remaining
+attempts (P2C-J2) so `close` can then succeed.
 
 ## Implemented now vs future
 
-### This baseline implements (in follow-on Phase 2B/2C jobs)
+### This baseline implements (across Slices 1–3)
 
-- `canceled` lifecycle state + transition matrix extension.
-- Admin ops: `unpublish`, `close`, `extend`, `cancel`; verify `publish`,
-  `archive`; clarify `PATCH`.
-- Runtime policy fields `latestStartOffsetMinutes`,
-  `minSubmitAfterStartMinutes` + the two guards.
-- `SubmitSource` discriminator.
-- New error codes + audit events.
+- Admin ops: `close` (S1), `unpublish`/`extend`/PATCH-clarify (S2); verify
+  `publish`/`archive`.
+- Runtime policy fields + the two guards + `SubmitSource` (S3).
+- Lock-reconcile-assert-mutate rule across all admin ops.
+- New error codes (minus cancel) + audit events.
 - Minimal admin UI controls with testids.
 
 ### Future / explicitly NOT this baseline
 
-(Phase 2C+ proctor runtime and beyond.)
-
-- `pause` / `resume` exam (a live hold distinct from `cancel`).
+- `cancel` lifecycle state and op (Slice 4 — deferred; needs voiding + marker
+  decisions).
+- `pause` / `resume` exam.
 - Per-candidate device replacement / rebind.
 - Account unlock / session reset.
 - Machine preflight checks.
-- Proctor force-submit (closes an **attempt**, not the exam; separate from
-  admin `close`).
-- Attempt invalidation (uses existing `voided` status; needs its own op).
-- Automatic force-submit of active attempts on exam `close` (deferred; close
-  ends the lifecycle only).
+- Proctor force-submit (P2C-J2) and attempt invalidation (`voided` op).
+- Automatic force-submit of active attempts on exam `close` (deferred).
 - Result publishing workflow / provisional-vs-final score visibility.
 - Live/provisional score monitor.
 - Additional lifecycle states: `paused`, `suspended`, `result_published`,
@@ -395,71 +502,50 @@ full proctor/session UI in this baseline.
 
 | Finding | Fixed by |
 | --- | --- |
-| No deterministic admin close for an `open` exam (scores/export stuck on 409) | `POST /api/exams/:id/close` (§3.3) — `examEnded` becomes true, replacing the `endingSoonSec` workaround. |
-| `PATCH /exams/:id` is draft-only, so schedules can't be adjusted after publish | `PATCH` schedule-edit for `published` (§3.7) + `extend` for `open` (§3.4). |
-| No minimum manual submit duration | `minSubmitAfterStartMinutes` + `ATTEMPT_SUBMIT_TOO_EARLY` (§4.3). |
-| No late-entry cutoff | `latestStartOffsetMinutes` + `ATTEMPT_LATE_ENTRY_CLOSED` (§4.2). |
-| Admin full-loop E2E blocked | Resumes once close + timing policy land; no `endingSoonSec` workaround remains. |
-| (Out of scope here, separate fix) Admin pages lacked `data-testid` | Captured in the spike commit; new UI controls here use stable testids by default. |
-
-## Boundary / non-collision with existing Phase 2C jobs
-
-This baseline operates on the **exam lifecycle** axis. It must not collide
-with the per-**attempt** proctor operations already scoped in Phase 2C. The
-distinction is explicit and binding:
-
-| Operation | Entity / field | Axis | Owner job | Collides with this ADR? |
-| --- | --- | --- | --- | --- |
-| `POST /api/exams/:id/extend` (§3.4) | `Exam.closeAt` | **exam window** (all candidates) | **this ADR (P2B)** | no — different axis |
-| `POST /api/admin/attempts/:id/extend-time` | `ExamAttempt.deadlineAt` | **per-attempt** | **P2C-J3** | no — per-candidate |
-| `POST /api/admin/attempts/:id/force-submit` | attempt submit | **per-attempt** | **P2C-J2** | no — closes one attempt, not the exam |
-| `POST /api/exams/:id/close` (§3.3) | `Exam.status` open→closed | **exam lifecycle** | **this ADR (P2B)** | no |
-
-**Naming**: the verb "extend" is overloaded. `exam.extend` (here) extends the
-**exam window**; `attempt.extendTime` (P2C-J3) extends a **candidate's
-deadline**. The two API paths (`/exams/:id/extend` vs
-`/admin/attempts/:id/extend-time`) and audit actions (`exam.extend` vs
-`attempt.extendTime`) are kept distinct to avoid ambiguity.
-
-**Force-submit boundary**: P2C-J2 force-submits a single attempt. This ADR's
-`exam.close` ends the **exam lifecycle** and does **not** submit attempts. The
-two are independent: a closed exam may still have `in_progress`/`disrupted`
-attempts (left to the deadline scanner or a future P2C-J2 force-submit). This
-is why "automatic force-submit on close" is deferred to a future op.
+| No deterministic admin close for an `open` exam (scores/export stuck on 409) | `close` (Slice 1) — `examEnded` becomes true, no `endingSoonSec` workaround. |
+| Active attempts block safe export | Close guard + scores/export guard require no unfinalized attempts. |
+| `PATCH /exams/:id` draft-only | PATCH schedule-edit for `published` (Slice 2) + `extend` for `open`. |
+| No minimum manual submit duration | `minSubmitAfterStartMinutes` + `ATTEMPT_SUBMIT_TOO_EARLY` (Slice 3). |
+| No late-entry cutoff | `latestStartOffsetMinutes` + `ATTEMPT_LATE_ENTRY_CLOSED` (Slice 3). |
+| Admin full-loop E2E blocked | Resumes after Slice 1; no `endingSoonSec` workaround remains. |
+| (Out of scope here) Admin pages lacked `data-testid` | Captured in the spike commit; new UI controls here use stable testids. |
 
 ## Alternatives considered
 
+- **Close active-attempt policy**: "allow close anytime, force-submit later"
+  was rejected for MVP in favor of "close only when no active attempts" — it
+  keeps `closed` as a truly settled state and makes export correctness
+  provable. Force-submit remains a separate P2C-J2 op.
 - **Idempotency for `close`**: 200 + current exam (chosen) vs 409-with-reason.
-  Chose 200 to match idempotent read conventions and avoid flaky double-click
-  errors in the admin UI.
 - **Extend body shape**: `extendMinutes` (chosen, explicit op) vs absolute
-  `closeAt` (rejected — smells like generic PATCH mid-`open`).
-- **Cancel in first cut**: include vs defer. Included but with a documented
-  fallback to defer if the new state causes broad churn.
-- **Force-submit on close**: rejected for this baseline — proctor/admin
-  force-submit is a separate future op touching **attempts**, not the exam
-  lifecycle.
-- **`submit source` as a body field**: rejected — source is a command-layer
-  discriminator, never client-controlled, to prevent bypassing the early-submit
-  guard.
+  `closeAt`.
+- **Cancel in first implementation**: **deferred** per review feedback; its
+  attempt/result/export semantics need explicit decisions first.
+- **`submit source` as a body field**: rejected — command-layer discriminator,
+  never client-controlled.
 
 ## Consequences
 
-- Positive: one authority for exam operation semantics; P2B-J1 E2E unblocks;
-  P2C proctor runtime has a stable base; clear error codes + audit trails.
-- Negative: one new lifecycle state (`canceled`) touches enums, state machine,
-  contracts, OpenAPI, and admin UI — non-trivial but contained.
-- Neutral: Redis/WS/queue/Desktop ADRs stay `Deferred`; this baseline is
-  HTTP-polling + synchronous writes + DB-backed scanner, consistent with
-  single-instance Phase 2 deployment.
+- Positive: one authority for exam operation semantics; P2B-J1 E2E unblocks
+  (Slice 1); P2C proctor runtime has a stable base; close/export correctness is
+  provable (no active attempts).
+- Negative: `close` requires active attempts to be resolved first — admins
+  cannot end an exam with live candidates without force-submit (P2C-J2) or
+  waiting for the scanner. This is intentional and documented.
+- Neutral: ADR-001..004 stay `Deferred`; this baseline is HTTP-polling +
+  synchronous writes + DB-backed scanner, consistent with single-instance
+  Phase 2.
 
 ## Open questions for review
 
-1. Confirm `canceled` (US spelling) is acceptable despite the prompting spec
-   writing `cancelled`. (Codebase strongly favors US.)
+1. Confirm `canceled` (US spelling) when Slice 4 ships; cancel itself is now
+   deferred, lowering the immediate stakes.
 2. Confirm the `close` idempotency choice (200 vs 409).
-3. Confirm scores/export policy for `canceled` exams (allow admin-only, no
-   cancellation marker in rows) vs reject outright.
+3. Confirm the close active-attempt policy (reject with `ACTIVE_ATTEMPTS_EXIST`
+   vs allow-and-defer-resolution). This ADR chose reject.
 4. Confirm `extendMinutes` (relative) over absolute `closeAt`.
-5. Confirm scope split: ship close first (unblocks P2B-J1), defer cancel/extend
-   if needed — or land all four together.
+5. Confirm the `minSubmitAfterStartMinutes > durationMinutes` rejection (vs
+   allow with a warning). This ADR chose reject.
+6. Confirm whether scores/export should reject `canceled` exams outright until
+   the cancellation marker ships — this ADR assumes `cancel` is deferred, so
+   the question is moot until Slice 4.

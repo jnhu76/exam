@@ -1,8 +1,11 @@
 # P2B-J0 — Exam Operation State Baseline (ADR)
 
-> **Authority**: `docs/adr/ADR-005-exam-operation-state-baseline.md` (Proposed).
+> **Authority**: `docs/adr/ADR-005-exam-operation-state-baseline.md` (Proposed, Revision 2).
 > This job card registers the ADR into the Phase 2B workflow. It produces
 > **design only** — no production code until the ADR is reviewed and approved.
+> Implementation is sliced 1–4 (Slice 1 = close baseline, unblocks P2B-J1;
+> Slice 2 = unpublish/schedule/extend; Slice 3 = timing policy; Slice 4 =
+> cancel, deferred).
 
 ## 1. Summary
 
@@ -123,9 +126,11 @@ clarify `PATCH`; new fields `latestStartOffsetMinutes`/`minSubmitAfterStartMinut
 
 ## 15. State Machine Contract
 
-**Design only.** Transition matrix in ADR-005 §Layer 2. Add `canceled`;
-add `published->draft`, `open->closed (admin)`, `published|open->canceled`,
-`canceled->archived`. Reject `open/closed/canceled->draft`,
+**Design only.** Transition matrix in ADR-005 §Layer 2. Mandatory
+**lock-reconcile-assert-mutate** rule across every admin op (ADR §Mandatory
+transaction rule). Stale-state protection on `unpublish`/`extend`. Close
+active-attempt guard (`ACTIVE_ATTEMPTS_EXIST`). `canceled` + `cancel` op
+**deferred** (Slice 4). Reject `open/closed/canceled->draft`,
 `archived->any`, `draft/open->archived`.
 
 ## 16. Command / Repository Boundary
@@ -172,9 +177,14 @@ Implementation tests land in the consuming jobs (P2B-J2a/b/c).
 ## 23. Acceptance Criteria
 
 ```txt
-[x] ADR-005 written with state matrix, API surface, error codes, audit events.
+[x] ADR-005 (Rev 2) written with three-axis model, state matrix, mandatory
+    lock-reconcile-assert-mutate rule, close active-attempt policy, stale-state
+    protection, runtime policy validation, and submitAttempt guard ordering.
+[x] cancel deferred (Slice 4); cancel semantics (voiding + export marker)
+    left as an explicit open question.
 [x] Boundary with P2C-J2 (force-submit) and P2C-J3 (per-attempt extend-time) documented.
-[x] Convention conflicts resolved (canceled spelling; audit dot.case vs SCREAMING).
+[x] Implementation sliced 1–4; Slice 1 (close) is the P2B-J1 unblocker.
+[x] Convention conflicts resolved (canceled spelling; audit dot.case).
 [x] P2B-J1 findings mapped to fixes.
 [x] No production code changed.
 [x] Job index updated.
