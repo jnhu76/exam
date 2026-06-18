@@ -105,10 +105,20 @@ export function TakeExamPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFlushing, setIsFlushing] = useState(false);
   const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
+  const [deadlinePassed, setDeadlinePassed] = useState(false);
+  const [autoSubmitFailed, setAutoSubmitFailed] = useState(false);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
+  const deadlineHandledRef = useRef(false);
+  const serverOffsetRef = useRef(0);
   const { scheduleSave, flush } = useSubmitFlush();
+
+  /** Returns the current time adjusted by the server clock offset. */
+  const nowByServerClock = useCallback(
+    () => Date.now() + serverOffsetRef.current,
+    [],
+  );
 
   /** Loads the in-progress attempt data and initializes answer/state maps. */
   const loadAttempt = useCallback(async () => {
@@ -120,6 +130,10 @@ export function TakeExamPage() {
       if (data.status !== "in_progress") {
         navigate(routes.exam.result(attemptId));
         return;
+      }
+      if (data.serverNow) {
+        serverOffsetRef.current =
+          new Date(data.serverNow).getTime() - Date.now();
       }
       setAttempt(data);
 
@@ -236,10 +250,11 @@ export function TakeExamPage() {
     try {
       await api.post(`/api/attempts/${attemptId}/submit`);
       navigate(routes.exam.result(attemptId));
-    } catch {
+    } catch (err) {
       submittingRef.current = false;
       setIsSubmitting(false);
       toast.error("提交失败，请重试");
+      throw err;
     }
   }, [attemptId, navigate]);
 
@@ -308,7 +323,14 @@ export function TakeExamPage() {
   const handleHeartbeat = useCallback(async () => {
     if (!attemptId) return;
     try {
-      await api.post(`/api/attempts/${attemptId}/heartbeat`);
+      const result = await api.post<{
+        ok: true;
+        serverNow: string;
+      }>(`/api/attempts/${attemptId}/heartbeat`);
+      if (result.serverNow) {
+        serverOffsetRef.current =
+          new Date(result.serverNow).getTime() - Date.now();
+      }
       setIsDisconnected(false);
     } catch {
       setIsDisconnected(true);
@@ -319,6 +341,44 @@ export function TakeExamPage() {
     const interval = setInterval(() => void handleHeartbeat(), 30000);
     return () => clearInterval(interval);
   }, [handleHeartbeat]);
+
+  useEffect(() => {
+    if (!attempt?.deadlineAt) return;
+
+    if (nowByServerClock() < new Date(attempt.deadlineAt).getTime()) {
+      deadlineHandledRef.current = false;
+      setDeadlinePassed(false);
+      setAutoSubmitFailed(false);
+    }
+
+    if (deadlineHandledRef.current) return;
+
+    const checkDeadline = () => {
+      if (deadlineHandledRef.current) return;
+      if (nowByServerClock() >= new Date(attempt.deadlineAt).getTime()) {
+        deadlineHandledRef.current = true;
+        setDeadlinePassed(true);
+        void (async () => {
+          try {
+            await flush();
+          } catch {
+            toast.error("保存答案时出错，系统将尝试提交");
+          } finally {
+            try {
+              await handleSubmit();
+            } catch {
+              setAutoSubmitFailed(true);
+              toast.error("自动提交失败，请点击重试");
+            }
+          }
+        })();
+      }
+    };
+
+    checkDeadline();
+    const interval = setInterval(checkDeadline, 1000);
+    return () => clearInterval(interval);
+  }, [attempt?.deadlineAt, flush, handleSubmit, nowByServerClock]);
 
   if (isLoading) {
     return (
@@ -358,25 +418,32 @@ export function TakeExamPage() {
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-lg font-semibold">答题中</div>
+            <div className="text-lg font-semibold">
+              {deadlinePassed ? "考试已结束" : "答题中"}
+            </div>
             <div className="text-sm text-muted-foreground">
               第 {currentIndex + 1} 题 / 共 {attempt.questionSnapshot.length} 题
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <SaveIndicator state={saveState} />
-            <ExamTimer
-              deadlineAt={attempt.deadlineAt}
-              onTimeout={handleTimeout}
-            />
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => void openSubmitDialog()}
-              data-testid="take-submit-btn"
-            >
-              交卷
-            </Button>
+            {!deadlinePassed && (
+              <ExamTimer
+                deadlineAt={attempt.deadlineAt}
+                onTimeout={handleTimeout}
+                serverOffsetMs={serverOffsetRef.current}
+              />
+            )}
+            {!deadlinePassed && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => void openSubmitDialog()}
+                data-testid="take-submit-btn"
+              >
+                交卷
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -428,7 +495,7 @@ export function TakeExamPage() {
                 );
               })()}
 
-            {isDisconnected && (
+            {isDisconnected && !deadlinePassed && (
               <Alert
                 variant="destructive"
                 className="border-destructive/30 bg-destructive/10"
@@ -442,9 +509,40 @@ export function TakeExamPage() {
             )}
 
             <section
-              className="rounded-lg border bg-card p-5 shadow-sm md:p-8"
+              className="relative rounded-lg border bg-card p-5 shadow-sm md:p-8"
               data-testid="take-question-section"
             >
+              {deadlinePassed && (
+                <div
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm"
+                  data-testid="deadline-overlay"
+                >
+                  <div className="flex flex-col items-center gap-3 text-center">
+                    <TimerOff
+                      className="size-12 text-destructive"
+                      aria-hidden="true"
+                    />
+                    <div className="text-lg font-semibold text-foreground">
+                      {autoSubmitFailed
+                        ? "自动提交失败"
+                        : "考试时间已到，答题已结束"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {autoSubmitFailed
+                        ? "请点击下方按钮重试提交"
+                        : "系统正在自动提交您的答案..."}
+                    </div>
+                    {autoSubmitFailed && (
+                      <Button
+                        onClick={() => void handleSubmit()}
+                        data-testid="retry-submit-btn"
+                      >
+                        重试提交
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
                 <div>
                   <div className="text-sm text-muted-foreground">
@@ -455,19 +553,21 @@ export function TakeExamPage() {
                     {currentQuestion.score} 分
                   </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={toggleFlag}>
-                  <Flag
-                    data-icon="inline-start"
-                    fill={
-                      questionStates[currentIndex] === "flagged"
-                        ? "currentColor"
-                        : "none"
-                    }
-                  />
-                  {questionStates[currentIndex] === "flagged"
-                    ? "取消标记"
-                    : "标记"}
-                </Button>
+                {!deadlinePassed && (
+                  <Button variant="outline" size="sm" onClick={toggleFlag}>
+                    <Flag
+                      data-icon="inline-start"
+                      fill={
+                        questionStates[currentIndex] === "flagged"
+                          ? "currentColor"
+                          : "none"
+                      }
+                    />
+                    {questionStates[currentIndex] === "flagged"
+                      ? "取消标记"
+                      : "标记"}
+                  </Button>
+                )}
               </div>
               <div className="mb-8 text-xl font-medium leading-8 text-foreground">
                 {currentQuestion.content}
@@ -478,6 +578,7 @@ export function TakeExamPage() {
                 onChange={(answer) =>
                   saveAnswer(currentQuestion.originalQuestionId, answer)
                 }
+                disabled={deadlinePassed}
               />
             </section>
           </div>
@@ -491,42 +592,46 @@ export function TakeExamPage() {
             已答 {answeredCount} / 未答 {unansweredCount} / 标记 {flaggedCount}{" "}
             / 共 {attempt.questionSnapshot.length}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrev}
-              disabled={currentIndex === 0}
-            >
-              <ChevronLeft data-icon="inline-start" />
-              上一题
-            </Button>
-            <Button variant="outline" size="sm" onClick={toggleFlag}>
-              <Flag
-                data-icon="inline-start"
-                fill={
-                  questionStates[currentIndex] === "flagged"
-                    ? "currentColor"
-                    : "none"
-                }
-              />
-              {questionStates[currentIndex] === "flagged" ? "取消标记" : "标记"}
-            </Button>
-            {currentIndex === attempt.questionSnapshot.length - 1 ? (
+          {!deadlinePassed && (
+            <div className="flex flex-wrap gap-2">
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                onClick={() => void openSubmitDialog()}
+                onClick={handlePrev}
+                disabled={currentIndex === 0}
               >
-                提交考试
+                <ChevronLeft data-icon="inline-start" />
+                上一题
               </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={handleNext}>
-                下一题
-                <ChevronRight data-icon="inline-end" />
+              <Button variant="outline" size="sm" onClick={toggleFlag}>
+                <Flag
+                  data-icon="inline-start"
+                  fill={
+                    questionStates[currentIndex] === "flagged"
+                      ? "currentColor"
+                      : "none"
+                  }
+                />
+                {questionStates[currentIndex] === "flagged"
+                  ? "取消标记"
+                  : "标记"}
               </Button>
-            )}
-          </div>
+              {currentIndex === attempt.questionSnapshot.length - 1 ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => void openSubmitDialog()}
+                >
+                  提交考试
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={handleNext}>
+                  下一题
+                  <ChevronRight data-icon="inline-end" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </footer>
 

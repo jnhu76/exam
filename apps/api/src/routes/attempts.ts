@@ -63,7 +63,10 @@ import { buildErrorResponse } from "../lib/errorResponse.js";
 // Wire response schemas (Zod) — single source of truth for serialization +
 // OpenAPI. SaveAnswer is an accepted/rejected union.
 const candidateExamListResponseSchema = z.array(CandidateExamSummarySchema);
-const heartbeatResponseSchema = z.object({ ok: z.literal(true) });
+const heartbeatResponseSchema = z.object({
+  ok: z.literal(true),
+  serverNow: z.string().datetime(),
+});
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
 /**
@@ -204,9 +207,10 @@ function getQueueStatus(exam: Exam, candidateId: string, now: Date) {
  * Serializes an ExamAttempt for candidate-facing responses, stripping
  * standardAnswer and other admin-only fields from the question snapshot.
  */
-function toCandidateAttemptResponse(attempt: ExamAttempt) {
+function toCandidateAttemptResponse(attempt: ExamAttempt, now: Date) {
   return {
     ...toAttemptResponse(attempt),
+    serverNow: now.toISOString(),
     questionSnapshot: attempt.questionSnapshot.map((q) => ({
       originalQuestionId: q.originalQuestionId,
       type: q.type,
@@ -808,14 +812,16 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           .code(201)
           .send(
             LoadAttemptResponseSchema.parse(
-              toCandidateAttemptResponse(attempt),
+              toCandidateAttemptResponse(attempt, fastify.now()),
             ),
           );
       }
       return reply
         .code(200)
         .send(
-          LoadAttemptResponseSchema.parse(toCandidateAttemptResponse(attempt)),
+          LoadAttemptResponseSchema.parse(
+            toCandidateAttemptResponse(attempt, fastify.now()),
+          ),
         );
     },
   );
@@ -846,7 +852,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = request["ctx"] as RequestContext;
       const attempt = await getOwnedAttempt(fastify, ctx, parsed.data.id);
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt),
+        toCandidateAttemptResponse(attempt, fastify.now()),
       );
     },
   );
@@ -1085,7 +1091,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           throw new NotFoundError("Attempt not found");
         }
         return LoadAttemptResponseSchema.parse(
-          toCandidateAttemptResponse(graded as ExamAttempt),
+          toCandidateAttemptResponse(graded as ExamAttempt, fastify.now()),
         );
       }
 
@@ -1135,7 +1141,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       );
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt as ExamAttempt),
+        toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
       );
     },
   );
@@ -1177,7 +1183,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         lastActivityAt: new Date(),
       } as Parameters<typeof attemptRepo.update>[2]);
 
-      return { ok: true };
+      return { ok: true, serverNow: fastify.now().toISOString() };
     },
   );
 
@@ -1232,7 +1238,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         attemptId,
       );
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt),
+        toCandidateAttemptResponse(attempt, fastify.now()),
       );
     },
   );
