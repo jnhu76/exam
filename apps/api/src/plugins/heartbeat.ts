@@ -92,6 +92,8 @@ function createAttemptRepoAdapter(
   return {
     findById: async (id) =>
       (await repo.findById(ctx, id)) as ExamAttempt | null,
+    findByIdForUpdate: async (id) =>
+      (await repo.findByIdForUpdate(ctx, id)) as ExamAttempt | null,
     findActiveByEnrollment: async (enrollmentId) =>
       (await repo.findActiveByEnrollment(
         ctx,

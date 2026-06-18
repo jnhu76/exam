@@ -23,6 +23,9 @@ import {
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
   findById(attemptId: string): Promise<ExamAttempt | null> | ExamAttempt | null;
+  findByIdForUpdate(
+    attemptId: string,
+  ): Promise<ExamAttempt | null> | ExamAttempt | null;
   findActiveByEnrollment(
     enrollmentId: string,
   ): Promise<ExamAttempt | null> | ExamAttempt | null;
@@ -256,8 +259,9 @@ export async function markDisrupted(
 }
 
 /**
- * Restores a disrupted attempt to in_progress state, refreshing the last activity timestamp.
- * Used for recovery after a client disconnection.
+ * Restores a disrupted attempt to in_progress state, refreshing the last activity timestamp
+ * and adjusting the deadline to compensate for time spent disconnected.
+ * Uses row-level locking to prevent concurrent restore double-applying the adjustment.
  */
 export async function restoreAttempt(
   examRepo: ExamRepository,
@@ -265,9 +269,13 @@ export async function restoreAttempt(
   attemptId: string,
   now: Date,
 ): Promise<ExamAttempt> {
-  const attempt = await attemptRepo.findById(attemptId);
+  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
+  }
+
+  if (attempt.status === "in_progress") {
+    return attempt;
   }
 
   const result = transition(attempt.status, "restore" as AttemptCommand);
@@ -282,9 +290,24 @@ export async function restoreAttempt(
     throw new ValidationError("Exam not found");
   }
 
+  const disconnectedDuration = Math.max(
+    0,
+    now.getTime() - (attempt.lastActivityAt?.getTime() ?? now.getTime()),
+  );
+
+  let updatedDeadline: Date | undefined;
+  if (attempt.deadlineAt) {
+    const adjustedDeadline =
+      attempt.deadlineAt.getTime() + disconnectedDuration;
+    updatedDeadline = exam.closeAt
+      ? new Date(Math.min(adjustedDeadline, exam.closeAt.getTime()))
+      : new Date(adjustedDeadline);
+  }
+
   const updateData: Partial<ExamAttempt> = {
     status: "in_progress",
     lastActivityAt: now,
+    ...(updatedDeadline !== undefined && { deadlineAt: updatedDeadline }),
   };
 
   const restored = await attemptRepo.update(attemptId, updateData);

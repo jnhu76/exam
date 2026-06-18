@@ -1418,6 +1418,68 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().status).toBe("in_progress");
     });
+
+    it("restores with deadlineAt adjusted for disconnected time", async () => {
+      const exam7 = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Restore Deadline Exam",
+          courseId,
+          questionIds: [questionId],
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId7 = exam7.json().id;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId7}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(examId7);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId7}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attId = startRes.json().id;
+      const originalDeadline = new Date(startRes.json().deadlineAt);
+
+      const fixedNow = new Date(Date.now());
+      ctx.setNow(fixedNow);
+      const lastActivity = new Date(fixedNow.getTime() - 5 * 60_000);
+      const attemptRepo = createAttemptRepo(ctx.db);
+      const candidateCtxVal = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      await attemptRepo.update(candidateCtxVal, attId, {
+        status: "disrupted",
+        lastActivityAt: lastActivity,
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attId}/restore`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.status).toBe("in_progress");
+      const restoredDeadline = new Date(body.deadlineAt);
+      const disconnectedMs = fixedNow.getTime() - lastActivity.getTime();
+      const expectedDeadline = new Date(
+        originalDeadline.getTime() + disconnectedMs,
+      );
+      expect(restoredDeadline.getTime()).toBe(expectedDeadline.getTime());
+    });
   });
 
   describe("CandidateExamSummary availabilityStatus derivation", () => {

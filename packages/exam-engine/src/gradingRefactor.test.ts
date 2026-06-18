@@ -123,6 +123,7 @@ function makeRepos(
   };
   const attemptRepo: AttemptRepository = {
     findById: () => storedAttempt,
+    findByIdForUpdate: () => storedAttempt,
     findActiveByEnrollment: () => null,
     findByEnrollmentAndAttemptNo: () => null,
     create: () => storedAttempt,
@@ -170,6 +171,7 @@ describe("readGradingSnapshot", () => {
   it("returns null when attempt does not exist", async () => {
     const attemptRepo: AttemptRepository = {
       findById: () => null,
+      findByIdForUpdate: () => null,
       findActiveByEnrollment: () => null,
       findByEnrollmentAndAttemptNo: () => null,
       create: () => makeAttempt(),

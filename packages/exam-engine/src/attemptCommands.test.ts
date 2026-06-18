@@ -120,6 +120,9 @@ function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
     findById(id) {
       return store.find((a) => a.id === id) ?? null;
     },
+    findByIdForUpdate(id) {
+      return store.find((a) => a.id === id) ?? null;
+    },
     findActiveByEnrollment(enrollmentId) {
       return (
         store.find(
@@ -594,6 +597,7 @@ describe("attemptCommands", () => {
       const attempt = makeAttempt();
       const attRepo: AttemptRepository = {
         findById: () => attempt,
+        findByIdForUpdate: () => attempt,
         findActiveByEnrollment: () => null,
         findByEnrollmentAndAttemptNo: () => null,
         create: () => attempt,
@@ -660,15 +664,21 @@ describe("attemptCommands", () => {
       expect(result.lastActivityAt).toEqual(restoreNow);
     });
 
-    it("throws for non disrupted attempt", async () => {
+    it("returns attempt directly when already in_progress", async () => {
       const attempt = makeAttempt({ status: "in_progress" });
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
       const attRepo = makeAttemptRepo([attempt]);
 
-      await expect(
-        restoreAttempt(examRepo, attRepo, "attempt-1", fixedNow),
-      ).rejects.toThrow(InvalidStateTransitionError);
+      const result = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        fixedNow,
+      );
+
+      expect(result.status).toBe("in_progress");
+      expect(result.id).toBe("attempt-1");
     });
 
     it("throws for non-existent attempt", async () => {
@@ -681,7 +691,7 @@ describe("attemptCommands", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    it("keeps the original deadline while restoring a disrupted attempt", async () => {
+    it("adjusts deadlineAt by the time spent disconnected", async () => {
       const attempt = makeAttempt({
         status: "disrupted",
         startedAt: new Date("2025-01-01T10:00:00Z"),
@@ -700,7 +710,67 @@ describe("attemptCommands", () => {
         restoreNow,
       );
 
-      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:00:00Z"));
+      const disconnectedMs =
+        restoreNow.getTime() - attempt.lastActivityAt!.getTime();
+      const expectedDeadline = new Date(
+        attempt.deadlineAt!.getTime() + disconnectedMs,
+      );
+      expect(result.deadlineAt).toEqual(expectedDeadline);
+    });
+
+    it("caps new deadlineAt at exam.closeAt when disconnected time pushes past it", async () => {
+      const attempt = makeAttempt({
+        status: "disrupted",
+        startedAt: new Date("2025-01-01T10:00:00Z"),
+        deadlineAt: new Date("2025-01-01T11:50:00Z"),
+        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
+      });
+      const exam = makeExam({
+        closeAt: new Date("2025-01-01T12:00:00Z"),
+      });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const restoreNow = new Date("2025-01-01T11:55:00Z");
+      const result = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        restoreNow,
+      );
+
+      expect(result.deadlineAt).toEqual(new Date("2025-01-01T12:00:00Z"));
+    });
+
+    it("does not double-apply deadline adjustment when called twice (idempotent)", async () => {
+      const attempt = makeAttempt({
+        status: "disrupted",
+        startedAt: new Date("2025-01-01T10:00:00Z"),
+        deadlineAt: new Date("2025-01-01T11:00:00Z"),
+        lastActivityAt: new Date("2025-01-01T10:20:00Z"),
+      });
+      const exam = makeExam();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const restoreNow = new Date("2025-01-01T10:30:00Z");
+      const first = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        restoreNow,
+      );
+
+      const secondRestoreNow = new Date("2025-01-01T10:35:00Z");
+      const second = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        secondRestoreNow,
+      );
+
+      expect(second.deadlineAt).toEqual(first.deadlineAt);
+      expect(second.status).toBe("in_progress");
     });
   });
 });

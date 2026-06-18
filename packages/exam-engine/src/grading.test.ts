@@ -113,6 +113,7 @@ function makeRepos(
   };
   const attemptRepo: AttemptRepository = {
     findById: () => storedAttempt,
+    findByIdForUpdate: () => storedAttempt,
     findActiveByEnrollment: () => null,
     findByEnrollmentAndAttemptNo: () => null,
     create: () => storedAttempt,
@@ -227,6 +228,7 @@ describe("gradeAttempt", () => {
     };
     const attemptRepo: AttemptRepository = {
       findById: () => attempt,
+      findByIdForUpdate: () => attempt,
       findActiveByEnrollment: () => null,
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
@@ -263,6 +265,7 @@ describe("gradeAttempt", () => {
     };
     const attemptRepo: AttemptRepository = {
       findById: () => attempt,
+      findByIdForUpdate: () => attempt,
       findActiveByEnrollment: () => null,
       findByEnrollmentAndAttemptNo: () => null,
       create: () => attempt,
