@@ -13,13 +13,12 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
+import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
 import {
-  submitAttempt,
-  gradeAttemptIdempotent,
-  type AttemptRepository,
-  type EnrollmentRepository,
-} from "@exam/exam-engine";
-import type { ExamRepository } from "@exam/exam-engine";
+  createExamRepoAdapter,
+  createAttemptRepoAdapter,
+  createEnrollmentRepoAdapter,
+} from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
@@ -89,83 +88,6 @@ function createSystemContext(organizationId: string): RequestContext {
     permissions: [] as Permission[],
     sessionId: SYSTEM_ACTOR_ID,
     targetOrganizationId: organizationId,
-  };
-}
-
-function createExamRepoAdapter(
-  repo: ReturnType<typeof createExamRepo>,
-  ctx: RequestContext,
-): ExamRepository {
-  return {
-    findById: async (examId) =>
-      (await repo.findById(ctx, examId)) as Exam | null,
-    update: async (examId, data) =>
-      (await repo.update(
-        ctx,
-        examId,
-        data as Record<string, unknown>,
-      )) as Exam | null,
-  };
-}
-
-function createAttemptRepoAdapter(
-  repo: ReturnType<typeof createAttemptRepo>,
-  ctx: RequestContext,
-): AttemptRepository {
-  return {
-    findById: async (id) =>
-      (await repo.findById(ctx, id)) as ExamAttempt | null,
-    findByIdForUpdate: async (id) =>
-      (await repo.findByIdForUpdate(ctx, id)) as ExamAttempt | null,
-    findActiveByEnrollment: async (enrollmentId) =>
-      (await repo.findActiveByEnrollment(
-        ctx,
-        enrollmentId,
-      )) as ExamAttempt | null,
-    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) =>
-      (await repo.findByEnrollmentAndAttemptNo(
-        ctx,
-        enrollmentId,
-        attemptNo,
-      )) as ExamAttempt | null,
-    create: async (input) =>
-      (await repo.create(
-        ctx,
-        input as Parameters<typeof repo.create>[1],
-      )) as ExamAttempt,
-    update: async (id, data) =>
-      (await repo.update(
-        ctx,
-        id,
-        data as Parameters<typeof repo.update>[2],
-      )) as ExamAttempt | null,
-  };
-}
-
-function createEnrollmentRepoAdapter(
-  repo: ReturnType<typeof createEnrollmentRepo>,
-  ctx: RequestContext,
-): EnrollmentRepository {
-  return {
-    findByExamAndCandidate: async (examId, candidateId) =>
-      (await repo.findByExamAndCandidate(ctx, examId, candidateId)) as
-        | import("@exam/domain").ExamEnrollment
-        | null,
-    findByExamAndCandidateForUpdate: async (examId, candidateId) =>
-      (await repo.findByExamAndCandidateForUpdate(ctx, examId, candidateId)) as
-        | import("@exam/domain").ExamEnrollment
-        | null,
-    create: async (input) =>
-      (await repo.create(
-        ctx,
-        input as Parameters<typeof repo.create>[1],
-      )) as import("@exam/domain").ExamEnrollment,
-    update: async (id, data) =>
-      (await repo.update(
-        ctx,
-        id,
-        data as Parameters<typeof repo.update>[2],
-      )) as import("@exam/domain").ExamEnrollment | null,
   };
 }
 

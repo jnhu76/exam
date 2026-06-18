@@ -1,9 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import type { ExamAttempt, Permission, RequestContext } from "@exam/domain";
+import type { Permission, RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import { markDisrupted, type AttemptRepository } from "@exam/exam-engine";
+import { markDisrupted } from "@exam/exam-engine";
+import { createAttemptRepoAdapter } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
@@ -77,45 +78,6 @@ function createSystemContext(organizationId: string): RequestContext {
     permissions: [] as Permission[],
     sessionId: "system:heartbeat",
     targetOrganizationId: organizationId,
-  };
-}
-
-/**
- * Wraps a database attempt repository into the `AttemptRepository` interface
- * expected by the exam engine's `markDisrupted` function, binding all
- * calls to the provided system context.
- */
-function createAttemptRepoAdapter(
-  repo: ReturnType<typeof createAttemptRepo>,
-  ctx: RequestContext,
-): AttemptRepository {
-  return {
-    findById: async (id) =>
-      (await repo.findById(ctx, id)) as ExamAttempt | null,
-    findByIdForUpdate: async (id) =>
-      (await repo.findByIdForUpdate(ctx, id)) as ExamAttempt | null,
-    findActiveByEnrollment: async (enrollmentId) =>
-      (await repo.findActiveByEnrollment(
-        ctx,
-        enrollmentId,
-      )) as ExamAttempt | null,
-    findByEnrollmentAndAttemptNo: async (enrollmentId, attemptNo) =>
-      (await repo.findByEnrollmentAndAttemptNo(
-        ctx,
-        enrollmentId,
-        attemptNo,
-      )) as ExamAttempt | null,
-    create: async (input) =>
-      (await repo.create(
-        ctx,
-        input as Parameters<typeof repo.create>[1],
-      )) as ExamAttempt,
-    update: async (id, data) =>
-      (await repo.update(
-        ctx,
-        id,
-        data as Parameters<typeof repo.update>[2],
-      )) as ExamAttempt | null,
   };
 }
 
