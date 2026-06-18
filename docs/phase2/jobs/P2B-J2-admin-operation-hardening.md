@@ -1,15 +1,22 @@
 # P2B-J2 — Admin Operation Hardening
 
 > **ADR-005 Slice 1 (Close Baseline): DONE** — `POST /api/exams/:id/close` implemented
-> with lock→reconcile→unresolved-guard→assert→mutate→audit. Scores/export also
-> reject while unresolved attempts remain. Admin UI close button added. E2E
-> updated (no more `endingSoonSec` workaround). See branch
-> `feat/p2b-exam-operation-baseline`.
+> with lock→reconcile→unresolved-guard→assert→mutate→audit (wrapped in
+> `executeInTransaction`). Scores/export also reject while unresolved attempts
+> remain. Admin UI close button added (ConfirmDialog). Review-fixed: tx atomicity,
+> audit `activeAttemptCount`, ADR spelling aligned to `UNRESOLVED_ATTEMPTS_EXIST`.
 >
-> **Remaining slices**: P2B-J2b (unpublish/schedule/extend), P2B-J2c (timing
-> policy: `latestStartOffsetMinutes`/`minSubmitAfterStartMinutes`/`SubmitSource`),
-> P2B-J2d (cancel, deferred). These consume ADR-005 directly; P2B-J2a is the
-> close baseline implemented above.
+> **ADR-005 Slice 2 (Unpublish / Extend / PATCH-clarify): DONE** —
+> `POST /exams/:id/unpublish` (stale-guarded published→draft),
+> `POST /exams/:id/extend {extendMinutes}` (stale-guarded open→open, closeAt+),
+> PATCH clarified (draft=full, published=openAt/closeAt only,
+> `EXAM_UPDATE_NOT_ALLOWED`). All three follow lock→reconcile→guard→mutate→audit
+> in one transaction. Admin UI buttons added (unpublish ConfirmDialog, extend
+> Dialog with minutes input). New error codes + audit events.
+>
+> **Remaining slices**: P2B-J2c (timing policy:
+> `latestStartOffsetMinutes`/`minSubmitAfterStartMinutes`/`SubmitSource`),
+> P2B-J2d (cancel, deferred). These consume ADR-005 directly.
 
 ## 1. Summary
 
