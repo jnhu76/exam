@@ -1,5 +1,16 @@
 # P2B-J2 — Admin Operation Hardening
 
+> **ADR-005 Slice 1 (Close Baseline): DONE** — `POST /api/exams/:id/close` implemented
+> with lock→reconcile→unresolved-guard→assert→mutate→audit. Scores/export also
+> reject while unresolved attempts remain. Admin UI close button added. E2E
+> updated (no more `endingSoonSec` workaround). See branch
+> `feat/p2b-exam-operation-baseline`.
+>
+> **Remaining slices**: P2B-J2b (unpublish/schedule/extend), P2B-J2c (timing
+> policy: `latestStartOffsetMinutes`/`minSubmitAfterStartMinutes`/`SubmitSource`),
+> P2B-J2d (cancel, deferred). These consume ADR-005 directly; P2B-J2a is the
+> close baseline implemented above.
+
 ## 1. Summary
 
 Fix gaps in the admin operation loop: exam setup validation, assignment reliability, publish/open/close/archive semantics, and score overview navigation.
