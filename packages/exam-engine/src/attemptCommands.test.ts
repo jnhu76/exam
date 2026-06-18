@@ -664,15 +664,21 @@ describe("attemptCommands", () => {
       expect(result.lastActivityAt).toEqual(restoreNow);
     });
 
-    it("throws for non disrupted attempt", async () => {
+    it("returns attempt directly when already in_progress", async () => {
       const attempt = makeAttempt({ status: "in_progress" });
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
       const attRepo = makeAttemptRepo([attempt]);
 
-      await expect(
-        restoreAttempt(examRepo, attRepo, "attempt-1", fixedNow),
-      ).rejects.toThrow(InvalidStateTransitionError);
+      const result = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        fixedNow,
+      );
+
+      expect(result.status).toBe("in_progress");
+      expect(result.id).toBe("attempt-1");
     });
 
     it("throws for non-existent attempt", async () => {
@@ -756,9 +762,15 @@ describe("attemptCommands", () => {
       );
 
       const secondRestoreNow = new Date("2025-01-01T10:35:00Z");
-      await expect(
-        restoreAttempt(examRepo, attRepo, "attempt-1", secondRestoreNow),
-      ).rejects.toThrow(InvalidStateTransitionError);
+      const second = await restoreAttempt(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        secondRestoreNow,
+      );
+
+      expect(second.deadlineAt).toEqual(first.deadlineAt);
+      expect(second.status).toBe("in_progress");
     });
   });
 });

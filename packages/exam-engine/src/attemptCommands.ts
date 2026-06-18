@@ -274,6 +274,10 @@ export async function restoreAttempt(
     throw new ValidationError("Attempt not found");
   }
 
+  if (attempt.status === "in_progress") {
+    return attempt;
+  }
+
   const result = transition(attempt.status, "restore" as AttemptCommand);
   if (!isTransitionOk(result)) {
     throw new InvalidStateTransitionError(
