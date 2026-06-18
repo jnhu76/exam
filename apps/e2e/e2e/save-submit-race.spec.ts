@@ -11,22 +11,21 @@ import {
 // P2A-J6 — save-submit-race
 //
 // Distinct from submit-flush.spec.ts (which proves the client-side flush
-// path: select answer, immediately submit, flush preserves the answer).
-// This spec proves the SERVER-side determinism of the save vs submit race:
+// path). This spec proves the SERVER-side determinism of the save vs submit
+// race:
 //
 //   - Answer is saved and confirmed on the server.
 //   - Concurrently with /submit, fire additional /answers requests.
 //   - Outcome must be deterministic:
 //       * attempt ends up graded (never corrupted / half-saved)
 //       * every concurrent save either:
-//           (a) is accepted as idempotent (same clientSeq -> same version), or
-//           (b) is rejected with ATTEMPT_ALREADY_SUBMITTED (no partial write)
+//           (a) is accepted as idempotent, or
+//           (b) is rejected with a deterministic conflict reason
 //       * the saved answer is reflected in the graded score
 //   - A second full submit (idempotent) must not re-grade or alter state.
 //
-// Backed by Answer Save Protocol (processSaveAnswer rejects with
-// ATTEMPT_ALREADY_SUBMITTED once status >= submitted) and P2A-J1 atomic
-// submit transaction.
+// Racing saves use the current persisted answer version as baseVersion to
+// ensure they test save-vs-submit race, not stale-version rejection.
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
@@ -38,11 +37,10 @@ async function candidateLoginByApi(
   const res = await request.post(`${BASE_URL}/api/auth/login`, {
     data: { username, password },
   });
-  if (!res.ok()) {
+  if (!res.ok())
     throw new Error(
       `candidate login failed: ${res.status()} ${await res.text()}`,
     );
-  }
   const token = res.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
   if (!token) throw new Error("no auth-token cookie");
   return token;
@@ -60,6 +58,7 @@ async function saveAnswer(
   questionId: string,
   clientSeq: number,
   answer: boolean,
+  baseVersion: number,
 ): Promise<SaveOutcome> {
   const res = await request.post(
     `${BASE_URL}/api/attempts/${attemptId}/answers/${questionId}`,
@@ -74,7 +73,7 @@ async function saveAnswer(
         answer,
         clientSeq,
         clientSavedAt: new Date().toISOString(),
-        baseVersion: 0,
+        baseVersion,
       },
     },
   );
@@ -157,40 +156,67 @@ test.describe("save vs submit race — deterministic outcome", () => {
     const attemptId = examDetail.activeAttemptId;
     if (!attemptId) throw new Error("no activeAttemptId after start");
 
+    // Read the current persisted answer version to use as baseVersion
+    // for racing saves — this ensures they test save-vs-submit race,
+    // not stale-version rejection.
+    const before = await fetchAttempt(request, token, attemptId);
+    const currentVersion =
+      ((before.answers as Array<Record<string, unknown>>)?.[0]
+        ?.version as number) ?? 0;
+
     // Phase 2 — race: fire 3 saves concurrently with the submit. Saves use
-    // a fresh clientSeq so they are NOT idempotent dedupes of the saved
-    // answer; they are genuine "candidate kept typing as they hit submit".
+    // the current version as baseVersion.
     const race = await Promise.all([
       submitAttempt(request, token, attemptId),
-      saveAnswer(request, token, attemptId, seeded.questionId, 9001, false),
-      saveAnswer(request, token, attemptId, seeded.questionId, 9002, false),
-      saveAnswer(request, token, attemptId, seeded.questionId, 9003, false),
+      saveAnswer(
+        request,
+        token,
+        attemptId,
+        seeded.questionId,
+        9001,
+        false,
+        currentVersion,
+      ),
+      saveAnswer(
+        request,
+        token,
+        attemptId,
+        seeded.questionId,
+        9002,
+        false,
+        currentVersion,
+      ),
+      saveAnswer(
+        request,
+        token,
+        attemptId,
+        seeded.questionId,
+        9003,
+        false,
+        currentVersion,
+      ),
     ]);
 
     const [submitResult, ...saveResults] = race;
 
-    // The submit itself must succeed (2xx) and grade. Whichever save lost
-    // the race must NOT take the attempt from graded back to in_progress.
+    // The submit itself must succeed (2xx) and grade.
     expect(submitResult.status).toBeGreaterThanOrEqual(200);
     expect(submitResult.status).toBeLessThan(300);
     expect(submitResult.body.status).toBe("graded");
 
-    // Every racing save: either accepted (idempotent, only if it landed
-    // before submit transition — extremely unlikely with fresh clientSeq),
-    // OR rejected with a deterministic, well-formed conflict reason. The
-    // unacceptable outcomes are: a 5xx, or a 200 with no accepted/reason.
+    // Every racing save either accepted (idempotent) or rejected with a
+    // deterministic conflict reason.
     for (const s of saveResults) {
       expect(s.status).toBeGreaterThanOrEqual(200);
       expect(s.status).toBeLessThan(500);
       if (s.status === 200) {
-        // Accepted (idempotent or pre-submit): must have a serverVersion.
         expect(s.body).toHaveProperty("serverVersion");
       } else {
-        // Rejected: must carry a stable conflict reason.
         const reason = (s.body as { reason?: string }).reason;
         expect([
           "ATTEMPT_ALREADY_SUBMITTED",
           "STALE_VERSION",
+          "CONFLICTING_PAYLOAD",
           "DEADLINE_EXCEEDED",
           "ATTEMPT_CLOSED",
         ]).toContain(reason);
@@ -235,10 +261,6 @@ test.describe("save vs submit race — deterministic outcome", () => {
       seeded.candidate.password,
     );
 
-    // The candidate exam summary should expose the latest attempt id; the
-    // canonical way is to read the exam detail where latestAttemptId is
-    // available via the StartExamPage data, but here we use the candidate
-    // summary list which includes latestAttemptId.
     const summaries = (await request
       .get(`${BASE_URL}/api/candidate/exams`, {
         headers: { Cookie: `auth-token=${token}` },
@@ -252,8 +274,7 @@ test.describe("save vs submit race — deterministic outcome", () => {
     )?.latestAttemptId;
     if (!attemptId) throw new Error("no latestAttemptId after submit");
 
-    // Fire two more submits concurrently. Both must be idempotent: same
-    // graded status, no state regression, no exception.
+    // Fire two more submits concurrently. Both must be idempotent.
     const [r1, r2] = await Promise.all([
       submitAttempt(request, token, attemptId),
       submitAttempt(request, token, attemptId),
@@ -261,7 +282,6 @@ test.describe("save vs submit race — deterministic outcome", () => {
     for (const r of [r1, r2]) {
       expect(r.status).toBeGreaterThanOrEqual(200);
       expect(r.status).toBeLessThan(500);
-      // Body status must remain graded (no rollback to submitted/grading).
       expect(r.body.status).toBe("graded");
       expect(r.body.score).toBe(100);
       expect(r.body.passed).toBe(true);

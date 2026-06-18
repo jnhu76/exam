@@ -121,13 +121,15 @@ fi
 # `docker compose up` 不会自动迁走它们：
 #   - 端口冲突时 compose 会报 bind 失败；
 #   - 但若宿主机上的旧进程刚好响应 health 探测，预检/Playwright 可能会无声地
-#     打到“假 app”，看到 rate-limit headers / 401 / 500 等无关行为。
-# 在 compose up 之前显式失败，能把“环境污染”变成可识别错误，而不是污染 E2E。
-APP_HOST_PORT="${APP_PORT:-3000}"
-# DB_HOST_PORT mirrors the default host-side port published by
-# docker-compose.test.yml (5432). Override via DB_HOST_PORT=5433 in
-# combination with docker-compose.test.override.yml when :5432 is taken.
-DB_HOST_PORT="${DB_HOST_PORT:-5432}"
+#     打到”假 app”，看到 rate-limit headers / 401 / 500 等无关行为。
+# 在 compose up 之前显式失败，能把”环境污染”变成可识别错误，而不是污染 E2E。
+#
+# 端口覆盖方式（需要配合 docker-compose.test.override.yml）：
+#   APP_PORT=3300 DB_HOST_PORT=5433 \
+#     COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
+#     bash scripts/e2e/run.sh
+APP_HOST_PORT=”${APP_PORT:-3000}”
+DB_HOST_PORT=”${DB_HOST_PORT:-5432}”
 
 port_owner() {
   local port="$1"
