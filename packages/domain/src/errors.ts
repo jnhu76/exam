@@ -140,6 +140,50 @@ export class ExamCloseNotAllowedError extends AppError {
   }
 }
 
+/**
+ * Admin unpublish is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 2 §3.2: `POST /exams/:id/unpublish` is allowed only from
+ * `published` AND only if, after reconciliation, the exam is still `published`
+ * (now < openAt). Stale-state protection: a published exam whose openAt already
+ * passed has reconciled to `open` and cannot be rewound to draft.
+ */
+export class ExamUnpublishNotAllowedError extends AppError {
+  constructor(message = "Exam unpublish is not allowed") {
+    super(message, "EXAM_UNPUBLISH_NOT_ALLOWED", 409);
+  }
+}
+
+/**
+ * Admin extend is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 2 §3.4: `POST /exams/:id/extend` is allowed only for an `open`
+ * exam whose closeAt has not yet elapsed (after reconciliation). Stale-state
+ * protection: an open exam whose closeAt already passed has reconciled to
+ * `closed` and cannot be revived by extending closeAt.
+ */
+export class ExamExtendNotAllowedError extends AppError {
+  constructor(
+    details?: { reason?: "NOT_OPEN" | "ALREADY_CLOSED" },
+    message = "Exam extend is not allowed",
+  ) {
+    super(message, "EXAM_EXTEND_NOT_ALLOWED", 409, details);
+  }
+}
+
+/**
+ * Admin PATCH is not allowed for the requested exam state (HTTP 409).
+ *
+ * ADR-005 Slice 2 §3.7: generic PATCH is allowed in `draft` (full edit) and
+ * `published` (schedule fields only: openAt/closeAt). It is rejected for
+ * `open|closed|canceled|archived` — use the dedicated operations instead.
+ */
+export class ExamUpdateNotAllowedError extends AppError {
+  constructor(message = "Exam update is not allowed in this state") {
+    super(message, "EXAM_UPDATE_NOT_ALLOWED", 409);
+  }
+}
+
 /** Candidate has reached the maximum number of allowed attempts (HTTP 409). */
 export class MaxAttemptsReachedError extends AppError {
   constructor(message = "Maximum attempt count reached") {

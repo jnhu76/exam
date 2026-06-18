@@ -341,7 +341,7 @@ describe("exam routes", () => {
     expect(body.error.details.fields[0].field).toBe("courseId");
   });
 
-  it("PATCH /api/exams/:id returns 409 EXAM_NOT_DRAFT for published exam", async () => {
+  it("PATCH /api/exams/:id returns 409 EXAM_UPDATE_NOT_ALLOWED for published exam non-schedule field", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
@@ -373,7 +373,7 @@ describe("exam routes", () => {
     });
     expect(res.statusCode).toBe(409);
     const body = res.json();
-    expect(body.error.code).toBe("EXAM_NOT_DRAFT");
+    expect(body.error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
     expect(body.error.requestId).toBeDefined();
   });
 
@@ -631,5 +631,250 @@ describe("exam close (ADR-005 Slice 1)", () => {
       cookies: { "auth-token": ctx.candidateToken },
     });
     expect(res.statusCode).toBe(403);
+  });
+});
+
+// ADR-005 Slice 2 — unpublish / extend / PATCH-clarify
+describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let questionId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(examRoutes);
+    });
+
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Slice2 Course",
+        code: `S2C-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Slice2 question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    questionId = qRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  /** Creates + publishes an exam with a FUTURE openAt (stays `published`). */
+  async function createPublishedExam(title: string): Promise<string> {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title,
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    const pubRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(pubRes.statusCode).toBe(200);
+    expect(pubRes.json().status).toBe("published");
+    return examId;
+  }
+
+  /** Creates + publishes + touches to reconcile to `open` (openAt in past). */
+  async function createOpenExam(title: string): Promise<string> {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title,
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 60_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // Candidate-less: touch via GET won't reconcile. Use extend/close to
+    // trigger reconcile instead — but simplest: rely on the op itself.
+    return examId;
+  }
+
+  // ---- unpublish ----
+  it("unpublishes a published exam -> draft (200)", async () => {
+    const examId = await createPublishedExam("Unpublish OK");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/unpublish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("draft");
+  });
+
+  it("rejects unpublish of a draft exam -> 409 EXAM_UNPUBLISH_NOT_ALLOWED", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Unpublish Draft",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${createRes.json().id}/unpublish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UNPUBLISH_NOT_ALLOWED");
+  });
+
+  it("rejects unpublish of a stale published (now open) exam -> 409", async () => {
+    // published with past openAt: the route reconciles to open, then rejects.
+    const examId = await createOpenExam("Unpublish Stale");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/unpublish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UNPUBLISH_NOT_ALLOWED");
+  });
+
+  // ---- extend ----
+  it("extends an open exam's closeAt -> 200", async () => {
+    const examId = await createOpenExam("Extend OK");
+    const beforeRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const beforeClose = beforeRes.json().closeAt;
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/extend`,
+      payload: { extendMinutes: 15 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(new Date(res.json().closeAt).getTime()).toBeGreaterThan(
+      new Date(beforeClose).getTime(),
+    );
+  });
+
+  it("rejects extend of a published (not open) exam -> 409", async () => {
+    const examId = await createPublishedExam("Extend Published");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/extend`,
+      payload: { extendMinutes: 15 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_EXTEND_NOT_ALLOWED");
+  });
+
+  it("rejects extend with non-positive extendMinutes -> 400", async () => {
+    const examId = await createOpenExam("Extend Bad");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/extend`,
+      payload: { extendMinutes: -5 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  // ---- PATCH-clarify ----
+  it("PATCH published allows schedule (openAt/closeAt) edit -> 200", async () => {
+    const examId = await createPublishedExam("PATCH Schedule");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {
+        closeAt: new Date(Date.now() + 172_800_000 + 3600_000).toISOString(),
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("PATCH published rejects non-schedule field (title) -> 409 EXAM_UPDATE_NOT_ALLOWED", async () => {
+    const examId = await createPublishedExam("PATCH Forbidden");
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { title: "Changed Title" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+
+  it("PATCH draft still allows full edit -> 200", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "PATCH Draft",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${createRes.json().id}`,
+      payload: { title: "Renamed", passingScore: 70 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
   });
 });

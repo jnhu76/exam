@@ -1,5 +1,5 @@
 import type { Exam, Question, QuestionSnapshot } from "@exam/domain";
-import { ValidationError } from "@exam/domain";
+import { InvalidStateTransitionError, ValidationError } from "@exam/domain";
 import { assertTransition } from "./examStateMachine.js";
 
 export { assertTransition as assertExamTransition } from "./examStateMachine.js";
@@ -149,6 +149,71 @@ export async function closeExam(
   assertTransition(exam.status, "closed");
 
   const updated = await repo.update(examId, { status: "closed" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
+}
+
+/**
+ * Reverts a published exam back to draft (published -> draft).
+ *
+ * ADR-005 Slice 2 §3.2: only allowed from `published`. The route layer
+ * reconciles status by now BEFORE calling this, so a stale `published` exam
+ * whose openAt already passed (logically `open`) is rejected at the route as
+ * `EXAM_UNPUBLISH_NOT_ALLOWED`. This engine function performs only the
+ * transition; it never accepts `open -> draft`.
+ */
+export async function unpublishExam(
+  repo: ExamRepository,
+  examId: string,
+): Promise<Exam> {
+  const exam = await repo.findById(examId);
+  if (!exam) {
+    throw new ValidationError("Exam not found");
+  }
+
+  assertTransition(exam.status, "draft");
+
+  const updated = await repo.update(examId, { status: "draft" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
+}
+
+/**
+ * Extends an open exam's closeAt by a positive number of minutes
+ * (open -> open, only closeAt changes).
+ *
+ * ADR-005 Slice 2 §3.4: only allowed for `open`. The route layer reconciles
+ * first, so a stale `open` exam whose closeAt already passed (logically
+ * `closed`) is rejected at the route as `EXAM_EXTEND_NOT_ALLOWED` and cannot
+ * be revived. `extendMinutes` must be a positive integer; the new closeAt is
+ * the old closeAt + extendMinutes (keeps the remaining window semantics).
+ */
+export async function extendExam(
+  repo: ExamRepository,
+  examId: string,
+  extendMinutes: number,
+): Promise<Exam> {
+  if (!Number.isInteger(extendMinutes) || extendMinutes <= 0) {
+    throw new ValidationError("extendMinutes must be a positive integer");
+  }
+
+  const exam = await repo.findById(examId);
+  if (!exam) {
+    throw new ValidationError("Exam not found");
+  }
+
+  // extend is NOT a state transition (status stays "open"); it only updates
+  // closeAt. So require the status to be exactly "open" rather than using
+  // assertTransition (the transition table has no "open -> open" entry).
+  if (exam.status !== "open") {
+    throw new InvalidStateTransitionError(
+      `Cannot extend exam in ${exam.status} state`,
+    );
+  }
+
+  const oldCloseAt = new Date(exam.closeAt);
+  const newCloseAt = new Date(oldCloseAt.getTime() + extendMinutes * 60_000);
+  const updated = await repo.update(examId, { closeAt: newCloseAt });
   if (!updated) throw new ValidationError("Exam not found after update");
   return updated;
 }

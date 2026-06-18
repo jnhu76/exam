@@ -4,7 +4,7 @@ import { InvalidStateTransitionError } from "@exam/domain";
 /** Valid state transitions for exams. */
 export const EXAM_VALID_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
   draft: ["published"],
-  published: ["open", "archived"],
+  published: ["draft", "open", "archived"],
   open: ["closed"],
   closed: ["archived"],
   archived: [],

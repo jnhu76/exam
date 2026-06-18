@@ -4,6 +4,8 @@ import {
   openExam,
   closeExam,
   archiveExam,
+  unpublishExam,
+  extendExam,
   buildQuestionSnapshot,
   checkAndUpdateExamStatus,
   type ExamRepository,
@@ -231,6 +233,69 @@ describe("examCommands", () => {
       const repo = makeRepo(makeExam({ status: "open" }));
       await expect(archiveExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
+      );
+    });
+  });
+
+  describe("unpublishExam", () => {
+    it("transitions published -> draft", async () => {
+      const repo = makeRepo(makeExam({ status: "published" }));
+      const result = await unpublishExam(repo, "exam-1");
+      expect(result.status).toBe("draft");
+    });
+
+    it("throws for draft -> draft (noop rejected)", async () => {
+      const repo = makeRepo(makeExam({ status: "draft" }));
+      await expect(unpublishExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+
+    it("throws for open -> draft", async () => {
+      const repo = makeRepo(makeExam({ status: "open" }));
+      await expect(unpublishExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+
+    it("throws for closed/archived -> draft", async () => {
+      const repo = makeRepo(makeExam({ status: "closed" }));
+      await expect(unpublishExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+  });
+
+  describe("extendExam", () => {
+    const futureClose = new Date(Date.now() + 3600_000);
+    const baseExam = (status: string) =>
+      makeExam({ status: status as never, closeAt: futureClose });
+
+    it("extends an open exam's closeAt by extendMinutes", async () => {
+      const repo = makeRepo(baseExam("open"));
+      const result = await extendExam(repo, "exam-1", 15);
+      expect(result.status).toBe("open");
+      expect(new Date(result.closeAt).getTime()).toBeGreaterThan(
+        futureClose.getTime(),
+      );
+    });
+
+    it("throws for non-open states", async () => {
+      for (const status of ["draft", "published", "closed", "archived"]) {
+        const repo = makeRepo(baseExam(status));
+        await expect(extendExam(repo, "exam-1", 15)).rejects.toThrow(
+          InvalidStateTransitionError,
+        );
+      }
+    });
+
+    it("throws for non-positive extendMinutes", async () => {
+      const repo = makeRepo(baseExam("open"));
+      await expect(extendExam(repo, "exam-1", 0)).rejects.toThrow(
+        ValidationError,
+      );
+      await expect(extendExam(repo, "exam-1", -5)).rejects.toThrow(
+        ValidationError,
       );
     });
   });
