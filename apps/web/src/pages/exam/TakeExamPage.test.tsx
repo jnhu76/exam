@@ -20,6 +20,7 @@ const { apiGet, apiPost, mockAttempt } = vi.hoisted(() => {
     status: "in_progress",
     score: null,
     deadlineAt: new Date(Date.now() + 3600000).toISOString(),
+    serverNow: new Date().toISOString(),
     questionSnapshot: [
       {
         originalQuestionId: "q1",
@@ -44,7 +45,10 @@ const { apiGet, apiPost, mockAttempt } = vi.hoisted(() => {
   };
   return {
     apiGet: vi.fn().mockResolvedValue(mockAttempt),
-    apiPost: vi.fn().mockResolvedValue({ ok: true }),
+    apiPost: vi.fn().mockResolvedValue({
+      ok: true,
+      serverNow: new Date().toISOString(),
+    }),
     mockAttempt,
   };
 });
@@ -97,8 +101,9 @@ afterEach(() => {
   vi.useRealTimers();
   apiGet.mockReset();
   apiPost.mockReset();
-  apiGet.mockResolvedValue(mockAttempt);
-  apiPost.mockResolvedValue({ ok: true });
+  const freshAttempt = { ...mockAttempt, serverNow: new Date().toISOString() };
+  apiGet.mockResolvedValue(freshAttempt);
+  apiPost.mockResolvedValue({ ok: true, serverNow: new Date().toISOString() });
 });
 
 describe("TakeExamPage smoke", () => {
@@ -492,45 +497,6 @@ describe("TakeExamPage S03b submit flush", () => {
     ).toBeEnabled();
   });
 
-  it("deadline-passed page auto-submits immediately without waiting for user action", async () => {
-    apiGet.mockResolvedValueOnce({
-      ...mockAttempt,
-      deadlineAt: new Date(Date.now() - 1000).toISOString(),
-      questionSnapshot: [
-        {
-          originalQuestionId: "q1",
-          type: "fill_blank",
-          content: "通行确认码是____",
-          score: 10,
-          options: [],
-        },
-      ],
-    });
-
-    apiPost.mockImplementation(async (path: string) => {
-      if (path.includes("/answers/")) {
-        return { accepted: true, serverVersion: 1, savedAt: "now" };
-      }
-      if (path.includes("/submit")) {
-        return { score: 10 };
-      }
-      return { ok: true };
-    });
-
-    renderPage();
-
-    await screen.findByLabelText("第1空答案");
-
-    await waitFor(() => {
-      expect(
-        apiPost.mock.calls.some(
-          (call: unknown[]) =>
-            typeof call[0] === "string" && call[0].includes("/submit"),
-        ),
-      ).toBe(true);
-    });
-  });
-
   it("dialog shows unanswered, unsaved, and failed save counts", async () => {
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,
@@ -751,7 +717,7 @@ describe("TakeExamPage S03b submit flush", () => {
           details: { serverAnswer: ["B"] },
         };
       }
-      return { ok: true };
+      return { ok: true, serverNow: new Date().toISOString() };
     });
 
     renderPage();
@@ -778,6 +744,7 @@ describe("TakeExamPage deadline awareness", () => {
   it("shows deadline overlay and disables inputs when deadline has passed", async () => {
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,
+      serverNow: new Date().toISOString(),
       deadlineAt: new Date(Date.now() - 1000).toISOString(),
       questionSnapshot: [
         {
@@ -805,6 +772,7 @@ describe("TakeExamPage deadline awareness", () => {
   it("auto-submits after flushing pending saves when deadline passes", async () => {
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,
+      serverNow: new Date().toISOString(),
       deadlineAt: new Date(Date.now() - 1000).toISOString(),
       questionSnapshot: [
         {
@@ -817,7 +785,19 @@ describe("TakeExamPage deadline awareness", () => {
       ],
     });
 
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/answers/")) {
+        return { accepted: true, serverVersion: 1, savedAt: "now" };
+      }
+      if (path.includes("/submit")) {
+        return { score: 10 };
+      }
+      return { ok: true, serverNow: new Date().toISOString() };
+    });
+
     renderPage();
+
+    await screen.findByLabelText("第1空答案");
 
     await waitFor(() => {
       expect(
@@ -829,9 +809,96 @@ describe("TakeExamPage deadline awareness", () => {
     });
   });
 
+  it("shows retry button when auto-submit fails after deadline", async () => {
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      serverNow: new Date().toISOString(),
+      deadlineAt: new Date(Date.now() - 1000).toISOString(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "fill_blank",
+          content: "通行确认码是____",
+          score: 10,
+          options: [],
+        },
+      ],
+    });
+
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/submit")) {
+        throw new Error("submit failed");
+      }
+      return { ok: true, serverNow: new Date().toISOString() };
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("deadline-overlay")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("自动提交失败")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole("button", { name: "重试提交" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not trigger deadline early when client clock is ahead", async () => {
+    vi.useFakeTimers();
+    const serverNow = new Date("2026-06-18T12:00:00Z");
+    const deadlineAt = new Date("2026-06-18T12:05:00Z").toISOString();
+    vi.setSystemTime(new Date("2026-06-18T12:10:00Z"));
+
+    apiGet.mockResolvedValueOnce({
+      ...mockAttempt,
+      deadlineAt,
+      serverNow: serverNow.toISOString(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q1",
+          type: "true_false",
+          content: "地球是圆的",
+          score: 10,
+          options: null,
+          standardAnswer: true,
+        },
+      ],
+    });
+
+    apiPost.mockImplementation(async (path: string) => {
+      if (path.includes("/heartbeat")) {
+        return { ok: true, serverNow: serverNow.toISOString() };
+      }
+      return { ok: true, serverNow: serverNow.toISOString() };
+    });
+
+    renderPage();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(screen.getByText("地球是圆的")).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+
+    const submitCalls = apiPost.mock.calls.filter(
+      (call: unknown[]) =>
+        typeof call[0] === "string" && call[0].includes("/submit"),
+    );
+    expect(submitCalls).toHaveLength(0);
+
+    vi.useRealTimers();
+  });
+
   it("overlay is non-dismissible - no close button or escape handling", async () => {
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,
+      serverNow: new Date().toISOString(),
       deadlineAt: new Date(Date.now() - 1000).toISOString(),
       questionSnapshot: [
         {

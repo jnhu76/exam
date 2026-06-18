@@ -106,11 +106,19 @@ export function TakeExamPage() {
   const [isFlushing, setIsFlushing] = useState(false);
   const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
   const [deadlinePassed, setDeadlinePassed] = useState(false);
+  const [autoSubmitFailed, setAutoSubmitFailed] = useState(false);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
   const deadlineHandledRef = useRef(false);
+  const serverOffsetRef = useRef(0);
   const { scheduleSave, flush } = useSubmitFlush();
+
+  /** Returns the current time adjusted by the server clock offset. */
+  const nowByServerClock = useCallback(
+    () => Date.now() + serverOffsetRef.current,
+    [],
+  );
 
   /** Loads the in-progress attempt data and initializes answer/state maps. */
   const loadAttempt = useCallback(async () => {
@@ -122,6 +130,10 @@ export function TakeExamPage() {
       if (data.status !== "in_progress") {
         navigate(routes.exam.result(attemptId));
         return;
+      }
+      if (data.serverNow) {
+        serverOffsetRef.current =
+          new Date(data.serverNow).getTime() - Date.now();
       }
       setAttempt(data);
 
@@ -238,10 +250,11 @@ export function TakeExamPage() {
     try {
       await api.post(`/api/attempts/${attemptId}/submit`);
       navigate(routes.exam.result(attemptId));
-    } catch {
+    } catch (err) {
       submittingRef.current = false;
       setIsSubmitting(false);
       toast.error("提交失败，请重试");
+      throw err;
     }
   }, [attemptId, navigate]);
 
@@ -310,7 +323,14 @@ export function TakeExamPage() {
   const handleHeartbeat = useCallback(async () => {
     if (!attemptId) return;
     try {
-      await api.post(`/api/attempts/${attemptId}/heartbeat`);
+      const result = await api.post<{
+        ok: true;
+        serverNow: string;
+      }>(`/api/attempts/${attemptId}/heartbeat`);
+      if (result.serverNow) {
+        serverOffsetRef.current =
+          new Date(result.serverNow).getTime() - Date.now();
+      }
       setIsDisconnected(false);
     } catch {
       setIsDisconnected(true);
@@ -325,16 +345,17 @@ export function TakeExamPage() {
   useEffect(() => {
     if (!attempt?.deadlineAt) return;
 
-    if (Date.now() < new Date(attempt.deadlineAt).getTime()) {
+    if (nowByServerClock() < new Date(attempt.deadlineAt).getTime()) {
       deadlineHandledRef.current = false;
       setDeadlinePassed(false);
+      setAutoSubmitFailed(false);
     }
 
     if (deadlineHandledRef.current) return;
 
     const checkDeadline = () => {
       if (deadlineHandledRef.current) return;
-      if (Date.now() >= new Date(attempt.deadlineAt).getTime()) {
+      if (nowByServerClock() >= new Date(attempt.deadlineAt).getTime()) {
         deadlineHandledRef.current = true;
         setDeadlinePassed(true);
         void (async () => {
@@ -346,7 +367,8 @@ export function TakeExamPage() {
             try {
               await handleSubmit();
             } catch {
-              toast.error("自动提交失败，请刷新页面重试");
+              setAutoSubmitFailed(true);
+              toast.error("自动提交失败，请点击重试");
             }
           }
         })();
@@ -356,7 +378,7 @@ export function TakeExamPage() {
     checkDeadline();
     const interval = setInterval(checkDeadline, 1000);
     return () => clearInterval(interval);
-  }, [attempt?.deadlineAt, flush, handleSubmit]);
+  }, [attempt?.deadlineAt, flush, handleSubmit, nowByServerClock]);
 
   if (isLoading) {
     return (
@@ -409,6 +431,7 @@ export function TakeExamPage() {
               <ExamTimer
                 deadlineAt={attempt.deadlineAt}
                 onTimeout={handleTimeout}
+                serverOffsetMs={serverOffsetRef.current}
               />
             )}
             {!deadlinePassed && (
@@ -500,11 +523,23 @@ export function TakeExamPage() {
                       aria-hidden="true"
                     />
                     <div className="text-lg font-semibold text-foreground">
-                      考试时间已到，答题已结束
+                      {autoSubmitFailed
+                        ? "自动提交失败"
+                        : "考试时间已到，答题已结束"}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      系统正在自动提交您的答案...
+                      {autoSubmitFailed
+                        ? "请点击下方按钮重试提交"
+                        : "系统正在自动提交您的答案..."}
                     </div>
+                    {autoSubmitFailed && (
+                      <Button
+                        onClick={() => void handleSubmit()}
+                        data-testid="retry-submit-btn"
+                      >
+                        重试提交
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

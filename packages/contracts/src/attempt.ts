@@ -110,6 +110,7 @@ export type AttemptDTO = z.infer<typeof AttemptSchema>;
  */
 export const LoadAttemptResponseSchema = AttemptSchema.extend({
   questionSnapshot: z.array(CandidateQuestionSnapshotSchema),
+  serverNow: z.string().datetime(),
 });
 
 /** Type for the load-attempt response with candidate-safe question snapshots. */

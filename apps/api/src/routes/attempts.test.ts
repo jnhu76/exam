@@ -1337,7 +1337,9 @@ describe("attempt routes", () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.headers["content-type"]).toMatch(/application\/json/);
-      expect(res.json()).toEqual({ ok: true });
+      const body = res.json();
+      expect(body.ok).toBe(true);
+      expect(typeof body.serverNow).toBe("string");
     });
 
     it("marks stale attempts as disrupted during the background scan", async () => {

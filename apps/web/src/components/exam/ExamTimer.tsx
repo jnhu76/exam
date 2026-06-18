@@ -4,17 +4,19 @@ import { useState, useEffect } from "react";
 export function ExamTimer({
   deadlineAt,
   onTimeout,
+  serverOffsetMs = 0,
 }: {
   deadlineAt: string;
   onTimeout: () => void;
+  serverOffsetMs?: number;
 }) {
   const [remaining, setRemaining] = useState(() =>
-    getRemainingSeconds(deadlineAt),
+    getRemainingSeconds(deadlineAt, serverOffsetMs),
   );
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const seconds = getRemainingSeconds(deadlineAt);
+      const seconds = getRemainingSeconds(deadlineAt, serverOffsetMs);
       setRemaining(seconds);
       if (seconds <= 0) {
         clearInterval(interval);
@@ -22,7 +24,7 @@ export function ExamTimer({
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [deadlineAt, onTimeout]);
+  }, [deadlineAt, onTimeout, serverOffsetMs]);
 
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
@@ -42,9 +44,12 @@ export function ExamTimer({
   );
 }
 
-/** Computes remaining seconds from a deadline ISO string to now. */
-function getRemainingSeconds(deadlineAt: string): number {
-  const diff = new Date(deadlineAt).getTime() - Date.now();
+/** Computes remaining seconds from a deadline ISO string to the server-adjusted now. */
+function getRemainingSeconds(
+  deadlineAt: string,
+  serverOffsetMs: number,
+): number {
+  const diff = new Date(deadlineAt).getTime() - (Date.now() + serverOffsetMs);
   if (diff <= 0) return 0;
   return Math.floor(diff / 1000);
 }
