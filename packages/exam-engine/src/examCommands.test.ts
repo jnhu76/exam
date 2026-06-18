@@ -5,6 +5,7 @@ import {
   closeExam,
   archiveExam,
   buildQuestionSnapshot,
+  checkAndUpdateExamStatus,
   type ExamRepository,
 } from "./examCommands.js";
 import type { Exam, Question } from "@exam/domain";
@@ -208,6 +209,101 @@ describe("examCommands", () => {
       await expect(archiveExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
       );
+    });
+  });
+
+  describe("checkAndUpdateExamStatus", () => {
+    it("transitions published → open when now >= openAt", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "published", openAt, closeAt }));
+      const now = new Date("2025-01-01T10:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("open");
+      expect(result?.transition).toBe("open");
+    });
+
+    it("transitions open → closed when now >= closeAt", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "open", openAt, closeAt }));
+      const now = new Date("2025-01-01T12:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("closed");
+      expect(result?.transition).toBe("closed");
+    });
+
+    it("does not transition published when now < openAt", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "published", openAt, closeAt }));
+      const now = new Date("2025-01-01T09:59:59Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("published");
+      expect(result?.transition).toBeUndefined();
+    });
+
+    it("does not transition open when now < closeAt", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "open", openAt, closeAt }));
+      const now = new Date("2025-01-01T11:59:59Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("open");
+      expect(result?.transition).toBeUndefined();
+    });
+
+    it("does not transition draft exam", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "draft", openAt, closeAt }));
+      const now = new Date("2025-01-01T11:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("draft");
+      expect(result?.transition).toBeUndefined();
+    });
+
+    it("does not transition closed exam", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "closed", openAt, closeAt }));
+      const now = new Date("2025-01-01T13:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("closed");
+      expect(result?.transition).toBeUndefined();
+    });
+
+    it("does not transition archived exam", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "archived", openAt, closeAt }));
+      const now = new Date("2025-01-01T11:00:00Z");
+      const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(result?.exam.status).toBe("archived");
+      expect(result?.transition).toBeUndefined();
+    });
+
+    it("returns null when not found", async () => {
+      const repo = makeRepo(makeExam());
+      const result = await checkAndUpdateExamStatus(
+        repo,
+        "nonexistent",
+        new Date(),
+      );
+      expect(result).toBeNull();
+    });
+
+    it("idempotent: second call after transition returns same status with no transition", async () => {
+      const openAt = new Date("2025-01-01T10:00:00Z");
+      const closeAt = new Date("2025-01-01T12:00:00Z");
+      const repo = makeRepo(makeExam({ status: "published", openAt, closeAt }));
+      const now = new Date("2025-01-01T10:00:00Z");
+      const first = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(first?.exam.status).toBe("open");
+      expect(first?.transition).toBe("open");
+      const second = await checkAndUpdateExamStatus(repo, "exam-1", now);
+      expect(second?.exam.status).toBe("open");
+      expect(second?.transition).toBeUndefined();
     });
   });
 });
