@@ -127,6 +127,113 @@ pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行�
 
 ---
 
+### BUG-FLAKE-003 — deadline scanner tests leak expired attempts across repeated runs
+
+**状态**: 已确认复现（2026-06-18，38 次运行 1 次失败，2.6% 触发率）。
+
+**失败位置**:
+
+- 文件：`apps/api/src/routes/attempts.test.ts:1959`
+- 用例：`deadline scanner — scanDatabaseForExpiredAttempts > does not touch a voided attempt whose deadline has passed`
+- 断言：`expect(result.submittedCount).toBe(0)` — 实际收到 `3`
+
+**错误**:
+
+```
+AssertionError: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+❯ src/routes/attempts.test.ts:1959:37
+```
+
+**复现条件**:
+
+- 同一 `exam_test` PostgreSQL 实例上连续多次运行 `pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner"`
+- 每次 run 后 `cleanup()` 只关闭连接，**不清数据**
+- `seed()` 用 `onConflictDoUpdate(slug)` 并发同一 `default` organization
+- 运行 N 次后，DB 中累积 N 组 expired attempts（voided / future-deadline / race-noop 逃逸场景）
+
+**失败链**:
+
+```txt
+多次 run 后 exam_test DB 中累积 expired disrupted attempts（≥3 条）
+  ↓
+run 38 的 voided test 调用 scanDatabaseForExpiredAttempts()
+  ↓
+listExpirableByDeadline 返回 94 条 expired in_progress/disrupted attempts
+  （包含 37 次前序 run 逃逸的残留 + 当前 run 的 voided attempt）
+  ↓
+scanner 对每条调用 autoSubmitAndGrade()
+  ↓
+voided attempt 被正确跳过（status 不匹配），但 3 条残留 disrupted attempt 被成功提交
+  ↓
+submittedCount = 3（期望 0）→ 断言失败
+```
+
+**已知不是的原因**:
+
+- 不是 deadline scanner 业务代码 bug — scanner 正确跳过了 voided attempt
+- 不是跨文件并行 — `fileParallelism: false` 已生效
+- 不是 PG 连接池争用 — 错误是断言失败（值不对），不是 timeout
+- 不是 `backdateDeadline` 偏移量问题 — 60s 偏移足够
+
+**根因（证据驱动）**:
+
+`testHelpers.ts:151` 的 `cleanup()` 只调用 `app.close()` + `conn.sql.end()`，不删数据。deadline scanner 测试不使用 `cleanupOrganizationTestData()`。每次 run 创建的 expired attempts（尤其是 voided、future-deadline、race-noop 三种逃逸场景）在 run 结束后残留在 DB 中。`scanDatabaseForExpiredAttempts` 扫描 **整个 org** 的全部 expired attempts，而非仅当前 test 的 attempt，因此跨 run 污染。
+
+**DB 证据（38 次 run 后）**:
+
+| status      | count |
+|-------------|-------|
+| graded      | 1316  |
+| disrupted   | 712   |
+| submitted   | 80    |
+| voided      | 40    |
+| in_progress | 12    |
+
+expired (`deadline_at <= now`, status `in_progress` or `disrupted`): **94 条**，全部在 `default` org。
+
+**触发率**: 2.6%（1/38），随累积 run 次数增加而上升。fresh DB 首次 run 不会触发。
+
+**当前缓解**: 无。单次 run 或 fresh DB 不会触发。
+
+**禁止做（仍然有效）**:
+
+- 不改 deadline scanner 业务代码来迁就测试
+- 不改 `backdateDeadline` 偏移量
+- 不 skip 该用例
+- 不给 `scanDatabaseForExpiredAttempts` 加过滤参数
+
+**后续修复方向**:
+
+1. **方案 A（推荐）**: 在 `deadline scanner` describe block 的 `beforeAll` 或每个 test 的 `beforeEach` 中清理 expired attempts——调用 `cleanupOrganizationTestData()` 或直接 `DELETE FROM exam_attempts WHERE deadline_at IS NOT NULL AND deadline_at <= now() AND status IN ('in_progress', 'disrupted')`，确保每次 test 从干净状态开始
+2. **方案 B**: 扩展 `buildTestApp()` / `cleanup()` 使其删除当前 org 的业务数据（exams、attempts、enrollments），与 BUG-FLAKE-002 的 Option B 同源
+3. **方案 C**: 每个 run 使用独立 PG schema（`SET search_path`），与 BUG-FLAKE-001 的 B 方案同源
+
+**验证命令**:
+
+```bash
+# 触发：连续多次运行同一 deadline scanner 测试
+for i in $(seq 1 40); do
+  pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner" && echo "Run $i: PASS" || { echo "Run $i: FAIL"; exit 1; }
+done
+
+# 对照：fresh DB 首次运行不应触发
+docker exec exam-test-pg psql -U exam -d exam_test -c "DELETE FROM exam_attempts"
+pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner"  # 应 PASS
+```
+
+**复发记录**:
+
+- 2026-06-18：50-run reproduction 脚本，Run 38 首次失败（`submittedCount: 3`）。Run 1-37 全过。DB 累积 94 条 expired disrupted attempts。
+
+---
+
 ## 2026-06-13 — `attempts.test.ts` 后台扫描测试 5s timeout
 
 **已升级到 BUG-FLAKE-001（见上）。** 本节保留作为升级前的原始上下文。
