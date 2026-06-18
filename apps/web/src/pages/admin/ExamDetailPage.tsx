@@ -87,7 +87,7 @@ interface EnrollmentItem {
 /**
  * Admin page for viewing and managing a single exam's details.
  * Displays exam configuration, statistics, enrollment management (add/remove candidates),
- * and provides publish and archive lifecycle actions.
+ * and provides publish, close, and archive lifecycle actions.
  */
 export function ExamDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -281,13 +281,20 @@ export function ExamDetailPage() {
               </Button>
             )}
             {exam.status === "open" && (
-              <Button
-                data-testid="exam-detail-close-btn"
-                onClick={() => void handleClose()}
-                disabled={closing}
-              >
-                {closing ? "关闭中..." : "关闭考试"}
-              </Button>
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    data-testid="exam-detail-close-btn"
+                    disabled={closing}
+                  >
+                    {closing ? "关闭中..." : "关闭考试"}
+                  </Button>
+                }
+                title="确认关闭"
+                description={`确定要关闭考试「${exam.title}」吗？关闭后将结束考试，考生无法再开始新的作答。`}
+                destructive
+                onConfirm={() => void handleClose()}
+              />
             )}
             {(exam.status === "published" || exam.status === "closed") && (
               <ConfirmDialog
