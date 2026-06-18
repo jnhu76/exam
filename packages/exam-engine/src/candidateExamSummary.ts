@@ -57,12 +57,16 @@ export function deriveCandidateExamState(
     exam.retakePolicy === "pass_then_stop" && enrollment?.finalPassed === true;
   const blocked = enrollment?.status === "blocked";
   const examOpen = exam.status === "published" || exam.status === "open";
+  // A `closed` exam has run past its window (auto-closed on access). It is
+  // not administratively hidden like `archived`/`draft`, so candidates still
+  // see it as "expired" rather than "unavailable".
+  const examClosed = exam.status === "closed";
   const hasResult = Boolean(
     finalAttempt ||
     (enrollment?.finalAttemptId && enrollment.finalScore != null),
   );
 
-  if (!examOpen || blocked) {
+  if ((!examOpen && !examClosed) || blocked) {
     return { availabilityStatus: "unavailable", primaryAction: "none" };
   }
 

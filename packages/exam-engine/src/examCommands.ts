@@ -140,6 +140,42 @@ export async function closeExam(
   return updated;
 }
 
+/** Result of a check-on-access auto-transition, including whether a transition occurred. */
+export interface CheckAndUpdateResult {
+  exam: Exam;
+  transition?: "open" | "closed";
+}
+
+/**
+ * Check-on-access auto-transition for exam status.
+ * Lazily transitions published→open when now >= openAt, and open→closed when now >= closeAt.
+ * Returns the exam (potentially updated) with transition info, or null if not found.
+ */
+export async function checkAndUpdateExamStatus(
+  repo: ExamRepository,
+  examId: string,
+  now: Date,
+): Promise<CheckAndUpdateResult | null> {
+  let exam = await repo.findById(examId);
+  if (!exam) {
+    return null;
+  }
+
+  let transition: "open" | "closed" | undefined;
+
+  if (exam.status === "published" && now >= exam.openAt) {
+    exam = await openExam(repo, examId);
+    transition = "open";
+  }
+
+  if (exam.status === "open" && now >= exam.closeAt) {
+    exam = await closeExam(repo, examId);
+    transition = "closed";
+  }
+
+  return { exam, ...(transition ? { transition } : {}) };
+}
+
 /** Transitions an exam to archived status, making it read-only. */
 export async function archiveExam(
   repo: ExamRepository,

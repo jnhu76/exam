@@ -1,9 +1,12 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import authRoutes from "./auth.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import examRoutes from "./exam.js";
+import attemptRoutes from "./attempts.js";
 import { buildTestApp, createExamViaApi } from "./testHelpers.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 
 let examCounter = 0;
 
@@ -166,3 +169,235 @@ describe("exam state machine transitions", () => {
     expect(res.statusCode).toBe(409);
   });
 });
+
+describe("exam auto-transition on access", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let candidateProfileId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(authRoutes, { prefix: "/auth" });
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(examRoutes);
+      await fastify.register(attemptRoutes);
+    });
+
+    const existing = await ctx.db
+      .select({ id: schema.candidateProfiles.id })
+      .from(schema.candidateProfiles)
+      .where(eq(schema.candidateProfiles.userId, ctx.candidate.id));
+    if (existing[0]) {
+      candidateProfileId = existing[0].id;
+    } else {
+      const id = crypto.randomUUID();
+      await ctx.db.insert(schema.candidateProfiles).values({
+        id,
+        organizationId: ctx.org.id,
+        userId: ctx.candidate.id,
+        fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      candidateProfileId = id;
+    }
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  async function enrollCandidate(examId: string) {
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: adminCookies(ctx.adminToken),
+    });
+  }
+
+  it("published exam auto-opens when candidate accesses exam list past openAt", async () => {
+    const openAt = new Date(Date.now() - 3600000);
+    const closeAt = new Date(Date.now() + 86400000);
+    const examId = await createExamWithTimeWindow(
+      ctx,
+      "Auto-Open List",
+      openAt,
+      closeAt,
+    );
+
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: adminCookies(ctx.adminToken),
+    });
+    expect(publishRes.statusCode).toBe(200);
+    expect(publishRes.json().status).toBe("published");
+
+    await enrollCandidate(examId);
+
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidate/exams",
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    const exams = listRes.json();
+    const target = exams.find((e: any) => e.examId === examId);
+    expect(target).toBeDefined();
+    expect(target.availabilityStatus).toBe("available");
+
+    const examAfter = await ctx.db
+      .select({ status: schema.exams.status })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    expect(examAfter[0]?.status).toBe("open");
+  });
+
+  it("published exam stays published when candidate accesses before openAt", async () => {
+    const openAt = new Date(Date.now() + 86400000);
+    const closeAt = new Date(Date.now() + 172800000);
+    const examId = await createExamWithTimeWindow(
+      ctx,
+      "No Auto-Open",
+      openAt,
+      closeAt,
+    );
+
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: adminCookies(ctx.adminToken),
+    });
+    expect(publishRes.statusCode).toBe(200);
+
+    await enrollCandidate(examId);
+
+    await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidate/exams",
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    const examAfter = await ctx.db
+      .select({ status: schema.exams.status })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    expect(examAfter[0]?.status).toBe("published");
+  });
+
+  it("open exam auto-closes when candidate accesses exam list past closeAt", async () => {
+    const openAt = new Date(Date.now() - 172800000);
+    const closeAt = new Date(Date.now() - 3600000);
+    const examId = await createExamWithTimeWindow(
+      ctx,
+      "Auto-Close List",
+      openAt,
+      closeAt,
+    );
+
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: adminCookies(ctx.adminToken),
+    });
+    expect(publishRes.statusCode).toBe(200);
+
+    await enrollCandidate(examId);
+
+    const listRes1 = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidate/exams",
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(listRes1.statusCode).toBe(200);
+    const examAfterFirst = await ctx.db
+      .select({ status: schema.exams.status })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    expect(examAfterFirst[0]?.status).toBe("closed");
+  });
+
+  it("published exam auto-opens on candidate start attempt", async () => {
+    const openAt = new Date(Date.now() - 3600000);
+    const closeAt = new Date(Date.now() + 86400000);
+    const examId = await createExamWithTimeWindow(
+      ctx,
+      "Auto-Open Start",
+      openAt,
+      closeAt,
+    );
+
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: adminCookies(ctx.adminToken),
+    });
+    expect(publishRes.statusCode).toBe(200);
+
+    await enrollCandidate(examId);
+
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(startRes.statusCode).toBe(201);
+
+    const examAfter = await ctx.db
+      .select({ status: schema.exams.status })
+      .from(schema.exams)
+      .where(eq(schema.exams.id, examId));
+    expect(examAfter[0]?.status).toBe("open");
+  });
+});
+
+async function createExamWithTimeWindow(
+  ctx: Awaited<ReturnType<typeof buildTestApp>>,
+  title: string,
+  openAt: Date,
+  closeAt: Date,
+): Promise<string> {
+  const courseRes = await ctx.app.inject({
+    method: "POST",
+    url: "/api/courses",
+    payload: {
+      name: `Course ${title}`,
+      code: `CWT-${Date.now()}`,
+      description: "",
+    },
+    cookies: adminCookies(ctx.adminToken),
+  });
+  const courseId = courseRes.json().id;
+
+  const qRes = await ctx.app.inject({
+    method: "POST",
+    url: "/api/questions",
+    payload: {
+      courseId,
+      type: "true_false",
+      content: `Q ${title}`,
+      standardAnswer: true,
+      score: 100,
+    },
+    cookies: adminCookies(ctx.adminToken),
+  });
+  const questionId = qRes.json().id;
+
+  const examRes = await ctx.app.inject({
+    method: "POST",
+    url: "/api/exams",
+    payload: {
+      title,
+      courseId,
+      durationMinutes: 60,
+      openAt: openAt.toISOString(),
+      closeAt: closeAt.toISOString(),
+      passingScore: 60,
+      totalScore: 100,
+      questionIds: [questionId],
+    },
+    cookies: adminCookies(ctx.adminToken),
+  });
+  return examRes.json().id;
+}
