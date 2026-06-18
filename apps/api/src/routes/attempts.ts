@@ -251,6 +251,8 @@ function createAttemptRepoAdapter(
   return {
     findById: async (id) =>
       (await repo.findById(ctx, id)) as ExamAttempt | null,
+    findByIdForUpdate: async (id) =>
+      (await repo.findByIdForUpdate(ctx, id)) as ExamAttempt | null,
     findActiveByEnrollment: async (enrollmentId) =>
       (await repo.findActiveByEnrollment(
         ctx,
@@ -1205,18 +1207,21 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
       await getOwnedAttempt(fastify, ctx, attemptId);
-      const examRepo = createExamRepo(fastify.db);
-      const attemptRepo = createAttemptRepo(fastify.db);
 
-      const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
-      const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
+      const attempt = await executeInTransaction(fastify.db, async (tx) => {
+        const examRepo = createExamRepo(tx);
+        const attemptRepo = createAttemptRepo(tx);
 
-      const attempt = await restoreAttempt(
-        examRepoAdapter,
-        attRepoAdapter,
-        attemptId,
-        new Date(),
-      );
+        const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
+        const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
+
+        return restoreAttempt(
+          examRepoAdapter,
+          attRepoAdapter,
+          attemptId,
+          new Date(),
+        );
+      });
 
       recordAudit(
         fastify,
