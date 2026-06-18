@@ -42,6 +42,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: z.string(),
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -58,6 +59,25 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
+      // ADR-005 Slice 1 §Close & export policy: do not export while unresolved
+      // attempts remain, so an admin cannot export partial results mid-exam.
+      const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+        ctx,
+        examId,
+      );
+      if (unresolvedCount > 0) {
+        return reply.code(409).send(
+          buildErrorResponse(
+            request.id,
+            "RESOURCE_CONFLICT",
+            {
+              reason: "UNRESOLVED_ATTEMPTS_EXIST",
+              activeAttemptCount: unresolvedCount,
+            },
+            "Exam has unresolved attempts",
+          ),
+        );
+      }
       const results = await attemptRepo.listGradedByExam(ctx, examId);
 
       const candidateFieldRepo = createCandidateFieldRepo(fastify.db);

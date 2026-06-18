@@ -189,6 +189,27 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
+      // ADR-005 Slice 1 §Close & export policy: scores are not exposed while
+      // unresolved attempts remain, even if the exam window has ended — an
+      // admin must not export partial results mid-exam. Checked BEFORE the
+      // ended/graded-count guard so the UNRESOLVED signal takes precedence.
+      const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+        ctx,
+        examId,
+      );
+      if (unresolvedCount > 0) {
+        return reply.code(409).send(
+          buildErrorResponse(
+            request.id,
+            "RESOURCE_CONFLICT",
+            {
+              reason: "UNRESOLVED_ATTEMPTS_EXIST",
+              activeAttemptCount: unresolvedCount,
+            },
+            "Exam has unresolved attempts",
+          ),
+        );
+      }
       const gradedCount = await attemptRepo.countGradedByExam(ctx, examId, {
         passFilter: "all",
       });

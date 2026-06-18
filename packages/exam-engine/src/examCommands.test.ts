@@ -182,6 +182,29 @@ describe("examCommands", () => {
         InvalidStateTransitionError,
       );
     });
+
+    // ADR-005 Slice 1 / review decision #2: close is idempotent for `closed`.
+    // `closed -> closed` is a no-op returning the current exam, NOT a
+    // transition error. The route layer suppresses the duplicate audit.
+    it("is idempotent: closed → closed returns the exam unchanged", async () => {
+      const repo = makeRepo(makeExam({ status: "closed" }));
+      const result = await closeExam(repo, "exam-1");
+      expect(result.status).toBe("closed");
+    });
+
+    it("throws for draft → closed", async () => {
+      const repo = makeRepo(makeExam({ status: "draft" }));
+      await expect(closeExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+
+    it("throws for archived → closed", async () => {
+      const repo = makeRepo(makeExam({ status: "archived" }));
+      await expect(closeExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
   });
 
   describe("archiveExam", () => {

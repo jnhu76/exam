@@ -44,6 +44,7 @@ export const errorMessages = {
   ATTEMPT_DEADLINE_EXCEEDED: "考试时间已到",
   EXAM_ALREADY_PUBLISHED: "考试已发布，不能重复发布",
   EXAM_NOT_DRAFT: "仅草稿状态的考试允许此操作",
+  EXAM_CLOSE_NOT_ALLOWED: "考试当前状态不允许关闭",
   ENROLLMENT_NOT_REMOVABLE: "已开始的报名不能移除",
   QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
   MAX_ATTEMPTS_REACHED: "已达到最大考试次数",

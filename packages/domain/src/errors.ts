@@ -116,6 +116,30 @@ export class ExamNotDraftError extends AppError {
   }
 }
 
+/**
+ * Admin close is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 1 §3.3 / review decision #3: `POST /exams/:id/close` is
+ * allowed only from `open`. It is rejected for any other status, or for an
+ * `open` exam that still has unresolved attempts. The `details.reason`
+ * discriminates the two cases:
+ *   - `UNRESOLVED_ATTEMPTS_EXIST` — active/in-flight attempts remain; the
+ *     admin must let them finalize (candidate submit, deadline scanner, or a
+ *     future force-submit) before close.
+ *   - omitted — the exam is not in an `open` (or already-`closed`) state.
+ */
+export class ExamCloseNotAllowedError extends AppError {
+  constructor(
+    details?: {
+      reason?: "UNRESOLVED_ATTEMPTS_EXIST";
+      activeAttemptCount?: number;
+    },
+    message = "Exam close is not allowed",
+  ) {
+    super(message, "EXAM_CLOSE_NOT_ALLOWED", 409, details);
+  }
+}
+
 /** Candidate has reached the maximum number of allowed attempts (HTTP 409). */
 export class MaxAttemptsReachedError extends AppError {
   constructor(message = "Maximum attempt count reached") {

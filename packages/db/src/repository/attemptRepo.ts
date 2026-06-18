@@ -304,6 +304,38 @@ export function createAttemptRepo(db: Database) {
         .where(baseWhere);
       return pgNum((rows[0] as { count: number }).count);
     },
+
+    /**
+     * Counts unresolved (not-yet-finalized) attempts for an exam, scoped to
+     * the tenant. Used by the admin close guard (ADR-005 Slice 1 §3.3) and
+     * the scores/export guard (§Close & export policy): an exam may not close
+     * and results may not be exported while unresolved attempts remain.
+     *
+     * Unresolved = not in a finalized state (`graded` / `voided`).
+     */
+    async countUnresolvedByExam(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(examAttempts)
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.examId, examId),
+            inArray(examAttempts.status, [
+              "queued",
+              "in_progress",
+              "disrupted",
+              "submitted",
+              "grading",
+            ]),
+          ),
+        );
+      return pgNum((rows[0] as { count: number }).count);
+    },
   };
 }
 

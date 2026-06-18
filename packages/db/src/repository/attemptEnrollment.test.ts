@@ -412,6 +412,103 @@ describe("attemptRepo custom methods", () => {
       expect(found.some((a) => a.enrollmentId === enrA.id)).toBe(false);
     });
   });
+
+  // ADR-005 Slice 1: close/export unresolved-attempts guard query.
+  describe("countUnresolvedByExam", () => {
+    it("counts only unresolved attempt statuses", async () => {
+      const orgU = randomUUID();
+      const idsU = makeIds();
+      const ctxU = createContext(orgU);
+      await seedBaseData(db, orgU, idsU);
+      const examId = idsU.examId;
+
+      // Each attempt needs its own user + candidate: enrollment has a unique
+      // (org, exam, candidate) constraint and candidate_profiles has a unique
+      // (org, user) constraint.
+      async function makeAttempt(status: string, attemptNo: number) {
+        const uid = randomUUID();
+        const candId = randomUUID();
+        const now = new Date();
+        await db.insert(schema.users).values({
+          id: uid,
+          organizationId: orgU,
+          username: `cand-${uid.slice(0, 8)}`,
+          passwordHash: "hash",
+          name: `Cand-${attemptNo}`,
+          role: "Candidate",
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await db.insert(schema.candidateProfiles).values({
+          id: candId,
+          organizationId: orgU,
+          userId: uid,
+          fields: {},
+        });
+        const enr = await enrollmentRepo.create(ctxU, {
+          examId,
+          candidateId: candId,
+          status: "started",
+          attemptCount: attemptNo,
+        });
+        return attemptRepo.create(ctxU, {
+          examId,
+          enrollmentId: enr.id,
+          candidateId: candId,
+          attemptNo,
+          status: status as never,
+          questionSnapshot: [],
+          answers: [],
+          startedAt: new Date(),
+          deadlineAt: new Date(Date.now() + 3600_000),
+          lastActivityAt: new Date(),
+        });
+      }
+
+      // Unresolved (should be counted): queued, in_progress, disrupted,
+      // submitted, grading.
+      await makeAttempt("in_progress", 1);
+      await makeAttempt("disrupted", 2);
+      await makeAttempt("submitted", 3);
+      // Finalized (must NOT be counted): graded, voided.
+      await makeAttempt("graded", 4);
+      await makeAttempt("voided", 5);
+
+      const count = await attemptRepo.countUnresolvedByExam(ctxU, examId);
+      expect(count).toBe(3);
+    });
+
+    it("returns 0 when only finalized attempts exist", async () => {
+      const orgU = randomUUID();
+      const idsU = makeIds();
+      const ctxU = createContext(orgU);
+      await seedBaseData(db, orgU, idsU);
+      const examId = idsU.examId;
+
+      const enr = await enrollmentRepo.create(ctxU, {
+        examId,
+        candidateId: idsU.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      await attemptRepo.create(ctxU, {
+        examId,
+        enrollmentId: enr.id,
+        candidateId: idsU.candidateId,
+        attemptNo: 1,
+        status: "graded",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(),
+        deadlineAt: new Date(Date.now() + 3600_000),
+        lastActivityAt: new Date(),
+      });
+
+      const count = await attemptRepo.countUnresolvedByExam(ctxU, examId);
+      expect(count).toBe(0);
+    });
+  });
 });
 
 describe("enrollmentRepo custom methods", () => {

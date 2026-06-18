@@ -123,7 +123,15 @@ export async function openExam(
   return updated;
 }
 
-/** Transitions an exam from open to closed status, preventing further attempts. */
+/**
+ * Transitions an exam from open to closed status, preventing further attempts.
+ *
+ * ADR-005 Slice 1 / review decision #2: idempotent for `closed` — a `closed`
+ * exam returns unchanged (no `InvalidStateTransitionError`). The route layer
+ * uses this to detect the idempotent case and suppress the duplicate audit.
+ * The unresolved-attempts guard lives at the route layer (it needs the
+ * attempt repo); this engine function performs only the status transition.
+ */
 export async function closeExam(
   repo: ExamRepository,
   examId: string,
@@ -131,6 +139,11 @@ export async function closeExam(
   const exam = await repo.findById(examId);
   if (!exam) {
     throw new ValidationError("Exam not found");
+  }
+
+  // Idempotent: already closed -> return as-is.
+  if (exam.status === "closed") {
+    return exam;
   }
 
   assertTransition(exam.status, "closed");

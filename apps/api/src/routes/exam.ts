@@ -18,6 +18,8 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
   archiveExam,
+  closeExam,
+  checkAndUpdateExamStatus,
   publishExam,
   type ExamRepository,
 } from "@exam/exam-engine";
@@ -26,6 +28,7 @@ import {
   InvalidStateTransitionError,
   ExamAlreadyPublishedError,
   ExamNotDraftError,
+  ExamCloseNotAllowedError,
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
@@ -563,6 +566,104 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         }
         throw err;
       }
+    },
+  );
+
+  /**
+   * Zod schema for the close request body: an optional human-readable reason.
+   */
+  const closeExamRequestSchema = z.object({
+    reason: z.string().trim().max(500).optional(),
+  });
+
+  fastify.post(
+    "/exams/:id/close",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: closeExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    /**
+     * Close an open exam (open -> closed). ADR-005 Slice 1.
+     *
+     * Construction hard rule: lock -> reconcile -> unresolved guard -> assert
+     * -> mutate -> audit. The engine `closeExam` is idempotent for `closed`,
+     * so we detect the no-op case (reconciled status already `closed`) and
+     * suppress the duplicate audit (review decision #2).
+     *
+     * Close is rejected with EXAM_CLOSE_NOT_ALLOWED / details.reason =
+     * UNRESOLVED_ATTEMPTS_EXIST when active/in-flight attempts remain
+     * (review decision #3), so scores/export stay semantically valid after.
+     */
+    async (request: any, reply: any) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+      const reason = (request.body?.reason ?? undefined) as string | undefined;
+
+      const repo = createExamRepo(fastify.db);
+      const attemptRepo = createAttemptRepo(fastify.db);
+
+      // 1. Lock the exam row.
+      const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+      if (!locked) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      // 2. Reconcile status by now (published->open / open->closed lazily).
+      const now = new Date();
+      const reconciled = await checkAndUpdateExamStatus(
+        createExamRepoAdapter(repo, ctx),
+        id,
+        now,
+      );
+      const exam = reconciled?.exam ?? locked;
+
+      // 3. Unresolved-attempts guard: reject if active/in-flight attempts
+      //    remain (only meaningful for an open exam, but cheap to check).
+      const unresolved = await attemptRepo.countUnresolvedByExam(ctx, id);
+      if (unresolved > 0) {
+        throw new ExamCloseNotAllowedError({
+          reason: "UNRESOLVED_ATTEMPTS_EXIST",
+          activeAttemptCount: unresolved,
+        });
+      }
+
+      // 4 + 5. Assert + mutate via the engine. closeExam is idempotent for
+      //    `closed` (returns as-is). A non-open, non-closed reconciled status
+      //    raises InvalidStateTransitionError; we surface it uniformly as
+      //    EXAM_CLOSE_NOT_ALLOWED (no UNRESOLVED reason) per ADR-005 §3.3.
+      const wasAlreadyClosed = exam.status === "closed";
+      let closed: Exam;
+      try {
+        closed = await closeExam(createExamRepoAdapter(repo, ctx), id);
+      } catch (err) {
+        if (err instanceof InvalidStateTransitionError) {
+          throw new ExamCloseNotAllowedError();
+        }
+        throw err;
+      }
+
+      // 6. Audit — only for a genuine transition (idempotent close writes no
+      //    duplicate audit, review decision #2).
+      if (!wasAlreadyClosed) {
+        recordAudit(fastify, request, ctx, "exam.close", "exam", id, {
+          reason,
+          fromStatus: exam.status,
+          toStatus: "closed",
+        });
+      }
+      return toExamResponse(closed);
     },
   );
 
