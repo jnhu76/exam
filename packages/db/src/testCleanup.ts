@@ -19,7 +19,7 @@ const FK_VIOLATION_CODE = "23503";
 const MAX_CLEANUP_ATTEMPTS = 5;
 const CLEANUP_RETRY_DELAY_MS = 50;
 
-function isForeignKeyViolation(err: unknown): boolean {
+export function isForeignKeyViolation(err: unknown): boolean {
   return (
     typeof err === "object" &&
     err !== null &&
