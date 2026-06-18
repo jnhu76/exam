@@ -96,6 +96,7 @@ export function ExamDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -231,6 +232,21 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Closes the exam (open -> closed). ADR-005 Slice 1. */
+  async function handleClose() {
+    if (!id || closing) return;
+    setClosing(true);
+    try {
+      await api.post(`/api/exams/${id}/close`, {});
+      toast.success("考试已关闭");
+      await loadExam();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "关闭失败，请稍后重试");
+    } finally {
+      setClosing(false);
+    }
+  }
+
   /** Archives the exam, removing it from the active exam list. */
   async function handleArchive() {
     if (!id || archiving) return;
@@ -262,6 +278,15 @@ export function ExamDetailPage() {
                 disabled={publishing}
               >
                 {publishing ? "发布中..." : "发布考试"}
+              </Button>
+            )}
+            {exam.status === "open" && (
+              <Button
+                data-testid="exam-detail-close-btn"
+                onClick={() => void handleClose()}
+                disabled={closing}
+              >
+                {closing ? "关闭中..." : "关闭考试"}
               </Button>
             )}
             {(exam.status === "published" || exam.status === "closed") && (
