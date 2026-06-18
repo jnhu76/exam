@@ -129,9 +129,21 @@ Not a single enum — derived from `ExamAttempt` fields:
 This axis is **observed**, not transitioned by a dedicated machine. Future
 proctor/device jobs add explicit state here.
 
-## Mandatory transaction rule (lock → reconcile → assert → mutate)
+## Construction hard rule — reconcile under lock (binding)
 
-**Every admin operation must**, inside a single transaction:
+**This is a construction hard rule, not an open question.** Every admin
+operation — publish, unpublish, close, extend, cancel, archive, PATCH — must
+execute this exact sequence inside a single transaction:
+
+```
+transaction
+  -> find exam for update        (row lock)
+  -> reconcile status by now     (checkAndUpdateExamStatus)
+  -> assert transition           (state machine)
+  -> mutate                      (status / closeAt / timing fields)
+  -> audit                       (recordAudit)
+  -> commit
+```
 
 1. **Lock** the exam row (e.g. `SELECT ... FOR UPDATE` via the repo) so no
    concurrent admin op or scanner races the decision.
@@ -139,13 +151,32 @@ proctor/device jobs add explicit state here.
    (`checkAndUpdateExamStatus`) **before** asserting the requested transition.
    This guarantees a *stale* persisted status cannot be acted on: if `now`
    says the exam should be `open`/`closed`, the row is advanced first.
-3. **Assert** the transition against the reconciled status via the state
+3. **Assert** the transition against the **reconciled** status via the state
    machine.
-4. **Mutate** the row (status / `closeAt` / timing fields) and commit.
+4. **Mutate** the row (status / `closeAt` / timing fields).
+5. **Audit** (dot.case action, metadata includes `fromStatus`/`toStatus`).
+6. **Commit.**
 
-This rule is what makes stale-state protection (§3.2, §3.4) and the close
-active-attempt guard (§3.3) correct. Any admin op that skips this sequence is
-a bug.
+### Why this is non-negotiable — stale-state failure modes
+
+Reconciling under lock is the only thing that prevents these concrete bugs:
+
+- **`unpublish` on a stale `published`**: an exam whose `openAt` already passed
+  is persisted as `published` but is logically `open`. Without reconcile-first,
+  `unpublish` would accept it (`published -> draft`) and silently rewind a
+  live exam back to draft — candidates mid-exam lose their window.
+- **`extend` on a stale `open`**: an exam whose `closeAt` already passed is
+  persisted as `open` but is logically `closed`. Without reconcile-first,
+  `extend` would revive a dead exam by pushing `closeAt` forward — reopening a
+  window the deadline scanner already treated as ended, and conflicting with
+  already-issued 409s on candidate starts.
+- **`close` racing the deadline scanner**: without the row lock, the scanner\'s
+  `open -> closed` auto-close and the admin\'s `close` can both read `open` and
+  both write, producing duplicate audits or a lost-update.
+
+Any admin op that skips reconcile-under-lock is a bug. This rule is what makes
+stale-state protection (§3.2, §3.4) and the close active-attempt guard (§3.3)
+correct.
 
 ## Layer 2 — Exam lifecycle transitions
 
