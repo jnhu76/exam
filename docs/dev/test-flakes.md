@@ -87,6 +87,8 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 
 **当前缓解（Option A，现行）**:
 
+> 缓解方案建立在 `docs/SPEC.md` §3.1 Organization Data Boundary Guard 定义的"所有业务数据归属于内部 default organization"（§2.8.1 Phase 1 数据归属边界）之上——测试 seed 与 cleanup 同样操作 default 组织，跨任务共享此状态即触发竞争。
+
 1. `turbo.json` 保留同名 task 的 `db → api` 依赖（`@exam/api#test dependsOn @exam/db#test` 等），保证单次 `turbo test` / `turbo coverage` 内 db 先于 api。
 2. **`package.json` 新增分阶段脚本**，把 DB-touching 任务排成严格串行链，避免任何交叉：
    - `test:db` / `test:api` / `coverage:db` / `coverage:api`：单 package filter，不经过 turbo 并发调度。
@@ -98,6 +100,8 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 4. 兼容：`pnpm test` / `pnpm coverage` / `pnpm test:integration` 行为不变（仍走 turbo，受同名 `dependsOn` 保护）；CI 的 `pnpm test` → `pnpm test:integration` → `pnpm build` → `pnpm coverage` 分步串行本就安全，Option A 是对 `pnpm verify` 单命令路径与未来组合调用的额外保险。
 
 **Option B（后续根因修复，待启动）**:
+
+> 根因修复属于 Phase 1 测试基础设施收紧范畴（`docs/phase-roadmap.md` Phase 1: Minimal Deliverable Exam System），在当前 Phase 1 工作窗口内规划但尚未启动。
 
 - 给每个 DB-touching 测试任务 / worker 分配独立的 PostgreSQL database 或 schema（例如 `exam_test_db_test`、`exam_test_api_coverage`，或 per-worker `SET search_path`），从源头解除"共享 default 组织 + 共享 schema"约束。
 - 完成后可恢复 turbo 对 DB 任务的并行调度，并 review 是否回滚 Option A 的串行脚本（`verify` 可改回 `pnpm test && pnpm coverage`）。
