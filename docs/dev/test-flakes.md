@@ -139,7 +139,7 @@ pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行�
 
 **错误**:
 
-```
+```text
 AssertionError: expected 3 to be +0 // Object.is equality
 
 - Expected
