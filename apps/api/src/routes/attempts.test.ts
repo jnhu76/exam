@@ -1447,7 +1447,9 @@ describe("attempt routes", () => {
       const attId = startRes.json().id;
       const originalDeadline = new Date(startRes.json().deadlineAt);
 
-      const lastActivity = new Date(Date.now() - 5 * 60_000);
+      const fixedNow = new Date(Date.now());
+      ctx.setNow(fixedNow);
+      const lastActivity = new Date(fixedNow.getTime() - 5 * 60_000);
       const attemptRepo = createAttemptRepo(ctx.db);
       const candidateCtxVal = {
         actorId: ctx.candidate.id,
@@ -1472,13 +1474,11 @@ describe("attempt routes", () => {
       const body = res.json();
       expect(body.status).toBe("in_progress");
       const restoredDeadline = new Date(body.deadlineAt);
-      const disconnectedMs = Date.now() - lastActivity.getTime();
-      const expectedMinDeadline = new Date(
-        originalDeadline.getTime() + disconnectedMs - 2000,
+      const disconnectedMs = fixedNow.getTime() - lastActivity.getTime();
+      const expectedDeadline = new Date(
+        originalDeadline.getTime() + disconnectedMs,
       );
-      expect(restoredDeadline.getTime()).toBeGreaterThanOrEqual(
-        expectedMinDeadline.getTime(),
-      );
+      expect(restoredDeadline.getTime()).toBe(expectedDeadline.getTime());
     });
   });
 

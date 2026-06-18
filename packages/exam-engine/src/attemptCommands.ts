@@ -286,8 +286,10 @@ export async function restoreAttempt(
     throw new ValidationError("Exam not found");
   }
 
-  const disconnectedDuration =
-    now.getTime() - (attempt.lastActivityAt?.getTime() ?? now.getTime());
+  const disconnectedDuration = Math.max(
+    0,
+    now.getTime() - (attempt.lastActivityAt?.getTime() ?? now.getTime()),
+  );
 
   let updatedDeadline: Date | undefined;
   if (attempt.deadlineAt) {

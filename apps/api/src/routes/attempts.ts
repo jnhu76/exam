@@ -1219,7 +1219,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
           examRepoAdapter,
           attRepoAdapter,
           attemptId,
-          new Date(),
+          fastify.now(),
         );
       });
 
