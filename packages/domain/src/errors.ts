@@ -277,3 +277,10 @@ export class ExamAlreadyPassedError extends AppError {
     super(message, "EXAM_ALREADY_PASSED", 409);
   }
 }
+
+/** Startup / runtime configuration error (HTTP 500). */
+export class RuntimeConfigError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super(message, "RUNTIME_CONFIG_ERROR", 500, details);
+  }
+}

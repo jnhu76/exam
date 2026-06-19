@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
+import { RuntimeConfigError, type RequestContext } from "@exam/domain";
 import jwt from "jsonwebtoken";
-import type { RequestContext } from "@exam/domain";
 
 /** JWT payload containing user identity without runtime-computed fields. */
 export type JwtPayload = Omit<
@@ -24,7 +24,7 @@ function getDefaultJwtSecret(): string {
     return secret;
   }
   if (isProductionMode()) {
-    throw new Error("JWT_SECRET is required in production");
+    throw new RuntimeConfigError("JWT_SECRET is required in production");
   }
   return "development-only-change-me";
 }
