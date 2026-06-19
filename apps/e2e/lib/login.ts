@@ -38,10 +38,19 @@ async function buildLoginError(
   );
 }
 
+/**
+ * Default post-login URL each role lands on. Candidates go to /exam/list;
+ * admins (and any non-Candidate role) go to /admin/dashboard
+ * (apps/web/src/contexts/AuthContext.tsx: redirectAfterLogin).
+ */
+const CANDIDATE_LANDING = /\/exam\/list(?:$|[/?#])/;
+const ADMIN_LANDING = /\/admin\/dashboard(?:$|[/?#])/;
+
 export async function loginViaUi(
   page: Page,
   username: string,
   password: string,
+  expectedUrl: RegExp = CANDIDATE_LANDING,
 ): Promise<void> {
   const observed: string[] = [];
   const pendingLogs: Promise<void>[] = [];
@@ -88,7 +97,7 @@ export async function loginViaUi(
       .catch(() => null);
 
     const navigationPromise = page
-      .waitForURL(/\/exam\/list(?:$|[/?#])/, { timeout: LOGIN_TIMEOUT_MS })
+      .waitForURL(expectedUrl, { timeout: LOGIN_TIMEOUT_MS })
       .then(() => "navigation" as const)
       .catch(() => null);
 
@@ -112,7 +121,7 @@ export async function loginViaUi(
       throw await buildLoginError(
         page,
         username,
-        "Login did not produce an auth response, alert, or /exam/list navigation",
+        `Login did not produce an auth response, alert, or ${expectedUrl} navigation`,
         observed,
         pendingLogs,
       );
@@ -129,17 +138,15 @@ export async function loginViaUi(
       );
     }
 
-    if (!/\/exam\/list(?:$|[/?#])/.test(new URL(page.url()).pathname)) {
-      await page
-        .waitForURL(/\/exam\/list(?:$|[/?#])/, { timeout: 5_000 })
-        .catch(() => {});
+    if (!expectedUrl.test(new URL(page.url()).pathname)) {
+      await page.waitForURL(expectedUrl, { timeout: 5_000 }).catch(() => {});
     }
 
-    if (!/\/exam\/list(?:$|[/?#])/.test(new URL(page.url()).pathname)) {
+    if (!expectedUrl.test(new URL(page.url()).pathname)) {
       throw await buildLoginError(
         page,
         username,
-        "Login failed to reach /exam/list",
+        `Login failed to reach ${expectedUrl}`,
         observed,
         pendingLogs,
       );
@@ -148,4 +155,16 @@ export async function loginViaUi(
     page.off("request", onRequest);
     page.off("response", onResponse);
   }
+}
+
+/**
+ * Log in as the demo-seed admin (admin/admin123 by default) and land on the
+ * admin dashboard. Used by admin-flow E2E specs that drive the admin UI.
+ */
+export async function loginAsAdmin(
+  page: Page,
+  username: string = process.env.E2E_ADMIN_USERNAME ?? "admin",
+  password: string = process.env.E2E_ADMIN_PASSWORD ?? "admin123",
+): Promise<void> {
+  await loginViaUi(page, username, password, ADMIN_LANDING);
 }

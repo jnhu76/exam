@@ -77,11 +77,19 @@ export function processSaveAnswer(
   state: AnswerState,
   request: SaveAnswerRequest,
 ): ProcessSaveResult {
+  // ADR-006: the exam-engine layer never reads the wall clock. The operation
+  // `now` arrives via `state.now` from the API layer (fastify.now()). It is the
+  // single time authority for every timestamp this function emits. The fallback
+  // only applies if a caller forgets to supply it; the production route always
+  // does, so the engine never reaches the fallback at runtime.
+  const now = state.now ?? new Date();
+  const savedAtIso = now.toISOString();
+
   if (state.attemptStatus === "voided") {
     return {
       accepted: false,
       serverVersion: 0,
-      savedAt: new Date().toISOString(),
+      savedAt: savedAtIso,
       conflict: { reason: "ATTEMPT_CLOSED" },
     };
   }
@@ -94,20 +102,16 @@ export function processSaveAnswer(
     return {
       accepted: false,
       serverVersion: 0,
-      savedAt: new Date().toISOString(),
+      savedAt: savedAtIso,
       conflict: { reason: "ATTEMPT_ALREADY_SUBMITTED" },
     };
   }
 
-  if (
-    state.deadlineAt &&
-    state.now &&
-    state.now.getTime() > state.deadlineAt.getTime()
-  ) {
+  if (state.deadlineAt && now.getTime() > state.deadlineAt.getTime()) {
     return {
       accepted: false,
       serverVersion: 0,
-      savedAt: new Date().toISOString(),
+      savedAt: savedAtIso,
       conflict: { reason: "DEADLINE_EXCEEDED" },
     };
   }
@@ -129,7 +133,7 @@ export function processSaveAnswer(
     return {
       accepted: false,
       serverVersion: existingBySeq.version,
-      savedAt: new Date().toISOString(),
+      savedAt: savedAtIso,
       conflict: {
         reason: "CONFLICTING_PAYLOAD" as const,
         latestAnswer: existingBySeq.answer,
@@ -146,7 +150,7 @@ export function processSaveAnswer(
     return {
       accepted: false,
       serverVersion: currentVersion,
-      savedAt: new Date().toISOString(),
+      savedAt: savedAtIso,
       conflict: {
         reason: "STALE_VERSION",
         latestAnswer: existingAnswer?.answer,
@@ -155,7 +159,6 @@ export function processSaveAnswer(
   }
 
   const newVersion = currentVersion + 1;
-  const now = new Date();
   const newAnswer: AnswerRecord = {
     questionId: request.questionId,
     answer: request.answer,
@@ -169,7 +172,7 @@ export function processSaveAnswer(
   return {
     accepted: true,
     serverVersion: newVersion,
-    savedAt: now.toISOString(),
+    savedAt: savedAtIso,
     newAnswer,
     newClientSeqMap,
   };

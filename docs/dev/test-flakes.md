@@ -234,6 +234,99 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 
 ---
 
+### BUG-FLAKE-004 — Intra-suite cross-file state leak via shared `exam_test` schema
+
+**状态**: 已确认（2026-06-19，RESOLVED-001 根因分析中发现）。
+
+**失败位置**:
+
+- 受影响文件：`apps/api/src/routes/exam.test.ts`、`apps/api/src/routes/permissionBoundary.test.ts`、`apps/api/tests/security/tenant-isolation.test.ts`
+- 触发条件：`tenant-isolation.test.ts` 写入 `batchSize:0`（契约非法）fixture → 同一次 `pnpm --filter @exam/api test` 运行中，`exam.test.ts` / `permissionBoundary.test.ts` 的 `GET /api/exams` 列出该记录 → Zod 校验失败 → 500
+
+**根因**:
+
+`apps/api` 内所有测试文件共享同一个 `exam_test` PostgreSQL schema。`fileParallelism: false`（BUG-FLAKE-001 A′ 方案）消除了文件并行，但**未消除跨文件状态残留**：前序文件写入的行在后续文件中仍可见。`tenant-isolation.test.ts` 的 `cleanup()` 只关闭连接不删数据（与 BUG-FLAKE-003 同源），留下非法 fixture 污染后续文件的 list 查询。
+
+**与已知条目的关系**:
+
+- **BUG-FLAKE-001**（A′ `fileParallelism: false`）只解决并行 I/O 争用，不解决状态残留。
+- **BUG-FLAKE-002**（turbo 跨 package 并发）只解决跨 package 竞争，不解决同 package 内跨文件残留。
+- **BUG-FLAKE-003**（deadline scanner 数据累积）是同类问题的另一个实例——同 schema 跨 run 残留。
+- 本条目是**同 package 内、跨文件、单次 run** 的状态泄漏，与上述三条都不同。
+
+**根因修复方向（与 BUG-FLAKE-001 B 方案同源）**:
+
+每个测试文件 / 每个 worker 使用独立 PG schema（`SET search_path`），从源头消除跨文件状态残留。完成后 `fileParallelism: false` 可恢复默认值。
+
+**当前缓解**: `apps/api` 的测试文件按序执行（`fileParallelism: false`），且 `cleanupOrganizationTestData()` 在多数 describe block 的 `afterAll` 中调用。但非所有文件都调用——`tenant-isolation.test.ts` 自建 app 不走 `buildTestApp`，未调用全局 cleanup。
+
+**禁止做（仍然有效）**:
+
+- 不改业务代码来迁就测试状态泄漏
+- 不 skip 受影响用例
+- 不给每个测试加独立 timeout 来掩盖
+
+**复发记录**:
+
+- 2026-06-19：RESOLVED-001 根因分析中发现，`tenant-isolation.test.ts` 写入 `batchSize:0` 后污染 `exam.test.ts` 与 `permissionBoundary.test.ts`，修复 fixture 后 512/512 过。
+
+---
+
+## 已诊断并修复的失败（非 flake，留档用于排查复用）
+
+> 本段记录的是**确定性、可复现、已根因修复**的失败，不是"同代码再跑就过"的偶发 flake。登记在此是为了让后人遇到 `GET /api/exams` 500 这类表面相似的症状时，不必重新走一遍排查链路。
+
+### RESOLVED-001 — `GET /api/exams` 返回 500 INTERNAL_ERROR（tenant-isolation + 共享 DB 污染 + 缺 nowPlugin）
+
+**状态**：已修复（2026-06-19，commit 见 ADR-006 PR）。表面像 flake，实为两个独立根因叠加。
+
+**失败位置**
+
+- `apps/api/tests/security/tenant-isolation.test.ts` ×2：`org A admin sees only org A exams`、`non-SuperAdmin x-target-org header is ignored`
+- `apps/api/src/routes/exam.test.ts`：`GET /api/exams returns list`
+- `apps/api/src/routes/permissionBoundary.test.ts`：`GET /api/exams returns 200`
+- 全部表现为 `AssertionError: expected 500 to be 200`，路由返回 `{"error":{"code":"INTERNAL_ERROR",...}}`。
+
+**错误（真实根因，非断言）**
+
+经逐层隔离复现，500 有两个独立成因：
+
+1. **`tenant-isolation.test.ts` 插入契约非法 fixture**：两处原始 `db.insert(schema.exams)` 用了 `controlFlags.batchSize: 0` / `batchInterval: 0`，但 `packages/contracts/src/exam.ts:42-43` 规定 `batchSize: z.number().int().min(1)`、`batchInterval: z.number().int().min(1)`。该测试绕过 API 校验直接写库，留下非法记录。
+2. **`tenant-isolation.test.ts` 构造的 Fastify app 未注册 `nowPlugin`**：其 `beforeAll` 注册了 auth/tenant/rateLimit/zodProvider/security/createDb，但**漏了 `nowPlugin`**。而 `GET /api/exams` 路由调用 `fastify.now()`（`apps/api/src/routes/exam.ts`），于是抛 `TypeError: fastify.now is not a function` → 被错误处理器包成 500。`buildTestApp`（其他测试用）注册了 `nowPlugin`，所以只有 tenant-isolation 自己构建的 app 中招。
+
+**出现场景 / 放大机制**
+
+- 根因 1（非法 fixture）通过 **共享的 `exam_test` DB 跨文件污染** 放大：tenant-isolation 留下的 `batchSize:0` 记录会被同一次 `pnpm test` 运行里的 `exam.test.ts` / `permissionBoundary.test.ts` 的 `GET /api/exams` 列到 → Fastify 响应 Zod 校验失败 → 500。所以根因 1 一次写入可炸 3 个文件。
+- 根因 2（缺 nowPlugin）只影响 tenant-isolation 自身 2 个用例，与 DB 状态无关。
+- 完全重置 DB（`DROP SCHEMA public, drizzle CASCADE; CREATE SCHEMA public`）后只跑 `exam.test.ts` → 40/40 过：证明根因 1 是 DB 状态污染，生产代码无 bug。
+
+**已知不是的原因**
+
+- 不是 ADR-006 / Time Authority 引入的回归（`fastify.now()` 在 list 路由本就存在；stash 回基线 commit 同样 4 个失败）。
+- 不是迁移修复（migration 0001）引入：timing 字段 nullable 与本问题无关。
+- 不是产品代码 bug：运行中的 exam-e2e-p2b app（同一镜像）`GET /api/exams` 返回 200 正常。
+
+**当前缓解 / 修复（已落地）**
+
+1. `tenant-isolation.test.ts` 两处 fixture `batchSize: 0 → 10`、`batchInterval: 0 → 3`（与 contract default 一致）。消除契约非法记录。
+2. `tenant-isolation.test.ts` `beforeAll` 增加 `await app.register(nowPlugin)`（与 `buildTestApp` 对齐）。消除 `fastify.now is not a function`。
+3. 验证：三文件同跑 58/58 过；完整 api 套件 512/512 过（偶发 1 个 suite-level 失败属 DB 状态共享，见后续动作）。
+
+**后续动作**
+
+- **测试 DB 隔离（follow-up，非本 PR）**：根因 1 之所以能炸到 3 个文件，本质是 `exam_test` PG 跨文件共享 schema、无 per-file/per-worker 隔离。这与 BUG-FLAKE-001 的 B 方案（每 worker 独立 schema）同源，建议合并处理。当前 `apps/api/vitest.config.ts` 的 `fileParallelism: false`（A′ 方案）只是串行化，并未消除跨文件状态残留。
+- 不要把 `setupErrorHandler` 的 500 文案当真去查产品代码——500 在本例来自响应 Zod 校验/插件缺失，错误处理器把它统一包成了 `INTERNAL_ERROR`，掩盖了真实原因。排查此类 500 时优先用 `app.addHook("onError", ...)` 或临时 `setErrorHandler` 打印 `err.message` / `err.cause`。
+
+**排查复用要点**
+
+遇到 `GET /api/exams`（或任何 list 路由）返回 500 INTERNAL_ERROR：
+
+1. 先确认是不是 DB 状态污染：`DROP SCHEMA public, drizzle CASCADE; CREATE SCHEMA public` 后单跑该文件。若过 → 是跨文件残留，查 fixture 是否写了契约非法值。
+2. 若不过，用 `onError` hook 打印真实 `err.message`：若为 `fastify.now is not a function` → 测试 app 漏注册 `nowPlugin`；若为 Zod `too_small`/`invalid_type` → 响应里有契约非法字段，查 fixture。
+3. 响应 500 + 错误处理器统一文案时，**不要**先怀疑产品代码。
+
+---
+
 ## 2026-06-13 — `attempts.test.ts` 后台扫描测试 5s timeout
 
 **已升级到 BUG-FLAKE-001（见上）。** 本节保留作为升级前的原始上下文。

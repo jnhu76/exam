@@ -179,6 +179,9 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
           .send(formatZodError(request.id, parsedQuery.error));
       }
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      // ADR-006: capture the operation now once from the time authority and
+      // thread it through every time-sensitive decision in this request.
+      const now = fastify.now();
       const { page, pageSize, passFilter, sortBy, sortOrder } =
         parsedQuery.data;
 
@@ -221,7 +224,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       const gradedCount = await attemptRepo.countGradedByExam(ctx, examId, {
         passFilter: "all",
       });
-      const access = canOpenScoreList(exam, gradedCount, new Date());
+      const access = canOpenScoreList(exam, gradedCount, now);
       if (!access.allowed) {
         return reply
           .code(409)

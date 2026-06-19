@@ -5,6 +5,7 @@ import fp from "fastify-plugin";
 import authPlugin from "../../src/plugins/auth.js";
 import tenantPlugin from "../../src/plugins/tenant.js";
 import rateLimitPlugin from "../../src/plugins/rateLimit.js";
+import nowPlugin from "../../src/plugins/now.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
 import zodProviderPlugin from "../../src/plugins/zodProvider.js";
 import setupSecurity from "../../src/plugins/security.js";
@@ -173,8 +174,8 @@ describe("Tenant Isolation (S01)", () => {
         detectTabSwitch: false,
         disableCopyPaste: false,
         requireQueue: false,
-        batchSize: 0,
-        batchInterval: 0,
+        batchSize: 10,
+        batchInterval: 3,
         restrictIp: false,
         requireLockdown: false,
         showResultImmediately: false,
@@ -208,6 +209,7 @@ describe("Tenant Isolation (S01)", () => {
     await app.register(zodProviderPlugin);
     await app.register(fastifyCookie);
     await app.register(createDbPlugin(db));
+    await app.register(nowPlugin);
     await app.register(authPlugin);
     await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);
@@ -263,8 +265,8 @@ describe("Tenant Isolation (S01)", () => {
           detectTabSwitch: false,
           disableCopyPaste: false,
           requireQueue: false,
-          batchSize: 0,
-          batchInterval: 0,
+          batchSize: 10,
+          batchInterval: 3,
           restrictIp: false,
           requireLockdown: false,
           showResultImmediately: false,

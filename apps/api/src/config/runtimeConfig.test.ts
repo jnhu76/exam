@@ -38,6 +38,7 @@ const ENV_KEYS = [
   "RATE_LIMIT_MAX",
   "RATE_LIMIT_WINDOW_MS",
   "RATE_LIMIT_DISABLED",
+  "APP_TIMEZONE",
 ] as const;
 
 describe("runtimeConfig", () => {
@@ -818,6 +819,73 @@ describe("runtimeConfig", () => {
       const env = readFile(".env.example");
       const deployLine = env.match(/^DEPLOYMENT_MODE=.*$/m)?.[0] ?? "";
       expect(deployLine).not.toMatch(/multiTenant/);
+    });
+  });
+
+  describe("timezone (ADR-006)", () => {
+    it("defaults APP_TIMEZONE to Asia/Shanghai when unset", () => {
+      delete process.env.APP_TIMEZONE;
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.timezone.timezone).toBe("Asia/Shanghai");
+    });
+
+    it("accepts a valid IANA timezone", () => {
+      process.env.APP_TIMEZONE = "America/New_York";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.timezone.timezone).toBe("America/New_York");
+    });
+
+    it("accepts UTC as a valid IANA timezone", () => {
+      process.env.APP_TIMEZONE = "UTC";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.timezone.timezone).toBe("UTC");
+    });
+
+    it("trims whitespace around APP_TIMEZONE", () => {
+      process.env.APP_TIMEZONE = "  Asia/Shanghai  ";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.timezone.timezone).toBe("Asia/Shanghai");
+    });
+
+    it("fails fast on an invalid (non-IANA) APP_TIMEZONE", () => {
+      process.env.APP_TIMEZONE = "Not/A/Real/Zone";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow(/Invalid APP_TIMEZONE/);
+    });
+
+    it("fails fast on empty APP_TIMEZONE by falling back to default (not error)", () => {
+      // Empty string is treated as unset -> default, not invalid.
+      process.env.APP_TIMEZONE = "   ";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.timezone.timezone).toBe("Asia/Shanghai");
+    });
+  });
+
+  describe("deployed config files declare APP_TIMEZONE / TZ baseline (ADR-006)", () => {
+    function readFile(rel: string): string {
+      return readFileSync(join(REPO_ROOT, rel), "utf8");
+    }
+
+    it(".env.example declares APP_TIMEZONE and TZ with Asia/Shanghai default", () => {
+      const env = readFile(".env.example");
+      expect(env).toMatch(/APP_TIMEZONE=Asia\/Shanghai/);
+      expect(env).toMatch(/TZ=Asia\/Shanghai/);
+      // Must not recommend ambiguous abbreviations.
+      expect(env).not.toMatch(/APP_TIMEZONE=CST/);
+    });
+
+    it("docker-compose.yml sets APP_TIMEZONE/TZ on app and TZ/PGTZ on db", () => {
+      const compose = readFile("docker-compose.yml");
+      expect(compose).toMatch(
+        /APP_TIMEZONE:\s*\$\{APP_TIMEZONE:-Asia\/Shanghai\}/,
+      );
+      expect(compose).toMatch(/TZ:\s*\$\{TZ:-Asia\/Shanghai\}/);
+      expect(compose).toMatch(/PGTZ:\s*\$\{APP_TIMEZONE:-Asia\/Shanghai\}/);
     });
   });
 });

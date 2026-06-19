@@ -57,6 +57,15 @@ export interface SecurityConfig {
   cspEnabled: boolean;
 }
 
+/**
+ * Runtime timezone config (display/log/diagnostics only — NOT a business-time
+ * authority). ADR-006: APP_TIMEZONE does not change instant-comparison
+ * semantics; openAt/closeAt/deadlineAt are absolute instants.
+ */
+export interface TimezoneConfig {
+  timezone: string;
+}
+
 export interface DatabaseConfig {
   url: string;
 }
@@ -101,11 +110,49 @@ export interface AppRuntimeConfig {
   auth: AuthConfig;
   rateLimit: RateLimitConfig;
   security: SecurityConfig;
+  timezone: TimezoneConfig;
 }
 
 const APP_MODES = ["development", "test", "e2e", "ci", "production"] as const;
 
 const DEFAULT_JWT_SECRET = "development-only-change-me";
+
+/**
+ * Default runtime timezone (display/log/diagnostics only). ADR-006: this does
+ * not change business-time comparison semantics. Asia/Shanghai is an explicit
+ * IANA zone; ambiguous abbreviations such as CST are never recommended.
+ */
+const DEFAULT_APP_TIMEZONE = "Asia/Shanghai";
+
+/**
+ * Assert that `timeZone` is a valid IANA timezone by probing the runtime's
+ * `Intl.DateTimeFormat`. Throws on invalid values so APP_TIMEZONE misconfig
+ * fails fast at startup. (Node rejects unknown zone strings here.)
+ */
+function assertValidIanaTimeZone(timeZone: string): void {
+  try {
+    // eslint-disable-next-line no-new
+    new Intl.DateTimeFormat("en-US", { timeZone });
+  } catch {
+    throw new Error(
+      `Invalid APP_TIMEZONE: ${timeZone}. Must be a valid IANA timezone (e.g. Asia/Shanghai).`,
+    );
+  }
+}
+
+/**
+ * Resolve the runtime timezone from `APP_TIMEZONE`, defaulting to
+ * Asia/Shanghai. Invalid (non-IANA) values fail fast.
+ *
+ * @param env - Process environment to read from.
+ * @returns The resolved IANA timezone string.
+ */
+function resolveTimezone(env: NodeJS.ProcessEnv): string {
+  const raw = env.APP_TIMEZONE?.trim();
+  const timezone = raw && raw.length > 0 ? raw : DEFAULT_APP_TIMEZONE;
+  assertValidIanaTimeZone(timezone);
+  return timezone;
+}
 
 const positiveIntSchema = z
   .union([z.string(), z.number()])
@@ -364,6 +411,7 @@ export function loadRuntimeConfig(
     security: {
       cspEnabled: true,
     },
+    timezone: { timezone: resolveTimezone(env) },
   };
 }
 

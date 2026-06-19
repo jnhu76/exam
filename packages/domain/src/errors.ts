@@ -141,6 +141,21 @@ export class ExamCloseNotAllowedError extends AppError {
 }
 
 /**
+ * Admin archive is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 construction hard rule (applied to archive per P2B-J2 follow-up #3):
+ * `POST /exams/:id/archive` is allowed only from `published | closed | canceled`
+ * (after reconciliation). `draft | open | archived` are rejected. Stale-state
+ * protection: a draft exam whose openAt already passed still reconciles to
+ * `open`/`published`-then-`open`, not a directly archivable state.
+ */
+export class ExamArchiveNotAllowedError extends AppError {
+  constructor(message = "Exam archive is not allowed") {
+    super(message, "EXAM_ARCHIVE_NOT_ALLOWED", 409);
+  }
+}
+
+/**
  * Admin unpublish is not allowed for the requested exam (HTTP 409).
  *
  * ADR-005 Slice 2 §3.2: `POST /exams/:id/unpublish` is allowed only from

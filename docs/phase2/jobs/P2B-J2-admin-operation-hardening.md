@@ -41,22 +41,29 @@
 
 ### Follow-ups (non-blocking, surfaced by Slice 4 review)
 
-- **Archive route does not follow the construction hard rule.** The
-  `POST /exams/:id/archive` handler (`apps/api/src/routes/exam.ts`) calls
-  `archiveExam()` directly — no `executeInTransaction`, no `findByIdForUpdate`,
-  no `checkAndUpdateExamStatus`. This predates all four slices (it has been the
-  Phase 1 archive behavior) and is **not** a regression introduced by Slice 4.
-  Slice 4 only made `canceled → archived` reachable via the state machine,
-  which exposed this gap. A future job should wrap archive in the same
-  tx+lock+reconcile+mutate+audit sequence as the other admin operations, for
-  consistency and stale-state protection on the `published/closed/canceled →
-  archived` transitions.
-- **Audit writes sit outside the transaction (all admin ops).** close/extend/
-  unpublish/cancel + attempts.ts all write audit after `executeInTransaction`
-  commits (best-effort, matching the established repo convention). The ADR
-  construction hard rule describes the ideal order; the implementation follows
-  the repo convention. A repo-wide "audit-in-tx" change is out of scope for
-  these slices.
+- **Archive route now follows the construction hard rule. ✅ DONE** (P2B-J1/J2
+  tail cleanup). `POST /exams/:id/archive` now wraps in `executeInTransaction`
+  → `findByIdForUpdate` (lock) → `checkAndUpdateExamStatus` (reconcile) →
+  assert via the state machine (invalid transition → `ExamArchiveNotAllowedError`
+  / `EXAM_ARCHIVE_NOT_ALLOWED` 409) → mutate, with 404 for a missing exam and
+  idempotent already-archived behavior (no duplicate audit). The audit write
+  stays outside the tx, matching the repo convention. This predates all four
+  slices (it was the Phase 1 archive behavior) and was **not** a regression
+  introduced by Slice 4 — Slice 4 only made `canceled → archived` reachable,
+  which exposed the gap.
+- **Enrollment batch validation. ✅ DONE** (P2B-J1/J2 tail cleanup).
+  `POST /exams/:examId/enrollments` now reports per-skip reasons:
+  `skippedCandidates: [{candidateId, reason: "DUPLICATE"|"NOT_FOUND"}]`.
+  Backward-compatible: `added`/`skipped`/`enrollments` unchanged. Scope chosen
+  was per-skip reason reporting (not fail-fast).
+- **Audit writes sit outside the transaction (all admin ops). ⏸️ DEFERRED** —
+  close/extend/unpublish/cancel/archive + attempts.ts all write audit after
+  `executeInTransaction` commits (best-effort, matching the established repo
+  convention). The ADR construction hard rule describes the ideal order; the
+  implementation follows the repo convention. A repo-wide "audit-in-tx" change
+  is intentionally deferred from the P2B-J1/J2 tail cleanup — see
+  `docs/phase2/jobs/P2B-J1-J2-remaining-audit.md` "FOLLOW-UP: Audit Atomicity
+  Refactor".
 
 ## 1. Summary
 
