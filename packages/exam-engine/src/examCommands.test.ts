@@ -45,6 +45,8 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
     retakePolicy: "unlimited",
     scoreStrategy: "highest",
     maxAttempts: 1,
+    latestStartOffsetMinutes: null,
+    minSubmitAfterStartMinutes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

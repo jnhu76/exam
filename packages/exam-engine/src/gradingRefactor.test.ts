@@ -50,6 +50,8 @@ function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
     retakePolicy: "unlimited",
     scoreStrategy,
     maxAttempts: 3,
+    latestStartOffsetMinutes: null,
+    minSubmitAfterStartMinutes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

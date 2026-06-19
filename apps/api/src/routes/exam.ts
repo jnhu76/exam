@@ -65,6 +65,8 @@ function toExamResponse(exam: Exam) {
     retakePolicy: exam.retakePolicy,
     scoreStrategy: exam.scoreStrategy,
     maxAttempts: exam.maxAttempts,
+    latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+    minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
     createdAt: exam.createdAt.toISOString(),
     updatedAt: exam.updatedAt.toISOString(),
   };

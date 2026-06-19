@@ -72,6 +72,8 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
     retakePolicy: "unlimited",
     scoreStrategy: "highest",
     maxAttempts: 3,
+    latestStartOffsetMinutes: null,
+    minSubmitAfterStartMinutes: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -320,6 +322,8 @@ describe("attemptCommands", () => {
       const exam = makeExam({
         retakePolicy: "max_attempts",
         maxAttempts: 1,
+        latestStartOffsetMinutes: null,
+        minSubmitAfterStartMinutes: null,
       });
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const existingAttempt = makeAttempt();
@@ -425,6 +429,8 @@ describe("attemptCommands", () => {
       const exam = makeExam({
         retakePolicy: "max_attempts",
         maxAttempts: 1,
+        latestStartOffsetMinutes: null,
+        minSubmitAfterStartMinutes: null,
       });
       const enrollment = makeEnrollment({ attemptCount: 1 });
       const examRepo = { findById: () => exam, update: () => exam };

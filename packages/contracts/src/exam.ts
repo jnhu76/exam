@@ -68,6 +68,9 @@ export const ExamSchema = z.object({
   retakePolicy: RetakePolicyEnum,
   scoreStrategy: ScoreStrategyEnum,
   maxAttempts: z.number().int().min(1),
+  // ADR-005 Slice 3 timing policy. null = disabled.
+  latestStartOffsetMinutes: z.number().int().nullable(),
+  minSubmitAfterStartMinutes: z.number().int().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -107,6 +110,9 @@ export const CreateExamRequestSchema = z.object({
   retakePolicy: Phase1RetakePolicyEnum.default("unlimited"),
   scoreStrategy: ScoreStrategyEnum.default("highest"),
   maxAttempts: z.number().int().min(1).default(1),
+  // ADR-005 Slice 3 timing policy. null/omitted = disabled.
+  latestStartOffsetMinutes: z.number().int().min(0).nullish(),
+  minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
 });
 
 /** Type for a create-exam request. */
@@ -130,6 +136,8 @@ export const UpdateExamRequestSchema = z.object({
   retakePolicy: Phase1RetakePolicyEnum.optional(),
   scoreStrategy: ScoreStrategyEnum.optional(),
   maxAttempts: z.number().int().min(1).optional(),
+  latestStartOffsetMinutes: z.number().int().min(0).nullish(),
+  minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
 });
 
 /** Type for an update-exam request. */

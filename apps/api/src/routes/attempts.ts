@@ -385,6 +385,8 @@ function buildCandidateExamDetail(
     questionCount: exam.questionSnapshot.length,
     controlFlags: exam.controlFlags,
     maxAttempts: exam.maxAttempts,
+    latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+    minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
     currentAttempts,
     ...(activeAttempt ? { activeAttemptId: activeAttempt.id } : {}),
     canStartNewAttempt,
@@ -516,6 +518,8 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             totalScore: exam.totalScore,
             attemptsUsed: enrollment.attemptCount,
             maxAttempts: exam.maxAttempts,
+            latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+            minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
             ...(displayAttempt
               ? {
                   latestAttemptId: displayAttempt.id,

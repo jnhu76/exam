@@ -224,6 +224,9 @@ export interface Exam {
   retakePolicy: RetakePolicy;
   scoreStrategy: ScoreStrategy;
   maxAttempts: number;
+  // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
+  latestStartOffsetMinutes: number | null;
+  minSubmitAfterStartMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
