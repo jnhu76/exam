@@ -201,7 +201,11 @@ export function ExamConfigForm({
                   onChange={(e) =>
                     update({
                       latestStartOffsetMinutes:
-                        e.target.value === "" ? null : Number(e.target.value),
+                        e.target.value === ""
+                          ? null
+                          : Number.isNaN(Number(e.target.value))
+                            ? null
+                            : Number(e.target.value),
                     })
                   }
                   min={0}
@@ -216,7 +220,11 @@ export function ExamConfigForm({
                   onChange={(e) =>
                     update({
                       minSubmitAfterStartMinutes:
-                        e.target.value === "" ? null : Number(e.target.value),
+                        e.target.value === ""
+                          ? null
+                          : Number.isNaN(Number(e.target.value))
+                            ? null
+                            : Number(e.target.value),
                     })
                   }
                   min={0}
@@ -225,7 +233,7 @@ export function ExamConfigForm({
               </Field>
             </div>
             <p className="text-xs text-muted-foreground">
-              时间模式：timed_window（Phase 1 仅支持此模式）。留空表示不限制。
+              时间模式：限时窗口（当前版本仅支持此模式）。留空表示不限制。
             </p>
           </FieldGroup>
         </CardContent>

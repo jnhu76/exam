@@ -468,15 +468,17 @@ describe("attemptRepo custom methods", () => {
 
       // Unresolved (should be counted): queued, in_progress, disrupted,
       // submitted, grading.
-      await makeAttempt("in_progress", 1);
-      await makeAttempt("disrupted", 2);
-      await makeAttempt("submitted", 3);
+      await makeAttempt("queued", 1);
+      await makeAttempt("in_progress", 2);
+      await makeAttempt("disrupted", 3);
+      await makeAttempt("submitted", 4);
+      await makeAttempt("grading", 5);
       // Finalized (must NOT be counted): graded, voided.
-      await makeAttempt("graded", 4);
-      await makeAttempt("voided", 5);
+      await makeAttempt("graded", 6);
+      await makeAttempt("voided", 7);
 
       const count = await attemptRepo.countUnresolvedByExam(ctxU, examId);
-      expect(count).toBe(3);
+      expect(count).toBe(5);
     });
 
     it("returns 0 when only finalized attempts exist", async () => {

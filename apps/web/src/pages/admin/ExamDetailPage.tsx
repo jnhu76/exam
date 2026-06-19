@@ -247,7 +247,7 @@ export function ExamDetailPage() {
       toast.success("考试已关闭");
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "关闭失败，请稍后重试");
+      toast.error("关闭失败，请稍后重试");
     } finally {
       setClosing(false);
     }
@@ -262,7 +262,7 @@ export function ExamDetailPage() {
       toast.success("已撤回发布");
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "撤回发布失败");
+      toast.error("撤回发布失败，请稍后重试");
     } finally {
       setUnpublishing(false);
     }
@@ -278,7 +278,7 @@ export function ExamDetailPage() {
       setExtendDialogOpen(false);
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "延长失败");
+      toast.error("延长失败，请稍后重试");
     } finally {
       setExtending(false);
     }

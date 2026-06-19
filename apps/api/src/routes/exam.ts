@@ -1,4 +1,8 @@
-import { FastifyPluginAsync } from "fastify";
+import {
+  FastifyPluginAsync,
+  type FastifyRequest,
+  type FastifyReply,
+} from "fastify";
 import { z } from "zod";
 import {
   CreateExamRequestSchema,
@@ -156,6 +160,13 @@ function createExamRepoAdapter(
 
 /** Determine whether scores can be viewed for an exam based on its status, close time, and graded attempt count. */
 function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
+  if (exam.status === "canceled") {
+    return {
+      canViewScores: false,
+      scoreViewDisabledReason: "已取消的考试不提供成绩",
+    };
+  }
+
   const examEnded =
     exam.status === "closed" ||
     exam.status === "archived" ||
@@ -297,7 +308,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
       const attemptRepo = createAttemptRepo(fastify.db);
       const allEnrollments = await createEnrollmentRepo(fastify.db).list(ctx);
-      const now = new Date();
+      const now = fastify.now();
 
       return {
         items: await Promise.all(
@@ -345,7 +356,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Get exam detail by ID, including aggregated stats and participant list. Returns 404 if not found. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
@@ -387,7 +398,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Create a new exam in draft status. Validates courseId and question ownership. Returns 400 on validation error. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = CreateExamRequestSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -482,7 +493,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
      * other states rejected. Lock -> reconcile -> guard -> mutate in ONE tx so a
      * stale persisted status cannot be acted on.
      */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const parsed = UpdateExamRequestSchema.safeParse(request.body);
@@ -509,7 +520,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const reconciled = await checkAndUpdateExamStatus(
             createExamRepoAdapter(repo, ctx),
             id,
-            new Date(),
+            fastify.now(),
           );
           const exam = reconciled?.exam ?? existing;
 
@@ -576,7 +587,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Publish a draft exam, transitioning it to published status and snapshotting questions. Throws ExamAlreadyPublishedError if not in draft state. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const examRepo = createExamRepo(fastify.db);
@@ -644,10 +655,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
      * UNRESOLVED_ATTEMPTS_EXIST when active/in-flight attempts remain
      * (review decision #3), so scores/export stay semantically valid after.
      */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const reason = (request.body?.reason ?? undefined) as string | undefined;
+      const reason = ((request.body as Record<string, unknown>)?.reason ??
+        undefined) as string | undefined;
 
       // ADR-005 construction hard rule: lock -> reconcile -> unresolved guard
       // -> assert -> mutate run INSIDE ONE transaction so the FOR UPDATE row
@@ -676,7 +688,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const reconciled = await checkAndUpdateExamStatus(
             createExamRepoAdapter(repo, ctx),
             id,
-            new Date(),
+            fastify.now(),
           );
           const exam = reconciled?.exam ?? locked;
 
@@ -767,7 +779,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
 
@@ -781,7 +793,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const reconciled = await checkAndUpdateExamStatus(
             createExamRepoAdapter(repo, ctx),
             id,
-            new Date(),
+            fastify.now(),
           );
           const exam = reconciled?.exam ?? locked;
           // After reconcile, only a still-`published` exam may unpublish.
@@ -831,7 +843,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const { extendMinutes, reason } = request.body as {
@@ -856,7 +868,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const reconciled = await checkAndUpdateExamStatus(
             createExamRepoAdapter(repo, ctx),
             id,
-            new Date(),
+            fastify.now(),
           );
           const exam = reconciled?.exam ?? locked;
           if (exam.status !== "open") {
@@ -923,10 +935,11 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const reason = (request.body?.reason ?? undefined) as string | undefined;
+      const reason = ((request.body as Record<string, unknown>)?.reason ??
+        undefined) as string | undefined;
 
       const result = await executeInTransaction(
         fastify.db,
@@ -948,7 +961,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const reconciled = await checkAndUpdateExamStatus(
             createExamRepoAdapter(repo, ctx),
             id,
-            new Date(),
+            fastify.now(),
           );
           const exam = reconciled?.exam ?? locked;
 
@@ -1016,7 +1029,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Archive a closed exam, transitioning it to archived status. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
@@ -1041,7 +1054,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Delete a draft exam by ID. Only draft exams can be deleted; returns 404 if not found. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
@@ -1078,7 +1091,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** List all enrollments for a given exam, including candidate display names and identity fields. Returns 404 if exam not found. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
       const examRepo = createExamRepo(fastify.db);
@@ -1234,7 +1247,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Remove an enrollment from an exam. Only enrollments with status "assigned" can be removed. Returns 404 if not found, 409 if already started. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId, enrollmentId } = request.params as {
         examId: string;

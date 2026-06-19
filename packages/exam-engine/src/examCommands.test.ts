@@ -334,7 +334,13 @@ describe("examCommands", () => {
     });
 
     it("throws for non-open states", async () => {
-      for (const status of ["draft", "published", "closed", "archived"]) {
+      for (const status of [
+        "draft",
+        "published",
+        "closed",
+        "canceled",
+        "archived",
+      ]) {
         const repo = makeRepo(baseExam(status));
         await expect(extendExam(repo, "exam-1", 15)).rejects.toThrow(
           InvalidStateTransitionError,

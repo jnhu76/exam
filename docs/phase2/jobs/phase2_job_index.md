@@ -62,7 +62,7 @@ P2-PLAN-J1  ->  P2.0-J1
                      |
                 P2A-J6 (completes 2A)
                      |
-    P2B-J1 -> P2B-J2 (SPLIT BEFORE CONSTRUCTION: J2a/J2b/J2c)
+    P2B-J0 -> P2B-J1 -> P2B-J2 (SPLIT BEFORE CONSTRUCTION: J2a/J2b/J2c)
                      |
     P2C-J1 -> P2C-J2 / P2C-J3 / P2C-J4 (parallel)
                      |

@@ -987,7 +987,28 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
   });
 
   it("cancels an open exam with no active attempts -> canceled (200)", async () => {
-    const examId = await createPublishedExam("Cancel Open NoActive");
+    // Create exam with openAt in the past so it reconciles to open.
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Cancel Open NoActive",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
     // No candidate started -> no active attempts.
     const res = await ctx.app.inject({
       method: "POST",
@@ -995,8 +1016,6 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
       payload: {},
       cookies: { "auth-token": ctx.adminToken },
     });
-    // published (reconcile may or may not advance to open depending on timing,
-    // but either way cancel from published is allowed and no active attempts).
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("canceled");
   });
@@ -1146,14 +1165,21 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     expect(res.statusCode).toBe(200);
-    const auditRes = await ctx.app.inject({
-      method: "GET",
-      url: `/api/admin/audit-logs?action=exam.cancel`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    const allRows =
-      auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
-    const rows = allRows.filter((r: any) => r.targetId === examId);
+
+    // recordAudit is fire-and-forget; poll until the log appears.
+    let rows: { targetId: string }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const auditRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?action=exam.cancel`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const allRows =
+        auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
+      rows = allRows.filter((r: { targetId: string }) => r.targetId === examId);
+      if (rows.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     expect(rows.length).toBe(1);
   });
 

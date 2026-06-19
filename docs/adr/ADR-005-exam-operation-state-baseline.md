@@ -2,9 +2,9 @@
 
 ## Status
 
-Proposed (design-first; **not yet implemented**). Awaiting review before any
-production code. This ADR is the authority for the forthcoming implementation
-that unblocks the paused P2B-J1 admin full-loop E2E.
+**Accepted** (implemented). Error codes, audit actions, and the Canceled state
+exist in the codebase. Core lifecycle operations (close, cancel, unpublish,
+extend, archive) are implemented per this ADR's transaction pattern.
 
 > **Revision 2** incorporates mandatory review feedback: rename to "three-axis
 > state model"; mandatory lock-reconcile-assert-mutate transaction rule; close

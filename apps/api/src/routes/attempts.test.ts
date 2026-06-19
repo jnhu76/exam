@@ -903,12 +903,13 @@ describe("attempt routes", () => {
       });
       const examId = examRes.json().id;
       // Override openAt via PATCH (draft) — buildExamPayload hardcodes openAt.
-      await ctx.app.inject({
+      const patchRes = await ctx.app.inject({
         method: "PATCH",
         url: `/api/exams/${examId}`,
         payload: { openAt },
         cookies: { "auth-token": ctx.adminToken },
       });
+      expect(patchRes.statusCode).toBe(200);
       await ctx.app.inject({
         method: "POST",
         url: `/api/exams/${examId}/publish`,

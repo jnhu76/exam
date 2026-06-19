@@ -79,15 +79,10 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
       );
       if (unresolvedCount > 0) {
         return reply.code(409).send(
-          buildErrorResponse(
-            request.id,
-            "RESOURCE_CONFLICT",
-            {
-              reason: "UNRESOLVED_ATTEMPTS_EXIST",
-              activeAttemptCount: unresolvedCount,
-            },
-            "Exam has unresolved attempts",
-          ),
+          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            reason: "UNRESOLVED_ATTEMPTS_EXIST",
+            activeAttemptCount: unresolvedCount,
+          }),
         );
       }
       const results = await attemptRepo.listGradedByExam(ctx, examId);
