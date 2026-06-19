@@ -8,6 +8,7 @@ import type {
 } from "@exam/domain";
 import {
   boolean,
+  check,
   doublePrecision,
   integer,
   jsonb,
@@ -16,6 +17,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /** Creates a primary key column. */
 const id = () => text("id").primaryKey();
@@ -170,39 +172,55 @@ export const questions = pgTable("questions", {
 });
 
 /** Exams table — stores exam configurations including timing, scoring, and question snapshots. */
-export const exams = pgTable("exams", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  courseId: text("course_id")
-    .notNull()
-    .references(() => courses.id),
-  status: text("status").notNull(),
-  timingMode: text("timing_mode").notNull(),
-  durationMinutes: integer("duration_minutes").notNull(),
-  openAt: timestamp("open_at", { withTimezone: true, mode: "date" }).notNull(),
-  closeAt: timestamp("close_at", {
-    withTimezone: true,
-    mode: "date",
-  }).notNull(),
-  passingScore: doublePrecision("passing_score").notNull(),
-  totalScore: doublePrecision("total_score").notNull(),
-  questionSelectionMode: text("question_selection_mode").notNull(),
-  questionIds: jsonb("question_ids").$type<string[]>().notNull(),
-  questionSnapshot: jsonb("question_snapshot")
-    .$type<QuestionSnapshot[]>()
-    .notNull(),
-  controlFlags: jsonb("control_flags").$type<ControlFlags>().notNull(),
-  retakePolicy: text("retake_policy").notNull(),
-  scoreStrategy: text("score_strategy").notNull(),
-  maxAttempts: integer("max_attempts").notNull(),
-  // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
-  latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
-  minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const exams = pgTable(
+  "exams",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    courseId: text("course_id")
+      .notNull()
+      .references(() => courses.id),
+    status: text("status").notNull(),
+    timingMode: text("timing_mode").notNull(),
+    durationMinutes: integer("duration_minutes").notNull(),
+    openAt: timestamp("open_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    closeAt: timestamp("close_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    passingScore: doublePrecision("passing_score").notNull(),
+    totalScore: doublePrecision("total_score").notNull(),
+    questionSelectionMode: text("question_selection_mode").notNull(),
+    questionIds: jsonb("question_ids").$type<string[]>().notNull(),
+    questionSnapshot: jsonb("question_snapshot")
+      .$type<QuestionSnapshot[]>()
+      .notNull(),
+    controlFlags: jsonb("control_flags").$type<ControlFlags>().notNull(),
+    retakePolicy: text("retake_policy").notNull(),
+    scoreStrategy: text("score_strategy").notNull(),
+    maxAttempts: integer("max_attempts").notNull(),
+    // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
+    latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
+    minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    check(
+      "exams_latest_start_offset_minutes_check",
+      sql`${table.latestStartOffsetMinutes} >= 0`,
+    ),
+    check(
+      "exams_min_submit_after_start_minutes_check",
+      sql`${table.minSubmitAfterStartMinutes} >= 0`,
+    ),
+  ],
+);
 
 /** Exam enrollments table — tracks candidate qualification, attempt counts, and final scores per exam. */
 export const examEnrollments = pgTable(

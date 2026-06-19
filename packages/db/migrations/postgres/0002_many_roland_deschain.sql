@@ -1,0 +1,2 @@
+ALTER TABLE "exams" ADD CONSTRAINT "exams_latest_start_offset_minutes_check" CHECK ("exams"."latest_start_offset_minutes" >= 0);--> statement-breakpoint
+ALTER TABLE "exams" ADD CONSTRAINT "exams_min_submit_after_start_minutes_check" CHECK ("exams"."min_submit_after_start_minutes" >= 0);

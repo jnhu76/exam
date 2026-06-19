@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ADR-006 — Exam Time Authority structural guardrail.
@@ -136,30 +136,32 @@ function isAllowed(repoRelative: string): boolean {
 
 /** Recursively collect source files under a directory matching the exts. */
 function collectFiles(dirAbs: string, exts: string[]): string[] {
-  let entries: string[] = [];
-  // Use a manual recursive walk so this stays dependency-free and synchronous.
-  // biome-ignore lint/suspicious/noExplicitAny: node:fs types vary across versions
-  const fs: any = require("node:fs");
-  const path: any = require("node:path");
-  let stack: string[] = [dirAbs];
+  const entries: string[] = [];
+  const stack: string[] = [dirAbs];
+
   while (stack.length > 0) {
-    const current = stack.pop()!;
-    let dirents: any[];
+    const current = stack.pop();
+    if (!current) continue;
+
+    let dirents;
     try {
-      dirents = fs.readdirSync(current, { withFileTypes: true });
+      dirents = readdirSync(current, { withFileTypes: true });
     } catch {
       continue;
     }
+
     for (const d of dirents) {
-      const full = path.join(current, d.name);
+      const full = join(current, d.name);
+
       if (d.isDirectory()) {
         stack.push(full);
-      } else if (d.isFile() && exts.includes(path.extname(d.name))) {
+      } else if (d.isFile() && exts.includes(extname(d.name))) {
         entries.push(full);
       }
     }
   }
-  return entries;
+
+  return entries.sort();
 }
 
 function toRepoRelative(absPath: string): string {
@@ -225,13 +227,11 @@ describe("ADR-006 time-authority structural guardrail", () => {
   });
 
   it("allowlist entries still exist on disk (no stale allowlist)", () => {
-    const fs: any = require("node:fs");
     for (const entry of ALLOWLIST) {
       const abs = resolve(REPO_ROOT, entry.path);
-      expect(
-        fs.existsSync(abs),
-        `allowlisted file missing: ${entry.path}`,
-      ).toBe(true);
+      expect(existsSync(abs), `allowlisted file missing: ${entry.path}`).toBe(
+        true,
+      );
     }
   });
 });
