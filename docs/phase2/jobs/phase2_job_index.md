@@ -17,8 +17,12 @@
 | P2A-J4 | Exam Open/Close Semantics | 2A | backend state-machine job | P2A-J1 | P2A-J6, P2B-J2 | Check-on-access auto-transition published to open to closed | Medium | S |
 | P2A-J5 | Restore Runtime Semantics | 2A | backend state-machine job | P2A-J1 | P2A-J6 | restoreAttempt preserves remaining time by adjusting deadlineAt | Medium | S |
 | P2A-J6 | Candidate Runtime E2E Matrix | 2A | E2E / regression job | P2A-J1, P2A-J2, P2A-J3, P2A-J4, P2A-J5 | P2B-J1, P2C-J8 | Abnormal path E2E: refresh, disconnect, double-click, deadline crash, race | High | M |
-| P2B-J1 | Admin Operation Flow Audit | 2B | E2E / regression job, planning / audit job | P2A-J6 | P2B-J2 | Verify end-to-end admin loop; identify gaps | Low | S |
-| P2B-J2 | Admin Operation Hardening (SPLIT BEFORE CONSTRUCTION) | 2B | backend API / route job, frontend UI job | P2B-J1, P2A-J4 | P2C-J1, P2C-J5 | Publish/open/close/archive alignment; setup/assignment validation. Split into P2B-J2a/J2b/J2c before construction. | Medium | M |
+| P2B-J0 | Exam Operation State Baseline (ADR) | 2B | docs-only planning job, infra ADR job | P2B-J1, P2A-J4 | P2B-J2a | ADR-005 (Rev 2): three-axis state model, mandatory lock-reconcile-assert-mutate rule, close active-attempt policy, stale-state protection, runtime timing policy, submitAttempt guard ordering. Sliced 1–4. Design only — no production code. | Low | S |
+| P2B-J1 | Admin Operation Flow Audit | 2B | E2E / regression job, planning / audit job | P2A-J6, P2B-J0 | P2B-J2a | Verify end-to-end admin loop; identify gaps | Low | S |
+| P2B-J2a | Exam Op Slice 1 — Close Baseline | 2B | backend API / route job, backend state-machine job, frontend UI job | P2B-J0, P2B-J1, P2A-J4 | P2B-J2b, P2C-J1, P2C-J5 | POST /exams/:id/close with lock-reconcile-assert-mutate + active-attempt guard (ACTIVE_ATTEMPTS_EXIST). Scores/export also require no unfinalized attempts. Unblocks P2B-J1 E2E; removes endingSoonSec workaround. | High | M |
+| P2B-J2b | Exam Op Slice 2 — Unpublish / Schedule / Extend | 2B | backend API / route job, frontend UI job | P2B-J2a | P2B-J2c | POST /exams/:id/unpublish (stale-guarded), /extend (stale-guarded); PATCH published schedule-only (openAt/closeAt). | Medium | M |
+| P2B-J2c | Exam Op Slice 3 — Timing Policy | 2B | backend API / route job, DB / repository / transaction job | P2B-J2b | P2C-J2 | latestStartOffsetMinutes + minSubmitAfterStartMinutes (DB/schema/contracts/OpenAPI); late-entry cutoff (new start only); min-submit guard with idempotent-first ordering; SubmitSource discriminator. | High | M |
+| P2B-J2d | Exam Op Slice 4 — Cancel (likely deferred) | 2B | backend API / route job | P2B-J2c | — | canceled state + POST /exams/:id/cancel + cancellation export marker. Deferred unless voiding/marker semantics decided; amend ADR-005 first. | Low | M |
 | P2C-J1 | Heartbeat and Disrupted Detection Hardening | 2C | DB / repository / transaction job | P2A-J2, P2B-J2 | P2C-J2, P2C-J3, P2C-J4, P2C-J5 | Stabilize scanner; add transaction; audit log disruptions | Medium | S |
 | P2C-J2 | Force Submit | 2C | backend API / route job, frontend UI job | P2C-J1 | P2C-J8 | Admin force-submits attempt; state transition + audit | Medium | M |
 | P2C-J3 | Extend Time | 2C | backend API / route job, frontend UI job | P2C-J1 | P2C-J8 | Admin extends deadline; candidate sync contract | Medium | M |
@@ -58,7 +62,7 @@ P2-PLAN-J1  ->  P2.0-J1
                      |
                 P2A-J6 (completes 2A)
                      |
-    P2B-J1 -> P2B-J2 (SPLIT BEFORE CONSTRUCTION: J2a/J2b/J2c)
+    P2B-J0 -> P2B-J1 -> P2B-J2 (SPLIT BEFORE CONSTRUCTION: J2a/J2b/J2c)
                      |
     P2C-J1 -> P2C-J2 / P2C-J3 / P2C-J4 (parallel)
                      |

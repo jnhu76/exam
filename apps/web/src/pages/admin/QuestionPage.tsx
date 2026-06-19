@@ -128,14 +128,14 @@ export function QuestionPage() {
   }, [filterCourse, filterDifficulty, filterTags, filterType, page]);
 
   useEffect(() => {
-    let cancelled = false;
+    let canceledFlag = false;
     async function init() {
       await loadCourses();
-      if (!cancelled) setIsInitialLoading(false);
+      if (!canceledFlag) setIsInitialLoading(false);
     }
     void init();
     return () => {
-      cancelled = true;
+      canceledFlag = true;
     };
     // initial mount only
     // eslint-disable-next-line react-hooks/exhaustive-deps

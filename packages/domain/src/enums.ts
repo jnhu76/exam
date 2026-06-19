@@ -106,6 +106,8 @@ export const ExamStatus = {
   Published: "published",
   Open: "open",
   Closed: "closed",
+  // ADR-005 Slice 4 (cancel-minimal): abnormal cancellation. US spelling.
+  Canceled: "canceled",
   Archived: "archived",
 } as const;
 export type ExamStatus = (typeof ExamStatus)[keyof typeof ExamStatus];

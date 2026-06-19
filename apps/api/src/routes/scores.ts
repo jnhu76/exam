@@ -189,6 +189,35 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const attemptRepo = createAttemptRepo(fastify.db);
+      // ADR-005 Slice 4 (cancel-minimal): canceled exams never expose normal
+      // scores/export. Runs first so it takes precedence over all other gates.
+      if (exam.status === "canceled") {
+        return reply
+          .code(409)
+          .send(
+            buildErrorResponse(
+              request.id,
+              "EXAM_CANCELED_RESULTS_UNAVAILABLE",
+              { reason: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
+            ),
+          );
+      }
+      // ADR-005 Slice 1 §Close & export policy: scores are not exposed while
+      // unresolved attempts remain, even if the exam window has ended — an
+      // admin must not export partial results mid-exam. Checked BEFORE the
+      // ended/graded-count guard so the UNRESOLVED signal takes precedence.
+      const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+        ctx,
+        examId,
+      );
+      if (unresolvedCount > 0) {
+        return reply.code(409).send(
+          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            reason: "UNRESOLVED_ATTEMPTS_EXIST",
+            activeAttemptCount: unresolvedCount,
+          }),
+        );
+      }
       const gradedCount = await attemptRepo.countGradedByExam(ctx, examId, {
         passFilter: "all",
       });

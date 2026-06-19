@@ -31,8 +31,24 @@ describe("examStateMachine", () => {
       );
     });
 
-    it("published → draft 不允许（Phase 1 不可回退到草稿）", () => {
-      expect(canTransition(ExamStatus.Published, ExamStatus.Draft)).toBe(false);
+    it("published → draft 允许（ADR-005 Slice 2: unpublish）", () => {
+      expect(canTransition(ExamStatus.Published, ExamStatus.Draft)).toBe(true);
+    });
+
+    it("published → canceled 允许", () => {
+      expect(canTransition(ExamStatus.Published, ExamStatus.Canceled)).toBe(
+        true,
+      );
+    });
+
+    it("open → canceled 允许", () => {
+      expect(canTransition(ExamStatus.Open, ExamStatus.Canceled)).toBe(true);
+    });
+
+    it("canceled → archived 允许", () => {
+      expect(canTransition(ExamStatus.Canceled, ExamStatus.Archived)).toBe(
+        true,
+      );
     });
 
     it("open → closed 允许", () => {

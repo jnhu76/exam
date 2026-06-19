@@ -683,4 +683,81 @@ describe("J8: score list routes", () => {
     expect(responseFailed.statusCode).toBe(200);
     expect(responseFailed.json().items.length).toBe(1);
   });
+
+  // ADR-005 Slice 1 §Close & export policy: scores must also reject while
+  // unresolved attempts remain, even when the exam window has ended, so an
+  // admin cannot export partial results mid-exam.
+  it("rejects scores while unresolved attempts remain (UNRESOLVED_ATTEMPTS_EXIST)", async () => {
+    // Create + publish an exam with an OPEN window (so a candidate can start).
+    const createResponse = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Unresolved Score Guard",
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600000).toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 6,
+        totalScore: 10,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createResponse.json().id as string;
+
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    // START (not submit) an attempt -> stays in_progress (unresolved).
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(startRes.statusCode).toBe(201);
+
+    // Move the window into the past directly (simulating the deadline elapsing
+    // before the scanner auto-closes the exam). Now examEnded is true via
+    // `now >= closeAt`, but the attempt is still unresolved.
+    await markExamClosed(examId);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?page=1&passFilter=all`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(response.statusCode).toBe(409);
+    const body = response.json();
+    expect(body.error.code).toBe("RESOURCE_CONFLICT");
+    expect(body.error.details?.reason).toBe("UNRESOLVED_ATTEMPTS_EXIST");
+    expect(body.error.details?.activeAttemptCount).toBeGreaterThanOrEqual(1);
+  });
 });

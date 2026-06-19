@@ -1,4 +1,8 @@
-import { FastifyPluginAsync } from "fastify";
+import {
+  FastifyPluginAsync,
+  type FastifyRequest,
+  type FastifyReply,
+} from "fastify";
 import { z } from "zod";
 import {
   CreateExamRequestSchema,
@@ -15,9 +19,15 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
   archiveExam,
+  closeExam,
+  cancelExam,
+  unpublishExam,
+  extendExam,
+  checkAndUpdateExamStatus,
   publishExam,
   type ExamRepository,
 } from "@exam/exam-engine";
@@ -26,6 +36,12 @@ import {
   InvalidStateTransitionError,
   ExamAlreadyPublishedError,
   ExamNotDraftError,
+  ValidationError,
+  ExamCloseNotAllowedError,
+  ExamUnpublishNotAllowedError,
+  ExamExtendNotAllowedError,
+  ExamUpdateNotAllowedError,
+  ExamCancelNotAllowedError,
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
@@ -55,6 +71,8 @@ function toExamResponse(exam: Exam) {
     retakePolicy: exam.retakePolicy,
     scoreStrategy: exam.scoreStrategy,
     maxAttempts: exam.maxAttempts,
+    latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
+    minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
     createdAt: exam.createdAt.toISOString(),
     updatedAt: exam.updatedAt.toISOString(),
   };
@@ -142,6 +160,13 @@ function createExamRepoAdapter(
 
 /** Determine whether scores can be viewed for an exam based on its status, close time, and graded attempt count. */
 function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
+  if (exam.status === "canceled") {
+    return {
+      canViewScores: false,
+      scoreViewDisabledReason: "已取消的考试不提供成绩",
+    };
+  }
+
   const examEnded =
     exam.status === "closed" ||
     exam.status === "archived" ||
@@ -283,7 +308,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
       const attemptRepo = createAttemptRepo(fastify.db);
       const allEnrollments = await createEnrollmentRepo(fastify.db).list(ctx);
-      const now = new Date();
+      const now = fastify.now();
 
       return {
         items: await Promise.all(
@@ -331,7 +356,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Get exam detail by ID, including aggregated stats and participant list. Returns 404 if not found. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
@@ -373,7 +398,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Create a new exam in draft status. Validates courseId and question ownership. Returns 400 on validation error. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const parsed = CreateExamRequestSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -436,6 +461,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         retakePolicy: data.retakePolicy,
         scoreStrategy: data.scoreStrategy,
         maxAttempts: data.maxAttempts,
+        latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
+        minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
       });
       recordAudit(fastify, request, ctx, "exam.create", "exam", exam.id);
 
@@ -456,11 +483,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           200: ExamSchema,
           400: ErrorResponseSchema,
           404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
-    /** Update an existing draft exam by ID. Only draft exams can be updated. Returns 404 if not found, 400 on validation error. */
-    async (request: any, reply: any) => {
+    /**
+     * Update an existing exam by ID. ADR-005 Slice 2 §3.7 + construction hard
+     * rule: draft = full edit; published = schedule fields only (openAt/closeAt);
+     * other states rejected. Lock -> reconcile -> guard -> mutate in ONE tx so a
+     * stale persisted status cannot be acted on.
+     */
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const parsed = UpdateExamRequestSchema.safeParse(request.body);
@@ -470,51 +503,72 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const data = parsed.data;
-      const repo = createExamRepo(fastify.db);
 
-      const existing = (await repo.findById(ctx, id)) as Exam | null;
-      if (!existing) {
-        return reply
-          .code(404)
-          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
-      }
+      const result = await executeInTransaction(
+        fastify.db,
+        async (tx): Promise<{ exam: Exam } | null> => {
+          const repo = createExamRepo(tx);
 
-      if (existing.status !== "draft") {
-        throw new ExamNotDraftError();
-      }
-      if (data.questionIds) {
-        const questionChecks = await Promise.all(
-          data.questionIds.map((questionId) =>
-            createQuestionRepo(fastify.db).findById(ctx, questionId),
-          ),
-        );
-        if (questionChecks.some((q) => q?.courseId !== existing.courseId)) {
-          return reply.code(400).send(
-            buildErrorResponse(request.id, "VALIDATION_ERROR", {
-              fields: [
-                {
-                  field: "questionIds",
-                  code: "QUESTION_COURSE_MISMATCH",
-                  message: "题目不属于所选课程",
-                },
-              ],
-            }),
+          // 1. Lock the exam row.
+          const existing = (await repo.findByIdForUpdate(
+            ctx,
+            id,
+          )) as Exam | null;
+          if (!existing) return null;
+
+          // 2. Reconcile status by now (published->open / open->closed lazily).
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            fastify.now(),
           );
-        }
-      }
+          const exam = reconciled?.exam ?? existing;
 
-      const updateData: Record<string, unknown> = { ...data };
-      if (data.openAt) updateData.openAt = new Date(data.openAt);
-      if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
+          // 3. State guard on the RECONCILED status.
+          if (exam.status !== "draft" && exam.status !== "published") {
+            throw new ExamUpdateNotAllowedError();
+          }
+          if (exam.status === "published") {
+            // Published exams may only edit the schedule. Any other field is
+            // rejected — questions/controlFlags/score policy are frozen.
+            const allowed = new Set(["openAt", "closeAt"]);
+            const forbidden = Object.keys(data).filter((k) => !allowed.has(k));
+            if (forbidden.length > 0) {
+              throw new ExamUpdateNotAllowedError();
+            }
+          }
+          if (exam.status === "draft" && data.questionIds) {
+            const questionChecks = await Promise.all(
+              data.questionIds.map((questionId) =>
+                createQuestionRepo(tx).findById(ctx, questionId),
+              ),
+            );
+            if (questionChecks.some((q) => q?.courseId !== exam.courseId)) {
+              throw new ValidationError("题目不属于所选课程");
+            }
+          }
 
-      const updated = (await repo.update(ctx, id, updateData)) as Exam | null;
-      if (!updated) {
+          // 4. Mutate.
+          const updateData: Record<string, unknown> = { ...data };
+          if (data.openAt) updateData.openAt = new Date(data.openAt);
+          if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
+          const updated = (await repo.update(
+            ctx,
+            id,
+            updateData,
+          )) as Exam | null;
+          if (!updated) return null;
+          return { exam: updated };
+        },
+      );
+
+      if (!result) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "exam.update", "exam", id);
-      return toExamResponse(updated);
+      return toExamResponse(result.exam);
     },
   );
 
@@ -533,7 +587,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Publish a draft exam, transitioning it to published status and snapshotting questions. Throws ExamAlreadyPublishedError if not in draft state. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const examRepo = createExamRepo(fastify.db);
@@ -566,6 +620,401 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 
+  /**
+   * Zod schema for the close request body: an optional human-readable reason.
+   */
+  const closeExamRequestSchema = z.object({
+    reason: z.string().trim().max(500).optional(),
+  });
+
+  fastify.post(
+    "/exams/:id/close",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: closeExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    /**
+     * Close an open exam (open -> closed). ADR-005 Slice 1.
+     *
+     * Construction hard rule: lock -> reconcile -> unresolved guard -> assert
+     * -> mutate -> audit. The engine `closeExam` is idempotent for `closed`,
+     * so we detect the no-op case (reconciled status already `closed`) and
+     * suppress the duplicate audit (review decision #2).
+     *
+     * Close is rejected with EXAM_CLOSE_NOT_ALLOWED / details.reason =
+     * UNRESOLVED_ATTEMPTS_EXIST when active/in-flight attempts remain
+     * (review decision #3), so scores/export stay semantically valid after.
+     */
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+      const reason = ((request.body as Record<string, unknown>)?.reason ??
+        undefined) as string | undefined;
+
+      // ADR-005 construction hard rule: lock -> reconcile -> unresolved guard
+      // -> assert -> mutate run INSIDE ONE transaction so the FOR UPDATE row
+      // lock spans the whole decision and the deadline scanner cannot race it.
+      // The tx-scoped repos below share one connection; the audit write stays
+      // outside the tx (best-effort, matching the attempts.ts convention).
+      const result = await executeInTransaction(
+        fastify.db,
+        async (
+          tx,
+        ): Promise<{
+          closed: Exam;
+          fromStatus: string;
+          unresolvedCount: number;
+        } | null> => {
+          const repo = createExamRepo(tx);
+          const attemptRepo = createAttemptRepo(tx);
+
+          // 1. Lock the exam row.
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) {
+            return null;
+          }
+
+          // 2. Reconcile status by now (published->open / open->closed lazily).
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            fastify.now(),
+          );
+          const exam = reconciled?.exam ?? locked;
+
+          // 3. Unresolved-attempts guard: reject if active/in-flight attempts
+          //    remain (review decision #3).
+          const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+            ctx,
+            id,
+          );
+          if (unresolvedCount > 0) {
+            throw new ExamCloseNotAllowedError({
+              reason: "UNRESOLVED_ATTEMPTS_EXIST",
+              activeAttemptCount: unresolvedCount,
+            });
+          }
+
+          // 4 + 5. Assert + mutate via the engine. closeExam is idempotent for
+          //    `closed` (returns as-is). A non-open, non-closed reconciled
+          //    status raises InvalidStateTransitionError; surfaced uniformly as
+          //    EXAM_CLOSE_NOT_ALLOWED (no UNRESOLVED reason) per ADR-005 §3.3.
+          let closed: Exam;
+          try {
+            closed = await closeExam(createExamRepoAdapter(repo, ctx), id);
+          } catch (err) {
+            if (err instanceof InvalidStateTransitionError) {
+              throw new ExamCloseNotAllowedError();
+            }
+            throw err;
+          }
+          return {
+            closed,
+            fromStatus: exam.status,
+            unresolvedCount,
+          };
+        },
+      );
+
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      const { closed, fromStatus } = result;
+
+      // 6. Audit — only for a genuine transition (idempotent close writes no
+      //    duplicate audit, review decision #2). activeAttemptCount included
+      //    per ADR-005 §Audit events (will be 0 here since the guard passed).
+      if (fromStatus !== "closed") {
+        recordAudit(fastify, request, ctx, "exam.close", "exam", id, {
+          reason,
+          fromStatus,
+          toStatus: "closed",
+          activeAttemptCount: result.unresolvedCount,
+        });
+      }
+      return toExamResponse(closed);
+    },
+  );
+
+  /**
+   * Zod schema for the extend request body: positive minutes + optional reason.
+   */
+  const extendExamRequestSchema = z.object({
+    extendMinutes: z.number().int().positive(),
+    reason: z.string().trim().max(500).optional(),
+  });
+
+  /**
+   * Unpublish a published exam (published -> draft). ADR-005 Slice 2 §3.2.
+   *
+   * Stale-state protection: lock -> reconcile first; if reconciliation advanced
+   * the exam to `open` (openAt already passed), reject — a live exam cannot be
+   * rewound to draft. Never allows open -> draft.
+   */
+  fastify.post(
+    "/exams/:id/unpublish",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+
+      const result = await executeInTransaction(
+        fastify.db,
+        async (tx): Promise<{ exam: Exam; fromStatus: string } | null> => {
+          const repo = createExamRepo(tx);
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) return null;
+          // Reconcile by now: a published exam whose openAt passed is now open.
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            fastify.now(),
+          );
+          const exam = reconciled?.exam ?? locked;
+          // After reconcile, only a still-`published` exam may unpublish.
+          if (exam.status !== "published") {
+            throw new ExamUnpublishNotAllowedError();
+          }
+          const updated = await unpublishExam(
+            createExamRepoAdapter(repo, ctx),
+            id,
+          );
+          return { exam: updated, fromStatus: exam.status };
+        },
+      );
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+      recordAudit(fastify, request, ctx, "exam.unpublish", "exam", id, {
+        fromStatus: result.fromStatus,
+        toStatus: "draft",
+      });
+      return toExamResponse(result.exam);
+    },
+  );
+
+  /**
+   * Extend an open exam's closeAt (open -> open). ADR-005 Slice 2 §3.4.
+   *
+   * Stale-state protection: lock -> reconcile first; if reconciliation advanced
+   * the exam to `closed` (closeAt already passed), reject — a dead exam cannot
+   * be revived by pushing closeAt forward.
+   */
+  fastify.post(
+    "/exams/:id/extend",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: extendExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+      const { extendMinutes, reason } = request.body as {
+        extendMinutes: number;
+        reason?: string;
+      };
+
+      const result = await executeInTransaction(
+        fastify.db,
+        async (
+          tx,
+        ): Promise<{
+          exam: Exam;
+          oldCloseAt: Date;
+          newCloseAt: Date;
+        } | null> => {
+          const repo = createExamRepo(tx);
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) return null;
+          const oldCloseAt = new Date(locked.closeAt);
+          // Reconcile: an open exam whose closeAt passed is now closed.
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            fastify.now(),
+          );
+          const exam = reconciled?.exam ?? locked;
+          if (exam.status !== "open") {
+            throw new ExamExtendNotAllowedError({
+              reason: exam.status === "closed" ? "ALREADY_CLOSED" : "NOT_OPEN",
+            });
+          }
+          const updated = await extendExam(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            extendMinutes,
+          );
+          return {
+            exam: updated,
+            oldCloseAt,
+            newCloseAt: new Date(updated.closeAt),
+          };
+        },
+      );
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+      recordAudit(fastify, request, ctx, "exam.extend", "exam", id, {
+        extendMinutes,
+        oldCloseAt: result.oldCloseAt,
+        newCloseAt: result.newCloseAt,
+        reason,
+      });
+      return toExamResponse(result.exam);
+    },
+  );
+
+  /**
+   * Zod schema for the cancel request body: optional reason.
+   */
+  const cancelExamRequestSchema = z.object({
+    reason: z.string().trim().max(500).optional(),
+  });
+
+  /**
+   * Cancel an exam abnormally (published/open -> canceled). ADR-005 Slice 4.
+   *
+   * Construction hard rule: lock -> reconcile -> unresolved guard -> assert
+   * -> mutate -> audit in one transaction. The unresolved guard (open with
+   * active attempts) rejects with EXAM_CANCEL_NOT_ALLOWED /
+   * UNRESOLVED_ATTEMPTS_EXIST. cancel does NOT void or force-submit attempts.
+   * cancel is NOT idempotent (canceled -> canceled rejected); archive to settle.
+   */
+  fastify.post(
+    "/exams/:id/cancel",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: cancelExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+      const reason = ((request.body as Record<string, unknown>)?.reason ??
+        undefined) as string | undefined;
+
+      const result = await executeInTransaction(
+        fastify.db,
+        async (
+          tx,
+        ): Promise<{
+          exam: Exam;
+          fromStatus: string;
+          unresolvedCount: number;
+        } | null> => {
+          const repo = createExamRepo(tx);
+          const attemptRepo = createAttemptRepo(tx);
+
+          // 1. Lock the exam row.
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) return null;
+
+          // 2. Reconcile status by now.
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            fastify.now(),
+          );
+          const exam = reconciled?.exam ?? locked;
+
+          // 3. Unresolved-attempts guard (only meaningful for open, but cheap).
+          const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+            ctx,
+            id,
+          );
+          if (unresolvedCount > 0) {
+            throw new ExamCancelNotAllowedError({
+              reason: "UNRESOLVED_ATTEMPTS_EXIST",
+              activeAttemptCount: unresolvedCount,
+            });
+          }
+
+          // 4 + 5. Assert + mutate via the engine. Non-cancellable states
+          //    (draft/closed/canceled/archived) raise
+          //    InvalidStateTransitionError -> surfaced as EXAM_CANCEL_NOT_ALLOWED.
+          let canceled: Exam;
+          try {
+            canceled = await cancelExam(createExamRepoAdapter(repo, ctx), id);
+          } catch (err) {
+            if (err instanceof InvalidStateTransitionError) {
+              throw new ExamCancelNotAllowedError();
+            }
+            throw err;
+          }
+          return {
+            exam: canceled,
+            fromStatus: exam.status,
+            unresolvedCount,
+          };
+        },
+      );
+
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      // 6. Audit (outside tx, best-effort). activeAttemptCount is 0 here
+      //    (guard passed).
+      recordAudit(fastify, request, ctx, "exam.cancel", "exam", id, {
+        reason,
+        fromStatus: result.fromStatus,
+        toStatus: "canceled",
+        activeAttemptCount: result.unresolvedCount,
+      });
+      return toExamResponse(result.exam);
+    },
+  );
+
   fastify.post(
     "/exams/:id/archive",
     {
@@ -580,7 +1029,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Archive a closed exam, transitioning it to archived status. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
@@ -605,7 +1054,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Delete a draft exam by ID. Only draft exams can be deleted; returns 404 if not found. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
@@ -642,7 +1091,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** List all enrollments for a given exam, including candidate display names and identity fields. Returns 404 if exam not found. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId } = request.params as { examId: string };
       const examRepo = createExamRepo(fastify.db);
@@ -798,7 +1247,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     /** Remove an enrollment from an exam. Only enrollments with status "assigned" can be removed. Returns 404 if not found, 409 if already started. */
-    async (request: any, reply: any) => {
+    async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { examId, enrollmentId } = request.params as {
         examId: string;

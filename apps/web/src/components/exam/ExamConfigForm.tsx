@@ -47,6 +47,9 @@ export interface ExamConfigData {
   retakePolicy: "unlimited" | "max_attempts" | "pass_then_stop";
   scoreStrategy: "highest" | "latest" | "first";
   maxAttempts: number;
+  // ADR-005 Slice 3 timing policy. null/undefined = disabled.
+  latestStartOffsetMinutes?: number | null;
+  minSubmitAfterStartMinutes?: number | null;
 }
 
 /** Props for the ExamConfigForm component. */
@@ -189,8 +192,48 @@ export function ExamConfigForm({
                 min={1}
               />
             </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field>
+                <Label>最晚进入（开考后分钟）</Label>
+                <Input
+                  type="number"
+                  value={data.latestStartOffsetMinutes ?? ""}
+                  onChange={(e) =>
+                    update({
+                      latestStartOffsetMinutes:
+                        e.target.value === ""
+                          ? null
+                          : Number.isNaN(Number(e.target.value))
+                            ? null
+                            : Number(e.target.value),
+                    })
+                  }
+                  min={0}
+                  placeholder="留空=不限"
+                />
+              </Field>
+              <Field>
+                <Label>最短交卷（开考后分钟）</Label>
+                <Input
+                  type="number"
+                  value={data.minSubmitAfterStartMinutes ?? ""}
+                  onChange={(e) =>
+                    update({
+                      minSubmitAfterStartMinutes:
+                        e.target.value === ""
+                          ? null
+                          : Number.isNaN(Number(e.target.value))
+                            ? null
+                            : Number(e.target.value),
+                    })
+                  }
+                  min={0}
+                  placeholder="留空=不限"
+                />
+              </Field>
+            </div>
             <p className="text-xs text-muted-foreground">
-              时间模式：timed_window（Phase 1 仅支持此模式）
+              时间模式：限时窗口（当前版本仅支持此模式）。留空表示不限制。
             </p>
           </FieldGroup>
         </CardContent>

@@ -197,6 +197,9 @@ export const exams = pgTable("exams", {
   retakePolicy: text("retake_policy").notNull(),
   scoreStrategy: text("score_strategy").notNull(),
   maxAttempts: integer("max_attempts").notNull(),
+  // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
+  latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
+  minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

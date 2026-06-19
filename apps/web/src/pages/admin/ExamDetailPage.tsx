@@ -10,6 +10,8 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -87,7 +89,7 @@ interface EnrollmentItem {
 /**
  * Admin page for viewing and managing a single exam's details.
  * Displays exam configuration, statistics, enrollment management (add/remove candidates),
- * and provides publish and archive lifecycle actions.
+ * and provides publish, close, and archive lifecycle actions.
  */
 export function ExamDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -96,7 +98,12 @@ export function ExamDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extendMinutes, setExtendMinutes] = useState(15);
   const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
@@ -231,6 +238,52 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Closes the exam (open -> closed). ADR-005 Slice 1. */
+  async function handleClose() {
+    if (!id || closing) return;
+    setClosing(true);
+    try {
+      await api.post(`/api/exams/${id}/close`, {});
+      toast.success("考试已关闭");
+      await loadExam();
+    } catch (err) {
+      toast.error("关闭失败，请稍后重试");
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  /** Unpublishes the exam (published -> draft). ADR-005 Slice 2 §3.2. */
+  async function handleUnpublish() {
+    if (!id || unpublishing) return;
+    setUnpublishing(true);
+    try {
+      await api.post(`/api/exams/${id}/unpublish`);
+      toast.success("已撤回发布");
+      await loadExam();
+    } catch (err) {
+      toast.error("撤回发布失败，请稍后重试");
+    } finally {
+      setUnpublishing(false);
+    }
+  }
+
+  /** Extends the open exam's closeAt (open -> open). ADR-005 Slice 2 §3.4. */
+  async function handleExtend() {
+    if (!id || extending) return;
+    setExtending(true);
+    try {
+      await api.post(`/api/exams/${id}/extend`, { extendMinutes });
+      toast.success(`已延长 ${extendMinutes} 分钟`);
+      setExtendDialogOpen(false);
+      await loadExam();
+    } catch (err) {
+      toast.error("延长失败，请稍后重试");
+    } finally {
+      setExtending(false);
+    }
+  }
+
   /** Archives the exam, removing it from the active exam list. */
   async function handleArchive() {
     if (!id || archiving) return;
@@ -263,6 +316,48 @@ export function ExamDetailPage() {
               >
                 {publishing ? "发布中..." : "发布考试"}
               </Button>
+            )}
+            {exam.status === "open" && (
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    data-testid="exam-detail-close-btn"
+                    disabled={closing}
+                  >
+                    {closing ? "关闭中..." : "关闭考试"}
+                  </Button>
+                }
+                title="确认关闭"
+                description={`确定要关闭考试「${exam.title}」吗？关闭后将结束考试，考生无法再开始新的作答。`}
+                destructive
+                onConfirm={() => void handleClose()}
+              />
+            )}
+            {exam.status === "open" && (
+              <Button
+                data-testid="exam-detail-extend-btn"
+                variant="outline"
+                onClick={() => setExtendDialogOpen(true)}
+              >
+                延长时间
+              </Button>
+            )}
+            {exam.status === "published" && (
+              <ConfirmDialog
+                trigger={
+                  <Button
+                    data-testid="exam-detail-unpublish-btn"
+                    variant="outline"
+                    disabled={unpublishing}
+                  >
+                    {unpublishing ? "撤回中..." : "撤回发布"}
+                  </Button>
+                }
+                title="确认撤回发布"
+                description={`确定要撤回考试「${exam.title}」的发布吗？撤回后将回到草稿状态，可以重新编辑。`}
+                destructive
+                onConfirm={() => void handleUnpublish()}
+              />
             )}
             {(exam.status === "published" || exam.status === "closed") && (
               <ConfirmDialog
@@ -530,6 +625,41 @@ export function ExamDetailPage() {
               {addingEnrollment
                 ? "添加中..."
                 : `添加 (${selectedCandidateIds.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>延长考试时间</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <Label htmlFor="extend-minutes">延长分钟数</Label>
+            <Input
+              id="extend-minutes"
+              type="number"
+              min={1}
+              value={extendMinutes}
+              onChange={(e) =>
+                setExtendMinutes(Number.parseInt(e.target.value, 10) || 0)
+              }
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExtendDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              data-testid="extend-confirm-btn"
+              disabled={extending || extendMinutes <= 0}
+              onClick={() => void handleExtend()}
+            >
+              {extending ? "延长中..." : `延长 ${extendMinutes} 分钟`}
             </Button>
           </DialogFooter>
         </DialogContent>

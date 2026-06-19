@@ -60,7 +60,7 @@ export const statusMeta = {
   saving: { label: "保存中", tone: "warning", icon: LoaderCircle },
   saved: { label: "已保存", tone: "success", icon: CheckCircle2 },
   failed: { label: "保存失败", tone: "destructive", icon: CircleAlert },
-  cancelled: { label: "已取消", tone: "muted", icon: XCircle },
+  canceled: { label: "已取消", tone: "muted", icon: XCircle },
   expired: { label: "已过期", tone: "destructive", icon: Clock },
   stale: { label: "过期数据", tone: "warning", icon: CircleAlert },
   connected: { label: "连接正常", tone: "success", icon: Wifi },

@@ -1,5 +1,63 @@
 # P2B-J2 — Admin Operation Hardening
 
+> **ADR-005 Slice 1 (Close Baseline): DONE** — `POST /api/exams/:id/close` implemented
+> with lock→reconcile→unresolved-guard→assert→mutate→audit (wrapped in
+> `executeInTransaction`). Scores/export also reject while unresolved attempts
+> remain. Admin UI close button added (ConfirmDialog). Review-fixed: tx atomicity,
+> audit `activeAttemptCount`, ADR spelling aligned to `UNRESOLVED_ATTEMPTS_EXIST`.
+>
+> **ADR-005 Slice 2 (Unpublish / Extend / PATCH-clarify): DONE** —
+> `POST /exams/:id/unpublish` (stale-guarded published→draft),
+> `POST /exams/:id/extend {extendMinutes}` (stale-guarded open→open, closeAt+),
+> PATCH clarified (draft=full, published=openAt/closeAt only,
+> `EXAM_UPDATE_NOT_ALLOWED`). All three follow lock→reconcile→guard→mutate→audit
+> in one transaction. Admin UI buttons added (unpublish ConfirmDialog, extend
+> Dialog with minutes input). New error codes + audit events.
+>
+> **ADR-005 Slice 3 (Timing Policy): DONE** — `latestStartOffsetMinutes`
+> (late-entry cutoff on NEW start only) + `minSubmitAfterStartMinutes`
+> (candidate manual submit only, source-gated; deadline_scanner bypasses).
+> `SubmitSource` discriminator (candidate/deadline_scanner/proctor/system).
+> submitAttempt guard ordering: idempotent-already-submitted FIRST, then
+> early-submit. DB migration + domain/contracts + engine guards + route wiring
+> + UI form fields. New error codes ATTEMPT_LATE_ENTRY_CLOSED,
+> ATTEMPT_SUBMIT_TOO_EARLY. 493 API tests pass.
+>
+> **ADR-005 Slice 4 (Cancel-minimal): DONE** — `POST /api/exams/:id/cancel`
+> (published/open→canceled; tx+lock+reconcile+unresolved-guard+mutate+audit).
+> `canceled` enum + state-machine transitions (published/open→canceled,
+> canceled→archived). Scores/export reject canceled exams with 409
+> EXAM_CANCELED_RESULTS_UNAVAILABLE (CANCELLATION_MARKER_NOT_IMPLEMENTED) until
+> cancellation-marker semantics ship. cancel does NOT void/force-submit
+> attempts; open exam with active attempts rejects with EXAM_CANCEL_NOT_ALLOWED
+> / UNRESOLVED_ATTEMPTS_EXIST. Archive now allows canceled→archived. US spelling
+> `canceled` enforced repo-wide (no `cancelled`).
+>
+> All four ADR-005 slices (close / unpublish-extend-patch / timing policy /
+> cancel-minimal) are now complete.
+>
+> **Tooling note**: scripts/rebuild-all.sh added — apps resolve @exam/* via
+> built dist, so rebuild dist before running filtered tests
+
+### Follow-ups (non-blocking, surfaced by Slice 4 review)
+
+- **Archive route does not follow the construction hard rule.** The
+  `POST /exams/:id/archive` handler (`apps/api/src/routes/exam.ts`) calls
+  `archiveExam()` directly — no `executeInTransaction`, no `findByIdForUpdate`,
+  no `checkAndUpdateExamStatus`. This predates all four slices (it has been the
+  Phase 1 archive behavior) and is **not** a regression introduced by Slice 4.
+  Slice 4 only made `canceled → archived` reachable via the state machine,
+  which exposed this gap. A future job should wrap archive in the same
+  tx+lock+reconcile+mutate+audit sequence as the other admin operations, for
+  consistency and stale-state protection on the `published/closed/canceled →
+  archived` transitions.
+- **Audit writes sit outside the transaction (all admin ops).** close/extend/
+  unpublish/cancel + attempts.ts all write audit after `executeInTransaction`
+  commits (best-effort, matching the established repo convention). The ADR
+  construction hard rule describes the ideal order; the implementation follows
+  the repo convention. A repo-wide "audit-in-tx" change is out of scope for
+  these slices.
+
 ## 1. Summary
 
 Fix gaps in the admin operation loop: exam setup validation, assignment reliability, publish/open/close/archive semantics, and score overview navigation.

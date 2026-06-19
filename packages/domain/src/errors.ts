@@ -116,6 +116,139 @@ export class ExamNotDraftError extends AppError {
   }
 }
 
+/**
+ * Admin close is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 1 §3.3 / review decision #3: `POST /exams/:id/close` is
+ * allowed only from `open`. It is rejected for any other status, or for an
+ * `open` exam that still has unresolved attempts. The `details.reason`
+ * discriminates the two cases:
+ *   - `UNRESOLVED_ATTEMPTS_EXIST` — active/in-flight attempts remain; the
+ *     admin must let them finalize (candidate submit, deadline scanner, or a
+ *     future force-submit) before close.
+ *   - omitted — the exam is not in an `open` (or already-`closed`) state.
+ */
+export class ExamCloseNotAllowedError extends AppError {
+  constructor(
+    details?: {
+      reason?: "UNRESOLVED_ATTEMPTS_EXIST";
+      activeAttemptCount?: number;
+    },
+    message = "Exam close is not allowed",
+  ) {
+    super(message, "EXAM_CLOSE_NOT_ALLOWED", 409, details);
+  }
+}
+
+/**
+ * Admin unpublish is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 2 §3.2: `POST /exams/:id/unpublish` is allowed only from
+ * `published` AND only if, after reconciliation, the exam is still `published`
+ * (now < openAt). Stale-state protection: a published exam whose openAt already
+ * passed has reconciled to `open` and cannot be rewound to draft.
+ */
+export class ExamUnpublishNotAllowedError extends AppError {
+  constructor(message = "Exam unpublish is not allowed") {
+    super(message, "EXAM_UNPUBLISH_NOT_ALLOWED", 409);
+  }
+}
+
+/**
+ * Admin extend is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 2 §3.4: `POST /exams/:id/extend` is allowed only for an `open`
+ * exam whose closeAt has not yet elapsed (after reconciliation). Stale-state
+ * protection: an open exam whose closeAt already passed has reconciled to
+ * `closed` and cannot be revived by extending closeAt.
+ */
+export class ExamExtendNotAllowedError extends AppError {
+  constructor(
+    details?: { reason?: "NOT_OPEN" | "ALREADY_CLOSED" },
+    message = "Exam extend is not allowed",
+  ) {
+    super(message, "EXAM_EXTEND_NOT_ALLOWED", 409, details);
+  }
+}
+
+/**
+ * Admin PATCH is not allowed for the requested exam state (HTTP 409).
+ *
+ * ADR-005 Slice 2 §3.7: generic PATCH is allowed in `draft` (full edit) and
+ * `published` (schedule fields only: openAt/closeAt). It is rejected for
+ * `open|closed|canceled|archived` — use the dedicated operations instead.
+ */
+export class ExamUpdateNotAllowedError extends AppError {
+  constructor(message = "Exam update is not allowed in this state") {
+    super(message, "EXAM_UPDATE_NOT_ALLOWED", 409);
+  }
+}
+
+/**
+ * Admin cancel is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 4 (cancel-minimal) §3.5: `POST /exams/:id/cancel` is allowed
+ * from `published` and from `open` only when no unfinalized attempts remain.
+ * `details.reason = UNRESOLVED_ATTEMPTS_EXIST` (with activeAttemptCount) is set
+ * by the route when an open exam still has active attempts. cancel does NOT
+ * force-submit; the admin must let attempts resolve first.
+ */
+export class ExamCancelNotAllowedError extends AppError {
+  constructor(
+    details?: {
+      reason?: "UNRESOLVED_ATTEMPTS_EXIST";
+      activeAttemptCount?: number;
+    },
+    message = "Exam cancel is not allowed",
+  ) {
+    super(message, "EXAM_CANCEL_NOT_ALLOWED", 409, details);
+  }
+}
+
+/**
+ * Scores/export requested for a canceled exam (HTTP 409).
+ *
+ * ADR-005 Slice 4 (cancel-minimal): until cancellation-marker result/export
+ * semantics are implemented, canceled exams MUST NOT expose normal
+ * scores/export. Silent export is forbidden.
+ */
+export class ExamCanceledResultsUnavailableError extends AppError {
+  constructor(
+    details?: { reason?: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
+    message = "Results are unavailable for canceled exams",
+  ) {
+    super(message, "EXAM_CANCELED_RESULTS_UNAVAILABLE", 409, details);
+  }
+}
+
+/**
+ * Candidate manual submit was attempted before the minimum submit duration
+ * elapsed (HTTP 409). ADR-005 Slice 3 §4.4. Only `source === "candidate"`
+ * submits are subject to this guard; deadline_scanner/proctor/system bypass.
+ */
+export class AttemptSubmitTooEarlyError extends AppError {
+  constructor(
+    details: { earliestSubmitAt: Date; remainingSeconds: number },
+    message = "Attempt submitted too early",
+  ) {
+    super(message, "ATTEMPT_SUBMIT_TOO_EARLY", 409, details);
+  }
+}
+
+/**
+ * A new attempt start was attempted after the late-entry cutoff (HTTP 409).
+ * ADR-005 Slice 3 §4.3. Applies only to creating a NEW attempt; resume/
+ * restore of existing attempts is never blocked.
+ */
+export class AttemptLateEntryClosedError extends AppError {
+  constructor(
+    details: { latestStartAt: Date; now: Date },
+    message = "Late entry closed for this exam",
+  ) {
+    super(message, "ATTEMPT_LATE_ENTRY_CLOSED", 409, details);
+  }
+}
+
 /** Candidate has reached the maximum number of allowed attempts (HTTP 409). */
 export class MaxAttemptsReachedError extends AppError {
   constructor(message = "Maximum attempt count reached") {
