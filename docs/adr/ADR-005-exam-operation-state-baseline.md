@@ -567,16 +567,81 @@ attempts (P2C-J2) so `close` can then succeed.
   synchronous writes + DB-backed scanner, consistent with single-instance
   Phase 2.
 
-## Open questions for review
+## Resolved review decisions
 
-1. Confirm `canceled` (US spelling) when Slice 4 ships; cancel itself is now
-   deferred, lowering the immediate stakes.
-2. Confirm the `close` idempotency choice (200 vs 409).
-3. Confirm the close active-attempt policy (reject with `UNRESOLVED_ATTEMPTS_EXIST`
-   vs allow-and-defer-resolution). This ADR chose reject.
-4. Confirm `extendMinutes` (relative) over absolute `closeAt`.
-5. Confirm the `minSubmitAfterStartMinutes > durationMinutes` rejection (vs
-   allow with a warning). This ADR chose reject.
-6. Confirm whether scores/export should reject `canceled` exams outright until
-   the cancellation marker ships — this ADR assumes `cancel` is deferred, so
-   the question is moot until Slice 4.
+All six review questions are now owner-resolved. Slices 1–3 already implement
+decisions 2–5; decision 1 and 6 govern the deferred Slice 4 (cancel).
+
+1. **`canceled` spelling**
+   Use US spelling: `canceled`. `cancelled` MUST NOT appear in enum values,
+   contracts, state-machine transitions, tests, or API responses. The
+   `canceled` enum value is deferred and MUST only be added when Slice 4
+   implements the cancel operation.
+
+2. **`close` idempotency**
+   `POST /api/exams/:id/close` is idempotent. If the exam is already `closed`
+   and no unfinalized attempts remain, return `200` with the current exam and
+   do NOT write a duplicate `exam.close` audit event. Do not return `409` for
+   this already-closed settled case. *(Implemented in Slice 1.)*
+
+3. **Close active-attempt policy**
+   Keep the MVP policy: `close` rejects while unfinalized attempts exist. An
+   `open` exam with `in_progress | disrupted | submitted | grading` attempts
+   MUST return `409 EXAM_CLOSE_NOT_ALLOWED` with:
+
+   ```json
+   {
+     "details": {
+       "reason": "UNRESOLVED_ATTEMPTS_EXIST",
+       "activeAttemptCount": "<number>"
+     }
+   }
+   ```
+
+   `close` MUST NOT force-submit attempts. Attempt resolution belongs to
+   candidate submit, the deadline scanner, or a future P2C force-submit.
+   *(Implemented in Slice 1.)*
+
+4. **Extend body shape**
+   Use relative `extendMinutes`, not absolute `closeAt`. The server computes
+   `newCloseAt` under the exam row lock from the reconciled current exam
+   state. `extendMinutes` MUST be an integer greater than `0`, and the
+   resulting `newCloseAt` MUST be greater than both `oldCloseAt` and `now`.
+   *(Implemented in Slice 2.)*
+
+5. **`minSubmitAfterStartMinutes > durationMinutes`**
+   Reject at create/update validation time. Allowing it would make candidate
+   manual submit impossible for the configured exam duration. A future
+   explicit policy flag may relax this, but no such flag exists in this
+   baseline. *(Validation is part of Slice 3; the create/update route rejects
+   when the field exceeds `durationMinutes`.)*
+
+6. **`canceled` scores/export behavior**
+   No current action in Slices 1–3. `cancel` / `canceled` are deferred and
+   MUST NOT be added before Slice 4.
+
+   When Slice 4 introduces `canceled`, scores/export MUST initially reject
+   canceled exams with an explicit error unless the same slice also defines
+   and implements cancellation-marker result/export semantics. Silent normal
+   scores/export for `canceled` exams is forbidden.
+
+   Future Slice 4 candidate error code (do NOT implement before Slice 4):
+
+   - `EXAM_CANCELED_RESULTS_UNAVAILABLE` — 409 — scores/export for canceled
+     exams before cancellation-marker result/export semantics are implemented.
+
+   Intended Slice 4 shape:
+
+   ```ts
+   if (exam.status === "canceled") {
+     return reply.code(409).send(
+       buildErrorResponse(request, {
+         code: "EXAM_CANCELED_RESULTS_UNAVAILABLE",
+         message: "Scores/export are unavailable for canceled exams.",
+         details: { reason: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
+       }),
+     );
+   }
+   // TODO(Slice 4+): Replace this rejection with explicit cancellation-marker
+   // result/export semantics once canceled exam behavior is defined.
+   ```
