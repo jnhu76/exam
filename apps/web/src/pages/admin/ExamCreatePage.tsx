@@ -101,6 +101,8 @@ export function ExamCreatePage() {
     retakePolicy: "unlimited",
     scoreStrategy: "highest",
     maxAttempts: 1,
+    latestStartOffsetMinutes: null,
+    minSubmitAfterStartMinutes: null,
   });
 
   /** Fetches available courses and questions, defaulting to the first course. */
