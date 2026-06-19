@@ -13,6 +13,10 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-singleTenant}
+      # ADR-006: runtime timezone (display/log/diagnostics only; does not
+      # change business-time comparison semantics).
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Shanghai}
+      TZ: ${TZ:-Asia/Shanghai}
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +42,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-exam}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exam}
       POSTGRES_DB: ${POSTGRES_DB:-exam}
+      # ADR-006: display/session timezone only; business time is instant-based.
+      TZ: ${TZ:-Asia/Shanghai}
+      PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

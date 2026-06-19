@@ -88,7 +88,10 @@ function createSystemContext(organizationId: string): RequestContext {
  */
 export async function scanDatabaseForDisruptedAttempts(
   fastify: Parameters<FastifyPluginAsync>[0],
-  now = new Date(),
+  // ADR-006: the scanner tick captures one operation now from the time
+  // authority and threads it through the whole scan; defaulting to
+  // fastify.now() keeps call sites that omit it on the authority clock.
+  now: Date = fastify.now(),
   heartbeatTimeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS,
 ): Promise<ScanResult> {
   const organizationRepo = createOrganizationRepo(fastify.db);
@@ -140,9 +143,10 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
     if (scanRunning) return;
     scanRunning = true;
     try {
+      // ADR-006: one operation now per tick, from the time authority.
       const result = await scanDatabaseForDisruptedAttempts(
         fastify,
-        new Date(),
+        fastify.now(),
         heartbeatTimeoutMs,
       );
       if (result.markedCount > 0) {

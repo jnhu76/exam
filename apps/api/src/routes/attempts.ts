@@ -336,12 +336,12 @@ function buildCandidateExamDetail(
   exam: Exam,
   enrollment: ExamEnrollment | null,
   activeAttempt: ExamAttempt | null,
+  now: Date,
   resumableAttempt: ExamAttempt | null = null,
   latestAttempt: ExamAttempt | null = null,
   finalAttempt: ExamAttempt | null = null,
 ) {
   const currentAttempts = enrollment?.attemptCount ?? 0;
-  const now = new Date();
   const { availabilityStatus, primaryAction } = deriveCandidateExamState({
     exam,
     enrollment,
@@ -438,7 +438,8 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
       const examRepo = createExamRepo(fastify.db);
       const attemptRepo = createAttemptRepo(fastify.db);
-      const now = new Date();
+      // ADR-006: one operation now for this list request.
+      const now = fastify.now();
 
       return Promise.all(
         enrollments.map(async (enrollment) => {
@@ -566,11 +567,13 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const candidateProfile = await getCandidateProfile(fastify, ctx);
+      // ADR-006: one operation now, threaded through the whole request.
+      const now = fastify.now();
       const examRepo = createExamRepo(fastify.db);
       const statusResult = await checkAndUpdateExamStatus(
         createExamRepoAdapter(examRepo, ctx),
         parsed.data.examId,
-        fastify.now(),
+        now,
       );
       if (!statusResult) {
         throw new NotFoundError("Exam not found");
@@ -619,6 +622,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         exam,
         enrollment,
         activeAttempt,
+        now,
         resumableAttempt,
         latestAttempt,
         finalAttempt,
@@ -658,7 +662,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
-      return getQueueStatus(exam, candidateProfile.id, new Date());
+      return getQueueStatus(exam, candidateProfile.id, fastify.now());
     },
   );
 
@@ -852,6 +856,9 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId, questionId } = parsedParams.data;
+      // ADR-006: one operation now for the whole save-answer request, reused
+      // by the answer protocol and the heartbeat lastActivityAt stamp.
+      const now = fastify.now();
       const body = parsedBody.data;
       if (body.attemptId !== attemptId || body.questionId !== questionId) {
         throw new ValidationError("Path and body identifiers must match");
@@ -894,7 +901,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             ...(lockedAttempt.deadlineAt
               ? { deadlineAt: lockedAttempt.deadlineAt }
               : {}),
-            now: fastify.now(),
+            now,
           },
           {
             attemptId,
@@ -935,7 +942,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
           await txRepo.update(ctx, attemptId, {
             answers: newAnswers,
-            lastActivityAt: new Date(),
+            lastActivityAt: now,
           } as Parameters<typeof txRepo.update>[2]);
         }
 
@@ -1143,6 +1150,9 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
+      // ADR-006: one operation now for the heartbeat — used for both the
+      // lastActivityAt stamp and the returned serverNow so they cannot drift.
+      const now = fastify.now();
       const attemptRepo = createAttemptRepo(fastify.db);
       const attempt = await getOwnedAttempt(fastify, ctx, attemptId);
       if (attempt.status !== "in_progress") {
@@ -1152,10 +1162,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       await attemptRepo.update(ctx, attemptId, {
-        lastActivityAt: new Date(),
+        lastActivityAt: now,
       } as Parameters<typeof attemptRepo.update>[2]);
 
-      return { ok: true, serverNow: fastify.now().toISOString() };
+      return { ok: true, serverNow: now.toISOString() };
     },
   );
 
