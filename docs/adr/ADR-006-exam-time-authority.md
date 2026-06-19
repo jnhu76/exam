@@ -146,6 +146,13 @@ request/tick
 Any business path that reads the wall clock directly (`new Date()`,
 `Date.now()`, SQL `now()`) instead of the threaded `now` is a bug.
 
+> **Note on audit placement:** the chain shows `recordAudit` using the same
+> operation `now`. That part (using one `now`) **is** enforced. The *separate*
+> question of whether the audit write happens **inside** the same DB
+> transaction as the mutate is **not** yet enforced — see "Follow-up: Audit
+> Atomicity Refactor" below. Today audit is written after the tx commits
+> (best-effort); a future PR moves it inside the tx.
+
 ## Non-goals
 
 - No Redis.
@@ -170,6 +177,45 @@ Any business path that reads the wall clock directly (`new Date()`,
 - Neutral: ADR-001..004 stay `Deferred`; this baseline is synchronous HTTP +
   in-process scanner + DB-backed state, consistent with single-instance
   Phase 2.
+
+## Follow-up: Audit Atomicity Refactor (deferred — item #4)
+
+This ADR records the *ideal* ordering (mutate → audit → commit, all inside one
+transaction) as the construction hard rule, but the **current implementation
+writes audit after the transaction commits** (best-effort, fire-and-forget).
+This applies to every admin operation (close/unpublish/extend/cancel/archive),
+`attempts.ts` (save/submit/restore/heartbeat), and the deadline/heartbeat
+scanners. It is the established repo convention, and changing it is
+**intentionally deferred** from the P2B-J1/J2 tail cleanup as a repo-wide
+follow-up so that a future PR can do it in one consistent pass.
+
+**FOLLOW-UP: Audit Atomicity Refactor**
+
+Move state-transition audit writes into the same DB transaction as the
+mutation, so a crash between commit and audit-write can no longer leave a
+mutated row with no audit trail (or vice-versa).
+
+Scope of that future PR:
+
+- Affected paths: all admin operations (`routes/exam.ts` close/unpublish/
+  extend/cancel/archive), `routes/attempts.ts` (save/submit/restore/heartbeat),
+  and the deadline/heartbeat scanners.
+- Move each `recordAudit(...)` call from after-`executeInTransaction` into the
+  tx callback, after the mutate step and before the implicit commit.
+- `recordAudit` currently uses its own repo on the shared `fastify.db` (not the
+  tx-scoped connection); the refactor must give it the tx-scoped connection so
+  the audit row participates in the same transaction. This touches the audit
+  repo's connection handling and the `recordAudit` helper signature.
+- Tests: every "audit written exactly once / no duplicate audit / rejected op
+  writes no audit" assertion stays valid; add a test that a forced tx rollback
+  also rolls back the audit row.
+- Non-goal of that PR: do not change *what* is audited or the audit action
+  vocabulary — only *when/where* the write happens.
+
+Out of scope for that PR (still): Redis/MQ, distributed clock, per-attempt
+audit, audit retention/rotation. This ADR (ADR-006) only owns the time-authority
+model; audit atomicity is a sibling concern being tracked here because the
+hard-rule wording references it.
 
 ## Alternatives considered
 

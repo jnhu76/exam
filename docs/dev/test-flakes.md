@@ -234,6 +234,44 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 
 ---
 
+### BUG-FLAKE-004 — Intra-suite cross-file state leak via shared `exam_test` schema
+
+**状态**: 已确认（2026-06-19，RESOLVED-001 根因分析中发现）。
+
+**失败位置**:
+
+- 受影响文件：`apps/api/src/routes/exam.test.ts`、`apps/api/src/routes/permissionBoundary.test.ts`、`apps/api/tests/security/tenant-isolation.test.ts`
+- 触发条件：`tenant-isolation.test.ts` 写入 `batchSize:0`（契约非法）fixture → 同一次 `pnpm --filter @exam/api test` 运行中，`exam.test.ts` / `permissionBoundary.test.ts` 的 `GET /api/exams` 列出该记录 → Zod 校验失败 → 500
+
+**根因**:
+
+`apps/api` 内所有测试文件共享同一个 `exam_test` PostgreSQL schema。`fileParallelism: false`（BUG-FLAKE-001 A′ 方案）消除了文件并行，但**未消除跨文件状态残留**：前序文件写入的行在后续文件中仍可见。`tenant-isolation.test.ts` 的 `cleanup()` 只关闭连接不删数据（与 BUG-FLAKE-003 同源），留下非法 fixture 污染后续文件的 list 查询。
+
+**与已知条目的关系**:
+
+- **BUG-FLAKE-001**（A′ `fileParallelism: false`）只解决并行 I/O 争用，不解决状态残留。
+- **BUG-FLAKE-002**（turbo 跨 package 并发）只解决跨 package 竞争，不解决同 package 内跨文件残留。
+- **BUG-FLAKE-003**（deadline scanner 数据累积）是同类问题的另一个实例——同 schema 跨 run 残留。
+- 本条目是**同 package 内、跨文件、单次 run** 的状态泄漏，与上述三条都不同。
+
+**根因修复方向（与 BUG-FLAKE-001 B 方案同源）**:
+
+每个测试文件 / 每个 worker 使用独立 PG schema（`SET search_path`），从源头消除跨文件状态残留。完成后 `fileParallelism: false` 可恢复默认值。
+
+**当前缓解**: `apps/api` 的测试文件按序执行（`fileParallelism: false`），且 `cleanupOrganizationTestData()` 在多数 describe block 的 `afterAll` 中调用。但非所有文件都调用——`tenant-isolation.test.ts` 自建 app 不走 `buildTestApp`，未调用全局 cleanup。
+
+**禁止做（仍然有效）**:
+
+- 不改业务代码来迁就测试状态泄漏
+- 不 skip 受影响用例
+- 不给每个测试加独立 timeout 来掩盖
+
+**复发记录**:
+
+- 2026-06-19：RESOLVED-001 根因分析中发现，`tenant-isolation.test.ts` 写入 `batchSize:0` 后污染 `exam.test.ts` 与 `permissionBoundary.test.ts`，修复 fixture 后 512/512 过。
+
+---
+
 ## 已诊断并修复的失败（非 flake，留档用于排查复用）
 
 > 本段记录的是**确定性、可复现、已根因修复**的失败，不是"同代码再跑就过"的偶发 flake。登记在此是为了让后人遇到 `GET /api/exams` 500 这类表面相似的症状时，不必重新走一遍排查链路。
