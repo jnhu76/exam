@@ -1156,6 +1156,113 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     expect(res.json().status).toBe("archived");
   });
 
+  // ADR-005 construction hard rule applied to archive (P2B-J2 follow-up #3):
+  // lock -> reconcile -> assert -> mutate inside executeInTransaction, with
+  // 404 for missing exam, 409 for invalid transition, and idempotent already-
+  // archived behavior (no duplicate audit).
+  it("archive returns 404 for a missing exam", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/00000000-0000-0000-0000-000000000000/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("archive of a draft exam is rejected with 409 (must publish first)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Archive Draft Reject",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_ARCHIVE_NOT_ALLOWED");
+  });
+
+  it("already-archived exam returns 200 and does not duplicate exam.archive audit", async () => {
+    const examId = await createPublishedExam("Archive Idempotent");
+    // First archive: genuine transition -> 200 + one audit event.
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().status).toBe("archived");
+
+    // Wait for the first audit event to land (recordAudit is fire-and-forget).
+    const waitForAuditCount = async (want: number) => {
+      for (let i = 0; i < 10; i++) {
+        const auditRes = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/audit-logs?action=exam.archive`,
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        const rows =
+          auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
+        const mine = rows.filter(
+          (r: { targetId: string }) => r.targetId === examId,
+        );
+        if (mine.length >= want) return mine.length;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return -1;
+    };
+    expect(await waitForAuditCount(1)).toBe(1);
+
+    // Second archive: idempotent no-op -> 200, NO additional audit.
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().status).toBe("archived");
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(await waitForAuditCount(2)).toBe(-1); // still 1, no second event
+  });
+
+  it("successful archive writes exactly one exam.archive audit event", async () => {
+    const examId = await createPublishedExam("Archive Audit");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+
+    let rows: { targetId: string }[] = [];
+    for (let i = 0; i < 10; i++) {
+      const auditRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?action=exam.archive`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const allRows =
+        auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
+      rows = allRows.filter((r: { targetId: string }) => r.targetId === examId);
+      if (rows.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(rows.length).toBe(1);
+  });
+
   it("successful cancel writes exactly one exam.cancel audit event", async () => {
     const examId = await createPublishedExam("Cancel Audit");
     const res = await ctx.app.inject({

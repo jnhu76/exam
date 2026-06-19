@@ -38,6 +38,7 @@ import {
   ExamNotDraftError,
   ValidationError,
   ExamCloseNotAllowedError,
+  ExamArchiveNotAllowedError,
   ExamUnpublishNotAllowedError,
   ExamExtendNotAllowedError,
   ExamUpdateNotAllowedError,
@@ -278,11 +279,23 @@ const enrollmentListItemSchema = enrollmentItemSchema.extend({
   candidateIdentity: z.string().optional(),
 });
 
+/** Reason a candidate ID was skipped during batch enrollment. */
+const enrollmentSkipReasonEnum = z.enum(["DUPLICATE", "NOT_FOUND"]);
+
 /** Zod schema for the enrollment batch-add response, reporting counts of added/skipped enrollments. */
 const enrollmentAddResponseSchema = z.object({
   added: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
   enrollments: z.array(enrollmentItemSchema),
+  // Per-skip reporting so the admin can see WHICH candidate IDs were skipped
+  // and why (DUPLICATE = already enrolled; NOT_FOUND = candidate does not
+  // exist). Backward-compatible addition; added/skipped/enrollments unchanged.
+  skippedCandidates: z.array(
+    z.object({
+      candidateId: z.string().uuid(),
+      reason: enrollmentSkipReasonEnum,
+    }),
+  ),
 });
 
 /** Fastify plugin that registers all exam CRUD, state-transition, and enrollment routes. */
@@ -1025,17 +1038,84 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         "x-role": ["Admin"],
         response: {
           200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
-    /** Archive a closed exam, transitioning it to archived status. */
+    /**
+     * Archive an exam (published/closed/canceled -> archived). P2B-J2 follow-up
+     * #3: brought under the ADR-005 construction hard rule so it is consistent
+     * with close/unpublish/extend/cancel — lock -> reconcile -> assert ->
+     * mutate inside ONE transaction, with 404 for a missing exam, 409 for an
+     * invalid transition, and idempotent already-archived behavior (no
+     * duplicate audit). The audit write stays outside the tx, matching the
+     * repo convention for this slice (audit-in-tx is a deferred repo-wide
+     * follow-up, #4).
+     */
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      const repo = createExamRepo(fastify.db);
+      // ADR-006: one operation now, threaded through the whole archive.
+      const now = fastify.now();
 
-      const archived = await archiveExam(createExamRepoAdapter(repo, ctx), id);
-      recordAudit(fastify, request, ctx, "exam.archive", "exam", id);
+      const result = await executeInTransaction(
+        fastify.db,
+        async (tx): Promise<{ archived: Exam; fromStatus: string } | null> => {
+          const repo = createExamRepo(tx);
+
+          // 1. Lock the exam row so no concurrent admin op / scanner races it.
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) return null;
+
+          // 2. Reconcile status by now (published->open / open->closed lazily)
+          //    so a stale persisted status cannot be archived against.
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            now,
+          );
+          const exam = reconciled?.exam ?? locked;
+
+          // 3 + 4. Assert + mutate via the engine. Idempotent already-archived:
+          //    the state machine has no `archived -> archived` transition, so
+          //    detect the no-op BEFORE calling archiveExam and return the
+          //    current exam without re-asserting (mirrors close's idempotency
+          //    gate, review decision #2). Any other non-archivable reconciled
+          //    status raises InvalidStateTransitionError from archiveExam;
+          //    surfaced uniformly as EXAM_ARCHIVE_NOT_ALLOWED per the ADR.
+          if (exam.status === "archived") {
+            return { archived: exam, fromStatus: "archived" };
+          }
+          let archived: Exam;
+          try {
+            archived = await archiveExam(createExamRepoAdapter(repo, ctx), id);
+          } catch (err) {
+            if (err instanceof InvalidStateTransitionError) {
+              throw new ExamArchiveNotAllowedError();
+            }
+            throw err;
+          }
+          return { archived, fromStatus: exam.status };
+        },
+      );
+
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      const { archived, fromStatus } = result;
+
+      // 5. Audit — only for a genuine transition (idempotent archive writes no
+      //    duplicate audit). fromStatus captured from the reconciled pre-image.
+      if (fromStatus !== "archived") {
+        recordAudit(fastify, request, ctx, "exam.archive", "exam", id, {
+          fromStatus,
+          toStatus: "archived",
+        });
+      }
       return toExamResponse(archived);
     },
   );
@@ -1184,15 +1264,22 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       let added = 0;
       let skipped = 0;
       const enrollments: unknown[] = [];
+      // Per-skip reason reporting: which candidate IDs were skipped and why.
+      const skippedCandidates: {
+        candidateId: string;
+        reason: "DUPLICATE" | "NOT_FOUND";
+      }[] = [];
 
       for (const candidateId of candidateIds) {
         if (existingIds.has(candidateId)) {
           skipped++;
+          skippedCandidates.push({ candidateId, reason: "DUPLICATE" });
           continue;
         }
         const candidate = await candidateRepo.findById(ctx, candidateId);
         if (!candidate) {
           skipped++;
+          skippedCandidates.push({ candidateId, reason: "NOT_FOUND" });
           continue;
         }
         const enrollment = await enrollmentRepo.create(ctx, {
@@ -1227,7 +1314,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      return { added, skipped, enrollments };
+      return { added, skipped, enrollments, skippedCandidates };
     },
   );
 

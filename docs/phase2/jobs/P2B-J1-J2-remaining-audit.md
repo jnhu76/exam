@@ -57,10 +57,16 @@ tests. ADR-005 has no open questions.
 
 | # | Item | Owner job | Priority | Effort | Notes |
 | --- | --- | --- | --- | --- | --- |
-| **1** | **`apps/e2e/e2e/admin-flow.spec.ts`** — land the E2E on this branch | P2B-J1 §22/§23 + P2B-J2 §11/§22 | **HIGH** (core acceptance for both jobs) | Medium | The spec is mostly written in spike `61ad5c9` (tests #1/#2 green; #3/#4 rewritten for the close route). Cherry-pick, adjust to the final close/cancel routes, validate via Docker E2E against an isolated DB (not `exam-test-pg`). |
-| 2 | Enrollment batch validation | P2B-J2 §6/§7 | MEDIUM (confirm scope first) | Small-Medium | §6 flags "no batch validation" as a gap. Confirm whether this is in-scope for P2B-J2 or deferred. |
-| 3 | Archive route construction hard rule (tx+lock+reconcile) | P2B-J2 follow-up | LOW (non-blocking) | Medium | `POST /exams/:id/archive` currently calls `archiveExam` directly (no tx/lock/reconcile). Predates all slices; not a regression. A future job should wrap it for consistency with close/unpublish/extend/cancel. |
-| 4 | Audit writes moved into the transaction (all admin ops) | P2B-J2 follow-up | LOW (repo convention) | Medium-Large | close/extend/unpublish/cancel + attempts.ts all write audit after the tx commits (best-effort, matching repo convention). The ADR construction hard rule describes the ideal order; a repo-wide change is out of scope for these slices. |
+| **1** | **`apps/e2e/e2e/admin-flow.spec.ts`** — land the E2E on this branch | P2B-J1 §22/§23 + P2B-J2 §11/§22 | **HIGH** (core acceptance for both jobs) | Medium | ✅ **DONE** — landed on this branch (commit on `feat/p2b-j1-j2-remaining-audit`). 4 tests green against the isolated Docker E2E stack (`exam-e2e-p2b`), driving the REAL close route (no `endingSoonSec` workaround). Also surfaced + fixed a critical migration bug (`0001_wooden_stingray.sql` declared the ADR-005 Slice 3 timing columns NOT NULL despite the nullable schema/contracts/ADR — exam create 500'd on PG). |
+| 2 | Enrollment batch validation | P2B-J2 §6/§7 | MEDIUM (confirm scope first) | Small-Medium | ✅ **DONE** — `POST /exams/:examId/enrollments` now reports `skippedCandidates: [{candidateId, reason: "DUPLICATE"\|"NOT_FOUND"}]` (backward-compatible: `added`/`skipped`/`enrollments` unchanged). Scope chosen: per-skip reason reporting (NOT fail-fast). |
+| 3 | Archive route construction hard rule (tx+lock+reconcile) | P2B-J2 follow-up | LOW (non-blocking) | Medium | ✅ **DONE** — `POST /exams/:id/archive` now follows the ADR-005 construction hard rule: `executeInTransaction` → `findByIdForUpdate` (lock) → `checkAndUpdateExamStatus` (reconcile) → assert (new `ExamArchiveNotAllowedError` / `EXAM_ARCHIVE_NOT_ALLOWED` 409) → mutate, with 404 for missing exam and idempotent already-archived (no duplicate audit). |
+| 4 | Audit writes moved into the transaction (all admin ops) | P2B-J2 follow-up | LOW (repo convention) | Medium-Large | ⏸️ **DEFERRED** — see "FOLLOW-UP: Audit Atomicity Refactor" below. close/extend/unpublish/cancel/archive + attempts.ts all write audit after the tx commits (best-effort, matching repo convention). The ADR construction hard rule describes the ideal order; a repo-wide change is intentionally deferred from the P2B-J1/J2 tail cleanup. |
+
+### FOLLOW-UP: Audit Atomicity Refactor (item #4, deferred)
+
+Move state-transition audit writes into the same DB transaction as the mutation.
+This affects admin operations, attempts routes, audit repo conventions, and tests.
+It is repo-wide and intentionally deferred from the P2B-J1/J2 tail cleanup.
 
 ## E2E spec — item #1 detail
 

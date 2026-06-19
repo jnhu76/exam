@@ -93,7 +93,16 @@ describe("exam state machine transitions", () => {
   });
 
   it("published exam can be archived", async () => {
-    const examId = await createExam(ctx, "SM Archive");
+    // Future openAt so the exam stays `published` after publish (ADR-005: a
+    // published exam whose openAt already passed reconciles to `open`, and
+    // `open -> archived` is not allowed — must go via close). The hardened
+    // archive route reconciles under lock before asserting.
+    const examId = await createExamWithTimeWindow(
+      ctx,
+      "SM Archive",
+      new Date(Date.now() + 86_400_000),
+      new Date(Date.now() + 172_800_000),
+    );
 
     const publishRes = await ctx.app.inject({
       method: "POST",
@@ -113,7 +122,12 @@ describe("exam state machine transitions", () => {
   });
 
   it("archived exam cannot be published", async () => {
-    const examId = await createExam(ctx, "SM Archived Publish");
+    const examId = await createExamWithTimeWindow(
+      ctx,
+      "SM Archived Publish",
+      new Date(Date.now() + 86_400_000),
+      new Date(Date.now() + 172_800_000),
+    );
 
     const publishRes = await ctx.app.inject({
       method: "POST",

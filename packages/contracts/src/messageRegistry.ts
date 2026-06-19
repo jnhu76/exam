@@ -45,6 +45,7 @@ export const errorMessages = {
   EXAM_ALREADY_PUBLISHED: "考试已发布，不能重复发布",
   EXAM_NOT_DRAFT: "仅草稿状态的考试允许此操作",
   EXAM_CLOSE_NOT_ALLOWED: "考试当前状态不允许关闭",
+  EXAM_ARCHIVE_NOT_ALLOWED: "考试当前状态不允许归档",
   EXAM_UNPUBLISH_NOT_ALLOWED: "已开放的考试不能撤回发布",
   EXAM_EXTEND_NOT_ALLOWED: "考试当前状态不能延长",
   EXAM_UPDATE_NOT_ALLOWED: "考试当前状态不允许修改",
