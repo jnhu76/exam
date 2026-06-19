@@ -128,8 +128,8 @@ fi
 #   APP_PORT=3300 DB_HOST_PORT=5433 \
 #     COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml \
 #     bash scripts/e2e/run.sh
-APP_HOST_PORT=”${APP_PORT:-3000}”
-DB_HOST_PORT=”${DB_HOST_PORT:-5432}”
+APP_HOST_PORT="${APP_PORT:-3000}"
+DB_HOST_PORT="${DB_HOST_PORT:-5432}"
 
 port_owner() {
   local port="$1"
