@@ -800,6 +800,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: LoadAttemptResponseSchema,
           400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -991,6 +992,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: LoadAttemptResponseSchema,
           400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -1024,10 +1026,21 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
 
         const status = lockedAttempt.status;
         if (status === "in_progress" || status === "disrupted") {
+          // ADR-005 Slice 3: candidate manual submit is subject to the
+          // minSubmitAfterStartMinutes guard. Fetch the exam for the field.
+          const exam = (await createExamRepo(tx).findById(
+            ctx,
+            lockedAttempt.examId,
+          )) as Exam | null;
           await submitAttempt(
             createAttemptRepoAdapter(txAttemptRepo, ctx),
             attemptId,
             fastify.now(),
+            {
+              source: "candidate",
+              minSubmitAfterStartMinutes:
+                exam?.minSubmitAfterStartMinutes ?? null,
+            },
           );
           return { alreadyGraded: false } as const;
         }
@@ -1161,6 +1174,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: LoadAttemptResponseSchema,
           400: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },

@@ -106,7 +106,11 @@ export async function autoSubmitAndGrade(
     }
 
     const attemptRepoAdapter = createAttemptRepoAdapter(txAttemptRepo, ctx);
-    await submitAttempt(attemptRepoAdapter, attemptId, now);
+    // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
+    // (source = deadline_scanner).
+    await submitAttempt(attemptRepoAdapter, attemptId, now, {
+      source: "deadline_scanner",
+    });
 
     const examRepo = createExamRepo(tx);
     const enrollmentRepo = createEnrollmentRepo(tx);

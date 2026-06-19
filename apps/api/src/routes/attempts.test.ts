@@ -62,6 +62,8 @@ function buildExamPayload(
     passingScore: number;
     totalScore: number;
     durationMinutes: number;
+    minSubmitAfterStartMinutes: number | null;
+    latestStartOffsetMinutes: number | null;
   }> = {},
 ) {
   return {
@@ -80,6 +82,8 @@ function buildExamPayload(
     retakePolicy: overrides.retakePolicy ?? "unlimited",
     scoreStrategy: overrides.scoreStrategy ?? "highest",
     maxAttempts: overrides.maxAttempts ?? 3,
+    minSubmitAfterStartMinutes: overrides.minSubmitAfterStartMinutes ?? null,
+    latestStartOffsetMinutes: overrides.latestStartOffsetMinutes ?? null,
   };
 }
 
@@ -840,6 +844,85 @@ describe("attempt routes", () => {
       expect(body.status).toBe("graded");
       expect(body.score).toBe(0);
       expect(body.passed).toBe(false);
+    });
+  });
+
+  describe("POST /attempts/:attemptId/submit — minSubmitAfterStartMinutes guard (ADR-005 Slice 3)", () => {
+    it("rejects candidate submit too early with 409 ATTEMPT_SUBMIT_TOO_EARLY", async () => {
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "MinSubmit Exam",
+          courseId,
+          questionIds: [questionId],
+          minSubmitAfterStartMinutes: 60,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId = examRes.json().id;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(examId);
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id;
+
+      // Submit immediately (well under 60 min) -> 409.
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe("ATTEMPT_SUBMIT_TOO_EARLY");
+      expect(res.json().error.details?.remainingSeconds).toBeGreaterThan(0);
+    });
+  });
+
+  describe("POST /attempts/:examId/start — latestStartOffsetMinutes guard (ADR-005 Slice 3)", () => {
+    it("rejects new start after the late-entry cutoff with 409 ATTEMPT_LATE_ENTRY_CLOSED", async () => {
+      // openAt = now - 2h; offset = 30min -> latestStartAt = now - 1.5h < now.
+      const openAt = new Date(Date.now() - 7200_000).toISOString();
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "LateEntry Exam",
+          courseId,
+          questionIds: [questionId],
+          latestStartOffsetMinutes: 30,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId = examRes.json().id;
+      // Override openAt via PATCH (draft) — buildExamPayload hardcodes openAt.
+      await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/exams/${examId}`,
+        payload: { openAt },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(examId);
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe("ATTEMPT_LATE_ENTRY_CLOSED");
     });
   });
 

@@ -448,6 +448,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         retakePolicy: data.retakePolicy,
         scoreStrategy: data.scoreStrategy,
         maxAttempts: data.maxAttempts,
+        latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
+        minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
       });
       recordAudit(fastify, request, ctx, "exam.create", "exam", exam.id);
 
