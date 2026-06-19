@@ -39,6 +39,25 @@
 > **Tooling note**: scripts/rebuild-all.sh added — apps resolve @exam/* via
 > built dist, so rebuild dist before running filtered tests
 
+### Follow-ups (non-blocking, surfaced by Slice 4 review)
+
+- **Archive route does not follow the construction hard rule.** The
+  `POST /exams/:id/archive` handler (`apps/api/src/routes/exam.ts`) calls
+  `archiveExam()` directly — no `executeInTransaction`, no `findByIdForUpdate`,
+  no `checkAndUpdateExamStatus`. This predates all four slices (it has been the
+  Phase 1 archive behavior) and is **not** a regression introduced by Slice 4.
+  Slice 4 only made `canceled → archived` reachable via the state machine,
+  which exposed this gap. A future job should wrap archive in the same
+  tx+lock+reconcile+mutate+audit sequence as the other admin operations, for
+  consistency and stale-state protection on the `published/closed/canceled →
+  archived` transitions.
+- **Audit writes sit outside the transaction (all admin ops).** close/extend/
+  unpublish/cancel + attempts.ts all write audit after `executeInTransaction`
+  commits (best-effort, matching the established repo convention). The ADR
+  construction hard rule describes the ideal order; the implementation follows
+  the repo convention. A repo-wide "audit-in-tx" change is out of scope for
+  these slices.
+
 ## 1. Summary
 
 Fix gaps in the admin operation loop: exam setup validation, assignment reliability, publish/open/close/archive semantics, and score overview navigation.
