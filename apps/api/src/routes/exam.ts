@@ -38,7 +38,6 @@ import {
   ExamExtendNotAllowedError,
   ExamUpdateNotAllowedError,
   ExamCancelNotAllowedError,
-  ExamCanceledResultsUnavailableError,
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
