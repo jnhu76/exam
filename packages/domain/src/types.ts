@@ -195,6 +195,20 @@ export interface ControlFlags {
   showResultImmediately: boolean;
 }
 
+// ── Submit source (ADR-005 Slice 3) ────────────────────────────────
+
+/**
+ * Discriminator for who initiated an attempt submit. Used by submitAttempt
+ * to gate the minimum-submit-duration policy: only `candidate` manual submits
+ * are subject to minSubmitAfterStartMinutes; deadline_scanner/proctor/system
+ * bypass it. Never client-controlled — set explicitly at the command boundary.
+ */
+export type SubmitSource =
+  | "candidate"
+  | "deadline_scanner"
+  | "proctor"
+  | "system";
+
 // ── Exam ──────────────────────────────────────────────────────────
 
 /**

@@ -48,6 +48,8 @@ export const errorMessages = {
   EXAM_UNPUBLISH_NOT_ALLOWED: "已开放的考试不能撤回发布",
   EXAM_EXTEND_NOT_ALLOWED: "考试当前状态不能延长",
   EXAM_UPDATE_NOT_ALLOWED: "考试当前状态不允许修改",
+  ATTEMPT_SUBMIT_TOO_EARLY: "考试开始时间过短，暂时无法交卷",
+  ATTEMPT_LATE_ENTRY_CLOSED: "已超过最晚进入考试时间",
   ENROLLMENT_NOT_REMOVABLE: "已开始的报名不能移除",
   QUESTION_COURSE_MISMATCH: "题目不属于所选课程",
   MAX_ATTEMPTS_REACHED: "已达到最大考试次数",

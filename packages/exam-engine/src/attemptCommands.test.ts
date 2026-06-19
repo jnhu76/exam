@@ -255,6 +255,59 @@ describe("attemptCommands", () => {
       expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
     });
 
+    // ADR-005 Slice 3 §4.3: late-entry cutoff on NEW attempt only.
+    it("rejects new start after latestStartOffsetMinutes (ATTEMPT_LATE_ENTRY_CLOSED)", async () => {
+      // openAt=09:00, offset=60min -> latestStartAt=10:00; now=10:30 > 10:00.
+      const exam = makeExam({ latestStartOffsetMinutes: 60 });
+      const enrollment = makeEnrollment();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo();
+
+      await expect(
+        startAttempt(examRepo, enrRepo, attRepo, "exam-1", "cand-1", fixedNow),
+      ).rejects.toThrow(/late entry/i);
+    });
+
+    it("allows new start before latestStartOffsetMinutes cutoff", async () => {
+      // openAt=09:00, offset=120min -> latestStartAt=11:00; now=10:30 < 11:00.
+      const exam = makeExam({ latestStartOffsetMinutes: 120 });
+      const enrollment = makeEnrollment();
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo();
+
+      const result = await startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+      expect(result.status).toBe("in_progress");
+    });
+
+    it("late-entry cutoff does NOT block resume of an active attempt", async () => {
+      // An in_progress attempt exists; now is past cutoff. Resume allowed.
+      const exam = makeExam({ latestStartOffsetMinutes: 60 });
+      const enrollment = makeEnrollment();
+      const active = makeAttempt({ status: "in_progress" });
+      const examRepo = { findById: () => exam, update: () => exam };
+      const enrRepo = makeEnrollmentRepo([enrollment]);
+      const attRepo = makeAttemptRepo([active]);
+
+      const result = await startAttempt(
+        examRepo,
+        enrRepo,
+        attRepo,
+        "exam-1",
+        "cand-1",
+        fixedNow,
+      );
+      expect(result.status).toBe("in_progress");
+    });
+
     it("rejects when no enrollment exists (Phase 1 requires explicit assignment)", async () => {
       const exam = makeExam();
       const examRepo = { findById: () => exam, update: () => exam };
@@ -567,13 +620,68 @@ describe("attemptCommands", () => {
       expect(result.submittedAt).toEqual(fixedNow);
     });
 
-    it("throws InvalidStateTransitionError for submitted attempt", async () => {
+    // ADR-005 Slice 3 §4.4: idempotent already-submitted path runs BEFORE
+    // the early-submit rejection. A re-submit of an already-submitted/graded
+    // attempt returns the current attempt instead of erroring.
+    it("returns idempotent success for an already-submitted attempt", async () => {
       const attempt = makeAttempt({ status: "submitted" });
       const attRepo = makeAttemptRepo([attempt]);
 
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      expect(result.status).toBe("submitted");
+    });
+
+    it("returns idempotent success for a graded attempt", async () => {
+      const attempt = makeAttempt({ status: "graded" });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      expect(result.status).toBe("graded");
+    });
+
+    it("rejects candidate submit before minSubmitAfterStartMinutes (ATTEMPT_SUBMIT_TOO_EARLY)", async () => {
+      const startedAt = new Date("2025-01-01T10:00:00Z");
+      const attempt = makeAttempt({ status: "in_progress", startedAt });
+      const attRepo = makeAttemptRepo([attempt]);
+
       await expect(
-        submitAttempt(attRepo, "attempt-1", fixedNow),
-      ).rejects.toThrow(InvalidStateTransitionError);
+        submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T10:05:00Z"), {
+          source: "candidate",
+          minSubmitAfterStartMinutes: 30,
+        }),
+      ).rejects.toThrow(/too early/i);
+    });
+
+    it("allows candidate submit at/after minSubmitAfterStartMinutes", async () => {
+      const startedAt = new Date("2025-01-01T10:00:00Z");
+      const attempt = makeAttempt({ status: "in_progress", startedAt });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(
+        attRepo,
+        "attempt-1",
+        new Date("2025-01-01T10:31:00Z"),
+        { source: "candidate", minSubmitAfterStartMinutes: 30 },
+      );
+
+      expect(result.status).toBe("submitted");
+    });
+
+    it("deadline_scanner bypasses minSubmitAfterStartMinutes", async () => {
+      const startedAt = new Date("2025-01-01T10:00:00Z");
+      const attempt = makeAttempt({ status: "in_progress", startedAt });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(
+        attRepo,
+        "attempt-1",
+        new Date("2025-01-01T10:01:00Z"),
+        { source: "deadline_scanner", minSubmitAfterStartMinutes: 30 },
+      );
+
+      expect(result.status).toBe("submitted");
     });
 
     it("throws ValidationError for non-existent attempt", async () => {

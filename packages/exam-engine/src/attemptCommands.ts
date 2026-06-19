@@ -3,8 +3,11 @@ import type {
   ExamAttempt,
   ExamEnrollment,
   QuestionSnapshot,
+  SubmitSource,
 } from "@exam/domain";
 import {
+  AttemptLateEntryClosedError,
+  AttemptSubmitTooEarlyError,
   ExamNotOpenError,
   InvalidStateTransitionError,
   ValidationError,
@@ -170,6 +173,17 @@ export async function startOrRestoreAttempt(
     throw new ExamAlreadyPassedError("Already passed this exam");
   }
 
+  // ADR-005 Slice 3 §4.3: late-entry cutoff on a NEW attempt only. resume/
+  // restore (handled above) never hits this. latestStartAt = openAt + offset.
+  if (exam.latestStartOffsetMinutes != null) {
+    const latestStartAt = new Date(
+      exam.openAt.getTime() + exam.latestStartOffsetMinutes * 60_000,
+    );
+    if (now.getTime() > latestStartAt.getTime()) {
+      throw new AttemptLateEntryClosedError({ latestStartAt, now });
+    }
+  }
+
   const attemptNo = enrollment.attemptCount + 1;
   const deadlineAt = calculateDeadlineAt(now, exam.durationMinutes);
 
@@ -202,25 +216,65 @@ export async function startOrRestoreAttempt(
 }
 
 /**
- * Submits an in-progress or disrupted attempt, transitioning it to the submitted state.
- * Records the submission timestamp.
+ * Submits an attempt, transitioning in_progress/disrupted -> submitted.
+ *
+ * ADR-005 Slice 3 §4.4 guard ordering (binding):
+ * 1. Idempotent already-submitted path FIRST: if the attempt is already in a
+ *    terminal/post-submit state (submitted/grading/graded), return it as-is.
+ *    A re-submit after the deadline scanner already submitted must not be
+ *    re-rejected by the early-submit guard.
+ * 2. State-machine transition assertion.
+ * 3. Only for a genuine in_progress/disrupted -> submitted transition with
+ *    `source === "candidate"` -> apply minSubmitAfterStartMinutes. Other
+ *    sources (deadline_scanner/proctor/system) bypass it.
  */
 export async function submitAttempt(
   attemptRepo: AttemptRepository,
   attemptId: string,
   now: Date,
+  opts: {
+    source?: SubmitSource;
+    minSubmitAfterStartMinutes?: number | null;
+  } = {},
 ): Promise<ExamAttempt> {
   const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
 
-  const result = transition(attempt.status, "submit" as AttemptCommand);
+  // 1. Idempotent already-submitted path — runs BEFORE any other check.
+  if (
+    attempt.status === "submitted" ||
+    attempt.status === "grading" ||
+    attempt.status === "graded"
+  ) {
+    return attempt;
+  }
 
+  // 2. State-machine transition assertion.
+  const result = transition(attempt.status, "submit" as AttemptCommand);
   if (!isTransitionOk(result)) {
     throw new InvalidStateTransitionError(
       `Cannot submit attempt in ${attempt.status} state`,
     );
+  }
+
+  // 3. Candidate min-submit guard (source-gated).
+  if (opts.source === "candidate" && opts.minSubmitAfterStartMinutes != null) {
+    const startedAt = attempt.startedAt;
+    if (startedAt) {
+      const earliestSubmitAt = new Date(
+        startedAt.getTime() + opts.minSubmitAfterStartMinutes * 60_000,
+      );
+      if (now.getTime() < earliestSubmitAt.getTime()) {
+        throw new AttemptSubmitTooEarlyError({
+          earliestSubmitAt,
+          remainingSeconds: Math.ceil(
+            (earliestSubmitAt.getTime() - now.getTime()) / 1000,
+          ),
+        });
+      }
+    }
   }
 
   const submitted = await attemptRepo.update(attemptId, {

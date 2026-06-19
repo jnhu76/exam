@@ -184,6 +184,34 @@ export class ExamUpdateNotAllowedError extends AppError {
   }
 }
 
+/**
+ * Candidate manual submit was attempted before the minimum submit duration
+ * elapsed (HTTP 409). ADR-005 Slice 3 §4.4. Only `source === "candidate"`
+ * submits are subject to this guard; deadline_scanner/proctor/system bypass.
+ */
+export class AttemptSubmitTooEarlyError extends AppError {
+  constructor(
+    details: { earliestSubmitAt: Date; remainingSeconds: number },
+    message = "Attempt submitted too early",
+  ) {
+    super(message, "ATTEMPT_SUBMIT_TOO_EARLY", 409, details);
+  }
+}
+
+/**
+ * A new attempt start was attempted after the late-entry cutoff (HTTP 409).
+ * ADR-005 Slice 3 §4.3. Applies only to creating a NEW attempt; resume/
+ * restore of existing attempts is never blocked.
+ */
+export class AttemptLateEntryClosedError extends AppError {
+  constructor(
+    details: { latestStartAt: Date; now: Date },
+    message = "Late entry closed for this exam",
+  ) {
+    super(message, "ATTEMPT_LATE_ENTRY_CLOSED", 409, details);
+  }
+}
+
 /** Candidate has reached the maximum number of allowed attempts (HTTP 409). */
 export class MaxAttemptsReachedError extends AppError {
   constructor(message = "Maximum attempt count reached") {
