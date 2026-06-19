@@ -121,7 +121,7 @@ export async function loginViaUi(
       throw await buildLoginError(
         page,
         username,
-        "Login did not produce an auth response, alert, or /exam/list navigation",
+        `Login did not produce an auth response, alert, or ${expectedUrl} navigation`,
         observed,
         pendingLogs,
       );

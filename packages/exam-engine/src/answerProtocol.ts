@@ -107,11 +107,7 @@ export function processSaveAnswer(
     };
   }
 
-  if (
-    state.deadlineAt &&
-    state.now &&
-    state.now.getTime() > state.deadlineAt.getTime()
-  ) {
+  if (state.deadlineAt && now.getTime() > state.deadlineAt.getTime()) {
     return {
       accepted: false,
       serverVersion: 0,
