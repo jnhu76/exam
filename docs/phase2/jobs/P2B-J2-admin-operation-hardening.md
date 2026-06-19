@@ -14,9 +14,20 @@
 > in one transaction. Admin UI buttons added (unpublish ConfirmDialog, extend
 > Dialog with minutes input). New error codes + audit events.
 >
-> **Remaining slices**: P2B-J2c (timing policy:
-> `latestStartOffsetMinutes`/`minSubmitAfterStartMinutes`/`SubmitSource`),
-> P2B-J2d (cancel, deferred). These consume ADR-005 directly.
+> **ADR-005 Slice 3 (Timing Policy): DONE** — `latestStartOffsetMinutes`
+> (late-entry cutoff on NEW start only) + `minSubmitAfterStartMinutes`
+> (candidate manual submit only, source-gated; deadline_scanner bypasses).
+> `SubmitSource` discriminator (candidate/deadline_scanner/proctor/system).
+> submitAttempt guard ordering: idempotent-already-submitted FIRST, then
+> early-submit. DB migration + domain/contracts + engine guards + route wiring
+> + UI form fields. New error codes ATTEMPT_LATE_ENTRY_CLOSED,
+> ATTEMPT_SUBMIT_TOO_EARLY. 493 API tests pass.
+>
+> **Remaining**: P2B-J2d (cancel, deferred — needs voiding + cancellation
+> marker decisions; amend ADR-005 first).
+>
+> **Tooling note**: scripts/rebuild-all.sh added — apps resolve @exam/* via
+> built dist, so rebuild dist before running filtered tests.
 
 ## 1. Summary
 
