@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router";
+import { RuntimeConfigError } from "@exam/domain";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -239,7 +240,7 @@ export function TakeExamPage() {
         rejected = true;
         setSaveState("error");
         setSaveRejection(result);
-        throw new Error("save rejected by server");
+        throw new RuntimeConfigError("save rejected by server");
       } catch (err) {
         setSaveState("error");
         if (!rejected) setIsDisconnected(true);

@@ -13,6 +13,7 @@
  * - production must fail fast on missing JWT_SECRET / DATABASE_URL / CORS_ORIGIN.
  */
 
+import { RuntimeConfigError } from "@exam/domain";
 import { z } from "zod";
 
 export type AppMode = "development" | "test" | "e2e" | "ci" | "production";
@@ -134,7 +135,7 @@ function assertValidIanaTimeZone(timeZone: string): void {
     // eslint-disable-next-line no-new
     new Intl.DateTimeFormat("en-US", { timeZone });
   } catch {
-    throw new Error(
+    throw new RuntimeConfigError(
       `Invalid APP_TIMEZONE: ${timeZone}. Must be a valid IANA timezone (e.g. Asia/Shanghai).`,
     );
   }
@@ -179,7 +180,7 @@ function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
     return appMode as AppMode;
   }
   // APP_MODE is set but invalid — fail fast.
-  throw new Error(
+  throw new RuntimeConfigError(
     `Invalid APP_MODE "${appMode}". Valid values: ${APP_MODES.join(", ")}`,
   );
 }
@@ -212,13 +213,13 @@ function parseDeploymentMode(value: string | undefined): DeploymentMode {
   if (trimmed === undefined || trimmed === "") return "singleTenant";
   if (trimmed === "singleTenant") return "singleTenant";
   if (trimmed === "multiTenant") {
-    throw new Error(
+    throw new RuntimeConfigError(
       "DEPLOYMENT_MODE=multiTenant is not supported in Phase 1. " +
         "Phase 1 runtime is single-tenant only (singleTenant). " +
         "Optional multiTenant is a Phase 4 platformization capability.",
     );
   }
-  throw new Error(
+  throw new RuntimeConfigError(
     "Invalid DEPLOYMENT_MODE. Phase 1 runtime supports singleTenant only.",
   );
 }
@@ -265,7 +266,7 @@ function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
   const secret = env.JWT_SECRET;
   if (secret) return secret;
   if (mode === "production") {
-    throw new Error("JWT_SECRET is required in production");
+    throw new RuntimeConfigError("JWT_SECRET is required in production");
   }
   return DEFAULT_JWT_SECRET;
 }
@@ -295,7 +296,7 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
   }
   const url = env.DATABASE_URL;
   if (!url && mode === "production") {
-    throw new Error("DATABASE_URL is required in production");
+    throw new RuntimeConfigError("DATABASE_URL is required in production");
   }
   return url ?? "postgresql://exam:exam@localhost:5432/exam";
 }
@@ -318,7 +319,7 @@ function resolveCorsOrigin(
   if (mode === "production") {
     raw = env.CORS_ORIGIN;
     if (!raw) {
-      throw new Error("CORS_ORIGIN is required in production");
+      throw new RuntimeConfigError("CORS_ORIGIN is required in production");
     }
   } else {
     raw = env.CORS_ORIGIN || "http://localhost:5173";
