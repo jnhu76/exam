@@ -4,6 +4,7 @@ import {
   openExam,
   closeExam,
   archiveExam,
+  cancelExam,
   unpublishExam,
   extendExam,
   buildQuestionSnapshot,
@@ -265,6 +266,56 @@ describe("examCommands", () => {
       await expect(unpublishExam(repo, "exam-1")).rejects.toThrow(
         InvalidStateTransitionError,
       );
+    });
+  });
+
+  describe("cancelExam", () => {
+    it("transitions published -> canceled", async () => {
+      const repo = makeRepo(makeExam({ status: "published" }));
+      const result = await cancelExam(repo, "exam-1");
+      expect(result.status).toBe("canceled");
+    });
+
+    it("transitions open -> canceled", async () => {
+      const repo = makeRepo(makeExam({ status: "open" }));
+      const result = await cancelExam(repo, "exam-1");
+      expect(result.status).toBe("canceled");
+    });
+
+    it("throws for draft -> canceled", async () => {
+      const repo = makeRepo(makeExam({ status: "draft" }));
+      await expect(cancelExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+
+    it("throws for closed -> canceled", async () => {
+      const repo = makeRepo(makeExam({ status: "closed" }));
+      await expect(cancelExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+
+    it("throws for canceled -> canceled (already canceled)", async () => {
+      const repo = makeRepo(makeExam({ status: "canceled" }));
+      await expect(cancelExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+
+    it("throws for archived -> canceled", async () => {
+      const repo = makeRepo(makeExam({ status: "archived" }));
+      await expect(cancelExam(repo, "exam-1")).rejects.toThrow(
+        InvalidStateTransitionError,
+      );
+    });
+  });
+
+  describe("archiveExam canceled", () => {
+    it("transitions canceled -> archived", async () => {
+      const repo = makeRepo(makeExam({ status: "canceled" }));
+      const result = await archiveExam(repo, "exam-1");
+      expect(result.status).toBe("archived");
     });
   });
 

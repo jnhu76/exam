@@ -7,6 +7,7 @@ const ExamStatusEnum = z.enum([
   "published",
   "open",
   "closed",
+  "canceled",
   "archived",
 ]);
 const TimingModeEnum = z.enum([

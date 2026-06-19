@@ -154,6 +154,32 @@ export async function closeExam(
 }
 
 /**
+ * Cancels an exam abnormally (published -> canceled, open -> canceled).
+ *
+ * ADR-005 Slice 4 (cancel-minimal): the engine performs only the status
+ * transition. It does NOT void or force-submit attempts. The unresolved-
+ * attempts guard (open with in_progress/disrupted/submitted/grading) lives at
+ * the route layer (needs the attempt repo), surfacing as
+ * EXAM_CANCEL_NOT_ALLOWED / UNRESOLVED_ATTEMPTS_EXIST. cancel is NOT idempotent
+ * (canceled -> canceled is rejected); to settle a canceled exam, archive it.
+ */
+export async function cancelExam(
+  repo: ExamRepository,
+  examId: string,
+): Promise<Exam> {
+  const exam = await repo.findById(examId);
+  if (!exam) {
+    throw new ValidationError("Exam not found");
+  }
+
+  assertTransition(exam.status, "canceled");
+
+  const updated = await repo.update(examId, { status: "canceled" });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return updated;
+}
+
+/**
  * Reverts a published exam back to draft (published -> draft).
  *
  * ADR-005 Slice 2 §3.2: only allowed from `published`. The route layer

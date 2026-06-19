@@ -185,6 +185,43 @@ export class ExamUpdateNotAllowedError extends AppError {
 }
 
 /**
+ * Admin cancel is not allowed for the requested exam (HTTP 409).
+ *
+ * ADR-005 Slice 4 (cancel-minimal) §3.5: `POST /exams/:id/cancel` is allowed
+ * from `published` and from `open` only when no unfinalized attempts remain.
+ * `details.reason = UNRESOLVED_ATTEMPTS_EXIST` (with activeAttemptCount) is set
+ * by the route when an open exam still has active attempts. cancel does NOT
+ * force-submit; the admin must let attempts resolve first.
+ */
+export class ExamCancelNotAllowedError extends AppError {
+  constructor(
+    details?: {
+      reason?: "UNRESOLVED_ATTEMPTS_EXIST";
+      activeAttemptCount?: number;
+    },
+    message = "Exam cancel is not allowed",
+  ) {
+    super(message, "EXAM_CANCEL_NOT_ALLOWED", 409, details);
+  }
+}
+
+/**
+ * Scores/export requested for a canceled exam (HTTP 409).
+ *
+ * ADR-005 Slice 4 (cancel-minimal): until cancellation-marker result/export
+ * semantics are implemented, canceled exams MUST NOT expose normal
+ * scores/export. Silent export is forbidden.
+ */
+export class ExamCanceledResultsUnavailableError extends AppError {
+  constructor(
+    details?: { reason?: "CANCELLATION_MARKER_NOT_IMPLEMENTED" },
+    message = "Results are unavailable for canceled exams",
+  ) {
+    super(message, "EXAM_CANCELED_RESULTS_UNAVAILABLE", 409, details);
+  }
+}
+
+/**
  * Candidate manual submit was attempted before the minimum submit duration
  * elapsed (HTTP 409). ADR-005 Slice 3 §4.4. Only `source === "candidate"`
  * submits are subject to this guard; deadline_scanner/proctor/system bypass.

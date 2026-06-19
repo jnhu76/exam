@@ -20,6 +20,7 @@ import type { Database } from "@exam/db/src/types.js";
 import {
   archiveExam,
   closeExam,
+  cancelExam,
   unpublishExam,
   extendExam,
   checkAndUpdateExamStatus,
@@ -36,6 +37,8 @@ import {
   ExamUnpublishNotAllowedError,
   ExamExtendNotAllowedError,
   ExamUpdateNotAllowedError,
+  ExamCancelNotAllowedError,
+  ExamCanceledResultsUnavailableError,
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
@@ -884,6 +887,117 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         oldCloseAt: result.oldCloseAt,
         newCloseAt: result.newCloseAt,
         reason,
+      });
+      return toExamResponse(result.exam);
+    },
+  );
+
+  /**
+   * Zod schema for the cancel request body: optional reason.
+   */
+  const cancelExamRequestSchema = z.object({
+    reason: z.string().trim().max(500).optional(),
+  });
+
+  /**
+   * Cancel an exam abnormally (published/open -> canceled). ADR-005 Slice 4.
+   *
+   * Construction hard rule: lock -> reconcile -> unresolved guard -> assert
+   * -> mutate -> audit in one transaction. The unresolved guard (open with
+   * active attempts) rejects with EXAM_CANCEL_NOT_ALLOWED /
+   * UNRESOLVED_ATTEMPTS_EXIST. cancel does NOT void or force-submit attempts.
+   * cancel is NOT idempotent (canceled -> canceled rejected); archive to settle.
+   */
+  fastify.post(
+    "/exams/:id/cancel",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        body: cancelExamRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: ExamSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request: any, reply: any) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+      const reason = (request.body?.reason ?? undefined) as string | undefined;
+
+      const result = await executeInTransaction(
+        fastify.db,
+        async (
+          tx,
+        ): Promise<{
+          exam: Exam;
+          fromStatus: string;
+          unresolvedCount: number;
+        } | null> => {
+          const repo = createExamRepo(tx);
+          const attemptRepo = createAttemptRepo(tx);
+
+          // 1. Lock the exam row.
+          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
+          if (!locked) return null;
+
+          // 2. Reconcile status by now.
+          const reconciled = await checkAndUpdateExamStatus(
+            createExamRepoAdapter(repo, ctx),
+            id,
+            new Date(),
+          );
+          const exam = reconciled?.exam ?? locked;
+
+          // 3. Unresolved-attempts guard (only meaningful for open, but cheap).
+          const unresolvedCount = await attemptRepo.countUnresolvedByExam(
+            ctx,
+            id,
+          );
+          if (unresolvedCount > 0) {
+            throw new ExamCancelNotAllowedError({
+              reason: "UNRESOLVED_ATTEMPTS_EXIST",
+              activeAttemptCount: unresolvedCount,
+            });
+          }
+
+          // 4 + 5. Assert + mutate via the engine. Non-cancellable states
+          //    (draft/closed/canceled/archived) raise
+          //    InvalidStateTransitionError -> surfaced as EXAM_CANCEL_NOT_ALLOWED.
+          let canceled: Exam;
+          try {
+            canceled = await cancelExam(createExamRepoAdapter(repo, ctx), id);
+          } catch (err) {
+            if (err instanceof InvalidStateTransitionError) {
+              throw new ExamCancelNotAllowedError();
+            }
+            throw err;
+          }
+          return {
+            exam: canceled,
+            fromStatus: exam.status,
+            unresolvedCount,
+          };
+        },
+      );
+
+      if (!result) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      // 6. Audit (outside tx, best-effort). activeAttemptCount is 0 here
+      //    (guard passed).
+      recordAudit(fastify, request, ctx, "exam.cancel", "exam", id, {
+        reason,
+        fromStatus: result.fromStatus,
+        toStatus: "canceled",
+        activeAttemptCount: result.unresolvedCount,
       });
       return toExamResponse(result.exam);
     },

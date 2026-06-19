@@ -23,11 +23,21 @@
 > + UI form fields. New error codes ATTEMPT_LATE_ENTRY_CLOSED,
 > ATTEMPT_SUBMIT_TOO_EARLY. 493 API tests pass.
 >
-> **Remaining**: P2B-J2d (cancel, deferred — needs voiding + cancellation
-> marker decisions; amend ADR-005 first).
+> **ADR-005 Slice 4 (Cancel-minimal): DONE** — `POST /api/exams/:id/cancel`
+> (published/open→canceled; tx+lock+reconcile+unresolved-guard+mutate+audit).
+> `canceled` enum + state-machine transitions (published/open→canceled,
+> canceled→archived). Scores/export reject canceled exams with 409
+> EXAM_CANCELED_RESULTS_UNAVAILABLE (CANCELLATION_MARKER_NOT_IMPLEMENTED) until
+> cancellation-marker semantics ship. cancel does NOT void/force-submit
+> attempts; open exam with active attempts rejects with EXAM_CANCEL_NOT_ALLOWED
+> / UNRESOLVED_ATTEMPTS_EXIST. Archive now allows canceled→archived. US spelling
+> `canceled` enforced repo-wide (no `cancelled`).
+>
+> All four ADR-005 slices (close / unpublish-extend-patch / timing policy /
+> cancel-minimal) are now complete.
 >
 > **Tooling note**: scripts/rebuild-all.sh added — apps resolve @exam/* via
-> built dist, so rebuild dist before running filtered tests.
+> built dist, so rebuild dist before running filtered tests
 
 ## 1. Summary
 

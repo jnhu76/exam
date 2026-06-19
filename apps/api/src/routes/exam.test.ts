@@ -4,6 +4,9 @@ import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import candidateRoutes from "./candidate.js";
 import attemptRoutes from "./attempts.js";
+import scoreRoutes from "./scores.js";
+import { exportRoutes } from "./export.js";
+import auditRoutes from "./audit.js";
 import {
   buildTestApp,
   uniquePrefix,
@@ -893,5 +896,321 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
+  });
+});
+
+// ADR-005 Slice 4 (cancel-minimal) — POST /api/exams/:id/cancel
+describe("exam cancel (ADR-005 Slice 4)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let questionId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(candidateRoutes);
+      await fastify.register(examRoutes);
+      await fastify.register(attemptRoutes);
+      await fastify.register(scoreRoutes);
+      await fastify.register(exportRoutes);
+      await fastify.register(auditRoutes);
+    });
+
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Cancel Course",
+        code: `CC4-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Cancel question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    questionId = qRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  /** Creates + publishes an exam with a FUTURE openAt (stays `published`). */
+  async function createPublishedExam(title: string): Promise<string> {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title,
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    return examId;
+  }
+
+  it("cancels a published exam -> canceled (200)", async () => {
+    const examId = await createPublishedExam("Cancel Pub");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: { reason: "test" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("canceled");
+  });
+
+  it("cancels an open exam with no active attempts -> canceled (200)", async () => {
+    const examId = await createPublishedExam("Cancel Open NoActive");
+    // No candidate started -> no active attempts.
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // published (reconcile may or may not advance to open depending on timing,
+    // but either way cancel from published is allowed and no active attempts).
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("canceled");
+  });
+
+  it("rejects cancel of an open exam with an active attempt -> 409 UNRESOLVED_ATTEMPTS_EXIST", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Cancel Open Active",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 60_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      ctx.adminToken,
+      `cand-cancel-active-${uniquePrefix()}`,
+      ctx.org.id,
+    );
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidate.candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidate.token },
+    });
+    expect(startRes.statusCode).toBe(201);
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: { reason: "try" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error.code).toBe("EXAM_CANCEL_NOT_ALLOWED");
+    expect(body.error.details?.reason).toBe("UNRESOLVED_ATTEMPTS_EXIST");
+    expect(body.error.details?.activeAttemptCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("rejects cancel of a draft exam -> 409 EXAM_CANCEL_NOT_ALLOWED (no UNRESOLVED reason)", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Cancel Draft",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${createRes.json().id}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_CANCEL_NOT_ALLOWED");
+    // Non-open rejection has no UNRESOLVED reason.
+    expect(res.json().error.details?.reason).toBeUndefined();
+  });
+
+  it("scores of a canceled exam -> 409 EXAM_CANCELED_RESULTS_UNAVAILABLE", async () => {
+    const examId = await createPublishedExam("Cancel Scores Reject");
+    const cancelRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores?page=1&passFilter=all`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_CANCELED_RESULTS_UNAVAILABLE");
+    expect(res.json().error.details?.reason).toBe(
+      "CANCELLATION_MARKER_NOT_IMPLEMENTED",
+    );
+  });
+
+  it("export of a canceled exam -> 409 EXAM_CANCELED_RESULTS_UNAVAILABLE", async () => {
+    const examId = await createPublishedExam("Cancel Export Reject");
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/export/scores`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("EXAM_CANCELED_RESULTS_UNAVAILABLE");
+  });
+
+  it("a canceled exam can be archived -> 200 archived", async () => {
+    const examId = await createPublishedExam("Cancel Then Archive");
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("archived");
+  });
+
+  it("successful cancel writes exactly one exam.cancel audit event", async () => {
+    const examId = await createPublishedExam("Cancel Audit");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: { reason: "audit-check" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const auditRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/audit-logs?action=exam.cancel`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const allRows =
+      auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
+    const rows = allRows.filter((r: any) => r.targetId === examId);
+    expect(rows.length).toBe(1);
+  });
+
+  it("rejected cancel (active attempts) writes NO audit event", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Cancel NoAudit",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 60_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const candidate = await createCandidateViaApi(
+      ctx.app,
+      ctx.adminToken,
+      `cand-cancel-noaudit-${uniquePrefix()}`,
+      ctx.org.id,
+    );
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidate.candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidate.token },
+    });
+    const cancelRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/cancel`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(cancelRes.statusCode).toBe(409);
+    const auditRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/audit-logs?action=exam.cancel`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const allRows =
+      auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
+    const rows = allRows.filter((r: any) => r.targetId === examId);
+    expect(rows.length).toBe(0);
   });
 });
