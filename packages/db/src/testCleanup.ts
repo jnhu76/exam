@@ -32,21 +32,7 @@ async function deleteOrganizationTreeOnce(
   organizationId: string,
 ): Promise<void> {
   await executeInTransaction(db, async (tx) => {
-    await tx
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, organizationId));
-    await tx
-      .delete(schema.examAttempts)
-      .where(eq(schema.examAttempts.organizationId, organizationId));
-    await tx
-      .delete(schema.examEnrollments)
-      .where(eq(schema.examEnrollments.organizationId, organizationId));
-    await tx
-      .delete(schema.exams)
-      .where(eq(schema.exams.organizationId, organizationId));
-    await tx
-      .delete(schema.questions)
-      .where(eq(schema.questions.organizationId, organizationId));
+    await deleteExamBusinessData(tx, organizationId);
     await tx
       .delete(schema.candidateProfiles)
       .where(eq(schema.candidateProfiles.organizationId, organizationId));
@@ -56,9 +42,6 @@ async function deleteOrganizationTreeOnce(
     await tx
       .delete(schema.organizationSettings)
       .where(eq(schema.organizationSettings.organizationId, organizationId));
-    await tx
-      .delete(schema.courses)
-      .where(eq(schema.courses.organizationId, organizationId));
     await tx
       .delete(schema.users)
       .where(eq(schema.users.organizationId, organizationId));
@@ -70,6 +53,35 @@ async function deleteOrganizationTreeOnce(
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Shared: delete exam-business rows (audit, attempts, enrollments, exams,
+ * questions, courses) for one organization. Used by organization tree cleanup,
+ * {@link cleanupOrganizationChildData}, and {@link cleanupBusinessData}.
+ */
+async function deleteExamBusinessData(
+  tx: Database,
+  organizationId: string,
+): Promise<void> {
+  await tx
+    .delete(schema.auditLogs)
+    .where(eq(schema.auditLogs.organizationId, organizationId));
+  await tx
+    .delete(schema.examAttempts)
+    .where(eq(schema.examAttempts.organizationId, organizationId));
+  await tx
+    .delete(schema.examEnrollments)
+    .where(eq(schema.examEnrollments.organizationId, organizationId));
+  await tx
+    .delete(schema.exams)
+    .where(eq(schema.exams.organizationId, organizationId));
+  await tx
+    .delete(schema.questions)
+    .where(eq(schema.questions.organizationId, organizationId));
+  await tx
+    .delete(schema.courses)
+    .where(eq(schema.courses.organizationId, organizationId));
 }
 
 /**
@@ -141,21 +153,7 @@ export async function cleanupOrganizationChildData(
   organizationId: string,
 ): Promise<void> {
   await executeInTransaction(db, async (tx) => {
-    await tx
-      .delete(schema.auditLogs)
-      .where(eq(schema.auditLogs.organizationId, organizationId));
-    await tx
-      .delete(schema.examAttempts)
-      .where(eq(schema.examAttempts.organizationId, organizationId));
-    await tx
-      .delete(schema.examEnrollments)
-      .where(eq(schema.examEnrollments.organizationId, organizationId));
-    await tx
-      .delete(schema.exams)
-      .where(eq(schema.exams.organizationId, organizationId));
-    await tx
-      .delete(schema.questions)
-      .where(eq(schema.questions.organizationId, organizationId));
+    await deleteExamBusinessData(tx, organizationId);
     await tx
       .delete(schema.candidateProfiles)
       .where(eq(schema.candidateProfiles.organizationId, organizationId));
@@ -165,8 +163,35 @@ export async function cleanupOrganizationChildData(
     await tx
       .delete(schema.organizationSettings)
       .where(eq(schema.organizationSettings.organizationId, organizationId));
-    await tx
-      .delete(schema.courses)
-      .where(eq(schema.courses.organizationId, organizationId));
+  });
+}
+
+/**
+ * Test-only: delete exam-related business data (audit, attempts, enrollments,
+ * exams, questions, courses) for a given organization while KEEPING the
+ * organization, users, candidate profiles, and candidate fields intact.
+ *
+ * Use this to reset test state between tests that share an organization
+ * (e.g. deadline scanner tests, tenant-isolation tests) without destroying
+ * the org that subsequent tests depend on. Idempotent.
+ *
+ * DIFFERENCE FROM `cleanupOrganizationChildData`:
+ * This helper is intentionally narrower — it only deletes exam-business
+ * tables that accumulate across test runs and cause cross-run pollution.
+ * It preserves org-level configuration (settings, candidate fields/profiles)
+ * and user accounts that tests rely on for authentication.
+ *
+ * NOTE: Because the organization row is preserved, a late fire-and-forget
+ * audit insert after this transaction will NOT cause a foreign-key violation
+ * (the org still exists). The orphan audit row will be cleaned up by the
+ * next call or by `cleanupOrganizationTestData` at suite teardown. This is
+ * acceptable for test-state isolation purposes.
+ */
+export async function cleanupBusinessData(
+  db: Database,
+  organizationId: string,
+): Promise<void> {
+  await executeInTransaction(db, async (tx) => {
+    await deleteExamBusinessData(tx, organizationId);
   });
 }
