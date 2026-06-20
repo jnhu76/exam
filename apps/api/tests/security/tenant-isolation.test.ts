@@ -21,7 +21,10 @@ import systemRoutes from "../../src/routes/system.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
-import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import {
+  cleanupOrganizationTestData,
+  cleanupBusinessData,
+} from "@exam/db/src/testCleanup.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -226,7 +229,7 @@ describe("Tenant Isolation (S01)", () => {
 
   afterAll(async () => {
     await app.close();
-    await cleanupOrganizationTestData(db, orgA.id);
+    await cleanupBusinessData(db, orgA.id);
     await cleanupOrganizationTestData(db, orgB.id);
     await sql.end();
   });
