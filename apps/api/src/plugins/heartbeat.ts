@@ -68,7 +68,13 @@ export async function scanForDisruptedAttempts(
         }
       } catch (err) {
         failedCount++;
-        options.onError?.(attempt.id, err);
+        // Guard the error callback itself: a throwing onError must not abort
+        // the scan loop and skip the remaining stale attempts.
+        try {
+          options.onError?.(attempt.id, err);
+        } catch {
+          /* error-reporting failure is non-fatal */
+        }
       }
     }
   }

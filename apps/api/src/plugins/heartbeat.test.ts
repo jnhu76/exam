@@ -184,5 +184,44 @@ describe("heartbeat plugin", () => {
       expect(onError).toHaveBeenCalledTimes(1);
       expect(onError.mock.calls[0]![0]).toBe("fail-1");
     });
+
+    it("continues scanning remaining attempts when onError itself throws", async () => {
+      const now = new Date("2025-01-01T11:00:00Z");
+      const timeoutMs = 60_000;
+      const visitedIds: string[] = [];
+      const onDisrupted = vi.fn(async (id: string) => {
+        visitedIds.push(id);
+        throw new Error("transient db error");
+      });
+      // A misbehaving error callback that throws must NOT abort the scan loop.
+      const throwingOnError = vi.fn(() => {
+        throw new Error("buggy error reporter");
+      });
+
+      const scanResult = await scanForDisruptedAttempts(
+        [
+          {
+            id: "att-1",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+          {
+            id: "att-2",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+        ],
+        now,
+        timeoutMs,
+        onDisrupted,
+        { onError: throwingOnError },
+      );
+
+      // Both attempts were visited despite onError throwing for the first.
+      expect(visitedIds).toEqual(["att-1", "att-2"]);
+      expect(scanResult.failedCount).toBe(2);
+      expect(scanResult.markedCount).toBe(0);
+      expect(throwingOnError).toHaveBeenCalledTimes(2);
+    });
   });
 });
