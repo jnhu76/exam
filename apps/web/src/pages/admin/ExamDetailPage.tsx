@@ -342,6 +342,14 @@ export function ExamDetailPage() {
                 延长时间
               </Button>
             )}
+            {exam.status === "open" && (
+              <Button
+                variant="outline"
+                onClick={() => void navigate(`/admin/exams/${id}/proctor`)}
+              >
+                监考
+              </Button>
+            )}
             {exam.status === "published" && (
               <ConfirmDialog
                 trigger={

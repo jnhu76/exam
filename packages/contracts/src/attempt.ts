@@ -368,3 +368,43 @@ export const CandidateExamDetailResponseSchema = z.object({
 export type CandidateExamDetailResponse = z.infer<
   typeof CandidateExamDetailResponseSchema
 >;
+
+// ── Candidate Status (Admin / Proctor) ──────────────────────────
+
+/**
+ * Schema for a single candidate's live status in the proctor dashboard.
+ * Used by GET /api/admin/exams/:examId/candidates/status (P2C-J5).
+ */
+export const CandidateStatusItemSchema = z.object({
+  candidateId: z.string().uuid(),
+  name: z.string(),
+  attemptId: z.string().uuid().nullable(),
+  status: z.enum([
+    "not_started",
+    "in_progress",
+    "disrupted",
+    "submitted",
+    "grading",
+    "graded",
+    "voided",
+  ]),
+  deadlineAt: z.string().datetime().nullable(),
+  lastActivityAt: z.string().datetime().nullable(),
+  misconduct: MisconductFlagSchema.nullable(),
+});
+
+/** DTO for a single candidate's live status in the proctor dashboard. */
+export type CandidateStatusItem = z.infer<typeof CandidateStatusItemSchema>;
+
+/**
+ * Response schema for the proctor dashboard candidate status endpoint.
+ */
+export const CandidateStatusResponseSchema = z.object({
+  candidates: z.array(CandidateStatusItemSchema),
+  total: z.number().int().nonnegative(),
+});
+
+/** Response type for the proctor dashboard candidate status endpoint. */
+export type CandidateStatusResponse = z.infer<
+  typeof CandidateStatusResponseSchema
+>;

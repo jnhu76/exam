@@ -187,6 +187,38 @@ export function createAttemptRepo(db: Database) {
         )) as AttemptSelect[];
     },
     /**
+     * Lists ALL attempts for a given exam, joined with candidate profiles and
+     * users to include candidate name. Unlike listGradedByExam, this returns
+     * attempts in ANY status (not just graded). Used by the proctor dashboard
+     * status aggregation (P2C-J5).
+     */
+    async listByExam(ctx: TenantContext | RequestContext, examId: string) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      return (await db
+        .select({
+          attempt: examAttempts,
+          candidateProfile: candidateProfiles,
+          candidateUser: users,
+        })
+        .from(examAttempts)
+        .innerJoin(
+          candidateProfiles,
+          eq(examAttempts.candidateId, candidateProfiles.id),
+        )
+        .innerJoin(users, eq(candidateProfiles.userId, users.id))
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.examId, examId),
+          ),
+        )) as {
+        attempt: AttemptSelect;
+        candidateProfile: CandidateSelect;
+        candidateUser: UserSelect;
+      }[];
+    },
+
+    /**
      * Lists graded attempts for an exam with optional pass/fail filter,
      * sorting, and pagination. Joins with candidate profiles and users
      * to include candidate name.
