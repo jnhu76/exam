@@ -2930,5 +2930,22 @@ describe("attempt routes", () => {
       });
       expect(res.statusCode).toBe(404);
     });
+
+    it("rejects a non-admin (candidate) with 403", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Misconduct Flag Forbidden Exam",
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/misconduct`,
+        payload: { severity: "warning", notes: "x" },
+        cookies: { "auth-token": t.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(403);
+    });
   });
 });
