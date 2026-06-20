@@ -51,6 +51,7 @@ import {
   buildErrorResponse,
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
+import { buildCandidateStatusItems } from "../lib/proctorService.js";
 
 /** Convert an Exam domain entity to the API response shape with ISO date strings. */
 function toExamResponse(exam: Exam) {
@@ -1401,53 +1402,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollments = (await enrollmentRepo.list(ctx)).filter(
-        (e) => e.examId === examId,
-      );
-      const candidateRepo = createCandidateRepo(fastify.db);
-      const userRepo = createUserRepo(fastify.db);
-      const attemptRepo = createAttemptRepo(fastify.db);
-
-      // Map candidateId → latest attempt for fast lookup
-      const allAttempts = await attemptRepo.listByExam(ctx, examId);
-      const latestAttemptByCandidate = new Map<
-        string,
-        (typeof allAttempts)[number]["attempt"]
-      >();
-      for (const row of allAttempts) {
-        const existing = latestAttemptByCandidate.get(row.attempt.candidateId);
-        if (!existing || row.attempt.createdAt > existing.createdAt) {
-          latestAttemptByCandidate.set(row.attempt.candidateId, row.attempt);
-        }
-      }
-
-      const statusItems = await Promise.all(
-        enrollments.map(async (enrollment) => {
-          const candidate = await candidateRepo.findById(
-            ctx,
-            enrollment.candidateId,
-          );
-          const user = candidate
-            ? await userRepo.findById(ctx, candidate.userId)
-            : null;
-          const attempt = latestAttemptByCandidate.get(enrollment.candidateId);
-
-          return {
-            candidateId: enrollment.candidateId,
-            name: user?.name ?? "-",
-            attemptId: attempt?.id ?? null,
-            status: attempt?.status ?? "not_started",
-            deadlineAt: attempt?.deadlineAt?.toISOString() ?? null,
-            lastActivityAt: attempt?.lastActivityAt?.toISOString() ?? null,
-            misconduct: attempt?.misconduct ?? null,
-          };
-        }),
+      const candidates = await buildCandidateStatusItems(
+        fastify.db,
+        ctx,
+        examId,
       );
 
       return CandidateStatusResponseSchema.parse({
-        candidates: statusItems,
-        total: statusItems.length,
+        candidates,
+        total: candidates.length,
       });
     },
   );

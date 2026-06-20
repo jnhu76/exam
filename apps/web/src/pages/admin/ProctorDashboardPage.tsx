@@ -436,7 +436,8 @@ export function ProctorDashboardPage() {
                 )}
                 {isLive && candidate.attemptId && (
                   <div className="flex flex-wrap gap-2 mt-1">
-                    {candidate.status === "in_progress" && (
+                    {(candidate.status === "in_progress" ||
+                      candidate.status === "disrupted") && (
                       <ConfirmDialog
                         trigger={
                           <Button
