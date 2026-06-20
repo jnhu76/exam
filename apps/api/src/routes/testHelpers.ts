@@ -83,13 +83,26 @@ const TEST_DB_URL =
  * Builds a fully configured Fastify test application with a fresh Postgres
  * database, seeded data, auth/tenant/rateLimit plugins, and the provided
  * route plugin. Returns a TestContext with tokens and cleanup.
+ *
+ * When `opts.schemaName` is provided, the database connection runs against
+ * the specified PostgreSQL schema (test isolation). Otherwise the default
+ * shared schema (`public`) is used.
  */
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,
-  opts?: { prefix?: string; rateLimit?: boolean },
+  opts?: {
+    prefix?: string;
+    rateLimit?: boolean;
+    databaseUrl?: string;
+    schemaName?: string;
+  },
 ): Promise<TestContext> {
-  const conn = await createDatabase(TEST_DB_URL);
-  await migratePostgres(conn.db);
+  const dbUrl = opts?.databaseUrl ?? TEST_DB_URL;
+  const conn = await createDatabase(dbUrl, opts?.schemaName);
+  await migratePostgres(
+    conn.db,
+    opts?.schemaName ? { migrationsSchema: opts.schemaName } : undefined,
+  );
   const db = conn.db;
 
   const seedResult = await seed(db, hashPassword);
