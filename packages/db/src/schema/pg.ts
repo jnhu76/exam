@@ -3,6 +3,7 @@ import type {
   Attachment,
   ControlFlags,
   GradingRule,
+  MisconductFlag,
   QuestionScoreResult,
   QuestionSnapshot,
 } from "@exam/domain";
@@ -286,6 +287,7 @@ export const examAttempts = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    misconduct: jsonb("misconduct").$type<MisconductFlag | null>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

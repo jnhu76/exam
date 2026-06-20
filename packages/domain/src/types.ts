@@ -12,6 +12,7 @@ import type {
   MultiSelectScoring,
   FillBlankMatchMode,
   ConflictReason,
+  MisconductSeverity,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -296,6 +297,28 @@ export interface ExamAttempt {
   lastActivityAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Admin/Proctor misconduct flag (P2C-J4). Null when the attempt has not
+   * been flagged; set via the flag-misconduct command (idempotent re-flag
+   * overwrites). Does not change `status`.
+   */
+  misconduct?: MisconductFlag | null;
+}
+
+/**
+ * Misconduct flag recorded on an exam attempt (P2C-J4).
+ *
+ * Stored as a single jsonb column on `exam_attempts`.
+ */
+export interface MisconductFlag {
+  /** When the flag was recorded (server time authority). */
+  flaggedAt: Date;
+  /** Actor id of the admin/proctor who recorded the flag. */
+  flaggedBy: string;
+  /** Free-text note describing the irregularity. */
+  notes: string;
+  /** Severity of the misconduct. */
+  severity: MisconductSeverity;
 }
 
 // ── Answer Record ─────────────────────────────────────────────────

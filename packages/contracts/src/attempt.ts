@@ -3,6 +3,20 @@ import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
+const MisconductSeverityEnum = z.enum(["warning", "serious"]);
+
+/**
+ * Schema for a misconduct flag recorded on an attempt (P2C-J4).
+ */
+export const MisconductFlagSchema = z.object({
+  flaggedAt: z.string().datetime(),
+  flaggedBy: z.string(),
+  notes: z.string().min(1).max(1000),
+  severity: MisconductSeverityEnum,
+});
+/** DTO for a misconduct flag. */
+export type MisconductFlagDTO = z.infer<typeof MisconductFlagSchema>;
+
 const AttemptStatusEnum = z.enum([
   "not_started",
   "queued",
@@ -98,6 +112,7 @@ export const AttemptSchema = z.object({
   submittedAt: z.string().datetime().optional(),
   deadlineAt: z.string().datetime().optional(),
   lastActivityAt: z.string().datetime().optional(),
+  misconduct: MisconductFlagSchema.nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -248,32 +263,28 @@ export const RestoreAttemptRequestSchema = z.object({
 /** Type for a restore-attempt request. */
 export type RestoreAttemptRequest = z.infer<typeof RestoreAttemptRequestSchema>;
 
-// ── Force Submit (Admin) ──────────────────────────────────────────
+// ── Flag Misconduct (Admin) ──────────────────────────────────────
 
 /**
- * Request body schema for an admin force-submitting an attempt.
- * `reason` is an optional human-readable note recorded in the audit log.
+ * Request body schema for an admin flagging misconduct on an attempt.
  */
-export const ForceSubmitRequestSchema = z.object({
-  reason: z.string().max(500).optional(),
+export const FlagMisconductRequestSchema = z.object({
+  severity: MisconductSeverityEnum,
+  notes: z.string().min(1).max(1000),
 });
 
-/** Type for a force-submit request body. */
-export type ForceSubmitRequest = z.infer<typeof ForceSubmitRequestSchema>;
+/** Type for a flag-misconduct request body. */
+export type FlagMisconductRequest = z.infer<typeof FlagMisconductRequestSchema>;
 
-// ── Extend Time (Admin) ──────────────────────────────────────────
-
-/**
- * Request body schema for an admin extending an attempt's deadline by a
- * positive number of minutes. Only in_progress/disrupted attempts may be
- * extended; an extension beyond exam.closeAt is rejected.
- */
-export const ExtendTimeRequestSchema = z.object({
-  additionalMinutes: z.number().int().positive(),
+/** Response schema for a flag-misconduct action. */
+export const FlagMisconductResponseSchema = z.object({
+  ok: z.literal(true),
 });
 
-/** Type for an extend-time request body. */
-export type ExtendTimeRequest = z.infer<typeof ExtendTimeRequestSchema>;
+/** Type for a flag-misconduct response. */
+export type FlagMisconductResponse = z.infer<
+  typeof FlagMisconductResponseSchema
+>;
 
 // ── Queue ─────────────────────────────────────────────────────────
 

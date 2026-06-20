@@ -2,6 +2,8 @@ import type {
   Exam,
   ExamAttempt,
   ExamEnrollment,
+  MisconductFlag,
+  MisconductSeverity,
   QuestionSnapshot,
   SubmitSource,
 } from "@exam/domain";
@@ -11,6 +13,7 @@ import {
   AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
   InvalidStateTransitionError,
+  NotFoundError,
   ValidationError,
   MaxAttemptsReachedError,
   ExamAlreadyPassedError,
@@ -371,60 +374,43 @@ export async function restoreAttempt(
 }
 
 /**
- * Extends an attempt's deadline by a positive number of minutes (admin
- * intervention). Allowed for in_progress/disrupted attempts only. Unlike
- * `restoreAttempt`, the extension is REJECTED (not clamped) when the new
- * deadline would exceed `exam.closeAt`.
- *
- * P2C-J3 §16/§17: no state transition — only `deadlineAt` is updated. The
- * caller is expected to wrap this in `executeInTransaction` and to use a
- * `findByIdForUpdate`-backed attempt repo so the read+update is atomic
- * against concurrent candidate saves / scanner activity.
+ * Records a misconduct flag on an attempt (P2C-J4). Does NOT change
+ * `status` — the flag is informational. Allowed on any attempt status (§16).
+ * Idempotent: re-flagging overwrites the previous flag. No transaction or row
+ * lock (§17) — a single best-effort jsonb update.
  */
-export async function extendAttemptTime(
-  examRepo: ExamRepository,
+export async function flagMisconduct(
   attemptRepo: AttemptRepository,
   attemptId: string,
-  additionalMinutes: number,
+  actorId: string,
+  severity: MisconductSeverity,
+  notes: string,
   now: Date,
 ): Promise<ExamAttempt> {
-  if (!Number.isInteger(additionalMinutes) || additionalMinutes <= 0) {
-    throw new ValidationError("additionalMinutes must be a positive integer");
+  const trimmed = notes.trim();
+  if (trimmed.length === 0) {
+    throw new ValidationError("misconduct notes must not be empty");
+  }
+  if (trimmed.length > 1000) {
+    throw new ValidationError("misconduct notes must be at most 1000 chars");
   }
 
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  // P2C-J4 §16: allowed on any attempt status. No state transition, no
+  // row lock (§17: transaction=no, row lock=no) — flagging is a single
+  // best-effort jsonb update.
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
-    throw new ValidationError("Attempt not found");
+    throw new NotFoundError("Attempt not found");
   }
 
-  // No state transition, but only active/abandoned attempts are extendable.
-  if (attempt.status !== "in_progress" && attempt.status !== "disrupted") {
-    throw new InvalidStateTransitionError(
-      `Cannot extend time for attempt in ${attempt.status} state`,
-    );
-  }
+  const flag: MisconductFlag = {
+    flaggedAt: now,
+    flaggedBy: actorId,
+    notes: trimmed,
+    severity,
+  };
 
-  const exam = await examRepo.findById(attempt.examId);
-  if (!exam) {
-    throw new ValidationError("Exam not found");
-  }
-
-  // Base the extension on the existing deadline, or `now` if none is set.
-  const baseMs = attempt.deadlineAt
-    ? attempt.deadlineAt.getTime()
-    : now.getTime();
-  const newDeadlineAt = new Date(baseMs + additionalMinutes * 60_000);
-
-  if (newDeadlineAt.getTime() > exam.closeAt.getTime()) {
-    throw new AttemptDeadlineExceedsExamCloseError({
-      newDeadlineAt,
-      examCloseAt: exam.closeAt,
-    });
-  }
-
-  const updated = await attemptRepo.update(attemptId, {
-    deadlineAt: newDeadlineAt,
-  });
-  if (!updated) throw new ValidationError("Attempt not found after update");
+  const updated = await attemptRepo.update(attemptId, { misconduct: flag });
+  if (!updated) throw new NotFoundError("Attempt not found after update");
   return updated;
 }

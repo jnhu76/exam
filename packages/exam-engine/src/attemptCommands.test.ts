@@ -4,7 +4,7 @@ import {
   submitAttempt,
   markDisrupted,
   restoreAttempt,
-  extendAttemptTime,
+  flagMisconduct,
   type AttemptRepository,
   type EnrollmentRepository,
 } from "./attemptCommands.js";
@@ -22,6 +22,7 @@ import {
   ValidationError,
   MaxAttemptsReachedError,
 } from "@exam/domain";
+import { MisconductSeverity } from "@exam/domain";
 
 function makeSnapshot(): QuestionSnapshot[] {
   return [
@@ -890,87 +891,88 @@ describe("attemptCommands", () => {
     });
   });
 
-  describe("extendAttemptTime", () => {
+  describe("flagMisconduct", () => {
     const fixedNow = new Date("2025-01-01T10:30:00Z");
 
-    it("extends an in_progress attempt's deadline by additionalMinutes", async () => {
-      const attempt = makeAttempt({
-        deadlineAt: new Date("2025-01-01T11:00:00Z"),
-      });
-      const attRepo = makeAttemptRepo([attempt]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+    it("records a misconduct flag on an in_progress attempt without changing status", async () => {
+      const attempt = makeAttempt({ status: "in_progress" });
+      const repo = makeAttemptRepo([attempt]);
 
-      const result = await extendAttemptTime(
-        examRepo,
-        attRepo,
+      const result = await flagMisconduct(
+        repo,
         "attempt-1",
-        15,
+        "admin-1",
+        MisconductSeverity.Serious,
+        "looked at phone",
         fixedNow,
       );
 
-      // 11:00 + 15min = 11:15, still before exam closeAt 12:00.
-      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:15:00Z"));
+      expect(result.misconduct).toEqual({
+        flaggedAt: fixedNow,
+        flaggedBy: "admin-1",
+        notes: "looked at phone",
+        severity: "serious",
+      });
       expect(result.status).toBe("in_progress");
     });
 
-    it("extends a disrupted attempt's deadline", async () => {
-      const attempt = makeAttempt({
-        status: "disrupted",
-        deadlineAt: new Date("2025-01-01T11:00:00Z"),
-      });
-      const attRepo = makeAttemptRepo([attempt]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+    it("overwrites a previous flag on re-flag (idempotent upsert)", async () => {
+      const attempt = makeAttempt({ status: "in_progress" });
+      const repo = makeAttemptRepo([attempt]);
 
-      const result = await extendAttemptTime(
-        examRepo,
-        attRepo,
+      await flagMisconduct(
+        repo,
         "attempt-1",
-        30,
+        "admin-1",
+        MisconductSeverity.Warning,
+        "first note",
+        fixedNow,
+      );
+      const later = new Date("2025-01-01T11:00:00Z");
+      const result = await flagMisconduct(
+        repo,
+        "attempt-1",
+        "admin-2",
+        MisconductSeverity.Serious,
+        "updated note",
+        later,
+      );
+
+      expect(result.misconduct).toEqual({
+        flaggedAt: later,
+        flaggedBy: "admin-2",
+        notes: "updated note",
+        severity: "serious",
+      });
+    });
+
+    it("allows flagging a voided attempt (any state per P2C-J4 §16)", async () => {
+      const repo = makeAttemptRepo([makeAttempt({ status: "voided" })]);
+
+      const result = await flagMisconduct(
+        repo,
+        "attempt-1",
+        "admin-1",
+        MisconductSeverity.Warning,
+        "note",
         fixedNow,
       );
 
-      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
-      expect(result.status).toBe("disrupted");
+      expect(result.misconduct?.severity).toBe("warning");
+      expect(result.status).toBe("voided");
     });
-
-    it("rejects with AttemptDeadlineExceedsExamCloseError when new deadline > exam.closeAt", async () => {
-      const attempt = makeAttempt({
-        deadlineAt: new Date("2025-01-01T11:00:00Z"),
-      });
-      const attRepo = makeAttemptRepo([attempt]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
-
-      // 11:00 + 120min = 13:00 > exam closeAt 12:00.
-      await expect(
-        extendAttemptTime(examRepo, attRepo, "attempt-1", 120, fixedNow),
-      ).rejects.toThrow(AttemptDeadlineExceedsExamCloseError);
-
-      // Deadline must be unchanged after rejection.
-      const after = await attRepo.findById("attempt-1");
-      expect(after?.deadlineAt).toEqual(new Date("2025-01-01T11:00:00Z"));
-    });
-
-    it("throws InvalidStateTransitionError for submitted/graded/voided attempts", async () => {
-      const attRepo = makeAttemptRepo([makeAttempt({ status: "submitted" })]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+    it("throws ValidationError for empty notes", async () => {
+      const repo = makeAttemptRepo([makeAttempt()]);
 
       await expect(
-        extendAttemptTime(examRepo, attRepo, "attempt-1", 10, fixedNow),
-      ).rejects.toThrow(InvalidStateTransitionError);
-    });
-
-    it("throws ValidationError for non-positive or non-integer additionalMinutes", async () => {
-      const attRepo = makeAttemptRepo([makeAttempt()]);
-      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
-
-      await expect(
-        extendAttemptTime(examRepo, attRepo, "attempt-1", 0, fixedNow),
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        extendAttemptTime(examRepo, attRepo, "attempt-1", -5, fixedNow),
-      ).rejects.toThrow(ValidationError);
-      await expect(
-        extendAttemptTime(examRepo, attRepo, "attempt-1", 5.5, fixedNow),
+        flagMisconduct(
+          repo,
+          "attempt-1",
+          "admin-1",
+          MisconductSeverity.Warning,
+          "   ",
+          fixedNow,
+        ),
       ).rejects.toThrow(ValidationError);
     });
   });
