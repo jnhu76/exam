@@ -3,7 +3,7 @@ import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
-const MisconductSeverityEnum = z.enum(["warning", "severe"]);
+const MisconductSeverityEnum = z.enum(["warning", "serious"]);
 
 /**
  * Schema for a misconduct flag recorded on an attempt (P2C-J4).

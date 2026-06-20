@@ -902,7 +902,7 @@ describe("attemptCommands", () => {
         repo,
         "attempt-1",
         "admin-1",
-        MisconductSeverity.Severe,
+        MisconductSeverity.Serious,
         "looked at phone",
         fixedNow,
       );
@@ -911,7 +911,7 @@ describe("attemptCommands", () => {
         flaggedAt: fixedNow,
         flaggedBy: "admin-1",
         notes: "looked at phone",
-        severity: "severe",
+        severity: "serious",
       });
       expect(result.status).toBe("in_progress");
     });
@@ -933,7 +933,7 @@ describe("attemptCommands", () => {
         repo,
         "attempt-1",
         "admin-2",
-        MisconductSeverity.Severe,
+        MisconductSeverity.Serious,
         "updated note",
         later,
       );
@@ -942,25 +942,25 @@ describe("attemptCommands", () => {
         flaggedAt: later,
         flaggedBy: "admin-2",
         notes: "updated note",
-        severity: "severe",
+        severity: "serious",
       });
     });
 
-    it("throws InvalidStateTransitionError for a voided attempt", async () => {
+    it("allows flagging a voided attempt (any state per P2C-J4 §16)", async () => {
       const repo = makeAttemptRepo([makeAttempt({ status: "voided" })]);
 
-      await expect(
-        flagMisconduct(
-          repo,
-          "attempt-1",
-          "admin-1",
-          MisconductSeverity.Warning,
-          "note",
-          fixedNow,
-        ),
-      ).rejects.toThrow(InvalidStateTransitionError);
-    });
+      const result = await flagMisconduct(
+        repo,
+        "attempt-1",
+        "admin-1",
+        MisconductSeverity.Warning,
+        "note",
+        fixedNow,
+      );
 
+      expect(result.misconduct?.severity).toBe("warning");
+      expect(result.status).toBe("voided");
+    });
     it("throws ValidationError for empty notes", async () => {
       const repo = makeAttemptRepo([makeAttempt()]);
 

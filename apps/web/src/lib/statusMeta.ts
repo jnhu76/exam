@@ -77,7 +77,7 @@ export const statusMeta = {
     tone: "warning",
     icon: Flag,
   },
-  misconduct_severe: {
+  misconduct_serious: {
     label: "违规-严重",
     tone: "destructive",
     icon: Flag,

@@ -81,7 +81,7 @@ interface MisconductFlag {
   flaggedAt: string;
   flaggedBy: string;
   notes: string;
-  severity: "warning" | "severe";
+  severity: "warning" | "serious";
 }
 
 /** Converts an answer value to a display-friendly string. */
@@ -112,7 +112,7 @@ export function AttemptDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
-  const [flagSeverity, setFlagSeverity] = useState<"warning" | "severe">(
+  const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
     "warning",
   );
   const [flagNotes, setFlagNotes] = useState("");
@@ -249,7 +249,7 @@ export function AttemptDetailPage() {
                 <Select
                   value={flagSeverity}
                   onValueChange={(v) =>
-                    setFlagSeverity(v as "warning" | "severe")
+                    setFlagSeverity(v as "warning" | "serious")
                   }
                 >
                   <SelectTrigger id="flag-severity">
@@ -257,7 +257,7 @@ export function AttemptDetailPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="warning">警告</SelectItem>
-                    <SelectItem value="severe">严重</SelectItem>
+                    <SelectItem value="serious">严重</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

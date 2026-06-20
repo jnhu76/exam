@@ -2862,8 +2862,8 @@ describe("attempt routes", () => {
 
       const res = await ctx.app.inject({
         method: "POST",
-        url: `/api/admin/attempts/${attemptId}/flag-misconduct`,
-        payload: { severity: "severe", notes: "candidate looked at notes" },
+        url: `/api/admin/attempts/${attemptId}/misconduct`,
+        payload: { severity: "serious", notes: "candidate looked at notes" },
         cookies: { "auth-token": t.adminToken },
       });
 
@@ -2875,7 +2875,7 @@ describe("attempt routes", () => {
         attemptId,
       );
       expect(attempt?.misconduct).toMatchObject({
-        severity: "severe",
+        severity: "serious",
         notes: "candidate looked at notes",
         flaggedBy: t.adminUserId,
       });
@@ -2888,17 +2888,17 @@ describe("attempt routes", () => {
         .from(schema.auditLogs)
         .where(eq(schema.auditLogs.targetId, attemptId));
       const flagRows = auditRows.filter(
-        (r) => r.action === "attempt.flagMisconduct",
+        (r) => r.action === "attempt.misconductFlagged",
       );
       expect(flagRows).toHaveLength(1);
       expect(flagRows[0]!.actorId).toBe(t.adminUserId);
       expect(flagRows[0]!.metadata).toMatchObject({
-        severity: "severe",
+        severity: "serious",
         notes: "candidate looked at notes",
       });
     });
 
-    it("rejects a voided attempt with 409", async () => {
+    it("allows flagging a voided attempt (any state per P2C-J4 §16, 200)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
@@ -2911,12 +2911,13 @@ describe("attempt routes", () => {
 
       const res = await ctx.app.inject({
         method: "POST",
-        url: `/api/admin/attempts/${attemptId}/flag-misconduct`,
+        url: `/api/admin/attempts/${attemptId}/misconduct`,
         payload: { severity: "warning", notes: "x" },
         cookies: { "auth-token": t.adminToken },
       });
 
-      expect(res.statusCode).toBe(409);
+      // §16: "Allowed states: any attempt status" — voided is flaggable.
+      expect(res.statusCode).toBe(200);
     });
 
     it("returns 404 for a non-existent attempt", async () => {

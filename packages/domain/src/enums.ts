@@ -199,11 +199,11 @@ export type ConflictReason =
  * Misconduct flag severity (P2C-J4).
  *
  * - `warning`: minor irregularity, logged but does not affect validity.
- * - `severe`: serious violation; may inform grading/validity review.
+ * - `serious`: serious violation; may inform grading/validity review.
  */
 export const MisconductSeverity = {
   Warning: "warning",
-  Severe: "severe",
+  Serious: "serious",
 } as const;
 export type MisconductSeverity =
   (typeof MisconductSeverity)[keyof typeof MisconductSeverity];

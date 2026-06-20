@@ -1237,10 +1237,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
    * POST /admin/attempts/:attemptId/flag-misconduct — Admin records a
    * misconduct flag on an attempt (informational; does not change status).
    * Idempotent (re-flag overwrites). voided is rejected. Audit:
-   * attempt.flagMisconduct. Response: { ok: true }.
+   * attempt.misconductFlagged. Response: { ok: true }.
    */
   fastify.post(
-    "/admin/attempts/:attemptId/flag-misconduct",
+    "/admin/attempts/:attemptId/misconduct",
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
       schema: {
@@ -1269,24 +1269,22 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       const { attemptId } = parsed.data;
       const { severity, notes } = body.data;
 
-      // flagMisconduct uses findByIdForUpdate; wrap in a transaction so the
-      // locked read + flag update are atomic.
-      await executeInTransaction(fastify.db, async (tx) => {
-        await flagMisconduct(
-          createAttemptRepoAdapter(createAttemptRepo(tx), ctx),
-          attemptId,
-          ctx.actorId,
-          severity,
-          notes,
-          fastify.now(),
-        );
-      });
+      // P2C-J4 §17: no transaction / no row lock. flagMisconduct performs a
+      // single best-effort jsonb update on the attempt.
+      await flagMisconduct(
+        createAttemptRepoAdapter(createAttemptRepo(fastify.db), ctx),
+        attemptId,
+        ctx.actorId,
+        severity,
+        notes,
+        fastify.now(),
+      );
 
       // Audit is awaited + best-effort (deterministic for tests).
       try {
         await createAuditLogRepo(fastify.db as Database).create(ctx, {
           actorId: ctx.actorId,
-          action: "attempt.flagMisconduct",
+          action: "attempt.misconductFlagged",
           targetType: "attempt",
           targetId: attemptId,
           metadata: {
@@ -1297,8 +1295,8 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         });
       } catch (err) {
         request.log.error(
-          { err, attemptId, action: "attempt.flagMisconduct" },
-          "Failed to record flag-misconduct audit",
+          { err, attemptId, action: "attempt.misconductFlagged" },
+          "Failed to record misconduct-flag audit",
         );
       }
 

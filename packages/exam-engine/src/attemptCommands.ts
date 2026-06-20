@@ -397,14 +397,12 @@ export async function flagMisconduct(
     throw new ValidationError("misconduct notes must be at most 1000 chars");
   }
 
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  // P2C-J4 §16: allowed on any attempt status. No state transition, no
+  // row lock (§17: transaction=no, row lock=no) — flagging is a single
+  // best-effort jsonb update.
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
-  }
-  if (attempt.status === "voided") {
-    throw new InvalidStateTransitionError(
-      `Cannot flag misconduct for attempt in ${attempt.status} state`,
-    );
   }
 
   const flag: MisconductFlag = {
