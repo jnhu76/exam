@@ -1,4 +1,12 @@
-import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  beforeEach,
+  afterAll,
+  afterEach,
+} from "vitest";
 import { eq, inArray, like, and, lte } from "drizzle-orm";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
@@ -11,7 +19,10 @@ import { scanDatabaseForDisruptedAttempts } from "../plugins/heartbeat.js";
 import { scanDatabaseForExpiredAttempts } from "../plugins/deadlineScanner.js";
 import { autoSubmitAndGrade } from "../plugins/deadlineScanner.js";
 import { getSaveAnswerMessage } from "@exam/contracts";
-import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import {
+  cleanupOrganizationTestData,
+  cleanupBusinessData,
+} from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import type { Database } from "@exam/db/src/types.js";
@@ -2051,6 +2062,18 @@ describe("attempt routes", () => {
             lte(schema.examAttempts.deadlineAt, new Date()),
           ),
         );
+    });
+
+    beforeEach(async () => {
+      const stale = await ctx.db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(
+          like(schema.organizations.slug, `${DEADLINE_SCANNER_TEST_PREFIX}%`),
+        );
+      for (const org of stale) {
+        await cleanupOrganizationTestData(ctx.db, org.id);
+      }
     });
 
     afterAll(async () => {

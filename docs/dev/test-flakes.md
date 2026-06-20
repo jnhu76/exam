@@ -129,7 +129,18 @@ pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行�
 
 ### BUG-FLAKE-003 — deadline scanner tests leak expired attempts across repeated runs
 
-**状态**: 已确认复现（2026-06-18，38 次运行 1 次失败，2.6% 触发率）。
+**状态**: 已缓解（2026-06-20，cleanup containment 方案）。根因修复（per-worker 独立 schema）仍待 B 方案。
+
+**修复（2026-06-20）**:
+
+1. `apps/api/src/routes/attempts.test.ts` deadline scanner describe block 添加 `beforeEach` 清理：每次测试前删除残留的 deadline-scanner-test-* 组织及其数据，确保每次测试从干净状态开始。
+2. 新增 `cleanupBusinessData()` helper（`packages/db/src/testCleanup.ts`）：删除考试业务数据（audit、attempts、enrollments、exams、questions、courses），保留组织、用户、候选数据。与 `cleanupOrganizationChildData` 共享底层 `deleteExamBusinessData` 私有 helper。
+3. 新增 stress 脚本 `scripts/test/deadline-scanner-stress.sh`：连续运行 deadline scanner 测试，默认 40 次。
+4. 新增 `cleanupBusinessData` 回归测试（`packages/db/src/testCleanup.test.ts`）。
+
+**验证**: 5 次 stress test 全过；`pnpm verify` 全过。
+
+**当前缓解**: `beforeEach` 清理 + `afterAll` 组织清理。跨 run 数据累积问题已消除。
 
 **失败位置**:
 
@@ -236,7 +247,16 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 
 ### BUG-FLAKE-004 — Intra-suite cross-file state leak via shared `exam_test` schema
 
-**状态**: 已确认（2026-06-19，RESOLVED-001 根因分析中发现）。
+**状态**: 已缓解（2026-06-20，explicit cleanup 方案）。根因修复（per-worker 独立 schema）仍待 B 方案。
+
+**修复（2026-06-20）**:
+
+1. `apps/api/tests/security/tenant-isolation.test.ts` `afterAll` 添加 `cleanupOrganizationTestData` 调用：确保测试结束后清理 orgA 和 orgB 的所有数据，不再污染后续测试文件。
+2. 同 BUG-FLAKE-003 修复中的 `cleanupBusinessData` helper 和共享 `deleteExamBusinessData` 私有 helper。
+
+**验证**: `pnpm verify` 全过。
+
+**当前缓解**: `afterAll` 显式清理。跨文件状态泄漏问题已消除。
 
 **失败位置**:
 
