@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-3300}:3000"
     environment:
       DATABASE_URL: postgresql://exam:exam@db:5432/exam
       JWT_SECRET: ${JWT_SECRET:-e2e-test-secret}
@@ -54,7 +54,7 @@ services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      - "${DB_HOST_PORT:-5432}:5432"
+      - "${DB_HOST_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
