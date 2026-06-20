@@ -33,6 +33,7 @@ import { ResultPage } from "@/pages/exam/ResultPage";
 import { ScoreListPage } from "@/pages/admin/ScoreListPage";
 import { ResultsOverviewPage } from "@/pages/admin/ResultsOverviewPage";
 import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
+import { ProctorDashboardPage } from "@/pages/admin/ProctorDashboardPage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
 import { SystemHealthPage } from "@/pages/admin/SystemHealthPage";
 
@@ -58,6 +59,7 @@ export function AppRoutes() {
         <Route path="exams/new" element={<ExamCreatePage />} />
         <Route path="exams/:id" element={<ExamDetailPage />} />
         <Route path="exams/:id/scores" element={<ScoreListPage />} />
+        <Route path="exams/:id/proctor" element={<ProctorDashboardPage />} />
         <Route path="results" element={<ResultsOverviewPage />} />
         <Route path="attempts/:id" element={<AttemptDetailPage />} />
         <Route path="*" element={<PlaceholderPage />} />

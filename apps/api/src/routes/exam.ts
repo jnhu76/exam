@@ -10,6 +10,7 @@ import {
   PaginationParamsSchema,
   EnrollCandidatesRequestSchema,
   ExamSchema,
+  CandidateStatusResponseSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -50,6 +51,7 @@ import {
   buildErrorResponse,
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
+import { buildCandidateStatusItems } from "../lib/proctorService.js";
 
 /** Convert an Exam domain entity to the API response shape with ISO date strings. */
 function toExamResponse(exam: Exam) {
@@ -1367,6 +1369,49 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         },
       );
       return reply.code(204).send();
+    },
+  );
+
+  /**
+   * GET /admin/exams/:examId/candidates/status — Returns the live status of
+   * every enrolled candidate for a given exam. Used by the proctor dashboard
+   * (P2C-J5) which polls this endpoint every 5 seconds. Admin only.
+   */
+  fastify.get(
+    "/admin/exams/:examId/candidates/status",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: examIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: CandidateStatusResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { examId } = request.params as { examId: string };
+      const examRepo = createExamRepo(fastify.db);
+      const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
+      if (!exam) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      const candidates = await buildCandidateStatusItems(
+        fastify.db,
+        ctx,
+        examId,
+      );
+
+      return CandidateStatusResponseSchema.parse({
+        candidates,
+        total: candidates.length,
+      });
     },
   );
 };

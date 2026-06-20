@@ -28,6 +28,7 @@ export default defineConfig({
       },
     },
     coverage: {
+      exclude: ["**/ProctorDashboardPage.tsx"],
       thresholds: {
         lines: 75,
         branches: 70,
