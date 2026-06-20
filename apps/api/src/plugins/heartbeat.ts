@@ -108,9 +108,9 @@ function createSystemContext(organizationId: string): RequestContext {
  *
  * @returns `true` when the attempt was transitioned `in_progress` →
  *   `disrupted`; `false` for a no-op race (the locked row was no longer
- *   `in_progress`, or it vanished). The audit write never fails the
- *   disruption — its errors are swallowed (logged by the caller's
- *   `onError` is intentionally not used here, matching the deadline scanner).
+ *   `in_progress`, or it vanished). The audit write is best-effort and
+ *   never fails the disruption; its errors are swallowed, matching the
+ *   deadline scanner.
  */
 export async function markAttemptDisrupted(
   db: Database,
