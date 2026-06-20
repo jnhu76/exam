@@ -15,6 +15,8 @@ import {
   SaveAnswerResponseSchema,
   StartAttemptRequestSchema,
   SubmitAttemptRequestSchema,
+  ForceSubmitRequestSchema,
+  AttemptIdParamsSchema,
   getSaveAnswerMessage,
   ErrorResponseSchema,
 } from "@exam/contracts";
@@ -52,6 +54,7 @@ import {
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
+  gradeAttemptIdempotent,
 } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
 import {
@@ -60,7 +63,9 @@ import {
   createEnrollmentRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { recordAudit } from "./audit.js";
-import { formatZodError } from "./helpers.js";
+import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import type { Database } from "@exam/db/src/types.js";
+import { ensureTargetOrg, formatZodError } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 // Wire response schemas (Zod) — single source of truth for serialization +
@@ -1222,6 +1227,129 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
       );
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt, fastify.now()),
+      );
+    },
+  );
+
+  /**
+   * POST /admin/attempts/:attemptId/force-submit — Admin force-submits an
+   * in_progress or disrupted attempt, then grades it. Idempotent for
+   * submitted/grading/graded (returns current result). voided is rejected.
+   * Audit event: attempt.forceSubmit (with admin identity + optional reason).
+   */
+  fastify.post(
+    "/admin/attempts/:attemptId/force-submit",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: AttemptIdParamsSchema,
+        body: ForceSubmitRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: LoadAttemptResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const body = ForceSubmitRequestSchema.safeParse(request.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send(formatZodError(request.id, body.error));
+      }
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { attemptId } = parsed.data;
+      const reason = body.data.reason;
+
+      const forceSubmitted = await executeInTransaction(
+        fastify.db,
+        async (tx) => {
+          const txAttemptRepo = createAttemptRepo(tx);
+          const locked = await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+          if (!locked) {
+            throw new NotFoundError("Attempt not found");
+          }
+          // voided is the only truly invalid state for force-submit.
+          if (locked.status === "voided") {
+            throw new InvalidStateTransitionError(
+              `Cannot force-submit attempt in ${locked.status} state`,
+            );
+          }
+          // Idempotent: already terminal (submitted/grading/graded) -> no-op.
+          const needsSubmit =
+            locked.status === "in_progress" || locked.status === "disrupted";
+          if (needsSubmit) {
+            // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
+            // guard (source = "proctor" — the SubmitSource for admin/proctor
+            // intervention; "admin" is not a valid SubmitSource value).
+            await submitAttempt(
+              createAttemptRepoAdapter(txAttemptRepo, ctx),
+              attemptId,
+              fastify.now(),
+              { source: "proctor" },
+            );
+            return true;
+          }
+          return false;
+        },
+      );
+
+      if (forceSubmitted) {
+        // Grade outside the submit transaction (matches candidate submit path).
+        await executeInTransaction(fastify.db, async (tx) => {
+          const txAttemptRepo = createAttemptRepo(tx);
+          await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+          await gradeAttemptIdempotent(
+            createExamRepoAdapter(createExamRepo(tx), ctx),
+            createEnrollmentRepoAdapter(createEnrollmentRepo(tx), ctx),
+            createAttemptRepoAdapter(txAttemptRepo, ctx),
+            attemptId,
+            fastify.now(),
+          );
+        });
+      }
+
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const attempt = await attemptRepo.findById(ctx, attemptId);
+      if (!attempt) {
+        throw new NotFoundError("Attempt not found after force-submit");
+      }
+
+      // Audit only when a real transition occurred (P2C-J2 review fix): an
+      // idempotent no-op (already submitted/grading/graded) must NOT emit a
+      // duplicate audit row. Awaited + best-effort so the row is committed
+      // before the response (spec §20/§23).
+      if (forceSubmitted) {
+        try {
+          await createAuditLogRepo(fastify.db as Database).create(ctx, {
+            actorId: ctx.actorId,
+            action: "attempt.forceSubmit",
+            targetType: "attempt",
+            targetId: attemptId,
+            metadata: {
+              requestId: request.id,
+              ...(reason ? { reason } : {}),
+            },
+            ipAddress: request.ip,
+            userAgent: request.headers["user-agent"],
+          });
+        } catch (err) {
+          request.log.error(
+            { err, attemptId, action: "attempt.forceSubmit" },
+            "Failed to record force-submit audit",
+          );
+        }
+      }
+
+      return LoadAttemptResponseSchema.parse(
+        toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
       );
     },
   );
