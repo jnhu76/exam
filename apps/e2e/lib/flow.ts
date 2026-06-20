@@ -99,6 +99,54 @@ export async function submitExam(page: Page): Promise<void> {
 
 // --- API-level helpers (for E2E specs that assert on response status/body) ---
 
+const MAX_LOGIN_RETRIES = 5;
+
+async function apiLogin(
+  request: APIRequestContext,
+  username: string,
+  password: string,
+  label: string,
+): Promise<string> {
+  for (let attempt = 1; attempt <= MAX_LOGIN_RETRIES; attempt++) {
+    const res = await request.post(`${BASE_URL}/api/auth/login`, {
+      data: { username, password },
+    });
+    if (res.status() === 429) {
+      if (attempt === MAX_LOGIN_RETRIES) {
+        throw new Error(
+          `${label} login rate-limited after ${MAX_LOGIN_RETRIES} attempts`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+      continue;
+    }
+    if (!res.ok()) {
+      throw new Error(
+        `${label} API login failed: ${res.status()} ${await res.text()}`,
+      );
+    }
+    const token = res.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
+    if (!token) throw new Error(`${label} API login returned no auth-token`);
+    return token;
+  }
+  throw new Error(`${label} login exhausted retries`);
+}
+
+/**
+ * Log in as admin over the API and return the auth-token cookie value.
+ * Retries on 429 (rate-limit) to tolerate rapid sequential E2E seeds.
+ */
+export async function adminApiToken(
+  request: APIRequestContext,
+): Promise<string> {
+  return apiLogin(
+    request,
+    process.env.E2E_ADMIN_USERNAME ?? "admin",
+    process.env.E2E_ADMIN_PASSWORD ?? "admin123",
+    "admin",
+  );
+}
+
 /**
  * Log in as `candidate` over the API and return the auth-token cookie value.
  * Lighter than the UI login for tests that only need to drive the candidate
@@ -108,17 +156,20 @@ export async function candidateApiToken(
   request: APIRequestContext,
   candidate: SeededCandidate,
 ): Promise<string> {
-  const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: { username: candidate.username, password: candidate.password },
-  });
-  if (!res.ok()) {
-    throw new Error(
-      `candidate API login failed: ${res.status()} ${await res.text()}`,
-    );
-  }
-  const token = res.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-  if (!token) throw new Error("candidate API login returned no auth-token");
-  return token;
+  return apiLogin(request, candidate.username, candidate.password, "candidate");
+}
+
+/**
+ * Log in as a candidate by username/password over the API. Unlike
+ * `candidateApiToken` (which takes a SeededCandidate), this accepts raw
+ * credentials — useful when the caller creates candidates outside seedExam().
+ */
+export async function candidateLoginApi(
+  request: APIRequestContext,
+  username: string,
+  password: string,
+): Promise<string> {
+  return apiLogin(request, username, password, "candidate");
 }
 
 /**
@@ -152,6 +203,54 @@ export async function startAndSubmitAttempt(
     );
   }
   return attemptId;
+}
+
+/**
+ * POST as admin. Returns the raw response — caller asserts status.
+ */
+export async function adminPost(
+  request: APIRequestContext,
+  token: string,
+  path: string,
+  data?: unknown,
+): Promise<APIResponse> {
+  return request.post(`${BASE_URL}${path}`, {
+    headers: { Cookie: `auth-token=${token}` },
+    data: data ?? {},
+  });
+}
+
+/**
+ * GET as admin. Returns the raw response — caller asserts status.
+ */
+export async function adminGet(
+  request: APIRequestContext,
+  token: string,
+  path: string,
+): Promise<APIResponse> {
+  return request.get(`${BASE_URL}${path}`, {
+    headers: { Cookie: `auth-token=${token}` },
+  });
+}
+
+/**
+ * Start a new attempt for `examId` as a candidate. Returns the attempt id.
+ * Throws on non-2xx (unlike adminPost/adminGet which return raw response).
+ */
+export async function candidateStartAttempt(
+  request: APIRequestContext,
+  candidateToken: string,
+  examId: string,
+): Promise<string> {
+  const res = await request.post(`${BASE_URL}/api/attempts/${examId}/start`, {
+    headers: { Cookie: `auth-token=${candidateToken}` },
+  });
+  if (!res.ok()) {
+    throw new Error(
+      `candidate start attempt failed: ${res.status()} ${await res.text()}`,
+    );
+  }
+  return ((await res.json()) as { id: string }).id;
 }
 
 /**

@@ -2,6 +2,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
 import { seedExam, type SeededExam } from "../lib/seed";
 import { loginAsAdmin } from "../lib/login";
 import {
+  adminApiToken,
   candidateLogin,
   startExamFromList,
   answerTrueFalse,
@@ -14,28 +15,6 @@ import {
 } from "../lib/flow";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-
-/**
- * Log in as admin over the API and return the auth-token cookie value. Used by
- * admin-flow tests that need to drive the admin API directly (e.g. to create an
- * extra candidate to enroll via the UI without coupling to demo seed state).
- */
-async function adminApiToken(request: APIRequestContext): Promise<string> {
-  const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: {
-      username: process.env.E2E_ADMIN_USERNAME ?? "admin",
-      password: process.env.E2E_ADMIN_PASSWORD ?? "admin123",
-    },
-  });
-  if (!res.ok()) {
-    throw new Error(
-      `admin API login failed: ${res.status()} ${await res.text()}`,
-    );
-  }
-  const token = res.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-  if (!token) throw new Error("admin API login returned no auth-token cookie");
-  return token;
-}
 
 /**
  * Create a single candidate with a distinctive name so the enrollment picker

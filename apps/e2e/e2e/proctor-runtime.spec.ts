@@ -1,82 +1,12 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { seedExam, type SeededExam } from "../lib/seed";
-
-const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-
-async function adminApiToken(request: APIRequestContext): Promise<string> {
-  const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: {
-      username: process.env.E2E_ADMIN_USERNAME ?? "admin",
-      password: process.env.E2E_ADMIN_PASSWORD ?? "admin123",
-    },
-  });
-  if (!res.ok()) {
-    throw new Error(
-      `admin API login failed: ${res.status()} ${await res.text()}`,
-    );
-  }
-  const token = res.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-  if (!token) throw new Error("admin API login returned no auth-token cookie");
-  return token;
-}
-
-async function candidateApiLogin(
-  request: APIRequestContext,
-  username: string,
-  password: string,
-): Promise<string> {
-  const res = await request.post(`${BASE_URL}/api/auth/login`, {
-    data: { username, password },
-  });
-  if (!res.ok()) {
-    throw new Error(
-      `candidate API login failed: ${res.status()} ${await res.text()}`,
-    );
-  }
-  const token = res.headers()["set-cookie"]?.match(/auth-token=([^;]+)/)?.[1];
-  if (!token) throw new Error("candidate API login returned no auth-token");
-  return token;
-}
-
-async function adminPost(
-  request: APIRequestContext,
-  token: string,
-  path: string,
-  data?: unknown,
-) {
-  const res = await request.post(`${BASE_URL}${path}`, {
-    headers: { Cookie: `auth-token=${token}` },
-    data: data ?? {},
-  });
-  return res;
-}
-
-async function adminGet(
-  request: APIRequestContext,
-  token: string,
-  path: string,
-) {
-  const res = await request.get(`${BASE_URL}${path}`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
-  return res;
-}
-
-async function candidateStartAttempt(
-  request: APIRequestContext,
-  candidateToken: string,
-  examId: string,
-): Promise<string> {
-  const res = await request.post(`${BASE_URL}/api/attempts/${examId}/start`, {
-    headers: { Cookie: `auth-token=${candidateToken}` },
-  });
-  if (!res.ok()) {
-    throw new Error(
-      `candidate start attempt failed: ${res.status()} ${await res.text()}`,
-    );
-  }
-  return ((await res.json()) as { id: string }).id;
-}
+import {
+  adminApiToken,
+  candidateLoginApi,
+  candidateStartAttempt,
+  adminPost,
+  adminGet,
+} from "../lib/flow";
 
 /**
  * P2C-J8 — Proctor Runtime E2E.
@@ -104,7 +34,7 @@ test.describe("Proctor Runtime E2E", () => {
     seeded = await seedExam(request, unique);
 
     adminToken = await adminApiToken(request);
-    candidateToken = await candidateApiLogin(
+    candidateToken = await candidateLoginApi(
       request,
       seeded.candidate.username,
       seeded.candidate.password,
@@ -159,7 +89,7 @@ test.describe("Proctor Runtime E2E", () => {
     request,
   }) => {
     const exam2 = await seedExam(request, `j8-ext-${Date.now()}`);
-    const candToken = await candidateApiLogin(
+    const candToken = await candidateLoginApi(
       request,
       exam2.candidate.username,
       exam2.candidate.password,
@@ -175,6 +105,7 @@ test.describe("Proctor Runtime E2E", () => {
       adminToken,
       `/api/admin/exams/${exam2.examId}/candidates/status`,
     );
+    expect(beforeRes.status()).toBe(200);
     const beforeBody = await beforeRes.json();
     const beforeDeadline = new Date(
       beforeBody.candidates[0].deadlineAt,
@@ -193,6 +124,7 @@ test.describe("Proctor Runtime E2E", () => {
       adminToken,
       `/api/admin/exams/${exam2.examId}/candidates/status`,
     );
+    expect(afterRes.status()).toBe(200);
     const afterBody = await afterRes.json();
     const afterDeadline = new Date(
       afterBody.candidates[0].deadlineAt,
@@ -205,7 +137,7 @@ test.describe("Proctor Runtime E2E", () => {
     request,
   }) => {
     const exam3 = await seedExam(request, `j8-mis-${Date.now()}`);
-    const candToken = await candidateApiLogin(
+    const candToken = await candidateLoginApi(
       request,
       exam3.candidate.username,
       exam3.candidate.password,
@@ -230,6 +162,7 @@ test.describe("Proctor Runtime E2E", () => {
       adminToken,
       `/api/admin/exams/${exam3.examId}/candidates/status`,
     );
+    expect(statusRes.status()).toBe(200);
     const statusBody = await statusRes.json();
     expect(statusBody.candidates[0].misconduct).toBeTruthy();
     expect(statusBody.candidates[0].misconduct.severity).toBe("serious");
@@ -240,7 +173,7 @@ test.describe("Proctor Runtime E2E", () => {
 
   test("non-admin cannot access candidate status", async ({ request }) => {
     const res = await request.get(
-      `${BASE_URL}/api/admin/exams/${seeded.examId}/candidates/status`,
+      `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/api/admin/exams/${seeded.examId}/candidates/status`,
       { headers: { Cookie: `auth-token=${candidateToken}` } },
     );
     expect(res.status()).toBe(403);
