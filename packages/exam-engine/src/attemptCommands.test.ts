@@ -4,6 +4,7 @@ import {
   submitAttempt,
   markDisrupted,
   restoreAttempt,
+  extendAttemptTime,
   type AttemptRepository,
   type EnrollmentRepository,
 } from "./attemptCommands.js";
@@ -15,6 +16,7 @@ import type {
   RequestContext,
 } from "@exam/domain";
 import {
+  AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
   InvalidStateTransitionError,
   ValidationError,
@@ -885,6 +887,91 @@ describe("attemptCommands", () => {
 
       expect(second.deadlineAt).toEqual(first.deadlineAt);
       expect(second.status).toBe("in_progress");
+    });
+  });
+
+  describe("extendAttemptTime", () => {
+    const fixedNow = new Date("2025-01-01T10:30:00Z");
+
+    it("extends an in_progress attempt's deadline by additionalMinutes", async () => {
+      const attempt = makeAttempt({
+        deadlineAt: new Date("2025-01-01T11:00:00Z"),
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+
+      const result = await extendAttemptTime(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        15,
+        fixedNow,
+      );
+
+      // 11:00 + 15min = 11:15, still before exam closeAt 12:00.
+      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:15:00Z"));
+      expect(result.status).toBe("in_progress");
+    });
+
+    it("extends a disrupted attempt's deadline", async () => {
+      const attempt = makeAttempt({
+        status: "disrupted",
+        deadlineAt: new Date("2025-01-01T11:00:00Z"),
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+
+      const result = await extendAttemptTime(
+        examRepo,
+        attRepo,
+        "attempt-1",
+        30,
+        fixedNow,
+      );
+
+      expect(result.deadlineAt).toEqual(new Date("2025-01-01T11:30:00Z"));
+      expect(result.status).toBe("disrupted");
+    });
+
+    it("rejects with AttemptDeadlineExceedsExamCloseError when new deadline > exam.closeAt", async () => {
+      const attempt = makeAttempt({
+        deadlineAt: new Date("2025-01-01T11:00:00Z"),
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+
+      // 11:00 + 120min = 13:00 > exam closeAt 12:00.
+      await expect(
+        extendAttemptTime(examRepo, attRepo, "attempt-1", 120, fixedNow),
+      ).rejects.toThrow(AttemptDeadlineExceedsExamCloseError);
+
+      // Deadline must be unchanged after rejection.
+      const after = await attRepo.findById("attempt-1");
+      expect(after?.deadlineAt).toEqual(new Date("2025-01-01T11:00:00Z"));
+    });
+
+    it("throws InvalidStateTransitionError for submitted/graded/voided attempts", async () => {
+      const attRepo = makeAttemptRepo([makeAttempt({ status: "submitted" })]);
+      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+
+      await expect(
+        extendAttemptTime(examRepo, attRepo, "attempt-1", 10, fixedNow),
+      ).rejects.toThrow(InvalidStateTransitionError);
+    });
+
+    it("throws ValidationError for non-positive or non-integer additionalMinutes", async () => {
+      const attRepo = makeAttemptRepo([makeAttempt()]);
+      const examRepo = { findById: () => makeExam(), update: () => makeExam() };
+
+      await expect(
+        extendAttemptTime(examRepo, attRepo, "attempt-1", 0, fixedNow),
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        extendAttemptTime(examRepo, attRepo, "attempt-1", -5, fixedNow),
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        extendAttemptTime(examRepo, attRepo, "attempt-1", 5.5, fixedNow),
+      ).rejects.toThrow(ValidationError);
     });
   });
 });

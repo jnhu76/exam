@@ -284,3 +284,18 @@ export class RuntimeConfigError extends AppError {
     super(message, "RUNTIME_CONFIG_ERROR", 500, details);
   }
 }
+
+/**
+ * Admin extend-time would push the attempt deadline past the exam's closeAt
+ * (HTTP 409). Per P2C-J3 §17 the extension is rejected rather than silently
+ * clamped, so the admin is forced to choose a duration that fits the exam
+ * window.
+ */
+export class AttemptDeadlineExceedsExamCloseError extends AppError {
+  constructor(
+    details?: { newDeadlineAt: Date; examCloseAt: Date },
+    message = "Extended deadline would exceed the exam close time",
+  ) {
+    super(message, "DEADLINE_EXCEEDS_EXAM_CLOSE", 409, details);
+  }
+}
