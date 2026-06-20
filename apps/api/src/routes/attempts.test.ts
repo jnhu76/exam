@@ -2929,6 +2929,7 @@ describe("attempt routes", () => {
         cookies: { "auth-token": t.adminToken },
       });
       expect(res.statusCode).toBe(404);
+      expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
     });
 
     it("rejects a non-admin (candidate) with 403", async () => {
@@ -2946,6 +2947,7 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(403);
+      expect(res.json().error.code).toBe("PERMISSION_DENIED");
     });
   });
 });
