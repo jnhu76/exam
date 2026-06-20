@@ -248,6 +248,19 @@ export const RestoreAttemptRequestSchema = z.object({
 /** Type for a restore-attempt request. */
 export type RestoreAttemptRequest = z.infer<typeof RestoreAttemptRequestSchema>;
 
+// ── Force Submit (Admin) ──────────────────────────────────────────
+
+/**
+ * Request body schema for an admin force-submitting an attempt.
+ * `reason` is an optional human-readable note recorded in the audit log.
+ */
+export const ForceSubmitRequestSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+/** Type for a force-submit request body. */
+export type ForceSubmitRequest = z.infer<typeof ForceSubmitRequestSchema>;
+
 // ── Queue ─────────────────────────────────────────────────────────
 
 /**
