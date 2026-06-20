@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach, vi, afterEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { scanForDisruptedAttempts } from "./heartbeat.js";
 
 describe("heartbeat plugin", () => {
@@ -30,6 +30,7 @@ describe("heartbeat plugin", () => {
         timeoutMs,
         async (id) => {
           markedIds.push(id);
+          return true;
         },
       );
 
@@ -39,7 +40,7 @@ describe("heartbeat plugin", () => {
       expect(markedIds).not.toContain("att-2");
     });
 
-    it("returns 0 when no attempts need marking", async () => {
+    it("returns 0 markedCount when no attempts need marking", async () => {
       const now = new Date("2025-01-01T11:00:00Z");
       const timeoutMs = 60_000;
 
@@ -53,7 +54,7 @@ describe("heartbeat plugin", () => {
         ],
         now,
         timeoutMs,
-        async () => {},
+        async () => true,
       );
 
       expect(scanResult.markedCount).toBe(0);
@@ -81,10 +82,107 @@ describe("heartbeat plugin", () => {
         timeoutMs,
         async (id) => {
           markedIds.push(id);
+          return true;
         },
       );
 
       expect(scanResult.markedCount).toBe(0);
+    });
+
+    it("does not count a no-op race (onDisrupted returns false) in markedCount", async () => {
+      const now = new Date("2025-01-01T11:00:00Z");
+      const timeoutMs = 60_000;
+      const onDisrupted = vi.fn(async () => false);
+
+      const scanResult = await scanForDisruptedAttempts(
+        [
+          {
+            id: "noop-1",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+        ],
+        now,
+        timeoutMs,
+        onDisrupted,
+      );
+
+      expect(onDisrupted).toHaveBeenCalledTimes(1);
+      expect(scanResult.markedCount).toBe(0);
+    });
+
+    it("counts a state change when onDisrupted returns true or void", async () => {
+      const now = new Date("2025-01-01T11:00:00Z");
+      const timeoutMs = 60_000;
+      const onDisrupted = vi.fn(async (id: string) => {
+        if (id === "ret-true") return true;
+        if (id === "ret-void") return undefined;
+        return false;
+      });
+
+      const scanResult = await scanForDisruptedAttempts(
+        [
+          {
+            id: "ret-true",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+          {
+            id: "ret-void",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+          {
+            id: "ret-false",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+        ],
+        now,
+        timeoutMs,
+        onDisrupted,
+      );
+
+      expect(scanResult.markedCount).toBe(2);
+    });
+
+    it("records failedCount and invokes onError when onDisrupted throws (retry next scan)", async () => {
+      const now = new Date("2025-01-01T11:00:00Z");
+      const timeoutMs = 60_000;
+      const markedIds: string[] = [];
+      const onDisrupted = vi.fn(async (id: string) => {
+        if (id === "fail-1") {
+          throw new Error("transient db error");
+        }
+        markedIds.push(id);
+        return true;
+      });
+      const onError = vi.fn();
+
+      const scanResult = await scanForDisruptedAttempts(
+        [
+          {
+            id: "fail-1",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+          {
+            id: "ok-1",
+            status: "in_progress",
+            lastActivityAt: new Date("2025-01-01T10:00:00Z"),
+          },
+        ],
+        now,
+        timeoutMs,
+        onDisrupted,
+        { onError },
+      );
+
+      expect(markedIds).toEqual(["ok-1"]);
+      expect(scanResult.markedCount).toBe(1);
+      expect(scanResult.failedCount).toBe(1);
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError.mock.calls[0]![0]).toBe("fail-1");
     });
   });
 });
