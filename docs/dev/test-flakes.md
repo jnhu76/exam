@@ -431,7 +431,7 @@ configure it globally with "testTimeout".
 
 ### 错误
 
-```
+```text
 AssertionError: expected 500 to be 409 // Object.is equality
 - Expected: 409
 + Received: 500
@@ -458,7 +458,8 @@ AssertionError: expected 500 to be 409 // Object.is equality
 
 ### 当前缓解
 
-无单点缓解（符合登记规则——偶发、与当前改动无因果，不主动加 timeout 或 skip）。依赖既有 A′ 方案（apps/api `fileParallelism: false`）控制跨文件并行。
+无单点缓解（符合登记规则——偶发、与当前改动无因果，不主动加 timeout 或 skip）。
+注：既有 A′ 方案（apps/api `fileParallelism: false`）仅控制跨文件并行，并**不**阻止 `-t` 过滤导致单文件内 57 个用例串行执行时的状态泄漏——此类同一文件内的跨用例争用需要 B 方案（每 worker 独立 PG schema）才能根除。
 
 ### 后续动作
 
