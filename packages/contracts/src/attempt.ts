@@ -286,6 +286,33 @@ export type FlagMisconductResponse = z.infer<
   typeof FlagMisconductResponseSchema
 >;
 
+// ── Force Submit (Admin) ──────────────────────────────────────────
+
+/**
+ * Request body schema for an admin force-submitting an attempt.
+ * `reason` is an optional human-readable note recorded in the audit log.
+ */
+export const ForceSubmitRequestSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+/** Type for a force-submit request body. */
+export type ForceSubmitRequest = z.infer<typeof ForceSubmitRequestSchema>;
+
+// ── Extend Time (Admin) ──────────────────────────────────────────
+
+/**
+ * Request body schema for an admin extending an attempt's deadline by a
+ * positive number of minutes. Only in_progress/disrupted attempts may be
+ * extended; an extension beyond exam.closeAt is rejected.
+ */
+export const ExtendTimeRequestSchema = z.object({
+  additionalMinutes: z.number().int().positive(),
+});
+
+/** Type for an extend-time request body. */
+export type ExtendTimeRequest = z.infer<typeof ExtendTimeRequestSchema>;
+
 // ── Queue ─────────────────────────────────────────────────────────
 
 /**
