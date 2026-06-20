@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { eq, like } from "drizzle-orm";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -221,6 +221,26 @@ describe("attempt routes", () => {
       });
       return res.json().id;
     }
+
+    beforeEach(async () => {
+      const stale = await ctx.db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(like(schema.organizations.slug, `${STATUS_TEST_PREFIX}%`));
+      for (const org of stale) {
+        await cleanupOrganizationTestData(ctx.db, org.id);
+      }
+    });
+
+    afterAll(async () => {
+      const stale = await ctx.db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(like(schema.organizations.slug, `${STATUS_TEST_PREFIX}%`));
+      for (const org of stale) {
+        await cleanupOrganizationTestData(ctx.db, org.id);
+      }
+    });
 
     it("returns 200 with candidate status list for a valid exam with enrollments", async () => {
       const t = await createIsolatedTestOrg();

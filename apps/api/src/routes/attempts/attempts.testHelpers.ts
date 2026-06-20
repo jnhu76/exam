@@ -44,7 +44,7 @@ export function buildExamPayload(
   }> = {},
 ) {
   return {
-    title: "Test Exam",
+    title: overrides.title ?? "Test Exam",
     description: "",
     courseId: overrides.courseId ?? "",
     timingMode: "timed_window" as const,

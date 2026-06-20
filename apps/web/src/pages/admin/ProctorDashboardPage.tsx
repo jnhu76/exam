@@ -31,31 +31,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RefreshCw, Users } from "lucide-react";
+import type {
+  CandidateStatusItem,
+  CandidateStatusResponse,
+} from "@exam/contracts";
 
 /** Polling interval for the proctor dashboard (ms). */
 const POLL_INTERVAL_MS = 5_000;
-
-/** A single candidate's live status from the status endpoint. */
-interface CandidateStatusItem {
-  candidateId: string;
-  name: string;
-  attemptId: string | null;
-  status: string;
-  deadlineAt: string | null;
-  lastActivityAt: string | null;
-  misconduct: {
-    flaggedAt: string;
-    flaggedBy: string;
-    notes: string;
-    severity: "warning" | "serious";
-  } | null;
-}
-
-/** Response shape from GET /api/admin/exams/:examId/candidates/status. */
-interface CandidateStatusResponse {
-  candidates: CandidateStatusItem[];
-  total: number;
-}
 
 /** Groups candidates into status categories for the proctor dashboard. */
 interface StatusGroups {
@@ -206,11 +188,7 @@ export function ProctorDashboardPage() {
   if (!data) return null;
 
   const groups = groupByStatus(data.candidates);
-  const hasActiveCandidates =
-    groups.active.length > 0 ||
-    groups.disrupted.length > 0 ||
-    groups.submitted.length > 0 ||
-    groups.graded.length > 0;
+  const hasAnyCandidates = data.candidates.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -253,7 +231,7 @@ export function ProctorDashboardPage() {
           </TabsTrigger>
         </TabsList>
 
-        {!hasActiveCandidates && (
+        {!hasAnyCandidates && (
           <div className="mt-4">
             <EmptyState
               icon={<Users className="size-8" />}

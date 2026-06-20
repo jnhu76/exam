@@ -210,6 +210,8 @@ export function createAttemptRepo(db: Database) {
           and(
             eq(examAttempts.organizationId, orgId),
             eq(examAttempts.examId, examId),
+            eq(candidateProfiles.organizationId, orgId),
+            eq(users.organizationId, orgId),
           ),
         )) as {
         attempt: AttemptSelect;

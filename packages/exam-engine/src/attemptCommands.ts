@@ -439,7 +439,7 @@ export async function extendAttemptTime(
 
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
-    throw new ValidationError("Attempt not found");
+    throw new NotFoundError("Attempt not found");
   }
 
   // No state transition, but only active/abandoned attempts are extendable.
@@ -451,7 +451,7 @@ export async function extendAttemptTime(
 
   const exam = await examRepo.findById(attempt.examId);
   if (!exam) {
-    throw new ValidationError("Exam not found");
+    throw new NotFoundError("Exam not found");
   }
 
   // Base the extension on the existing deadline, or `now` if none is set.
@@ -470,6 +470,6 @@ export async function extendAttemptTime(
   const updated = await attemptRepo.update(attemptId, {
     deadlineAt: newDeadlineAt,
   });
-  if (!updated) throw new ValidationError("Attempt not found after update");
+  if (!updated) throw new NotFoundError("Attempt not found after update");
   return updated;
 }
