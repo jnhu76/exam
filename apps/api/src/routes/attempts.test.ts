@@ -2629,7 +2629,7 @@ describe("attempt routes", () => {
       expect(disruptedRows).toHaveLength(1);
     });
   });
-  describe("POST /api/admin/attempts/:attemptId/flag-misconduct", () => {
+  describe("POST /api/admin/attempts/:attemptId/misconduct", () => {
     interface IsolatedTestOrg {
       orgId: string;
       adminToken: string;
@@ -2924,7 +2924,7 @@ describe("attempt routes", () => {
       const t = await createIsolatedTestOrg();
       const res = await ctx.app.inject({
         method: "POST",
-        url: `/api/admin/attempts/${crypto.randomUUID()}/flag-misconduct`,
+        url: `/api/admin/attempts/${crypto.randomUUID()}/misconduct`,
         payload: { severity: "warning", notes: "x" },
         cookies: { "auth-token": t.adminToken },
       });

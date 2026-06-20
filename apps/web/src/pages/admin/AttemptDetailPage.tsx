@@ -122,6 +122,7 @@ export function AttemptDetailPage() {
     if (!id) return;
     setIsLoading(true);
     setError(null);
+    setResult(null);
     setLiveAttempt(null);
     setLiveMisconduct(null);
     try {
@@ -170,7 +171,7 @@ export function AttemptDetailPage() {
     setFlagging(true);
     try {
       await api.post(
-        `/api/admin/attempts/${liveAttempt.attemptId}/flag-misconduct`,
+        `/api/admin/attempts/${liveAttempt.attemptId}/misconduct`,
         { severity: flagSeverity, notes },
       );
       toast.success("已标记违规");

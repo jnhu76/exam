@@ -375,11 +375,9 @@ export async function restoreAttempt(
 
 /**
  * Records a misconduct flag on an attempt (P2C-J4). Does NOT change
- * `status` — the flag is informational. Allowed on any non-voided attempt;
- * voided is rejected. Idempotent: re-flagging overwrites the previous flag.
- *
- * The caller wraps this in `executeInTransaction` and uses a
- * `findByIdForUpdate`-backed attempt repo so the read+update is atomic.
+ * `status` — the flag is informational. Allowed on any attempt status (§16).
+ * Idempotent: re-flagging overwrites the previous flag. No transaction or row
+ * lock (§17) — a single best-effort jsonb update.
  */
 export async function flagMisconduct(
   attemptRepo: AttemptRepository,

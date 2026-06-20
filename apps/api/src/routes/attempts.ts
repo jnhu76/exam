@@ -1234,10 +1234,10 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
-   * POST /admin/attempts/:attemptId/flag-misconduct — Admin records a
+   * POST /admin/attempts/:attemptId/misconduct — Admin records a
    * misconduct flag on an attempt (informational; does not change status).
-   * Idempotent (re-flag overwrites). voided is rejected. Audit:
-   * attempt.misconductFlagged. Response: { ok: true }.
+   * Allowed on any attempt status (§16). Idempotent (re-flag overwrites).
+   * Audit: attempt.misconductFlagged. Response: { ok: true }.
    */
   fastify.post(
     "/admin/attempts/:attemptId/misconduct",
