@@ -143,7 +143,7 @@ export async function markAttemptDisrupted(
       metadata: { source: "heartbeat-scanner" },
     });
   } catch {
-    // Audit is best-effort; the disruption must succeed regardless.
+    // Audit is best-effort; scanner must not fail because of audit write.
   }
 
   return true;
