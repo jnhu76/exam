@@ -17,8 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -65,8 +65,8 @@ type AttemptResultResponse =
       examTitle: string;
     };
 
-/** Attempt statuses an admin may force-submit (transition to submitted→graded). */
-const FORCE_SUBMITTABLE_STATUSES = new Set(["in_progress", "disrupted"]);
+/** Attempt statuses an admin may extend time on (deadline adjustment). */
+const EXTENDABLE_STATUSES = new Set(["in_progress", "disrupted"]);
 
 /** Converts an answer value to a display-friendly string. */
 function formatAnswer(value: unknown): string {
@@ -92,15 +92,14 @@ export function AttemptDetailPage() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [forceDialogOpen, setForceDialogOpen] = useState(false);
-  const [forceReason, setForceReason] = useState("");
-  const [forceSubmitting, setForceSubmitting] = useState(false);
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extendMinutes, setExtendMinutes] = useState("");
+  const [extending, setExtending] = useState(false);
 
   const loadResult = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     setError(null);
-    setResult(null);
     setLiveAttempt(null);
     try {
       const data = await api.get<AttemptResultResponse>(
@@ -108,9 +107,7 @@ export function AttemptDetailPage() {
       );
       if (data.showResultImmediately === true) {
         setResult(data);
-      } else if (FORCE_SUBMITTABLE_STATUSES.has(data.status)) {
-        // Active/abandoned attempt — admin may force-submit. Show the live
-        // status instead of an error so the action button is reachable.
+      } else if (EXTENDABLE_STATUSES.has(data.status)) {
         setLiveAttempt({
           attemptId: data.attemptId,
           status: data.status,
@@ -138,32 +135,35 @@ export function AttemptDetailPage() {
     loadResult();
   }, [loadResult]);
 
-  const handleForceSubmit = useCallback(async () => {
+  const handleExtend = useCallback(async () => {
     if (!liveAttempt) return;
-    setForceSubmitting(true);
+    const minutes = Number(extendMinutes);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      toast.error("请输入有效的正整数分钟数");
+      return;
+    }
+    setExtending(true);
     try {
       await api.post(
-        `/api/admin/attempts/${liveAttempt.attemptId}/force-submit`,
-        {
-          reason: forceReason.trim() || undefined,
-        },
+        `/api/admin/attempts/${liveAttempt.attemptId}/extend-time`,
+        { additionalMinutes: minutes },
       );
-      toast.success("已强制交卷");
-      setForceDialogOpen(false);
-      setForceReason("");
+      toast.success("已延长考试时间");
+      setExtendDialogOpen(false);
+      setExtendMinutes("");
       await loadResult();
     } catch {
-      toast.error("强制交卷失败，请稍后重试");
+      toast.error("延长考试时间失败，请稍后重试");
     } finally {
-      setForceSubmitting(false);
+      setExtending(false);
     }
-  }, [liveAttempt, forceReason, loadResult]);
+  }, [liveAttempt, extendMinutes, loadResult]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result && !liveAttempt) return null;
 
-  // Live (in_progress/disrupted) attempt: admin force-submit action view.
+  // Live (in_progress/disrupted) attempt: admin extend-time action view.
   if (liveAttempt && !result) {
     return (
       <div className="flex flex-col gap-6">
@@ -184,53 +184,49 @@ export function AttemptDetailPage() {
               <div className="flex items-center gap-3">
                 <StatusBadge status={liveAttempt.status} />
                 <span className="text-sm text-muted-foreground">
-                  该尝试尚未交卷，管理员可执行强制交卷。
+                  该尝试尚未交卷，管理员可延长考试时间。
                 </span>
               </div>
               <Button
-                variant="destructive"
+                variant="outline"
                 className="w-fit"
-                onClick={() => setForceDialogOpen(true)}
+                onClick={() => setExtendDialogOpen(true)}
               >
-                强制交卷
+                延长考试时间
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Dialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+        <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
           <DialogContent aria-describedby={undefined} className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>确认强制交卷</DialogTitle>
+              <DialogTitle>延长考试时间</DialogTitle>
               <DialogDescription>
-                强制交卷将立即提交并评分该尝试，此操作不可撤销。
+                输入要延长的分钟数。延长后的截止时间不得超过考试结束时间。
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-2 py-2">
-              <Label htmlFor="force-reason">原因（可选）</Label>
-              <Textarea
-                id="force-reason"
-                value={forceReason}
-                onChange={(e) => setForceReason(e.target.value)}
-                placeholder="例如：考生放弃考试"
-                rows={3}
-                maxLength={500}
+              <Label htmlFor="extend-minutes">延长分钟数</Label>
+              <Input
+                id="extend-minutes"
+                type="number"
+                min={1}
+                step={1}
+                value={extendMinutes}
+                onChange={(e) => setExtendMinutes(e.target.value)}
               />
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setForceDialogOpen(false)}
-                disabled={forceSubmitting}
+                onClick={() => setExtendDialogOpen(false)}
+                disabled={extending}
               >
                 取消
               </Button>
-              <Button
-                variant="destructive"
-                disabled={forceSubmitting}
-                onClick={() => void handleForceSubmit()}
-              >
-                {forceSubmitting ? "提交中…" : "确认强制交卷"}
+              <Button disabled={extending} onClick={() => void handleExtend()}>
+                {extending ? "提交中…" : "确认延长"}
               </Button>
             </DialogFooter>
           </DialogContent>
