@@ -63,6 +63,8 @@ import {
   createEnrollmentRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { recordAudit } from "./audit.js";
+import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import type { Database } from "@exam/db/src/types.js";
 import { ensureTargetOrg, formatZodError } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
@@ -1319,15 +1321,27 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Attempt not found after force-submit");
       }
 
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "attempt.forceSubmit",
-        "attempt",
-        attemptId,
-        reason ? { reason } : {},
-      );
+      // Force-submit audit is awaited (not fire-and-forget like recordAudit)
+      // so the audit row is committed before the response returns — the spec
+      // (P2C-J2 §20/§23) treats the audit as required evidence of the admin
+      // action. Best-effort: a failed write must not fail the force-submit.
+      try {
+        await createAuditLogRepo(fastify.db as Database).create(ctx, {
+          actorId: ctx.actorId,
+          action: "attempt.forceSubmit",
+          targetType: "attempt",
+          targetId: attemptId,
+          metadata: {
+            requestId: request.id,
+            ...(reason ? { reason } : {}),
+          },
+        });
+      } catch (err) {
+        request.log.error(
+          { err, attemptId, action: "attempt.forceSubmit" },
+          "Failed to record force-submit audit",
+        );
+      }
 
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),

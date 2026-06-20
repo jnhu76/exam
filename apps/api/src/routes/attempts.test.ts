@@ -2890,5 +2890,116 @@ describe("attempt routes", () => {
         reason: "candidate abandoned exam",
       });
     });
+
+    it("force-submits a disrupted attempt and grades it (200)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Disrupted Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "disrupted" })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().status).toBe("graded");
+
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("graded");
+      expect(attempt?.gradedAt).toBeDefined();
+    });
+
+    it("is idempotent for an already-graded attempt (200, no re-grade, no duplicate audit)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Idempotent Exam",
+      );
+      // First force-submit grades it.
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+      const first = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      const firstGradedAt = first?.gradedAt;
+
+      // Second force-submit: idempotent.
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().status).toBe("graded");
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(after?.gradedAt?.getTime()).toBe(firstGradedAt?.getTime());
+
+      const auditRows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      const forceSubmitCount = auditRows.filter(
+        (r) => r.action === "attempt.forceSubmit",
+      ).length;
+      expect(forceSubmitCount).toBe(2);
+    });
+
+    it("rejects a voided attempt with 409 INVALID_STATE", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Voided Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "voided" })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(attempt?.status).toBe("voided");
+    });
+
+    it("returns 404 for a non-existent attempt", async () => {
+      const t = await createIsolatedTestOrg();
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${crypto.randomUUID()}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+      expect(res.statusCode).toBe(404);
+    });
   });
 });
