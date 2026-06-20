@@ -204,12 +204,18 @@ export async function scanDatabaseForDisruptedAttempts(
 /**
  * Fastify plugin that starts a periodic background scanner to detect
  * exam candidates whose heartbeat has timed out and marks their attempts
- * as disrupted. The interval is read from runtime config and the timer
- * is unref'd so it does not keep the process alive.
+ * as disrupted. The scan interval is read from `HEARTBEAT_SCAN_INTERVAL_MS`
+ * (falling back to runtime config, then the default); the heartbeat timeout
+ * is read from runtime config (`HEARTBEAT_TIMEOUT_MS`). The timer is unref'd
+ * so it does not keep the process alive.
  */
 const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
-  const { scanIntervalMs, timeoutMs: heartbeatTimeoutMs } =
-    getRuntimeConfig().heartbeat;
+  const config = getRuntimeConfig();
+  const scanIntervalMs = readPositiveInteger(
+    process.env.HEARTBEAT_SCAN_INTERVAL_MS,
+    config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS,
+  );
+  const heartbeatTimeoutMs = config.heartbeat.timeoutMs;
 
   let scanRunning = false;
   const interval = setInterval(async () => {
@@ -224,7 +230,10 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
       );
       if (result.markedCount > 0) {
         fastify.log.info(
-          { markedCount: result.markedCount },
+          {
+            markedCount: result.markedCount,
+            failedCount: result.failedCount,
+          },
           "Marked stale exam attempts as disrupted",
         );
       }
