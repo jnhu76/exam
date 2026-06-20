@@ -8,6 +8,7 @@ import type {
 import {
   AttemptLateEntryClosedError,
   AttemptSubmitTooEarlyError,
+  AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
   InvalidStateTransitionError,
   ValidationError,
@@ -367,4 +368,63 @@ export async function restoreAttempt(
   const restored = await attemptRepo.update(attemptId, updateData);
   if (!restored) throw new ValidationError("Attempt not found after update");
   return restored;
+}
+
+/**
+ * Extends an attempt's deadline by a positive number of minutes (admin
+ * intervention). Allowed for in_progress/disrupted attempts only. Unlike
+ * `restoreAttempt`, the extension is REJECTED (not clamped) when the new
+ * deadline would exceed `exam.closeAt`.
+ *
+ * P2C-J3 §16/§17: no state transition — only `deadlineAt` is updated. The
+ * caller is expected to wrap this in `executeInTransaction` and to use a
+ * `findByIdForUpdate`-backed attempt repo so the read+update is atomic
+ * against concurrent candidate saves / scanner activity.
+ */
+export async function extendAttemptTime(
+  examRepo: ExamRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+  additionalMinutes: number,
+  now: Date,
+): Promise<ExamAttempt> {
+  if (!Number.isInteger(additionalMinutes) || additionalMinutes <= 0) {
+    throw new ValidationError("additionalMinutes must be a positive integer");
+  }
+
+  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  if (!attempt) {
+    throw new ValidationError("Attempt not found");
+  }
+
+  // No state transition, but only active/abandoned attempts are extendable.
+  if (attempt.status !== "in_progress" && attempt.status !== "disrupted") {
+    throw new InvalidStateTransitionError(
+      `Cannot extend time for attempt in ${attempt.status} state`,
+    );
+  }
+
+  const exam = await examRepo.findById(attempt.examId);
+  if (!exam) {
+    throw new ValidationError("Exam not found");
+  }
+
+  // Base the extension on the existing deadline, or `now` if none is set.
+  const baseMs = attempt.deadlineAt
+    ? attempt.deadlineAt.getTime()
+    : now.getTime();
+  const newDeadlineAt = new Date(baseMs + additionalMinutes * 60_000);
+
+  if (newDeadlineAt.getTime() > exam.closeAt.getTime()) {
+    throw new AttemptDeadlineExceedsExamCloseError({
+      newDeadlineAt,
+      examCloseAt: exam.closeAt,
+    });
+  }
+
+  const updated = await attemptRepo.update(attemptId, {
+    deadlineAt: newDeadlineAt,
+  });
+  if (!updated) throw new ValidationError("Attempt not found after update");
+  return updated;
 }

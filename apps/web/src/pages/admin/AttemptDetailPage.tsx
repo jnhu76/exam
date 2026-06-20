@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -159,6 +160,34 @@ export function AttemptDetailPage() {
     }
   }, [liveAttempt, forceReason, loadResult]);
 
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extendMinutes, setExtendMinutes] = useState("");
+  const [extending, setExtending] = useState(false);
+
+  const handleExtend = useCallback(async () => {
+    if (!liveAttempt) return;
+    const minutes = Number(extendMinutes);
+    if (!Number.isInteger(minutes) || minutes <= 0) {
+      toast.error("请输入有效的正整数分钟数");
+      return;
+    }
+    setExtending(true);
+    try {
+      await api.post(
+        `/api/admin/attempts/${liveAttempt.attemptId}/extend-time`,
+        { additionalMinutes: minutes },
+      );
+      toast.success("已延长考试时间");
+      setExtendDialogOpen(false);
+      setExtendMinutes("");
+      await loadResult();
+    } catch {
+      toast.error("延长考试时间失败，请稍后重试");
+    } finally {
+      setExtending(false);
+    }
+  }, [liveAttempt, extendMinutes, loadResult]);
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result && !liveAttempt) return null;
@@ -193,6 +222,13 @@ export function AttemptDetailPage() {
                 onClick={() => setForceDialogOpen(true)}
               >
                 强制交卷
+              </Button>
+              <Button
+                variant="outline"
+                className="w-fit"
+                onClick={() => setExtendDialogOpen(true)}
+              >
+                延长考试时间
               </Button>
             </div>
           </CardContent>
@@ -231,6 +267,40 @@ export function AttemptDetailPage() {
                 onClick={() => void handleForceSubmit()}
               >
                 {forceSubmitting ? "提交中…" : "确认强制交卷"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
+          <DialogContent aria-describedby={undefined} className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>延长考试时间</DialogTitle>
+              <DialogDescription>
+                输入要延长的分钟数。延长后的截止时间不得超过考试结束时间。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-2 py-2">
+              <Label htmlFor="extend-minutes">延长分钟数</Label>
+              <Input
+                id="extend-minutes"
+                type="number"
+                min={1}
+                step={1}
+                value={extendMinutes}
+                onChange={(e) => setExtendMinutes(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setExtendDialogOpen(false)}
+                disabled={extending}
+              >
+                取消
+              </Button>
+              <Button disabled={extending} onClick={() => void handleExtend()}>
+                {extending ? "提交中…" : "确认延长"}
               </Button>
             </DialogFooter>
           </DialogContent>
