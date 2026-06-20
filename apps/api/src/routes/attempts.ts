@@ -15,6 +15,7 @@ import {
   SaveAnswerResponseSchema,
   StartAttemptRequestSchema,
   SubmitAttemptRequestSchema,
+  ExtendTimeRequestSchema,
   ForceSubmitRequestSchema,
   AttemptIdParamsSchema,
   getSaveAnswerMessage,
@@ -51,6 +52,7 @@ import {
   startOrRestoreAttempt,
   submitAttempt,
   restoreAttempt,
+  extendAttemptTime,
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
@@ -1346,6 +1348,84 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
             "Failed to record force-submit audit",
           );
         }
+      }
+
+      return LoadAttemptResponseSchema.parse(
+        toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
+      );
+    },
+  );
+
+  /**
+   * POST /admin/attempts/:attemptId/extend-time — Admin extends an
+   * in_progress/disrupted attempt's deadline by N minutes inside a
+   * transaction with a row lock. Rejected (409) if the new deadline would
+   * exceed exam.closeAt, or for non-active states. Audit: attempt.extendTime.
+   */
+  fastify.post(
+    "/admin/attempts/:attemptId/extend-time",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: AttemptIdParamsSchema,
+        body: ExtendTimeRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: LoadAttemptResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const body = ExtendTimeRequestSchema.safeParse(request.body ?? {});
+      if (!body.success) {
+        return reply.code(400).send(formatZodError(request.id, body.error));
+      }
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { attemptId } = parsed.data;
+      const { additionalMinutes } = body.data;
+
+      // extendAttemptTime uses findByIdForUpdate and returns the updated
+      // attempt, so we reuse it from the transaction callback instead of a
+      // second findById roundtrip (review fix).
+      const attempt = await executeInTransaction(fastify.db, async (tx) => {
+        const txAttemptRepo = createAttemptRepo(tx);
+        return extendAttemptTime(
+          createExamRepoAdapter(createExamRepo(tx), ctx),
+          createAttemptRepoAdapter(txAttemptRepo, ctx),
+          attemptId,
+          additionalMinutes,
+          fastify.now(),
+        );
+      });
+
+      // Audit is awaited + best-effort so the row is committed before the
+      // response (deterministic for tests); a failed write must not fail the
+      // extend.
+      try {
+        await createAuditLogRepo(fastify.db as Database).create(ctx, {
+          actorId: ctx.actorId,
+          action: "attempt.extendTime",
+          targetType: "attempt",
+          targetId: attemptId,
+          metadata: {
+            requestId: request.id,
+            additionalMinutes,
+          },
+        });
+      } catch (err) {
+        request.log.error(
+          { err, attemptId, action: "attempt.extendTime" },
+          "Failed to record extend-time audit",
+        );
       }
 
       return LoadAttemptResponseSchema.parse(
