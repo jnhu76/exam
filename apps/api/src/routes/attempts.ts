@@ -1249,6 +1249,7 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: LoadAttemptResponseSchema,
           400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
           404: ErrorResponseSchema,
           409: ErrorResponseSchema,
         },
@@ -1336,6 +1337,8 @@ const attemptRoutes: FastifyPluginAsync = async (fastify) => {
               requestId: request.id,
               ...(reason ? { reason } : {}),
             },
+            ipAddress: request.ip,
+            userAgent: request.headers["user-agent"],
           });
         } catch (err) {
           request.log.error(
