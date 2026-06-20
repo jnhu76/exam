@@ -100,6 +100,7 @@ export function AttemptDetailPage() {
     if (!id) return;
     setIsLoading(true);
     setError(null);
+    setResult(null);
     setLiveAttempt(null);
     try {
       const data = await api.get<AttemptResultResponse>(

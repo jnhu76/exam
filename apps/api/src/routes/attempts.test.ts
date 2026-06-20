@@ -2959,12 +2959,66 @@ describe("attempt routes", () => {
         .select()
         .from(schema.auditLogs)
         .where(eq(schema.auditLogs.targetId, attemptId));
+      // Only the first (state-changing) force-submit emits an audit row; the
+      // idempotent second call is a no-op and must NOT duplicate the audit.
       const forceSubmitCount = auditRows.filter(
         (r) => r.action === "attempt.forceSubmit",
       ).length;
-      expect(forceSubmitCount).toBe(2);
+      expect(forceSubmitCount).toBe(1);
     });
 
+    it("is idempotent for an already-submitted attempt (200, no re-grade)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Idempotent Submitted Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "submitted" })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("submitted");
+      expect(after?.gradedAt).toBeNull();
+    });
+
+    it("is idempotent for a grading attempt (200, no re-grade)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Force Submit Idempotent Grading Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ status: "grading" })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/force-submit`,
+        payload: {},
+        cookies: { "auth-token": t.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("grading");
+    });
     it("rejects a voided attempt with 409 INVALID_STATE", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
