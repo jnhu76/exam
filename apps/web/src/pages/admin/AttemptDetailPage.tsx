@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,8 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -65,8 +66,8 @@ type AttemptResultResponse =
       examTitle: string;
     };
 
-/** Attempt statuses an admin may extend time on (deadline adjustment). */
-const EXTENDABLE_STATUSES = new Set(["in_progress", "disrupted"]);
+/** Attempt statuses an admin may force-submit (transition to submitted→graded). */
+const FORCE_SUBMITTABLE_STATUSES = new Set(["in_progress", "disrupted"]);
 
 /** Converts an answer value to a display-friendly string. */
 function formatAnswer(value: unknown): string {
@@ -92,9 +93,9 @@ export function AttemptDetailPage() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const [extendMinutes, setExtendMinutes] = useState("");
-  const [extending, setExtending] = useState(false);
+  const [forceDialogOpen, setForceDialogOpen] = useState(false);
+  const [forceReason, setForceReason] = useState("");
+  const [forceSubmitting, setForceSubmitting] = useState(false);
 
   const loadResult = useCallback(async () => {
     if (!id) return;
@@ -108,7 +109,9 @@ export function AttemptDetailPage() {
       );
       if (data.showResultImmediately === true) {
         setResult(data);
-      } else if (EXTENDABLE_STATUSES.has(data.status)) {
+      } else if (FORCE_SUBMITTABLE_STATUSES.has(data.status)) {
+        // Active/abandoned attempt — admin may force-submit. Show the live
+        // status instead of an error so the action button is reachable.
         setLiveAttempt({
           attemptId: data.attemptId,
           status: data.status,
@@ -135,6 +138,31 @@ export function AttemptDetailPage() {
   useEffect(() => {
     loadResult();
   }, [loadResult]);
+
+  const handleForceSubmit = useCallback(async () => {
+    if (!liveAttempt) return;
+    setForceSubmitting(true);
+    try {
+      await api.post(
+        `/api/admin/attempts/${liveAttempt.attemptId}/force-submit`,
+        {
+          reason: forceReason.trim() || undefined,
+        },
+      );
+      toast.success("已强制交卷");
+      setForceDialogOpen(false);
+      setForceReason("");
+      await loadResult();
+    } catch {
+      toast.error("强制交卷失败，请稍后重试");
+    } finally {
+      setForceSubmitting(false);
+    }
+  }, [liveAttempt, forceReason, loadResult]);
+
+  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [extendMinutes, setExtendMinutes] = useState("");
+  const [extending, setExtending] = useState(false);
 
   const handleExtend = useCallback(async () => {
     if (!liveAttempt) return;
@@ -164,7 +192,7 @@ export function AttemptDetailPage() {
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result && !liveAttempt) return null;
 
-  // Live (in_progress/disrupted) attempt: admin extend-time action view.
+  // Live (in_progress/disrupted) attempt: admin force-submit action view.
   if (liveAttempt && !result) {
     return (
       <div className="flex flex-col gap-6">
@@ -185,9 +213,16 @@ export function AttemptDetailPage() {
               <div className="flex items-center gap-3">
                 <StatusBadge status={liveAttempt.status} />
                 <span className="text-sm text-muted-foreground">
-                  该尝试尚未交卷，管理员可延长考试时间。
+                  该尝试尚未交卷，管理员可执行强制交卷。
                 </span>
               </div>
+              <Button
+                variant="destructive"
+                className="w-fit"
+                onClick={() => setForceDialogOpen(true)}
+              >
+                强制交卷
+              </Button>
               <Button
                 variant="outline"
                 className="w-fit"
@@ -198,6 +233,44 @@ export function AttemptDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+          <DialogContent aria-describedby={undefined} className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>确认强制交卷</DialogTitle>
+              <DialogDescription>
+                强制交卷将立即提交并评分该尝试，此操作不可撤销。
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-2 py-2">
+              <Label htmlFor="force-reason">原因（可选）</Label>
+              <Textarea
+                id="force-reason"
+                value={forceReason}
+                onChange={(e) => setForceReason(e.target.value)}
+                placeholder="例如：考生放弃考试"
+                rows={3}
+                maxLength={500}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setForceDialogOpen(false)}
+                disabled={forceSubmitting}
+              >
+                取消
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={forceSubmitting}
+                onClick={() => void handleForceSubmit()}
+              >
+                {forceSubmitting ? "提交中…" : "确认强制交卷"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
           <DialogContent aria-describedby={undefined} className="max-w-sm">
