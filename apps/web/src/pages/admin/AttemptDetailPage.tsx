@@ -19,6 +19,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -66,8 +73,16 @@ type AttemptResultResponse =
       examTitle: string;
     };
 
-/** Attempt statuses an admin may force-submit (transition to submitted→graded). */
-const FORCE_SUBMITTABLE_STATUSES = new Set(["in_progress", "disrupted"]);
+/** Attempt statuses an admin may flag for misconduct. */
+const FLAGGABLE_STATUSES = new Set(["in_progress", "disrupted"]);
+
+/** Misconduct flag DTO (mirrors MisconductFlagDTO in @exam/contracts). */
+interface MisconductFlag {
+  flaggedAt: string;
+  flaggedBy: string;
+  notes: string;
+  severity: "warning" | "severe";
+}
 
 /** Converts an answer value to a display-friendly string. */
 function formatAnswer(value: unknown): string {
@@ -91,32 +106,38 @@ export function AttemptDetailPage() {
     status: string;
     examTitle: string;
   } | null>(null);
+  const [liveMisconduct, setLiveMisconduct] = useState<MisconductFlag | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [forceDialogOpen, setForceDialogOpen] = useState(false);
-  const [forceReason, setForceReason] = useState("");
-  const [forceSubmitting, setForceSubmitting] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [flagSeverity, setFlagSeverity] = useState<"warning" | "severe">(
+    "warning",
+  );
+  const [flagNotes, setFlagNotes] = useState("");
+  const [flagging, setFlagging] = useState(false);
 
   const loadResult = useCallback(async () => {
     if (!id) return;
     setIsLoading(true);
     setError(null);
-    setResult(null);
     setLiveAttempt(null);
+    setLiveMisconduct(null);
     try {
       const data = await api.get<AttemptResultResponse>(
         `/api/scores/attempts/${id}`,
       );
       if (data.showResultImmediately === true) {
         setResult(data);
-      } else if (FORCE_SUBMITTABLE_STATUSES.has(data.status)) {
-        // Active/abandoned attempt — admin may force-submit. Show the live
-        // status instead of an error so the action button is reachable.
+      } else if (FLAGGABLE_STATUSES.has(data.status)) {
         setLiveAttempt({
           attemptId: data.attemptId,
           status: data.status,
           examTitle: data.examTitle,
         });
+        // The hidden (non-graded) response does not expose misconduct; the
+        // badge is shown once an admin flags it this session.
       } else {
         setError(
           data.status === "submitted"
@@ -139,60 +160,40 @@ export function AttemptDetailPage() {
     loadResult();
   }, [loadResult]);
 
-  const handleForceSubmit = useCallback(async () => {
+  const handleFlag = useCallback(async () => {
     if (!liveAttempt) return;
-    setForceSubmitting(true);
-    try {
-      await api.post(
-        `/api/admin/attempts/${liveAttempt.attemptId}/force-submit`,
-        {
-          reason: forceReason.trim() || undefined,
-        },
-      );
-      toast.success("已强制交卷");
-      setForceDialogOpen(false);
-      setForceReason("");
-      await loadResult();
-    } catch {
-      toast.error("强制交卷失败，请稍后重试");
-    } finally {
-      setForceSubmitting(false);
-    }
-  }, [liveAttempt, forceReason, loadResult]);
-
-  const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const [extendMinutes, setExtendMinutes] = useState("");
-  const [extending, setExtending] = useState(false);
-
-  const handleExtend = useCallback(async () => {
-    if (!liveAttempt) return;
-    const minutes = Number(extendMinutes);
-    if (!Number.isInteger(minutes) || minutes <= 0) {
-      toast.error("请输入有效的正整数分钟数");
+    const notes = flagNotes.trim();
+    if (!notes) {
+      toast.error("请填写违规说明");
       return;
     }
-    setExtending(true);
+    setFlagging(true);
     try {
       await api.post(
-        `/api/admin/attempts/${liveAttempt.attemptId}/extend-time`,
-        { additionalMinutes: minutes },
+        `/api/admin/attempts/${liveAttempt.attemptId}/flag-misconduct`,
+        { severity: flagSeverity, notes },
       );
-      toast.success("已延长考试时间");
-      setExtendDialogOpen(false);
-      setExtendMinutes("");
-      await loadResult();
+      toast.success("已标记违规");
+      setFlagDialogOpen(false);
+      setFlagNotes("");
+      setLiveMisconduct({
+        flaggedAt: new Date().toISOString(),
+        flaggedBy: "",
+        notes,
+        severity: flagSeverity,
+      });
     } catch {
-      toast.error("延长考试时间失败，请稍后重试");
+      toast.error("标记违规失败，请稍后重试");
     } finally {
-      setExtending(false);
+      setFlagging(false);
     }
-  }, [liveAttempt, extendMinutes, loadResult]);
+  }, [liveAttempt, flagSeverity, flagNotes]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result && !liveAttempt) return null;
 
-  // Live (in_progress/disrupted) attempt: admin force-submit action view.
+  // Live (in_progress/disrupted) attempt: admin misconduct-flag action view.
   if (liveAttempt && !result) {
     return (
       <div className="flex flex-col gap-6">
@@ -210,97 +211,82 @@ export function AttemptDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <StatusBadge status={liveAttempt.status} />
-                <span className="text-sm text-muted-foreground">
-                  该尝试尚未交卷，管理员可执行强制交卷。
-                </span>
+                {liveMisconduct && (
+                  <StatusBadge
+                    status={`misconduct_${liveMisconduct.severity}`}
+                  />
+                )}
+                {liveMisconduct && (
+                  <span className="text-sm text-muted-foreground">
+                    {liveMisconduct.notes}
+                  </span>
+                )}
               </div>
-              <Button
-                variant="destructive"
-                className="w-fit"
-                onClick={() => setForceDialogOpen(true)}
-              >
-                强制交卷
-              </Button>
               <Button
                 variant="outline"
                 className="w-fit"
-                onClick={() => setExtendDialogOpen(true)}
+                onClick={() => setFlagDialogOpen(true)}
               >
-                延长考试时间
+                标记违规
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Dialog open={forceDialogOpen} onOpenChange={setForceDialogOpen}>
+        <Dialog open={flagDialogOpen} onOpenChange={setFlagDialogOpen}>
           <DialogContent aria-describedby={undefined} className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>确认强制交卷</DialogTitle>
+              <DialogTitle>标记违规</DialogTitle>
               <DialogDescription>
-                强制交卷将立即提交并评分该尝试，此操作不可撤销。
+                标记违规用于记录考生异常行为，不会改变尝试状态。
               </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col gap-2 py-2">
-              <Label htmlFor="force-reason">原因（可选）</Label>
-              <Textarea
-                id="force-reason"
-                value={forceReason}
-                onChange={(e) => setForceReason(e.target.value)}
-                placeholder="例如：考生放弃考试"
-                rows={3}
-                maxLength={500}
-              />
+            <div className="flex flex-col gap-3 py-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="flag-severity">严重程度</Label>
+                <Select
+                  value={flagSeverity}
+                  onValueChange={(v) =>
+                    setFlagSeverity(v as "warning" | "severe")
+                  }
+                >
+                  <SelectTrigger id="flag-severity">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="warning">警告</SelectItem>
+                    <SelectItem value="severe">严重</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="flag-notes">违规说明</Label>
+                <Textarea
+                  id="flag-notes"
+                  value={flagNotes}
+                  onChange={(e) => setFlagNotes(e.target.value)}
+                  placeholder="例如：考生查看手机"
+                  rows={3}
+                  maxLength={1000}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setForceDialogOpen(false)}
-                disabled={forceSubmitting}
+                onClick={() => setFlagDialogOpen(false)}
+                disabled={flagging}
               >
                 取消
               </Button>
               <Button
                 variant="destructive"
-                disabled={forceSubmitting}
-                onClick={() => void handleForceSubmit()}
+                disabled={flagging}
+                onClick={() => void handleFlag()}
               >
-                {forceSubmitting ? "提交中…" : "确认强制交卷"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
-          <DialogContent aria-describedby={undefined} className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>延长考试时间</DialogTitle>
-              <DialogDescription>
-                输入要延长的分钟数。延长后的截止时间不得超过考试结束时间。
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col gap-2 py-2">
-              <Label htmlFor="extend-minutes">延长分钟数</Label>
-              <Input
-                id="extend-minutes"
-                type="number"
-                min={1}
-                step={1}
-                value={extendMinutes}
-                onChange={(e) => setExtendMinutes(e.target.value)}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setExtendDialogOpen(false)}
-                disabled={extending}
-              >
-                取消
-              </Button>
-              <Button disabled={extending} onClick={() => void handleExtend()}>
-                {extending ? "提交中…" : "确认延长"}
+                {flagging ? "提交中…" : "确认标记"}
               </Button>
             </DialogFooter>
           </DialogContent>

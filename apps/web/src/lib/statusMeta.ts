@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Clock,
   FilePenLine,
+  Flag,
   HelpCircle,
   LoaderCircle,
   Lock,
@@ -71,6 +72,16 @@ export const statusMeta = {
   unknown: { label: "未知", tone: "muted", icon: HelpCircle },
   passed: { label: "及格", tone: "success", icon: Trophy },
   not_passed: { label: "不及格", tone: "destructive", icon: XCircle },
+  misconduct_warning: {
+    label: "违规-警告",
+    tone: "warning",
+    icon: Flag,
+  },
+  misconduct_severe: {
+    label: "违规-严重",
+    tone: "destructive",
+    icon: Flag,
+  },
 } as const satisfies Record<string, StatusMeta>;
 
 /** Union of all recognized status keys. */
