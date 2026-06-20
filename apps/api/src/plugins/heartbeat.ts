@@ -77,15 +77,6 @@ export async function scanForDisruptedAttempts(
 }
 
 /**
- * Parses an environment variable as a positive integer. Returns `fallback`
- * if the value is undefined, not a number, or not a positive integer.
- */
-function readPositiveInteger(value: string | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-/**
  * Creates a synthetic `RequestContext` representing the system heartbeat
  * actor, used when the background scanner needs to interact with
  * repositories that require a context.
@@ -204,17 +195,15 @@ export async function scanDatabaseForDisruptedAttempts(
 /**
  * Fastify plugin that starts a periodic background scanner to detect
  * exam candidates whose heartbeat has timed out and marks their attempts
- * as disrupted. The scan interval is read from `HEARTBEAT_SCAN_INTERVAL_MS`
- * (falling back to runtime config, then the default); the heartbeat timeout
- * is read from runtime config (`HEARTBEAT_TIMEOUT_MS`). The timer is unref'd
- * so it does not keep the process alive.
+ * as disrupted. The scan interval and heartbeat timeout come from runtime
+ * config (`HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS`), parsed and
+ * cached once at startup. The timer is unref'd so it does not keep the
+ * process alive.
  */
 const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
   const config = getRuntimeConfig();
-  const scanIntervalMs = readPositiveInteger(
-    process.env.HEARTBEAT_SCAN_INTERVAL_MS,
-    config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS,
-  );
+  const scanIntervalMs =
+    config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS;
   const heartbeatTimeoutMs = config.heartbeat.timeoutMs;
 
   let scanRunning = false;
