@@ -421,6 +421,56 @@ configure it globally with "testTimeout".
 
 ---
 
+## 2026-06-20 — `attempts.test.ts` extend-time beyond-close 间歇性返回 500（应为 409）
+
+### 失败位置
+
+- 文件：`apps/api/src/routes/attempts.test.ts`
+- 用例：`POST /api/admin/attempts/:attemptId/extend-time > rejects an extension beyond exam.closeAt with 409 DEADLINE_EXCEEDS_EXAM_CLOSE (deadline unchanged)`（约 line 2947）
+- 调用：`pnpm --filter @exam/api test -- attempts.test.ts -t "rejects an extension beyond exam.closeAt"`
+
+### 错误
+
+```
+AssertionError: expected 500 to be 409 // Object.is equality
+- Expected: 409
++ Received: 500
+```
+
+（该用例本身的断言多数情况下通过；500 偶发出现在整文件运行 / `-t` 过滤匹配到整个 describe、连带执行 57 个用例时。）
+
+### 出现场景
+
+- 分支：`feat/p2c-j3-extend-time`（P2C-J3 review 修复阶段）
+- 当时正在做：采集 PR #80 review 意见并应用修复（让 extend-time 路从事务回调直接返回 updated attempt + AttemptDetailPage loadResult 加 setResult(null)）。修复本身与 flake 无因果（纯减少一次 query，不可能产生 500）。
+- 触发命令：`pnpm --filter @exam/api test -- attempts.test.ts -t "rejects an extension beyond exam.closeAt"`（`-t` 命中整个 extend-time describe，连带执行全文件 57 个用例）
+- 复跑结果：连续 4 次中 1 次出现该失败，其余通过；随后单独 `pnpm --filter @exam/api test -- attempts.test.ts` 连续 2 次均 528 green。
+
+### 根因假设
+
+`-t` 过滤匹配到整个 `describe` 块，导致整文件 57 个用例在共享 `exam_test` PostgreSQL schema 上并发/串行执行，触发既有的跨用例 DB 状态泄漏 / 资源争用家族（参见 BUG-FLAKE-002、BUG-FLAKE-004）。beyond-close 用例的 `extendAttemptTime` 在争用窗口内偶发抛出后被 error handler 映射成 500（非预期的非 AppError 路径，或 PG 连接瞬态错误）。
+
+### 已知不是的原因
+
+- 不是 review 修复引入：修复仅是「事务回调 return」+「前端 setResult」，纯前端状态与减少一次 query，不可能产生后端 500。
+- 不是 `extendAttemptTime` 逻辑缺陷：单跑整文件连续 2 次 528 green，且 happy-path / disrupted / submitted-409 / beyond-close-409 用例在该用例本身断言上均通过。
+- 不是 `AttemptDeadlineExceedsExamCloseError` 映射错误：该 error 继承 AppError(statusCode=409)，error handler 正确映射；500 是偶发，非稳定。
+
+### 当前缓解
+
+无单点缓解（符合登记规则——偶发、与当前改动无因果，不主动加 timeout 或 skip）。依赖既有 A′ 方案（apps/api `fileParallelism: false`）控制跨文件并行。
+
+### 后续动作
+
+- 观察：若该位置复发 ≥3 次或在 PR CI 上稳定出现，升级为正式条目。
+- 根因修复走 B 方案（每 worker 独立 PG schema），届时此类跨用例争用 flake 一并消除。
+
+### 复发记录
+
+- 2026-06-20：J3 review 修复阶段，`-t` 过滤连跑整文件时单次出现（1/4），重跑通过。单跑整文件连续 2 次通过。
+
+---
+
 ## 模板（新增 flake 时复制使用）
 
 ```markdown
