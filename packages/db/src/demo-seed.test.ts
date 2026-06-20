@@ -1,23 +1,34 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { getTestDb } from "./testDb.js";
+import type { Database } from "./types.js";
+import { getIsolatedTestDb } from "./testDb.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
 import { schema } from "./schema/pg.js";
-import { cleanupOrganizationTestData } from "./testCleanup.js";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 
 describe("demo seed", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-demo-seed");
+    db = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
   it("seeds and verifies without errors", async () => {
-    const { db } = await getTestDb();
     const ids = await seedDemo(db, hashPassword);
     const errors = await verifyDemoSeed(db, ids);
     expect(errors).toEqual([]);
   });
 
   it("is idempotent on second run", async () => {
-    const { db } = await getTestDb();
     await seedDemo(db, hashPassword);
     const ids = await seedDemo(db, hashPassword);
     const errors = await verifyDemoSeed(db, ids);
@@ -25,7 +36,6 @@ describe("demo seed", () => {
   });
 
   it("keeps question idempotency scoped by course", async () => {
-    const { db } = await getTestDb();
     const ids = await seedDemo(db, hashPassword);
     const skillCourseId = ids.courses["SKILL-201"]!;
 
@@ -70,7 +80,6 @@ describe("demo seed", () => {
   });
 
   it("creates all expected users with real argon2 hashes", async () => {
-    const { db } = await getTestDb();
     await seedDemo(db, hashPassword);
     const demoOrg = await db
       .select()
@@ -93,10 +102,7 @@ describe("demo seed", () => {
   });
 
   it("creates graded attempts with grading results", async () => {
-    const { db } = await getTestDb();
     const ids = await seedDemo(db, hashPassword);
-    // Scope to the demo org only: this test must assert demo-seed behavior,
-    // not unrelated graded attempts left in the shared DB by other tests.
     const allAttempts = await db
       .select()
       .from(schema.examAttempts)
@@ -112,11 +118,6 @@ describe("demo seed", () => {
   });
 
   it("regression: keeps non-empty gradingResult on every graded attempt across a double seedDemo run", async () => {
-    const { db } = await getTestDb();
-    // First run seeds; second run exercises the idempotent update path of
-    // upsertAttempt, which re-writes gradingResult from a freshly rebuilt
-    // snapshot. Graded attempts must never end up with an empty
-    // gradingResult, even on the second run.
     const firstIds = await seedDemo(db, hashPassword);
     await seedDemo(db, hashPassword);
 
@@ -132,17 +133,6 @@ describe("demo seed", () => {
         0,
       );
       expect(attempt.score).toBeDefined();
-    }
-  });
-
-  afterAll(async () => {
-    const { db } = await getTestDb();
-    const demoOrg = await db
-      .select()
-      .from(schema.organizations)
-      .where(eq(schema.organizations.slug, "default"));
-    if (demoOrg[0]) {
-      await cleanupOrganizationTestData(db, demoOrg[0].id);
     }
   });
 });

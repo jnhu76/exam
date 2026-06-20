@@ -22,6 +22,10 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { eq } from "drizzle-orm";
 import type { Role } from "@exam/domain";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import {
+  setupIsolatedTestDb,
+  isTestDbIsolationEnabled,
+} from "@exam/db/src/testIsolation.js";
 
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
@@ -98,10 +102,23 @@ export async function buildTestApp(
   },
 ): Promise<TestContext> {
   const dbUrl = opts?.databaseUrl ?? TEST_DB_URL;
-  const conn = await createDatabase(dbUrl, opts?.schemaName);
+  let resolvedSchemaName = opts?.schemaName;
+  let isolatedCleanup: (() => Promise<void>) | undefined;
+
+  if (!resolvedSchemaName && isTestDbIsolationEnabled()) {
+    const baseUrl = opts?.databaseUrl ?? TEST_DB_URL;
+    const iso = await setupIsolatedTestDb({
+      namespace: "api",
+      databaseUrl: baseUrl,
+    });
+    resolvedSchemaName = iso.schemaName;
+    isolatedCleanup = iso.cleanup;
+  }
+
+  const conn = await createDatabase(dbUrl, resolvedSchemaName);
   await migratePostgres(
     conn.db,
-    opts?.schemaName ? { migrationsSchema: opts.schemaName } : undefined,
+    resolvedSchemaName ? { migrationsSchema: resolvedSchemaName } : undefined,
   );
   const db = conn.db;
 
@@ -164,6 +181,9 @@ export async function buildTestApp(
     cleanup: async () => {
       await app.close();
       await conn.sql.end();
+      if (isolatedCleanup) {
+        await isolatedCleanup();
+      }
     },
     org,
     admin,

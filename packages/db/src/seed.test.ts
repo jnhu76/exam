@@ -1,15 +1,27 @@
-import { describe, expect, it, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { eq, and } from "drizzle-orm";
-import { getTestDb } from "./testDb.js";
+import type { Database } from "./types.js";
+import { getIsolatedTestDb } from "./testDb.js";
 import { seed } from "./seed.js";
 import { schema } from "./schema/pg.js";
-import { cleanupOrganizationTestData } from "./testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { verifyPassword } from "@exam/auth/src/password.js";
 
 describe("seed idempotency", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-seed");
+    db = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
   it("creates default org and Phase 1 users with real argon2 hashes", async () => {
-    const { db } = await getTestDb();
     const result = await seed(db, hashPassword);
     expect(result.orgId).toBeDefined();
     expect(result.users.adminId).toBeDefined();
@@ -45,7 +57,6 @@ describe("seed idempotency", () => {
   });
 
   it("does not create future role users in the Phase 1 default seed", async () => {
-    const { db } = await getTestDb();
     const result = await seed(db, hashPassword);
 
     const seededIds = new Set(Object.values(result.users));
@@ -61,7 +72,6 @@ describe("seed idempotency", () => {
   });
 
   it("is idempotent on second run and resets password/isActive", async () => {
-    const { db } = await getTestDb();
     const r1 = await seed(db, hashPassword);
 
     await db
@@ -84,7 +94,6 @@ describe("seed idempotency", () => {
   });
 
   it("survives concurrent seed calls without unique-violation errors", async () => {
-    const { db } = await getTestDb();
     const results = await Promise.all([
       seed(db, hashPassword),
       seed(db, hashPassword),
@@ -115,17 +124,6 @@ describe("seed idempotency", () => {
           ),
         );
       expect(rows).toHaveLength(1);
-    }
-  });
-
-  afterAll(async () => {
-    const { db } = await getTestDb();
-    const orgs = await db
-      .select()
-      .from(schema.organizations)
-      .where(eq(schema.organizations.slug, "default"));
-    if (orgs[0]) {
-      await cleanupOrganizationTestData(db, orgs[0].id);
     }
   });
 });
