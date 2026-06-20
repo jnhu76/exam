@@ -13,6 +13,7 @@ import {
   AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
   InvalidStateTransitionError,
+  NotFoundError,
   ValidationError,
   MaxAttemptsReachedError,
   ExamAlreadyPassedError,
@@ -398,7 +399,7 @@ export async function flagMisconduct(
 
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
-    throw new ValidationError("Attempt not found");
+    throw new NotFoundError("Attempt not found");
   }
   if (attempt.status === "voided") {
     throw new InvalidStateTransitionError(
@@ -414,6 +415,6 @@ export async function flagMisconduct(
   };
 
   const updated = await attemptRepo.update(attemptId, { misconduct: flag });
-  if (!updated) throw new ValidationError("Attempt not found after update");
+  if (!updated) throw new NotFoundError("Attempt not found after update");
   return updated;
 }
