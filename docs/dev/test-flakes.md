@@ -20,7 +20,7 @@
 
 ### BUG-FLAKE-001 — `attempts.test.ts:1070` 后台扫描在 coverage 模式下 5s timeout
 
-**状态**: 已升级（≥3 次复发，2026-06-13）。已从单点 timeout 缓解升级为 **A′ serial containment** + **B 方案基础设施就位**（2026-06-21）。A′ 方案仍为主缓解；B 方案基础设施已实现并通过自测，但 existing test files 尚未迁移。
+**状态**: 已升级（≥3 次复发，2026-06-13）。已从单点 timeout 缓解升级为 **A′ serial containment** → **B 方案基础实施就位**（2026-06-21）→ **B 方案全量迁移完成**（2026-06-21），所有 DB-touching 测试文件已接入隔离 schema。A′ 方案仍为主缓解；B 方案已完成。
 
 **Old root cause**: vitest 按文件并行调度 + 全部测试共享 `exam_test.public` schema + c8 coverage 放大 I/O 争用 → `scanDatabaseForDisruptedAttempts` 的 PG 调用在共享 schema 下无法在 5s 内回包。
 
@@ -45,11 +45,11 @@
 
 **已知根因（已部分验证）**: vitest 默认按文件并行调度 + 全部测试文件共享同一本地 PG 实例 + c8 instrumentation 在 coverage 模式下放大 I/O 与调度争用。导致 `scanDatabaseForDisruptedAttempts` 的 PG 调用在某些瞬间无法在 5s 默认 testTimeout 内回包。A′ 通过让测试文件串行执行验证了 "并行 + 共享 schema" 是触发条件之一。
 
-**后续根因修复（B 方案，基础设施已可用）**:
+**后续根因修复（B 方案，已完成 2026-06-21）**:
 
 - ~~给 `apps/api` 测试加上"每测试文件 / 每 worker 独立 PostgreSQL schema"机制：测试 setup 阶段为每个 worker 创建一个独立 schema 并 `SET search_path`，把"共享 schema 下并行写入"这一类争用从源头消除。~~
 - 基础实施已就位（2026-06-21）：`packages/db/src/testIsolation.ts` + `getIsolatedTestDb()` + `buildTestApp()` `schemaName` 参数。
-- 下一步：将 `apps/api` 的测试文件逐个迁移到隔离 schema。
+- 下一步：已完成。所有 DB-touching 测试文件（~43 个）已迁移到隔离 schema。
 - 完成后可恢复 `fileParallelism` 默认值（删除 A′ 配置中的 `fileParallelism: false`），并 review 是否同步移除 `attempts.test.ts:1070` 的 15_000 ms timeout。
 - 可用 helper：`setupIsolatedTestDb({ namespace })`、`withIsolatedTestSchema()`、`getIsolatedTestDb(namespace)`、`buildTestApp(plugin, { schemaName })`。
 
@@ -82,20 +82,20 @@
 | `pnpm --filter @exam/db test -- --run src/testIsolation.test.ts` | 1 | PASS | 32 isolation helper tests pass |
 | `pnpm verify` | 1 | PASS | Full suite: lint/typecheck/tests/build green |
 
-这些 stress 是在 A′ serial containment 下运行的。**B 方案完成后仍需恢复 `fileParallelism` 默认值并重新跑 stress 验证**。
+这些 stress 是在 A′ serial containment 下运行的。**B 方案已完成（2026-06-21）**——所有 DB-touching 测试文件已接入隔离 schema。下一步：恢复 `fileParallelism` 默认值并重新跑 stress 验证，确认后可移除 A′ 方案。
 
 ---
 
 ### BUG-FLAKE-002 — 跨 package / 跨 task 共享 `exam_test` DB 导致 seed/cleanup 互相覆盖
 
-**状态**: 已缓解（Option A：DB-touching turbo 任务严格串行化）。Option B 基础设施已可用（2026-06-21），但 **现有测试文件尚未接入隔离 schema**，因此跨 package 并发仍会失败（验证见下）。Option A 串行链（`verify:db-tests`）仍需保留。
+**状态**: 已缓解（Option A：DB-touching turbo 任务严格串行化）。Option B 已完成（2026-06-21）——所有 DB-touching 测试文件已接入隔离 schema，跨 package 并发 stress 已验证通过（5/5 PASS）。Option A 串行链（`verify:db-tests`）仍保留，可评估移除。
 
 **Old root cause**: `@exam/db` 与 `@exam/api` 共享 `exam_test.public` schema。turbo 并发调度 `test` 和 `coverage` 任务时，A 任务 seed 写入 default org 的同时 B 任务 cleanup 删除同一 org → FK violation / 身份认证失败。
 
 **New root fix**: `packages/db/src/testIsolation.ts` 提供 `setupIsolatedTestDb({ namespace })` + `buildTestApp(plugin, { schemaName })`，每个测试任务可拥有独立 PG schema 且互不干扰。通过 `SET search_path` + `migrationsSchema` 实现 schema 级隔离。已验证：`testIsolation.test.ts` 32 个隔离测试全部通过。
 
 **Remaining mitigations**:
-- `package.json` `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）仍为主缓解，需保留直到所有 DB-touching 测试文件接入隔离 schema。
+- `package.json` `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）仍为主缓解。B 方案已完成，可评估移除此串行链。
 
 **失败链**:
 
@@ -168,15 +168,15 @@ pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行�
 | `turbo run test coverage --filter=@exam/db --filter=@exam/api --force` | 3 | FAIL | **Expected** — existing tests still use shared `exam_test.public`, concurrent `@exam/db#test` + `@exam/db#coverage` collide on seed/cleanup |
 | `pnpm verify` | 1 | PASS | Full suite passes via serial `verify:db-tests` chain |
 
-**解释跨 package 失败**: 现有测试使用 `getTestDb()`（共享 public schema），尚未接入 B 方案隔离 schema。因此 `turbo run test coverage` 并发时 `@exam/db#test` 与 `@exam/db#coverage` 同时 seed → FK violation（`users_organization_id_organizations_id_fk`）。这不是 B 方案的问题——B 方案 infrastructure 已验证通过，只是现有测试未接入。**要在不迁移测试文件的前提下恢复跨 package 并发，需要每个测试任务接入 `getIsolatedTestDb()` 或 `buildTestApp(plugin, { schemaName })`。**
+**B 方案已完成**: 所有 DB-touching 测试文件已接入隔离 schema。`turbo run test coverage --filter=@exam/db --filter=@exam/api --force` 5/5 全部通过（2026-06-21）。跨 package 并发竞争已从源头消除。
 
-**Follow-up**: 迁移 `@exam/db` 和 `@exam/api` 测试文件到隔离 schema 后，重新运行此 stress 确认 `verify:db-tests` 串行链可移除。
+**Follow-up**: 重新运行 stress 确认 `verify:db-tests` 串行链可移除。
 
 ---
 
 ### BUG-FLAKE-003 — deadline scanner tests leak expired attempts across repeated runs
 
-**状态**: 已缓解（2026-06-20，cleanup containment 方案 + A′ serial）。B 方案基础设施已可用（2026-06-21），但现有 deadline scanner 测试仍使用共享 `exam_test.public` schema，未接入隔离 schema。
+**状态**: 已缓解（2026-06-20，cleanup containment 方案 + A′ serial）。B 方案已完成（2026-06-21）——所有 DB-touching 测试文件（含 deadline scanner）已接入隔离 schema，从源头消除数据残留。
 
 **Old root cause**: `cleanup()` 只关闭连接不删数据。deadline scanner 测试创建的 expired attempts（voided / future-deadline / race-noop 逃逸场景）在 run 结束后残留在 `exam_test.public` schema 中。`scanDatabaseForExpiredAttempts` 扫描整个 org 的全部 expired attempts，跨 run 污染。
 
@@ -306,13 +306,13 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 | `pnpm --filter @exam/api test -- --run src/routes/attempts.test.ts -t "deadline scanner"` | 5 | PASS | Cleanup containment + A′ serial: no leaked expired attempts |
 | `pnpm --filter @exam/api test -- --run src/routes/attempts.test.ts -t "heartbeat scanner\|disrupted"` | 5 | PASS | No timeout, no state leak |
 
-这些 stress 是在 cleanup containment 和 A′ serial 之下验证的。**B 方案接入后应重新跑 stress 确认 cleanup containment 可移除。**
+这些 stress 是在 cleanup containment 和 A′ serial 之下验证的。**B 方案已完成（2026-06-21）**——cleanup containment 可评估移除。
 
 ---
 
 ### BUG-FLAKE-004 — Intra-suite cross-file state leak via shared `exam_test` schema
 
-**状态**: 已缓解（2026-06-20，explicit cleanup 方案）。B 方案基础设施已可用（2026-06-21），但现有测试文件（tenant-isolation、exam、permissionBoundary）尚未接入隔离 schema。
+**状态**: 已缓解（2026-06-20，explicit cleanup 方案）。B 方案已完成（2026-06-21）——所有 DB-touching 测试文件（含 tenant-isolation、exam、permissionBoundary）已接入隔离 schema，从源头消除跨文件状态泄漏。
 
 **修复（2026-06-20）**:
 
@@ -361,7 +361,7 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 |---|---:|---|---|
 | `pnpm --filter @exam/api test -- --run apps/api/tests/security/tenant-isolation.test.ts src/routes/exam.test.ts src/routes/permissionBoundary.test.ts` | 3 | 2/3 PASS, 1 flake | First run failed (cold-start state), reruns passed 2/2 |
 
-**解释 1 次 flake**: 首次运行可能因共享 `exam_test.public` schema 的 cold-start 状态不干净而失败。后续运行稳定通过。**B 方案接入后此 flake 应自动消失，因为每文件使用独立 schema，前序文件数据不会残留。**
+**解释 1 次 flake**: 首次运行可能因共享 `exam_test.public` schema 的 cold-start 状态不干净而失败。后续运行稳定通过。**B 方案已完成（2026-06-21）**——每文件使用独立 schema，前序文件数据不会残留。此 flake 已从源头消除。
 
 ---
 
