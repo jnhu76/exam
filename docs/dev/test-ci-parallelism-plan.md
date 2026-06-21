@@ -141,6 +141,9 @@ Queue prefix:  exam:test:{scope}        # 例如 exam:test:local:w1 , exam:test:
 
 ## Phase 2 — datasource / scope resolver
 
+> **进度**: Phase 2A 已落地（resolver skeleton，见下方小节）。Phase 2B
+> （把 resolver 接入测试工厂、消费派生命名）尚未开始。
+
 **目标**：引入一个统一的 scope resolver，把"当前在哪运行 / 当前是哪个
 worker"映射成一个 scope id，再由 scope id 解析出 PG database、Redis
 prefix、Queue prefix。本阶段先只解析 scope，PG 切换在 Phase 3。
@@ -165,7 +168,53 @@ TEST_DB_ISOLATION=worker-database|file-schema
 TEST_DATABASE_URL_TEMPLATE=postgres://.../exam_test_s{shard}_w{worker}
 ```
 
-**验收（stress 证据）**：
+### Phase 2A — resolver skeleton（已完成）
+
+落地内容（`packages/db/src/testScope.ts`，并通过 `@exam/db` 公共导出）：
+
+- 纯解析逻辑，**无任何副作用**：不连 PG、不建库、不建 schema、不跑
+  migration、不连 Redis、不建 queue、不启 worker、不起 timer。
+- `resolveTestScope(env)` → `ResolvedTestScope`，派生 `scopeId` / `kind` /
+  `group` / `dbIsolation` / `postgresDatabaseName` / `redisPrefix` /
+  `queuePrefix` / `queueMode` / `shardIndex` / `workerId` / `isCi`。
+- worker id 解析顺序：`TEST_WORKER_ID`（fallback lever）→ `VITEST_WORKER_ID`
+  （runner 自动注入）→ `"1"`。**不要求**开发者手动传 `TEST_WORKER_ID`。
+- 输入校验：worker id 仅允许 `[A-Za-z0-9_-]`；shard index 仅允许 `local`
+  或正整数；group / db isolation / queue mode 必须属于允许集合；派生的 PG
+  database name 仅允许 `[a-z0-9_]` 且 ≤63 字符。非法输入**直接报错**，不静默
+  生成奇怪名字。
+- 命名规则（与 ADR-007 §2/§3/§4 一致）：
+  - local: `scopeId=local_w{w}`，`db=exam_test_w{w}`，
+    `redis=exam:test:local:w{w}:`，`queue=exam:test:local:w{w}`。
+  - CI: `scopeId=s{shard}_w{w}`，`db=exam_test_s{shard}_w{w}`，
+    `redis=exam:test:s{shard}:w{w}:`，`queue=exam:test:s{shard}:w{w}`。
+  - dedicated（background/concurrency/e2e）：`scopeId=<group>`，
+    `db=exam_test_<group>`，`redis=exam:test:<group>:`，
+    `queue=exam:test:<group>`。
+- legacy `TEST_DB_ISOLATION=file-schema`：`postgresDatabaseName=null`，
+  `isLegacyFileSchemaMode()=true`，resolver **不**派生 worker database。
+- 单元测试 `packages/db/src/testScope.test.ts`（26 用例，hermetic，无需 PG
+  服务）覆盖默认值、local/CI/dedicated 命名、file-schema 回退、各类非法输入
+  拒绝、Redis prefix 必以 `:` 结尾、Queue prefix 不得以 `:` 结尾、PG name
+  安全字符与长度。
+
+**Phase 2A 严格不做**：
+
+- **不**打开 `fileParallelism: true`，**不**改 `maxWorkers`。
+- **不**创建真实 worker database（那是 Phase 3）。
+- **不**移除 `packages/db/src/testIsolation.ts` 每文件 schema helper。
+- **不**移除 `TEST_DB_ISOLATION=file-schema` 回退。
+- **不**引入 Redis / BullMQ 依赖。
+- **不**改 CI。
+- **不**声称修复 `BUG-FLAKE-001`。
+- 现有测试执行拓扑与结果**完全不变**；resolver 仅提供命名能力，尚未被
+  测试工厂消费。
+
+**Phase 2A 验收**：`pnpm --filter @exam/db exec vitest run src/testScope.test.ts`
+全绿（26/26）；`pnpm --filter @exam/db typecheck` 通过；既有 `@exam/db` /
+`@exam/api` 测试行为不变。
+
+**验收（stress 证据，Phase 2B 及以后）**：
 
 - `TEST_DB_ISOLATION=file-schema`（默认回退）下 `pnpm verify` 全绿，行为与
   Phase 0 一致。

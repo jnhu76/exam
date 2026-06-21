@@ -2,6 +2,7 @@ export * from "./schema/pg.js";
 export * from "./database.js";
 export * from "./postgres.js";
 export * from "./types.js";
+export * from "./testScope.js";
 export * from "./repository/baseRepo.js";
 export * from "./repository/attemptRepo.js";
 export * from "./repository/auditLogRepo.js";
