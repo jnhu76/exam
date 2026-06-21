@@ -50,6 +50,13 @@ describe("gradeQuestion", () => {
     [[], ["a", "b"], "partial_half", 0],
     [["c"], ["a", "b"], "partial_half", 0],
     [["a"], ["a", "b"], "all_correct_full", 0],
+    // Superset of the standard set contains a wrong selection → 0 even under
+    // partial_half. Guards against a "score what overlaps" misimplementation.
+    [["a", "b", "c"], ["a", "b"], "partial_half", 0],
+    // Superset is still 0 under all_correct_full.
+    [["a", "b", "c"], ["a", "b"], "all_correct_full", 0],
+    // Duplicates in candidate collapse to a set; still full when correct.
+    [["a", "a", "b"], ["a", "b"], "partial_half", 10],
   ] as const)(
     "grades multiple choice candidate=%j standard=%j strategy=%s",
     (candidateAnswer, standardAnswer, multiSelectScoring, expectedScore) => {
@@ -118,6 +125,58 @@ describe("gradeQuestion", () => {
         },
       }),
       "atom",
+    );
+
+    expect(result.score).toBe(0);
+  });
+
+  it("scores a multi-blank record 0 when any single blank mismatches", () => {
+    const result = gradeQuestion(
+      makeQuestion({
+        type: "fill_blank",
+        standardAnswer: { blank1: "atom", blank2: "electron|电子" },
+      }),
+      { blank1: "atom", blank2: "proton" },
+    );
+
+    expect(result.score).toBe(0);
+    expect(result.correct).toBe(false);
+  });
+
+  it.each([
+    ["number candidate", 42],
+    ["null candidate", null],
+    ["boolean candidate", true],
+    ["array candidate", ["atom"]],
+  ])(
+    "scores fill blank 0 without throwing for %s",
+    (_label, candidateAnswer) => {
+      const result = gradeQuestion(
+        makeQuestion({
+          type: "fill_blank",
+          standardAnswer: "atom",
+        }),
+        candidateAnswer,
+      );
+
+      expect(result.score).toBe(0);
+      expect(result.correct).toBe(false);
+    },
+  );
+
+  it("returns 0 for multiple_choice when standardAnswer is not an array", () => {
+    // Guards toStringArray() coercion: a malformed standardAnswer yields an
+    // empty standard set, so any non-empty candidate is "all wrong" → 0.
+    const result = gradeQuestion(
+      makeQuestion({
+        type: "multiple_choice",
+        standardAnswer: "a",
+        gradingRule: {
+          multiSelectScoring: "partial_half",
+          fillBlankMatchMode: "exact",
+        },
+      }),
+      ["a"],
     );
 
     expect(result.score).toBe(0);

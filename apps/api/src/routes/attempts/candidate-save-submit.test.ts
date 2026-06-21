@@ -5,6 +5,7 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getSaveAnswerMessage } from "@exam/contracts";
 import {
@@ -1154,6 +1155,308 @@ describe("attempt routes", () => {
         originalDeadline.getTime() + disconnectedMs,
       );
       expect(restoredDeadline.getTime()).toBe(expectedDeadline.getTime());
+    });
+  });
+
+  // P2D-J1 regression: clean submit → grade → result flows for every objective
+  // question type, plus score-strategy selection observed through the API.
+  // These complement the single_choice/fill_blank cases scattered above by
+  // giving each type a named, self-contained path and asserting the graded
+  // score directly. Score strategy is verified end-to-end by enrolling the
+  // same candidate twice on strategy-specific exams and reading the
+  // enrollment's recorded finalScore/finalAttemptId from the DB.
+  describe("POST /attempts/:attemptId/submit — submit→grade→result for all objective question types", () => {
+    let mcPartialQuestionId: string;
+    let tfQuestionId: string;
+
+    beforeAll(async () => {
+      mcPartialQuestionId = crypto.randomUUID();
+      tfQuestionId = crypto.randomUUID();
+
+      await ctx.db.insert(schema.questions).values({
+        id: mcPartialQuestionId,
+        organizationId: ctx.org.id,
+        courseId,
+        type: "multiple_choice",
+        content: "Select the even numbers",
+        options: [
+          { id: "a", content: "1" },
+          { id: "b", content: "2" },
+          { id: "c", content: "3" },
+          { id: "d", content: "4" },
+        ],
+        standardAnswer: ["b", "d"],
+        attachments: [],
+        score: 100,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "partial_half",
+          fillBlankMatchMode: "exact",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await ctx.db.insert(schema.questions).values({
+        id: tfQuestionId,
+        organizationId: ctx.org.id,
+        courseId,
+        type: "true_false",
+        content: "The sky is blue on a clear day",
+        options: [
+          { id: "true", content: "True" },
+          { id: "false", content: "False" },
+        ],
+        standardAnswer: true,
+        attachments: [],
+        score: 100,
+        difficulty: 1,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    });
+
+    async function buildGradedFlow(opts: {
+      title: string;
+      questionIds: string[];
+    }): Promise<{ examId: string }> {
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: opts.title,
+          courseId,
+          questionIds: opts.questionIds,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId = examRes.json().id;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, examId);
+      return { examId };
+    }
+
+    async function startSaveSubmit(
+      examId: string,
+      qId: string,
+      answer: unknown,
+    ): Promise<{ attemptId: string; submitBody: Record<string, unknown> }> {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer,
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const submitRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      return { attemptId, submitBody: submitRes.json() };
+    }
+
+    it("grades a correct single_choice submit at full score", async () => {
+      const { examId } = await buildGradedFlow({
+        title: "SC Graded Flow",
+        questionIds: [questionId],
+      });
+      const { submitBody } = await startSaveSubmit(examId, questionId, "b");
+
+      expect(submitBody).toMatchObject({
+        status: "graded",
+        score: 100,
+        passed: true,
+      });
+    });
+
+    it("grades a partial multiple_choice submit at half score (partial_half)", async () => {
+      const { examId } = await buildGradedFlow({
+        title: "MC Partial Graded Flow",
+        questionIds: [mcPartialQuestionId],
+      });
+      // Select only one of two correct options, no wrong option → half score.
+      const { submitBody } = await startSaveSubmit(
+        examId,
+        mcPartialQuestionId,
+        ["b"],
+      );
+
+      expect(submitBody).toMatchObject({
+        status: "graded",
+        score: 50,
+        passed: false, // 50 < passingScore 60
+      });
+    });
+
+    it("grades a correct true_false submit at full score", async () => {
+      const { examId } = await buildGradedFlow({
+        title: "TF Graded Flow",
+        questionIds: [tfQuestionId],
+      });
+      const { submitBody } = await startSaveSubmit(examId, tfQuestionId, true);
+
+      expect(submitBody).toMatchObject({
+        status: "graded",
+        score: 100,
+        passed: true,
+      });
+    });
+  });
+
+  describe("POST /attempts/:attemptId/submit — score strategy applies to enrollment via API", () => {
+    // For each strategy the candidate takes two attempts on a max_attempts=2
+    // exam: attempt #1 scores 0 (wrong answer), attempt #2 scores 100
+    // (correct answer). We then read the enrollment row from the DB and
+    // assert which attempt's score/attemptId is recorded as final.
+    async function twoAttemptsAndRead(strategy: string): Promise<{
+      finalScore: number | null;
+      finalAttemptId: string | null;
+      attempt1Id: string;
+      attempt2Id: string;
+    }> {
+      // Build a dedicated exam for this strategy with 2 max attempts.
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: `Strategy ${strategy}`,
+          courseId,
+          questionIds: [questionId],
+          scoreStrategy: strategy,
+          retakePolicy: "max_attempts",
+          maxAttempts: 2,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const examId2 = examRes.json().id;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId2}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, examId2);
+
+      // Attempt 1: wrong answer → score 0.
+      const start1 = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId2}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attempt1Id = start1.json().id as string;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attempt1Id}/answers/${questionId}`,
+        payload: {
+          attemptId: attempt1Id,
+          questionId,
+          answer: "a", // wrong (standard is "b")
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const submit1 = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attempt1Id}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(submit1.json().score).toBe(0);
+
+      // Attempt 2: correct answer → score 100.
+      const start2 = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId2}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attempt2Id = start2.json().id as string;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attempt2Id}/answers/${questionId}`,
+        payload: {
+          attemptId: attempt2Id,
+          questionId,
+          answer: "b", // correct
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const submit2 = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attempt2Id}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(submit2.json().score).toBe(100);
+
+      const enrollmentRepo = createEnrollmentRepo(ctx.db);
+      const candidateCtx = {
+        actorId: ctx.candidate.id,
+        organizationId: ctx.org.id,
+        role: "Candidate" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const enrollment = await enrollmentRepo.findByExamAndCandidate(
+        candidateCtx,
+        examId2,
+        candidateProfileId,
+      );
+      return {
+        finalScore: enrollment?.finalScore ?? null,
+        finalAttemptId: enrollment?.finalAttemptId ?? null,
+        attempt1Id,
+        attempt2Id,
+      };
+    }
+
+    it("latest strategy records the most recent attempt (score 100, attempt #2)", async () => {
+      const { finalScore, finalAttemptId, attempt2Id } =
+        await twoAttemptsAndRead("latest");
+      expect(finalScore).toBe(100);
+      // latest always overwrites → the second (most recent) attempt wins.
+      expect(finalAttemptId).toBe(attempt2Id);
+    });
+
+    it("highest strategy records the higher-scoring attempt (score 100, attempt #2)", async () => {
+      const { finalScore, finalAttemptId, attempt2Id } =
+        await twoAttemptsAndRead("highest");
+      expect(finalScore).toBe(100);
+      // attempt #2 (100) > attempt #1 (0) → highest selects #2.
+      expect(finalAttemptId).toBe(attempt2Id);
+    });
+
+    it("first strategy keeps the first attempt (score 0, attempt #1)", async () => {
+      const { finalScore, finalAttemptId, attempt1Id } =
+        await twoAttemptsAndRead("first");
+      expect(finalScore).toBe(0);
+      // first never overwrites once set → the initial attempt #1 stays.
+      expect(finalAttemptId).toBe(attempt1Id);
     });
   });
 });

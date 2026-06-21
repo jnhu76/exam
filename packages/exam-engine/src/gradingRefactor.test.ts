@@ -445,6 +445,20 @@ describe("shouldEnrollmentComplete", () => {
     ).toBe(false);
   });
 
+  it("returns true for pass_then_stop when a previous attempt already passed even if the current one fails", () => {
+    // Names the `enrollment.finalPassed === true` disjunct in grading.ts:66.
+    // A candidate who passed once, then re-attempted and failed, must still
+    // be treated as completed under pass_then_stop.
+    expect(
+      shouldEnrollmentComplete(
+        { ...baseExam, retakePolicy: "pass_then_stop" },
+        { ...baseEnrollment, finalPassed: true },
+        false,
+        now,
+      ),
+    ).toBe(true);
+  });
+
   it("returns true when exam window has closed", () => {
     expect(
       shouldEnrollmentComplete(
