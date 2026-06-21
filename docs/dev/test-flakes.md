@@ -27,7 +27,7 @@
 **New root fix**: `packages/db/src/testIsolation.ts` 提供每测试文件 / 每 worker 独立 PG schema 机制。通过 `SET search_path TO <unique_schema>`（不含 `public`）+ `migrationsSchema` 参数为每个 schema 独立追踪迁移状态 → 跨 worker / 跨文件 DB 状态泄漏从源头消除。已验证：32 个 isolation helper 测试全部通过。
 
 **Remaining mitigations**:
-1. **A′ `fileParallelism: false`**（apps/api 和 packages/db vitest config）：串行执行 DB-touching file，仍为当前主缓解。B 方案迁移完成后可评估移除（需在独立 follow-up PR 中验证 stress）。
+1. **A′ `fileParallelism: false`**（apps/api vitest config，packages/db 已于 PR87 恢复并行）：串行执行 apps/api 的 DB-touching file，仍为当前主缓解。B 方案迁移完成后可评估移除（需在独立 follow-up PR 中验证 stress）。
 2. **C 方案 scanner legacy timeout**（15_000ms）：保留，可评估移除（需在独立 follow-up PR 中 review）。
 
 **当前缓解**:
@@ -37,7 +37,7 @@
    - 隔离机制：`SET search_path TO <unique_schema>`（不含 `public`）+ `migrationsSchema` 参数实现 schema 级独立追踪。
    - FK 约束 schema 无关：迁移 SQL 中所有 FK 引用已去掉 `"public".` 硬编码前缀。
    - 由 `TEST_DB_ISOLATION=1`（默认开启）控制。
-2. **A′ 方案（保留，可选移除）**: `apps/api/vitest.config.ts` 与 `packages/db/vitest.config.ts` 均设置 `fileParallelism: false`。B 方案迁移完成后此设置已成为安全网而非主缓解，可在独立 follow-up PR 中评估移除。
+2. **A′ 方案（保留，packages/db 已恢复并行）**: `apps/api/vitest.config.ts` 设置 `fileParallelism: false`（packages/db 已于 PR87 删除该设置）。B 方案迁移完成后此设置已成为安全网而非主缓解，可在独立 follow-up PR 中评估移除。
    - 影响范围：仅 `apps/api` 和 `packages/db`。
    - turbo 层面：跨 package 仍然并行（已验证 5/5 通过）。
 3. **C 方案（保留，可选 review）**: `apps/api/src/routes/attempts.test.ts:1070` 的 15_000 ms timeout。B 方案迁移完成后可 review 是否移除。
@@ -81,7 +81,105 @@
 | `pnpm --filter @exam/db test -- --run src/testIsolation.test.ts` | 1 | PASS | 32 isolation helper tests pass |
 | `pnpm verify` | 1 | PASS | Full suite: lint/typecheck/tests/build green |
 
-这些 stress 是在 A′ serial containment 下运行的。**B 方案已完成（2026-06-21）**——所有 DB-touching 测试文件已接入隔离 schema，跨 package 并发 stress 5/5 PASS。**下一步（独立 follow-up PR）**：移除 `fileParallelism` 默认值并重新跑 stress 验证，确认后可移除 A′ 方案。
+这些 stress 是在 A′ serial containment 下运行的。**B 方案已完成（2026-06-21）**——所有 DB-touching 测试文件已接入隔离 schema，跨 package 并发 stress 5/5 PASS。
+
+**PR86（2026-06-21）**：`apps/api` 文件并行**不可恢复**——详见下方 PR86 诊断小节。`apps/api/vitest.config.ts` 永久保留 `fileParallelism: false`。
+
+**PR87（2026-06-21）**：`packages/db` 文件并行**已恢复**——见下方 PR87 记录。`packages/db/vitest.config.ts` 已删除 `fileParallelism: false`，恢复 Vitest 默认并行。
+
+### PR86 fileParallelism 恢复诊断（2026-06-21）
+
+> 尝试在本 PR 恢复 `apps/api` 文件并行，经 stress 验证后**判定不可恢复**，转为诊断/阻塞 PR。
+> 完整 PR 描述见 PR86；本节为代码库内留档的复现矩阵。
+
+**复现到的失败（精确匹配此前观察）**：
+
+| Run | File | Test | Error | Schema | Subsystem |
+|---:|---|---|---|---|---|
+| B run 3/15 | `src/routes/auth.test.ts` | `auth routes > POST /api/auth/login rejects legacy future-role rows with generic auth failure` | `Test timed out in 5000ms`（实测 5007ms） | isolated `test_api_*`（B 方案隔离 schema 生效） | 默认并行下并发 `buildTestApp()` 的 CREATE SCHEMA → migrate → seed + 该用例 6 轮 login/audit-polling 叠加，单个用例无法在 5s 默认 testTimeout 内收敛 |
+
+**诊断矩阵**（vitest 4.1.7，WSL2，8 core，10 GB，`exam-test` PG on docker）：
+
+| 变体 | 命令 | Runs | 结果 | 含义 |
+|---|---|---:|---|---|
+| A 串行（当前 config） | `vitest run`（config `fileParallelism:false`） | 8 | 8/8 PASS（91–112s/run） | 串行稳定，对照基线 |
+| B 并行默认 workers | `vitest run --fileParallelism`（~7 workers，CPU ~511%） | 15 | 2 PASS / 1 FAIL（@run 3，5007ms timeout） | **复现阻塞**：默认并行会触发 auth legacy-role 用例超时 |
+| C 并行 + 50% 限流 | `vitest run --fileParallelism --maxWorkers=50%`（~4 workers，CPU ~403%） | 15 | 15/15 PASS（37–44s/run） | 限流到 ≤4 workers 可消除超时 |
+| D 并行 + 25% 限流 | `vitest run --fileParallelism --maxWorkers=25%`（~2 workers） | 10 | 10/10 PASS（53–72s/run） | 25% 限流更慢但同样稳定 |
+| E turbo 冷缓存 | `turbo run test --filter=@exam/api --force`（串行 config） | 5 | 5/5 PASS（111–132s/run） | 冷缓存 / turbo 调度路径稳定，与失败无相关 |
+
+**vitest 语义核验**（避免误读 C/D）：
+
+- vitest 4.1.x 的 `resolveConfig.ts`：`fileParallelism: false` 会把 `maxWorkers` **强制为 1**。
+- 因此 `--maxWorkers=50%` 必须与 `--fileParallelism`（正布尔 CLI flag）同时提供才有效；单独传 `--maxWorkers=50%` 会被 config 的 `fileParallelism:false` 覆盖、退化为串行。本配置无法被 CI flag 旁路。
+- 这是 PR86 诊断的方法学关键：先前曾误把"maxWorkers=50% 通过"当作并行安全的证据；实际若未显式开 `--fileParallelism`，该结果等同于串行，不构成并行证据。C/D 的 15/15、10/10 是在确认 CPU 实际达 403%/多 worker（即真正并行）下取得的。
+
+**结论（证据驱动）**：
+
+`apps/api` 的文件并行被并行 schema migration 的 PG 吞吐瓶颈阻塞。B 方案的 schema 隔离消除了跨文件状态污染，但并行 `buildTestApp()` 仍并发执行 CREATE SCHEMA → migrate → seed。auth legacy-role 用例（6 轮 login + 每轮 audit 轮询）在默认 7-worker 并行下偶发超过 5s 默认 testTimeout。限流到 ≤4 workers 可在本机消除超时，但**不作为本 PR 的修复**（需显式决策是否接受永久限流 + 慢测试，且 CI runner 的 core 数与本地不同，50% 的含义不可移植）。
+
+**推荐**：保留 `apps/api` `fileParallelism: false`。`packages/db` 的跨 package stress 此前 5/5 通过，建议在独立 follow-up PR 单独评估其是否恢复并行。不在本 PR 恢复 apps/api 文件并行。
+
+**根因修复方向（follow-up，非本 PR）**：
+
+1. 测试期 semaphore 串行化隔离 schema 的 create/migrate/seed。
+2. 预迁移模板 schema，每测试文件 clone/copy 结构而非全量 migrate。
+3. 在安全前提下让多文件共享同一 worker 的隔离 schema。
+4. 拆分 auth legacy-role 用例，避免单个 5s test 下 6 轮顺序 audit 轮询。
+5. 若并行收益不值不回复杂度，则永久保留 `apps/api fileParallelism: false`。
+
+**禁止做（仍有效）**：不调长 auth.test 单点 timeout（该 bump 已被前序提交正确 revert）、不 skip 该用例、不在 CI 默认重跑后通过。
+
+### PR87 packages/db 文件并行恢复（2026-06-21）
+
+> `packages/db` 删除 `fileParallelism: false`，恢复 Vitest 默认文件并行。
+> `apps/api` 不动（永久保留 `fileParallelism: false`，由 PR86 诊断确认不可恢复）。
+
+**恢复原因**：`packages/db` 仅 8 个测试文件（vs `apps/api` 52 个），其中 6 个 DB-touching 文件均使用 B 方案隔离 schema helper（`getIsolatedTestDb`），且无 `auth.test` 式的单测试 6 轮 login + audit-polling 放大。并行度低、无放大用例 → 并行安全。
+
+**验证矩阵**（vitest 4.1.7，WSL2，8 core，10 GB，`exam-test` PG on docker）：
+
+| 变体 | Runs | 结果 | 含义 |
+|---|---|---:|---|---|
+| `pnpm --filter @exam/db test`（并行，CPU ~320%） | 15 | 15/15 PASS（5–7s/run） | packages/db 内部文件并行稳定 |
+| `pnpm --filter @exam/db coverage`（并行，v8 instrumentation） | 10 | 10/10 PASS（6–8s/run） | 含 coverage 插桩下并行稳定 |
+| `turbo run test coverage --filter=@exam/db --filter=@exam/api --force`（跨包 turbo 并发） | 5 | 4/5 PASS，1/5 demo-seed 5032ms timeout | PR88 修复前基线；跨包 turbo 并发下 db:test + db:coverage + api:test + api:coverage 4 任务同时挤 PG 导致 demo-seed 超时 |
+| `pnpm verify` | 1 | PASS | 全链路（lint/typecheck/test/coverage/build）通过 |
+
+**PR88 修复**：`turbo.json` 新增 `@exam/db#coverage dependsOn @exam/db#test`，使 DB-touching test 与 coverage 在 turbo 调度层面不再并发。修复后 turbo 并发压力验证 10/10 PASS（见 PR88 小节）。
+
+**不纳入 PR87 的范围**：
+1. 不调长 `demo-seed.test.ts` 的单点 timeout（不应为测试便利让步）。
+2. 不修改 `apps/api/vitest.config.ts`（PR86 判定永久保留）。
+3. 不修改 scanner timeout。
+4. 不改产品代码。
+
+### PR88 turbo 层面 DB-touching 任务串行化（2026-06-21）
+
+> 在 `turbo.json` 新增 `@exam/db#coverage dependsOn ["^build", "@exam/db#test"]`，使 `@exam/db` 的 test 和 coverage 在 turbo 调度层面不再并发。
+> 配合 PR87（packages/db 内部文件并行恢复），完成 DB-touching 测试调度的全面稳定性。
+
+**修复原因**：PR87 验证中发现 `turbo run test coverage --filter=@exam/db --filter=@exam/api --force` 在 4 任务并发（db:test + db:coverage + api:test + api:coverage）下，`demo-seed.test.ts` 偶发 5s timeout（5032ms）。根因是 4 个任务同时挤同一个 PG 实例的 schema create/migrate/seed + argon2 哈希，导致单个测试超时。
+
+**修复方式**：`turbo.json` 为 `@exam/db#coverage` 添加 `dependsOn: ["^build", "@exam/db#test"]`。修复后 turbo 调度管道变为：
+- `@exam/db#test` → `@exam/db#coverage` → `@exam/api#coverage`
+- `@exam/db#test` → `@exam/api#test`
+- 最大并行 PG 任务数：4 → 2
+
+**验证矩阵**（vitest 4.1.7，WSL2，8 core，10 GB，`exam-test` PG on docker）：
+
+| 变体 | Runs | 结果 | 含义 |
+|---|---|---:|---|---|
+| `pnpm --filter @exam/db test`（并行） | 15 | 15/15 PASS（5–7s/run） | packages/db 内部文件并行稳定 |
+| `pnpm --filter @exam/db coverage`（并行） | 10 | 10/10 PASS（6–8s/run） | 含 coverage 插桩下并行稳定 |
+| `turbo run test coverage --filter=@exam/db --filter=@exam/api --force`（修复后） | 10 | 10/10 PASS（137–154s/run） | 串行化 db 任务后 turbo 并发压力稳定 |
+| `pnpm verify` | 3 | 3/3 PASS（217–218s/run） | 全链路稳定 |
+
+**不纳入 PR88 的范围**：
+1. 不改 `apps/api/vitest.config.ts`（PR86 判定永久保留 `fileParallelism: false`）。
+2. 不改 scanner timeout。
+3. 不改 `demo-seed.test.ts` 单点 timeout。
+4. 不改产品代码。
 
 ---
 
@@ -112,7 +210,7 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 
 **已知不是的原因**:
 
-- 不是单 package 内并行（`fileParallelism: false` 已分别作用于 `apps/api` 与 `packages/db`，见 BUG-FLAKE-001 A′ 方案）
+- 不是单 package 内并行（`fileParallelism: false` 作用于 `apps/api`，`packages/db` 已于 PR87 恢复并行，见 BUG-FLAKE-001 A′ 方案）
 - 不是产品代码 bug（seed / cleanup / 路由均未改动）
 - 不是迁移问题（schema 早已就位）
 
