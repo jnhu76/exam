@@ -27,7 +27,7 @@
 **New root fix**: `packages/db/src/testIsolation.ts` 提供每测试文件 / 每 worker 独立 PG schema 机制。通过 `SET search_path TO <unique_schema>`（不含 `public`）+ `migrationsSchema` 参数为每个 schema 独立追踪迁移状态 → 跨 worker / 跨文件 DB 状态泄漏从源头消除。已验证：32 个 isolation helper 测试全部通过。
 
 **Remaining mitigations**:
-1. **A′ `fileParallelism: false`**（apps/api 和 packages/db vitest config）：串行执行 DB-touching file，仍为当前主缓解。B 方案迁移完成后可评估移除（需在独立 follow-up PR 中验证 stress）。
+1. **A′ `fileParallelism: false`**（apps/api vitest config，packages/db 已于 PR87 恢复并行）：串行执行 apps/api 的 DB-touching file，仍为当前主缓解。B 方案迁移完成后可评估移除（需在独立 follow-up PR 中验证 stress）。
 2. **C 方案 scanner legacy timeout**（15_000ms）：保留，可评估移除（需在独立 follow-up PR 中 review）。
 
 **当前缓解**:
@@ -37,7 +37,7 @@
    - 隔离机制：`SET search_path TO <unique_schema>`（不含 `public`）+ `migrationsSchema` 参数实现 schema 级独立追踪。
    - FK 约束 schema 无关：迁移 SQL 中所有 FK 引用已去掉 `"public".` 硬编码前缀。
    - 由 `TEST_DB_ISOLATION=1`（默认开启）控制。
-2. **A′ 方案（保留，可选移除）**: `apps/api/vitest.config.ts` 与 `packages/db/vitest.config.ts` 均设置 `fileParallelism: false`。B 方案迁移完成后此设置已成为安全网而非主缓解，可在独立 follow-up PR 中评估移除。
+2. **A′ 方案（保留，packages/db 已恢复并行）**: `apps/api/vitest.config.ts` 设置 `fileParallelism: false`（packages/db 已于 PR87 删除该设置）。B 方案迁移完成后此设置已成为安全网而非主缓解，可在独立 follow-up PR 中评估移除。
    - 影响范围：仅 `apps/api` 和 `packages/db`。
    - turbo 层面：跨 package 仍然并行（已验证 5/5 通过）。
 3. **C 方案（保留，可选 review）**: `apps/api/src/routes/attempts.test.ts:1070` 的 15_000 ms timeout。B 方案迁移完成后可 review 是否移除。
@@ -210,7 +210,7 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 
 **已知不是的原因**:
 
-- 不是单 package 内并行（`fileParallelism: false` 已分别作用于 `apps/api` 与 `packages/db`，见 BUG-FLAKE-001 A′ 方案）
+- 不是单 package 内并行（`fileParallelism: false` 作用于 `apps/api`，`packages/db` 已于 PR87 恢复并行，见 BUG-FLAKE-001 A′ 方案）
 - 不是产品代码 bug（seed / cleanup / 路由均未改动）
 - 不是迁移问题（schema 早已就位）
 

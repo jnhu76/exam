@@ -7,7 +7,7 @@ import { defineConfig } from "vitest/config";
 //   - No auth-style amplification: the heaviest single test is a bounded
 //     repo/seed assertion, not a 6-cycle login + audit-polling loop that must
 //     converge inside a single 5s testTimeout.
-//   - Every DB-touching file uses the B方案 isolated-schema helper
+//   - Every DB-touching file uses the Plan B isolated-schema helper
 //     (getIsolatedTestDb → setupIsolatedTestDb → migratePostgres), so cross-
 //     file state pollution is eliminated at the source.
 //
