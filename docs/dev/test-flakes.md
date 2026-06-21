@@ -8,6 +8,13 @@
 - 让我们能识别出"反复在同一个测试上出现"的趋势——若一条 flake 升级为高频问题，就要从登记册升级为正式 Bug
 - 给将来 Phase1.5/1.6/1.7 测试基础设施收紧时（统一隔离、串行化、独立 PG schema）留下证据
 
+> **进度备注（ADR-007 Phase 2A，resolver skeleton）**：ADR-007 Phase 2A
+> introduced a resolver skeleton only (`packages/db/src/testScope.ts`)。它只提供
+> 统一 test scope 命名能力，是纯解析逻辑、无副作用、未被测试工厂消费，
+> **does not remove BUG-FLAKE-001 mitigations**（`fileParallelism: false`、
+> `verify:db-tests` 串行链、scanner legacy timeout、每文件 schema 隔离全部
+> 保留），也**不声称 flake 已修复**。真实隔离落地是 Phase 3+ 的后续 PR。
+
 ## 登记规则
 
 1. **必须有再现一次"同代码再跑就过"的证据**才能记入此处，否则按真实 bug 处理。

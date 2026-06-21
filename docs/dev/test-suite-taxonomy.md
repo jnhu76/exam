@@ -277,3 +277,13 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
 - `.github/workflows/ci.yml` —— 当前 CI 已有独立 `e2e` job（独立 PG
   `exam_e2e`），与本文件 Group 4 一致；Phase 6 才新增 `api-fast` shard /
   `api-background` / `api-concurrency`。
+
+## 进度备注（Phase 2A，resolver skeleton）
+
+- `packages/db/src/testScope.ts` 已落地（纯解析，无副作用），能按本文件的
+  group 概念派生 `scopeId` / `postgresDatabaseName` / `redisPrefix` /
+  `queuePrefix` / `queueMode`。其中 `API_TEST_GROUP=background` 默认推导出
+  `queueMode=worker-enabled`，`concurrency` / `e2e` / `fast` 默认
+  `producer-only`，与上表"worker 是否显式启用"的语义一致。
+- 这只是命名能力，**不**改变现有测试执行拓扑，**不**消费 resolver 的派生
+  database/prefix。打标（Phase 1）与真实隔离落地（Phase 3+）仍是后续 PR。
