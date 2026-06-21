@@ -72,10 +72,10 @@
 - 2026-06-20：P2C-J2/J3 恢复（`feat/p2c-j5-proctor-dashboard` 分支）后跑 `pnpm verify`，scanner 用例再次 5s timeout——`attempts.test.ts > deadline scanner > is idempotent: second scan does not re-grade or duplicate audit` 与 `> heartbeat scanner > leaves a still-stale in_progress attempt for the next scan when this scan finds nothing to disrupt` 两个用例 timeout（5000ms），均为 scanner 家族。同代码单跑整文件 `vitest run src/routes/attempts.test.ts` 68/68 green；`-t "force-submit|extend-time|misconduct"` 15/15 green。属 BUG-FLAKE-001 重负载 timeout 家族，与 J2/J3 恢复改动无因果（恢复仅新增 force-submit/extend-time 路由与测试，未触碰 scanner 代码）。
 - 2026-06-20：`attempts.ts` 机械拆分为 `attempts.{candidate,admin,shared}.ts`（同分支）后，连续 3 次 `vitest run src/routes/attempts.test.ts` 整文件运行中，同样的 scanner 用例（`is idempotent: second scan...` / `leaves a still-stale in_progress attempt...`）间歇 5s timeout（1–2 个用例，非断言错误）。单独复跑 `-t "is idempotent: second scan|leaves a still-stale"` 时 1 个 timeout、1 个 4532ms 勉强过；`-t "force-submit|extend-time|misconduct"` 15/15 green。失败用例固定落在 deadline/heartbeat scanner describe，且为 timeout（非断言），符合 BUG-FLAKE-001 PG I/O 争用特征。拆分仅改路由层 register hub 与文件归属，未触碰 scanner 代码（`packages/exam-engine` 的 `scanDatabase*` 与 `apps/api/src/plugins/{deadlineScanner,heartbeat}.ts` 均未改动），判定无因果关系。
 
-### Stress verification
+### Stress verification — BUG-FLAKE-001 scanner
 
 | Command | Runs | Result | Notes |
-|---|---:|---|---|
+|---|---|---|---:|---|
 | `pnpm --filter @exam/api test -- --run src/routes/attempts.test.ts -t "deadline scanner"` | 5 | PASS | No timeout, no leaked expired attempts |
 | `pnpm --filter @exam/api test -- --run src/routes/attempts.test.ts -t "heartbeat scanner\|disrupted"` | 5 | PASS | Stable under serial containment |
 | `pnpm --filter @exam/db test -- --run src/testIsolation.test.ts` | 1 | PASS | 32 isolation helper tests pass |
@@ -298,10 +298,10 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 
 - 2026-06-18：50-run reproduction 脚本，Run 38 首次失败（`submittedCount: 3`）。Run 1-37 全过。DB 累积 94 条 expired disrupted attempts。
 
-### Stress verification
+### Stress verification — BUG-FLAKE-003 deadline scanner
 
 | Command | Runs | Result | Notes |
-|---|---:|---|---|
+|---|---|---|---:|---|
 | `pnpm --filter @exam/api test -- --run src/routes/attempts.test.ts -t "deadline scanner"` | 5 | PASS | Cleanup containment + A′ serial: no leaked expired attempts |
 | `pnpm --filter @exam/api test -- --run src/routes/attempts.test.ts -t "heartbeat scanner\|disrupted"` | 5 | PASS | No timeout, no state leak |
 
@@ -354,10 +354,10 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 
 - 2026-06-19：RESOLVED-001 根因分析中发现，`tenant-isolation.test.ts` 写入 `batchSize:0` 后污染 `exam.test.ts` 与 `permissionBoundary.test.ts`，修复 fixture 后 512/512 过。
 
-### Stress verification
+### Stress verification — BUG-FLAKE-004 cross-file
 
 | Command | Runs | Result | Notes |
-|---|---:|---|---|
+|---|---|---|---:|---|
 | `pnpm --filter @exam/api test -- --run apps/api/tests/security/tenant-isolation.test.ts src/routes/exam.test.ts src/routes/permissionBoundary.test.ts` | 3 | 2/3 PASS, 1 flake | First run failed (cold-start state), reruns passed 2/2 |
 
 **解释 1 次 flake**: 首次运行可能因共享 `exam_test.public` schema 的 cold-start 状态不干净而失败。后续运行稳定通过。**B 方案已完成（2026-06-21）**——每文件使用独立 schema，前序文件数据不会残留。此 flake 已从源头消除。

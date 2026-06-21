@@ -261,7 +261,7 @@ describe("seed works in isolated schema", () => {
     expect(users[0]!.role).toBe("Admin");
   });
 
-  it("does not leak org to public schema", async () => {
+  it("creates org in isolated schema", async () => {
     const sql = postgres(TEST_DB_URL);
     try {
       const rows = await sql`

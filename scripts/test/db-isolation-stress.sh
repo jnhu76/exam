@@ -53,7 +53,7 @@ FAIL_COUNT=0
 cleanup() {
   if [ "$KEEP" != "1" ] && [ "$KEEP" != "true" ]; then
     echo "=== Schema cleanup ==="
-    bash scripts/db/drop-test-schemas.sh 2>&1 | head -5
+    bash scripts/db/drop-test-schemas.sh 2>&1 | sed -n '1,5p'
   fi
   rm -rf "$LOG_DIR"
 }

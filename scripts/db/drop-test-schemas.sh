@@ -13,14 +13,14 @@ echo "Listing test_* schemas before drop:"
 psql "$DB_URL" -t -A <<'SQL'
   SELECT schema_name
   FROM information_schema.schemata
-  WHERE schema_name LIKE 'test_%'
+  WHERE schema_name LIKE 'test\_%'
   ORDER BY schema_name;
 SQL
 
 COUNT=$(psql "$DB_URL" -t -A <<'SQL'
   SELECT count(*)
   FROM information_schema.schemata
-  WHERE schema_name LIKE 'test_%';
+  WHERE schema_name LIKE 'test\_%';
 SQL
 )
 
@@ -39,7 +39,7 @@ psql "$DB_URL" <<'SQL'
     FOR rec IN
       SELECT schema_name
       FROM information_schema.schemata
-      WHERE schema_name LIKE 'test_%'
+      WHERE schema_name LIKE 'test\_%'
       ORDER BY schema_name
     LOOP
       EXECUTE format('DROP SCHEMA IF EXISTS %I CASCADE', rec.schema_name);
@@ -53,7 +53,7 @@ echo "Done. Remaining test_* schemas:"
 psql "$DB_URL" -t -A <<'SQL'
   SELECT schema_name
   FROM information_schema.schemata
-  WHERE schema_name LIKE 'test_%'
+  WHERE schema_name LIKE 'test\_%'
   ORDER BY schema_name;
 SQL
 

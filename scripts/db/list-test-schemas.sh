@@ -11,6 +11,6 @@ DB_URL="${DATABASE_URL:-postgresql://exam:exam@localhost:5432/exam_test}"
 psql "$DB_URL" -t -A <<'SQL'
   SELECT schema_name
   FROM information_schema.schemata
-  WHERE schema_name LIKE 'test_%'
+  WHERE schema_name LIKE 'test\_%'
   ORDER BY schema_name;
 SQL

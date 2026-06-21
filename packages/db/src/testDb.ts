@@ -81,8 +81,14 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
     namespace,
     databaseUrl: TEST_DB_URL,
   });
-  const conn = await createDatabase(iso.databaseUrl, iso.schemaName);
-  await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
+  let conn: Awaited<ReturnType<typeof createDatabase>>;
+  try {
+    conn = await createDatabase(iso.databaseUrl, iso.schemaName);
+    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
+  } catch (err) {
+    await iso.cleanup();
+    throw err;
+  }
 
   return {
     db: conn.db,
