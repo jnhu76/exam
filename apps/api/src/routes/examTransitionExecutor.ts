@@ -55,15 +55,11 @@ export async function executeAdminExamTransition<T>(
     if (!locked) return null;
 
     // 2. Reconcile status by now (published->open / open->closed lazily).
-    const reconciled = await reconcileExamForMutation(
-      createExamRepoAdapter(repo, ctx),
-      examId,
-      now,
-    );
+    const adapter = createExamRepoAdapter(repo, ctx);
+    const reconciled = await reconcileExamForMutation(adapter, examId, now);
     const exam = reconciled?.exam ?? locked;
 
     // 3. Route-specific guard + command.
-    const adapter = createExamRepoAdapter(repo, ctx);
     const data = await run({ tx, repo: adapter, exam });
 
     return {
