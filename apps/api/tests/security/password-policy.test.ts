@@ -12,6 +12,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -31,13 +32,19 @@ describe("Password Policy Baseline (S08-lite)", () => {
   let app: ReturnType<typeof Fastify>;
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let adminToken: string;
+  let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const conn = await createDatabase(
+    const TEST_DB_URL =
       process.env.TEST_DATABASE_URL ??
-        "postgresql://exam:exam@localhost:5432/exam_test",
-    );
-    await migratePostgres(conn.db);
+      "postgresql://exam:exam@localhost:5432/exam_test";
+    const iso = await setupIsolatedTestDb({
+      namespace: "security-password",
+      databaseUrl: TEST_DB_URL,
+    });
+    cleanup = iso.cleanup;
+    const conn = await createDatabase(TEST_DB_URL, iso.schemaName);
+    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
     const db = conn.db;
     sql = conn.sql;
 
@@ -72,6 +79,7 @@ describe("Password Policy Baseline (S08-lite)", () => {
   afterAll(async () => {
     await app.close();
     await sql.end();
+    await cleanup();
   });
 
   describe("AC1: POST /api/users rejects passwords shorter than 8 characters", () => {

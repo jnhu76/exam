@@ -13,6 +13,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -21,10 +22,6 @@ import systemRoutes from "../../src/routes/system.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
-import {
-  cleanupOrganizationTestData,
-  cleanupBusinessData,
-} from "@exam/db/src/testCleanup.js";
 
 function createDbPlugin(db: Database) {
   return fp(async (fastify) => {
@@ -52,13 +49,19 @@ describe("Tenant Isolation (S01)", () => {
   let candidateAToken: string;
   let app: ReturnType<typeof Fastify>;
   let examBId: string;
+  let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const conn = await createDatabase(
+    const TEST_DB_URL =
       process.env.TEST_DATABASE_URL ??
-        "postgresql://exam:exam@localhost:5432/exam_test",
-    );
-    await migratePostgres(conn.db);
+      "postgresql://exam:exam@localhost:5432/exam_test";
+    const iso = await setupIsolatedTestDb({
+      namespace: "security-tenant",
+      databaseUrl: TEST_DB_URL,
+    });
+    cleanup = iso.cleanup;
+    const conn = await createDatabase(TEST_DB_URL, iso.schemaName);
+    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
     db = conn.db;
     sql = conn.sql;
 
@@ -229,9 +232,8 @@ describe("Tenant Isolation (S01)", () => {
 
   afterAll(async () => {
     await app.close();
-    await cleanupBusinessData(db, orgA.id);
-    await cleanupOrganizationTestData(db, orgB.id);
     await sql.end();
+    await cleanup();
   });
 
   describe("Cross-tenant data isolation", () => {

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase, migratePostgres } from "@exam/db";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 import { resetAdminPassword } from "./reset-admin-password.js";
@@ -54,15 +55,22 @@ async function insertUser(
 describe("resetAdminPassword service", () => {
   let db: Database;
   let conn: Awaited<ReturnType<typeof createDatabase>>;
+  let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    conn = await createDatabase(TEST_DB_URL);
+    const iso = await setupIsolatedTestDb({
+      namespace: "script-reset-pwd",
+      databaseUrl: TEST_DB_URL,
+    });
+    cleanup = iso.cleanup;
+    conn = await createDatabase(TEST_DB_URL, iso.schemaName);
     db = conn.db;
-    await migratePostgres(db);
+    await migratePostgres(db, { migrationsSchema: iso.schemaName });
   });
 
   afterAll(async () => {
     await conn.sql.end();
+    await cleanup();
   });
 
   it("resets Admin password successfully", async () => {
