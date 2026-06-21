@@ -4,23 +4,29 @@ import { createAsyncTenantCrudRepo } from "./baseRepo.js";
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 type ManualGradingEntrySelect = (typeof manualGradingEntries)["$inferSelect"];
 
 /**
- * Creates the manual-grading-entry repository with CRUD plus two read-only
- * finders. Write operations (upsert/create) are intentionally NOT provided
- * here — they belong to the grading command layer (P2D-J3). This job only
- * defines the model and the read path.
+ * Creates the manual-grading-entry repository. Exposes only read operations
+ * (findById / list / count / listPaginated + two finders). Write operations
+ * (create / update / delete) are intentionally NOT exposed here — they belong
+ * to the grading command layer (P2D-J3). This keeps the model-only scope of
+ * J2 from leaking write paths into callers.
  */
 export function createManualGradingRepo(db: Database) {
   const repo = createAsyncTenantCrudRepo(db, manualGradingEntries);
 
   return {
-    ...repo,
+    // Read-only CRUD surface (create/update/delete deliberately omitted).
+    findById: repo.findById,
+    list: repo.list,
+    count: repo.count,
+    listPaginated: repo.listPaginated,
     /**
      * Lists all manual grading entries for an attempt, scoped to the tenant.
+     * Ordered by questionId for deterministic results.
      */
     async findByAttempt(
       ctx: TenantContext | RequestContext,
@@ -35,7 +41,8 @@ export function createManualGradingRepo(db: Database) {
             eq(manualGradingEntries.organizationId, orgId),
             eq(manualGradingEntries.attemptId, attemptId),
           ),
-        );
+        )
+        .orderBy(asc(manualGradingEntries.questionId));
     },
     /**
      * Finds the single manual grading entry for a given attempt + question,

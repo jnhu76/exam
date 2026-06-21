@@ -239,6 +239,44 @@ describe("manualGradingRepo", () => {
     ).rejects.toThrow();
   });
 
+  it("DB check constraint rejects score > maxScore at the database boundary", async () => {
+    const now = new Date();
+    await expect(
+      db.insert(schema.manualGradingEntries).values({
+        id: randomUUID(),
+        organizationId: orgId,
+        attemptId,
+        questionId: "q-over-max",
+        score: 11,
+        maxScore: 10,
+        comment: "",
+        gradedBy: "grader-1",
+        gradedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("DB check constraint rejects a negative score", async () => {
+    const now = new Date();
+    await expect(
+      db.insert(schema.manualGradingEntries).values({
+        id: randomUUID(),
+        organizationId: orgId,
+        attemptId,
+        questionId: "q-negative",
+        score: -1,
+        maxScore: 10,
+        comment: "",
+        gradedBy: "grader-1",
+        gradedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ).rejects.toThrow();
+  });
+
   it("scoping: does not return entries from another organization", async () => {
     const otherOrgId = randomUUID();
     const ctx2 = createContext(otherOrgId);

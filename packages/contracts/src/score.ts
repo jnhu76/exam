@@ -40,16 +40,21 @@ export const GradingStatusEnum = z.enum([
  * `questionId` is the `QuestionSnapshot.originalQuestionId` (not necessarily
  * a uuid), so it is validated as a plain string.
  */
-export const ManualGradingEntrySchema = z.object({
-  id: z.string().uuid(),
-  attemptId: z.string().uuid(),
-  questionId: z.string().min(1),
-  score: z.number().min(0),
-  maxScore: z.number().min(0),
-  comment: z.string().max(2000).default(""),
-  gradedBy: z.string().uuid(),
-  gradedAt: z.string().datetime(),
-});
+export const ManualGradingEntrySchema = z
+  .object({
+    id: z.string().uuid(),
+    attemptId: z.string().uuid(),
+    questionId: z.string().min(1),
+    score: z.number().min(0),
+    maxScore: z.number().min(0),
+    comment: z.string().max(2000).default(""),
+    gradedBy: z.string().uuid(),
+    gradedAt: z.string().datetime(),
+  })
+  .refine((data) => data.score <= data.maxScore, {
+    message: "score must be less than or equal to maxScore",
+    path: ["score"],
+  });
 
 /** DTO for a manual grading entry. */
 export type ManualGradingEntryDTO = z.infer<typeof ManualGradingEntrySchema>;

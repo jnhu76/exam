@@ -1,5 +1,5 @@
 {
-  "id": "1bcc1db5-2a77-47d7-832d-889a0cff0af6",
+  "id": "612b642a-8e54-463a-988c-836bbee42611",
   "prevId": "fbc22c73-8d35-4478-aabf-ed2ccf03bee9",
   "version": "7",
   "dialect": "postgresql",
@@ -485,7 +485,8 @@
           "name": "grading_status",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": false,
+          "default": "'auto_graded'"
         },
         "created_at": {
           "name": "created_at",
@@ -1013,7 +1014,20 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "manual_grading_entries_score_check": {
+          "name": "manual_grading_entries_score_check",
+          "value": "\"manual_grading_entries\".\"score\" >= 0"
+        },
+        "manual_grading_entries_max_score_check": {
+          "name": "manual_grading_entries_max_score_check",
+          "value": "\"manual_grading_entries\".\"max_score\" >= 0"
+        },
+        "manual_grading_entries_score_limit_check": {
+          "name": "manual_grading_entries_score_limit_check",
+          "value": "\"manual_grading_entries\".\"score\" <= \"manual_grading_entries\".\"max_score\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.organization_settings": {

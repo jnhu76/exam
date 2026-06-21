@@ -827,6 +827,15 @@ describe("manual grading contracts", () => {
     expect(result.success).toBe(false);
   });
 
+  it("ManualGradingEntrySchema rejects score greater than maxScore", () => {
+    const result = ManualGradingEntrySchema.safeParse({
+      ...validEntry,
+      score: 11,
+      maxScore: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("ManualGradingEntrySchema rejects comment longer than 2000 chars", () => {
     const result = ManualGradingEntrySchema.safeParse({
       ...validEntry,

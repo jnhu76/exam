@@ -289,7 +289,9 @@ export const examAttempts = pgTable(
       mode: "date",
     }),
     misconduct: jsonb("misconduct").$type<MisconductFlag | null>(),
-    gradingStatus: text("grading_status").$type<GradingStatus>(),
+    gradingStatus: text("grading_status")
+      .$type<GradingStatus>()
+      .default("auto_graded"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -331,6 +333,18 @@ export const manualGradingEntries = pgTable(
     uniqueIndex("manual_grading_entries_attempt_question_unique").on(
       table.attemptId,
       table.questionId,
+    ),
+    // Data-integrity guards at the DB boundary (mirrors the exams table's
+    // check-constraint convention). Application-level (Zod) validation is the
+    // primary gate; these protect persisted data against direct DB writes.
+    check("manual_grading_entries_score_check", sql`${table.score} >= 0`),
+    check(
+      "manual_grading_entries_max_score_check",
+      sql`${table.maxScore} >= 0`,
+    ),
+    check(
+      "manual_grading_entries_score_limit_check",
+      sql`${table.score} <= ${table.maxScore}`,
     ),
   ],
 );
