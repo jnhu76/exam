@@ -15,6 +15,7 @@ import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { TEST_DB_URL } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -100,9 +101,6 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
   }
 
   beforeAll(async () => {
-    const TEST_DB_URL =
-      process.env.TEST_DATABASE_URL ??
-      "postgresql://exam:exam@localhost:5432/exam_test";
     const iso = await setupIsolatedTestDb({
       namespace: "security-exam-protocol",
       databaseUrl: TEST_DB_URL,
