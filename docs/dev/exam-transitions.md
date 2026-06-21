@@ -285,7 +285,54 @@ type ReconciliationResult =
 
 ---
 
-## 7. Test Results
+## 7. Centralized Transition Executor (J2.9)
+
+### Problem
+
+Before J2.9, all 5 admin transition routes (close, unpublish, extend, cancel, archive) duplicated the same orchestration: `executeInTransaction` → lock → reconcile → guard → command → audit → serialize. Each route copy-pasted the transaction wrapper, `createExamRepo`, `findByIdForUpdate`, `reconcileExamForMutation`, and `reconAuditActions` bookkeeping.
+
+### Solution
+
+Created `apps/api/src/routes/examTransitionExecutor.ts` with:
+
+- **`executeAdminExamTransition<T>(db, ctx, examId, now, run)`** — shared lock → reconcile → run → audit pattern. Returns `TransitionResult<T>` (discriminated union with `reconAuditActions`).
+- **`recordReconAudit(fastify, request, ctx, examId, result)`** — records reconciliation audit actions after tx commits (no-op if empty).
+
+The `run` callback receives `{ tx, repo, exam }` and returns route-specific data. The helper handles:
+1. Transaction + row-level lock
+2. Mutation reconciliation (J2.8)
+3. Reconciliation audit actions (J2.7 policy)
+
+Routes only provide: guard check + engine command + return data.
+
+### Migrated Routes
+
+| Route | File | Pattern |
+|-------|------|---------|
+| close | `exam.ts` | `executeAdminExamTransition` + unresolved guard + `closeExam` |
+| unpublish | `exam.ts` | `executeAdminExamTransition` + published guard + `unpublishExam` |
+| extend | `exam.ts` | `executeAdminExamTransition` + open guard + `extendExam` |
+| cancel | `exam.ts` | `executeAdminExamTransition` + unresolved guard + `cancelExam` |
+| archive | `exam.ts` | `executeAdminExamTransition` + archived idempotency + `archiveExam` |
+
+### Routes Not Migrated
+
+None — all 5 admin transition routes migrated.
+
+### Behavior Preserved
+
+- Status rules unchanged (close from open, unpublish from published, extend from open, cancel from published/open, archive from published/closed/canceled)
+- Reconciliation audit unchanged (J2.7 policy intact)
+- Explicit transition audit unchanged (same action names, same conditions)
+- Error codes unchanged (EXAM_CLOSE_NOT_ALLOWED, EXAM_UNPUBLISH_NOT_ALLOWED, etc.)
+- Response shape unchanged (same ExamSchema)
+- Transaction/lock boundary unchanged (one tx per transition, FOR UPDATE lock)
+- Close idempotency unchanged (already-closed returns as-is, no duplicate audit)
+- Archive idempotency unchanged (already-archived returns 200, no duplicate audit)
+
+---
+
+## 8. Test Results
 
 ### Commands Run
 
@@ -320,7 +367,7 @@ All verification steps pass. The 14 characterization tests are included in the 5
 
 ---
 
-## 8. Appendix: State Machine Diagram
+## 9. Appendix: State Machine Diagram
 
 ```
 ┌─────────────┐
@@ -365,7 +412,7 @@ Notes:
 
 ---
 
-## 9. References
+## 10. References
 
 - **Exam state machine**: `packages/exam-engine/src/examStateMachine.ts`
 - **Exam command implementations**: `packages/exam-engine/src/examCommands.ts`

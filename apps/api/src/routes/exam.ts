@@ -45,6 +45,10 @@ import {
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
+import {
+  executeAdminExamTransition,
+  recordReconAudit,
+} from "./examTransitionExecutor.js";
 import { recordAudit } from "./audit.js";
 import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
 import {
@@ -660,40 +664,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const reason = ((request.body as Record<string, unknown>)?.reason ??
         undefined) as string | undefined;
 
-      // ADR-005 construction hard rule: lock -> reconcile -> unresolved guard
-      // -> assert -> mutate run INSIDE ONE transaction so the FOR UPDATE row
-      // lock spans the whole decision and the deadline scanner cannot race it.
-      // The tx-scoped repos below share one connection; the audit write stays
-      // outside the tx (best-effort, matching the attempts.ts convention).
-      const result = await executeInTransaction(
+      const result = await executeAdminExamTransition(
         fastify.db,
-        async (
-          tx,
-        ): Promise<{
-          closed: Exam;
-          fromStatus: string;
-          unresolvedCount: number;
-          reconAuditActions: string[];
-        } | null> => {
-          const repo = createExamRepo(tx);
+        ctx,
+        id,
+        fastify.now(),
+        async ({ tx, repo, exam }) => {
           const attemptRepo = createAttemptRepo(tx);
 
-          // 1. Lock the exam row.
-          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
-          if (!locked) {
-            return null;
-          }
-
-          // 2. Reconcile status by now (published->open / open->closed lazily).
-          const reconciled = await reconcileExamForMutation(
-            createExamRepoAdapter(repo, ctx),
-            id,
-            fastify.now(),
-          );
-          const exam = reconciled?.exam ?? locked;
-
-          // 3. Unresolved-attempts guard: reject if active/in-flight attempts
-          //    remain (review decision #3).
+          // Unresolved-attempts guard: reject if active/in-flight attempts
+          // remain (review decision #3).
           const unresolvedCount = await attemptRepo.countUnresolvedByExam(
             ctx,
             id,
@@ -705,13 +685,13 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             });
           }
 
-          // 4 + 5. Assert + mutate via the engine. closeExam is idempotent for
-          //    `closed` (returns as-is). A non-open, non-closed reconciled
-          //    status raises InvalidStateTransitionError; surfaced uniformly as
-          //    EXAM_CLOSE_NOT_ALLOWED (no UNRESOLVED reason) per ADR-005 §3.3.
+          // Assert + mutate via the engine. closeExam is idempotent for
+          // `closed` (returns as-is). A non-open, non-closed reconciled
+          // status raises InvalidStateTransitionError; surfaced uniformly as
+          // EXAM_CLOSE_NOT_ALLOWED (no UNRESOLVED reason) per ADR-005 §3.3.
           let closed: Exam;
           try {
-            closed = await closeExam(createExamRepoAdapter(repo, ctx), id);
+            closed = await closeExam(repo, id);
           } catch (err) {
             if (err instanceof InvalidStateTransitionError) {
               throw new ExamCloseNotAllowedError();
@@ -722,9 +702,6 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             closed,
             fromStatus: exam.status,
             unresolvedCount,
-            reconAuditActions: reconciled?.changed
-              ? reconciled.auditActions
-              : [],
           };
         },
       );
@@ -735,21 +712,19 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const { closed, fromStatus } = result;
+      const { closed, fromStatus } = result.data;
 
-      for (const action of result.reconAuditActions) {
-        recordAudit(fastify, request, ctx, action, "exam", id);
-      }
+      recordReconAudit(fastify, request, ctx, id, result);
 
-      // 6. Audit — only for a genuine transition (idempotent close writes no
-      //    duplicate audit, review decision #2). activeAttemptCount included
-      //    per ADR-005 §Audit events (will be 0 here since the guard passed).
+      // Audit — only for a genuine transition (idempotent close writes no
+      // duplicate audit, review decision #2). activeAttemptCount included
+      // per ADR-005 §Audit events (will be 0 here since the guard passed).
       if (fromStatus !== "closed") {
         recordAudit(fastify, request, ctx, "exam.close", "exam", id, {
           reason,
           fromStatus,
           toStatus: "closed",
-          activeAttemptCount: result.unresolvedCount,
+          activeAttemptCount: result.data.unresolvedCount,
         });
       }
       return toExamResponse(closed);
@@ -790,27 +765,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
 
-      const result = await executeInTransaction(
+      const result = await executeAdminExamTransition(
         fastify.db,
-        async (tx): Promise<{ exam: Exam; fromStatus: string } | null> => {
-          const repo = createExamRepo(tx);
-          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
-          if (!locked) return null;
-          // Reconcile by now: a published exam whose openAt passed is now open.
-          const reconciled = await reconcileExamForMutation(
-            createExamRepoAdapter(repo, ctx),
-            id,
-            fastify.now(),
-          );
-          const exam = reconciled?.exam ?? locked;
+        ctx,
+        id,
+        fastify.now(),
+        async ({ repo, exam }) => {
           // After reconcile, only a still-`published` exam may unpublish.
           if (exam.status !== "published") {
             throw new ExamUnpublishNotAllowedError();
           }
-          const updated = await unpublishExam(
-            createExamRepoAdapter(repo, ctx),
-            id,
-          );
+          const updated = await unpublishExam(repo, id);
           return { exam: updated, fromStatus: exam.status };
         },
       );
@@ -819,11 +784,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+      recordReconAudit(fastify, request, ctx, id, result);
       recordAudit(fastify, request, ctx, "exam.unpublish", "exam", id, {
-        fromStatus: result.fromStatus,
+        fromStatus: result.data.fromStatus,
         toStatus: "draft",
       });
-      return toExamResponse(result.exam);
+      return toExamResponse(result.data.exam);
     },
   );
 
@@ -858,44 +824,23 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         reason?: string;
       };
 
-      const result = await executeInTransaction(
+      const result = await executeAdminExamTransition(
         fastify.db,
-        async (
-          tx,
-        ): Promise<{
-          exam: Exam;
-          oldCloseAt: Date;
-          newCloseAt: Date;
-          reconAuditActions: string[];
-        } | null> => {
-          const repo = createExamRepo(tx);
-          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
-          if (!locked) return null;
-          const oldCloseAt = new Date(locked.closeAt);
-          // Reconcile: an open exam whose closeAt passed is now closed.
-          const reconciled = await reconcileExamForMutation(
-            createExamRepoAdapter(repo, ctx),
-            id,
-            fastify.now(),
-          );
-          const exam = reconciled?.exam ?? locked;
+        ctx,
+        id,
+        fastify.now(),
+        async ({ repo, exam }) => {
+          const oldCloseAt = new Date(exam.closeAt);
           if (exam.status !== "open") {
             throw new ExamExtendNotAllowedError({
               reason: exam.status === "closed" ? "ALREADY_CLOSED" : "NOT_OPEN",
             });
           }
-          const updated = await extendExam(
-            createExamRepoAdapter(repo, ctx),
-            id,
-            extendMinutes,
-          );
+          const updated = await extendExam(repo, id, extendMinutes);
           return {
             exam: updated,
             oldCloseAt,
             newCloseAt: new Date(updated.closeAt),
-            reconAuditActions: reconciled?.changed
-              ? reconciled.auditActions
-              : [],
           };
         },
       );
@@ -904,16 +849,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      for (const action of result.reconAuditActions) {
-        recordAudit(fastify, request, ctx, action, "exam", id);
-      }
+      recordReconAudit(fastify, request, ctx, id, result);
       recordAudit(fastify, request, ctx, "exam.extend", "exam", id, {
         extendMinutes,
-        oldCloseAt: result.oldCloseAt,
-        newCloseAt: result.newCloseAt,
+        oldCloseAt: result.data.oldCloseAt,
+        newCloseAt: result.data.newCloseAt,
         reason,
       });
-      return toExamResponse(result.exam);
+      return toExamResponse(result.data.exam);
     },
   );
 
@@ -955,32 +898,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const reason = ((request.body as Record<string, unknown>)?.reason ??
         undefined) as string | undefined;
 
-      const result = await executeInTransaction(
+      const result = await executeAdminExamTransition(
         fastify.db,
-        async (
-          tx,
-        ): Promise<{
-          exam: Exam;
-          fromStatus: string;
-          unresolvedCount: number;
-          reconAuditActions: string[];
-        } | null> => {
-          const repo = createExamRepo(tx);
+        ctx,
+        id,
+        fastify.now(),
+        async ({ tx, repo, exam }) => {
           const attemptRepo = createAttemptRepo(tx);
 
-          // 1. Lock the exam row.
-          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
-          if (!locked) return null;
-
-          // 2. Reconcile status by now.
-          const reconciled = await reconcileExamForMutation(
-            createExamRepoAdapter(repo, ctx),
-            id,
-            fastify.now(),
-          );
-          const exam = reconciled?.exam ?? locked;
-
-          // 3. Unresolved-attempts guard (only meaningful for open, but cheap).
+          // Unresolved-attempts guard (only meaningful for open, but cheap).
           const unresolvedCount = await attemptRepo.countUnresolvedByExam(
             ctx,
             id,
@@ -992,12 +918,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             });
           }
 
-          // 4 + 5. Assert + mutate via the engine. Non-cancellable states
-          //    (draft/closed/canceled/archived) raise
-          //    InvalidStateTransitionError -> surfaced as EXAM_CANCEL_NOT_ALLOWED.
+          // Assert + mutate via the engine. Non-cancellable states
+          // (draft/closed/canceled/archived) raise
+          // InvalidStateTransitionError -> surfaced as EXAM_CANCEL_NOT_ALLOWED.
           let canceled: Exam;
           try {
-            canceled = await cancelExam(createExamRepoAdapter(repo, ctx), id);
+            canceled = await cancelExam(repo, id);
           } catch (err) {
             if (err instanceof InvalidStateTransitionError) {
               throw new ExamCancelNotAllowedError();
@@ -1008,9 +934,6 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             exam: canceled,
             fromStatus: exam.status,
             unresolvedCount,
-            reconAuditActions: reconciled?.changed
-              ? reconciled.auditActions
-              : [],
           };
         },
       );
@@ -1021,19 +944,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      for (const action of result.reconAuditActions) {
-        recordAudit(fastify, request, ctx, action, "exam", id);
-      }
+      recordReconAudit(fastify, request, ctx, id, result);
 
-      // 6. Audit (outside tx, best-effort). activeAttemptCount is 0 here
-      //    (guard passed).
+      // Audit (outside tx, best-effort). activeAttemptCount is 0 here
+      // (guard passed).
       recordAudit(fastify, request, ctx, "exam.cancel", "exam", id, {
         reason,
-        fromStatus: result.fromStatus,
+        fromStatus: result.data.fromStatus,
         toStatus: "canceled",
-        activeAttemptCount: result.unresolvedCount,
+        activeAttemptCount: result.data.unresolvedCount,
       });
-      return toExamResponse(result.exam);
+      return toExamResponse(result.data.exam);
     },
   );
 
@@ -1065,65 +986,28 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
-      // ADR-006: one operation now, threaded through the whole archive.
       const now = fastify.now();
 
-      const result = await executeInTransaction(
+      const result = await executeAdminExamTransition(
         fastify.db,
-        async (
-          tx,
-        ): Promise<{
-          archived: Exam;
-          fromStatus: string;
-          reconAuditActions: string[];
-        } | null> => {
-          const repo = createExamRepo(tx);
-
-          // 1. Lock the exam row so no concurrent admin op / scanner races it.
-          const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
-          if (!locked) return null;
-
-          // 2. Reconcile status by now (published->open / open->closed lazily)
-          //    so a stale persisted status cannot be archived against.
-          const reconciled = await reconcileExamForMutation(
-            createExamRepoAdapter(repo, ctx),
-            id,
-            now,
-          );
-          const exam = reconciled?.exam ?? locked;
-
-          // 3 + 4. Assert + mutate via the engine. Idempotent already-archived:
-          //    the state machine has no `archived -> archived` transition, so
-          //    detect the no-op BEFORE calling archiveExam and return the
-          //    current exam without re-asserting (mirrors close's idempotency
-          //    gate, review decision #2). Any other non-archivable reconciled
-          //    status raises InvalidStateTransitionError from archiveExam;
-          //    surfaced uniformly as EXAM_ARCHIVE_NOT_ALLOWED per the ADR.
+        ctx,
+        id,
+        now,
+        async ({ repo, exam }) => {
+          // Idempotent already-archived: detect no-op before calling archiveExam.
           if (exam.status === "archived") {
-            return {
-              archived: exam,
-              fromStatus: exam.status,
-              reconAuditActions: reconciled?.changed
-                ? reconciled.auditActions
-                : [],
-            };
+            return { archived: exam, fromStatus: exam.status };
           }
           let archived: Exam;
           try {
-            archived = await archiveExam(createExamRepoAdapter(repo, ctx), id);
+            archived = await archiveExam(repo, id);
           } catch (err) {
             if (err instanceof InvalidStateTransitionError) {
               throw new ExamArchiveNotAllowedError();
             }
             throw err;
           }
-          return {
-            archived,
-            fromStatus: exam.status,
-            reconAuditActions: reconciled?.changed
-              ? reconciled.auditActions
-              : [],
-          };
+          return { archived, fromStatus: exam.status };
         },
       );
 
@@ -1133,14 +1017,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const { archived, fromStatus } = result;
+      const { archived, fromStatus } = result.data;
 
-      for (const action of result.reconAuditActions) {
-        recordAudit(fastify, request, ctx, action, "exam", id);
-      }
+      recordReconAudit(fastify, request, ctx, id, result);
 
-      // 5. Audit — only for a genuine transition (idempotent archive writes no
-      //    duplicate audit). fromStatus captured from the reconciled pre-image.
+      // Audit — only for a genuine transition (idempotent archive writes no
+      // duplicate audit). fromStatus captured from the reconciled pre-image.
       if (fromStatus !== "archived") {
         recordAudit(fastify, request, ctx, "exam.archive", "exam", id, {
           fromStatus,
