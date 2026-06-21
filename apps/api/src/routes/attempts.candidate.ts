@@ -44,20 +44,13 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
-import {
-  startOrRestoreAttempt,
-  submitAttempt,
-  restoreAttempt,
-  readGradingSnapshot,
-  computeGradingResult,
-  finalizeGrading,
-} from "@exam/exam-engine";
+import { startOrRestoreAttempt, restoreAttempt } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
-  createAttemptRepoAdapter,
   createExamEngineRepos,
 } from "../adapters/repoAdapters.js";
+import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { recordAudit } from "./audit.js";
 import { formatZodError } from "./helpers.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
@@ -958,122 +951,21 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const ctx = request["ctx"] as RequestContext;
       const { attemptId } = parsed.data;
 
-      const phaseOne = await executeInTransaction(fastify.db, async (tx) => {
-        const txAttemptRepo = createAttemptRepo(tx);
-        const candidateProfile = await createCandidateRepo(tx).findByUserId(
-          ctx,
-          ctx.actorId,
-        );
-        if (!candidateProfile) {
-          throw new NotFoundError("Candidate profile not found");
-        }
-        const lockedAttempt = await txAttemptRepo.findByIdForUpdate(
-          ctx,
-          attemptId,
-        );
-        if (
-          !lockedAttempt ||
-          lockedAttempt.candidateId !== candidateProfile.id
-        ) {
-          throw new NotFoundError("Attempt not found");
-        }
-
-        const status = lockedAttempt.status;
-        if (status === "in_progress" || status === "disrupted") {
-          // ADR-005 Slice 3: candidate manual submit is subject to the
-          // minSubmitAfterStartMinutes guard. Fetch the exam for the field.
-          const exam = (await createExamRepo(tx).findById(
-            ctx,
-            lockedAttempt.examId,
-          )) as Exam | null;
-          await submitAttempt(
-            createAttemptRepoAdapter(txAttemptRepo, ctx),
-            attemptId,
-            fastify.now(),
-            {
-              source: "candidate",
-              minSubmitAfterStartMinutes:
-                exam?.minSubmitAfterStartMinutes ?? null,
-            },
-          );
-          return { alreadyGraded: false } as const;
-        }
-        if (status === "submitted") {
-          return { alreadyGraded: false } as const;
-        }
-        if (status === "graded") {
-          return { alreadyGraded: true } as const;
-        }
-        throw new InvalidStateTransitionError(
-          `Cannot submit attempt in ${status} state`,
-        );
-      });
-
-      const attemptRepo = createAttemptRepo(fastify.db);
-
-      if (phaseOne.alreadyGraded) {
-        const graded = await attemptRepo.findById(ctx, attemptId);
-        if (!graded) {
-          throw new NotFoundError("Attempt not found");
-        }
-        return LoadAttemptResponseSchema.parse(
-          toCandidateAttemptResponse(graded as ExamAttempt, fastify.now()),
-        );
+      const candidateProfile = await createCandidateRepo(
+        fastify.db,
+      ).findByUserId(ctx, ctx.actorId);
+      if (!candidateProfile) {
+        throw new NotFoundError("Candidate profile not found");
       }
 
-      const examRepo = createExamRepo(fastify.db);
-      const enrollmentRepo = createEnrollmentRepo(fastify.db);
-
-      const { exams, enrollments, attempts } = createExamEngineRepos(
-        {
-          examRepo,
-          enrollmentRepo,
-          attemptRepo,
-        },
+      const { attempt } = await submitAndGradeAttempt(
+        fastify.db,
         ctx,
-      );
-
-      const snapshot = await readGradingSnapshot(
-        exams,
-        enrollments,
-        attempts,
         attemptId,
-      );
-      if (!snapshot) {
-        throw new NotFoundError("Attempt not found after submit");
-      }
-
-      const gradingResult = computeGradingResult(
-        snapshot.attempt,
-        snapshot.exam,
+        candidateProfile.id,
         fastify.now(),
       );
 
-      await executeInTransaction(fastify.db, async (tx) => {
-        const txAttemptRepo = createAttemptRepo(tx);
-        await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
-        const { enrollments, attempts } = createExamEngineRepos(
-          {
-            examRepo: createExamRepo(tx),
-            attemptRepo: txAttemptRepo,
-            enrollmentRepo: createEnrollmentRepo(tx),
-          },
-          ctx,
-        );
-        await finalizeGrading(
-          enrollments,
-          attempts,
-          attemptId,
-          snapshot.enrollment.id,
-          gradingResult,
-          snapshot.exam,
-        );
-      });
-
-      const attempt = await attemptRepo.findById(ctx, attemptId);
-      if (!attempt) {
-        throw new NotFoundError("Attempt not found after grading");
-      }
       recordAudit(
         fastify,
         request,
@@ -1084,7 +976,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       );
 
       return LoadAttemptResponseSchema.parse(
-        toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
+        toCandidateAttemptResponse(attempt, fastify.now()),
       );
     },
   );
