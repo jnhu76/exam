@@ -23,9 +23,8 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import {
-  createExamRepoAdapter,
   createAttemptRepoAdapter,
-  createEnrollmentRepoAdapter,
+  createExamEngineRepos,
 } from "../adapters/repoAdapters.js";
 import { ensureTargetOrg, formatZodError } from "./helpers.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
@@ -181,10 +180,18 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         await executeInTransaction(fastify.db, async (tx) => {
           const txAttemptRepo = createAttemptRepo(tx);
           await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+          const { exams, enrollments, attempts } = createExamEngineRepos(
+            {
+              examRepo: createExamRepo(tx),
+              attemptRepo: txAttemptRepo,
+              enrollmentRepo: createEnrollmentRepo(tx),
+            },
+            ctx,
+          );
           await gradeAttemptIdempotent(
-            createExamRepoAdapter(createExamRepo(tx), ctx),
-            createEnrollmentRepoAdapter(createEnrollmentRepo(tx), ctx),
-            createAttemptRepoAdapter(txAttemptRepo, ctx),
+            exams,
+            enrollments,
+            attempts,
             attemptId,
             fastify.now(),
           );
@@ -271,9 +278,17 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       // second findById roundtrip (review fix).
       const attempt = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
+        const { exams, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: txAttemptRepo,
+            enrollmentRepo: createEnrollmentRepo(tx),
+          },
+          ctx,
+        );
         return extendAttemptTime(
-          createExamRepoAdapter(createExamRepo(tx), ctx),
-          createAttemptRepoAdapter(txAttemptRepo, ctx),
+          exams,
+          attempts,
           attemptId,
           additionalMinutes,
           fastify.now(),

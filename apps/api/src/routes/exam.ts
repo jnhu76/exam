@@ -30,7 +30,6 @@ import {
   extendExam,
   checkAndUpdateExamStatus,
   publishExam,
-  type ExamRepository,
 } from "@exam/exam-engine";
 import type { RequestContext, Exam, Question } from "@exam/domain";
 import {
@@ -47,6 +46,7 @@ import {
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
@@ -143,22 +143,6 @@ async function getExamParticipants(
       passed: enrollment.finalPassed ?? null,
     };
   });
-}
-
-/** Adapter that bridges the exam-engine ExamRepository interface to the local exam repo with a bound RequestContext. */
-function createExamRepoAdapter(
-  repo: ReturnType<typeof createExamRepo>,
-  ctx: RequestContext,
-): ExamRepository {
-  return {
-    findById: (examId) => repo.findById(ctx, examId) as Promise<Exam | null>,
-    update: (examId, data) =>
-      repo.update(
-        ctx,
-        examId,
-        data as Record<string, unknown>,
-      ) as Promise<Exam | null>,
-  };
 }
 
 /** Determine whether scores can be viewed for an exam based on its status, close time, and graded attempt count. */
