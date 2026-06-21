@@ -193,9 +193,13 @@ describe("gradeAttempt", () => {
   it.each([
     ["latest", 8, 10, "attempt-1"],
     ["highest", 12, 12, "previous-attempt"],
+    // highest: a new score equal to the existing final does NOT replace it
+    // (`score > enrollment.finalScore`, not `>=`). Keeps the prior attempt as
+    // the recorded final.
+    ["highest", 10, 10, "previous-attempt"],
     ["first", 8, 8, "previous-attempt"],
   ] as const)(
-    "applies %s score strategy",
+    "applies %s score strategy (previous=%d)",
     async (scoreStrategy, previousScore, expectedScore, expectedAttemptId) => {
       const repos = makeRepos(
         makeExam(scoreStrategy),
@@ -219,6 +223,31 @@ describe("gradeAttempt", () => {
       expect(repos.getEnrollment().finalAttemptId).toBe(expectedAttemptId);
     },
   );
+
+  it("writes finalScore on the first graded attempt when none is set yet (all strategies)", async () => {
+    // Explicitly names the "first-ever" branch: enrollment has no
+    // finalScore/finalAttemptId, so every strategy must record this attempt.
+    for (const scoreStrategy of ["latest", "highest", "first"] as const) {
+      const repos = makeRepos(
+        makeExam(scoreStrategy),
+        makeAttempt(),
+        // No finalScore/finalAttemptId set: simulates a first-ever grade.
+        makeEnrollment(),
+      );
+
+      await gradeAttempt(
+        repos.examRepo,
+        repos.enrollmentRepo,
+        repos.attemptRepo,
+        "attempt-1",
+        new Date(),
+      );
+
+      expect(repos.getEnrollment().finalScore).toBe(10);
+      expect(repos.getEnrollment().finalPassed).toBe(true);
+      expect(repos.getEnrollment().finalAttemptId).toBe("attempt-1");
+    }
+  });
 
   it("throws ValidationError when persisting graded result fails", async () => {
     const exam = makeExam();
