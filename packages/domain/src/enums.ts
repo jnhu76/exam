@@ -81,6 +81,24 @@ export const AttemptStatus = {
 export type AttemptStatus = (typeof AttemptStatus)[keyof typeof AttemptStatus];
 
 /**
+ * Grading workflow status for an attempt (P2D-J2).
+ *
+ * Tracks where an attempt sits in the grading pipeline. Orthogonal to
+ * {@link AttemptStatus}: an attempt may be `status=graded` (lifecycle done)
+ * while `gradingStatus=pending_manual` (still needs subjective scoring).
+ *
+ * - `auto_graded`: scored entirely by the auto-grading engine.
+ * - `pending_manual`: has subjective questions awaiting manual scoring.
+ * - `fully_graded`: all questions (auto + manual) scored.
+ */
+export const GradingStatus = {
+  AutoGraded: "auto_graded",
+  PendingManual: "pending_manual",
+  FullyGraded: "fully_graded",
+} as const;
+export type GradingStatus = (typeof GradingStatus)[keyof typeof GradingStatus];
+
+/**
  * Candidate enrollment status for an exam.
  *
  * Tracks whether a candidate has been assigned, has started, completed, or

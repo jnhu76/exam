@@ -14,6 +14,51 @@ export const QuestionScoreResultSchema = z.object({
   standardAnswer: z.unknown(),
 });
 
+// ── Manual Grading (P2D-J2) ──────────────────────────────────────
+
+/**
+ * Grading workflow status for an attempt.
+ *
+ * - `auto_graded`: attempt was graded entirely by the auto-grading engine.
+ * - `pending_manual`: attempt has subjective questions awaiting manual scoring.
+ * - `fully_graded`: all questions (auto + manual) have been scored.
+ *
+ * Stored as a plain text column on `exam_attempts` (see ADR: repository
+ * enum-column convention; `pgEnum` is intentionally not used).
+ */
+export const GradingStatusEnum = z.enum([
+  "auto_graded",
+  "pending_manual",
+  "fully_graded",
+]);
+
+/**
+ * Schema for a single manual grading entry — one grader's score + comment
+ * for one subjective question within one attempt. Uniqueness of
+ * (attemptId, questionId) is enforced at the DB layer.
+ *
+ * `questionId` is the `QuestionSnapshot.originalQuestionId` (not necessarily
+ * a uuid), so it is validated as a plain string.
+ */
+export const ManualGradingEntrySchema = z
+  .object({
+    id: z.string().uuid(),
+    attemptId: z.string().uuid(),
+    questionId: z.string().min(1),
+    score: z.number().min(0),
+    maxScore: z.number().min(0),
+    comment: z.string().max(2000).default(""),
+    gradedBy: z.string().uuid(),
+    gradedAt: z.string().datetime(),
+  })
+  .refine((data) => data.score <= data.maxScore, {
+    message: "score must be less than or equal to maxScore",
+    path: ["score"],
+  });
+
+/** DTO for a manual grading entry. */
+export type ManualGradingEntryDTO = z.infer<typeof ManualGradingEntrySchema>;
+
 /**
  * Schema for the complete score result of an attempt, including per-question results
  * and overall pass/fail status.
