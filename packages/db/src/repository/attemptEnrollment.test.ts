@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { beforeAll, describe, expect, it } from "vitest";
-import { getTestDb } from "../testDb.js";
+import { beforeAll, describe, expect, it, afterAll } from "vitest";
+import { getIsolatedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
 import { createAttemptRepo } from "./attemptRepo.js";
 import { createEnrollmentRepo } from "./enrollmentRepo.js";
@@ -114,6 +114,7 @@ function makeIds(): SeedIds {
 
 describe("attemptRepo custom methods", () => {
   let db: Database;
+  let cleanup: () => Promise<void>;
   let attemptRepo: ReturnType<typeof createAttemptRepo>;
   let enrollmentRepo: ReturnType<typeof createEnrollmentRepo>;
   let ctx: RequestContext;
@@ -122,9 +123,10 @@ describe("attemptRepo custom methods", () => {
   const orgId = randomUUID();
 
   beforeAll(async () => {
-    ids = makeIds();
-    const result = await getTestDb();
+    const result = await getIsolatedTestDb("db-attempt-enrollment");
     db = result.db;
+    cleanup = result.cleanup;
+    ids = makeIds();
     attemptRepo = createAttemptRepo(db);
     enrollmentRepo = createEnrollmentRepo(db);
     ctx = createContext(orgId);
@@ -138,6 +140,10 @@ describe("attemptRepo custom methods", () => {
       attemptCount: 1,
     });
     enrollmentId = enr.id;
+  });
+
+  afterAll(async () => {
+    await cleanup();
   });
 
   it("findActiveByEnrollment returns in_progress attempt", async () => {
@@ -413,7 +419,6 @@ describe("attemptRepo custom methods", () => {
     });
   });
 
-  // ADR-005 Slice 1: close/export unresolved-attempts guard query.
   describe("countUnresolvedByExam", () => {
     it("counts only unresolved attempt statuses", async () => {
       const orgU = randomUUID();
@@ -422,9 +427,6 @@ describe("attemptRepo custom methods", () => {
       await seedBaseData(db, orgU, idsU);
       const examId = idsU.examId;
 
-      // Each attempt needs its own user + candidate: enrollment has a unique
-      // (org, exam, candidate) constraint and candidate_profiles has a unique
-      // (org, user) constraint.
       async function makeAttempt(status: string, attemptNo: number) {
         const uid = randomUUID();
         const candId = randomUUID();
@@ -466,14 +468,11 @@ describe("attemptRepo custom methods", () => {
         });
       }
 
-      // Unresolved (should be counted): queued, in_progress, disrupted,
-      // submitted, grading.
       await makeAttempt("queued", 1);
       await makeAttempt("in_progress", 2);
       await makeAttempt("disrupted", 3);
       await makeAttempt("submitted", 4);
       await makeAttempt("grading", 5);
-      // Finalized (must NOT be counted): graded, voided.
       await makeAttempt("graded", 6);
       await makeAttempt("voided", 7);
 
@@ -515,19 +514,25 @@ describe("attemptRepo custom methods", () => {
 
 describe("enrollmentRepo custom methods", () => {
   let db: Database;
+  let cleanup: () => Promise<void>;
   let enrollmentRepo: ReturnType<typeof createEnrollmentRepo>;
   let ctx: RequestContext;
   let ids: SeedIds;
   const orgId = randomUUID();
 
   beforeAll(async () => {
-    ids = makeIds();
-    const result = await getTestDb();
+    const result = await getIsolatedTestDb("db-enrollment");
     db = result.db;
+    cleanup = result.cleanup;
+    ids = makeIds();
     enrollmentRepo = createEnrollmentRepo(db);
     ctx = createContext(orgId);
 
     await seedBaseData(db, orgId, ids);
+  });
+
+  afterAll(async () => {
+    await cleanup();
   });
 
   it("findByExamAndCandidate returns enrollment", async () => {

@@ -1,9 +1,14 @@
 import { createDatabase } from "./database.js";
 import { migratePostgres } from "./postgres.js";
+import {
+  isTestDbIsolationEnabled,
+  setupIsolatedTestDb,
+  type IsolatedTestDb,
+} from "./testIsolation.js";
 import type { Database } from "./types.js";
 
 /** Database URL for the test database, defaults to `exam_test`. */
-const TEST_DB_URL =
+export const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
   "postgresql://exam:exam@localhost:5432/exam_test";
 
@@ -18,6 +23,10 @@ let _migrated = false;
  * Returns a shared, migrated test database connection and a cleanup function
  * that tears it down. The connection is lazily created on first call and
  * reused across tests.
+ *
+ * WARNING: This instance is shared across all callers in the same process.
+ * If you need per-file or per-task isolation, use {@link getIsolatedTestDb}
+ * instead.
  */
 export async function getTestDb(): Promise<{
   db: Database;
@@ -41,6 +50,55 @@ export async function getTestDb(): Promise<{
       _sharedDb = null;
       _sharedSql = null;
       _migrated = false;
+    },
+  };
+}
+
+/**
+ * Returns a per-call isolated test database connection with its own PostgreSQL
+ * schema and migration. The schema is dropped when `cleanup()` is called.
+ *
+ * NOTE: This function does NOT run `seed()`. Callers (e.g., `buildTestApp`)
+ * must call `seed()` after migration if the test requires seeded data (default
+ * org, admin user, candidate user). This avoids pulling password-hashing
+ * dependencies into `packages/db`.
+ *
+ * When {@link isTestDbIsolationEnabled} returns `false`, this falls back to
+ * the shared {@link getTestDb} instance (no isolation).
+ *
+ * @param namespace - Logical test namespace (e.g. `"api"`, `"db"`, `"tenant"`).
+ * @returns Database connection in isolated schema + cleanup function.
+ */
+export async function getIsolatedTestDb(namespace: string): Promise<{
+  db: Database;
+  cleanup: () => Promise<void>;
+}> {
+  if (!isTestDbIsolationEnabled()) {
+    return getTestDb();
+  }
+
+  const iso = await setupIsolatedTestDb({
+    namespace,
+    databaseUrl: TEST_DB_URL,
+  });
+  let conn: Awaited<ReturnType<typeof createDatabase>>;
+  try {
+    conn = await createDatabase(iso.databaseUrl, iso.schemaName);
+    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
+  } catch (err) {
+    await iso.cleanup();
+    throw err;
+  }
+
+  return {
+    db: conn.db,
+    cleanup: async () => {
+      try {
+        await conn.sql.end();
+      } finally {
+        // Ensure schema is dropped even if sql.end() throws
+        await iso.cleanup();
+      }
     },
   };
 }

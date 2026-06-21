@@ -12,6 +12,8 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { TEST_DB_URL } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -38,13 +40,16 @@ describe("RBAC Permission Matrix (S02)", () => {
   let adminToken: string;
   let candidateToken: string;
   let app: ReturnType<typeof Fastify>;
+  let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const conn = await createDatabase(
-      process.env.TEST_DATABASE_URL ??
-        "postgresql://exam:exam@localhost:5432/exam_test",
-    );
-    await migratePostgres(conn.db);
+    const iso = await setupIsolatedTestDb({
+      namespace: "security-rbac",
+      databaseUrl: TEST_DB_URL,
+    });
+    cleanup = iso.cleanup;
+    const conn = await createDatabase(TEST_DB_URL, iso.schemaName);
+    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
     db = conn.db;
     sql = conn.sql;
 
@@ -116,6 +121,7 @@ describe("RBAC Permission Matrix (S02)", () => {
   afterAll(async () => {
     await app.close();
     await sql.end();
+    await cleanup();
   });
 
   describe("AC1: Candidate cannot create exams", () => {

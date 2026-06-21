@@ -22,6 +22,10 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { eq } from "drizzle-orm";
 import type { Role } from "@exam/domain";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import {
+  setupIsolatedTestDb,
+  isTestDbIsolationEnabled,
+} from "@exam/db/src/testIsolation.js";
 
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
@@ -83,13 +87,39 @@ const TEST_DB_URL =
  * Builds a fully configured Fastify test application with a fresh Postgres
  * database, seeded data, auth/tenant/rateLimit plugins, and the provided
  * route plugin. Returns a TestContext with tokens and cleanup.
+ *
+ * When `opts.schemaName` is provided, the database connection runs against
+ * the specified PostgreSQL schema (test isolation). Otherwise the default
+ * shared schema (`public`) is used.
  */
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,
-  opts?: { prefix?: string; rateLimit?: boolean },
+  opts?: {
+    prefix?: string;
+    rateLimit?: boolean;
+    databaseUrl?: string;
+    schemaName?: string;
+  },
 ): Promise<TestContext> {
-  const conn = await createDatabase(TEST_DB_URL);
-  await migratePostgres(conn.db);
+  const dbUrl = opts?.databaseUrl ?? TEST_DB_URL;
+  let resolvedSchemaName = opts?.schemaName;
+  let isolatedCleanup: (() => Promise<void>) | undefined;
+
+  if (!resolvedSchemaName && isTestDbIsolationEnabled()) {
+    const baseUrl = opts?.databaseUrl ?? TEST_DB_URL;
+    const iso = await setupIsolatedTestDb({
+      namespace: "api",
+      databaseUrl: baseUrl,
+    });
+    resolvedSchemaName = iso.schemaName;
+    isolatedCleanup = iso.cleanup;
+  }
+
+  const conn = await createDatabase(dbUrl, resolvedSchemaName);
+  await migratePostgres(
+    conn.db,
+    resolvedSchemaName ? { migrationsSchema: resolvedSchemaName } : undefined,
+  );
   const db = conn.db;
 
   const seedResult = await seed(db, hashPassword);
@@ -151,6 +181,9 @@ export async function buildTestApp(
     cleanup: async () => {
       await app.close();
       await conn.sql.end();
+      if (isolatedCleanup) {
+        await isolatedCleanup();
+      }
     },
     org,
     admin,

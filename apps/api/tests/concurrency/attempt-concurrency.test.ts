@@ -1,9 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { createDatabase, schema } from "@exam/db";
+import { createDatabase, migratePostgres, schema } from "@exam/db";
 import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { seed } from "@exam/db/src/seed.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
@@ -44,10 +45,14 @@ interface Fixture {
   questionId: string;
 }
 
-async function buildFixture(): Promise<Fixture> {
-  const conn = await createDatabase(TEST_DB_URL);
+async function buildFixture(schemaName?: string): Promise<Fixture> {
+  const conn = await createDatabase(TEST_DB_URL, schemaName);
   const db = conn.db;
   const sql = conn.sql as Fixture["sql"];
+
+  if (schemaName) {
+    await migratePostgres(db, { migrationsSchema: schemaName });
+  }
 
   const seedResult = await seed(db, hashPassword);
   const orgId = seedResult.orgId;
@@ -218,15 +223,22 @@ describe("PG concurrency — attempt row-level serialization", () => {
   let fx: Fixture;
   let ctx: ReturnType<typeof makeCtx>;
   let attemptId: string;
+  let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    fx = await buildFixture();
+    const iso = await setupIsolatedTestDb({
+      namespace: "concurrency",
+      databaseUrl: TEST_DB_URL,
+    });
+    cleanup = iso.cleanup;
+    fx = await buildFixture(iso.schemaName);
     ctx = makeCtx(fx);
     attemptId = await insertAttempt(fx, 1, "in_progress");
   });
 
   afterAll(async () => {
     await fx.sql.end();
+    await cleanup();
   });
 
   it("rollback: save error does not modify attempt row", async () => {

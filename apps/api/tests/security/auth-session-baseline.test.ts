@@ -12,6 +12,8 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { TEST_DB_URL } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -30,13 +32,16 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
   let sql: Awaited<ReturnType<typeof createDatabase>>["sql"];
   let adminToken: string;
   let adminUsername: string;
+  let cleanup: () => Promise<void>;
 
   beforeAll(async () => {
-    const conn = await createDatabase(
-      process.env.TEST_DATABASE_URL ??
-        "postgresql://exam:exam@localhost:5432/exam_test",
-    );
-    await migratePostgres(conn.db);
+    const iso = await setupIsolatedTestDb({
+      namespace: "security-auth",
+      databaseUrl: TEST_DB_URL,
+    });
+    cleanup = iso.cleanup;
+    const conn = await createDatabase(TEST_DB_URL, iso.schemaName);
+    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
     const db = conn.db;
     sql = conn.sql;
 
@@ -79,6 +84,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
   afterAll(async () => {
     await app.close();
     await sql.end();
+    await cleanup();
   });
 
   describe("AC1: JWT verification rejects tampered tokens", () => {

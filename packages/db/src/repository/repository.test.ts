@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { PublicBrandingContext, RequestContext } from "@exam/domain";
-import { beforeAll, describe, expect, it } from "vitest";
-import { getTestDb } from "../testDb.js";
+import { beforeAll, describe, expect, it, afterAll } from "vitest";
+import { getIsolatedTestDb } from "../testDb.js";
 import { createCourseRepo } from "./courseRepo.js";
 import { createEnrollmentRepo } from "./enrollmentRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { createQuestionRepo } from "./questionRepo.js";
 import { createSettingsRepo } from "./settingsRepo.js";
 import { schema } from "../schema/pg.js";
-import { executeInTransaction } from "../types.js";
-import { eq, and } from "drizzle-orm";
+import type { Database } from "../types.js";
 
 const permissions: RequestContext["permissions"] = [];
 
@@ -29,6 +28,8 @@ function createContext(
 }
 
 describe("repository tenant isolation", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
   const publicBrandingContext: PublicBrandingContext = {
     purpose: "public_branding",
   };
@@ -40,11 +41,17 @@ describe("repository tenant isolation", () => {
   const rootContext = createContext("system", "Admin", "system");
 
   beforeAll(async () => {
-    const { db } = await getTestDb();
+    const result = await getIsolatedTestDb("db-repo-tenant");
+    db = result.db;
+    cleanup = result.cleanup;
     organizationRepo = createOrganizationRepo(db);
     settingsRepo = createSettingsRepo(db);
     courseRepo = createCourseRepo(db);
     questionRepo = createQuestionRepo(db);
+  });
+
+  afterAll(async () => {
+    await cleanup();
   });
 
   it("keeps tenant-scoped course queries isolated", async () => {
@@ -220,14 +227,16 @@ describe("repository tenant isolation", () => {
 });
 
 describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
   const rootContext = createContext("system", "Admin", "system");
-  let db: Awaited<ReturnType<typeof getTestDb>>["db"];
   let orgId: string;
   let ctx: RequestContext;
 
   beforeAll(async () => {
-    const testDb = await getTestDb();
-    db = testDb.db;
+    const result = await getIsolatedTestDb("db-repo-enrollment");
+    db = result.db;
+    cleanup = result.cleanup;
     const orgRepo = createOrganizationRepo(db);
     const suffix = randomUUID().slice(0, 8);
     const org = await orgRepo.create(rootContext, {
@@ -237,6 +246,10 @@ describe("enrollmentRepo.findByExamAndCandidateForUpdate", () => {
     });
     orgId = org.id;
     ctx = createContext(orgId);
+  });
+
+  afterAll(async () => {
+    await cleanup();
   });
 
   it("returns null when no enrollment exists", async () => {

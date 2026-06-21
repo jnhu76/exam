@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
-import { getTestDb } from "./testDb.js";
+import type { Database } from "./types.js";
+import { getIsolatedTestDb } from "./testDb.js";
 import {
   cleanupBusinessData,
   cleanupOrganizationChildData,
@@ -10,8 +11,20 @@ import {
 import { schema } from "./schema/pg.js";
 
 describe("cleanupOrganizationTestData", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-cleanup-org");
+    db = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
   it("removes audit logs before organizations and keeps other organizations", async () => {
-    const { db } = await getTestDb();
     const organizationId = crypto.randomUUID();
     const otherOrganizationId = crypto.randomUUID();
     const now = new Date();
@@ -101,7 +114,6 @@ describe("cleanupOrganizationTestData", () => {
     // pins the baseline contract (a committed audit log is deleted before the
     // org); the FK-violation detection that drives the retry is covered
     // deterministically by isForeignKeyViolation() unit tests below.
-    const { db } = await getTestDb();
     const organizationId = crypto.randomUUID();
     const now = new Date();
 
@@ -166,8 +178,20 @@ describe("isForeignKeyViolation", () => {
 });
 
 describe("cleanupOrganizationChildData", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-cleanup-child");
+    db = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
   it("removes child rows but keeps the organization and its users intact", async () => {
-    const { db } = await getTestDb();
     const organizationId = crypto.randomUUID();
     const userId = crypto.randomUUID();
     const now = new Date();
@@ -227,7 +251,6 @@ describe("cleanupOrganizationChildData", () => {
   });
 
   it("is idempotent and safe to run on an already-cleaned organization", async () => {
-    const { db } = await getTestDb();
     const organizationId = crypto.randomUUID();
     const now = new Date();
 
@@ -250,8 +273,20 @@ describe("cleanupOrganizationChildData", () => {
 });
 
 describe("cleanupBusinessData", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-cleanup-biz");
+    db = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
   it("removes exam business data but keeps org, users, and candidate data intact", async () => {
-    const { db } = await getTestDb();
     const organizationId = crypto.randomUUID();
     const userId = crypto.randomUUID();
     const courseId = crypto.randomUUID();
@@ -366,7 +401,6 @@ describe("cleanupBusinessData", () => {
   });
 
   it("is idempotent and safe to run on an already-cleaned organization", async () => {
-    const { db } = await getTestDb();
     const organizationId = crypto.randomUUID();
     const now = new Date();
 
