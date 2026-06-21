@@ -44,7 +44,7 @@ import {
   ExamUpdateNotAllowedError,
   ExamCancelNotAllowedError,
 } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, recordReconciliationAudit } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
 import {
@@ -673,6 +673,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           closed: Exam;
           fromStatus: string;
           unresolvedCount: number;
+          reconTransition: "open" | "closed" | undefined;
+          reconPreviousStatus: string | undefined;
         } | null> => {
           const repo = createExamRepo(tx);
           const attemptRepo = createAttemptRepo(tx);
@@ -721,6 +723,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             closed,
             fromStatus: exam.status,
             unresolvedCount,
+            reconTransition: reconciled?.transition,
+            reconPreviousStatus: reconciled?.previousStatus,
           };
         },
       );
@@ -732,6 +736,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const { closed, fromStatus } = result;
+
+      recordReconciliationAudit(
+        fastify,
+        request,
+        ctx,
+        id,
+        result.reconPreviousStatus,
+        result.reconTransition,
+      );
 
       // 6. Audit — only for a genuine transition (idempotent close writes no
       //    duplicate audit, review decision #2). activeAttemptCount included
@@ -858,6 +871,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           exam: Exam;
           oldCloseAt: Date;
           newCloseAt: Date;
+          reconTransition: "open" | "closed" | undefined;
+          reconPreviousStatus: string | undefined;
         } | null> => {
           const repo = createExamRepo(tx);
           const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
@@ -884,6 +899,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             exam: updated,
             oldCloseAt,
             newCloseAt: new Date(updated.closeAt),
+            reconTransition: reconciled?.transition,
+            reconPreviousStatus: reconciled?.previousStatus,
           };
         },
       );
@@ -892,6 +909,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+      recordReconciliationAudit(
+        fastify,
+        request,
+        ctx,
+        id,
+        result.reconPreviousStatus,
+        result.reconTransition,
+      );
       recordAudit(fastify, request, ctx, "exam.extend", "exam", id, {
         extendMinutes,
         oldCloseAt: result.oldCloseAt,
@@ -948,6 +973,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           exam: Exam;
           fromStatus: string;
           unresolvedCount: number;
+          reconTransition: "open" | "closed" | undefined;
+          reconPreviousStatus: string | undefined;
         } | null> => {
           const repo = createExamRepo(tx);
           const attemptRepo = createAttemptRepo(tx);
@@ -992,6 +1019,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             exam: canceled,
             fromStatus: exam.status,
             unresolvedCount,
+            reconTransition: reconciled?.transition,
+            reconPreviousStatus: reconciled?.previousStatus,
           };
         },
       );
@@ -1001,6 +1030,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+
+      recordReconciliationAudit(
+        fastify,
+        request,
+        ctx,
+        id,
+        result.reconPreviousStatus,
+        result.reconTransition,
+      );
 
       // 6. Audit (outside tx, best-effort). activeAttemptCount is 0 here
       //    (guard passed).
@@ -1047,7 +1085,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
       const result = await executeInTransaction(
         fastify.db,
-        async (tx): Promise<{ archived: Exam; fromStatus: string } | null> => {
+        async (
+          tx,
+        ): Promise<{
+          archived: Exam;
+          fromStatus: string;
+          reconTransition: "open" | "closed" | undefined;
+          reconPreviousStatus: string | undefined;
+        } | null> => {
           const repo = createExamRepo(tx);
 
           // 1. Lock the exam row so no concurrent admin op / scanner races it.
@@ -1071,7 +1116,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           //    status raises InvalidStateTransitionError from archiveExam;
           //    surfaced uniformly as EXAM_ARCHIVE_NOT_ALLOWED per the ADR.
           if (exam.status === "archived") {
-            return { archived: exam, fromStatus: "archived" };
+            return {
+              archived: exam,
+              fromStatus: "archived",
+              reconTransition: reconciled?.transition,
+              reconPreviousStatus: reconciled?.previousStatus,
+            };
           }
           let archived: Exam;
           try {
@@ -1082,7 +1132,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             }
             throw err;
           }
-          return { archived, fromStatus: exam.status };
+          return {
+            archived,
+            fromStatus: exam.status,
+            reconTransition: reconciled?.transition,
+            reconPreviousStatus: reconciled?.previousStatus,
+          };
         },
       );
 
@@ -1093,6 +1148,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const { archived, fromStatus } = result;
+
+      recordReconciliationAudit(
+        fastify,
+        request,
+        ctx,
+        id,
+        result.reconPreviousStatus,
+        result.reconTransition,
+      );
 
       // 5. Audit — only for a genuine transition (idempotent archive writes no
       //    duplicate audit). fromStatus captured from the reconciled pre-image.

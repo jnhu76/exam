@@ -248,6 +248,7 @@ export async function extendExam(
 export interface CheckAndUpdateResult {
   exam: Exam;
   transition?: "open" | "closed";
+  previousStatus?: string;
 }
 
 /**
@@ -265,6 +266,7 @@ export async function checkAndUpdateExamStatus(
     return null;
   }
 
+  const previousStatus = exam.status;
   let transition: "open" | "closed" | undefined;
 
   if (exam.status === "published" && now >= exam.openAt) {
@@ -277,7 +279,10 @@ export async function checkAndUpdateExamStatus(
     transition = "closed";
   }
 
-  return { exam, ...(transition ? { transition } : {}) };
+  return {
+    exam,
+    ...(transition ? { transition, previousStatus } : {}),
+  };
 }
 
 /** Transitions an exam to archived status, making it read-only. */

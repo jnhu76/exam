@@ -1,4 +1,4 @@
-# P2D-J2.6 Exam Transition/Reconciliation Audit Report
+# P2D-J2 Exam Transition/Reconciliation Audit Report
 
 ## Summary
 
@@ -7,11 +7,11 @@ This audit examines all exam state transition handlers and reconciliation logic 
 ### Key Findings
 
 1. **Consistent ADR-005 pattern**: All admin routes (close, unpublish, extend, cancel, archive) follow the `lock → reconcile → guard → assert → mutate → audit` pattern inside transactions
-2. **Reconciliation spread**: `checkAndUpdateExamStatus` is called from 9 locations (6 admin routes + 3 candidate routes) with inconsistent audit handling
+2. **Reconciliation spread**: `checkAndUpdateExamStatus` is called from 9 locations (6 admin routes + 3 candidate routes)
 3. **Audit duplication prevention**: Close and archive routes explicitly check for idempotent transitions to prevent duplicate audits (characterized and verified)
 4. **Candidate route reconciliation**: 3 candidate routes reconcile and audit on every access, but only when transitions actually occur
-5. **Audit asymmetry (characterized)**: Candidate routes DO write `exam.open`/`exam.closed` audit on lazy reconciliation; admin routes do NOT write reconciliation audits. This is verified by the `candidate reconciliation writes exam.open audit (admin routes do NOT)` characterization test.
-6. **12 characterization tests added** in `apps/api/src/routes/examTransitions.test.ts`, all passing
+5. **Unified reconciliation audit policy (P2D-J2.7)**: Any persisted exam.status change caused by reconciliation writes exactly one audit (`exam.open` or `exam.closed`), regardless of whether the entry point is an admin route or a candidate route. Admin mutating routes (close, extend, cancel, archive) now write reconciliation audits via `recordReconciliationAudit()`. Admin non-mutating routes (GET, PATCH) and rejection-path routes (unpublish, extend-rejected, cancel-rejected) do not write reconciliation audits because no persisted status change survives the transaction.
+6. **14 characterization tests** in `apps/api/src/routes/examTransitions.test.ts`, all passing
 
 ---
 
@@ -79,15 +79,18 @@ This audit examines all exam state transition handlers and reconciliation logic 
 - `published → open` when `now >= openAt`
 - `open → closed` when `now >= closeAt`
 
-**Audit pattern:**
-- Candidate routes: audit only if `transition` is truthy (i.e., a status change occurred)
-- Admin routes: no audit from reconciliation; route writes explicit audit for the admin action
+**Audit pattern (P2D-J2.7 unified policy):**
+- All entry points: if reconciliation causes a persisted status change, exactly one audit (`exam.open` or `exam.closed`) is written
+- Candidate routes: audit via `if (transition) { recordAudit(...) }`
+- Admin mutating routes (close, extend, cancel, archive): audit via `recordReconciliationAudit()` after tx commits
+- Admin non-mutating routes (GET, PATCH): no audit (reconciliation either doesn't run or tx rolls back on guard rejection)
+- Double-transition edge case (`published→open→closed` in one pass): `recordReconciliationAudit` detects via `lockedStatus === "published" && transition === "closed"` and writes both `exam.open` and `exam.closed`
 
-**Duplicate audit risk analysis:**
-- **Close route**: If exam is `open` but `now >= closeAt`, reconciliation triggers `open→closed`, then route still attempts `open→closed` (idempotent) and writes `exam.close`. Route has idempotent check at line 739 (`if (fromStatus !== "closed")`) to prevent this.
-- **Unpublish route**: If exam is `published` but `now >= openAt`, reconciliation triggers `published→open`, then route guard rejects unpublish (line 799-801). No duplicate audit.
-- **Cancel route**: If exam is `open` but `now >= closeAt`, reconciliation triggers `open→closed`, then route guard rejects cancel (line 973). No duplicate audit.
-- **Archive route**: If reconciliation triggers `published→open` or `open→closed`, audit is written for the auto-transition. Route has idempotent check at line 1099 (`if (fromStatus !== "archived")`) to prevent duplicate `exam.archive` audit.
+**Duplicate audit prevention:**
+- **Close route**: If exam is `open` but `now >= closeAt`, reconciliation triggers `open→closed` (writes `exam.closed`), then closeExam is idempotent. The `exam.close` audit is suppressed by `if (fromStatus !== "closed")` check.
+- **Unpublish route**: If exam is `published` but `now >= openAt`, reconciliation triggers `published→open`, then route guard rejects unpublish. Tx rolls back — no persisted change, no audit.
+- **Cancel route**: If exam is `open` but `now >= closeAt`, reconciliation triggers `open→closed`, then cancelExam raises InvalidStateTransitionError. Tx rolls back — no persisted change, no audit. If exam is `published` and reconciliation does `published→open`, cancel proceeds — `exam.open` audit is written by `recordReconciliationAudit`, then `exam.cancel` by the explicit audit.
+- **Archive route**: If reconciliation triggers `published→open→closed`, `recordReconciliationAudit` writes both `exam.open` and `exam.closed`. Archive then proceeds and writes `exam.archive`. The `if (fromStatus !== "archived")` check prevents duplicate archive audit.
 
 **Race condition concern:**
 - Admin routes hold row lock during reconciliation, so no concurrent operations can race
@@ -97,22 +100,15 @@ This audit examines all exam state transition handlers and reconciliation logic 
 
 ## 3. Inconsistencies Found
 
-### Inconsistency 1: Reconciliation Audit Inconsistency
+### Inconsistency 1: Reconciliation Audit Inconsistency ✅ Resolved (P2D-J2.7)
 
 **Location**: Admin routes vs candidate routes
 
-**Issue**: Admin routes do NOT audit reconciliation transitions; candidate routes DO audit reconciliation transitions.
+**Issue**: Admin routes did NOT audit reconciliation transitions; candidate routes DID audit reconciliation transitions.
 
-**Evidence**:
-- `attempts.candidate.ts:398-407`: Candidate route writes `exam.open` or `exam.closed` audit on auto-transition
-- `exam.ts:519-524`: Admin PATCH route does not write audit on reconciliation
-- `exam.ts:687-692`: Admin close route does not write audit on reconciliation (relies on explicit close audit)
+**Resolution (P2D-J2.7)**: Unified audit policy implemented. Any persisted exam.status change caused by reconciliation now writes exactly one audit (`exam.open` or `exam.closed`), regardless of entry point. Admin mutating routes (close, extend, cancel, archive) use `recordReconciliationAudit()` helper. Routes where reconciliation causes a tx rollback (unpublish, extend-rejected, cancel-rejected) do not write audit because the status change didn't persist.
 
-**Impact**: If an exam auto-transitions from `published→open` via candidate access, only candidate-triggered audits exist. If admin later manually closes it, both `exam.open` (from reconciliation) and `exam.close` (from admin action) are logged. If exam never accessed by candidates but transitions via admin operation, the auto-transition is not audited.
-
-**Current behavior**: Inconsistent audit trail for lazy state transitions.
-
-**Follow-up**: Decide whether to audit all reconciliations consistently (either always or never), and if always, where to place the audit (engine vs route, inside vs outside transaction).
+**Implementation**: `recordReconciliationAudit()` in `exam.ts` handles the double-transition edge case (`published→open→closed` in one pass) by checking `lockedStatus === "published" && transition === "closed"` and emitting both `exam.open` and `exam.closed`.
 
 ### Inconsistency 2: Transaction Scope for Reconciliation
 
@@ -172,7 +168,7 @@ This audit examines all exam state transition handlers and reconciliation logic 
 
 ### New Test File: `apps/api/src/routes/examTransitions.test.ts`
 
-This test file characterizes current behavior across 12 tests (all passing):
+This test file characterizes current behavior across 14 tests (all passing):
 
 1. **Published to Open Auto-Reconciliation (Candidate Route)**
    - `candidate exam list reconciles published -> open and writes exam.open audit`
@@ -184,8 +180,8 @@ This test file characterizes current behavior across 12 tests (all passing):
 3. **Reconciliation Idempotency**
    - `repeated candidate access does not write duplicate exam.open audit`
 
-4. **Close Route with Reconciliation**
-   - `close after reconciliation triggers open->closed writes NO exam.close audit (fromStatus=closed)`
+4. **Close Route with Reconciliation (P2D-J2.7)**
+   - `close after reconciliation triggers open->closed writes exam.closed audit (not exam.close)`
 
 5. **Unpublish Route with Reconciliation**
    - `unpublish of a stale published (now open) exam is rejected -> 409`
@@ -196,13 +192,15 @@ This test file characterizes current behavior across 12 tests (all passing):
 7. **Cancel Route with Reconciliation**
    - `cancel of a stale open (now closed) exam is rejected -> 409`
 
-8. **Archive Route with Reconciliation**
-   - `archive after reconciliation (published->open->closed) succeeds and writes exam.archive audit`
+8. **Archive Route with Reconciliation (P2D-J2.7)**
+   - `archive after reconciliation (published->open->closed) writes exam.open, exam.closed, and exam.archive audits`
    - `archive idempotency: already-archived returns 200 with NO duplicate audit`
 
-9. **Audit Behavior Characterization**
+9. **Audit Behavior Characterization (P2D-J2.7)**
    - `successful close writes exam.close audit with fromStatus/toStatus metadata`
-   - `candidate reconciliation writes exam.open audit (admin routes do NOT)`
+   - `admin GET (non-mutating) does not reconcile; candidate list does`
+   - `admin extend on stale-published reconciles and writes exam.open audit`
+   - `admin cancel on stale-published reconciles and writes exam.open audit`
 
 All tests are **characterization tests** that document current behavior without prescribing what it should be. Any behavior changes in the future would require updating these tests (with explicit justification).
 
@@ -210,50 +208,17 @@ All tests are **characterization tests** that document current behavior without 
 
 ## 5. Recommended Follow-Up
 
-### 5.1 Centralize Reconciliation Call Pattern
+### 5.1 Centralize Reconciliation Call Pattern ✅ Resolved (P2D-J2.7)
 
-**Recommendation**: Consider extracting a common helper function that wraps `checkAndUpdateExamStatus` with consistent transaction and audit behavior.
-
-**Options**:
-
-**Option A**: Create `executeReconciliation(repo, examId, now, options)` that:
-- Takes an `options` object with flags: `{ audit: boolean | "auto" | "never" }`
-- Wraps the reconciliation in a transaction if needed
-- Writes audit with consistent metadata
-- Returns both the exam and whether an audit was written
-
-**Option B**: Keep current pattern but standardize on:
-- Admin routes: no audit from reconciliation (explicit audit for admin action)
-- Candidate routes: audit auto-transitions
-- Document this decision clearly
-
-**Decision needed**: Do we want to audit lazy transitions? If yes, where and how?
+**Decision**: Adopted Option B variant — keep current route-level pattern, but standardize audit behavior via `recordReconciliationAudit()` helper. Admin mutating routes (close, extend, cancel, archive) now write reconciliation audits consistently. No large helper extraction (`executeReconciliation` or `executeExamTransition`) was needed.
 
 ### 5.2 Extract executeExamTransition
 
-**Recommendation**: The repeated `lock → reconcile → guard → assert → mutate → audit` pattern in admin routes (exam.ts) could be extracted into `executeExamTransition(repo, examId, command, options)`.
+**Status**: Deferred. The repeated `lock → reconcile → guard → assert → mutate → audit` pattern is not duplicated enough to justify a large abstraction. The `recordReconciliationAudit()` helper addresses the audit consistency need without restructuring route control flow.
 
-**Benefits**:
-- Eliminates code duplication across close, unpublish, extend, cancel, archive routes
-- Centralizes transaction and lock management
-- Makes it easier to add new transition commands
-- Consistent error handling and audit behavior
+### 5.3 Reconciliation Audit Policy ✅ Resolved (P2D-J2.7)
 
-**Risks**:
-- May obscure route-specific guard conditions (e.g., unresolved-attempts guard)
-- Needs careful design to avoid over-abstraction
-- Would be a breaking change for existing tests
-
-**Decision needed**: Is the duplication high enough to justify extraction? Can we design a clean abstraction that preserves clarity?
-
-### 5.3 Bugfix PR for Inconsistency #1 (Reconciliation Audit)
-
-**Recommendation**: File a separate issue to decide on reconciliation audit policy, then implement consistently.
-
-**Decision needed**:
-- Audit all reconciliations (engine or route)?
-- Audit no reconciliations (rely only on explicit actions)?
-- Audit only candidate-triggered reconciliations (current behavior)?
+**Decision**: Audit all reconciliations that cause a persisted status change. Implementation: `recordReconciliationAudit()` in admin routes + existing `if (transition)` pattern in candidate routes. Reconciliation audits use action names `exam.open` / `exam.closed` (matching candidate route convention), distinct from explicit transition audits (`exam.close`, `exam.cancel`, etc.).
 
 ### 5.4 Transaction Scope for Candidate Routes
 

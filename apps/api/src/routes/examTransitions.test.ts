@@ -193,7 +193,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
   });
 
   describe("candidate-triggered reconciliation: open -> closed", () => {
-    it("candidate exam list reconciles open -> closed and writes exam.closed audit", async () => {
+    it("candidate exam list reconciles published->open->closed and writes both exam.open and exam.closed audits", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Recon Open->Closed",
@@ -215,6 +215,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(listRes.statusCode).toBe(200);
 
       expect(await getExamStatus(ctx, examId)).toBe("closed");
+      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
       expect(await waitForAuditCount(ctx, "exam.closed", examId, 1)).toBe(1);
     });
   });
@@ -259,7 +260,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
   });
 
   describe("admin route reconciliation: close", () => {
-    it("close after reconciliation triggers open->closed writes NO exam.close audit (fromStatus=closed)", async () => {
+    it("close after reconciliation triggers open->closed writes exam.closed audit (not exam.close)", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Close Recon No Dup",
@@ -281,9 +282,14 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().status).toBe("closed");
 
+      // Reconciliation did published→open→closed in one pass.
+      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await waitForAuditCount(ctx, "exam.closed", examId, 1)).toBe(1);
+
+      // The close command was a no-op — exam.close audit is NOT written.
       await new Promise((resolve) => setTimeout(resolve, 200));
-      const count = await waitForAuditCount(ctx, "exam.close", examId, 1);
-      expect(count).toBe(-1);
+      const closeCount = await waitForAuditCount(ctx, "exam.close", examId, 1);
+      expect(closeCount).toBe(-1);
     });
   });
 
@@ -363,7 +369,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
   });
 
   describe("admin route reconciliation: archive", () => {
-    it("archive after reconciliation (published->open->closed) succeeds and writes exam.archive audit", async () => {
+    it("archive after reconciliation (published->open->closed) writes exam.open, exam.closed, and exam.archive audits", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Archive Recon",
@@ -384,6 +390,10 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().status).toBe("archived");
 
+      // Reconciliation did published→open→closed in one pass.
+      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await waitForAuditCount(ctx, "exam.closed", examId, 1)).toBe(1);
+      // Explicit archive action audit.
       expect(await waitForAuditCount(ctx, "exam.archive", examId, 1)).toBe(1);
     });
 
@@ -460,7 +470,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(mine[0]?.metadata?.reason).toBe("done");
     });
 
-    it("candidate reconciliation writes exam.open audit (admin routes do NOT)", async () => {
+    it("admin GET (non-mutating) does not reconcile; candidate list does", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Recon Audit Asymmetry",
@@ -496,6 +506,56 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
         cookies: { "auth-token": candidateToken },
       });
       expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+    });
+
+    it("admin extend on stale-published reconciles and writes exam.open audit", async () => {
+      const examId = await createExamWithTimeWindow(
+        ctx,
+        "Extend Recon Open",
+        new Date(Date.now() - 60_000),
+        new Date(Date.now() + 86_400_000),
+      );
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: adminCookies(ctx.adminToken),
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/extend`,
+        payload: { extendMinutes: 30 },
+        cookies: adminCookies(ctx.adminToken),
+      });
+      expect(res.statusCode).toBe(200);
+
+      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await waitForAuditCount(ctx, "exam.extend", examId, 1)).toBe(1);
+    });
+
+    it("admin cancel on stale-published reconciles and writes exam.open audit", async () => {
+      const examId = await createExamWithTimeWindow(
+        ctx,
+        "Cancel Recon Open",
+        new Date(Date.now() - 60_000),
+        new Date(Date.now() + 86_400_000),
+      );
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: adminCookies(ctx.adminToken),
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/cancel`,
+        payload: {},
+        cookies: adminCookies(ctx.adminToken),
+      });
+      expect(res.statusCode).toBe(200);
+
+      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await waitForAuditCount(ctx, "exam.cancel", examId, 1)).toBe(1);
     });
   });
 });

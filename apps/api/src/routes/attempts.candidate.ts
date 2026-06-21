@@ -52,7 +52,7 @@ import {
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { recordAudit } from "./audit.js";
-import { formatZodError } from "./helpers.js";
+import { formatZodError, recordReconciliationAudit } from "./helpers.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
 
 // Wire response schemas (Zod) — single source of truth for serialization +
@@ -395,16 +395,14 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           );
           if (!result) return null;
           const { exam, transition } = result;
-          if (transition) {
-            recordAudit(
-              fastify,
-              request,
-              ctx,
-              `exam.${transition}`,
-              "exam",
-              exam.id,
-            );
-          }
+          recordReconciliationAudit(
+            fastify,
+            request,
+            ctx,
+            exam.id,
+            result.previousStatus,
+            transition,
+          );
 
           const allAttempts = (await attemptRepo.findByExamAndCandidate(
             ctx,
@@ -523,16 +521,14 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Exam not found");
       }
       const { exam, transition } = statusResult;
-      if (transition) {
-        recordAudit(
-          fastify,
-          request,
-          ctx,
-          `exam.${transition}`,
-          "exam",
-          exam.id,
-        );
-      }
+      recordReconciliationAudit(
+        fastify,
+        request,
+        ctx,
+        exam.id,
+        statusResult.previousStatus,
+        transition,
+      );
 
       const rawEnrollment = await createEnrollmentRepo(
         fastify.db,
@@ -650,16 +646,14 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Exam not found");
       }
       const { exam, transition } = statusResult;
-      if (transition) {
-        recordAudit(
-          fastify,
-          request,
-          ctx,
-          `exam.${transition}`,
-          "exam",
-          examId,
-        );
-      }
+      recordReconciliationAudit(
+        fastify,
+        request,
+        ctx,
+        examId,
+        statusResult.previousStatus,
+        transition,
+      );
       if (
         exam.controlFlags.requireQueue &&
         getQueueStatus(exam, candidateId, fastify.now()).status !== "ready"
