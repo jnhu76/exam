@@ -37,7 +37,6 @@ import {
 import {
   deriveCandidateExamState,
   pickDisplayAttempt,
-  checkAndUpdateExamStatus,
 } from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -52,7 +51,8 @@ import {
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { recordAudit } from "./audit.js";
-import { formatZodError, recordReconciliationAudit } from "./helpers.js";
+import { formatZodError } from "./helpers.js";
+import { reconcileExamForRead } from "./reconciliation.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
 
 // Wire response schemas (Zod) — single source of truth for serialization +
@@ -388,21 +388,16 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       return Promise.all(
         enrollments.map(async (enrollment) => {
           const examAdapter = createExamRepoAdapter(examRepo, ctx);
-          const result = await checkAndUpdateExamStatus(
+          const result = await reconcileExamForRead(
             examAdapter,
             enrollment.examId,
             now,
-          );
-          if (!result) return null;
-          const { exam, transition } = result;
-          recordReconciliationAudit(
             fastify,
             request,
             ctx,
-            exam.id,
-            result.previousStatus,
-            transition,
           );
+          if (!result) return null;
+          const { exam } = result;
 
           const allAttempts = (await attemptRepo.findByExamAndCandidate(
             ctx,
@@ -512,23 +507,18 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       // ADR-006: one operation now, threaded through the whole request.
       const now = fastify.now();
       const examRepo = createExamRepo(fastify.db);
-      const statusResult = await checkAndUpdateExamStatus(
+      const statusResult = await reconcileExamForRead(
         createExamRepoAdapter(examRepo, ctx),
         parsed.data.examId,
         now,
+        fastify,
+        request,
+        ctx,
       );
       if (!statusResult) {
         throw new NotFoundError("Exam not found");
       }
-      const { exam, transition } = statusResult;
-      recordReconciliationAudit(
-        fastify,
-        request,
-        ctx,
-        exam.id,
-        statusResult.previousStatus,
-        transition,
-      );
+      const { exam } = statusResult;
 
       const rawEnrollment = await createEnrollmentRepo(
         fastify.db,
@@ -637,23 +627,18 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const candidateId = candidateProfile.id;
 
       const examRepo = createExamRepo(fastify.db);
-      const statusResult = await checkAndUpdateExamStatus(
+      const statusResult = await reconcileExamForRead(
         createExamRepoAdapter(examRepo, ctx),
         examId,
         fastify.now(),
+        fastify,
+        request,
+        ctx,
       );
       if (!statusResult) {
         throw new NotFoundError("Exam not found");
       }
-      const { exam, transition } = statusResult;
-      recordReconciliationAudit(
-        fastify,
-        request,
-        ctx,
-        examId,
-        statusResult.previousStatus,
-        transition,
-      );
+      const { exam } = statusResult;
       if (
         exam.controlFlags.requireQueue &&
         getQueueStatus(exam, candidateId, fastify.now()).status !== "ready"

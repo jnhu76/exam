@@ -1,8 +1,6 @@
 import type { RequestContext } from "@exam/domain";
 import type { ZodError } from "zod";
-import type { FastifyInstance, FastifyRequest } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
-import { recordAudit } from "./audit.js";
 
 /**
  * Ensures that the request context has a `targetOrganizationId` set.
@@ -43,28 +41,4 @@ export function formatZodError(requestId: string, error: ZodError) {
     },
     error.issues.map((i) => i.message).join("; "),
   );
-}
-
-/**
- * Write reconciliation audit(s) for a status change caused by
- * checkAndUpdateExamStatus. Mirrors the candidate-route convention:
- * `exam.open` / `exam.closed` with no metadata. Handles the double-
- * transition edge case (published → open → closed in one reconcile pass)
- * by emitting both audits.
- */
-export function recordReconciliationAudit(
-  fastify: FastifyInstance,
-  request: FastifyRequest,
-  ctx: RequestContext,
-  examId: string,
-  previousStatus: string | undefined,
-  transition: "open" | "closed" | undefined,
-): void {
-  if (!transition) return;
-  if (previousStatus === "published" && transition === "closed") {
-    recordAudit(fastify, request, ctx, "exam.open", "exam", examId);
-    recordAudit(fastify, request, ctx, "exam.closed", "exam", examId);
-    return;
-  }
-  recordAudit(fastify, request, ctx, `exam.${transition}`, "exam", examId);
 }

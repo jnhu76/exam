@@ -102,6 +102,8 @@ This audit examines all exam state transition handlers and reconciliation logic 
 
 ### Inconsistency 1: Reconciliation Audit Inconsistency ✅ Resolved (P2D-J2.7)
 
+> **Note**: The implementation details in this section reference `recordReconciliationAudit()` which has been superseded by J2.8. See §6 for the current centralized entrypoints.
+
 **Location**: Admin routes vs candidate routes
 
 **Issue**: Admin routes did NOT audit reconciliation transitions; candidate routes DID audit reconciliation transitions.
@@ -218,6 +220,8 @@ All tests are **characterization tests** that document current behavior without 
 
 ### 5.3 Reconciliation Audit Policy ✅ Resolved (P2D-J2.7)
 
+> **Note**: The `recordReconciliationAudit()` implementation referenced below has been superseded by J2.8's `reconcileExamForRead`/`reconcileExamForMutation`. See §6 for current call-site matrix.
+
 **Decision**: Audit all reconciliations that cause a persisted status change. Implementation: `recordReconciliationAudit()` in admin routes + existing `if (transition)` pattern in candidate routes. Reconciliation audits use action names `exam.open` / `exam.closed` (matching candidate route convention), distinct from explicit transition audits (`exam.close`, `exam.cancel`, etc.).
 
 ### 5.4 Transaction Scope for Candidate Routes
@@ -233,7 +237,55 @@ All tests are **characterization tests** that document current behavior without 
 
 ---
 
-## 6. Test Results
+## 6. Centralized Reconciliation Entrypoints (J2.8)
+
+### Problem
+
+Before J2.8, 9 call sites manually called `checkAndUpdateExamStatus` and 4 of those also duplicated `recordReconciliationAudit` with the same double-transition detection logic. This scattered the "reconcile + emit audit" pattern across route files.
+
+### Solution
+
+Created `apps/api/src/routes/reconciliation.ts` with two explicit wrappers:
+
+- **`reconcileExamForRead(repo, examId, now, fastify, request, ctx)`** — for read-side routes. Records audit internally.
+- **`reconcileExamForMutation(repo, examId, now)`** — for mutation-side (tx) routes. Returns `auditActions[]` for caller to record after tx commits.
+
+Both return `ReconciliationResult` (discriminated union):
+
+```ts
+type ReconciliationResult =
+  | { exam: Exam; changed: false }
+  | { exam: Exam; changed: true; fromStatus: string; toStatus: string; auditActions: string[] };
+```
+
+### Call-Site Matrix After J2.8
+
+| Route | File | Entrypoint | Audit caller |
+|-------|------|------------|-------------|
+| Candidate list exams | `attempts.candidate.ts` | `reconcileExamForRead` | internal |
+| Candidate get exam | `attempts.candidate.ts` | `reconcileExamForRead` | internal |
+| Candidate start attempt | `attempts.candidate.ts` | `reconcileExamForRead` | internal |
+| Admin close | `exam.ts` | `reconcileExamForMutation` | caller (after tx) |
+| Admin extend | `exam.ts` | `reconcileExamForMutation` | caller (after tx) |
+| Admin cancel | `exam.ts` | `reconcileExamForMutation` | caller (after tx) |
+| Admin archive | `exam.ts` | `reconcileExamForMutation` | caller (after tx) |
+| Admin PATCH (update) | `exam.ts` | `reconcileExamForMutation` | none (guard rejects) |
+| Admin unpublish | `exam.ts` | `reconcileExamForMutation` | none (guard rejects) |
+
+### Dead Code Removed
+
+- `recordReconciliationAudit` removed from `apps/api/src/routes/helpers.ts`
+- `checkAndUpdateExamStatus` import removed from `exam.ts` and `attempts.candidate.ts` (only `reconciliation.ts` imports it now)
+
+### Why Two Wrappers
+
+- `reconcileExamForRead` needs `fastify`/`request`/`ctx` to record audit internally (fire-and-forget)
+- `reconcileExamForMutation` runs inside a transaction — audit must be recorded **after** tx commits, so it returns `auditActions` for the caller to record
+- No option-soup mode parameter; the two use cases have different lifecycles
+
+---
+
+## 7. Test Results
 
 ### Commands Run
 
@@ -251,7 +303,7 @@ pnpm verify
 pnpm --filter @exam/api test
 
  Test Files  55 passed (55)
-      Tests  572 passed (572)
+      Tests  574 passed (574)
    Duration  117.05s
 ```
 
@@ -264,11 +316,11 @@ pnpm typecheck      → 15 successful, 15 total
 pnpm build          → 8 successful, 8 total
 ```
 
-All verification steps pass. The 12 new characterization tests are included in the 572 passing tests.
+All verification steps pass. The 14 characterization tests are included in the 574 passing tests.
 
 ---
 
-## 7. Appendix: State Machine Diagram
+## 8. Appendix: State Machine Diagram
 
 ```
 ┌─────────────┐
@@ -313,7 +365,7 @@ Notes:
 
 ---
 
-## 8. References
+## 9. References
 
 - **Exam state machine**: `packages/exam-engine/src/examStateMachine.ts`
 - **Exam command implementations**: `packages/exam-engine/src/examCommands.ts`

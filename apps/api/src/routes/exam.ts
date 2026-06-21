@@ -28,7 +28,6 @@ import {
   cancelExam,
   unpublishExam,
   extendExam,
-  checkAndUpdateExamStatus,
   publishExam,
 } from "@exam/exam-engine";
 import type { RequestContext, Exam, Question } from "@exam/domain";
@@ -44,7 +43,8 @@ import {
   ExamUpdateNotAllowedError,
   ExamCancelNotAllowedError,
 } from "@exam/domain";
-import { ensureTargetOrg, recordReconciliationAudit } from "./helpers.js";
+import { ensureTargetOrg } from "./helpers.js";
+import { reconcileExamForMutation } from "./reconciliation.js";
 import { recordAudit } from "./audit.js";
 import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
 import {
@@ -516,7 +516,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           if (!existing) return null;
 
           // 2. Reconcile status by now (published->open / open->closed lazily).
-          const reconciled = await checkAndUpdateExamStatus(
+          const reconciled = await reconcileExamForMutation(
             createExamRepoAdapter(repo, ctx),
             id,
             fastify.now(),
@@ -673,8 +673,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           closed: Exam;
           fromStatus: string;
           unresolvedCount: number;
-          reconTransition: "open" | "closed" | undefined;
-          reconPreviousStatus: string | undefined;
+          reconAuditActions: string[];
         } | null> => {
           const repo = createExamRepo(tx);
           const attemptRepo = createAttemptRepo(tx);
@@ -686,7 +685,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           // 2. Reconcile status by now (published->open / open->closed lazily).
-          const reconciled = await checkAndUpdateExamStatus(
+          const reconciled = await reconcileExamForMutation(
             createExamRepoAdapter(repo, ctx),
             id,
             fastify.now(),
@@ -723,8 +722,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             closed,
             fromStatus: exam.status,
             unresolvedCount,
-            reconTransition: reconciled?.transition,
-            reconPreviousStatus: reconciled?.previousStatus,
+            reconAuditActions: reconciled?.changed
+              ? reconciled.auditActions
+              : [],
           };
         },
       );
@@ -737,14 +737,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
       const { closed, fromStatus } = result;
 
-      recordReconciliationAudit(
-        fastify,
-        request,
-        ctx,
-        id,
-        result.reconPreviousStatus,
-        result.reconTransition,
-      );
+      for (const action of result.reconAuditActions) {
+        recordAudit(fastify, request, ctx, action, "exam", id);
+      }
 
       // 6. Audit — only for a genuine transition (idempotent close writes no
       //    duplicate audit, review decision #2). activeAttemptCount included
@@ -802,7 +797,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
           if (!locked) return null;
           // Reconcile by now: a published exam whose openAt passed is now open.
-          const reconciled = await checkAndUpdateExamStatus(
+          const reconciled = await reconcileExamForMutation(
             createExamRepoAdapter(repo, ctx),
             id,
             fastify.now(),
@@ -871,15 +866,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           exam: Exam;
           oldCloseAt: Date;
           newCloseAt: Date;
-          reconTransition: "open" | "closed" | undefined;
-          reconPreviousStatus: string | undefined;
+          reconAuditActions: string[];
         } | null> => {
           const repo = createExamRepo(tx);
           const locked = (await repo.findByIdForUpdate(ctx, id)) as Exam | null;
           if (!locked) return null;
           const oldCloseAt = new Date(locked.closeAt);
           // Reconcile: an open exam whose closeAt passed is now closed.
-          const reconciled = await checkAndUpdateExamStatus(
+          const reconciled = await reconcileExamForMutation(
             createExamRepoAdapter(repo, ctx),
             id,
             fastify.now(),
@@ -899,8 +893,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             exam: updated,
             oldCloseAt,
             newCloseAt: new Date(updated.closeAt),
-            reconTransition: reconciled?.transition,
-            reconPreviousStatus: reconciled?.previousStatus,
+            reconAuditActions: reconciled?.changed
+              ? reconciled.auditActions
+              : [],
           };
         },
       );
@@ -909,14 +904,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordReconciliationAudit(
-        fastify,
-        request,
-        ctx,
-        id,
-        result.reconPreviousStatus,
-        result.reconTransition,
-      );
+      for (const action of result.reconAuditActions) {
+        recordAudit(fastify, request, ctx, action, "exam", id);
+      }
       recordAudit(fastify, request, ctx, "exam.extend", "exam", id, {
         extendMinutes,
         oldCloseAt: result.oldCloseAt,
@@ -973,8 +963,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           exam: Exam;
           fromStatus: string;
           unresolvedCount: number;
-          reconTransition: "open" | "closed" | undefined;
-          reconPreviousStatus: string | undefined;
+          reconAuditActions: string[];
         } | null> => {
           const repo = createExamRepo(tx);
           const attemptRepo = createAttemptRepo(tx);
@@ -984,7 +973,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           if (!locked) return null;
 
           // 2. Reconcile status by now.
-          const reconciled = await checkAndUpdateExamStatus(
+          const reconciled = await reconcileExamForMutation(
             createExamRepoAdapter(repo, ctx),
             id,
             fastify.now(),
@@ -1019,8 +1008,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             exam: canceled,
             fromStatus: exam.status,
             unresolvedCount,
-            reconTransition: reconciled?.transition,
-            reconPreviousStatus: reconciled?.previousStatus,
+            reconAuditActions: reconciled?.changed
+              ? reconciled.auditActions
+              : [],
           };
         },
       );
@@ -1031,14 +1021,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      recordReconciliationAudit(
-        fastify,
-        request,
-        ctx,
-        id,
-        result.reconPreviousStatus,
-        result.reconTransition,
-      );
+      for (const action of result.reconAuditActions) {
+        recordAudit(fastify, request, ctx, action, "exam", id);
+      }
 
       // 6. Audit (outside tx, best-effort). activeAttemptCount is 0 here
       //    (guard passed).
@@ -1090,8 +1075,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         ): Promise<{
           archived: Exam;
           fromStatus: string;
-          reconTransition: "open" | "closed" | undefined;
-          reconPreviousStatus: string | undefined;
+          reconAuditActions: string[];
         } | null> => {
           const repo = createExamRepo(tx);
 
@@ -1101,7 +1085,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
           // 2. Reconcile status by now (published->open / open->closed lazily)
           //    so a stale persisted status cannot be archived against.
-          const reconciled = await checkAndUpdateExamStatus(
+          const reconciled = await reconcileExamForMutation(
             createExamRepoAdapter(repo, ctx),
             id,
             now,
@@ -1118,9 +1102,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           if (exam.status === "archived") {
             return {
               archived: exam,
-              fromStatus: "archived",
-              reconTransition: reconciled?.transition,
-              reconPreviousStatus: reconciled?.previousStatus,
+              fromStatus: exam.status,
+              reconAuditActions: reconciled?.changed
+                ? reconciled.auditActions
+                : [],
             };
           }
           let archived: Exam;
@@ -1135,8 +1120,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           return {
             archived,
             fromStatus: exam.status,
-            reconTransition: reconciled?.transition,
-            reconPreviousStatus: reconciled?.previousStatus,
+            reconAuditActions: reconciled?.changed
+              ? reconciled.auditActions
+              : [],
           };
         },
       );
@@ -1149,14 +1135,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
       const { archived, fromStatus } = result;
 
-      recordReconciliationAudit(
-        fastify,
-        request,
-        ctx,
-        id,
-        result.reconPreviousStatus,
-        result.reconTransition,
-      );
+      for (const action of result.reconAuditActions) {
+        recordAudit(fastify, request, ctx, action, "exam", id);
+      }
 
       // 5. Audit — only for a genuine transition (idempotent archive writes no
       //    duplicate audit). fromStatus captured from the reconciled pre-image.
