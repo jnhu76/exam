@@ -23,6 +23,8 @@ import {
   SaveAnswerAcceptedSchema,
   SaveAnswerRejectedSchema,
   SaveAnswerRejectReasonEnum,
+  GradingStatusEnum,
+  ManualGradingEntrySchema,
   ErrorResponseSchema,
   getSaveAnswerMessage,
   isErrorCode,
@@ -780,5 +782,64 @@ describe("Phase 1 role model (Admin + Candidate only)", () => {
       role: "Candidate",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// P2D-J2: manual grading model contracts.
+describe("manual grading contracts", () => {
+  it("GradingStatusEnum accepts the three valid statuses", () => {
+    for (const s of ["auto_graded", "pending_manual", "fully_graded"]) {
+      expect(GradingStatusEnum.safeParse(s).success).toBe(true);
+    }
+  });
+
+  it("GradingStatusEnum rejects unknown statuses", () => {
+    expect(GradingStatusEnum.safeParse("manual").success).toBe(false);
+    expect(GradingStatusEnum.safeParse("graded").success).toBe(false);
+    expect(GradingStatusEnum.safeParse("").success).toBe(false);
+  });
+
+  const validEntry = {
+    id: "00000000-0000-4000-8000-000000000001",
+    attemptId: "00000000-0000-4000-8000-000000000002",
+    questionId: "q-essay-1", // originalQuestionId — not a uuid
+    score: 7,
+    maxScore: 10,
+    gradedBy: "00000000-0000-4000-8000-000000000003",
+    gradedAt: "2026-06-21T00:00:00.000Z",
+  };
+
+  it("ManualGradingEntrySchema accepts a complete valid payload", () => {
+    const result = ManualGradingEntrySchema.safeParse(validEntry);
+    expect(result.success).toBe(true);
+  });
+
+  it("ManualGradingEntrySchema defaults comment to empty string when omitted", () => {
+    const parsed = ManualGradingEntrySchema.parse(validEntry);
+    expect(parsed.comment).toBe("");
+  });
+
+  it("ManualGradingEntrySchema rejects negative score", () => {
+    const result = ManualGradingEntrySchema.safeParse({
+      ...validEntry,
+      score: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("ManualGradingEntrySchema rejects comment longer than 2000 chars", () => {
+    const result = ManualGradingEntrySchema.safeParse({
+      ...validEntry,
+      comment: "x".repeat(2001),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("ManualGradingEntrySchema accepts a non-uuid questionId (originalQuestionId)", () => {
+    const result = ManualGradingEntrySchema.safeParse({
+      ...validEntry,
+      questionId: "any-snapshot-question-id",
+    });
+    expect(result.success).toBe(true);
   });
 });

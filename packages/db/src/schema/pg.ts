@@ -3,6 +3,7 @@ import type {
   Attachment,
   ControlFlags,
   GradingRule,
+  GradingStatus,
   MisconductFlag,
   QuestionScoreResult,
   QuestionSnapshot,
@@ -288,6 +289,7 @@ export const examAttempts = pgTable(
       mode: "date",
     }),
     misconduct: jsonb("misconduct").$type<MisconductFlag | null>(),
+    gradingStatus: text("grading_status").$type<GradingStatus>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -296,6 +298,39 @@ export const examAttempts = pgTable(
       table.organizationId,
       table.enrollmentId,
       table.attemptNo,
+    ),
+  ],
+);
+
+/**
+ * Manual grading entries — one grader's score + comment for one subjective
+ * question within one attempt (P2D-J2). Uniqueness of (attemptId, questionId)
+ * prevents duplicate entries for the same question in the same attempt.
+ */
+export const manualGradingEntries = pgTable(
+  "manual_grading_entries",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    attemptId: text("attempt_id")
+      .notNull()
+      .references(() => examAttempts.id),
+    questionId: text("question_id").notNull(),
+    score: doublePrecision("score").notNull(),
+    maxScore: doublePrecision("max_score").notNull(),
+    comment: text("comment").notNull().default(""),
+    gradedBy: text("graded_by").notNull(),
+    gradedAt: timestamp("graded_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("manual_grading_entries_attempt_question_unique").on(
+      table.attemptId,
+      table.questionId,
     ),
   ],
 );
@@ -326,5 +361,6 @@ export const schema = {
   exams,
   examEnrollments,
   examAttempts,
+  manualGradingEntries,
   auditLogs,
 };

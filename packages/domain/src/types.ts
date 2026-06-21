@@ -13,6 +13,7 @@ import type {
   FillBlankMatchMode,
   ConflictReason,
   MisconductSeverity,
+  GradingStatus,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -303,6 +304,13 @@ export interface ExamAttempt {
    * overwrites). Does not change `status`.
    */
   misconduct?: MisconductFlag | null;
+  /**
+   * Grading workflow status (P2D-J2). Orthogonal to `status`: tracks where
+   * the attempt sits in the grading pipeline. Undefined for attempts graded
+   * before this field existed (migration backfills `auto_graded`); defaults
+   * to `auto_graded` at the application boundary.
+   */
+  gradingStatus?: GradingStatus;
 }
 
 /**
@@ -386,6 +394,32 @@ export interface QuestionScoreResult {
   correct: boolean;
   candidateAnswer: unknown;
   standardAnswer: unknown;
+}
+
+// ── Manual Grading Entry (P2D-J2) ────────────────────────────────
+
+/**
+ * A single manual grading entry: one grader's score + comment for one
+ * subjective question within one attempt.
+ *
+ * Uniqueness of (attemptId, questionId) is enforced at the DB layer.
+ * `questionId` joins `QuestionSnapshot.originalQuestionId`. `gradedBy` is
+ * the Admin userId in Phase 2 (the Grader role is a Phase 3+ bundle).
+ */
+export interface ManualGradingEntry {
+  id: string;
+  organizationId: string;
+  attemptId: string;
+  questionId: string;
+  score: number;
+  maxScore: number;
+  /** Free-text grader comment; empty string when none. */
+  comment: string;
+  gradedBy: string;
+  /** Server-authoritative grading timestamp. */
+  gradedAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ── Audit Log (§3.8) ─────────────────────────────────────────────
