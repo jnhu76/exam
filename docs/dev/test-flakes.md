@@ -14,6 +14,14 @@
 > **does not remove BUG-FLAKE-001 mitigations**（`fileParallelism: false`、
 > `verify:db-tests` 串行链、scanner legacy timeout、每文件 schema 隔离全部
 > 保留），也**不声称 flake 已修复**。真实隔离落地是 Phase 3+ 的后续 PR。
+>
+> **进度备注（ADR-007 Phase 3A，worker-database prototype）**：ADR-007 Phase 3A
+> introduced a worker-database **prototype** only
+> (`packages/db/src/testWorkerDatabase.ts`)。它只新增 helper + 自带测试，**不**
+> 接入任何现有测试工厂、**不**打开 `fileParallelism`、**不**改 `maxWorkers`、
+> **does not modify default maxWorkers, does not enable file parallelism, does
+> not prove maxWorkers=2/4 safety, does not remove BUG-FLAKE-001 mitigations**。
+> 现有测试默认行为不变；legacy `file-schema` 仍是默认/回退。
 
 ## 登记规则
 
