@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import type { PgTable, TableConfig } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { Database } from "../types.js";
@@ -118,12 +118,11 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
     },
     /** Returns the total row count for the tenant's organization. */
     async count(ctx: TenantContext | RequestContext): Promise<number> {
-      return (
-        await db
-          .select({ id: table.id })
-          .from(tbl)
-          .where(eq(table.organizationId, orgId(ctx)))
-      ).length;
+      const rows = await db
+        .select({ value: count() })
+        .from(tbl)
+        .where(eq(table.organizationId, orgId(ctx)));
+      return Number(rows[0]?.value ?? 0);
     },
     /**
      * Lists rows for the tenant's organization with pagination.
@@ -143,12 +142,11 @@ export function createAsyncTenantCrudRepo<T extends TenantTable>(
         .orderBy(table.createdAt, table.id)
         .limit(pageSize)
         .offset(offset)) as Select[];
-      const total = (
-        await db
-          .select({ id: table.id })
-          .from(tbl)
-          .where(eq(table.organizationId, oid))
-      ).length;
+      const totalRows = await db
+        .select({ value: count() })
+        .from(tbl)
+        .where(eq(table.organizationId, oid));
+      const total = Number(totalRows[0]?.value ?? 0);
       return { items, total };
     },
     /**
