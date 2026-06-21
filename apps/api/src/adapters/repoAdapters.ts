@@ -99,3 +99,28 @@ export function createEnrollmentRepoAdapter(
       )) as ExamEnrollment | null,
   };
 }
+
+/** All three adapted repo interfaces needed by exam-engine commands. */
+export interface ExamEngineRepos {
+  exams: ExamRepository;
+  attempts: AttemptRepository;
+  enrollments: EnrollmentRepository;
+}
+
+/** Creates all three adapted repo interfaces in one call, binding the request
+ *  context. Use this instead of calling individual adapter factories when the
+ *  caller needs multiple repos (e.g. startOrRestoreAttempt, grading, submit). */
+export function createExamEngineRepos(
+  repos: {
+    examRepo: ReturnType<typeof createExamRepo>;
+    attemptRepo: ReturnType<typeof createAttemptRepo>;
+    enrollmentRepo: ReturnType<typeof createEnrollmentRepo>;
+  },
+  ctx: RequestContext,
+): ExamEngineRepos {
+  return {
+    exams: createExamRepoAdapter(repos.examRepo, ctx),
+    attempts: createAttemptRepoAdapter(repos.attemptRepo, ctx),
+    enrollments: createEnrollmentRepoAdapter(repos.enrollmentRepo, ctx),
+  };
+}

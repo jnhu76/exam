@@ -14,11 +14,7 @@ import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
-import {
-  createExamRepoAdapter,
-  createAttemptRepoAdapter,
-  createEnrollmentRepoAdapter,
-} from "../adapters/repoAdapters.js";
+import { createExamEngineRepos } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
@@ -105,22 +101,22 @@ export async function autoSubmitAndGrade(
       return false;
     }
 
-    const attemptRepoAdapter = createAttemptRepoAdapter(txAttemptRepo, ctx);
+    const { exams, enrollments, attempts } = createExamEngineRepos(
+      {
+        examRepo: createExamRepo(tx),
+        attemptRepo: txAttemptRepo,
+        enrollmentRepo: createEnrollmentRepo(tx),
+      },
+      ctx,
+    );
+
     // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
     // (source = deadline_scanner).
-    await submitAttempt(attemptRepoAdapter, attemptId, now, {
+    await submitAttempt(attempts, attemptId, now, {
       source: "deadline_scanner",
     });
 
-    const examRepo = createExamRepo(tx);
-    const enrollmentRepo = createEnrollmentRepo(tx);
-    await gradeAttemptIdempotent(
-      createExamRepoAdapter(examRepo, ctx),
-      createEnrollmentRepoAdapter(enrollmentRepo, ctx),
-      attemptRepoAdapter,
-      attemptId,
-      now,
-    );
+    await gradeAttemptIdempotent(exams, enrollments, attempts, attemptId, now);
 
     return true;
   });

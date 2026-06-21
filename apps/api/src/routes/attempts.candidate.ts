@@ -56,7 +56,7 @@ import { processSaveAnswer } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
   createAttemptRepoAdapter,
-  createEnrollmentRepoAdapter,
+  createExamEngineRepos,
 } from "../adapters/repoAdapters.js";
 import { recordAudit } from "./audit.js";
 import { formatZodError } from "./helpers.js";
@@ -679,23 +679,19 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const { attempt, isNew } = await executeInTransaction(
         fastify.db,
         async (tx) => {
-          const examRepoAdapter = createExamRepoAdapter(
-            createExamRepo(tx),
-            ctx,
-          );
-          const enrRepoAdapter = createEnrollmentRepoAdapter(
-            createEnrollmentRepo(tx),
-            ctx,
-          );
-          const attRepoAdapter = createAttemptRepoAdapter(
-            createAttemptRepo(tx),
+          const { exams, enrollments, attempts } = createExamEngineRepos(
+            {
+              examRepo: createExamRepo(tx),
+              attemptRepo: createAttemptRepo(tx),
+              enrollmentRepo: createEnrollmentRepo(tx),
+            },
             ctx,
           );
 
           return startOrRestoreAttempt(
-            examRepoAdapter,
-            enrRepoAdapter,
-            attRepoAdapter,
+            exams,
+            enrollments,
+            attempts,
             examId,
             candidateId,
             fastify.now(),
@@ -1028,10 +1024,19 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const examRepo = createExamRepo(fastify.db);
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
 
+      const { exams, enrollments, attempts } = createExamEngineRepos(
+        {
+          examRepo,
+          enrollmentRepo,
+          attemptRepo,
+        },
+        ctx,
+      );
+
       const snapshot = await readGradingSnapshot(
-        createExamRepoAdapter(examRepo, ctx),
-        createEnrollmentRepoAdapter(enrollmentRepo, ctx),
-        createAttemptRepoAdapter(attemptRepo, ctx),
+        exams,
+        enrollments,
+        attempts,
         attemptId,
       );
       if (!snapshot) {
@@ -1047,9 +1052,17 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
         await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+        const { enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: txAttemptRepo,
+            enrollmentRepo: createEnrollmentRepo(tx),
+          },
+          ctx,
+        );
         await finalizeGrading(
-          createEnrollmentRepoAdapter(createEnrollmentRepo(tx), ctx),
-          createAttemptRepoAdapter(txAttemptRepo, ctx),
+          enrollments,
+          attempts,
           attemptId,
           snapshot.enrollment.id,
           gradingResult,
@@ -1149,18 +1162,16 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       await getOwnedAttempt(fastify, ctx, attemptId);
 
       const attempt = await executeInTransaction(fastify.db, async (tx) => {
-        const examRepo = createExamRepo(tx);
-        const attemptRepo = createAttemptRepo(tx);
-
-        const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
-        const attRepoAdapter = createAttemptRepoAdapter(attemptRepo, ctx);
-
-        return restoreAttempt(
-          examRepoAdapter,
-          attRepoAdapter,
-          attemptId,
-          fastify.now(),
+        const { exams, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: createAttemptRepo(tx),
+            enrollmentRepo: createEnrollmentRepo(tx),
+          },
+          ctx,
         );
+
+        return restoreAttempt(exams, attempts, attemptId, fastify.now());
       });
 
       recordAudit(
