@@ -225,11 +225,71 @@ TEST_DATABASE_URL_TEMPLATE=postgres://.../exam_test_s{shard}_w{worker}
 
 ## Phase 3 — PostgreSQL per-worker database
 
+> **进度**: Phase 3A 已落地（worker-database **prototype**，见下方小节）。
+> Phase 3B（把 API test helper 接入 worker database）尚未开始。
+
 **目标**：把 ordinary API / integration 测试从"每文件 schema + 每文件
 migrate + drop"迁移到"每 worker 一个 database，migrate once，文件之间
 `TRUNCATE ... RESTART IDENTITY CASCADE`"。
 
-**范围**：
+### Phase 3A — worker-database prototype（已完成）
+
+落地内容（`packages/db/src/testWorkerDatabase.ts`，test-only，**不**在
+`index.ts` barrel 导出，遵循 `testIsolation.ts` 同样的非公共导出约定）：
+
+- `setupWorkerTestDatabase({ env, truncateSchema })` → `WorkerDatabaseHandle`：
+  - 复用 Phase 2A `resolveTestScope()` 派生 `postgresDatabaseName`。
+  - 生产模式守卫：`APP_MODE=production` 或 `NODE_ENV=production`（且
+    `APP_MODE` 未设置）时**拒绝运行**（test-only）。
+  - `ensureDatabaseExists(adminUrl, name)`：连 maintenance DB，参数化
+    `SELECT 1 FROM pg_database WHERE datname = $1` 探测，缺失则
+    `CREATE DATABASE "<safe-quoted>"`。幂等。
+  - 复用现有 `migratePostgres(db)`（无 `migrationsSchema`，即默认 `public`
+    业务表 + `drizzle` 迁移元数据），Drizzle `migrate()` 幂等。
+  - `handle.resetPostgres()`：`TRUNCATE ... RESTART IDENTITY CASCADE` 目标
+    schema（默认 `public`）所有业务表，**排除**迁移元数据表
+    （`__drizzle_migrations` / `drizzle_migrations`）。表名来自
+    `pg_tables` catalog，标识符严格 quote。
+  - `handle.close()`：关闭 worker pool，幂等。
+- 辅助：`withDatabaseName(url, name)`、`truncateBusinessTables(sql, schema)`、
+  `ensureDatabaseExists(adminUrl, name)`。
+- 测试 `packages/db/src/testWorkerDatabase.test.ts`（12 用例）：URL 派生、
+  生产守卫、`file-schema` 拒绝、不安全 URL/标识符/schema 拒绝、
+  `ensureDatabaseExists` 幂等、完整生命周期（migrate → connect → insert →
+  truncate → 迁移元数据保留 → close 幂等）、no-op truncate。PG 集成用例在
+  PG 不可达时自动 `describe.skip`。
+
+**Phase 3A 严格不做**（与本计划"不纳入 Phase 3"一致，且更窄）：
+
+- **不**把 `@exam/api` 测试工厂接入 worker database（那是 Phase 3B）。
+- **不**把 `@exam/db` 现有测试文件切到 worker database —— 现有文件仍走
+  `testIsolation.ts` 每文件 schema 路径（`isTestDbIsolationEnabled()` 把
+  `"worker-database"` 当 truthy，继续走 schema 隔离）。本 PR 只新增 helper
+  prototype + 其自带测试。
+- **不**打开 `fileParallelism: true`，**不**改 `maxWorkers`。
+- **不**改 CI、turbo、package.json、生产 schema/migration。
+- **不**引入 Redis / BullMQ。
+- **不**移除 `testIsolation.ts` 或 `TEST_DB_ISOLATION=file-schema` 回退。
+- **不**声称 `BUG-FLAKE-001` 已修复，**不**证明 `maxWorkers=2/4` 安全。
+
+**Phase 3A 验收**（独立 PG，端口与 e2e/他人隔离）：
+
+| 命令 | 结果 | 粗略耗时 |
+|---|---|---:|
+| `pnpm --filter @exam/db exec vitest run src/testWorkerDatabase.test.ts` | 12/12 PASS | ~2s |
+| `pnpm --filter @exam/db test`（legacy 默认） | 149/149 PASS | ~7s |
+| `TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 pnpm --filter @exam/db test` | 149/149 PASS | ~8s |
+| `pnpm --filter @exam/api test`（legacy 默认，串行） | 560/560 PASS | ~110s |
+
+> 注：db suite 两种 env 耗时基本相同，因为现有 db 测试两种 env 下都走
+> legacy 每文件 schema 路径；worker-database 路径当前只由新 12 个测试驱动。
+> 提速收益要等 Phase 3B 把 api suite 接入 worker database 后才会显现。
+
+**Phase 3A 可回滚**：`TEST_DB_ISOLATION=file-schema`（或任何非
+`worker-database` 值）下，`setupWorkerTestDatabase()` 会在入口拒绝；现有测试
+行为完全不变。即使删掉这两个新文件，旧模式仍正常工作。
+
+**Phase 3B 及以后**（后续 PR）才会做本 Phase 3 主目标的剩余部分：
 
 - 启动时确保 worker database 存在（`CREATE DATABASE IF NOT EXISTS` 等价，
   PostgreSQL 无此语法，用 `SELECT 1 FROM pg_database` 探测 + 条件

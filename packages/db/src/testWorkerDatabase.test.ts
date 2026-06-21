@@ -1,0 +1,268 @@
+import { afterAll, describe, expect, it } from "vitest";
+import postgres from "postgres";
+import {
+  ensureDatabaseExists,
+  setupWorkerTestDatabase,
+  truncateBusinessTables,
+  withDatabaseName,
+} from "./testWorkerDatabase.js";
+
+/**
+ * ADR-007 Phase 3A worker-database prototype tests.
+ *
+ * Two layers:
+ *   - Pure-logic tests (URL derivation, production guard, scope wiring) —
+ *     hermetic, no PG service needed.
+ *   - PG-integration tests (ensure / migrate / truncate / close) — require a
+ *     reachable PostgreSQL. They use a dedicated worker database name derived
+ *     from a fixed TEST_WORKER_ID so they never touch a sibling test's data.
+ *
+ * PG-integration tests are wrapped in `PG_DESCRIBE`, which becomes
+ * `describe.skip` when the server is not reachable — so the suite never fails
+ * just because PG is down, but DOES run wherever PG is up (local dev / CI).
+ */
+
+const BASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  "postgresql://exam:exam@localhost:5432/exam_test";
+
+/** A real admin URL derived from BASE_URL → maintenance DB `postgres`. */
+const ADMIN_URL = withDatabaseName(BASE_URL, "postgres");
+
+/** Best-effort reachability check; resolves true/false, never throws. */
+async function pgReachable(url: string): Promise<boolean> {
+  const sql = postgres(url, { connect_timeout: 2 });
+  try {
+    await sql`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await sql.end();
+  }
+}
+
+const PG_UP = await pgReachable(ADMIN_URL);
+/** describe or describe.skip depending on PG reachability. */
+const PG_DESCRIBE = PG_UP ? describe : describe.skip;
+
+/** Clean up any leftover worker DB from a previous run (best-effort). */
+async function dropDbIfPresent(name: string): Promise<void> {
+  if (!PG_UP) return;
+  const admin = postgres(ADMIN_URL);
+  try {
+    await admin.unsafe(`DROP DATABASE IF EXISTS "${name}"`);
+  } finally {
+    await admin.end();
+  }
+}
+
+afterAll(async () => {
+  // Best-effort cleanup of the prototype DB names used below.
+  await dropDbIfPresent("exam_test_w_phase3a_proto");
+});
+
+// ---------------------------------------------------------------------------
+// Pure-logic tests (no PG service required)
+// ---------------------------------------------------------------------------
+
+describe("withDatabaseName", () => {
+  it("replaces the pathname and preserves the rest", () => {
+    const out = withDatabaseName(
+      "postgresql://exam:exam@localhost:5432/exam_test",
+      "exam_test_w1",
+    );
+    expect(out).toBe("postgresql://exam:exam@localhost:5432/exam_test_w1");
+  });
+
+  it("preserves query parameters", () => {
+    const out = withDatabaseName(
+      "postgresql://exam:exam@localhost:5432/exam_test?sslmode=disable",
+      "exam_test_s2_w1",
+    );
+    expect(out).toContain("/exam_test_s2_w1");
+    expect(out).toContain("sslmode=disable");
+  });
+
+  it("derives the CI worker URL from a shard+worker name", () => {
+    const out = withDatabaseName(BASE_URL, "exam_test_s2_w1");
+    expect(out.endsWith("/exam_test_s2_w1")).toBe(true);
+  });
+});
+
+describe("setupWorkerTestDatabase — input guards (no PG)", () => {
+  it("refuses to run in production mode (APP_MODE=production)", async () => {
+    await expect(
+      setupWorkerTestDatabase({
+        env: {
+          APP_MODE: "production",
+          TEST_DB_ISOLATION: "worker-database",
+          TEST_DATABASE_URL: BASE_URL,
+        },
+      }),
+    ).rejects.toThrow(/production mode/);
+  });
+
+  it("refuses to run when NODE_ENV=production and APP_MODE unset", async () => {
+    await expect(
+      setupWorkerTestDatabase({
+        env: {
+          NODE_ENV: "production",
+          TEST_DB_ISOLATION: "worker-database",
+          TEST_DATABASE_URL: BASE_URL,
+        },
+      }),
+    ).rejects.toThrow(/production mode/);
+  });
+
+  it("rejects when dbIsolation is file-schema", async () => {
+    await expect(
+      setupWorkerTestDatabase({
+        env: { TEST_DB_ISOLATION: "file-schema", TEST_DATABASE_URL: BASE_URL },
+      }),
+    ).rejects.toThrow(/worker-database/);
+  });
+
+  it("rejects an unsafe base URL scheme", async () => {
+    await expect(
+      setupWorkerTestDatabase({
+        env: {
+          TEST_DB_ISOLATION: "worker-database",
+          TEST_DATABASE_URL: "sqlite:./dev.db",
+          TEST_WORKER_ID: "1",
+        },
+      }),
+    ).rejects.toThrow(/postgresql:\/\/ or postgres:\/\//);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PG-integration tests (skipped when PG is not reachable)
+// ---------------------------------------------------------------------------
+
+PG_DESCRIBE("ensureDatabaseExists", () => {
+  it("creates the database if missing, idempotent on second call", async () => {
+    const workerDb = "exam_test_w_phase3a_ensure";
+    await dropDbIfPresent(workerDb);
+    // First call: creates.
+    await ensureDatabaseExists(ADMIN_URL, workerDb);
+    // Second call: idempotent (already exists).
+    await ensureDatabaseExists(ADMIN_URL, workerDb);
+    const admin = postgres(ADMIN_URL);
+    try {
+      const rows = await admin`
+        SELECT 1 FROM pg_database WHERE datname = ${workerDb}
+      `;
+      expect(rows.length).toBe(1);
+    } finally {
+      await admin.end();
+      await dropDbIfPresent(workerDb);
+    }
+  });
+
+  it("rejects an unsafe database name without issuing DDL", async () => {
+    await expect(
+      ensureDatabaseExists(ADMIN_URL, "exam_test; DROP TABLE x"),
+    ).rejects.toThrow(/unsafe database name/);
+  });
+});
+
+PG_DESCRIBE("setupWorkerTestDatabase — full lifecycle", () => {
+  it("migrates, connects, truncates, preserves migration metadata, closes cleanly", async () => {
+    const handle = await setupWorkerTestDatabase({
+      env: {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_INFRA_SCOPE: "local",
+        TEST_WORKER_ID: "phase3a_proto",
+        TEST_DATABASE_URL: BASE_URL,
+      },
+    });
+    try {
+      // Derived name follows the resolver's local-worker rule.
+      expect(handle.databaseName).toBe("exam_test_wphase3a_proto");
+      expect(handle.scope.dbIsolation).toBe("worker-database");
+      expect(handle.databaseUrl.endsWith(`/${handle.databaseName}`)).toBe(true);
+
+      // Migration metadata must be present (real migration ran).
+      const meta = postgres(handle.databaseUrl);
+      try {
+        const tables = await meta`
+          SELECT tablename FROM pg_tables WHERE schemaname = 'drizzle'
+        `;
+        const names = tables.map((t) =>
+          "tablename" in (t as object)
+            ? (t as { tablename: string }).tablename
+            : "",
+        );
+        expect(names).toContain("__drizzle_migrations");
+      } finally {
+        await meta.end();
+      }
+
+      // Insert a business row into a migrated table (organizations), then
+      // confirm resetPostgres() clears it while preserving migration metadata.
+      const biz = postgres(handle.databaseUrl);
+      try {
+        await biz`
+          INSERT INTO organizations (id, name, slug, display_name, created_at, updated_at)
+          VALUES ('org-test-phase3a', 'Test Org', 'org-test-phase3a', 'Test Org', now(), now())
+        `;
+        let rows = await biz`SELECT count(*)::int AS c FROM organizations`;
+        expect((rows[0] as { c: number }).c).toBeGreaterThanOrEqual(1);
+
+        await handle.resetPostgres();
+        rows = await biz`SELECT count(*)::int AS c FROM organizations`;
+        expect((rows[0] as { c: number }).c).toBe(0);
+      } finally {
+        await biz.end();
+      }
+
+      // Migration metadata MUST survive resetPostgres().
+      const meta2 = postgres(handle.databaseUrl);
+      try {
+        const after = await meta2`
+          SELECT count(*)::int AS c FROM drizzle.__drizzle_migrations
+        `;
+        expect((after[0] as { c: number }).c).toBeGreaterThan(0);
+      } finally {
+        await meta2.end();
+      }
+    } finally {
+      await handle.close();
+      await handle.close(); // idempotent
+      await dropDbIfPresent(handle.databaseName);
+    }
+  });
+});
+
+describe("truncateBusinessTables — guard", () => {
+  it("rejects an unsafe schema name without touching PG", async () => {
+    const fakeSql = {
+      async unsafe() {
+        throw new Error("should not be called");
+      },
+    } as unknown as postgres.Sql;
+    await expect(
+      truncateBusinessTables(fakeSql, "public; DROP"),
+    ).rejects.toThrow(/unsafe schema/);
+  });
+});
+
+PG_DESCRIBE("truncateBusinessTables — no-op path", () => {
+  it("does not error when there are zero business rows", async () => {
+    const handle = await setupWorkerTestDatabase({
+      env: {
+        TEST_DB_ISOLATION: "worker-database",
+        TEST_WORKER_ID: "phase3a_noop",
+        TEST_DATABASE_URL: BASE_URL,
+      },
+    });
+    try {
+      await handle.resetPostgres();
+      await handle.resetPostgres(); // no business rows -> no-op, no error
+    } finally {
+      await handle.close();
+      await dropDbIfPresent(handle.databaseName);
+    }
+  });
+});

@@ -287,3 +287,16 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
   `producer-only`，与上表"worker 是否显式启用"的语义一致。
 - 这只是命名能力，**不**改变现有测试执行拓扑，**不**消费 resolver 的派生
   database/prefix。打标（Phase 1）与真实隔离落地（Phase 3+）仍是后续 PR。
+
+## 进度备注（Phase 3A，worker-database prototype）
+
+- `packages/db/src/testWorkerDatabase.ts` 已落地（test-only prototype）。它
+  消费 Phase 2A resolver 的 `postgresDatabaseName`，提供
+  `setupWorkerTestDatabase()` → `WorkerDatabaseHandle`（ensure database →
+  migrate once → `resetPostgres()` truncate → `close()`）。
+- **不**改变现有测试执行拓扑：现有 `@exam/db` / `@exam/api` 测试仍走
+  `testIsolation.ts` 每文件 schema 路径（legacy default）。worker-database
+  路径目前只由其自带 12 个测试驱动。
+- **不**打开 `fileParallelism`，**不**改 `maxWorkers`，**不**改 CI。
+- Phase 3B（把 API test helper 接入 worker database）才是真正切换默认行为
+  的下一步，需要独立 PR + stress 证据。
