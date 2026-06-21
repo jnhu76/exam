@@ -27,30 +27,29 @@
 **New root fix**: `packages/db/src/testIsolation.ts` 提供每测试文件 / 每 worker 独立 PG schema 机制。通过 `SET search_path TO <unique_schema>`（不含 `public`）+ `migrationsSchema` 参数为每个 schema 独立追踪迁移状态 → 跨 worker / 跨文件 DB 状态泄漏从源头消除。已验证：32 个 isolation helper 测试全部通过。
 
 **Remaining mitigations**:
-1. **A′ `fileParallelism: false`**（apps/api 和 packages/db vitest config）：串行执行 DB-touching file，仍为当前主缓解。
-2. **C 方案 scanner legacy timeout**（15_000ms）：保留，不做主动移除。
+1. **A′ `fileParallelism: false`**（apps/api 和 packages/db vitest config）：串行执行 DB-touching file，仍为当前主缓解。B 方案迁移完成后可评估移除（需在独立 follow-up PR 中验证 stress）。
+2. **C 方案 scanner legacy timeout**（15_000ms）：保留，可评估移除（需在独立 follow-up PR 中 review）。
 
 **当前缓解**:
 
-1. **B 方案基础设施（新增，2026-06-21）**: `packages/db/src/testIsolation.ts` 提供 `setupIsolatedTestDb()` / `withIsolatedTestSchema()` helper，`getIsolatedTestDb(namespace)` 和 `buildTestApp(plugin, { schemaName })` 支持每测试文件独立 PG schema。通过 `SET search_path TO <unique_schema>` + `migrationsSchema` 参数实现隔离，从源头消除跨文件 / 跨 worker DB 状态泄漏。由 `TEST_DB_ISOLATION=1`（默认开启）控制。
-   - **per-schema 迁移追踪**：`migratePostgres()` 接受 `migrationsSchema` 参数，Drizzle 在隔离 schema 内独立记录 `__drizzle_migrations`，不共享全局 `drizzle` schema。
-   - **FK 约束 schema 无关**：迁移 SQL 中所有 FK 引用已去掉 `"public".` 硬编码前缀，改为无 schema 限定的 `REFERENCES "organizations"`，通过 search_path 正确解析。
-   - 已迁移的测试文件：`testIsolation.test.ts`（32 个隔离测试全部通过）。
-2. **A′ 方案（主缓解，现行）**: `apps/api/vitest.config.ts` 与 `packages/db/vitest.config.ts` 均设置 `fileParallelism: false`，让两个共享 `exam_test` PostgreSQL 实例的 package 内部测试文件串行执行。从源头消除 vitest 跨文件并行 + 共享 PostgreSQL schema + coverage instrumentation + turbo 跨 package 并发四者叠加导致的 DB 资源争用。
-   - 影响范围：仅 `apps/api` 和 `packages/db`（即唯一两个使用 `exam_test` PG 的 package）。`web`、`contracts`、`domain`、`import-export`、`exam-engine`、`auth` 不受影响，仍然并行。
-   - turbo 层面：`@exam/api` 和 `@exam/db` 仍然在 turbo 调度下跨 package 并行，但每个 package 内部测试文件串行；这是 vitest config 的官方推荐做法（见 vitest "Parallelism > File Parallelism"：当测试共享外部资源如数据库时，应禁用文件并行）。
-   - 代价：受影响 package 测试时间约翻倍（apps/api 70s → ~71s，packages/db 11s → ~16s 量级），但稳定。
-   - 兼容：`vitest watch`（`pnpm --filter ... dev`）仍可走默认配置；CLI 行为保持透明。
-3. **C 方案（遗留安全网，保留）**: `apps/api/src/routes/attempts.test.ts:1070` 该 it() 仍带 positional `15_000` ms timeout。在 A′ 生效后此 timeout 已变成 redundant safety net；不主动移除，避免再次回退。如果后续做 B 方案恢复并行，此 timeout 应一并 review。
+1. **B 方案（已完成，2026-06-21）**: 所有 ~43 个 DB-touching 测试文件已接入独立 PG schema。每测试文件通过 `setupIsolatedTestDb()` / `buildTestApp()` 自动创建独立 schema，从源头消除跨文件 / 跨 worker / 跨 package DB 状态泄漏。跨 package 并发 stress 5/5 PASS。
+   - 基础设施：`packages/db/src/testIsolation.ts` 提供 `setupIsolatedTestDb()` / `withIsolatedTestSchema()` / `getIsolatedTestDb()` / `buildTestApp()`。
+   - 隔离机制：`SET search_path TO <unique_schema>`（不含 `public`）+ `migrationsSchema` 参数实现 schema 级独立追踪。
+   - FK 约束 schema 无关：迁移 SQL 中所有 FK 引用已去掉 `"public".` 硬编码前缀。
+   - 由 `TEST_DB_ISOLATION=1`（默认开启）控制。
+2. **A′ 方案（保留，可选移除）**: `apps/api/vitest.config.ts` 与 `packages/db/vitest.config.ts` 均设置 `fileParallelism: false`。B 方案迁移完成后此设置已成为安全网而非主缓解，可在独立 follow-up PR 中评估移除。
+   - 影响范围：仅 `apps/api` 和 `packages/db`。
+   - turbo 层面：跨 package 仍然并行（已验证 5/5 通过）。
+3. **C 方案（保留，可选 review）**: `apps/api/src/routes/attempts.test.ts:1070` 的 15_000 ms timeout。B 方案迁移完成后可 review 是否移除。
 
 **已知根因（已部分验证）**: vitest 默认按文件并行调度 + 全部测试文件共享同一本地 PG 实例 + c8 instrumentation 在 coverage 模式下放大 I/O 与调度争用。导致 `scanDatabaseForDisruptedAttempts` 的 PG 调用在某些瞬间无法在 5s 默认 testTimeout 内回包。A′ 通过让测试文件串行执行验证了 "并行 + 共享 schema" 是触发条件之一。
 
-**后续根因修复（B 方案，已完成 2026-06-21）**:
+**B 方案后续根因修复：已完成（2026-06-21）**:
 
 - ~~给 `apps/api` 测试加上"每测试文件 / 每 worker 独立 PostgreSQL schema"机制：测试 setup 阶段为每个 worker 创建一个独立 schema 并 `SET search_path`，把"共享 schema 下并行写入"这一类争用从源头消除。~~
 - 基础实施已就位（2026-06-21）：`packages/db/src/testIsolation.ts` + `getIsolatedTestDb()` + `buildTestApp()` `schemaName` 参数。
-- 下一步：已完成。所有 DB-touching 测试文件（~43 个）已迁移到隔离 schema。
-- 完成后可恢复 `fileParallelism` 默认值（删除 A′ 配置中的 `fileParallelism: false`），并 review 是否同步移除 `attempts.test.ts:1070` 的 15_000 ms timeout。
+- 迁移完成：所有 ~43 个 DB-touching 测试文件已接入隔离 schema。跨 package 并发 stress 5/5 PASS。
+- **未在本次 PR 中执行**：移除 `fileParallelism: false`、`verify:db-tests` 串行链、scanner 15_000 ms timeout。这些应在独立 follow-up PR 中评估移除，需先通过移除后的 stress 验证。
 - 可用 helper：`setupIsolatedTestDb({ namespace })`、`withIsolatedTestSchema()`、`getIsolatedTestDb(namespace)`、`buildTestApp(plugin, { schemaName })`。
 
 **禁止做（仍然有效）**:
@@ -82,7 +81,7 @@
 | `pnpm --filter @exam/db test -- --run src/testIsolation.test.ts` | 1 | PASS | 32 isolation helper tests pass |
 | `pnpm verify` | 1 | PASS | Full suite: lint/typecheck/tests/build green |
 
-这些 stress 是在 A′ serial containment 下运行的。**B 方案已完成（2026-06-21）**——所有 DB-touching 测试文件已接入隔离 schema。下一步：恢复 `fileParallelism` 默认值并重新跑 stress 验证，确认后可移除 A′ 方案。
+这些 stress 是在 A′ serial containment 下运行的。**B 方案已完成（2026-06-21）**——所有 DB-touching 测试文件已接入隔离 schema，跨 package 并发 stress 5/5 PASS。**下一步（独立 follow-up PR）**：移除 `fileParallelism` 默认值并重新跑 stress 验证，确认后可移除 A′ 方案。
 
 ---
 
@@ -95,7 +94,7 @@
 **New root fix**: `packages/db/src/testIsolation.ts` 提供 `setupIsolatedTestDb({ namespace })` + `buildTestApp(plugin, { schemaName })`，每个测试任务可拥有独立 PG schema 且互不干扰。通过 `SET search_path` + `migrationsSchema` 实现 schema 级隔离。已验证：`testIsolation.test.ts` 32 个隔离测试全部通过。
 
 **Remaining mitigations**:
-- `package.json` `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）仍为主缓解。B 方案已完成，可评估移除此串行链。
+- `package.json` `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）仍为主缓解。B 方案已完成，可评估移除（需在独立 follow-up PR 中验证 stress）。
 
 **失败链**:
 
@@ -133,12 +132,12 @@ turbo 在单次调用里并发调度多个 DB-touching 任务
 3. 影响范围：仅 `@exam/db` 与 `@exam/api`（唯一两个使用 `exam_test` PG 的 package）。其余 package（web/contracts/domain/import-export/exam-engine/auth）不受影响，仍并行。
 4. 兼容：`pnpm test` / `pnpm coverage` / `pnpm test:integration` 行为不变（仍走 turbo，受同名 `dependsOn` 保护）；CI 的 `pnpm test` → `pnpm test:integration` → `pnpm build` → `pnpm coverage` 分步串行本就安全，Option A 是对 `pnpm verify` 单命令路径与未来组合调用的额外保险。
 
-**Option B（B 方案基础设施已可用）**:
+**Option B（B 方案已完成）**:
 
-> 根因修复基础设施已实现（2026-06-21）：每测试文件 / 每 worker 独立 PostgreSQL schema 机制。
+> 根因修复已实现（2026-06-21）：每测试文件 / 每 worker 独立 PostgreSQL schema 机制。所有 ~43 个 DB-touching 测试文件已迁移，跨 package 并发 stress 5/5 PASS。
 
-- ~~需要给每个 DB-touching 测试任务 / worker 分配独立的 PostgreSQL database 或 schema~~ → 已实现：`packages/db/src/testIsolation.ts` 的 `setupIsolatedTestDb({ namespace })` + `buildTestApp(plugin, { schemaName })`。
-- 完成后可恢复 turbo 对 DB 任务的并行调度，并 review 是否回滚 Option A 的串行脚本（`verify` 可改回 `pnpm test && pnpm coverage`）。
+- ~~需要给每个 DB-touching 测试任务 / worker 分配独立的 PostgreSQL database 或 schema~~ → 已完成：`packages/db/src/testIsolation.ts` 的 `setupIsolatedTestDb({ namespace })` + `buildTestApp(plugin, { schemaName })`。
+- **未完成**：恢复 turbo 对 DB 任务的并行调度、回滚 Option A 串行脚本。这些应在独立 follow-up PR 中评估，需先通过移除后的 stress 验证。
 - 可用 helper：`setupIsolatedTestDb()`、`getIsolatedTestDb(namespace)`、`buildTestApp(plugin, { schemaName })`。见 BUG-FLAKE-001 B 方案详情。
 
 **禁止做（仍然有效）**:
@@ -165,12 +164,12 @@ pnpm verify           # 现在走 verify:nodb-tests → verify:db-tests 串行�
 |---|---:|---|---|
 | `pnpm --filter @exam/db test` | 1 | PASS | 98/98 tests pass in public schema (serial) |
 | `pnpm --filter @exam/api test` | 1 | PASS | 543/543 tests pass in public schema (serial) |
-| `turbo run test coverage --filter=@exam/db --filter=@exam/api --force` | 3 | FAIL | **Expected** — existing tests still use shared `exam_test.public`, concurrent `@exam/db#test` + `@exam/db#coverage` collide on seed/cleanup |
+| `turbo run test coverage --filter=@exam/db --filter=@exam/api --force` | 5 | PASS | B方案完成——隔离 schema 消除跨 package 竞争 |
 | `pnpm verify` | 1 | PASS | Full suite passes via serial `verify:db-tests` chain |
 
 **B 方案已完成**: 所有 DB-touching 测试文件已接入隔离 schema。`turbo run test coverage --filter=@exam/db --filter=@exam/api --force` 5/5 全部通过（2026-06-21）。跨 package 并发竞争已从源头消除。
 
-**Follow-up**: 重新运行 stress 确认 `verify:db-tests` 串行链可移除。
+**Follow-up**: `verify:db-tests` 串行链可评估移除（需在独立 follow-up PR 中验证 stress）。
 
 ---
 
