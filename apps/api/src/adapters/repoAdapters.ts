@@ -7,10 +7,12 @@ import type {
 import type { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import type { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import type { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import type { createManualGradingRepo } from "@exam/db/src/repository/manualGradingRepo.js";
 import type {
   ExamRepository,
   AttemptRepository,
   EnrollmentRepository,
+  ManualGradingRepository,
 } from "@exam/exam-engine";
 
 /** Adapts the DB exam repo to the ExamRepository interface expected by
@@ -105,6 +107,20 @@ export interface ExamEngineRepos {
   exams: ExamRepository;
   attempts: AttemptRepository;
   enrollments: EnrollmentRepository;
+}
+
+/** Adapts the DB manual-grading repo to the ManualGradingRepository interface
+ * expected by the exam-engine `gradeQuestion` command, binding the request
+ * context (P2D-J3). */
+export function createManualGradingRepoAdapter(
+  repo: ReturnType<typeof createManualGradingRepo>,
+  ctx: RequestContext,
+): ManualGradingRepository {
+  return {
+    upsert: async (input) =>
+      repo.upsert(ctx, input as Parameters<typeof repo.upsert>[1]),
+    findByAttempt: async (attemptId) => repo.findByAttempt(ctx, attemptId),
+  };
 }
 
 /** Creates all three adapted repo interfaces in one call, binding the request
