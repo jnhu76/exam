@@ -114,40 +114,55 @@ describe("stripOptionsFromUrl", () => {
 });
 
 describe("create and drop schema", () => {
-  const testSchema = `test_isolation_${Date.now()}`;
-
-  afterAll(async () => {
-    await dropTestSchema(TEST_DB_URL, testSchema).catch(() => {});
-  });
+  // NOTE: each `it` owns its own unique schema. Earlier this describe shared a
+  // single `testSchema` across `it` blocks in a strict create→idempotent→
+  // drop→idempotent-drop sequence. That is an order dependency that breaks
+  // under `sequence.concurrent: true` / `it.concurrent` (later `it` would
+  // drop/observe a schema the earlier `it` had not yet created). Giving each
+  // test its own schema makes the suite order-independent and safe under any
+  // execution mode.
 
   it("creates a schema", async () => {
-    await expect(
-      createTestSchema(TEST_DB_URL, testSchema),
-    ).resolves.toBeUndefined();
-
-    const sql = postgres(TEST_DB_URL);
+    const name = generateUniqueSchemaName("isolation_create");
     try {
-      const rows =
-        await sql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = ${testSchema}`;
-      expect(rows.length).toBe(1);
+      await expect(
+        createTestSchema(TEST_DB_URL, name),
+      ).resolves.toBeUndefined();
+
+      const sql = postgres(TEST_DB_URL);
+      try {
+        const rows =
+          await sql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = ${name}`;
+        expect(rows.length).toBe(1);
+      } finally {
+        await sql.end();
+      }
     } finally {
-      await sql.end();
+      await dropTestSchema(TEST_DB_URL, name).catch(() => {});
     }
   });
 
-  it("is idempotent (second create does not error)", async () => {
-    await expect(
-      createTestSchema(TEST_DB_URL, testSchema),
-    ).resolves.toBeUndefined();
+  it("create is idempotent (second create does not error)", async () => {
+    const name = generateUniqueSchemaName("isolation_idem");
+    try {
+      await createTestSchema(TEST_DB_URL, name);
+      await expect(
+        createTestSchema(TEST_DB_URL, name),
+      ).resolves.toBeUndefined();
+    } finally {
+      await dropTestSchema(TEST_DB_URL, name).catch(() => {});
+    }
   });
 
   it("drops a schema", async () => {
-    await dropTestSchema(TEST_DB_URL, testSchema);
+    const name = generateUniqueSchemaName("isolation_drop");
+    await createTestSchema(TEST_DB_URL, name);
+    await dropTestSchema(TEST_DB_URL, name);
 
     const sql = postgres(TEST_DB_URL);
     try {
       const rows =
-        await sql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = ${testSchema}`;
+        await sql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = ${name}`;
       expect(rows.length).toBe(0);
     } finally {
       await sql.end();
@@ -155,9 +170,10 @@ describe("create and drop schema", () => {
   });
 
   it("drop is idempotent (IF EXISTS)", async () => {
-    await expect(
-      dropTestSchema(TEST_DB_URL, testSchema),
-    ).resolves.toBeUndefined();
+    // Dropping a (likely) non-existent test_ schema must not throw thanks to
+    // IF EXISTS. Fully self-contained; does not depend on any prior `it`.
+    const name = generateUniqueSchemaName("isolation_dropidem");
+    await expect(dropTestSchema(TEST_DB_URL, name)).resolves.toBeUndefined();
   });
 
   it("refuses to drop non-test_ schema", async () => {
@@ -276,17 +292,28 @@ describe("seed works in isolated schema", () => {
 });
 
 describe("setupIsolatedTestDb", () => {
+  // NOTE: setup MUST live in `beforeAll`, not in the first `it`. Earlier this
+  // suite assigned `testDb` inside the first `it` and let later `it` blocks
+  // read it. That is an order dependency: it only works because Vitest runs
+  // `it` blocks sequentially by default (sequence.concurrent defaults to
+  // false). Under `sequence.concurrent: true` (or `it.concurrent`), the later
+  // `it` blocks read `testDb` before the first one assigned it and crashed
+  // with `Cannot read properties of undefined`. Moving setup to `beforeAll`
+  // removes the order dependency entirely so the suite is safe under any
+  // execution mode.
   let testDb: Awaited<ReturnType<typeof setupIsolatedTestDb>>;
+
+  beforeAll(async () => {
+    testDb = await setupIsolatedTestDb({
+      namespace: "test-helper",
+    });
+  });
 
   afterAll(async () => {
     await testDb?.cleanup().catch(() => {});
   });
 
-  it("creates schema and returns workable info", async () => {
-    testDb = await setupIsolatedTestDb({
-      namespace: "test-helper",
-    });
-
+  it("returns workable info (schemaName, databaseUrl, cleanup)", async () => {
     expect(testDb.schemaName).toMatch(/^test_/);
     expect(testDb.databaseUrl).toBe(TEST_DB_URL);
     expect(typeof testDb.cleanup).toBe("function");
@@ -315,13 +342,19 @@ describe("setupIsolatedTestDb", () => {
     expect(orgs.length).toBe(1);
   });
 
-  it("cleanup drops the schema", async () => {
-    await testDb.cleanup();
+  it("cleanup drops the schema (self-contained: own isolated DB)", async () => {
+    // Use a SEPARATE isolated DB so this test does not destroy the shared
+    // `testDb` that the other `it` blocks read. Order-independent under any
+    // execution mode.
+    const victim = await setupIsolatedTestDb({
+      namespace: "test-helper-cleanup",
+    });
+    await victim.cleanup();
 
     const sql = postgres(TEST_DB_URL);
     try {
       const rows =
-        await sql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = ${testDb.schemaName}`;
+        await sql`SELECT schema_name FROM information_schema.schemata WHERE schema_name = ${victim.schemaName}`;
       expect(rows.length).toBe(0);
     } finally {
       await sql.end();
