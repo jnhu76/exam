@@ -97,7 +97,7 @@ production code paths.
 | Phase 4 — background default-off | Completed                 | buildTestApp does not auto-start scanner timers     |
 | Phase 5A — local maxWorkers=2    | Completed                 | 5/5 stress pass                                     |
 | Phase 5B — local maxWorkers=4    | Completed                 | 5/5 stress pass; local recommended mode             |
-| Phase 6 — CI shard               | Planned / Prepared next   | Live CI validation pending                           |
+| Phase 6 — CI shard               | Config prepared            | 2 shards × 1 worker in ci.yml; live CI validation pending |
 | Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
