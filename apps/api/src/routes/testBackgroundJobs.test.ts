@@ -39,11 +39,21 @@ async function captureSetIntervalDuring<T>(
   const calls: unknown[][] = [];
   const original = global.setInterval;
   // Replace global.setInterval with a spy that records but does NOT actually
-  // start a timer (returning a dummy handle). This keeps the build hermetic:
-  // even if a regression introduced a timer, it would never fire.
+  // start a timer. The mock handle exposes ref()/unref() no-ops so that, if a
+  // regression ever registers a scanner plugin here, the plugin's `interval.
+  // unref()` call doesn't crash with a cryptic TypeError — instead the build
+  // completes and the `expect(setIntervalCalls).toHaveLength(0)` assertion
+  // fails cleanly with the recorded call.
   const spy = vi.fn((...args: unknown[]) => {
     calls.push(args);
-    return 0 as unknown as NodeJS.Timeout;
+    return {
+      ref() {},
+      unref() {},
+      refresh() {},
+      [Symbol.toPrimitive]() {
+        return 0;
+      },
+    } as unknown as NodeJS.Timeout;
   });
   global.setInterval = spy as unknown as typeof global.setInterval;
   try {

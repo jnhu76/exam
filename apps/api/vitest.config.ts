@@ -46,8 +46,8 @@ function resolveParallelism(): {
   fileParallelism: boolean;
   maxWorkers?: number;
 } {
-  const dbIsolation = process.env.TEST_DB_ISOLATION;
-  const rawMax = process.env.API_TEST_MAX_WORKERS;
+  const dbIsolation = process.env.TEST_DB_ISOLATION?.trim();
+  const rawMax = process.env.API_TEST_MAX_WORKERS?.trim();
 
   // No opt-in → legacy serial default.
   if (rawMax === undefined || rawMax === "") {
