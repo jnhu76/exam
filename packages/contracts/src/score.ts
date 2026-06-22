@@ -59,6 +59,129 @@ export const ManualGradingEntrySchema = z
 /** DTO for a manual grading entry. */
 export type ManualGradingEntryDTO = z.infer<typeof ManualGradingEntrySchema>;
 
+// ── Grading Queue (P2D-J3) ───────────────────────────────────────
+
+/**
+ * A single row in the admin grading queue: one attempt awaiting manual
+ * scoring, joined with candidate + exam identity for display.
+ */
+export const GradingQueueItemSchema = z.object({
+  attemptId: z.string().uuid(),
+  examId: z.string().uuid(),
+  examTitle: z.string(),
+  candidateId: z.string().uuid(),
+  candidateName: z.string(),
+  submittedAt: z.string().datetime().nullable(),
+  gradingStatus: GradingStatusEnum,
+  /** Count of subjective questions not yet scored. */
+  pendingQuestionCount: z.number().int().min(0),
+});
+/** A grading-queue row. */
+export type GradingQueueItem = z.infer<typeof GradingQueueItemSchema>;
+
+/**
+ * Query for `GET /admin/grading-queue`: pagination + optional exam filter.
+ * Status is implicitly `pending_manual` (the queue only lists attempts
+ * awaiting manual grading).
+ */
+export const GradingQueueListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  examId: z.string().uuid().optional(),
+});
+/** Query for the grading queue list endpoint. */
+export type GradingQueueListQuery = z.infer<typeof GradingQueueListQuerySchema>;
+
+/**
+ * Response for `GET /admin/grading-queue`: paginated queue items + total.
+ */
+export const GradingQueueListResponseSchema = z.object({
+  items: z.array(GradingQueueItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+});
+/** Response for the grading queue list endpoint. */
+export type GradingQueueListResponse = z.infer<
+  typeof GradingQueueListResponseSchema
+>;
+
+/**
+ * One subjective question's grading state within a grading-details response.
+ * `entry` is null until the question has been scored.
+ */
+export const GradingDetailsQuestionSchema = z.object({
+  questionId: z.string(),
+  type: z.enum([
+    "single_choice",
+    "multiple_choice",
+    "fill_blank",
+    "true_false",
+  ]),
+  content: z.string(),
+  maxScore: z.number(),
+  entry: z
+    .object({
+      score: z.number(),
+      comment: z.string(),
+      gradedBy: z.string().uuid(),
+      gradedAt: z.string().datetime(),
+    })
+    .nullable(),
+});
+/** A subjective question's grading state. */
+export type GradingDetailsQuestion = z.infer<
+  typeof GradingDetailsQuestionSchema
+>;
+
+/**
+ * Response for `GET /admin/attempts/:attemptId/grading-details`: attempt
+ * summary + the subjective questions awaiting manual scoring with their
+ * current grading state.
+ */
+export const GradingDetailsResponseSchema = z.object({
+  attemptId: z.string().uuid(),
+  examId: z.string().uuid(),
+  examTitle: z.string(),
+  candidateId: z.string().uuid(),
+  candidateName: z.string(),
+  gradingStatus: GradingStatusEnum,
+  questions: z.array(GradingDetailsQuestionSchema),
+});
+/** Response for the grading-details endpoint. */
+export type GradingDetailsResponse = z.infer<
+  typeof GradingDetailsResponseSchema
+>;
+
+/**
+ * Request body for `POST /admin/attempts/:attemptId/grade-question`.
+ *
+ * `score` must be ≥ 0; the per-question upper bound (maxScore) is enforced
+ * server-side in the handler since the snapshot lives on the attempt, not
+ * in the request. `comment` is optional and capped at 2000 chars.
+ */
+export const GradeQuestionRequestSchema = z.object({
+  questionId: z.string().min(1),
+  score: z.number().min(0),
+  comment: z.string().max(2000).default(""),
+});
+/** Request body for grade-question. */
+export type GradeQuestionRequest = z.infer<typeof GradeQuestionRequestSchema>;
+
+/**
+ * Response for `POST grade-question`: the updated grading status + whether
+ * the attempt is now fully graded.
+ */
+export const GradeQuestionResponseSchema = z.object({
+  attemptId: z.string().uuid(),
+  gradingStatus: GradingStatusEnum,
+  questionId: z.string(),
+  score: z.number(),
+  fullyGraded: z.boolean(),
+});
+/** Response for grade-question. */
+export type GradeQuestionResponse = z.infer<typeof GradeQuestionResponseSchema>;
+
 /**
  * Schema for the complete score result of an attempt, including per-question results
  * and overall pass/fail status.

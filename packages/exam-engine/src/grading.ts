@@ -6,6 +6,7 @@ import type {
 } from "@exam/domain";
 import {
   gradeAnswers,
+  hasSubjectiveQuestions,
   InvalidStateTransitionError,
   ValidationError,
 } from "@exam/domain";
@@ -164,6 +165,12 @@ export async function finalizeGrading(
     score: result.totalScore,
     passed: result.passed,
     gradedAt: result.gradedAt,
+    // P2D-J3: an attempt with any subjective question (no standardAnswer)
+    // enters the manual-grading queue as pending_manual; otherwise it is
+    // fully auto_graded. Orthogonal to the lifecycle status (graded).
+    gradingStatus: hasSubjectiveQuestions(attempt.questionSnapshot)
+      ? "pending_manual"
+      : "auto_graded",
   });
   if (!gradedUpdate) {
     throw new ValidationError("Failed to persist graded results");

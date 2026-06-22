@@ -139,6 +139,19 @@ export function gradeQuestion(
 }
 
 /**
+ * Returns true when any question in the snapshot has no standard answer and
+ * therefore requires manual scoring (P2D-J3 subjective-question detection).
+ *
+ * `QuestionSnapshot.standardAnswer` is typed `unknown`; a missing/null value
+ * signals a subjective question. Empty snapshots return false.
+ *
+ * @param questions - The attempt's question snapshot.
+ */
+export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
+  return questions.some((q) => q.standardAnswer == null);
+}
+
+/**
  * Grade all questions in an attempt and compute the total score.
  *
  * Matches answers to questions by `questionId`, grades each, sums the

@@ -1,6 +1,12 @@
 import type { Database } from "../types.js";
 import { pgNum } from "../types.js";
-import { examAttempts, candidateProfiles, users } from "../schema/pg.js";
+import {
+  examAttempts,
+  candidateProfiles,
+  users,
+  exams,
+  manualGradingEntries,
+} from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
@@ -368,6 +374,86 @@ export function createAttemptRepo(db: Database) {
             ]),
           ),
         );
+      return pgNum((rows[0] as { count: number }).count);
+    },
+
+    /**
+     * Lists attempts in the admin manual-grading queue: attempts whose
+     * `gradingStatus = 'pending_manual'`, joined with candidate + exam
+     * identity for display (P2D-J3). Each row also carries the count of
+     * subjective questions not yet scored (subjective question count −
+     * existing manual_grading_entries).
+     *
+     * Scoped to the tenant; optionally filtered to one exam.
+     */
+    async listPendingManual(
+      ctx: TenantContext | RequestContext,
+      options: { examId?: string; limit?: number; offset?: number } = {},
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const conditions = [
+        eq(examAttempts.organizationId, orgId),
+        eq(examAttempts.gradingStatus, "pending_manual"),
+      ];
+      if (options.examId) {
+        conditions.push(eq(examAttempts.examId, options.examId));
+      }
+      const baseQuery = db
+        .select({
+          attempt: examAttempts,
+          exam: exams,
+          candidateProfile: candidateProfiles,
+          candidateUser: users,
+          scoredCount: sql<number>`count(${manualGradingEntries.id})::int`,
+        })
+        .from(examAttempts)
+        .innerJoin(exams, eq(examAttempts.examId, exams.id))
+        .innerJoin(
+          candidateProfiles,
+          eq(examAttempts.candidateId, candidateProfiles.id),
+        )
+        .innerJoin(users, eq(candidateProfiles.userId, users.id))
+        .leftJoin(
+          manualGradingEntries,
+          eq(manualGradingEntries.attemptId, examAttempts.id),
+        )
+        .where(and(...conditions))
+        .groupBy(examAttempts.id, exams.id, candidateProfiles.id, users.id)
+        .orderBy(examAttempts.submittedAt);
+
+      const rows = options.limit
+        ? await baseQuery.limit(options.limit).offset(options.offset ?? 0)
+        : await baseQuery.offset(options.offset ?? 0);
+      return rows as Array<{
+        attempt: AttemptSelect;
+        exam: (typeof exams)["$inferSelect"];
+        candidateProfile: CandidateSelect;
+        candidateUser: UserSelect;
+        scoredCount: number;
+      }>;
+    },
+
+    /**
+     * Counts attempts in the manual-grading queue (gradingStatus =
+     * 'pending_manual'), scoped to the tenant; optionally filtered to one
+     * exam (P2D-J3).
+     */
+    async countPendingManual(
+      ctx: TenantContext | RequestContext,
+      options: { examId?: string } = {},
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const conditions = [
+        eq(examAttempts.organizationId, orgId),
+        eq(examAttempts.gradingStatus, "pending_manual"),
+      ];
+      if (options.examId) {
+        conditions.push(eq(examAttempts.examId, options.examId));
+      }
+      const rows = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(examAttempts)
+        .where(and(...conditions));
       return pgNum((rows[0] as { count: number }).count);
     },
   };
