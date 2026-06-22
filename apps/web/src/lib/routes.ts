@@ -18,6 +18,8 @@ export const routes = {
     examScores: (id: string) => `/admin/exams/${id}/scores`,
     examProctor: (id: string) => `/admin/exams/${id}/proctor`,
     results: "/admin/results",
+    gradingQueue: "/admin/grading-queue",
+    gradingDetail: (id: string) => `/admin/grading-queue/${id}`,
     attemptDetail: (id: string) => `/admin/attempts/${id}`,
     system: "/admin/system",
   },

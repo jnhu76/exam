@@ -72,6 +72,13 @@ export const statusMeta = {
   unknown: { label: "未知", tone: "muted", icon: HelpCircle },
   passed: { label: "及格", tone: "success", icon: Trophy },
   not_passed: { label: "不及格", tone: "destructive", icon: XCircle },
+  auto_graded: { label: "自动评分", tone: "secondary", icon: CheckCircle2 },
+  pending_manual: {
+    label: "待手动评分",
+    tone: "warning",
+    icon: Clock,
+  },
+  fully_graded: { label: "已完成评分", tone: "success", icon: Trophy },
   misconduct_warning: {
     label: "违规-警告",
     tone: "warning",
