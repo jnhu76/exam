@@ -318,3 +318,19 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
 - 真正的"ordinary API 默认走 worker database + 文件间 truncate"仍待 Phase 3
   主目标后续 PR（需要解决多 build-per-file 与 truncate 的边界，以及
   `closeInfra()` 统一关闭）。
+
+## 进度备注（Phase 4，background-job default-off regression guard）
+
+- **审计结论**：ordinary `buildTestApp()` 当前**已经**默认不启动任何 background
+  timer。唯一的两个周期 scanner（`heartbeatPlugin`、`deadlineScannerPlugin`）
+  是 Fastify plugin，仅由生产 `server.ts` 注册；测试直接调用 scan 函数，不经
+  定时器 lifecycle。**不存在** audit polling 实现。
+- **回归 guard**：新增 `apps/api/src/routes/testBackgroundJobs.test.ts`（4 用例）
+  锁定该不变量 —— `hasPlugin` 断言 + `setInterval` spy（name-independent）。
+- **不引入 opt-in API**：当前无测试需要 plugin-level scanner lifecycle，故不
+  加 `enableScanners` 等 unused 参数。未来 background/concurrency 测试若需要
+  真实 timer lifecycle，再在 `buildTestApp()` 增加显式 opt-in；ordinary 测试
+  保持 default-off。
+- **意义**：这是 Phase 5（本地并行）的前置条件 —— ordinary 测试 default-off
+  background jobs，才能在并行时不互相干扰。详见
+  `docs/dev/test-ci-parallelism-plan.md` Phase 4 小节。

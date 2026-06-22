@@ -437,6 +437,61 @@ opt-in。
 - `pnpm verify` 全绿。
 - 无泄漏 worker / timer（teardown 后无残留 `setInterval`）。
 
+### Phase 4 状态 — audit-confirmed default-off + regression guard（已完成）
+
+**审计结论**：`buildTestApp()` 当前**已经**满足 Phase 4 目标 —— 默认**不**启动任何
+background timer。具体证据：
+
+- `buildTestApp()` / `finishBuildTestApp()` 只注册：security、errorHandler、
+  zodProvider、cookie、db、now、auth、tenant（+ 可选 rateLimit）、caller 传入的
+  routePlugin。**不**注册 `heartbeatPlugin` / `deadlineScannerPlugin`。
+- `apps/api/src/**` 内仅有的两个 `setInterval` 周期定时器分别位于
+  `plugins/heartbeat.ts:216`（disrupted-attempt scanner）和
+  `plugins/deadlineScanner.ts:204`（expired-attempt auto-submit scanner）。
+  两者都是 Fastify plugin，**仅**由生产 `server.ts:58-59` 注册，**任何测试都不
+  注册它们**。
+- 两个 scanner plugin 都已挂 `onClose → clearInterval`
+  （heartbeat.ts:243、deadlineScanner.ts:226），teardown 路径完整。
+- scanner 测试（`src/plugins/heartbeat.test.ts`、
+  `src/plugins/deadlineScanner.test.ts`、`src/routes/attempts/heartbeat.test.ts`、
+  `src/routes/attempts/deadline-scanner.test.ts`）直接调用 scan **函数**
+  （`scanDatabaseForExpiredAttempts`、`scanDatabaseForDisruptedAttempts`），
+  不经过定时器驱动的 plugin lifecycle。
+- **不存在** audit polling 实现。`apps/api/vitest.config.ts` 注释里提到的
+  "audit-polling" 是历史措辞；`audit.test.ts:114` 唯一的 `setTimeout` 是 25ms
+  测试等待，不是轮询。
+
+**回归 guard**：新增 `apps/api/src/routes/testBackgroundJobs.test.ts`（4 用例）：
+
+1. ordinary `buildTestApp()` 不注册 `heartbeatPlugin`（`hasPlugin` 断言）。
+2. ordinary `buildTestApp()` 不注册 `deadlineScannerPlugin`。
+3. ordinary `buildTestApp()` 启动**零** `setInterval`（spy `global.setInterval`，
+   name-independent，能捕获任何未来以任意名注册的 scanner / poller / worker）。
+4. ordinary build 仍能正常 seed 并 ready，且不依赖任何 background tick。
+
+**不引入 opt-in API**：本 PR **不**添加 `enableScanners` /
+`enableDeadlineScanner` / `enableHeartbeatScanner` 等参数。原因：当前没有任何
+测试需要 plugin-level scanner lifecycle（都直接调函数）。在没有具体需求前加
+unused API 会增加 `buildTestApp` 的表面积而无收益。
+
+**Follow-up note**：如果未来某个 background / concurrency 测试需要真实的
+timer-driven scanner plugin lifecycle，再在 `buildTestApp()` 增加显式 opt-in
+参数（例如 `enableDeadlineScanner: true`），ordinary 测试保持 default-off。
+本回归 guard 会确保任何"偷偷在 ordinary build 里注册 scanner"的改动被立即发现。
+
+**Phase 4 验收**（独立 PG `exam-db-6432`，端口 6432）：
+
+| 命令 | 结果 |
+|---|---|
+| `pnpm --filter @exam/api exec vitest run src/routes/testBackgroundJobs.test.ts` | 4/4 PASS |
+| `pnpm --filter @exam/api exec vitest run src/plugins/heartbeat.test.ts src/plugins/deadlineScanner.test.ts` | PASS |
+| `pnpm --filter @exam/api exec vitest run src/routes/attempts/heartbeat.test.ts src/routes/attempts/deadline-scanner.test.ts` | PASS |
+| `TEST_DB_ISOLATION=file-schema pnpm --filter @exam/api test` | 570/570 PASS |
+| `TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 pnpm --filter @exam/api test` | 570/570 PASS |
+
+**Phase 4 可回滚**：删除 `testBackgroundJobs.test.ts` + 还原文档，不影响任何
+行为（纯测试 + 纯文档）。
+
 ---
 
 ## Phase 5 — 本地并行
