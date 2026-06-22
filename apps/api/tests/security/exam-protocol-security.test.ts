@@ -14,7 +14,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
-import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
+import { setupApiTestDatabaseFromEnv } from "../../src/routes/testDatabase.js";
 import { TEST_DB_URL } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
@@ -101,13 +101,17 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
   }
 
   beforeAll(async () => {
-    const iso = await setupIsolatedTestDb({
+    const testDb = await setupApiTestDatabaseFromEnv({
       namespace: "security-exam-protocol",
       databaseUrl: TEST_DB_URL,
     });
-    cleanup = iso.cleanup;
-    const conn = await createDatabase(TEST_DB_URL, iso.schemaName);
-    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
+    await testDb.resetPostgres();
+    cleanup = testDb.close;
+    const conn = await createDatabase(testDb.databaseUrl, testDb.schemaName);
+    await migratePostgres(
+      conn.db,
+      testDb.schemaName ? { migrationsSchema: testDb.schemaName } : undefined,
+    );
     const db = conn.db;
     sql = conn.sql;
 

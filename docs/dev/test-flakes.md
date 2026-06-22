@@ -196,6 +196,51 @@
 3. 不改 `demo-seed.test.ts` 单点 timeout。
 4. 不改产品代码。
 
+### Phase 3B API test helper opt-in worker database（2026-06-22）
+
+> ADR-007 Phase 3B 落地：`apps/api` 测试工厂 `buildTestApp()` 与 7 个
+> `apps/api/tests/security/*.test.ts` 自建 app 接入 Phase 3A worker database
+> 路径，作为**显式 opt-in**（`TEST_DB_ISOLATION=worker-database`）。
+
+**与 BUG-FLAKE-001 的关系（重要）**：
+
+- **不声称 BUG-FLAKE-001 已修复。** Phase 3B 只是把 worker database 路径接到
+  api test factory；它**不**打开 `fileParallelism: true`、**不**改 `maxWorkers`、
+  **不**移除 `fileParallelism: false`、**不**移除 scanner 15_000 ms timeout、
+  **不**移除 `verify:db-tests` 串行链。A′ serial containment 仍是主缓解。
+- Phase 3B 的 worker database 在 `fileParallelism:false` 下与 legacy 每文件
+  schema 路径**执行拓扑等价**（都是单 worker 串行），因此既不缓解也不加剧
+  BUG-FLAKE-001 的并行 I/O 争用根因。
+- BUG-FLAKE-001 的真正进展仍要等 Phase 5（恢复并行）+ stress 证据，本 PR 不
+  越界。
+
+**reset boundary 设计决定**：`buildTestApp()` 在 worker-DB 分支**不**自动
+truncate。原因：`auth.test.ts`(4)、`exam.test.ts`(4)、`user.test.ts`(3)、
+`api-smoke.test.ts`(5) 等文件单文件内多次 `buildTestApp()` 并跨 build 复用共享
+`ctx.org`，每次 build truncate 会清掉被引用的 org 行 → FK violation
+（`users_organization_id_organizations_id_fk`）。跨文件隔离由 per-worker
+database（不同 vitest worker 不同 database）提供；`fileParallelism:false` 保证
+同时只有一个 worker。文件内隔离沿用既有 `uniquePrefix()` + org-scoped insert。
+
+**验证矩阵**（独立 PG 容器 `exam-db-6432`，端口 6432 与 e2e/他人隔离）：
+
+| 命令 | Runs | 结果 | 含义 |
+|---|---:|---|---|
+| `pnpm --filter @exam/api exec vitest run src/routes/testDatabase.test.ts` | 1 | 10/10 PASS | adapter 单元测试（全 mock，无 PG） |
+| `pnpm --filter @exam/api test`（unset / 默认 legacy） | 1 | 570/570 PASS（~93s） | 默认行为不变 |
+| `TEST_DB_ISOLATION=file-schema pnpm --filter @exam/api test` | 1 | 570/570 PASS（~93s） | legacy 回退路径稳定 |
+| `TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 pnpm --filter @exam/api test` | 2 | 2/2 PASS 570/570（~102s, ~116s） | worker-DB 路径稳定 |
+| `pnpm verify`（默认 legacy） | 1 | 全绿 | 全链路质量门 |
+
+**不纳入 Phase 3B 的范围**：
+1. 不打开 `fileParallelism: true`，不改 `maxWorkers`。
+2. 不移除 legacy `file-schema` 回退、`testIsolation.ts`、每文件 schema helper。
+3. 不引入 Redis / BullMQ。
+4. 不改 CI、turbo、package.json script、生产 schema/migration。
+5. 不声称 BUG-FLAKE-001 已修复，不证明 `maxWorkers=2/4` 安全。
+6. 不改 `@exam/db` 测试（仍走每文件 schema 路径）。
+7. 不把 worker-DB 设为默认。
+
 ---
 
 ### BUG-FLAKE-002 — 跨 package / 跨 task 共享 `exam_test` DB 导致 seed/cleanup 互相覆盖

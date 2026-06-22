@@ -300,3 +300,21 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
 - **不**打开 `fileParallelism`，**不**改 `maxWorkers`，**不**改 CI。
 - Phase 3B（把 API test helper 接入 worker database）才是真正切换默认行为
   的下一步，需要独立 PR + stress 证据。
+
+## 进度备注（Phase 3B，API test helper opt-in worker database）
+
+- `apps/api/src/routes/testDatabase.ts` adapter 已落地：single chokepoint，在
+  `TEST_DB_ISOLATION=worker-database`（显式 opt-in）时走 Phase 3A worker
+  database，否则走 legacy 每文件 schema 路径。`buildTestApp()` 与 7 个
+  `apps/api/tests/security/*.test.ts` 自建 app 已接入 adapter。
+- **默认行为不变**：`isWorkerDatabaseMode()` 仅识别字面值 `"worker-database"`，
+  故 unset / `file-schema` / `"1"` 等都走 legacy。本备注上方"ordinary API 隔离
+  = PG worker database"仍是**目标态**，当前默认仍是每文件 schema。
+- **reset boundary**：`buildTestApp()` 在 worker-DB 分支**不**自动 truncate
+  （多 build-per-file 文件会因共享 `ctx.org` 被 wipe 而 FK violation）。跨文件
+  隔离由 per-worker database 提供，文件内隔离由既有 `uniquePrefix()` 提供。
+- **不**打开 `fileParallelism`，**不**改 `maxWorkers`，**不**改 CI，
+  **不**声称 `BUG-FLAKE-001` 已修复。
+- 真正的"ordinary API 默认走 worker database + 文件间 truncate"仍待 Phase 3
+  主目标后续 PR（需要解决多 build-per-file 与 truncate 的边界，以及
+  `closeInfra()` 统一关闭）。
