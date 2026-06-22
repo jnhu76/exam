@@ -26,6 +26,11 @@ import {
   setupIsolatedTestDb,
   isTestDbIsolationEnabled,
 } from "@exam/db/src/testIsolation.js";
+import {
+  setupApiTestDatabaseFromEnv,
+  isWorkerDatabaseMode,
+  type ApiTestDatabaseHandle,
+} from "./testDatabase.js";
 
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
@@ -105,6 +110,45 @@ export async function buildTestApp(
   let resolvedSchemaName = opts?.schemaName;
   let isolatedCleanup: (() => Promise<void>) | undefined;
 
+  // Phase 3B opt-in: when the caller did not pass an explicit schemaName AND
+  // the environment selected worker-database mode, use the per-worker
+  // database adapter instead of legacy per-file schema isolation. The worker
+  // DB is already migrated by the adapter; migratePostgres() below no-ops.
+  //
+  // RESET BOUNDARY (deliberate choice): we do NOT call adapter.resetPostgres()
+  // here. Several API test files (e.g. auth.test.ts, user.test.ts) build the
+  // app MORE THAN ONCE per file — a shared `ctx` in beforeAll plus additional
+  // buildTestApp() calls inside individual `it` blocks — and reuse `ctx.org`
+  // across those builds. If we truncated on every build, a later in-file
+  // build would wipe the org that the shared ctx still references, causing FK
+  // violations (organizations row gone). Instead, isolation between test
+  // FILES is provided by the per-worker database itself: each vitest worker
+  // owns its own DB, and legacy `fileParallelism:false` means only one worker
+  // runs at a time. Within a file, tests keep their existing per-test reset
+  // helpers (uniquePrefix fixtures, org-scoped cleanup) — unchanged from the
+  // legacy path. If a future file needs explicit worker-DB truncation, it can
+  // call `setupApiTestDatabaseFromEnv()` directly and use resetPostgres().
+  if (!resolvedSchemaName && isWorkerDatabaseMode()) {
+    const adapter: ApiTestDatabaseHandle = await setupApiTestDatabaseFromEnv({
+      namespace: "api",
+    });
+    // In worker mode there is no per-file schemaName; business tables live in
+    // the worker DB's default `public` schema.
+    resolvedSchemaName = undefined;
+    const workerUrl = adapter.databaseUrl;
+    isolatedCleanup = async () => {
+      await adapter.close();
+    };
+    const conn = await createDatabase(workerUrl, undefined);
+    await migratePostgres(conn.db);
+    return finishBuildTestApp({
+      routePlugin,
+      conn,
+      ...(opts ? { opts } : {}),
+      customCleanup: isolatedCleanup,
+    });
+  }
+
   if (!resolvedSchemaName && isTestDbIsolationEnabled()) {
     const baseUrl = opts?.databaseUrl ?? TEST_DB_URL;
     const iso = await setupIsolatedTestDb({
@@ -120,6 +164,32 @@ export async function buildTestApp(
     conn.db,
     resolvedSchemaName ? { migrationsSchema: resolvedSchemaName } : undefined,
   );
+  return finishBuildTestApp({
+    routePlugin,
+    conn,
+    ...(opts ? { opts } : {}),
+    ...(isolatedCleanup ? { customCleanup: isolatedCleanup } : {}),
+  });
+}
+
+/**
+ * Shared tail of {@link buildTestApp}: seeds the DB, builds the Fastify app,
+ * registers plugins, mints auth tokens, and returns the TestContext. Split
+ * out so the worker-DB and legacy code paths share identical app assembly.
+ */
+async function finishBuildTestApp(args: {
+  routePlugin: FastifyPluginAsync;
+  conn: Awaited<ReturnType<typeof createDatabase>>;
+  opts?: {
+    prefix?: string;
+    rateLimit?: boolean;
+    databaseUrl?: string;
+    schemaName?: string;
+  };
+  customCleanup?: () => Promise<void>;
+}): Promise<TestContext> {
+  const { conn, opts, customCleanup } = args;
+  const { routePlugin } = args;
   const db = conn.db;
 
   const seedResult = await seed(db, hashPassword);
@@ -181,8 +251,8 @@ export async function buildTestApp(
     cleanup: async () => {
       await app.close();
       await conn.sql.end();
-      if (isolatedCleanup) {
-        await isolatedCleanup();
+      if (customCleanup) {
+        await customCleanup();
       }
     },
     org,

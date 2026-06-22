@@ -225,8 +225,10 @@ TEST_DATABASE_URL_TEMPLATE=postgres://.../exam_test_s{shard}_w{worker}
 
 ## Phase 3 — PostgreSQL per-worker database
 
-> **进度**: Phase 3A 已落地（worker-database **prototype**，见下方小节）。
-> Phase 3B（把 API test helper 接入 worker database）尚未开始。
+> **进度**: Phase 3A 已落地（worker-database **prototype**）。Phase 3B 已
+> 落地（API test helper opt-in worker database）。Phase 3 主目标的剩余部分
+> （每文件/每用例 `TRUNCATE` 重置、`closeInfra()` 统一关闭、提速收益验证）
+> 尚未开始，见下方小节。
 
 **目标**：把 ordinary API / integration 测试从"每文件 schema + 每文件
 migrate + drop"迁移到"每 worker 一个 database，migrate once，文件之间
@@ -288,6 +290,86 @@ migrate + drop"迁移到"每 worker 一个 database，migrate once，文件之�
 **Phase 3A 可回滚**：`TEST_DB_ISOLATION=file-schema`（或任何非
 `worker-database` 值）下，`setupWorkerTestDatabase()` 会在入口拒绝；现有测试
 行为完全不变。即使删掉这两个新文件，旧模式仍正常工作。
+
+### Phase 3B — API test helper opt-in worker database（已完成）
+
+**目标**：把 `apps/api` 的测试工厂 `buildTestApp()` 与 7 个
+`apps/api/tests/security/*.test.ts` 自建 app 接入 Phase 3A 的 worker
+database 路径，作为**显式 opt-in**。默认行为不变。
+
+**范围**：
+
+- 新增 `apps/api/src/routes/testDatabase.ts`（adapter，single chokepoint）：
+  - `setupApiTestDatabaseFromEnv({ namespace, databaseUrl })` →
+    `ApiTestDatabaseHandle`：根据 `TEST_DB_ISOLATION` 选择 worker-database 或
+    legacy 每文件 schema 路径。
+  - `isWorkerDatabaseMode(env)`：**仅**当 `TEST_DB_ISOLATION` 字面等于
+    `"worker-database"` 时返回 true。**故意不**沿用 Phase 2A resolver 的
+    `worker-database` 默认值（resolver 在 env 未设时默认 worker-database）——
+    Phase 3B 的非目标之一是"不强制把所有测试切到 worker-DB"。adapter 必须只在
+    开发者/CI 显式 opt-in 时切换。
+  - `ApiTestDatabaseHandle`：统一 `mode` / `databaseUrl` / `schemaName` /
+    `resetPostgres()` / `close()`，legacy 路径下 `resetPostgres()` 是 no-op
+    （每文件 schema 自身隔离，无需 truncate）。
+- `apps/api/src/routes/testHelpers.ts` 的 `buildTestApp()`：拆出共享尾部
+  `finishBuildTestApp()`，新增 worker-DB 分支（在 caller 未传 `schemaName` 且
+  `isWorkerDatabaseMode()` 为 true 时走 adapter）。
+- 7 个 `apps/api/tests/security/*.test.ts`：把 `setupIsolatedTestDb` 改为
+  `setupApiTestDatabaseFromEnv`，setup 块改为 `resetPostgres()` + `close()`
+  统一形态。
+- 新增 `apps/api/src/routes/testDatabase.test.ts`（10 用例，全 mock，不依赖
+  PG）：覆盖 mode 选择、namespace/databaseUrl 透传、worker/legacy 包装、close
+  幂等、production 守卫委托。
+
+**RESET BOUNDARY（重要设计决定）**：
+
+`buildTestApp()` 在 worker-DB 分支**不**调用 `adapter.resetPostgres()`。原因：
+若干 `apps/api` 测试文件（`auth.test.ts` 4 次、`exam.test.ts` 4 次、
+`user.test.ts` 3 次、`api-smoke.test.ts` 5 次等）在同一文件内**多次**调用
+`buildTestApp()`，并跨这些 build 复用 `beforeAll` 里的共享 `ctx.org`。如果在
+每次 build 时 truncate，文件后段的 build 会清掉前段 build 写入并被共享 ctx
+引用的 org 行，触发 FK violation（`users_organization_id_organizations_id_fk`）。
+
+隔离来源：
+- **跨文件**：每个 vitest worker 拥有自己的 database（resolver 派生
+  `exam_test_w{w}`），`fileParallelism:false` 保证同一时刻只有一个 worker 在
+  跑。worker-DB 模式下文件之间不复用 schema，跨文件脏数据落在不同 database。
+- **文件内**：每个测试已用 `uniquePrefix()` + org-scoped insert 生成不冲突
+  数据，无需 truncate；与 legacy 每文件 schema 路径行为一致。
+
+若未来某文件需要显式 worker-DB truncate，可直接调
+`setupApiTestDatabaseFromEnv()` 并使用返回 handle 的 `resetPostgres()`。
+
+**Phase 3B 严格不做**：
+
+- **不**打开 `fileParallelism: true`，**不**改 `maxWorkers`。
+- **不**移除 legacy `file-schema` 回退、`testIsolation.ts`、每文件 schema
+  helper。
+- **不**引入 Redis / BullMQ。
+- **不**改 CI、turbo、package.json script、生产 schema/migration。
+- **不**声称 `BUG-FLAKE-001` 已修复，**不**证明 `maxWorkers=2/4` 安全，
+  **不**把 worker-DB 设为默认。
+- **不**改 `@exam/db` 测试（它们仍走每文件 schema 路径）。
+
+**Phase 3B 验收**（独立 PG，端口 6432 与 e2e/他人隔离）：
+
+| 命令 | 结果 | 粗略耗时 |
+|---|---|---:|
+| `pnpm --filter @exam/api exec vitest run src/routes/testDatabase.test.ts` | 10/10 PASS | ~0.1s |
+| `pnpm --filter @exam/api test`（unset / 默认 legacy） | 570/570 PASS | ~93s |
+| `TEST_DB_ISOLATION=file-schema pnpm --filter @exam/api test` | 570/570 PASS | ~93s |
+| `TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 pnpm --filter @exam/api test`（×2 连跑） | 570/570 PASS ×2 | ~102s / ~116s |
+| `pnpm verify`（默认 legacy 路径） | 全绿 | — |
+
+> 注：worker-DB 模式比 legacy 略慢（~102s vs ~93s），因为同一 worker database
+> 跨文件累积数据，单文件 migrate/seed 之外没有 schema 重建带来的天然清空；
+> 但 `fileParallelism:false` 下二者都在串行执行，差距主要来自额外的 database
+> bootstrap。提速收益要等 Phase 5 恢复并行后才会显现，本阶段不追求提速。
+
+**Phase 3B 可回滚**：`TEST_DB_ISOLATION` 未设或为任何非 `"worker-database"`
+值时，`isWorkerDatabaseMode()` 返回 false，`buildTestApp()` 与 7 个 security
+文件全部走 legacy 每文件 schema 路径，行为与 Phase 3A 完全一致。adapter 与
+security 文件的改写是纯增量分支，删掉 worker 分支即回到旧形态。
 
 **Phase 3B 及以后**（后续 PR）才会做本 Phase 3 主目标的剩余部分：
 
