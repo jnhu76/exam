@@ -353,3 +353,20 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
   worker 落 `exam_test_w1`）。依赖 vitest 自动注入的 `VITEST_WORKER_ID`。
 - **不**改默认、**不**改 CI、**不**声称 BUG-FLAKE-001 全局修复、**不**声称
   CI 并行安全。local evidence only。
+
+## 进度备注（Phase 6，CI shard — Planned / Prepared next）
+
+- CI shard 配置已准备，但 live CI 尚未执行。Phase 6 不声称 CI speedup。
+- 推荐第一版：2 shards × 1 worker，每个 shard 设 `TEST_INFRA_SCOPE=ci` +
+  `TEST_SHARD_INDEX` + `TEST_DB_ISOLATION=worker-database` +
+  `API_TEST_MAX_WORKERS=1`。
+- 并行 / shard 模式下**绝不设 `TEST_WORKER_ID`**（见 ADR-007 Critical
+  Warning）。
+- Live CI validation 是 Phase 6 的 blocking gate。
+
+## 进度备注（Phase 7，Redis / Queue — Deferred）
+
+- Redis / Queue prefix 集成推迟到 adoption-triggered。当前 PostgreSQL
+  test-infra track 不依赖 Redis / Queue。
+- Phase 7 的触发条件：Redis presence / Redis rate limit / BullMQ / queue /
+  outbox processor / async audit writer / background worker consuming jobs。
