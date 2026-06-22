@@ -4,6 +4,7 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   ClipboardList,
   FileUp,
   Gauge,
@@ -49,6 +50,7 @@ const groups = [
     label: "考试",
     items: [
       { label: "考试管理", to: "/admin/exams", icon: ClipboardList, end: true },
+      { label: "待评分", to: "/admin/grading-queue", icon: ClipboardCheck },
       { label: "成绩查询", to: "/admin/results", icon: Gauge },
     ],
   },
