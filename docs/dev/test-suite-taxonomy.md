@@ -318,3 +318,38 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
 - 真正的"ordinary API 默认走 worker database + 文件间 truncate"仍待 Phase 3
   主目标后续 PR（需要解决多 build-per-file 与 truncate 的边界，以及
   `closeInfra()` 统一关闭）。
+
+## 进度备注（Phase 4，background-job default-off regression guard）
+
+- **审计结论**：ordinary `buildTestApp()` 当前**已经**默认不启动任何 background
+  timer。唯一的两个周期 scanner（`heartbeatPlugin`、`deadlineScannerPlugin`）
+  是 Fastify plugin，仅由生产 `server.ts` 注册；测试直接调用 scan 函数，不经
+  定时器 lifecycle。**不存在** audit polling 实现。
+- **回归 guard**：新增 `apps/api/src/routes/testBackgroundJobs.test.ts`（4 用例）
+  锁定该不变量 —— `hasPlugin` 断言 + `setInterval` spy（name-independent）。
+- **不引入 opt-in API**：当前无测试需要 plugin-level scanner lifecycle，故不
+  加 `enableScanners` 等 unused 参数。未来 background/concurrency 测试若需要
+  真实 timer lifecycle，再在 `buildTestApp()` 增加显式 opt-in；ordinary 测试
+  保持 default-off。
+- **意义**：这是 Phase 5（本地并行）的前置条件 —— ordinary 测试 default-off
+  background jobs，才能在并行时不互相干扰。详见
+  `docs/dev/test-ci-parallelism-plan.md` Phase 4 小节。
+
+## 进度备注（Phase 5A/5B，local worker-database parallelism）
+
+- `apps/api/vitest.config.ts` 新增 env-gated `resolveParallelism()`：仅当
+  `TEST_DB_ISOLATION=worker-database` + `API_TEST_MAX_WORKERS=正整数` 时打开
+  `fileParallelism=true, maxWorkers=<N>`；默认 serial 不变；fail-fast 拒绝
+  并行跑 file-schema 或非法 `API_TEST_MAX_WORKERS`。
+- **本备注上方"ordinary API 隔离 = PG worker database"的执行拓扑**在 opt-in
+  并行模式下成立：`API_TEST_MAX_WORKERS=4` 时各 vitest worker 绑
+  `exam_test_w{VITEST_WORKER_ID}`。**默认仍 serial**，上方 maxWorkers=4 / CI
+  shard 仍是**目标态 / Phase 6**。
+- **Phase 5A**（maxWorkers=2）×5 PASS、**Phase 5B**（maxWorkers=4）×5 PASS，
+  fresh PG 容器 evidence。提速 1.7× / 2.6×。详见
+  `docs/dev/test-flakes.md` Phase 5A/5B 小节与
+  `docs/dev/test-ci-parallelism-plan.md` Phase 5A/5B 状态小节。
+- **关键**：并行模式绝不设 `TEST_WORKER_ID`（resolver 优先它，固定会让所有
+  worker 落 `exam_test_w1`）。依赖 vitest 自动注入的 `VITEST_WORKER_ID`。
+- **不**改默认、**不**改 CI、**不**声称 BUG-FLAKE-001 全局修复、**不**声称
+  CI 并行安全。local evidence only。

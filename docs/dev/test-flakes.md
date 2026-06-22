@@ -241,6 +241,75 @@ database（不同 vitest worker 不同 database）提供；`fileParallelism:fals
 6. 不改 `@exam/db` 测试（仍走每文件 schema 路径）。
 7. 不把 worker-DB 设为默认。
 
+### Phase 5A/5B local worker-database parallelism（2026-06-22）
+
+> ADR-007 Phase 5 落地：`apps/api/vitest.config.ts` 新增 env-gated
+> `resolveParallelism()`。仅当 `TEST_DB_ISOLATION=worker-database` **且**
+> `API_TEST_MAX_WORKERS` 是正整数时打开 `fileParallelism=true,
+> maxWorkers=<N>`；否则默认串行不变。Fail-fast 拒绝并行跑 file-schema，
+> 拒绝非正整数 `API_TEST_MAX_WORKERS`。
+
+**与 BUG-FLAKE-001 的关系（重要）**：
+
+- **不声称 BUG-FLAKE-001 全局修复。** Phase 5 只在 `worker-database` 模式
+  （per-worker PG database 隔离就位）下打开并行；**不**在 `file-schema`
+  下打开（config 会 throw 拒绝）。BUG-FLAKE-001 的 file-schema + 并行 + 共享
+  schema 动机因此**绕开**而非根治。
+- A′ `fileParallelism: false` **仍是默认**；本 Phase 只新增 opt-in 并行路径，
+  不改默认，CI 不自动继承。
+- scanner 15_000ms timeout、`verify:db-tests` 串行链等既有缓解一律保留。
+
+**关键不变量**（config 注释固化）：**并行模式绝不设 `TEST_WORKER_ID`**。
+`resolveWorkerId()` 优先 `TEST_WORKER_ID`，固定会让所有 worker 落到
+`exam_test_w1` → 隔离失效。并行只依赖 vitest 注入的 `VITEST_WORKER_ID`。
+（实测：vitest `getWorkerId()` 单调递增 + 回收复用，`maxWorkers=2` 并发 ≤2
+但一次 suite 会创建 w0..w41 多个 database —— 安全但累积，不影响正确性。）
+
+**验证矩阵**（fresh PG 容器 `exam-db-6432`，postgres:18.4，端口 6432）：
+
+| 命令 | Runs | 结果 | 耗时 |
+|---|---:|---|---|
+| Phase 4 gate: file-schema full | 1 | 589/589 PASS | ~95s |
+| Phase 4 gate: worker-DB serial (`TEST_WORKER_ID=1`) | 1 | 589/589 PASS | ~101s |
+| Phase 5A: `API_TEST_MAX_WORKERS=2` single | 1 | 589/589 PASS | ~57s |
+| Phase 5A: `API_TEST_MAX_WORKERS=2` ×5 | 5 | **5/5 PASS**（589/589 ea） | ~57s/run |
+| Phase 5B: `API_TEST_MAX_WORKERS=4` single | 1 | 589/589 PASS | ~38s |
+| Phase 5B: `API_TEST_MAX_WORKERS=4` ×5 | 5 | **5/5 PASS**（589/589 ea） | ~38–43s/run |
+| Regression: file-schema full | 1 | 589/589 PASS | ~95s |
+| Regression: worker-DB serial | 1 | 589/589 PASS | ~101s |
+
+提速：maxWorkers=2 ≈ **1.7×**，maxWorkers=4 ≈ **2.6×** vs serial。无 DB
+collision、无 open-handle 警告。
+
+**不纳入 Phase 5 的范围**：
+1. 不改默认（serial 仍是默认）。
+2. 不改 CI matrix（Phase 6 shard 才碰 CI）。
+3. 不把 4 worker 设为默认（opt-in only）。
+4. 不引入 Redis / Queue。
+5. 不删 legacy `file-schema` 回退。
+6. **不**声称 BUG-FLAKE-001 全局修复、CI 并行安全、parallelism globally safe。
+   本 evidence 是 **local only**。
+
+**可回滚**：unset `API_TEST_MAX_WORKERS`（或 `TEST_DB_ISOLATION=file-schema`）
+→ config 立刻回到 `fileParallelism:false`（serial）。CI flag 无法绕过。
+
+### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
+
+- 在 ADR-007 Phase 4 调查中观察到 `examTransitions.test.ts` 在 `file-schema`
+  full suite 下 8/14 失败（`expected -1 to be 1`，`waitForAuditCount` 1s
+  超时）。归档为 issue #98。
+- **后续调查无法复现**：fresh PG 容器上定向运行 ×3 全过（14/14），fresh DB
+  上 full suite ×2 全过（585/585），polluted（3001 行 `public.audit_logs`）
+  full suite ×2 全过（585/585）。原始失败最可能是先前 worker-database 实验
+  造成 `public.audit_logs` 异常累积（6449 行）+ 特定数据重叠的瞬时污染状态。
+- **未做生产代码修复**（`reconciliation.ts` / `examTransitionExecutor.ts`
+  逻辑正确；characterization 测试断言正确）。#98 关闭为 not-reproducible。
+- Phase 5A/5B 从 fresh PG 状态重起，无 #98 阻塞。
+- 备注（潜在脆弱性，非 #98 范围，不阻塞 Phase 5）：每文件 `file-schema`
+  用 `search_path=${schema},public`，理论上 `public` 污染可泄漏；若未来此类
+  flake 复发，值得调查是否去掉 `public` fallback 或让 worker-DB 模式跨模式
+  切换时 flush `public`。这属于 ADR-007 test infra 范畴，非业务逻辑修复。
+
 ---
 
 ### BUG-FLAKE-002 — 跨 package / 跨 task 共享 `exam_test` DB 导致 seed/cleanup 互相覆盖
