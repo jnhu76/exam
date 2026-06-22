@@ -32,6 +32,7 @@ export interface ExamConfigData {
   totalScore: number;
   questionSelectionMode: "manual" | "random";
   questionIds: string[];
+  resultPublicationMode: "immediate" | "after_grading" | "manual";
   controlFlags: {
     shuffleQuestions: boolean;
     shuffleOptions: boolean;
@@ -418,14 +419,31 @@ export function ExamConfigForm({
             />
             <Label className="font-normal">禁止复制粘贴</Label>
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={data.controlFlags.showResultImmediately}
-              onCheckedChange={(v) =>
-                updateFlags({ showResultImmediately: v === true })
-              }
-            />
-            <Label className="font-normal">交卷后立即显示成绩</Label>
+          <div className="space-y-2">
+            <Label>成绩公布方式</Label>
+            <Select
+              value={data.resultPublicationMode}
+              onValueChange={(v) => {
+                const mode = v as "immediate" | "after_grading" | "manual";
+                onChange({
+                  ...data,
+                  resultPublicationMode: mode,
+                  controlFlags: {
+                    ...data.controlFlags,
+                    showResultImmediately: mode === "immediate",
+                  },
+                });
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="immediate">交卷后立即公布</SelectItem>
+                <SelectItem value="after_grading">评分完成后公布</SelectItem>
+                <SelectItem value="manual">管理员手动公布</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

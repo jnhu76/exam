@@ -14,6 +14,7 @@ const baseConfig: ExamConfigData = {
   totalScore: 100,
   questionSelectionMode: "manual",
   questionIds: [],
+  resultPublicationMode: "immediate",
   controlFlags: {
     shuffleQuestions: false,
     shuffleOptions: false,
@@ -275,5 +276,30 @@ describe("ExamConfigForm fields", () => {
       />,
     );
     expect(screen.getByText("最大尝试次数")).toBeInTheDocument();
+  });
+
+  it("renders result publication mode selector with default immediate", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("成绩公布方式")).toBeInTheDocument();
+    expect(screen.getByText("交卷后立即公布")).toBeInTheDocument();
+  });
+
+  it("renders manual mode option when resultPublicationMode is manual", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{ ...baseConfig, resultPublicationMode: "manual" }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("管理员手动公布")).toBeInTheDocument();
   });
 });
