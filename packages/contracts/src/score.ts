@@ -216,8 +216,29 @@ const AttemptQuestionResultSchema = QuestionScoreResultSchema.extend({
 });
 
 /**
+ * Reason the full result is withheld in the hidden response variant (P2D-J5a).
+ *
+ * - `not_graded` — grading is incomplete or pending manual scoring; the result
+ *   is not yet computable.
+ * - `pending_publish` — manual publication mode and the admin has not yet
+ *   called publish-results (resultsPublishedAt is null).
+ * - `not_started` — attempt is in any non-graded lifecycle state (in_progress,
+ *   submitted, grading, voided, disrupted, etc.). The result is not yet
+ *   computable; the label is historical, not literal.
+ */
+export const HiddenReasonEnum = z.enum([
+  "not_graded",
+  "pending_publish",
+  "not_started",
+]);
+
+/** Type for the {@link HiddenReasonEnum} values. */
+export type HiddenReason = z.infer<typeof HiddenReasonEnum>;
+
+/**
  * Response variant when the exam's showResultImmediately flag is false.
  * Only returns attempt status and exam title without score details.
+ * Optional `hiddenReason` (P2D-J5a) lets the frontend show a precise message.
  */
 const HiddenAttemptResultSchema = z.object({
   attemptId: z.string().uuid(),
@@ -233,6 +254,7 @@ const HiddenAttemptResultSchema = z.object({
   ]),
   showResultImmediately: z.literal(false),
   examTitle: z.string(),
+  hiddenReason: HiddenReasonEnum.optional(),
 });
 
 /**

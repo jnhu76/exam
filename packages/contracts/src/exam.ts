@@ -32,6 +32,13 @@ const Phase1RetakePolicyEnum = z.enum([
   "max_attempts",
   "pass_then_stop",
 ]);
+// P2D-J5a: result publishing policy. Authoritative visibility field;
+// showResultImmediately remains as a legacy input only.
+const ResultPublicationModeEnum = z.enum([
+  "immediate",
+  "after_grading",
+  "manual",
+]);
 
 const ControlFlagsSchema = z.object({
   shuffleQuestions: z.boolean().default(false),
@@ -72,6 +79,9 @@ export const ExamSchema = z.object({
   // ADR-005 Slice 3 timing policy. null = disabled.
   latestStartOffsetMinutes: z.number().int().nullable(),
   minSubmitAfterStartMinutes: z.number().int().nullable(),
+  // P2D-J5a: result publishing policy + manual publish timestamp.
+  resultPublicationMode: ResultPublicationModeEnum,
+  resultsPublishedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -114,6 +124,11 @@ export const CreateExamRequestSchema = z.object({
   // ADR-005 Slice 3 timing policy. null/omitted = disabled.
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
+  // P2D-J5a: result publishing policy. Optional here so the API boundary can
+  // detect "caller did not send it" and coerce from the legacy
+  // controlFlags.showResultImmediately; the route handler applies the
+  // 'immediate' default after coercion.
+  resultPublicationMode: ResultPublicationModeEnum.optional(),
 });
 
 /** Type for a create-exam request. */
@@ -139,6 +154,9 @@ export const UpdateExamRequestSchema = z.object({
   maxAttempts: z.number().int().min(1).optional(),
   latestStartOffsetMinutes: z.number().int().min(0).nullish(),
   minSubmitAfterStartMinutes: z.number().int().min(0).nullish(),
+  // P2D-J5a: result publishing policy. Optional on update (only draft exams
+  // accept full edits; published is schedule-only per ADR-005 Slice 2 §3.7).
+  resultPublicationMode: ResultPublicationModeEnum.optional(),
 });
 
 /** Type for an update-exam request. */

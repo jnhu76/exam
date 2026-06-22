@@ -29,6 +29,7 @@ import {
   unpublishExam,
   extendExam,
   publishExam,
+  publishResults,
 } from "@exam/exam-engine";
 import type { RequestContext, Exam, Question } from "@exam/domain";
 import {
@@ -42,6 +43,7 @@ import {
   ExamExtendNotAllowedError,
   ExamUpdateNotAllowedError,
   ExamCancelNotAllowedError,
+  ExamPublishResultsNotAllowedError,
 } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
@@ -80,6 +82,10 @@ function toExamResponse(exam: Exam) {
     maxAttempts: exam.maxAttempts,
     latestStartOffsetMinutes: exam.latestStartOffsetMinutes,
     minSubmitAfterStartMinutes: exam.minSubmitAfterStartMinutes,
+    resultPublicationMode: exam.resultPublicationMode,
+    resultsPublishedAt: exam.resultsPublishedAt
+      ? exam.resultsPublishedAt.toISOString()
+      : null,
     createdAt: exam.createdAt.toISOString(),
     updatedAt: exam.updatedAt.toISOString(),
   };
@@ -200,6 +206,31 @@ function getDeleteMeta(exam: Exam) {
 
 /** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
+
+/**
+ * P2D-J5a legacy compatibility: if a client omits `resultPublicationMode` but
+ * sends the legacy `controlFlags.showResultImmediately` flag, derive the mode
+ * from the legacy flag. `true` → 'immediate', `false` → 'manual'. Once the
+ * caller explicitly sets `resultPublicationMode`, it wins and the legacy flag
+ * is ignored for visibility (the flag is still stored verbatim in controlFlags
+ * so older clients reading it back are unaffected). Returns the resolved mode
+ * so the caller can pass it through to repo.create/update.
+ */
+function resolveResultPublicationMode(
+  rawBody: unknown,
+  parsedMode: "immediate" | "after_grading" | "manual",
+): "immediate" | "after_grading" | "manual" {
+  if (typeof rawBody !== "object" || rawBody === null) return parsedMode;
+  const body = rawBody as Record<string, unknown>;
+  // If the caller explicitly set resultPublicationMode, honor it verbatim.
+  if (body.resultPublicationMode !== undefined) return parsedMode;
+  const flags = body.controlFlags;
+  if (typeof flags !== "object" || flags === null) return parsedMode;
+  const legacy = (flags as Record<string, unknown>).showResultImmediately;
+  if (legacy === false) return "manual";
+  if (legacy === true) return "immediate";
+  return parsedMode;
+}
 
 /** Zod schema for route params containing a UUID `examId`. */
 const examIdParamsSchema = z.object({ examId: z.string().uuid() });
@@ -466,6 +497,13 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         maxAttempts: data.maxAttempts,
         latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
         minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
+        // P2D-J5a: authoritative visibility field. Coerce from the legacy
+        // showResultImmediately flag when the caller did not set the mode;
+        // default to 'immediate' when neither is present.
+        resultPublicationMode: resolveResultPublicationMode(
+          request.body,
+          data.resultPublicationMode ?? "immediate",
+        ),
       });
       recordAudit(fastify, request, ctx, "exam.create", "exam", exam.id);
 
@@ -555,6 +593,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const updateData: Record<string, unknown> = { ...data };
           if (data.openAt) updateData.openAt = new Date(data.openAt);
           if (data.closeAt) updateData.closeAt = new Date(data.closeAt);
+          // P2D-J5a: coerce resultPublicationMode from the legacy flag when
+          // the caller set controlFlags.showResultImmediately but not the
+          // mode. Mirrors the create-handler shim.
+          if (data.resultPublicationMode !== undefined) {
+            updateData.resultPublicationMode = data.resultPublicationMode;
+          } else {
+            const coerced = resolveResultPublicationMode(
+              request.body,
+              data.resultPublicationMode ?? "immediate",
+            );
+            if (coerced !== "immediate") {
+              updateData.resultPublicationMode = coerced;
+            }
+          }
           const updated = (await repo.update(
             ctx,
             id,
@@ -1030,6 +1082,82 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
       return toExamResponse(archived);
+    },
+  );
+
+  /**
+   * Zod schema for the publish-results response payload (P2D-J5a).
+   * `alreadyPublished` lets the caller detect the idempotent no-op case.
+   */
+  const publishResultsResponseSchema = z.object({
+    ok: z.literal(true),
+    resultsPublishedAt: z.string().datetime(),
+    alreadyPublished: z.boolean(),
+  });
+
+  /**
+   * POST /exams/:id/publish-results — Sets `resultsPublishedAt` so manual-mode
+   * result visibility flips from hidden → visible. P2D-J5a.
+   *
+   * Allowed only from `published | open | closed` (after reconciliation);
+   * `draft | canceled | archived` return 409 EXAM_PUBLISH_RESULTS_NOT_ALLOWED.
+   * Idempotent: a repeat call returns ok=true with `alreadyPublished: true`
+   * and leaves the stored timestamp unchanged.
+   *
+   * NOTE: this does NOT advance grading. Attempts still pending manual grading
+   * stay hidden behind the `not_graded` hiddenReason.
+   */
+  fastify.post(
+    "/exams/:id/publish-results",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: idParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: publishResultsResponseSchema,
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { id } = request.params as { id: string };
+      const examRepo = createExamRepo(fastify.db);
+
+      let result: { exam: Exam; alreadyPublished: boolean } | null = null;
+      try {
+        result = await publishResults(
+          createExamRepoAdapter(examRepo, ctx),
+          id,
+          fastify.now(),
+        );
+      } catch (err) {
+        if (err instanceof InvalidStateTransitionError) {
+          throw new ExamPublishResultsNotAllowedError();
+        }
+        // ValidationError here means the exam was not found.
+        if (err instanceof ValidationError) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+        throw err;
+      }
+      const { exam, alreadyPublished } = result;
+      // Audit only on a genuine transition; idempotent re-publish records
+      // the action with alreadyPublished=true but does not change state.
+      recordAudit(fastify, request, ctx, "exam.publish_results", "exam", id, {
+        alreadyPublished,
+        resultsPublishedAt: exam.resultsPublishedAt?.toISOString(),
+      });
+      return {
+        ok: true as const,
+        resultsPublishedAt: exam.resultsPublishedAt!.toISOString(),
+        alreadyPublished,
+      };
     },
   );
 

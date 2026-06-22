@@ -6,6 +6,7 @@ import {
   ScoreListQuerySchema,
   ScoreListResponseSchema,
   ErrorResponseSchema,
+  type HiddenReason,
 } from "@exam/contracts";
 import type {
   Exam,
@@ -145,6 +146,78 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
 }
 
 /**
+ * P2D-J5a result visibility decision for a single attempt.
+ *
+ * Two-stage gate:
+ *   1. resultReady — is the result itself computable? Requires status=graded
+ *      AND all score fields present AND grading is no longer pending manual
+ *      scoring. after_grading mode additionally requires gradingStatus to be
+ *      exactly 'fully_graded' (auto_graded is not enough — that mode means
+ *      "wait for all grading including manual to finish").
+ *   2. publication gate — for candidates only. Admins (role !== 'Candidate')
+ *      bypass this stage and see the full result whenever resultReady is true.
+ *
+ * Returns `{ visible: true }` when the full result can be shown, otherwise
+ * `{ visible: false, hiddenReason }` where hiddenReason is one of:
+ *   - 'not_started'  — attempt is in a pre-submit lifecycle state.
+ *   - 'not_graded'   — result not yet computable (grading pending or incomplete).
+ *   - 'pending_publish' — manual mode and admin has not called publish-results.
+ */
+function computeResultVisibility(
+  exam: Exam,
+  attempt: ExamAttempt,
+  role: RequestContext["role"],
+): { visible: true } | { visible: false; hiddenReason: HiddenReason } {
+  // Stage 1: is the result computable?
+  const isPreSubmit = attempt.status !== "graded";
+  const scoreFieldsPresent =
+    attempt.score != null &&
+    attempt.passed != null &&
+    attempt.gradedAt != null &&
+    attempt.gradingResult != null;
+
+  if (isPreSubmit) {
+    // 'not_started' covers any non-graded lifecycle state (in_progress,
+    // submitted, grading, voided, disrupted, etc.) — the result is not yet
+    // computable. The label is historical, not literal.
+    return { visible: false, hiddenReason: "not_started" };
+  }
+  if (!scoreFieldsPresent) {
+    return { visible: false, hiddenReason: "not_graded" };
+  }
+
+  // gradingStatus semantics: 'pending_manual' always means not-ready.
+  // 'auto_graded' counts as ready UNLESS the exam mode is after_grading
+  // (which demands 'fully_graded'). 'fully_graded' is always ready.
+  const gradingStatus = attempt.gradingStatus ?? "auto_graded";
+  if (gradingStatus === "pending_manual") {
+    return { visible: false, hiddenReason: "not_graded" };
+  }
+  if (
+    exam.resultPublicationMode === "after_grading" &&
+    gradingStatus !== "fully_graded"
+  ) {
+    // after_grading demands fully_graded; auto_graded is insufficient.
+    return { visible: false, hiddenReason: "not_graded" };
+  }
+
+  // Stage 2: publication gate (candidates only).
+  if (role !== "Candidate") {
+    return { visible: true };
+  }
+  switch (exam.resultPublicationMode) {
+    case "immediate":
+      return { visible: true };
+    case "after_grading":
+      return { visible: true };
+    case "manual":
+      return exam.resultsPublishedAt != null
+        ? { visible: true }
+        : { visible: false, hiddenReason: "pending_publish" };
+  }
+}
+
+/**
  * Fastify plugin registering score-list and individual attempt result routes.
  */
 const scoreRoutes: FastifyPluginAsync = async (fastify) => {
@@ -278,8 +351,23 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
 
   /**
    * GET /scores/attempts/:attemptId — Returns the detailed result for a
-   * single graded attempt. Visible to the owning candidate (if
-   * showResultImmediately is enabled) and to admins.
+   * single graded attempt. Visibility is governed by P2D-J5a:
+   *
+   *   1. resultReady — the result is computable (status=graded, score/passed/
+   *      gradedAt/gradingResult all present, AND gradingStatus is not
+   *      pending_manual — i.e. grading is done). If not ready, the response
+   *      is status-only with hiddenReason='not_graded' (or 'not_started' for
+   *      pre-submit states).
+   *   2. publication gate — for candidates, the exam's resultPublicationMode:
+   *        immediate     → visible as soon as resultReady
+   *        after_grading → visible as soon as resultReady (gradingStatus must
+   *                        be fully_graded, NOT auto_graded)
+   *        manual        → visible only after admin publish-results
+   *                        (resultsPublishedAt != null); pending_publish
+   *                        hiddenReason otherwise.
+   *
+   * Admins (non-Candidate roles) bypass the publication gate and see the full
+   * result whenever resultReady is true.
    */
   fastify.get(
     "/scores/attempts/:attemptId",
@@ -320,24 +408,23 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Exam not found");
       }
 
-      const showResults =
-        ctx.role !== "Candidate" || exam.controlFlags.showResultImmediately;
-      if (
-        !showResults ||
-        attempt.status !== "graded" ||
-        attempt.score == null ||
-        attempt.passed == null ||
-        !attempt.gradedAt ||
-        !attempt.gradingResult
-      ) {
+      const visibility = computeResultVisibility(exam, attempt, ctx.role);
+
+      if (!visibility.visible) {
         return AttemptResultResponseSchema.parse({
           attemptId: attempt.id,
           status: attempt.status,
           showResultImmediately: false,
+          hiddenReason: visibility.hiddenReason,
           examTitle: exam.title,
         });
       }
 
+      // visibility.visible === true guarantees score/passed/gradedAt/
+      // gradingResult are all present (the helper checks them before returning
+      // visible). Assert non-null for TS; the runtime invariant holds.
+      const gradedAt = attempt.gradedAt as Date;
+      const gradingResult = attempt.gradingResult as QuestionScoreResult[];
       return AttemptResultResponseSchema.parse({
         attemptId: attempt.id,
         status: attempt.status,
@@ -346,8 +433,8 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         passingScore: exam.passingScore,
         totalScore: attempt.score,
         passed: attempt.passed,
-        gradedAt: attempt.gradedAt.toISOString(),
-        questionResults: buildQuestionResults(attempt, attempt.gradingResult),
+        gradedAt: gradedAt.toISOString(),
+        questionResults: buildQuestionResults(attempt, gradingResult),
       });
     },
   );

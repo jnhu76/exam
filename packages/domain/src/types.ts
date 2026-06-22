@@ -14,6 +14,7 @@ import type {
   ConflictReason,
   MisconductSeverity,
   GradingStatus,
+  ResultPublicationMode,
 } from "./enums.js";
 
 // ── Organization ──────────────────────────────────────────────────
@@ -243,6 +244,13 @@ export interface Exam {
   // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
   latestStartOffsetMinutes: number | null;
   minSubmitAfterStartMinutes: number | null;
+  // P2D-J5a: result publishing policy. Authoritative field for candidate
+  // result visibility; supersedes the legacy ControlFlags.showResultImmediately.
+  resultPublicationMode: ResultPublicationMode;
+  // P2D-J5a: server time authority instant when an admin published results
+  // for a manual-mode exam. Null until the first publish-results call; once
+  // set, it is never updated (idempotent re-publish is a no-op on this field).
+  resultsPublishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

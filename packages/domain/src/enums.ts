@@ -99,6 +99,28 @@ export const GradingStatus = {
 export type GradingStatus = (typeof GradingStatus)[keyof typeof GradingStatus];
 
 /**
+ * Result publication policy for an exam (P2D-J5a).
+ *
+ * Governs when candidates may see their graded results. Orthogonal to the
+ * exam lifecycle status and to {@link GradingStatus}.
+ *
+ * - `immediate`: result visible as soon as it is computable (auto_graded or
+ *   fully_graded). Does NOT show partial results while subjective grading is
+ *   pending.
+ * - `after_grading`: result visible only when `gradingStatus = fully_graded`.
+ * - `manual`: result hidden until an admin calls publish-results
+ *   (`resultsPublishedAt` becomes non-null). Publish does not itself advance
+ *   grading — if grading is still pending the result stays hidden.
+ */
+export const ResultPublicationMode = {
+  Immediate: "immediate",
+  AfterGrading: "after_grading",
+  Manual: "manual",
+} as const;
+export type ResultPublicationMode =
+  (typeof ResultPublicationMode)[keyof typeof ResultPublicationMode];
+
+/**
  * Candidate enrollment status for an exam.
  *
  * Tracks whether a candidate has been assigned, has started, completed, or

@@ -7,6 +7,7 @@ import type {
   MisconductFlag,
   QuestionScoreResult,
   QuestionSnapshot,
+  ResultPublicationMode,
 } from "@exam/domain";
 import {
   boolean,
@@ -209,6 +210,18 @@ export const exams = pgTable(
     // ADR-005 Slice 3: candidate runtime timing policy. null = disabled.
     latestStartOffsetMinutes: integer("latest_start_offset_minutes"),
     minSubmitAfterStartMinutes: integer("min_submit_after_start_minutes"),
+    // P2D-J5a: result publishing policy. Authoritative visibility field;
+    // legacy controlFlags.showResultImmediately remains as a deprecated input.
+    resultPublicationMode: text("result_publication_mode")
+      .$type<ResultPublicationMode>()
+      .notNull()
+      .default("immediate"),
+    // P2D-J5a: server time authority instant of the first publish-results call.
+    // Null until manual publish; idempotent re-publish does not update it.
+    resultsPublishedAt: timestamp("results_published_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

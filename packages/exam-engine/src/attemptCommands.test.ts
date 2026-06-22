@@ -78,6 +78,8 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
     maxAttempts: 3,
     latestStartOffsetMinutes: null,
     minSubmitAfterStartMinutes: null,
+    resultPublicationMode: "immediate",
+    resultsPublishedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

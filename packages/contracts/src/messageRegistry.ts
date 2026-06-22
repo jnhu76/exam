@@ -50,6 +50,7 @@ export const errorMessages = {
   EXAM_EXTEND_NOT_ALLOWED: "考试当前状态不能延长",
   EXAM_UPDATE_NOT_ALLOWED: "考试当前状态不允许修改",
   EXAM_CANCEL_NOT_ALLOWED: "考试当前状态不能取消",
+  EXAM_PUBLISH_RESULTS_NOT_ALLOWED: "考试当前状态不能公布成绩",
   EXAM_CANCELED_RESULTS_UNAVAILABLE: "已取消的考试不提供成绩",
   ATTEMPT_SUBMIT_TOO_EARLY: "考试开始时间过短，暂时无法交卷",
   ATTEMPT_LATE_ENTRY_CLOSED: "已超过最晚进入考试时间",
