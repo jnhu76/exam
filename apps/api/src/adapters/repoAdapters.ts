@@ -117,8 +117,9 @@ export function createManualGradingRepoAdapter(
   ctx: RequestContext,
 ): ManualGradingRepository {
   return {
-    upsert: async (input) =>
-      repo.upsert(ctx, input as Parameters<typeof repo.upsert>[1]),
+    upsert: async (input) => {
+      await repo.upsert(ctx, input as Parameters<typeof repo.upsert>[1]);
+    },
     findByAttempt: async (attemptId) => repo.findByAttempt(ctx, attemptId),
   };
 }

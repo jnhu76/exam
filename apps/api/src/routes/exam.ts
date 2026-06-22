@@ -599,13 +599,13 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           if (data.resultPublicationMode !== undefined) {
             updateData.resultPublicationMode = data.resultPublicationMode;
           } else {
-            const coerced = resolveResultPublicationMode(
+            // Always apply the coerced value so that legacy
+            // showResultImmediately: true (→ "immediate") is persisted,
+            // matching the create-handler behavior.
+            updateData.resultPublicationMode = resolveResultPublicationMode(
               request.body,
               data.resultPublicationMode ?? "immediate",
             );
-            if (coerced !== "immediate") {
-              updateData.resultPublicationMode = coerced;
-            }
           }
           const updated = (await repo.update(
             ctx,

@@ -22,7 +22,7 @@ export interface ManualGradingRepository {
     gradedBy: string;
     gradedAt: Date;
     now: Date;
-  }): Promise<unknown>;
+  }): Promise<void>;
   /** All manual grading entries for an attempt. */
   findByAttempt(
     attemptId: string,
@@ -115,7 +115,8 @@ export async function gradeQuestion(
 
   const entries = await manualGradingRepo.findByAttempt(attemptId);
   const scoredIds = new Set(entries.map((e) => e.questionId));
-  const fullyGraded = subjectiveIds.every((id) => scoredIds.has(id));
+  const fullyGraded =
+    subjectiveIds.length > 0 && subjectiveIds.every((id) => scoredIds.has(id));
 
   if (fullyGraded && attempt.gradingStatus !== "fully_graded") {
     await attemptRepo.update(attemptId, { gradingStatus: "fully_graded" });
