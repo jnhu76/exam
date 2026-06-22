@@ -71,17 +71,19 @@ Queue prefix:  exam:test:{scope}        # 例如 exam:test:local:w1 , exam:test:
 
 ## 阶段总览
 
-| Phase | 内容                                          | 是否改代码 | 是否改 CI | 必备 stress 证据 |
-| ----- | -------------------------------------------- | ---------- | --------- | ---------------- |
-| 0     | 仅文档（ADR + plan + taxonomy）              | 否         | 否        | 否               |
-| 1     | 测试分类打标（ordinary / bg / concurrency / e2e） | 是（测试标记） | 否        | 是               |
-| 2     | datasource / scope resolver                  | 是         | 否        | 是               |
-| 3     | PostgreSQL per-worker database               | 是         | 否        | 是               |
-| 4     | background jobs 显式 opt-in                  | 是         | 否        | 是               |
-| 5     | 本地并行（fileParallelism=true）             | 是         | 否        | 是               |
-| 6     | CI 分片                                      | 是         | 是        | 是               |
-| 7     | Redis / Queue 集成                           | 是         | 是        | 是               |
-| 8     | 可选：template database                      | 是         | 否        | 是               |
+| Phase | 内容                                          | Status          | 是否改代码 | 是否改 CI | 必备 stress 证据 |
+| ----- | -------------------------------------------- | --------------- | ---------- | --------- | ---------------- |
+| 0     | 仅文档（ADR + plan + taxonomy）              | Completed       | 否         | 否        | 否               |
+| 1     | 测试分类打标（ordinary / bg / concurrency / e2e） | Pending         | 是（测试标记） | 否        | 是               |
+| 2A    | datasource / scope resolver                  | Completed       | 是         | 否        | 是               |
+| 3A    | PostgreSQL worker DB prototype               | Completed       | 是         | 否        | 是               |
+| 3B    | API test helper opt-in worker DB             | Completed       | 是         | 否        | 是               |
+| 4     | background jobs 显式 opt-in                  | Completed       | 是         | 否        | 是               |
+| 5A    | 本地并行 maxWorkers=2                        | Completed       | 是         | 否        | 是               |
+| 5B    | 本地并行 maxWorkers=4                        | Completed       | 是         | 否        | 是               |
+| 6     | CI 分片                                      | Planned / Next  | 是         | 是        | 是               |
+| 7     | Redis / Queue 集成                           | Deferred        | 是         | 是        | 是               |
+| 8     | 可选：template database                      | Deferred        | 是         | 否        | 是               |
 
 ---
 
@@ -727,6 +729,16 @@ CREATE DATABASE exam_test_s{shard}_w{worker} TEMPLATE exam_template_{hash}
 - 测试结果与 Phase 3 一致。
 
 ---
+
+## Phase 5 后 Roadmap
+
+| Step                                  | Status         | Notes                                               |
+| ------------------------------------- | -------------- | --------------------------------------------------- |
+| Local worker DB maxWorkers=4          | Complete       | 5/5 stress pass                                     |
+| CI shard prep                         | Next           | config + local simulated shard                      |
+| Live CI validation                    | Pending        | blocked by CI availability                          |
+| Redis / Queue prefix                  | Deferred       | adoption-triggered                                  |
+| Template database (Phase 8)           | Deferred       | only if migration/seed still slow after Phase 6     |
 
 ## 验证矩阵（贯穿所有阶段）
 

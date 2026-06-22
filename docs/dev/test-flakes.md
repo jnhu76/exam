@@ -258,6 +258,11 @@ database（不同 vitest worker 不同 database）提供；`fileParallelism:fals
 - A′ `fileParallelism: false` **仍是默认**；本 Phase 只新增 opt-in 并行路径，
   不改默认，CI 不自动继承。
 - scanner 15_000ms timeout、`verify:db-tests` 串行链等既有缓解一律保留。
+- ADR-007 Phase 5 added local evidence that worker-database mode avoids the
+  file-schema / shared-schema trigger conditions for BUG-FLAKE-001 under local
+  maxWorkers=2 and maxWorkers=4 stress runs. This does not globally close
+  BUG-FLAKE-001. The legacy file-schema path keeps its existing serial
+  mitigation. CI shard validation remains pending.
 
 **关键不变量**（config 注释固化）：**并行模式绝不设 `TEST_WORKER_ID`**。
 `resolveWorkerId()` 优先 `TEST_WORKER_ID`，固定会让所有 worker 落到

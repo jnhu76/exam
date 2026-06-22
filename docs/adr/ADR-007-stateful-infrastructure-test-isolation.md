@@ -87,6 +87,93 @@ or migration semantics. Per-worker databases, Redis prefixes, and queue
 prefixes exist solely in the test harness; none of them are referenced by
 production code paths.
 
+## Implementation Status
+
+| Phase                            | Status                    | Evidence / Notes                                    |
+| -------------------------------- | ------------------------- | --------------------------------------------------- |
+| Phase 2A — scope resolver        | Completed                 | resolver + scope naming landed                      |
+| Phase 3A — worker DB prototype   | Completed                 | db helper tested                                    |
+| Phase 3B — API worker DB opt-in  | Completed                 | API suite can run serial in worker DB mode           |
+| Phase 4 — background default-off | Completed                 | buildTestApp does not auto-start scanner timers     |
+| Phase 5A — local maxWorkers=2    | Completed                 | 5/5 stress pass                                     |
+| Phase 5B — local maxWorkers=4    | Completed                 | 5/5 stress pass; local recommended mode             |
+| Phase 6 — CI shard               | Planned / Prepared next   | Live CI validation pending                           |
+| Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
+
+## Current Recommended Modes
+
+### Local recommended
+
+```bash
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
+```
+
+Only for local API suite. Based on Phase 5B 5/5 stress evidence. Does not
+imply CI should use 4 workers.
+
+### Local conservative
+
+```bash
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=2 pnpm --filter @exam/api test
+```
+
+Use if local machine has fewer cores or IO contention.
+
+### Legacy fallback
+
+```bash
+TEST_DB_ISOLATION=file-schema pnpm --filter @exam/api test
+```
+
+Remains available. Still uses existing BUG-FLAKE-001 mitigation path. Slower
+but useful for rollback / debugging.
+
+### Worker DB serial
+
+```bash
+TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 pnpm --filter @exam/api test
+```
+
+Only for serial debugging. Never use `TEST_WORKER_ID=1` in parallel / shard
+mode.
+
+## Critical Warning: Do Not Set TEST_WORKER_ID in Parallel or Shard Mode
+
+In serial worker-database debugging, `TEST_WORKER_ID=1` is allowed.
+
+In parallel mode, `TEST_WORKER_ID` must not be set.
+
+`resolveWorkerId()` prioritizes `TEST_WORKER_ID` over `VITEST_WORKER_ID`.
+If `TEST_WORKER_ID=1` is set during parallel Vitest execution, all workers
+will use the same database, such as `exam_test_w1` or `exam_test_s1_w1`.
+That breaks worker isolation.
+
+Correct:
+
+```bash
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
+```
+
+Wrong:
+
+```bash
+TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
+```
+
+CI shard — same rule:
+
+Correct:
+
+```bash
+TEST_INFRA_SCOPE=ci TEST_SHARD_INDEX=1 TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=1 pnpm --filter @exam/api exec vitest run --shard=1/2
+```
+
+Wrong:
+
+```bash
+TEST_INFRA_SCOPE=ci TEST_SHARD_INDEX=1 TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 API_TEST_MAX_WORKERS=1 pnpm --filter @exam/api exec vitest run --shard=1/2
+```
+
 ## Decision
 
 Adopt a **single test-scope model** in which every test scope owns its
@@ -435,20 +522,126 @@ Full sequencing and acceptance gates live in
 
 - **Phase 0 — docs only (this PR).** Add ADR + plan + taxonomy. No code change.
 - **Phase 1 — classify tests.** Tag ordinary / background / concurrency / E2E.
-- **Phase 2 — datasource resolver.** Scope resolver for local worker and CI
-  shard+worker, with legacy `file-schema` fallback.
-- **Phase 3 — PostgreSQL worker database.** Ensure DB exists, migrate once per
-  worker, `TRUNCATE` between tests, close pools.
-- **Phase 4 — background jobs explicit opt-in.** `buildTestApp()` does not
-  start scanner / poller / queue worker by default; background tests opt in.
-- **Phase 5 — local parallelism.** `fileParallelism=true`, `maxWorkers=2`
-  first, `4` after stability.
-- **Phase 6 — CI sharding.** `api-fast` matrix shards, per-shard
-  `maxWorkers=1~2`, background/concurrency/E2E as separate jobs.
-- **Phase 7 — Redis / Queue integration.** Redis prefix resolver, queue prefix
-  resolver, `producer-only` mode, `worker-enabled` only in dedicated tests.
+- **Phase 2A — scope resolver (Completed).** Scope resolver for local worker
+  and CI shard+worker, with legacy `file-schema` fallback.
+- **Phase 3A — worker DB prototype (Completed).** Worker database helper
+  tested.
+- **Phase 3B — API worker DB opt-in (Completed).** API suite can run serial
+  in worker DB mode.
+- **Phase 4 — background jobs explicit opt-in (Completed).** `buildTestApp()`
+  does not start scanner / poller / queue worker by default; background tests
+  opt in.
+- **Phase 5A — local maxWorkers=2 (Completed).** 5/5 stress pass.
+- **Phase 5B — local maxWorkers=4 (Completed).** 5/5 stress pass; local
+  recommended mode.
+- **Phase 6 — CI sharding (Planned / Prepared next).** `api-fast` matrix
+  shards, per-shard `maxWorkers=1~2`, background/concurrency/E2E as separate
+  jobs. Live CI validation pending.
+- **Phase 7 — Redis / Queue integration (Deferred).** Redis prefix resolver,
+  queue prefix resolver, `producer-only` mode, `worker-enabled` only in
+  dedicated tests. Only when Redis / Queue adoption is triggered.
 - **Phase 8 — optional template DB.** If migration/seed is still slow,
   `CREATE DATABASE exam_test_s{shard}_w{worker} TEMPLATE exam_template_{hash}`.
+
+## Phase 6 Plan — CI Shard + Worker Database Isolation
+
+Status: Planned / prepared next. Live CI validation is currently unavailable.
+This phase must not claim CI speedup until real CI timing exists.
+
+**Goal**: CI uses GitHub Actions matrix shards with worker-database isolation,
+not single-job Vitest workers.
+
+**First CI shape** (2 shards x 1 worker):
+
+```
+api-fast shard 1/2:
+  TEST_INFRA_SCOPE=ci
+  TEST_SHARD_INDEX=1
+  TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=1
+  vitest --shard=1/2
+
+api-fast shard 2/2:
+  TEST_INFRA_SCOPE=ci
+  TEST_SHARD_INDEX=2
+  TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=1
+  vitest --shard=2/2
+```
+
+Database naming:
+
+```
+shard 1 worker 1 -> exam_test_s1_w1
+shard 2 worker 1 -> exam_test_s2_w1
+```
+
+If later tuned to 2 workers per shard:
+
+```
+shard 1 worker 2 -> exam_test_s1_w2
+shard 2 worker 2 -> exam_test_s2_w2
+```
+
+**Acceptance gates**:
+
+- Local simulated shard 1/2 passes.
+- Local simulated shard 2/2 passes.
+- Legacy file-schema still passes.
+- Local worker-db maxWorkers=4 still passes.
+- `pnpm verify` passes or unrelated failure documented.
+- Docs clearly say live CI validation pending.
+
+## Phase 7 Plan — Redis / Queue Prefix Integration
+
+Status: Deferred until Redis / Queue adoption.
+
+**Trigger conditions** — Phase 7 only starts when one or more of the
+following lands:
+
+- Redis presence
+- Redis rate limit
+- BullMQ / queue
+- Outbox processor
+- Async audit writer
+- Queue-backed deadline scanner
+- Background worker consuming jobs
+
+**Scope**:
+
+- Implement Redis prefix resolver (`exam:test:{scope}:`).
+- Implement queue prefix resolver (`exam:test:{scope}`).
+- Implement `TEST_QUEUE_MODE=disabled|producer-only|worker-enabled`.
+- Ordinary API tests default to queue disabled or producer-only.
+- Worker / consumer / retry / delay tests run in background / concurrency
+  group.
+- Implement cleanup: `resetRedisByPrefix()`, `resetQueues()`, `closeInfra()`.
+- Ensure no leaked Redis connections.
+- Ensure no leaked `Queue` / `Worker` / `QueueEvents` / `FlowProducer`.
+- If BullMQ is adopted, use BullMQ `prefix`, not ioredis `keyPrefix`.
+
+**Explicitly not done**:
+
+- Phase 7 is not required to finish current PostgreSQL test-infra work.
+- Redis / Queue must not be introduced only for testing.
+
+## Completion Boundary
+
+For the current PostgreSQL test-infra track, ADR-007 is considered complete
+when:
+
+1. Local worker-database API mode has stress evidence. **(done — Phase 5B)**
+2. Legacy file-schema fallback remains available. **(done — retained)**
+3. CI shard configuration is prepared and documented. **(done — Phase 6 plan)**
+4. Live CI validation status is explicitly recorded. **(pending — Phase 6)**
+5. Redis / Queue integration is either implemented or explicitly deferred until
+   adoption. **(done — Phase 7 deferred)**
+
+Phase 7 is not a blocker unless Redis / Queue has been adopted.
+
+PostgreSQL local / CI test isolation can be completed before Redis / Queue
+exists. Redis / Queue prefix integration is adoption-triggered, not mandatory
+upfront work.
 
 ## Validation matrix (acceptance gates, not run in this PR)
 
