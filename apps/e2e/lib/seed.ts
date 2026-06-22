@@ -120,6 +120,7 @@ export async function seedExam(
     durationMinutes?: number;
     passingScore?: number;
     totalScore?: number;
+    resultPublicationMode?: "immediate" | "after_grading" | "manual";
   } = {},
 ): Promise<SeededExam> {
   const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -155,6 +156,7 @@ export async function seedExam(
     totalScore: opts.totalScore ?? 100,
     questionSelectionMode: "manual",
     questionIds: [questionId],
+    resultPublicationMode: opts.resultPublicationMode ?? "immediate",
     controlFlags: {
       shuffleQuestions: false,
       shuffleOptions: false,

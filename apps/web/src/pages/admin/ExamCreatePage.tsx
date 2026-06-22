@@ -86,6 +86,7 @@ export function ExamCreatePage() {
     totalScore: 100,
     questionSelectionMode: "manual",
     questionIds: [],
+    resultPublicationMode: "immediate",
     controlFlags: {
       shuffleQuestions: false,
       shuffleOptions: false,

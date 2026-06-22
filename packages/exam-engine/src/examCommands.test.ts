@@ -9,6 +9,7 @@ import {
   extendExam,
   buildQuestionSnapshot,
   checkAndUpdateExamStatus,
+  publishResults,
   type ExamRepository,
 } from "./examCommands.js";
 import type { Exam, Question } from "@exam/domain";
@@ -48,6 +49,8 @@ function makeExam(overrides: Partial<Exam> = {}): Exam {
     maxAttempts: 1,
     latestStartOffsetMinutes: null,
     minSubmitAfterStartMinutes: null,
+    resultPublicationMode: "immediate",
+    resultsPublishedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -461,6 +464,60 @@ describe("examCommands", () => {
       const result = await checkAndUpdateExamStatus(repo, "exam-1", now);
       expect(result?.exam.status).toBe("closed");
       expect(result?.transition).toBe("closed");
+    });
+  });
+
+  // P2D-J5a: publishResults unit coverage. Mirrors the route integration
+  // tests but isolates the pure engine logic from the DB/HTTP layer.
+  describe("publishResults", () => {
+    const publishTime = new Date("2025-06-01T10:00:00Z");
+
+    it("sets resultsPublishedAt on a published exam and reports alreadyPublished=false", async () => {
+      const repo = makeRepo(
+        makeExam({ status: "published", resultsPublishedAt: null }),
+      );
+      const result = await publishResults(repo, "exam-1", publishTime);
+      expect(result.exam.resultsPublishedAt).toBe(publishTime);
+      expect(result.alreadyPublished).toBe(false);
+    });
+
+    it("accepts open and closed states", async () => {
+      for (const status of ["open", "closed"] as const) {
+        const repo = makeRepo(makeExam({ status, resultsPublishedAt: null }));
+        const result = await publishResults(repo, "exam-1", publishTime);
+        expect(result.exam.resultsPublishedAt).toBe(publishTime);
+        expect(result.alreadyPublished).toBe(false);
+      }
+    });
+
+    it("is idempotent: a repeat call returns alreadyPublished=true and leaves the timestamp unchanged", async () => {
+      const firstAt = new Date("2025-06-01T10:00:00Z");
+      const repo = makeRepo(
+        makeExam({ status: "published", resultsPublishedAt: firstAt }),
+      );
+      const result = await publishResults(
+        repo,
+        "exam-1",
+        new Date("2025-07-01T10:00:00Z"),
+      );
+      expect(result.exam.resultsPublishedAt).toBe(firstAt);
+      expect(result.alreadyPublished).toBe(true);
+    });
+
+    it("rejects draft, canceled, and archived states with InvalidStateTransitionError", async () => {
+      for (const status of ["draft", "canceled", "archived"] as const) {
+        const repo = makeRepo(makeExam({ status }));
+        await expect(
+          publishResults(repo, "exam-1", publishTime),
+        ).rejects.toThrow(InvalidStateTransitionError);
+      }
+    });
+
+    it("throws ValidationError when the exam does not exist", async () => {
+      const repo = makeRepo(makeExam());
+      await expect(
+        publishResults(repo, "missing", publishTime),
+      ).rejects.toThrow(ValidationError);
     });
   });
 });

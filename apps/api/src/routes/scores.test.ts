@@ -264,10 +264,14 @@ describe("score routes", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    // P2D-J5a: legacy showResultImmediately=false coerces to manual mode, so
+    // the hidden variant now carries hiddenReason='pending_publish' (no
+    // publish-results call has been made).
     expect(response.json()).toEqual({
       attemptId,
       status: "graded",
       showResultImmediately: false,
+      hiddenReason: "pending_publish",
       examTitle: "Hidden Score",
     });
   });
@@ -296,6 +300,7 @@ describe("score routes", () => {
       attemptId,
       status: "in_progress",
       showResultImmediately: false,
+      hiddenReason: "not_started",
       examTitle: "Visible Score",
     });
   });

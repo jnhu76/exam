@@ -301,3 +301,51 @@ export async function archiveExam(
   if (!updated) throw new ValidationError("Exam not found after update");
   return updated;
 }
+
+/**
+ * Publishes results for an exam (P2D-J5a).
+ *
+ * Sets `resultsPublishedAt` on the exam so manual-mode result visibility
+ * flips from hidden → visible. This is NOT a lifecycle status transition
+ * (`status` is unchanged); it only advances the result-visibility state.
+ *
+ * Allowed only from `published | open | closed` — i.e. any state where the
+ * exam is past draft and not in a terminal/canceled state. `draft` (no
+ * attempts yet), `canceled`, and `archived` are rejected.
+ *
+ * Idempotent: if `resultsPublishedAt` is already set, the exam is returned
+ * unchanged (the timestamp is never updated on repeat calls). The caller can
+ * detect the no-op case via the `alreadyPublished` return flag and suppress
+ * duplicate audit/metadata accordingly.
+ *
+ * NOTE: publish does NOT itself advance grading. If attempts still have
+ * `gradingStatus=pending_manual`, their results stay hidden behind the
+ * `not_graded` hiddenReason even after this call. Visibility is the AND of
+ * "publish done" (manual mode) and "result computable" (grading done).
+ */
+export async function publishResults(
+  repo: ExamRepository,
+  examId: string,
+  now: Date,
+): Promise<{ exam: Exam; alreadyPublished: boolean }> {
+  const exam = await repo.findById(examId);
+  if (!exam) {
+    throw new ValidationError("Exam not found");
+  }
+
+  const allowed = new Set(["published", "open", "closed"]);
+  if (!allowed.has(exam.status)) {
+    throw new InvalidStateTransitionError(
+      `Cannot publish results for exam in ${exam.status} state`,
+    );
+  }
+
+  // Idempotent: already published -> return as-is, flag the no-op.
+  if (exam.resultsPublishedAt != null) {
+    return { exam, alreadyPublished: true };
+  }
+
+  const updated = await repo.update(examId, { resultsPublishedAt: now });
+  if (!updated) throw new ValidationError("Exam not found after update");
+  return { exam: updated, alreadyPublished: false };
+}
