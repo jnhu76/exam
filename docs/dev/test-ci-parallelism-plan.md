@@ -538,6 +538,96 @@ timer-driven scanner plugin lifecycle，再在 `buildTestApp()` 增加显式 opt
 
 **不纳入 Phase 5**：不改 CI（CI 分片在 Phase 6）。
 
+### Phase 5A 状态 — env-gated two-worker parallelism（已完成）
+
+**实现**（`apps/api/vitest.config.ts`）：新增 `resolveParallelism()`，env-gated：
+
+- 默认 `fileParallelism: false`（legacy 串行，BUG-FLAKE-001 缓解不动）。
+- **仅当** `TEST_DB_ISOLATION=worker-database` **且** `API_TEST_MAX_WORKERS`
+  是正整数时，才切到 `fileParallelism=true, maxWorkers=<N>`。
+- Fail-fast：
+  - `API_TEST_MAX_WORKERS` 设了但 `TEST_DB_ISOLATION != worker-database` →
+    throw（拒绝并行跑共享 schema，避免重引 BUG-FLAKE-001）。
+  - `API_TEST_MAX_WORKERS` 非正整数 → throw（不静默退化为串行伪装并行）。
+
+**关键不变量**（在 config 注释中固化）：**并行模式绝不设 `TEST_WORKER_ID`**。
+`resolveWorkerId()` 优先读 `TEST_WORKER_ID`，固定为 1 会让所有 vitest worker 落到
+`exam_test_w1` → per-worker database 隔离失效。并行只依赖 vitest 自动注入的
+`VITEST_WORKER_ID`。serial 模式仍可手工 `TEST_WORKER_ID=1`。
+
+**用法**：
+
+```
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=2 pnpm --filter @exam/api test
+```
+
+**vitest worker-id 行为（实测）**：vitest 的 `getWorkerId()` 分配单调递增 +
+回收复用的 id（见 `cli-api.C6CiCDM3.js`）。`maxWorkers=2` 把**并发**限到 2，
+但一次完整 suite（57 文件）跑下来会创建远多于 2 个 worker database
+（实测 w0..w41，缺号是回收复用）。这是**安全但累积**的行为：并发 ≤2 保证无
+DB collision，database 累积是 cosmetic 问题，不影响正确性。CI/Phase 6 如要
+限 database 数量，需 template database（Phase 8）或 worker-id 收紧策略。
+
+**Phase 5A 验收**（fresh PG 容器 `exam-db-6432`，postgres:18.4，端口 6432，
+与共享 dev DB 隔离）：
+
+| 命令 | 结果 | 耗时 |
+|---|---|---:|
+| Phase 4 gate: `TEST_DB_ISOLATION=file-schema pnpm --filter @exam/api test` | 589/589 PASS | ~95s |
+| Phase 4 gate: `TEST_DB_ISOLATION=worker-database TEST_WORKER_ID=1 …` | 589/589 PASS | ~101s |
+| Phase 5A single: `… API_TEST_MAX_WORKERS=2 …` | 589/589 PASS | ~57s |
+| Phase 5A ×5 stress: `… API_TEST_MAX_WORKERS=2 …` | **5/5 PASS**（589/589 each） | ~57s/run |
+| Regression: file-schema | 589/589 PASS | ~95s |
+| Regression: worker-DB serial | 589/589 PASS | ~101s |
+
+提速：~57s vs ~100s serial ≈ **1.7×**。无 DB collision，无 open-handle 警告。
+
+### Phase 5B 状态 — four-worker parallelism（已完成）
+
+**实现**：无额外代码改动 —— Phase 5A 的 `resolveParallelism()` 已支持任意正整数
+`API_TEST_MAX_WORKERS`。`API_TEST_MAX_WORKERS=4` 直接复用同一逻辑。
+
+**用法**：
+
+```
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
+```
+
+**Phase 5B 验收**（同 fresh PG 容器）：
+
+| 命令 | 结果 | 耗时 |
+|---|---|---:|
+| Phase 5B single: `… API_TEST_MAX_WORKERS=4 …` | 589/589 PASS | ~38s |
+| Phase 5B ×5 stress run 1 | 589/589 PASS | ~39s |
+| Phase 5B ×5 stress run 2 | 589/589 PASS | ~38s |
+| Phase 5B ×5 stress run 3 | 589/589 PASS | ~41s |
+| Phase 5B ×5 stress run 4 | 589/589 PASS | ~43s |
+| Phase 5B ×5 stress run 5 | 589/589 PASS | ~39s |
+
+提速：~38–43s vs ~100s serial ≈ **2.6×**；比 maxWorkers=2 再快 ~30%。
+**5/5 PASS**，无 DB collision，无 open-handle 警告。
+
+### Phase 5 推荐模式与边界
+
+- **推荐 local 并行模式**：`TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=4`（本地 4 worker 证据充分，提速最大）。
+- **保守回退**：`API_TEST_MAX_WORKERS=2`（若未来某机器在 4 worker 下出现
+  资源争用）。
+- **4 worker 不设为默认**：默认仍是 `fileParallelism:false`（serial）。
+  Phase 5 只是**提供** opt-in 并行能力，不强制。
+- **CI 不自动继承**：CI 仍走默认串行（或 Phase 6 的 shard 矩阵）。本 Phase
+  evidence 是**local only**。
+
+### Phase 5 严格不做
+
+- **不**改默认（serial 仍是默认）。
+- **不**改 CI matrix（Phase 6）。
+- **不**声称 BUG-FLAKE-001 全局修复（只证明 local worker-database + ≤4
+  worker 在本机稳定；BUG-FLAKE-001 的 file-schema 并行动机仍保留）。
+- **不**声称 CI 并行安全、parallelism globally safe。
+- **不**删除 legacy `file-schema` 回退。
+- **不**改业务逻辑 / 生产 schema / migration。
+
 ---
 
 ## Phase 6 — CI 分片
