@@ -69,13 +69,33 @@ describe("setupApiTestDatabaseFromEnv — mode selection", () => {
     await h.close();
   });
 
-  it("TEST_DB_ISOLATION=file-schema → legacy path explicitly", async () => {
+  it("TEST_DB_ISOLATION=file-schema → legacy path with per-file schema (NOT silently disabled)", async () => {
+    // Regression guard: "file-schema" is the documented legacy mode name and
+    // MUST be treated as ENABLED. Without the explicit handling it falls
+    // through to the disabled branch, returning schemaName undefined and
+    // silently running tests on the shared `public` schema with no isolation.
     const h = await setupApiTestDatabaseFromEnv({
       env: { TEST_DB_ISOLATION: "file-schema", TEST_DATABASE_URL: BASE_URL },
       namespace: "unit-fs",
     });
     expect(h.mode).toBe("file-schema");
+    expect(typeof h.schemaName).toBe("string");
+    expect(h.schemaName).toMatch(/^test_/);
     expect(setupWorkerMock).not.toHaveBeenCalled();
+    await h.close();
+  });
+
+  it("trims whitespace around TEST_DB_ISOLATION before matching", async () => {
+    // "  file-schema  " must behave identically to "file-schema" (enabled).
+    const h = await setupApiTestDatabaseFromEnv({
+      env: {
+        TEST_DB_ISOLATION: "  file-schema  ",
+        TEST_DATABASE_URL: BASE_URL,
+      },
+      namespace: "unit-fs-trim",
+    });
+    expect(h.mode).toBe("file-schema");
+    expect(typeof h.schemaName).toBe("string");
     await h.close();
   });
 

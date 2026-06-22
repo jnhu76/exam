@@ -119,13 +119,18 @@ export async function setupApiTestDatabaseFromEnv(options?: {
   // Legacy path — bit-for-bit the previous behavior of the security files.
   // Whether a per-file schema is created follows the SAME rules as
   // `isTestDbIsolationEnabled()`, but evaluated against the `env` the caller
-  // passed in (defaults to `process.env`) so the adapter is fully testable:
-  //   - unset / "" / "1" / "true"  → enabled, fresh schema per call
-  //   - "0" / any other literal     → disabled, schemaName undefined, caller
-  //                                  connects to the base DB's default schema.
+  // passed in (defaults to `process.env`) so the adapter is fully testable.
+  // The value is trimmed for consistency with `isWorkerDatabaseMode()`.
+  //   - unset / "" / "file-schema" / "1" / "true" → enabled, fresh schema/call
+  //   - "0" / any other literal                    → disabled, schemaName
+  //     undefined, caller connects to the base DB's default schema.
+  // Note: "file-schema" is treated as ENABLED. It is the documented legacy
+  // mode name (see docs/dev/test-suite-taxonomy.md); without this it would
+  // fall through to the disabled branch and silently run tests on the shared
+  // `public` schema with NO isolation.
   const isoEnabled = (() => {
-    const val = env.TEST_DB_ISOLATION;
-    if (val === undefined || val === "") return true;
+    const val = env.TEST_DB_ISOLATION?.trim();
+    if (val === undefined || val === "" || val === "file-schema") return true;
     return val === "1" || val === "true";
   })();
 

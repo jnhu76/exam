@@ -113,7 +113,8 @@ export async function buildTestApp(
   // Phase 3B opt-in: when the caller did not pass an explicit schemaName AND
   // the environment selected worker-database mode, use the per-worker
   // database adapter instead of legacy per-file schema isolation. The worker
-  // DB is already migrated by the adapter; migratePostgres() below no-ops.
+  // DB is already migrated by the adapter (Drizzle tracks applied migrations
+  // in `drizzle.__drizzle_migrations`, so re-running is a no-op).
   //
   // RESET BOUNDARY (deliberate choice): we do NOT call adapter.resetPostgres()
   // here. Several API test files (e.g. auth.test.ts, user.test.ts) build the
@@ -131,6 +132,7 @@ export async function buildTestApp(
   if (!resolvedSchemaName && isWorkerDatabaseMode()) {
     const adapter: ApiTestDatabaseHandle = await setupApiTestDatabaseFromEnv({
       namespace: "api",
+      ...(opts?.databaseUrl ? { databaseUrl: opts.databaseUrl } : {}),
     });
     // In worker mode there is no per-file schemaName; business tables live in
     // the worker DB's default `public` schema.
@@ -139,8 +141,10 @@ export async function buildTestApp(
     isolatedCleanup = async () => {
       await adapter.close();
     };
+    // No migratePostgres() here: the adapter already migrated the worker DB
+    // (see setupWorkerTestDatabase). Migration state persists in the DB, so
+    // conn.db sees it and a re-run would just be a redundant no-op per build.
     const conn = await createDatabase(workerUrl, undefined);
-    await migratePostgres(conn.db);
     return finishBuildTestApp({
       routePlugin,
       conn,
