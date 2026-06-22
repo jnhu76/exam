@@ -663,6 +663,66 @@ TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api
 
 **不纳入 Phase 6**：不引入 Redis / Queue 运行时依赖（它们落地后才进 Phase 7）。
 
+### Phase 6 状态 — CI shard config prepared（pending live CI validation）
+
+**实现**（`.github/workflows/ci.yml`）：新增 `api-fast` job，使用 GitHub
+Actions matrix 策略，2 shards × 1 worker。
+
+- 每个 shard 有独立 PostgreSQL 18.4 service（与 `docker-compose.dev.yml` 一致）。
+- 每个 shard 设置 `TEST_INFRA_SCOPE=ci` + `TEST_SHARD_INDEX=${{ matrix.shard }}`
+  + `TEST_DB_ISOLATION=worker-database` + `API_TEST_MAX_WORKERS=1`。
+- shard 命令：`pnpm --filter @exam/api exec vitest run
+  --shard=${{ matrix.shard }}/2`。
+- Node.js 24 LTS（24.16.0）。
+- `fail-fast: false`：一个 shard 失败不影响另一个。
+- **live CI validation 尚未执行**。
+
+**本地模拟验证**（shard 命令本身可执行，但本地无 PG 服务所以 worker
+database 路径会 ECONNREFUSED；CI 中有独立 PG service，该路径可正常工作）：
+
+- vitest `--shard` 参数正确分割测试文件。
+- `resolveParallelism()` 在 `TEST_DB_ISOLATION=worker-database` +
+  `API_TEST_MAX_WORKERS=1` 下正确启用 `fileParallelism=true, maxWorkers=1`。
+- `resolveTestScope()` 在 `TEST_INFRA_SCOPE=ci` + `TEST_SHARD_INDEX=1` 下
+  正确派生 `scopeId=s1_w1`、`postgresDatabaseName=exam_test_s1_w1`。
+
+**推荐 first CI shape**：
+
+```
+api-fast shard 1/2:
+  TEST_INFRA_SCOPE=ci
+  TEST_SHARD_INDEX=1
+  TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=1
+  vitest --shard=1/2
+
+api-fast shard 2/2:
+  TEST_INFRA_SCOPE=ci
+  TEST_SHARD_INDEX=2
+  TEST_DB_ISOLATION=worker-database
+  API_TEST_MAX_WORKERS=1
+  vitest --shard=2/2
+```
+
+**关键约束**（config 注释固化）：**并行 / shard 模式绝不设
+`TEST_WORKER_ID`**。`resolveWorkerId()` 优先 `TEST_WORKER_ID`，固定会让所有
+worker 落到同一 database → 隔离失效。
+
+**Phase 6 验收 gates**：
+
+- local simulated shard 1/2 passes（vitest shard 分割正确）。
+- local simulated shard 2/2 passes。
+- legacy file-schema still passes。
+- local worker-db maxWorkers=4 still passes。
+- `pnpm verify` passes。
+- docs clearly say live CI validation pending。
+
+**不纳入 Phase 6**：
+
+- 不引入 Redis / Queue。
+- 不声称 CI speedup / CI verified / CI parallelism safe。
+- 不改变 local Phase 5 已验证路径。
+
 ---
 
 ## Phase 7 — Redis / Queue 集成

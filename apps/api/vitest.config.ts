@@ -42,6 +42,11 @@ import { defineConfig } from "vitest/config";
 //
 // 非法 API_TEST_MAX_WORKERS（非数字 / ≤0 / 非整数）直接 throw，fail-fast，
 // 不静默退化为串行（避免开发者以为在跑并行实际却串行）。
+//
+// Phase 6 CI shard：CI 通过 GitHub Actions matrix + per-shard PG service 实现
+// 隔离。每个 shard 设 TEST_INFRA_SCOPE=ci + TEST_SHARD_INDEX + shard 命令
+// vitest run --shard=N/2。CI 不设 TEST_WORKER_ID（与本地并行同理）。
+// CI worker count 默认 1（保守），待 real timing data 后 tuning。
 function resolveParallelism(): {
   fileParallelism: boolean;
   maxWorkers?: number;

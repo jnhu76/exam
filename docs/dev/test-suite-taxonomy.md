@@ -354,15 +354,19 @@ CI:          e2e job，独立 PG service（POSTGRES_DB: exam_e2e，已存在）
 - **不**改默认、**不**改 CI、**不**声称 BUG-FLAKE-001 全局修复、**不**声称
   CI 并行安全。local evidence only。
 
-## 进度备注（Phase 6，CI shard — Planned / Prepared next）
+## 进度备注（Phase 6，CI shard — config prepared, pending live validation）
 
-- CI shard 配置已准备，但 live CI 尚未执行。Phase 6 不声称 CI speedup。
-- 推荐第一版：2 shards × 1 worker，每个 shard 设 `TEST_INFRA_SCOPE=ci` +
-  `TEST_SHARD_INDEX` + `TEST_DB_ISOLATION=worker-database` +
-  `API_TEST_MAX_WORKERS=1`。
+- `.github/workflows/ci.yml` 新增 `api-fast` job：2 shards × 1 worker，
+  每个 shard 有独立 PG 18.4 service。
+- 每个 shard 设置 `TEST_INFRA_SCOPE=ci` + `TEST_SHARD_INDEX` +
+  `TEST_DB_ISOLATION=worker-database` + `API_TEST_MAX_WORKERS=1`。
+- shard 命令：`vitest run --shard=${{ matrix.shard }}/2`。
+- Node.js 24 LTS（24.16.0）。
+- **live CI validation 尚未执行**。Phase 6 不声称 CI speedup。
 - 并行 / shard 模式下**绝不设 `TEST_WORKER_ID`**（见 ADR-007 Critical
   Warning）。
-- Live CI validation 是 Phase 6 的 blocking gate。
+- 推荐 first CI shape：2 shards × 1 worker，CI worker count 应在 real
+  timing data 可用后 tuning。
 
 ## 进度备注（Phase 7，Redis / Queue — Deferred）
 
