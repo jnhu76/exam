@@ -123,9 +123,7 @@ describe("create and drop schema", () => {
   // execution mode.
 
   it("creates a schema", async () => {
-    const name = `test_isolation_create_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const name = generateUniqueSchemaName("isolation_create");
     try {
       await expect(
         createTestSchema(TEST_DB_URL, name),
@@ -145,9 +143,7 @@ describe("create and drop schema", () => {
   });
 
   it("create is idempotent (second create does not error)", async () => {
-    const name = `test_isolation_idem_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const name = generateUniqueSchemaName("isolation_idem");
     try {
       await createTestSchema(TEST_DB_URL, name);
       await expect(
@@ -159,9 +155,7 @@ describe("create and drop schema", () => {
   });
 
   it("drops a schema", async () => {
-    const name = `test_isolation_drop_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const name = generateUniqueSchemaName("isolation_drop");
     await createTestSchema(TEST_DB_URL, name);
     await dropTestSchema(TEST_DB_URL, name);
 
@@ -178,9 +172,7 @@ describe("create and drop schema", () => {
   it("drop is idempotent (IF EXISTS)", async () => {
     // Dropping a (likely) non-existent test_ schema must not throw thanks to
     // IF EXISTS. Fully self-contained; does not depend on any prior `it`.
-    const name = `test_isolation_dropidem_${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
+    const name = generateUniqueSchemaName("isolation_dropidem");
     await expect(dropTestSchema(TEST_DB_URL, name)).resolves.toBeUndefined();
   });
 
