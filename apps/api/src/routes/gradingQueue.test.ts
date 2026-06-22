@@ -564,9 +564,9 @@ describe("grading queue routes (P2D-J3)", () => {
   });
 
   // ── Slice 10: audit row grading.score_entered ────────────────────
-  it("records a grading.score_entered audit row", async () => {
+  it("records a grading.score_entered audit row with full metadata", async () => {
     const { attemptId } = await seedAttempt(ctx, {
-      questions: [subjectiveQuestion("q-aud")],
+      questions: [subjectiveQuestion("q-aud", 10)],
       title: "Audit Exam",
     });
     const res = await ctx.app.inject({
@@ -597,7 +597,56 @@ describe("grading queue routes (P2D-J3)", () => {
       action: "grading.score_entered",
       targetType: "attempt",
       targetId: attemptId,
+      metadata: {
+        questionId: "q-aud",
+        score: 6,
+        maxScore: 10,
+        graderId: ctx.admin.id,
+      },
     });
-    expect(mine?.metadata).toMatchObject({ questionId: "q-aud", score: 6 });
+  });
+
+  // ── Slice 11: audit row grading.finalized ────────────────────────
+  it("records a grading.finalized audit when last question is graded", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-fin", 10)],
+      title: "Finalize Exam",
+    });
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-fin", score: 8 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.fullyGraded).toBe(true);
+    expect(body.gradingStatus).toBe("fully_graded");
+
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const { items } = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+      requestContext,
+      1,
+      50,
+      { action: "grading.finalized" },
+    );
+    const mine = items.find((i) => i.targetId === attemptId);
+    expect(mine).toBeDefined();
+    expect(mine).toMatchObject({
+      action: "grading.finalized",
+      targetType: "attempt",
+      targetId: attemptId,
+      metadata: {
+        gradingStatus: "fully_graded",
+        graderId: ctx.admin.id,
+      },
+    });
   });
 });

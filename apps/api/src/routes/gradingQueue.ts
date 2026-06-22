@@ -234,6 +234,25 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const { questionId, score, comment } = body.data;
       const now = fastify.now();
 
+      // Pre-fetch the attempt to read maxScore and previousScore for audit metadata.
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const preAttempt = await attemptRepo.findById(ctx, attemptId);
+      const questionSnapshot = preAttempt?.questionSnapshot;
+      const targetQuestion = questionSnapshot?.find(
+        (q) => q.originalQuestionId === questionId,
+      );
+      const maxScore = targetQuestion?.score ?? 0;
+
+      const manualGradingRepo = createManualGradingRepo(fastify.db);
+      const existingEntries = await manualGradingRepo.findByAttempt(
+        ctx,
+        attemptId,
+      );
+      const previousEntry = existingEntries.find(
+        (e) => e.questionId === questionId,
+      );
+      const previousScore = previousEntry?.score ?? null;
+
       const result = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
         const txManualGradingRepo = createManualGradingRepo(tx);
@@ -262,6 +281,9 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
             requestId: request.id,
             questionId,
             score,
+            maxScore,
+            previousScore,
+            graderId: ctx.actorId,
           },
         });
       } catch (err) {
@@ -274,6 +296,32 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           },
           "Failed to record manual-grading audit",
         );
+      }
+
+      // Record grading.finalized when the attempt becomes fully_graded.
+      if (result.fullyGraded) {
+        try {
+          await createAuditLogRepo(fastify.db as Database).create(ctx, {
+            actorId: ctx.actorId,
+            action: "grading.finalized",
+            targetType: "attempt",
+            targetId: attemptId,
+            metadata: {
+              requestId: request.id,
+              gradingStatus: "fully_graded",
+              graderId: ctx.actorId,
+            },
+          });
+        } catch (err) {
+          request.log.error(
+            {
+              err,
+              attemptId,
+              action: "grading.finalized",
+            },
+            "Failed to record grading-finalized audit",
+          );
+        }
       }
 
       return reply.send({
