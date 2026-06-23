@@ -67,30 +67,20 @@ unsafe for any future parallelism and offers only a modest ~62ms-vs-84ms gain.
 
 ## Selected plan
 
-### Phase 3a — `isolate: false` for apps/api (the big win)
+### Phase 3a — `isolate: false` for apps/api (TRIED + DISPROVEN)
 
-Set `isolate: false` in `apps/api/vitest.config.ts`. Combined with the existing
-`fileParallelism: false`, this means: ONE worker process, files run sequentially
-in that single process, and the module graph (Fastify, plugins, db, contracts)
-is imported ONCE and shared across files instead of re-imported per file.
+> **Result (tried 2026-06-24, reverted):** No improvement. `import` stayed at
+> 42.35s (was 35.7–42.7s); wall stayed ~143s. Root cause: the `forks` pool
+> (Vitest default) runs **each file in a separate child process** regardless of
+> `isolate`. Context7 `/vitest-dev/vitest/v4.1.6` confirms forks isolation is
+> process-based — `isolate:false` only disables in-process module reset, but
+> since each file is a new process there is nothing to share. The suite DID pass
+> (646/5skip), proving it is safe, but it buys nothing under `fileParallelism:false`
+> + the forks pool. Reverted; not pursued. (A `pool:'threads'`+`isolate:false`
+> switch would share module cache, but changes the concurrency/native-module
+> model and is higher-risk — deferred.)
 
-**Why it is safe here (evidence-based, not assumed):**
-1. `fileParallelism:false` already guarantees a single worker — so `isolate:false`
-   changes "fresh module cache per file" to "shared module cache across files"
-   within that one process. No new concurrency is introduced.
-2. **Cross-file DB state cannot leak**: every file gets its OWN isolated PG
-   schema via `buildTestApp` (CREATE SCHEMA per build). Module sharing does not
-   share DB state — the schema isolation is per-`buildTestApp`, not per-module.
-3. The shared risk is **module-level mutable state** (e.g. a module-level Map
-   that accumulates across files). The validation is a full clean-suite run; if
-   any file depends on a fresh module cache, it will fail deterministically
-   (not flakily) and we revert.
-
-**Validation gate**: `pnpm test:api` must pass 651/651 (same as baseline). If
-it fails, REVERT this commit (it is one config line) — no other change depends
-on it.
-
-### Phase 3b — migrate-once-per-process cache (the I/O win)
+### Phase 3b — migrate-once-per-process cache (the verified I/O win)  **← SELECTED**
 
 In `apps/api/src/routes/testHelpers.ts`, cache the migrated schema per process
 (vitest worker). On the FIRST `buildTestApp` in a process: CREATE SCHEMA +

@@ -7,14 +7,20 @@
 
 ## Summary
 
-**Worker-database mode + file parallelism is safe and stable** up to
-`maxWorkers=6` (the highest tested). The BUG-FLAKE-001 serial mitigation
-(`fileParallelism:false`) is no longer needed when per-worker databases
-are active — each worker owns its own PG database, eliminating cross-file
-DDL contention and cross-file data pollution at the source.
+**Worker-database mode + file parallelism is NOT fully safe yet.** While 62
+out of 63 test files pass under all tested worker counts, the `audit.test.ts`
+"filters by inclusive date range" test **deterministically fails** (3/3 runs)
+at every maxWorkers ≥ 2. The root cause is **cross-worker audit-log pollution**:
+audit rows written by one worker's tests are visible to another worker's
+audit-list assertions. This is a known isolation gap (audit logs are
+fire-and-forget `recordAudit`, not scoped to the worker's database) and was
+not surfaced under the legacy `fileParallelism:false` serial regime.
 
-The largest measured win: `maxWorkers=6` reduces the api suite from ~119s
-(default serial file-schema) to ~25s — a **~4.3× speedup**.
+**Result**: parallelism is **NOT safe** at the default config. The `reuseSchema`
+migrate-cache (Phase 3) is the safe, immediate win. Parallelism requires
+fixing audit-log isolation first — either by making the audit assertion
+resilient, or by scoping audit queries to the current test's organizationId
+range.
 
 ## Matrix
 
@@ -24,56 +30,61 @@ postgresql://exam:exam@localhost:5432/exam_test, 8-core WSL2.
 | Case | Config | Result | Duration (avg) | Tests | Notes |
 |---|---:|---:|---:|---:|---|
 | Baseline serial file-schema | (default) | PASS | ~119s | 646/5skip | current default; import 35.7s + tests 74.8s |
-| Worker-DB serial (1w) | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=1` | PASS | ~108s | 651/0skip | avoids per-file schema create+drop overhead |
-| Worker-DB 2 workers | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=2` | PASS (3/3) | ~55s | 651/0skip | 2.2× vs file-schema baseline |
-| Worker-DB 4 workers | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4` | PASS (3/3) | ~32s | 651/0skip | 3.7× vs baseline; 3.4× vs serial worker-DB |
-| Worker-DB 6 workers | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=6` | PASS (3/3) | ~25s | 651/0skip | 4.8× vs baseline; best measured |
+| Worker-DB serial (1w) | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=1` | PASS | ~119s | 651/0skip | no parallelism; same wall as file-schema |
+| Worker-DB 2 workers | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=2` | **FAIL (1 test)** | ~48s | 1 fail (audit), 645 pass | 3/3 consistent |
+| Worker-DB 4 workers | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4` | **FAIL (1 test)** | ~48s | 1 fail (audit), 645 pass | 3/3 consistent |
+| Worker-DB 6 workers | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=6` | **FAIL (1 test)** | ~43s | 1 fail (audit), 645 pass | 3/3 consistent |
 
-All `maxWorkers=2/4/6` runs were tested with **3 consecutive passes** to rule
-out flakiness. No BUG-FLAKE-001 recurrence (concurrent DDL contention) was
-observed — the per-worker database eliminates the root cause (shared schema
-contention). No orphan databases were left behind (verified via `\l` before/
-after each batch).
+All `maxWorkers=2/4/6` runs were tested with **3 consecutive runs**, and the
+audit test failed identically every time (`audit.test.ts:144 "filters by
+inclusive date range"`). No BUG-FLAKE-001 DDL contention was observed —
+per-worker databases do eliminate schema contention. The failure is a
+**data-isolation** gap in audit assertions, not a schema/DDL contention issue.
+
+## Failure root cause
+
+`audit.test.ts` "filters by inclusive date range" inserts audit rows, then
+asserts a count from `GET /api/admin/audit-logs?from=...&to=...`. Under
+parallelism, **other workers' audit rows** (from their own test builds)
+intersect with the date range and inflate the count, causing the
+`expected false to be true` assertion failure.
+
+The audit repo writes to a shared `audit_logs` table that spans all workers'
+databases (fire-and-forget `recordAudit`). The per-worker database isolates
+**business tables** (exams, attempts, enrollments) but audit rows are
+cross-cutting by design (they log all operations).
 
 ## Safe settings
 
-- `TEST_DB_ISOLATION=worker-database` + `API_TEST_MAX_WORKERS=4` — **proven
-  safe** (≥3 passes, 0 failures). Recommended as the `test:api:fast` default.
-- `maxWorkers=2` — conservative, 2× speedup, very low contention risk.
-- `maxWorkers=6` — aggressive, 4.8× speedup, still passed 3/3 on this machine.
-  Should be stress-tested on CI before being made default.
+- `TEST_DB_ISOLATION=worker-database` + `API_TEST_MAX_WORKERS=1` — **proven
+  safe** (serial, same wall time as file-schema). Offers the migrate-once
+  per-worker-DB benefit but no parallelism gain.
+- Default serial file-schema — **safe** (the current production default).
 
 ## Unsafe settings
 
-- `maxWorkers` > 6 not tested (8-core machine; PG connection pool + DDL
-  concurrency would likely saturate beyond 6–8 workers).
+- Any `maxWorkers ≥ 2` — audit test fails deterministically.
 - `fileParallelism:true` WITHOUT `worker-database` mode — would trigger
-  BUG-FLAKE-001 (shared schema contention). The config guards this:
-  `API_TEST_MAX_WORKERS` requires `TEST_DB_ISOLATION=worker-database` or it
-  throws.
+  BUG-FLAKE-001 (the config guard prevents this).
 
 ## Remaining blockers
 
-- **`@exam/db` coverage + `@exam/api` coverage running concurrently** under
-  turbo: the `verify:db-tests` chain runs api tests + api coverage + db tests
-  + db coverage. If api parallelises but db parallelises too, the PG server
-  sees up to 6+4=10 concurrent pools + DDL. This should be measured, not
-  assumed safe.
-- **CI shard** (`TEST_INFRA_SCOPE=ci` + `TEST_SHARD_INDEX`): the per-worker-
-  database model is designed for CI sharding (each shard gets its own PG
-  service), but this has not been stress-tested on CI hardware.
-- **Default configuration**: the current default is `fileParallelism:false`
-  (serial, file-schema). Changing the default to `worker-database + parallel`
-  is a follow-up decision that needs CI stress evidence.
+1. **Cross-worker audit assertion**: the `audit.test.ts` date-range test must
+   either (a) scope its query to the current test's org/user IDs, (b) truncate
+   audit rows before the assertion, or (c) relax the exact-count assertion to
+   a `>=` bound. Until this is fixed, parallelism cannot be safely enabled.
+2. **Coverage + parallelism**: not yet measured.
+3. **CI stress**: not yet measured.
 
 ## Recommendation
 
-1. **Add `pnpm test:api:fast` using `TEST_DB_ISOLATION=worker-database
-   API_TEST_MAX_WORKERS=4`** as a documented dev-loop fast path. Keep the
-   default serial path for safety.
-2. Run the CI stress matrix (worker-database + maxWorkers=4/6 on CI hardware)
-   before changing the default.
-3. Do NOT change the default for `pnpm verify` (it currently runs serial
-   + coverage; coverage under parallelism needs separate measurement).
-4. The `reuseSchema` cache (Phase 3) is orthogonal — it helps intra-file
-   multi-build scenarios regardless of parallelism mode.
+1. **Do NOT change the default** `fileParallelism` or `API_TEST_MAX_WORKERS`.
+   The serial default remains the safe gate.
+2. **Fix the audit-test isolation** as a follow-up (small, isolated) before
+   enabling parallelism.
+3. The `reuseSchema` migrate-cache (Phase 3) is the safe, available win —
+   it reduces per-build migration I/O without changing parallelism.
+4. The orphan database cleanup mechanism (`testWorkerDatabase.dropDatabaseIfExists`)
+   is functional but was not triggered by the parallel runs — those databases
+   were from prior experimental runs. A `pnpm test:api:fast` cleanup command
+   or `afterAll` hook could be added as a follow-up.

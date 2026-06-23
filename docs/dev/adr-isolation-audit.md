@@ -141,22 +141,28 @@ unclosed worker, or default-org pollution was identified.
 
 ## UPDATE (2026-06-24, Phase 7 parallelism experiment)
 
-Worker-database + fileParallelism was safety-tested and **proven stable**:
+Worker-database + fileParallelism was tested and **found NOT safe at maxWorkers ≥ 2**:
 
 | maxWorkers | Duration | Result |
 |---|---:|---|
-| 1 | ~108s | PASS |
-| 2 | ~55s | PASS (3/3) |
-| 4 | ~32s | PASS (3/3) |
-| 6 | ~25s | PASS (3/3) |
+| 1 | ~119s | PASS |
+| 2 | ~48s | **FAIL (1 test)** — audit date-range assertion |
+| 4 | ~48s | **FAIL (1 test)** — same |
+| 6 | ~43s | **FAIL (1 test)** — same |
 
-All 651 tests pass; BUG-FLAKE-001 concurrent DDL contention does not reproduce
-under per-worker databases. The opt-in `test:api:fast` command is safe for
-developer use. See `docs/dev/test-parallelism-results.md` for full matrix.
+The `audit.test.ts` "filters by inclusive date range" test fails consistently
+(3/3 runs) because audit rows written by one worker's tests are visible to
+another worker's assertions — cross-worker audit pollution. Per-worker databases
+isolate business tables but audit rows are cross-cutting (fire-and-forget
+`recordAudit`).
 
-The default `pnpm verify` path remains serial (file-schema) pending CI stress
-evidence at the chosen worker count; changing the default is a follow-up
-decision, not done in this task.
+Per-worker databases DO eliminate BUG-FLAKE-001 schema contention. The failure
+is a data-isolation gap in audit assertions, not a schema/DDL issue. Fixing
+the audit test (scope to org/user IDs, or relax assertion) would unblock
+parallelism.
+
+See `docs/dev/test-parallelism-results.md` for full matrix. The default
+`pnpm verify` path remains serial pending audit-test fix + CI stress evidence.
 
 ## Commands run
 
