@@ -71,6 +71,12 @@ export interface DatabaseConfig {
   url: string;
 }
 
+export interface RedisConfig {
+  url: string | null;
+  enabled: boolean;
+  keyPrefix: string;
+}
+
 export interface AuthSecretConfig {
   jwtSecret: string;
   cookieSecure: boolean;
@@ -102,6 +108,7 @@ export interface AppRuntimeConfig {
   port: number;
   host: string;
   database: DatabaseConfig;
+  redis: RedisConfig;
   authSecret: AuthSecretConfig;
   cors: CorsConfig;
   features: FeaturesConfig;
@@ -346,6 +353,20 @@ export function resolveDatabaseUrlFromEnv(env: NodeJS.ProcessEnv): string {
 }
 
 /**
+ * Resolve the Redis connection URL from `REDIS_URL`. Redis is optional:
+ * when `REDIS_URL` is unset or empty, Redis is disabled and the URL is null.
+ *
+ * @param env - Process environment to read from.
+ * @returns The resolved Redis URL or null when disabled.
+ */
+function resolveRedisUrl(env: NodeJS.ProcessEnv): string | null {
+  const url = env.REDIS_URL;
+  if (!url) return null;
+  const trimmed = url.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
  * Pure function: build config from an explicit env object.
  * All validation and fail-fast logic lives here.
  */
@@ -367,6 +388,10 @@ export function loadRuntimeConfig(
     env.HEARTBEAT_TIMEOUT_MS ?? "60000",
   );
 
+  const redisUrl = resolveRedisUrl(env);
+  const redisEnabled = redisUrl !== null;
+  const redisKeyPrefix = env.REDIS_KEY_PREFIX ?? "";
+
   return {
     app: { mode, isProduction, isTestLike },
     env: envValue,
@@ -374,6 +399,7 @@ export function loadRuntimeConfig(
     port: Number(env.APP_PORT) || 3000,
     host: env.HOST || "0.0.0.0",
     database: { url: resolveDatabaseUrl(env, mode) },
+    redis: { url: redisUrl, enabled: redisEnabled, keyPrefix: redisKeyPrefix },
     authSecret: {
       jwtSecret: resolveJwtSecret(env, mode),
       cookieSecure: isProduction || isTruthy(env.COOKIE_SECURE),

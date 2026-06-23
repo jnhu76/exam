@@ -176,9 +176,9 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /system/diagnostics
    *
-   * Returns server version, uptime, database latency, heartbeat scanner
-   * status, deadline scanner status, and non-sensitive runtime config.
-   * Admin-only.
+   * Returns server version, uptime, database latency, Redis status,
+   * heartbeat scanner status, deadline scanner status, and non-sensitive
+   * runtime config. Admin-only.
    */
   fastify.get("/system/diagnostics", {
     preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
@@ -192,10 +192,30 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       const statsRepo = createSystemStatsRepo(anyDb);
       const dbLatency = await statsRepo.pingDb();
 
+      let redisStatus: { connected: boolean; latencyMs: number | null } = {
+        connected: false,
+        latencyMs: null,
+      };
+      if (fastify.redis) {
+        try {
+          // ADR-006: use fastify.now() (the exam time authority) rather than a
+          // raw wall-clock read, even though this is diagnostics-only latency.
+          const start = fastify.now().getTime();
+          await fastify.redis.ping();
+          redisStatus = {
+            connected: true,
+            latencyMs: fastify.now().getTime() - start,
+          };
+        } catch {
+          redisStatus = { connected: false, latencyMs: null };
+        }
+      }
+
       return {
         version: process.env.npm_package_version ?? "0.0.0",
         uptime: process.uptime(),
         dbLatency,
+        redisStatus,
         heartbeatStatus: {
           interval: config.heartbeat.scanIntervalMs ?? 30_000,
           timeout: config.heartbeat.timeoutMs ?? 60_000,

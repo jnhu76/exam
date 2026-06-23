@@ -5,6 +5,7 @@ services:
       - "${APP_PORT:-3000}:3000"
     environment:
       DATABASE_URL: postgresql://exam:exam@db:5432/exam
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-e2e-test-secret}
       NODE_ENV: development
       APP_MODE: e2e
@@ -34,6 +35,8 @@ services:
       DEADLINE_SCAN_INTERVAL_MS: ${DEADLINE_SCAN_INTERVAL_MS:-5000}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test:
@@ -73,6 +76,19 @@ services:
       - exam-net
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - exam-net
+    restart: unless-stopped
+
   e2e:
     image: mcr.microsoft.com/playwright:v1.61.0-noble
     init: true
@@ -100,6 +116,7 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
 
 networks:
   exam-net:
