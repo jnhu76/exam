@@ -116,15 +116,27 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request) => {
       const ctx = ensureTargetOrg(request.ctx!);
-      const { page, pageSize, action } = AuditLogQuerySchema.parse(
-        request.query,
-      );
+      const { page, pageSize, action, targetType, from, to } =
+        AuditLogQuerySchema.parse(request.query);
       const repo = createAuditLogRepo(fastify.db);
+      // Build the filter object conditionally — only carry keys that are set,
+      // matching the established `action ? { action } : {}` pattern. `from`/
+      // `to` arrive as ISO datetime strings and are parsed to JS `Date` here.
+      const filter: {
+        action?: string;
+        targetType?: string;
+        from?: Date;
+        to?: Date;
+      } = {};
+      if (action) filter.action = action;
+      if (targetType) filter.targetType = targetType;
+      if (from) filter.from = new Date(from);
+      if (to) filter.to = new Date(to);
       const { items, total } = await repo.listPaginatedFiltered(
         ctx,
         page,
         pageSize,
-        action ? { action } : {},
+        filter,
       );
 
       return {
