@@ -1,4 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { z } from "zod";
 import {
   FlagMisconductRequestSchema,
   FlagMisconductResponseSchema,
@@ -7,9 +8,13 @@ import {
   LoadAttemptResponseSchema,
   AttemptTimelineResponseSchema,
   AttemptIdParamsSchema,
+  AttemptExportResponseSchema,
+  type AttemptExportData,
+  type AttemptExportQuestionResult,
   ErrorResponseSchema,
 } from "@exam/contracts";
 import type { RequestContext, ExamAttempt } from "@exam/domain";
+import { generateCSV } from "@exam/import-export";
 import { NotFoundError, InvalidStateTransitionError } from "@exam/domain";
 import {
   submitAttempt,
@@ -379,4 +384,197 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       });
     },
   );
+
+  /**
+   * GET /admin/attempts/:attemptId/export — Export attempt details (answers +
+   * question results) as JSON. Admin-only. Audit event: attempt.exported.
+   * For CSV, see GET /admin/attempts/:attemptId/export/csv (split so each
+   * response has a single, self-consistent OpenAPI content type).
+   */
+  fastify.get(
+    "/admin/attempts/:attemptId/export",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: AttemptIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: AttemptExportResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { attemptId } = parsed.data;
+
+      const exportData = await buildAttemptExport(fastify, ctx, attemptId);
+
+      await recordExportAudit(fastify, ctx, request, attemptId, "json");
+
+      return reply.send(AttemptExportResponseSchema.parse(exportData));
+    },
+  );
+
+  /**
+   * GET /admin/attempts/:attemptId/export/csv — Export attempt details as a
+   * UTF-8 (BOM) CSV file. Admin-only. `x-content-types` declares the real
+   * `text/csv` media type so the generated OpenAPI documents it correctly
+   * instead of mislabeling it as application/json (the provider default).
+   * Audit event: attempt.exported.
+   */
+  fastify.get(
+    "/admin/attempts/:attemptId/export/csv",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: AttemptIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: z.string(),
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+        "x-content-types": { "200": "text/csv" },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { attemptId } = parsed.data;
+
+      const exportData = await buildAttemptExport(fastify, ctx, attemptId);
+
+      await recordExportAudit(fastify, ctx, request, attemptId, "csv");
+
+      const csvHeaders = [
+        "题号",
+        "题型",
+        "题目内容",
+        "考生答案",
+        "标准答案",
+        "得分",
+        "满分",
+        "是否正确",
+      ];
+      const csvRows = exportData.questionResults.map((q) => ({
+        题号: q.order,
+        题型: q.type,
+        题目内容: q.content,
+        考生答案: formatAnswerValue(q.candidateAnswer),
+        标准答案: formatAnswerValue(q.standardAnswer),
+        得分: q.score ?? "—",
+        满分: q.maxScore,
+        是否正确: q.correct == null ? "—" : q.correct ? "是" : "否",
+      }));
+      const csv = "\uFEFF" + generateCSV(csvHeaders, csvRows);
+      reply.header(
+        "Content-Disposition",
+        `attachment; filename="attempt-${attemptId}.csv"`,
+      );
+      return reply.type("text/csv; charset=utf-8").send(csv);
+    },
+  );
+}
+
+/**
+ * Builds the attempt export payload (answers + per-question results) shared by
+ * the JSON and CSV export routes. Throws NotFoundError if the attempt does not
+ * exist in the caller's organization.
+ */
+async function buildAttemptExport(
+  fastify: FastifyInstance,
+  ctx: RequestContext,
+  attemptId: string,
+): Promise<AttemptExportData> {
+  const attemptRepo = createAttemptRepo(fastify.db);
+  const attempt = await attemptRepo.findById(ctx, attemptId);
+  if (!attempt) {
+    throw new NotFoundError("Attempt not found");
+  }
+
+  const answerMap = new Map<string, unknown>();
+  for (const a of attempt.answers) {
+    answerMap.set(a.questionId, a.answer);
+  }
+
+  const questionResults: AttemptExportQuestionResult[] =
+    attempt.questionSnapshot.map((q) => {
+      const gResult = attempt.gradingResult?.find(
+        (g) => g.questionId === q.originalQuestionId,
+      );
+      return {
+        order: q.order,
+        type: q.type,
+        content: q.content,
+        candidateAnswer: answerMap.get(q.originalQuestionId) ?? null,
+        standardAnswer: q.standardAnswer,
+        score: gResult?.score ?? null,
+        maxScore: gResult?.maxScore ?? q.score,
+        correct: gResult?.correct ?? null,
+      };
+    });
+
+  return {
+    attemptId: attempt.id,
+    examId: attempt.examId,
+    attemptNo: attempt.attemptNo,
+    status: attempt.status,
+    ...(attempt.score == null ? {} : { score: attempt.score }),
+    ...(attempt.passed == null ? {} : { passed: attempt.passed }),
+    startedAt: attempt.startedAt?.toISOString(),
+    submittedAt: attempt.submittedAt?.toISOString(),
+    deadlineAt: attempt.deadlineAt?.toISOString(),
+    createdAt: attempt.createdAt.toISOString(),
+    questionResults,
+  };
+}
+
+/**
+ * Records the attempt.exported audit row (awaited + best-effort so a failed
+ * write never fails the export itself).
+ */
+async function recordExportAudit(
+  fastify: FastifyInstance,
+  ctx: RequestContext,
+  request: FastifyRequest,
+  attemptId: string,
+  format: "json" | "csv",
+): Promise<void> {
+  try {
+    await createAuditLogRepo(fastify.db as Database).create(ctx, {
+      actorId: ctx.actorId,
+      action: "attempt.exported",
+      targetType: "attempt",
+      targetId: attemptId,
+      metadata: { requestId: request.id, format },
+      ipAddress: request.ip,
+      userAgent: request.headers["user-agent"],
+    });
+  } catch (err) {
+    request.log.error(
+      { err, attemptId, action: "attempt.exported" },
+      "Failed to record export audit",
+    );
+  }
+}
+
+/** Formats an answer value as a display string for CSV export. */
+function formatAnswerValue(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(String).join("; ");
+  return JSON.stringify(value);
 }

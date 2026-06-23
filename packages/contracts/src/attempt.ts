@@ -313,6 +313,57 @@ export const ExtendTimeRequestSchema = z.object({
 /** Type for an extend-time request body. */
 export type ExtendTimeRequest = z.infer<typeof ExtendTimeRequestSchema>;
 
+// ── Attempt Export (P2E-J4) ────────────────────────────────────────
+
+/**
+ * Schema for a single question result in the export payload.
+ * Represents the candidate's answer, the standard answer, and scoring.
+ */
+export const AttemptExportQuestionResultSchema = z.object({
+  order: z.number().int(),
+  type: z.string(),
+  content: z.string(),
+  candidateAnswer: z.unknown(),
+  standardAnswer: z.unknown(),
+  score: z.number().nullish(),
+  maxScore: z.number(),
+  correct: z.boolean().nullish(),
+});
+
+/** Type for a single question result in the export payload. */
+export type AttemptExportQuestionResult = z.infer<
+  typeof AttemptExportQuestionResultSchema
+>;
+
+/**
+ * Schema for the full attempt export data payload returned by
+ * `GET /api/admin/attempts/:id/export`.
+ */
+export const AttemptExportDataSchema = z.object({
+  attemptId: z.string().uuid(),
+  examId: z.string().uuid(),
+  attemptNo: z.number().int(),
+  status: z.string(),
+  score: z.number().optional(),
+  passed: z.boolean().optional(),
+  startedAt: z.string().datetime().optional(),
+  submittedAt: z.string().datetime().optional(),
+  deadlineAt: z.string().datetime().optional(),
+  createdAt: z.string().datetime(),
+  questionResults: z.array(AttemptExportQuestionResultSchema),
+});
+
+/** Type for the full attempt export data payload. */
+export type AttemptExportData = z.infer<typeof AttemptExportDataSchema>;
+
+/**
+ * Response schema for `GET /api/admin/attempts/:id/export` (JSON format).
+ */
+export const AttemptExportResponseSchema = AttemptExportDataSchema;
+
+/** Type for the attempt export JSON response. */
+export type AttemptExportResponse = z.infer<typeof AttemptExportResponseSchema>;
+
 // ── Queue ─────────────────────────────────────────────────────────
 
 /**
