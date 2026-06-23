@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 
 /**
  * Sanitize a string to be a valid PostgreSQL schema identifier.
@@ -126,19 +127,33 @@ async function withAdminConnection<T>(
 /**
  * Create an isolated schema in the PostgreSQL database.
  * Idempotent — safe to call multiple times.
+ *
+ * ADR-007 Phase 6D: the `CREATE SCHEMA` is wrapped in the cross-process
+ * test-infra advisory lock. Under `@exam/db` coverage, several Vitest workers
+ * concurrently CREATE SCHEMA + migrate against the same PG instance, contending
+ * with `testWorkerDatabase.test.ts`'s CREATE DATABASE. The lock serializes the
+ * heavy catalog DDL so no single CREATE SCHEMA / migrate is starved past the 5s
+ * testTimeout. The lock is server-global (key-identity), so hosting it on the
+ * target DB's connection still coordinates across all workers.
  */
 export async function createTestSchema(
   databaseUrl: string,
   schemaName: string,
 ): Promise<void> {
-  await withAdminConnection(databaseUrl, async (sql) => {
-    await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(schemaName)}`);
+  const adminUrl = stripOptionsFromUrl(databaseUrl);
+  await withTestInfraLifecycleLock(adminUrl, async () => {
+    await withAdminConnection(databaseUrl, async (sql) => {
+      await sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteIdent(schemaName)}`);
+    });
   });
 }
 
 /**
  * Drop an isolated schema and all its contents.
  * Idempotent — safe to call multiple times.
+ *
+ * ADR-007 Phase 6D: wrapped in the test-infra advisory lock to avoid racing
+ * with concurrent CREATE SCHEMA / CREATE DATABASE on the same catalog.
  */
 export async function dropTestSchema(
   databaseUrl: string,
@@ -149,8 +164,13 @@ export async function dropTestSchema(
       `Refusing to drop schema "${schemaName}" — does not start with "test_"`,
     );
   }
-  await withAdminConnection(databaseUrl, async (sql) => {
-    await sql.unsafe(`DROP SCHEMA IF EXISTS ${quoteIdent(schemaName)} CASCADE`);
+  const adminUrl = stripOptionsFromUrl(databaseUrl);
+  await withTestInfraLifecycleLock(adminUrl, async () => {
+    await withAdminConnection(databaseUrl, async (sql) => {
+      await sql.unsafe(
+        `DROP SCHEMA IF EXISTS ${quoteIdent(schemaName)} CASCADE`,
+      );
+    });
   });
 }
 

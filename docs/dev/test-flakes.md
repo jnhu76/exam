@@ -455,6 +455,73 @@ migration semaphore）后、且 standalone coverage gate 连续稳定 N 次通�
 2. `coverage:db` 用 `test:db:unit` + `coverage:db:lifecycle` 组合替代（lifecycle 单独
    容忍 flake），并在该组合下 standalone N/3+ PASS。
 
+### Phase 6D physical DB lifecycle contention root-cause mitigation（2026-06-23）
+
+> Phase 6D 针对的是 BUG-FLAKE-001 的 **physical-DB-lifecycle 子类**：`@exam/db` coverage
+> 下 `testWorkerDatabase.test.ts > ensureDatabaseExists > creates the database if
+> missing` 在 cold-start 偶发 5s timeout。这是 Phase 6C coverage dedup gate 的直接
+> blocker。本节实现并验证了根因修复。
+
+#### 1. Root cause confirmed
+
+| Evidence | Result |
+|---|---|
+| `@exam/db` coverage 下测试文件数 | 13→14 个文件**默认并行**执行（vitest `packages/db/vitest.config.ts` 无 `fileParallelism` 覆盖） |
+| 同时执行 heavy lifecycle 的文件 | `testWorkerDatabase.test.ts`（`CREATE DATABASE` + `migratePostgres`）、`seed.test.ts` / `demo-seed.test.ts` / `testCleanup.test.ts` / `testIsolation.test.ts`（`CREATE SCHEMA` + `migratePostgres`） |
+| 协调机制 | **修复前无任何**——没有 advisory lock、没有 semaphore、没有 JS mutex；多个 worker 同时对同一 PG 实例执行 catalog DDL |
+| `dropDbIfPresent`（旧） | 裸 `DROP DATABASE IF EXISTS`，**不** terminate active connections，无 lock |
+| lifecycle 测试 DB 名（旧） | 固定名 `exam_test_w_phase3a_ensure` 等 → 可能与 crashed 前次 run 残留冲突 |
+| `migratePostgres` 并发处理 | 吞掉 `42P07`（duplicate table），但 catalog 锁 / 连接 slot / IO 争用仍存在 |
+| v8 coverage 放大 | instrumentation 放大 I/O 与调度争用，使单个 `CREATE DATABASE` 更容易击穿 5s testTimeout |
+
+结论：**这不是测试逻辑本身恒定错误**（standalone `test:db:lifecycle` / `coverage:db:lifecycle`
+始终通过），而是 physical DB lifecycle 操作在 full `@exam/db` coverage 拓扑下受 PG DDL /
+migration / coverage / worker 并行影响。cold-start 或 IO 峰值时单个 `ensureDatabaseExists`
+（含 `CREATE DATABASE`）无法在 5s 内收敛。
+
+#### 2. Fix implemented
+
+| File | Change |
+|---|---|
+| `packages/db/src/testInfraLock.ts`（**新增**） | PostgreSQL advisory lock helper（`withTestInfraLifecycleLock`）。固定 key（`exam_test_infra_lifecycle` 经 FNV-1a → 单 bigint），`pg_advisory_lock`/`pg_advisory_unlock` 在专用 admin session 上 acquire/release（`finally` 释放）。跨 Node process / Vitest worker 生效（PG server 端持有）。仅用于测试基础设施。 |
+| `packages/db/src/testWorkerDatabase.ts` | `ensureDatabaseExists` 的 existence check + `CREATE DATABASE` 包进 advisory lock；新增 `dropDatabaseIfExists`（Option C：`pg_terminate_backend` 清残留连接 → `DROP DATABASE IF EXISTS`，外包 lock，`keepMissing` 默认 true，错误不吞）；`setupWorkerTestDatabase` 的 `migratePostgres` 包进 lock。 |
+| `packages/db/src/testIsolation.ts` | `createTestSchema` / `dropTestSchema` 的 DDL 包进 advisory lock。 |
+| `packages/db/src/testWorkerDatabase.test.ts` | lifecycle DB 名改 per-run unique（`exam_test_wphase6d_*_<pid>_<rand>`，Option B）；teardown 改用 `dropDatabaseIfExists`；`ensureDatabaseExists` 测试改为"DB 不存在 → 创建"而非"先 drop 旧固定名"；新增 3 个 robust drop 测试（idempotent missing、unsafe name refusal、drop existing）。lifecycle 测试 12 → 15。 |
+| `packages/db/src/testInfraLock.test.ts`（**新增**） | 6 个测试：key 派生确定性 + bigint 范围；acquire/release；跨 session 串行化（`Promise.all` 双 caller，maxConcurrent=1，overlap=false）；throw-path 释放。 |
+
+#### 3. Validation（Phase 6D.5）
+
+| Command | Result | Notes |
+|---|---|---|
+| `pnpm test:db:lifecycle` | PASS 15/15 | lifecycle 12 + robust drop 3 |
+| `pnpm test:db:unit` | PASS 145/145（13 文件） | 含新 `testInfraLock.test.ts` |
+| `pnpm coverage:db:lifecycle` | PASS 15/15 | |
+| `pnpm coverage:db`（单次） | PASS 160/160（14 文件，coverage 79.89%） | 修复前 cold-start 会 flake |
+| `pnpm coverage:db` ×5 stress | **5/5 PASS**（~8–9s/run） | |
+| `pnpm verify:fast` | PASS | |
+| **`pnpm verify`（单次）** | **PASS（~281s）** | **修复前会 flake 的命令** |
+| `pnpm verify` ×3 stress | **2/2 PASS**（run1 280s, run2 302s） | run3 被 shell 10min timeout 中断，**非测试失败**；已超 prompt 最低标准（coverage:db ×3 + verify ×1） |
+
+#### 4. Claim boundary（重要）
+
+- **本修复只针对 BUG-FLAKE-001 的 physical-DB-lifecycle 子类**（`@exam/db` coverage
+  cold-start physical lifecycle timeout）。
+- **不声称 BUG-FLAKE-001 全局关闭**——auth amplification 子类仍未单独修复；A′
+  `fileParallelism:false` 仍是 apps/api 的 I/O contention 缓解。
+- **auth amplification 仍 open**（除非单独修复）。
+- **apps/api 默认并行不变**（`fileParallelism:false` 仍在）。
+- **`verify:db-tests` 串行链不变**。
+- **CI 未验证**——本证据是 local only；CI shard live validation 仍 pending。
+- advisory lock 只锁 heavy test-infra lifecycle（CREATE/DROP DATABASE、CREATE/DROP SCHEMA、
+  migrate），**不**锁普通业务 query，避免把测试整体串行。
+
+#### 5. 对 Phase 6C 的影响
+
+physical-DB-lifecycle 子类修复后，`coverage:db` cold-start 不再被 lifecycle flake 击穿。
+Phase 6C coverage dedup gate 的 blocker（`coverage:db` standalone 3/3）可重新评估——但
+本 Phase **不**自动推进 coverage dedup，`verify:coverage-gate` 仍为 un-wired candidate，
+`verify` 仍走 `test:db + test:api + coverage:db + coverage:api` 串行链。是否 dedup 需独立评估。
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 - 在 ADR-007 Phase 4 调查中观察到 `examTransitions.test.ts` 在 `file-schema`

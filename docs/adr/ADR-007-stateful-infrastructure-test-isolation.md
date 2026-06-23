@@ -104,6 +104,7 @@ production code paths.
 | Phase 5A — local maxWorkers=2    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass (local, test-only)                                     |
 | Phase 5B — local maxWorkers=4    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass; local recommended mode (local, test-only)             |
 | Phase 6 — CI shard               | Config prepared; live CI shard validation pending | 2 shards × 1 worker in ci.yml; live CI validation pending |
+| Phase 6D — physical DB lifecycle contention | Mitigation implemented (local-only evidence; not CI-validated; does not close BUG-FLAKE-001) | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress |
 | Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
@@ -642,10 +643,19 @@ following lands:
 > - scanner legacy timeout（15_000ms）。
 > - worker-database opt-in 状态（未设为默认 / CI 默认）。
 > - CI shard live validation pending。
+> - **auth amplification 仍 open**（`auth.test.ts` 在全量 coverage + PG I/O 争用下的 5s
+>   timeout 子类，未单独修复）。
 >
 > 因此 Phase 5 的 "Completed" 仅是 **local-only / test-only evidence**；Phase 6 的
-> "Config prepared" 仅是**配置就绪，live CI validation pending**。在上述缓解移除 / 永久化
-> 决策 + CI live validation 完成之前，ADR-007 保持 Proposed / not-fully-closed。
+> "Config prepared" 仅是**配置就绪，live CI validation pending**。
+>
+> **Phase 6D（2026-06-23）补充**：physical DB lifecycle contention 已实现根因缓解
+> （PostgreSQL advisory lock 串行化 heavy test-infra DDL/migration + per-run unique DB
+> names + robust DROP with connection termination），local 证据 `coverage:db` 5/5 PASS、
+> `pnpm verify` 1/1 + 2/2 stress PASS。这**只**修复 BUG-FLAKE-001 的 physical-DB-lifecycle
+> 子类，**不**关闭 BUG-FLAKE-001 全局（auth amplification 子类 + A′ serial 仍在），**不**
+> 构成 CI 证据，**不**允许移除上述任何残留缓解。在上述缓解移除 / 永久化决策 + CI live
+> validation 完成之前，ADR-007 保持 Proposed / not-fully-closed。
 
 For the current PostgreSQL test-infra track, ADR-007 is considered complete
 when:

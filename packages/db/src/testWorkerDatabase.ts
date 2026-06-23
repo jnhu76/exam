@@ -40,6 +40,7 @@
 
 import postgres from "postgres";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
+import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 import {
   resolveTestScope,
   type ResolvedTestScope,
@@ -193,23 +194,92 @@ function resolveAdminUrl(env: ResolverEnv, baseUrl: string): string {
  * `sql.unsafe(...)` does not wrap in a transaction, so this is safe. The
  * existence check is parameterized (`$1`); the `CREATE DATABASE` identifier
  * is validated + quoted, never raw env.
+ *
+ * ADR-007 Phase 6D: the existence check + optional `CREATE DATABASE` are wrapped
+ * in the cross-process test-infra advisory lock (`withTestInfraLifecycleLock`).
+ * Under `@exam/db` coverage, multiple Vitest workers concurrently run
+ * `CREATE DATABASE` / `CREATE SCHEMA` / `migratePostgres` against the same PG
+ * instance; the lock serializes the heavy catalog DDL so a single CREATE
+ * DATABASE cannot be starved past the 5s testTimeout by sibling migration
+ * traffic. The lock is acquired on a dedicated admin session and released in
+ * `finally`. Ordinary business queries are NOT locked.
  */
 export async function ensureDatabaseExists(
   adminUrl: string,
   databaseName: string,
 ): Promise<void> {
   assertPgNameSafe(databaseName);
-  const admin = postgres(adminUrl);
-  try {
-    const rows = (await admin`
-      SELECT 1 FROM pg_database WHERE datname = ${databaseName}
-    `) as Array<{ "?column?": number }>;
-    if (rows.length === 0) {
-      await admin.unsafe(`CREATE DATABASE ${quotePgIdentifier(databaseName)}`);
+  await withTestInfraLifecycleLock(adminUrl, async () => {
+    const admin = postgres(adminUrl);
+    try {
+      const rows = (await admin`
+        SELECT 1 FROM pg_database WHERE datname = ${databaseName}
+      `) as Array<{ "?column?": number }>;
+      if (rows.length === 0) {
+        await admin.unsafe(
+          `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
+        );
+      }
+    } finally {
+      await admin.end();
     }
-  } finally {
-    await admin.end();
-  }
+  });
+}
+
+/**
+ * Drop a database if it exists, terminating any lingering connections first
+ * (Phase 6D). `DROP DATABASE` fails if any backend still holds the DB open
+ * (leftover pool from a crashed previous run); `pg_terminate_backend` clears
+ * them so the drop succeeds. Refuses unsafe names via {@link assertPgNameSafe}.
+ *
+ * The terminate + drop are wrapped in the test-infra advisory lock so concurrent
+ * teardown does not race on the same catalog entries. Errors are surfaced, not
+ * swallowed — callers decide whether to treat a missing DB as success.
+ *
+ * @param adminUrl Maintenance/admin URL for DDL.
+ * @param databaseName Database to drop (must pass {@link assertPgNameSafe}).
+ * @param options.keepMissing When true (default), a missing DB is NOT an error.
+ */
+export async function dropDatabaseIfExists(
+  adminUrl: string,
+  databaseName: string,
+  options: { keepMissing?: boolean } = {},
+): Promise<void> {
+  const keepMissing = options.keepMissing ?? true;
+  assertPgNameSafe(databaseName);
+  await withTestInfraLifecycleLock(adminUrl, async () => {
+    const admin = postgres(adminUrl);
+    try {
+      // Terminate any lingering connections to the target DB so DROP DATABASE
+      // cannot fail with "database ... is being accessed by other users".
+      // Exclude our own backend pid. Safe to run even if the DB is gone.
+      await admin`
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = ${databaseName} AND pid <> pg_backend_pid()
+      `;
+      try {
+        await admin.unsafe(
+          `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+        );
+      } catch (err) {
+        // `IF EXISTS` already covers the missing case; if keepMissing and the
+        // error is specifically "does not exist", it is a no-op. Any other
+        // error (e.g. lock conflict) is re-thrown so callers see it.
+        if (keepMissing && isDatabaseMissingError(err)) return;
+        throw err;
+      }
+    } finally {
+      await admin.end();
+    }
+  });
+}
+
+/** Heuristic: is `err` the "database does not exist" catalog error (3D000)? */
+function isDatabaseMissingError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: string; cause?: { code?: string } };
+  return e.code === "3D000" || e.cause?.code === "3D000";
 }
 
 /**
@@ -254,7 +324,13 @@ export async function setupWorkerTestDatabase(
     // worker-database mode uses the default `public` schema + the default
     // `drizzle` migrationsSchema. Drizzle's `migrate()` is idempotent: once
     // `__drizzle_migrations` is up to date, this is a no-op.
-    await migratePostgres(conn.db);
+    //
+    // ADR-007 Phase 6D: wrap migrate in the test-infra advisory lock. Drizzle
+    // migrations touch catalog rows and can contend with sibling workers that
+    // are concurrently migrating their own schema (CREATE TABLE IF NOT EXISTS,
+    // __drizzle_migrations journal). The lock removes that contention so a
+    // single migrate is not starved past the 5s testTimeout.
+    await withTestInfraLifecycleLock(adminUrl, () => migratePostgres(conn.db));
   } catch (err) {
     await conn.sql.end();
     throw err;
