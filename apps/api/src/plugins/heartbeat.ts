@@ -36,6 +36,15 @@ export interface ScanResult {
 }
 
 /**
+ * In-memory metrics for the heartbeat scanner, updated after each scan cycle.
+ * These are single-instance counters reset on server restart.
+ */
+export const heartbeatMetrics = {
+  lastScanAt: null as Date | null,
+  disruptedCount: 0,
+};
+
+/**
  * Scans a list of active attempts and invokes `onDisrupted` for each
  * in-progress attempt whose `lastActivityAt` is older than
  * `heartbeatTimeoutMs` relative to the provided `now` timestamp.
@@ -223,6 +232,8 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
         fastify.now(),
         heartbeatTimeoutMs,
       );
+      heartbeatMetrics.lastScanAt = fastify.now();
+      heartbeatMetrics.disruptedCount += result.markedCount;
       if (result.markedCount > 0) {
         fastify.log.info(
           {

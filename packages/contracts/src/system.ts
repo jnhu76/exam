@@ -45,3 +45,35 @@ export const DashboardResponseSchema = z.object({
 
 /** Type for the admin dashboard response. */
 export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
+
+// ── Diagnostics ──────────────────────────────────────────────────
+
+/**
+ * Schema for the system diagnostics response, providing server version,
+ * uptime, database latency, heartbeat/deadline scanner status, and
+ * non-sensitive runtime configuration.
+ */
+export const DiagnosticsResponseSchema = z.object({
+  version: z.string(),
+  uptime: z.number(),
+  dbLatency: z.number().min(0),
+  heartbeatStatus: z.object({
+    interval: z.number().int().min(0),
+    timeout: z.number().int().min(0),
+    lastScanAt: z.string().nullable(),
+    disruptedCount: z.number().int().min(0),
+  }),
+  deadlineScannerStatus: z.object({
+    interval: z.number().int().min(0),
+    lastScanAt: z.string().nullable(),
+    autoSubmitCount: z.number().int().min(0),
+  }),
+  config: z.object({
+    heartbeatInterval: z.number().int().min(0),
+    heartbeatTimeout: z.number().int().min(0),
+    deadlineScanInterval: z.number().int().min(0),
+  }),
+});
+
+/** Type for the system diagnostics response. */
+export type DiagnosticsResponse = z.infer<typeof DiagnosticsResponseSchema>;
