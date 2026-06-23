@@ -35,7 +35,32 @@
 
 ### BUG-FLAKE-001 — `attempts.test.ts:1070` 后台扫描在 coverage 模式下 5s timeout
 
-**状态**: 已升级（≥3 次复发，2026-06-13）。已从单点 timeout 缓解升级为 **A′ serial containment** → **B 方案基础实施就位**（2026-06-21）→ **B 方案全量迁移完成**（2026-06-21），所有 DB-touching 测试文件已接入隔离 schema。A′ 方案仍为主缓解；B 方案已完成。
+**状态**: 已升级（≥3 次复发，2026-06-13）。已从单点 timeout 缓解升级为 **A′ serial containment** → **B 方案基础实施就位**（2026-06-21）→ **B 方案全量迁移完成**（2026-06-21）。
+
+> **总体口径（Phase 6 修正，2026-06-23）**：BUG-FLAKE-001 的 **state leak 子问题**已由 B
+> 方案（每测试文件 / 每 worker 独立 PG schema）修复——跨文件 / 跨 worker / 跨 package
+> 的 DB 状态泄漏从源头消除。但 BUG-FLAKE-001 还有 **I/O contention 子问题**，B 方案
+> **没有**修复，仍由 **A′ serial containment**（`apps/api fileParallelism:false`）+
+> **`verify:db-tests` 串行链**缓解。因此 **BUG-FLAKE-001 不能算已关闭**：在 I/O
+> contention 子问题被根因修复（template DB / migration semaphore / 并发限流落地），
+> 且上述缓解以 stress 证据移除之前，仍保持开启。Phase 5/6 仅提供 local / test-only
+> evidence，不构成 CI / global 关闭证据。
+>
+> BUG-FLAKE-001 现按根因分类为以下子类，登记在同一升级条目下，不另开新条目：
+>
+> - **state leak（已修复）**：跨文件状态污染、跨 worker 状态污染、跨 package schema/data leak。
+> - **I/O contention（未修复，仍靠 A′ serial + `verify:db-tests` 串行链缓解）**：
+>   - PG create / migrate / seed 争用（并行 `buildTestApp()` 并发 CREATE SCHEMA →
+>     migrate → seed 是 PG 吞吐瓶颈，PR86 诊断矩阵证实）。
+>   - coverage instrumentation 放大（v8 / c8 instrumentation 在 coverage 模式下放大
+>     I/O 与调度争用）。
+>   - **auth amplification**（见下方 2026-06-23 观察与 PR86 矩阵）：auth login /
+>     audit polling 在全量 coverage + PG I/O 争用下被放大，单用例 6 轮 login +
+>     每轮 audit 轮询无法在 5s 默认 testTimeout 内收敛。
+>   - **physical-DB-lifecycle amplification**（见下方 2026-06-23 观察与
+>     `testWorkerDatabase.test.ts` 条目）：`CREATE DATABASE` / migration / truncate
+>     这类 PG lifecycle 操作在 coverage + turbo 交叉任务 PG 争用下更容易击穿默认 5s。
+>   - module / global state leakage（单文件内或全局状态残留，A′ 串行不覆盖）。
 
 **Old root cause**: vitest 按文件并行调度 + 全部测试共享 `exam_test.public` schema + c8 coverage 放大 I/O 争用 → `scanDatabaseForDisruptedAttempts` 的 PG 调用在共享 schema 下无法在 5s 内回包。
 
@@ -86,6 +111,8 @@
 - 2026-06-13：A′ 方案首轮 `verify-stress.sh 5 --no-cache` 验证时，**packages/db `demo-seed.test.ts` 同样出现 5s timeout**——证明 PG 资源争用同样影响 packages/db。修复扩展到 `packages/db/vitest.config.ts` 同样设置 `fileParallelism: false`
 - 2026-06-20：P2C-J2/J3 恢复（`feat/p2c-j5-proctor-dashboard` 分支）后跑 `pnpm verify`，scanner 用例再次 5s timeout——`attempts.test.ts > deadline scanner > is idempotent: second scan does not re-grade or duplicate audit` 与 `> heartbeat scanner > leaves a still-stale in_progress attempt for the next scan when this scan finds nothing to disrupt` 两个用例 timeout（5000ms），均为 scanner 家族。同代码单跑整文件 `vitest run src/routes/attempts.test.ts` 68/68 green；`-t "force-submit|extend-time|misconduct"` 15/15 green。属 BUG-FLAKE-001 重负载 timeout 家族，与 J2/J3 恢复改动无因果（恢复仅新增 force-submit/extend-time 路由与测试，未触碰 scanner 代码）。
 - 2026-06-20：`attempts.ts` 机械拆分为 `attempts.{candidate,admin,shared}.ts`（同分支）后，连续 3 次 `vitest run src/routes/attempts.test.ts` 整文件运行中，同样的 scanner 用例（`is idempotent: second scan...` / `leaves a still-stale in_progress attempt...`）间歇 5s timeout（1–2 个用例，非断言错误）。单独复跑 `-t "is idempotent: second scan|leaves a still-stale"` 时 1 个 timeout、1 个 4532ms 勉强过；`-t "force-submit|extend-time|misconduct"` 15/15 green。失败用例固定落在 deadline/heartbeat scanner describe，且为 timeout（非断言），符合 BUG-FLAKE-001 PG I/O 争用特征。拆分仅改路由层 register hub 与文件归属，未触碰 scanner 代码（`packages/exam-engine` 的 `scanDatabase*` 与 `apps/api/src/plugins/{deadlineScanner,heartbeat}.ts` 均未改动），判定无因果关系。
+- 2026-06-23（**auth amplification 子类**）：`auth.test.ts` 在全量 `pnpm verify` / coverage 模式下出现 5000ms timeout。standalone 定向运行 2/2 PASS（约 2.2s），但 full coverage 1/1 FAIL。归类为 BUG-FLAKE-001 的 **auth amplification** 子类：auth login / audit polling（单用例 6 轮 login + 每轮 audit 轮询）在全量 coverage + PG I/O 争用下被放大，无法在 5s 默认 testTimeout 内收敛。该观察**不**证明 auth 业务逻辑错误，也**不允许**通过单点 timeout / skip 掩盖（PR86 诊断矩阵曾误把"maxWorkers=50% 通过"当并行安全证据，本子类不重蹈：standalone PASS ≠ 全量并行/coverage PASS）。归入 BUG-FLAKE-001，不另开 BUG-FLAKE-005。
+- 2026-06-23（**physical-DB-lifecycle 子类**）：`packages/db/src/testWorkerDatabase.test.ts` 的 `ensureDatabaseExists > creates the database if missing, idempotent on second call` 在 `pnpm verify` / coverage 模式下 5000ms timeout（Phase 6A 验证时实测复现：`pnpm verify` 在 `@exam/db test`（`vitest run`，无显式 coverage flag，但 turbo verify 链已跑过 coverage 插桩 + 前序 PG 争用）下击穿 5s）。standalone test 与 standalone coverage 均可通过：`pnpm test:db:lifecycle` standalone 12/12 PASS（约 1.4–1.8s）；standalone coverage 中 `ensureDatabaseExists` 约 2009ms，明显慢于 normal test 下约 627ms。归类为 BUG-FLAKE-001 的 **physical-DB-lifecycle** 子类：`CREATE DATABASE` / migration / truncate 这类 PG lifecycle 操作在 coverage + turbo 交叉任务 PG 争用下更容易击穿默认 5s。该观察**不应**通过专属 timeout 立即掩盖；Phase 6A 仅做 lifecycle command split（`test:db:lifecycle` / `test:db:unit` 拆分），不 skip、不加 timeout、不从 full path 删除。归入 BUG-FLAKE-001，**不另开 BUG-FLAKE-005**；standalone 通过**不**等于根治。
 
 ### Stress verification — BUG-FLAKE-001 scanner
 
@@ -298,6 +325,136 @@ collision、无 open-handle 警告。
 **可回滚**：unset `API_TEST_MAX_WORKERS`（或 `TEST_DB_ISOLATION=file-schema`）
 → config 立刻回到 `fileParallelism:false`（serial）。CI flag 无法绕过。
 
+### Phase 6A/6B script stratification + worker-database fast-path stress（2026-06-23）
+
+> Phase 6A 落地：`package.json` 新增本地快速反馈入口与 lifecycle 拆分脚本，**不改默认行为**。
+> Phase 6B 落地：worker-database fast-path local stress（test + coverage 各 5/5）。
+
+**Phase 6A 新增脚本（仅 local opt-in，不接入 CI 默认流程）**：
+
+| Script | 作用 | 包含 | 排除 |
+|---|---|---|---|
+| `test:db:unit` | `@exam/db` 普通测试 | 12 文件 / 139 测试 | `src/testWorkerDatabase.test.ts`（lifecycle） |
+| `test:db:lifecycle` | physical DB lifecycle 单跑 | `src/testWorkerDatabase.test.ts`（1 文件 / 12 测试） | — |
+| `test:api:fast` | worker-database + maxWorkers=4 的 `@exam/api` test | 60 文件 / 623 测试 | — |
+| `coverage:api:fast` | 同上带 coverage | 60 文件 / 623 测试 | — |
+| `coverage:db:lifecycle` | lifecycle 单跑带 coverage | `src/testWorkerDatabase.test.ts` | — |
+| `verify:fast` | 本地快速反馈门（无 coverage、无 lifecycle） | `format:check → lint → lint:copy → lint:arch → typecheck → verify:nodb-tests → test:db:unit → test:api:fast → build` | coverage、physical DB lifecycle |
+| `verify:full` | `pnpm verify` 别名 | — | — |
+| `verify:coverage-gate` | candidate coverage-dedup 门（**未接入** `verify`，仅候选） | `format:check → lint → lint:copy → lint:arch → typecheck → verify:nodb-tests → coverage:db → coverage:api → build` | test（用 coverage 覆盖） |
+
+**关键不变量（review 标准）**：
+
+- `verify` 默认行为**不变**（仍走 `verify:db-tests` 串行链）。
+- `test:api` 行为**不变**（仍是 safe/default serial path）。
+- `verify:fast` **必须**使用 `test:api:fast`（非 `test:api`）、`test:db:unit`（非含 lifecycle 的 `test:db`）。
+- `verify:fast` **不跑** coverage、**不跑** physical DB lifecycle tests。
+- `test:db:lifecycle` 单独存在；**不从** full path 删除。
+- `verify:coverage-gate` 仅是 candidate，**未替换** `verify`。
+
+**Phase 6A 验证结果**（docker PG `exam-db-1`，postgres:18.4，端口 5432）：
+
+| 命令 | Runs | 结果 | 耗时 |
+|---|---:|---|---|
+| `pnpm test:db:lifecycle` | 1 | 12/12 PASS（1 文件） | ~1.8s |
+| `pnpm test:db:unit` | 1 | 139/139 PASS（12 文件） | ~6.7s |
+| `pnpm test:api:fast` | 1 | 623/623 PASS（60 文件） | ~44s |
+| `pnpm verify:fast` | 1 | PASS（8/8 turbo task） | ~5min（含 build） |
+| `pnpm format:check` | 1 | PASS | — |
+| `pnpm verify`（full） | 1 | **FAIL — 见下** | — |
+
+**`pnpm verify` 失败记录（已知 BUG-FLAKE-001 physical-DB-lifecycle 子类，非脚本错误）**：
+
+`pnpm verify` 在 `@exam/db test`（`vitest run`）阶段击穿 5s 默认 testTimeout：
+
+```text
+FAIL src/testWorkerDatabase.test.ts > ensureDatabaseExists > creates the database if missing, idempotent on second call
+Error: Test timed out in 5000ms.
+```
+
+- **失败测试**：`packages/db/src/testWorkerDatabase.test.ts` > `ensureDatabaseExists > creates the database if missing, idempotent on second call`。
+- **是否同代码单独复跑通过**：是。`pnpm test:db:lifecycle` standalone 立即 12/12 PASS（~1.4–1.8s）。
+- **是否符合 BUG-FLAKE-001 子类**：是，physical-DB-lifecycle 子类（coverage + turbo 交叉任务 PG 争用放大 CREATE DATABASE / migration / truncate）。
+- **是否需要登记文档**：已登记（BUG-FLAKE-001 复发记录 physical-DB-lifecycle 子类 + 既有 `2026-06-23 testWorkerDatabase` 条目）。
+- **处理**：**不改代码掩盖**。该失败属已知 flake，按规则不通过单点 timeout / skip 解决；Phase 6A 仅做 lifecycle command split。`verify:fast`（fast path）已绕开此 lifecycle 文件。
+
+**Phase 6B stress 验证（local only）**：
+
+| 命令 | Runs | 结果 | 耗时/run |
+|---|---:|---|---|
+| `pnpm test:api:fast`（worker-database + maxWorkers=4） | 5 | **5/5 PASS**（623/623 ea） | ~44–48s/run |
+| `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage` | 5 | **5/5 PASS**（623/623 ea, coverage ≥ 阈值） | ~48–54s/run |
+
+**结论（仅 local evidence）**：local worker-database maxWorkers=4 test/coverage stress
+passed 5/5. This is still local evidence only; **CI default remains unchanged**.
+
+**不纳入 Phase 6A/6B 的范围**：
+
+1. 不改默认（`fileParallelism:false` serial 仍是默认；worker-database 仍 opt-in）。
+2. 不改 CI 默认 test path。
+3. 不把 4 worker / worker-database 设为默认。
+4. 不删 `verify:db-tests` 串行链（Phase 6D stress gate 未完成）。
+5. 不删 `apps/api fileParallelism:false`。
+6. 不声称 BUG-FLAKE-001 closed、不声称 ADR-007 complete、不声称 CI validated。
+7. coverage dedup：Phase 6C candidate（`verify:coverage-gate`）**未替换** `verify`，待 standalone coverage gate 验证。
+
+### Phase 6C coverage dedup gate investigation（2026-06-23）
+
+> 目标：判断 `test` + `coverage` 是否执行同一批测试，从而把 full verify 里的普通 `test`
+> 去掉、只留 `coverage`。**证据门控未完全通过 → coverage dedup blocked，仅保留 candidate。**
+
+**6C.1 同批次测试验证（PASS）**：
+
+| Package | `vitest run`（test） | `vitest run --coverage`（coverage） | 同批次？ |
+|---|---|---|---|
+| `@exam/db` | 13 文件 / 151 测试 | 13 文件 / 151 测试 | ✅ |
+| `@exam/api` | 60 文件 / 623 测试 | 60 文件 / 623 测试 | ✅ |
+
+结论：`coverage` 严格是 `test` 的超集（多出 v8 coverage 插桩，无额外测试文件）。
+**理论上去重可行**——`coverage` 入口已覆盖全部测试 + 提供覆盖率数据。
+
+**6C.2 standalone coverage gate stress（部分 PASS，未达 gate）**：
+
+| 命令 | Runs | 结果 | 耗时/run | 备注 |
+|---|---:|---|---|---|
+| `pnpm coverage:db` | 1（cold-start） | **FAIL** | ~9s | `testWorkerDatabase.test.ts > ensureDatabaseExists` 5000ms timeout（BUG-FLAKE-001 physical-DB-lifecycle 子类） |
+| `pnpm coverage:db`（warm，characterization） | 5 | **5/5 PASS** | ~10s | 同代码、同环境复跑全过 → 确认 cold-start flake 非确定性 |
+| `pnpm coverage:db:lifecycle`（standalone） | 1 | 12/12 PASS | ~2.3s | 同 lifecycle 文件单独复跑通过 |
+| `pnpm coverage:api` | 3 | **3/3 PASS**（83.45% lines） | ~131–134s | coverage 稳定，达阈值 |
+
+**6C.3 gate 判定 — BLOCKED**：
+
+按本任务门控条件（`coverage:db` standalone 3/3 PASS **且** `coverage:api` standalone
+3/3 PASS **且** 修改后 `pnpm verify` 3/3 PASS 才允许去重），`coverage:db` 在 cold-start
+首次即 FAIL（physical-DB-lifecycle 子类），**未稳定达到 standalone 3/3 的硬门控**。
+
+虽然 warm 后 `coverage:db` 5/5 PASS、`coverage:db:lifecycle` standalone 通过，证明该失败
+是已知 flake 而非真实回归，但**按保守规则不掩盖**：当 standalone coverage 入口本身会被
+physical-DB-lifecycle flake 击穿时，把 full verify 的普通 `test` 去掉、只留 `coverage`，
+会让该 flake 直接成为 merge-gate 阻塞，且失去 fast-path（`test:db:unit`）已建立的绕开能力。
+
+**结论**：
+
+```text
+Coverage dedup blocked: Evidence insufficient.
+- same-test check: PASS (db 13/151 = coverage; api 60/623 = coverage).
+- coverage:db standalone: cold-start 1/1 FAIL (physical-DB-lifecycle flake); warm 5/5 PASS.
+- coverage:api standalone: 3/3 PASS.
+- gate NOT met: coverage:db not reliably 3/3 standalone.
+```
+
+**保留的 candidate（未接入）**：`verify:coverage-gate` 脚本已新增，**但未替换 `verify`**、
+**未接入** `verify:fast`，仅作为未来在 physical-DB-lifecycle 根因修复（template DB /
+migration semaphore）后、且 standalone coverage gate 连续稳定 N 次通过时的候选 merge gate。
+当前 `verify` 仍走 `test:db + test:api + coverage:db + coverage:api` 串行链。
+
+**去重再次评估的前置条件**（任一满足后可重开 6C）：
+
+1. physical-DB-lifecycle 根因修复落地（template DB / migration semaphore），使
+   `coverage:db` cold-start 也能连续 N/3+ PASS；**或**
+2. `coverage:db` 用 `test:db:unit` + `coverage:db:lifecycle` 组合替代（lifecycle 单独
+   容忍 flake），并在该组合下 standalone N/3+ PASS。
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 - 在 ADR-007 Phase 4 调查中观察到 `examTransitions.test.ts` 在 `file-schema`
@@ -319,7 +476,24 @@ collision、无 open-handle 警告。
 
 ### BUG-FLAKE-002 — 跨 package / 跨 task 共享 `exam_test` DB 导致 seed/cleanup 互相覆盖
 
-**状态**: 已缓解（Option A：DB-touching turbo 任务严格串行化）。Option B 已完成（2026-06-21）——所有 DB-touching 测试文件已接入隔离 schema，跨 package 并发 stress 已验证通过（5/5 PASS）。Option A 串行链（`verify:db-tests`）仍保留，可评估移除。
+**状态**: 已缓解（Option A：DB-touching turbo 任务严格串行化）。
+
+> **总体口径（Phase 6 修正，2026-06-23）**：Option A / `verify:db-tests` 串行链**仍是
+> active mitigation**，主要防 **I/O contention**（不只防 data leak）。Option B / B
+> 方案（每文件 / 每 worker 独立 PG schema 隔离）**已修复 state leak**，但**没有替代**
+> 串行链：B 方案消除的是跨 package schema/data 竞争（state leak），而 `verify:db-tests`
+> 串行链消除的是 turbo 调度下 `db:test + db:coverage + api:test + api:coverage` 多任务
+> 并发挤同一 PG 的 **I/O contention**（PR88 历史动机）。这是两类不同根因。
+>
+> **删除 `verify:db-tests` 串行链的强制前置门控**（未满足前不允许删）：
+>
+> ```bash
+> turbo run test coverage --filter=@exam/db --filter=@exam/api --force   # ×5 PASS
+> pnpm verify                                                            # ×3 PASS
+> ```
+>
+> Phase 6D 会基于此门控判断是否提案删除；删除必须单独 PR / 单独提交，且报告必须说明：
+> 删除哪条串行链、预计收益、rollback 方法、风险、为什么不会把 BUG-FLAKE-002 放回。
 
 **Old root cause**: `@exam/db` 与 `@exam/api` 共享 `exam_test.public` schema。turbo 并发调度 `test` 和 `coverage` 任务时，A 任务 seed 写入 default org 的同时 B 任务 cleanup 删除同一 org → FK violation / 身份认证失败。
 
@@ -328,7 +502,18 @@ collision、无 open-handle 警告。
 **Remaining mitigations**:
 - `package.json` `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）仍为主缓解。B 方案已完成，可评估移除（需在独立 follow-up PR 中验证 stress）。
 
-**失败链**:
+**失败链（历史复现链路；当前已被 `verify:db-tests` 串行链缓解）**:
+
+> **Phase 6 历史口径修正（2026-06-23）**：历史上，`turbo run test coverage
+> --filter=@exam/db --filter=@exam/api --force` 曾可能形成 `db:test + db:coverage +
+> api:test + api:coverage` 多任务并发挤同一 PG 的状态。PR88 后，`turbo.json` 已通过
+> `dependsOn`（`@exam/db#coverage dependsOn @exam/db#test`、`@exam/api#test
+> dependsOn @exam/db#test` 等）降低该风险；当前 `pnpm verify:db-tests` 通过 package
+> script 的 `&&` 严格串行执行四个 DB-heavy 任务（`test:db && test:api &&
+> coverage:db && coverage:api`）。直接运行 `turbo run test coverage ... --force`
+> 这类 stress 时，**仍需关注 turbo 调度下可能出现的交叉 PG I/O contention**——turbo
+> `dependsOn` 只保证 task 间的依赖顺序，不强制全局串行，跨 task 仍可能在 turbo 调度下
+> 交叠挤 PG。因此 `verify:db-tests` 串行链仍是 active mitigation。
 
 ```txt
 turbo 在单次调用里并发调度多个 DB-touching 任务
@@ -822,6 +1007,15 @@ If this is a long-running test, pass a timeout value as the last argument or con
 ### 当前缓解
 
 无单点缓解（符合登记规则——偶发、与当前改动无因果，不主动加 timeout 或 skip）。既有 PR88 `turbo.json` `@exam/db#coverage dependsOn @exam/db#test` 串行化已生效（本机 PG 启动较慢时仍可能瞬时超时），且 `verify:db-tests` 串行链已就位。
+
+**Phase 6A 缓解（2026-06-23，lifecycle command split，非单点 timeout）**：新增
+`test:db:lifecycle`（单独跑 `src/testWorkerDatabase.test.ts`）与 `test:db:unit`
+（`--exclude src/testWorkerDatabase.test.ts`，跑其余 12 文件 / 139 测试）。本地快速反馈入口
+`verify:fast` 使用 `test:db:unit`（不含 lifecycle），把 physical-DB-lifecycle 从 fast
+path 拆出。**不 skip、不从 full path 删除、不加专属 timeout**——`pnpm verify` / `test:db`
+仍覆盖 lifecycle；`test:db:lifecycle` 让物理 DB lifecycle 可单独定向复跑（见 Phase 6A
+验证：standalone 12/12 PASS 约 1.4–1.8s）。归入 BUG-FLAKE-001 physical-DB-lifecycle
+子类，**不另开 BUG-FLAKE-005**。
 
 ### 后续动作
 

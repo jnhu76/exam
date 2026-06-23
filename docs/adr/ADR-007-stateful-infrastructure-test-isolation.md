@@ -89,15 +89,21 @@ production code paths.
 
 ## Implementation Status
 
+> **Phase 6 口径修正（2026-06-23）**：下表 Phase 5A/5B 的 "Completed" 仅指 **local-only、
+> test-only evidence**（maxWorkers=2/4 的 5/5 stress 是本地单次 test pass，不含 coverage、
+> 不含 CI、不含 global/default 证据）。Phase 6 "Config prepared" 指 CI shard 配置已就绪，
+> **live CI validation 仍 pending**。这些状态**不**等价于 "CI-ready" 或 "coverage/global
+> proof"。详见下方 Completion Boundary。
+
 | Phase                            | Status                    | Evidence / Notes                                    |
 | -------------------------------- | ------------------------- | --------------------------------------------------- |
 | Phase 2A — scope resolver        | Completed                 | resolver + scope naming landed                      |
 | Phase 3A — worker DB prototype   | Completed                 | db helper tested                                    |
 | Phase 3B — API worker DB opt-in  | Completed                 | API suite can run serial in worker DB mode           |
 | Phase 4 — background default-off | Completed                 | buildTestApp does not auto-start scanner timers     |
-| Phase 5A — local maxWorkers=2    | Completed                 | 5/5 stress pass                                     |
-| Phase 5B — local maxWorkers=4    | Completed                 | 5/5 stress pass; local recommended mode             |
-| Phase 6 — CI shard               | Config prepared            | 2 shards × 1 worker in ci.yml; live CI validation pending |
+| Phase 5A — local maxWorkers=2    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass (local, test-only)                                     |
+| Phase 5B — local maxWorkers=4    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass; local recommended mode (local, test-only)             |
+| Phase 6 — CI shard               | Config prepared; live CI shard validation pending | 2 shards × 1 worker in ci.yml; live CI validation pending |
 | Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
@@ -545,8 +551,9 @@ Full sequencing and acceptance gates live in
 
 ## Phase 6 Plan — CI Shard + Worker Database Isolation
 
-Status: Planned / prepared next. Live CI validation is currently unavailable.
-This phase must not claim CI speedup until real CI timing exists.
+Status: Config prepared; live CI shard validation pending. Live CI validation is
+currently unavailable. This phase must not claim CI speedup until real CI
+timing exists.
 
 **Goal**: CI uses GitHub Actions matrix shards with worker-database isolation,
 not single-job Vitest workers.
@@ -626,6 +633,19 @@ following lands:
 - Redis / Queue must not be introduced only for testing.
 
 ## Completion Boundary
+
+> **Phase 6 completion-boundary 修正（2026-06-23）**：ADR-007 **不能**算作已完全关闭，除非
+> 残留缓解**要么**以 stress 证据移除，**要么**被明确接受为永久设计决策。当前仍在的缓解：
+>
+> - `apps/api` `fileParallelism: false`（默认串行；worker-database 仍 opt-in，未默认）。
+> - `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）。
+> - scanner legacy timeout（15_000ms）。
+> - worker-database opt-in 状态（未设为默认 / CI 默认）。
+> - CI shard live validation pending。
+>
+> 因此 Phase 5 的 "Completed" 仅是 **local-only / test-only evidence**；Phase 6 的
+> "Config prepared" 仅是**配置就绪，live CI validation pending**。在上述缓解移除 / 永久化
+> 决策 + CI live validation 完成之前，ADR-007 保持 Proposed / not-fully-closed。
 
 For the current PostgreSQL test-infra track, ADR-007 is considered complete
 when:
