@@ -254,6 +254,7 @@ export const QuestionImportResultSchema = z.object({
       message: z.string().optional(),
     }),
   ),
+  logId: z.string().uuid().optional(),
 });
 
 /** Type for a question import result. */

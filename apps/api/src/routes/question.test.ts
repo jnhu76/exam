@@ -356,6 +356,52 @@ describe("question routes", () => {
     expect(body.errors).toBe(0);
   });
 
+  it("POST /api/questions/import with confirm=true persists a log and returns logId", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions/import",
+      payload: {
+        courseId,
+        confirm: true,
+        rows: [
+          {
+            type: "true_false",
+            content: "Confirm log Q?",
+            standardAnswer: true,
+            score: 5,
+          },
+        ],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.valid).toBe(1);
+    expect(body.logId).toEqual(expect.any(String));
+  });
+
+  it("POST /api/questions/import without confirm does not return logId", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions/import",
+      payload: {
+        courseId,
+        rows: [
+          {
+            type: "true_false",
+            content: "Preview Q?",
+            standardAnswer: false,
+            score: 5,
+          },
+        ],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.logId).toBeUndefined();
+  });
+
   it("POST /api/questions/import reports errors for invalid rows", async () => {
     const res = await ctx.app.inject({
       method: "POST",

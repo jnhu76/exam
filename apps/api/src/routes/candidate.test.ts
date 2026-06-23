@@ -212,6 +212,7 @@ describe("candidate routes", () => {
     const body = res.json();
     expect(body.created).toBe(2);
     expect(body.total).toBe(2);
+    expect(body.logId).toEqual(expect.any(String));
   });
 
   it("POST /api/candidates/import re-imports by username as update", async () => {
@@ -274,6 +275,7 @@ describe("candidate routes", () => {
     expect(body.errors).toHaveLength(2);
     expect(body.errors[0].row).toBe(1);
     expect(body.errors[1].row).toBe(2);
+    expect(body.logId).toEqual(expect.any(String));
   });
 
   it("POST /api/candidates/import row errors include stable code field", async () => {

@@ -43,6 +43,13 @@
       "when": 1782141041874,
       "tag": "0005_abnormal_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782232302529,
+      "tag": "0006_import_job_logs",
+      "breakpoints": true
     }
   ]
 }

@@ -68,6 +68,9 @@ async function deleteExamBusinessData(
     .delete(schema.auditLogs)
     .where(eq(schema.auditLogs.organizationId, organizationId));
   await tx
+    .delete(schema.importJobLogs)
+    .where(eq(schema.importJobLogs.organizationId, organizationId));
+  await tx
     .delete(schema.examAttempts)
     .where(eq(schema.examAttempts.organizationId, organizationId));
   await tx

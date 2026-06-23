@@ -13,13 +13,14 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
+import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import {
   CandidateIdentityConflictError,
   UserAlreadyExistsError,
   ValidationError,
 } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, resolveImportStatus } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import {
   buildErrorResponse,
@@ -527,7 +528,39 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         ctx.targetOrganizationId!,
         { total: data.rows.length, created, updated, errors: errors.length },
       );
-      return { total: data.rows.length, created, updated, errors };
+      const candidateLogStatus = resolveImportStatus({
+        errors: errors.length,
+        affectedCount: created + updated,
+      });
+      let logId: string | undefined;
+      try {
+        const candidateLog = await createImportJobLogRepo(fastify.db).create(
+          ctx,
+          {
+            type: "candidate",
+            status: candidateLogStatus,
+            total: data.rows.length,
+            createdCount: created,
+            updatedCount: updated,
+            errors: errors.length,
+            metadata: {},
+            errorsDetail: errors.length > 0 ? errors : null,
+          },
+        );
+        logId = candidateLog.id;
+      } catch (logError) {
+        fastify.log.error(
+          { err: logError, type: "candidate", status: candidateLogStatus },
+          "Failed to persist candidate import log; import result is unchanged",
+        );
+      }
+      return {
+        total: data.rows.length,
+        created,
+        updated,
+        errors,
+        ...(logId ? { logId } : {}),
+      };
     },
   );
 };

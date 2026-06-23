@@ -13,6 +13,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -362,6 +363,47 @@ export const manualGradingEntries = pgTable(
   ],
 );
 
+/**
+ * Import job logs table — persists import operation summaries and diagnostics.
+ *
+ * `createdCount` / `updatedCount` / `errors` are import-result COUNTS (how
+ * many rows were created/updated/errored in this import run), NOT timestamps.
+ * The row creation time lives in `createdAt`.
+ *
+ * Append-only: rows are written once per import run and never updated.
+ */
+export const importJobLogs = pgTable(
+  "import_job_logs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    type: text("type").notNull(),
+    status: text("status").notNull(),
+    total: integer("total").notNull(),
+    createdCount: integer("created_count").notNull(),
+    updatedCount: integer("updated_count").notNull(),
+    errors: integer("errors").notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    errorsDetail: jsonb("errors_detail").$type<Array<{
+      row: number;
+      code: string;
+      message: string;
+    }> | null>(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    // Single-tenant boundary: every list query filters by organizationId and
+    // orders by createdAt desc. This composite index covers both.
+    index("import_job_logs_org_created_at_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+  ],
+);
+
 /** Audit logs table — records user actions for compliance and debugging. */
 export const auditLogs = pgTable("audit_logs", {
   id: id(),
@@ -390,4 +432,5 @@ export const schema = {
   examAttempts,
   manualGradingEntries,
   auditLogs,
+  importJobLogs,
 };
