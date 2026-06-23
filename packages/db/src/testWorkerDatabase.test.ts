@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import postgres from "postgres";
 import {
+  dropDatabaseIfExists,
   ensureDatabaseExists,
   setupWorkerTestDatabase,
   truncateBusinessTables,
@@ -20,6 +21,12 @@ import {
  * PG-integration tests are wrapped in `PG_DESCRIBE`, which becomes
  * `describe.skip` when the server is not reachable — so the suite never fails
  * just because PG is down, but DOES run wherever PG is up (local dev / CI).
+ *
+ * ADR-007 Phase 6D: lifecycle DB names are now per-run unique
+ * (`exam_test_wphase6d_<pid>_<ts>_<rand>`) so leftover DBs from a crashed
+ * previous run cannot collide with the current run's fixed name, and teardown
+ * uses {@link dropDatabaseIfExists} (terminates lingering connections + advisory
+ * lock) instead of a bare `DROP DATABASE IF EXISTS`.
  */
 
 const BASE_URL =
@@ -46,20 +53,34 @@ const PG_UP = await pgReachable(ADMIN_URL);
 /** describe or describe.skip depending on PG reachability. */
 const PG_DESCRIBE = PG_UP ? describe : describe.skip;
 
-/** Clean up any leftover worker DB from a previous run (best-effort). */
-async function dropDbIfPresent(name: string): Promise<void> {
-  if (!PG_UP) return;
-  const admin = postgres(ADMIN_URL);
-  try {
-    await admin.unsafe(`DROP DATABASE IF EXISTS "${name}"`);
-  } finally {
-    await admin.end();
-  }
+/**
+ * Generate a per-run unique, safety-guard-compatible database name.
+ *
+ * Phase 6D Option B: previously the lifecycle tests used fixed names
+ * (`exam_test_w_phase3a_ensure`), which could collide with leftovers from a
+ * crashed prior run and force a `DROP DATABASE` on the cold path. A unique
+ * name means a fresh run starts with an absent DB (CREATE DATABASE only) and
+ * best-effort cleanup never has to wait for a stale connection.
+ *
+ * Format: `exam_test_wphase6d_<pid>_<counter>_<rand>` — passes the
+ * `^[a-z0-9_]+ / ≤63-char guard in `assertPgNameSafe`.
+ */
+function uniqueLifecycleDbName(tag: string): string {
+  const rand = Math.random().toString(36).slice(2, 8);
+  const name = `exam_test_wphase6d_${tag}_${process.pid}_${rand}`;
+  // Defensive: keep within the 63-char PG identifier limit.
+  return name.slice(0, 63).replace(/[^a-z0-9_]/g, "_");
 }
 
 afterAll(async () => {
   // Best-effort cleanup of the prototype DB names used below.
-  await dropDbIfPresent("exam_test_w_phase3a_proto");
+  if (PG_UP) {
+    await dropDatabaseIfExists(ADMIN_URL, "exam_test_w_phase3a_proto", {
+      keepMissing: true,
+    }).catch(() => {
+      /* best-effort; reported via diagnostics in dropDatabaseIfExists */
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -142,21 +163,26 @@ describe("setupWorkerTestDatabase — input guards (no PG)", () => {
 
 PG_DESCRIBE("ensureDatabaseExists", () => {
   it("creates the database if missing, idempotent on second call", async () => {
-    const workerDb = "exam_test_w_phase3a_ensure";
-    await dropDbIfPresent(workerDb);
-    // First call: creates.
-    await ensureDatabaseExists(ADMIN_URL, workerDb);
-    // Second call: idempotent (already exists).
-    await ensureDatabaseExists(ADMIN_URL, workerDb);
-    const admin = postgres(ADMIN_URL);
+    // Phase 6D Option B: per-run unique name so a crashed prior run's leftover
+    // DB cannot collide, and teardown uses robust dropDatabaseIfExists.
+    const workerDb = uniqueLifecycleDbName("ensure");
     try {
-      const rows = await admin`
-        SELECT 1 FROM pg_database WHERE datname = ${workerDb}
-      `;
-      expect(rows.length).toBe(1);
+      // First call: creates (DB is absent because the name is unique).
+      await ensureDatabaseExists(ADMIN_URL, workerDb);
+      // Second call: idempotent (already exists).
+      await ensureDatabaseExists(ADMIN_URL, workerDb);
+      const admin = postgres(ADMIN_URL);
+      try {
+        const rows = await admin`
+          SELECT 1 FROM pg_database WHERE datname = ${workerDb}
+        `;
+        expect(rows.length).toBe(1);
+      } finally {
+        await admin.end();
+      }
     } finally {
-      await admin.end();
-      await dropDbIfPresent(workerDb);
+      // Phase 6D Option C: robust drop (terminate lingering connections + lock).
+      await dropDatabaseIfExists(ADMIN_URL, workerDb, { keepMissing: true });
     }
   });
 
@@ -167,19 +193,62 @@ PG_DESCRIBE("ensureDatabaseExists", () => {
   });
 });
 
+PG_DESCRIBE("dropDatabaseIfExists — robust drop", () => {
+  it("is idempotent when the database is missing", async () => {
+    const missing = uniqueLifecycleDbName("missing");
+    // No CREATE — drop a DB that does not exist; must not throw with keepMissing.
+    await dropDatabaseIfExists(ADMIN_URL, missing, { keepMissing: true });
+    // And again — repeated drop on missing is still a no-op.
+    await dropDatabaseIfExists(ADMIN_URL, missing, { keepMissing: true });
+  });
+
+  it("refuses an unsafe database name without issuing DDL", async () => {
+    await expect(
+      dropDatabaseIfExists(ADMIN_URL, "exam_test; DROP TABLE x"),
+    ).rejects.toThrow(/unsafe database name/);
+  });
+
+  it("drops a database that exists", async () => {
+    const workerDb = uniqueLifecycleDbName("dropdrop");
+    try {
+      await ensureDatabaseExists(ADMIN_URL, workerDb);
+      await dropDatabaseIfExists(ADMIN_URL, workerDb);
+      const admin = postgres(ADMIN_URL);
+      try {
+        const rows = await admin`
+          SELECT 1 FROM pg_database WHERE datname = ${workerDb}
+        `;
+        expect(rows.length).toBe(0);
+      } finally {
+        await admin.end();
+      }
+    } finally {
+      await dropDatabaseIfExists(ADMIN_URL, workerDb, {
+        keepMissing: true,
+      }).catch(() => {
+        /* best-effort */
+      });
+    }
+  });
+});
+
 PG_DESCRIBE("setupWorkerTestDatabase — full lifecycle", () => {
   it("migrates, connects, truncates, preserves migration metadata, closes cleanly", async () => {
+    // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name
+    // (`exam_test_wphase6d_proto_<tag>`), so no leftover-collision on cold start.
+    const runTag = Math.random().toString(36).slice(2, 8);
+    const workerId = `phase6d_proto_${runTag}`.replace(/[^a-z0-9_]/g, "_");
     const handle = await setupWorkerTestDatabase({
       env: {
         TEST_DB_ISOLATION: "worker-database",
         TEST_INFRA_SCOPE: "local",
-        TEST_WORKER_ID: "phase3a_proto",
+        TEST_WORKER_ID: workerId,
         TEST_DATABASE_URL: BASE_URL,
       },
     });
     try {
-      // Derived name follows the resolver's local-worker rule.
-      expect(handle.databaseName).toBe("exam_test_wphase3a_proto");
+      // Derived name follows the resolver's local-worker rule (`exam_test_w<id>`).
+      expect(handle.databaseName).toBe(`exam_test_w${workerId}`);
       expect(handle.scope.dbIsolation).toBe("worker-database");
       expect(handle.databaseUrl.endsWith(`/${handle.databaseName}`)).toBe(true);
 
@@ -230,7 +299,9 @@ PG_DESCRIBE("setupWorkerTestDatabase — full lifecycle", () => {
     } finally {
       await handle.close();
       await handle.close(); // idempotent
-      await dropDbIfPresent(handle.databaseName);
+      await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+        keepMissing: true,
+      });
     }
   });
 });
@@ -250,10 +321,13 @@ describe("truncateBusinessTables — guard", () => {
 
 PG_DESCRIBE("truncateBusinessTables — no-op path", () => {
   it("does not error when there are zero business rows", async () => {
+    // Phase 6D Option B: unique TEST_WORKER_ID → unique resolved DB name.
+    const runTag = Math.random().toString(36).slice(2, 8);
+    const workerId = `phase6d_noop_${runTag}`.replace(/[^a-z0-9_]/g, "_");
     const handle = await setupWorkerTestDatabase({
       env: {
         TEST_DB_ISOLATION: "worker-database",
-        TEST_WORKER_ID: "phase3a_noop",
+        TEST_WORKER_ID: workerId,
         TEST_DATABASE_URL: BASE_URL,
       },
     });
@@ -262,7 +336,9 @@ PG_DESCRIBE("truncateBusinessTables — no-op path", () => {
       await handle.resetPostgres(); // no business rows -> no-op, no error
     } finally {
       await handle.close();
-      await dropDbIfPresent(handle.databaseName);
+      await dropDatabaseIfExists(ADMIN_URL, handle.databaseName, {
+        keepMissing: true,
+      });
     }
   });
 });

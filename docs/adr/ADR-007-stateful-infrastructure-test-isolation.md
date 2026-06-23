@@ -89,15 +89,25 @@ production code paths.
 
 ## Implementation Status
 
+> **Phase 6 口径修正（2026-06-23）**：下表 Phase 5A/5B 的 "Completed" 仅指 **local-only、
+> test-only evidence**（maxWorkers=2/4 的 5/5 stress 是本地单次 test pass，不含 coverage、
+> 不含 CI、不含 global/default 证据）。Phase 6 "Config prepared" 指 CI shard 配置已就绪，
+> **live CI validation 仍 pending**。这些状态**不**等价于 "CI-ready" 或 "coverage/global
+> proof"。详见下方 Completion Boundary。
+
 | Phase                            | Status                    | Evidence / Notes                                    |
 | -------------------------------- | ------------------------- | --------------------------------------------------- |
 | Phase 2A — scope resolver        | Completed                 | resolver + scope naming landed                      |
 | Phase 3A — worker DB prototype   | Completed                 | db helper tested                                    |
 | Phase 3B — API worker DB opt-in  | Completed                 | API suite can run serial in worker DB mode           |
 | Phase 4 — background default-off | Completed                 | buildTestApp does not auto-start scanner timers     |
-| Phase 5A — local maxWorkers=2    | Completed                 | 5/5 stress pass                                     |
-| Phase 5B — local maxWorkers=4    | Completed                 | 5/5 stress pass; local recommended mode             |
-| Phase 6 — CI shard               | Config prepared            | 2 shards × 1 worker in ci.yml; live CI validation pending |
+| Phase 5A — local maxWorkers=2    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass (local, test-only)                                     |
+| Phase 5B — local maxWorkers=4    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass; local recommended mode (local, test-only)             |
+| Phase 6 — CI shard               | Config prepared; live CI shard validation pending | 2 shards × 1 worker in ci.yml; live CI validation pending |
+| Phase 6D — physical DB lifecycle contention | Mitigation implemented (local-only evidence; not CI-validated; does not close BUG-FLAKE-001) | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress |
+| Phase 6E — CI verify gate dedup | CI verify job optimized to avoid root test + coverage duplication | `verify:ci` uses coverage as test entry; `verify`/`verify:db-tests`/api-fast/e2e unchanged |
+| Phase 6F — CI job DAG optimization | CI DAG optimized, static-gated parallel jobs prepared | new `static` job; `verify`/`api-fast`/`e2e` now `needs: static` (parallel); test semantics unchanged; live CI validation pending |
+| Phase 6G — Live CI validation | Deferred | Blocked until GitHub Actions can run. Must validate `static`/`verify`/`api-fast`/`e2e` on the real CI DAG before changing defaults or closing ADR-007. Local evidence is not sufficient. |
 | Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
@@ -545,8 +555,9 @@ Full sequencing and acceptance gates live in
 
 ## Phase 6 Plan — CI Shard + Worker Database Isolation
 
-Status: Planned / prepared next. Live CI validation is currently unavailable.
-This phase must not claim CI speedup until real CI timing exists.
+Status: Config prepared; live CI shard validation pending. Live CI validation is
+currently unavailable. This phase must not claim CI speedup until real CI
+timing exists.
 
 **Goal**: CI uses GitHub Actions matrix shards with worker-database isolation,
 not single-job Vitest workers.
@@ -625,7 +636,56 @@ following lands:
 - Phase 7 is not required to finish current PostgreSQL test-infra work.
 - Redis / Queue must not be introduced only for testing.
 
+### Phase 6G — Live CI validation TODO
+
+Status: **Deferred until GitHub Actions can run.**
+
+Phase 6G is required because **local evidence cannot prove CI stability**. The
+optimized CI DAG (Phase 6F) and the worker-database shard job (`api-fast`) must
+be validated on GitHub Actions before ADR-007 can be considered complete. Local
+stress (Phase 6D `coverage:db` 5/5, `pnpm verify` PASS) is necessary but not
+sufficient: CI differs in CPU scheduling, PostgreSQL service behavior, cold-start
+timing, cache state, and job parallelism.
+
+**Blocked decisions** (do not proceed until live CI evidence exists):
+
+- default worker-database mode
+- removing `apps/api fileParallelism:false`
+- removing `verify:db-tests`
+- treating `api-fast` as a replacement gate
+- closing BUG-FLAKE-001 globally
+- further CI DAG / artifact-sharing optimization based only on local evidence
+
+**Acceptance evidence** (minimum): one clean GitHub Actions run on the new DAG
+with `static` / `verify` / both `api-fast` shards / `e2e` all PASS, and no
+recurrence of physical-DB-lifecycle timeout, auth amplification timeout,
+worker-database shard isolation failure, or e2e ordering/cold-start failure.
+Preferred: 3 consecutive clean runs with recorded timing. Full checklist lives
+in `docs/dev/test-flakes.md` Phase 6G section.
+
 ## Completion Boundary
+
+> **Phase 6 completion-boundary 修正（2026-06-23）**：ADR-007 **不能**算作已完全关闭，除非
+> 残留缓解**要么**以 stress 证据移除，**要么**被明确接受为永久设计决策。当前仍在的缓解：
+>
+> - `apps/api` `fileParallelism: false`（默认串行；worker-database 仍 opt-in，未默认）。
+> - `verify:db-tests` 串行链（`test:db && test:api && coverage:db && coverage:api`）。
+> - scanner legacy timeout（15_000ms）。
+> - worker-database opt-in 状态（未设为默认 / CI 默认）。
+> - CI shard live validation pending。
+> - **auth amplification 仍 open**（`auth.test.ts` 在全量 coverage + PG I/O 争用下的 5s
+>   timeout 子类，未单独修复）。
+>
+> 因此 Phase 5 的 "Completed" 仅是 **local-only / test-only evidence**；Phase 6 的
+> "Config prepared" 仅是**配置就绪，live CI validation pending**。
+>
+> **Phase 6D（2026-06-23）补充**：physical DB lifecycle contention 已实现根因缓解
+> （PostgreSQL advisory lock 串行化 heavy test-infra DDL/migration + per-run unique DB
+> names + robust DROP with connection termination），local 证据 `coverage:db` 5/5 PASS、
+> `pnpm verify` 1/1 + 2/2 stress PASS。这**只**修复 BUG-FLAKE-001 的 physical-DB-lifecycle
+> 子类，**不**关闭 BUG-FLAKE-001 全局（auth amplification 子类 + A′ serial 仍在），**不**
+> 构成 CI 证据，**不**允许移除上述任何残留缓解。在上述缓解移除 / 永久化决策 + CI live
+> validation 完成之前，ADR-007 保持 Proposed / not-fully-closed。
 
 For the current PostgreSQL test-infra track, ADR-007 is considered complete
 when:
