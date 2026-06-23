@@ -341,6 +341,180 @@ describe("audit log baseline (S06-lite)", () => {
       expect(ours.length).toBe(2);
     });
 
+    it("filters by targetType query param", async () => {
+      await clearAudits();
+      const { recordAudit } = await import("./audit.js");
+      const fakeReq = {
+        id: "t",
+        ip: "127.0.0.1",
+        headers: { "user-agent": "vitest" },
+      } as unknown as Parameters<typeof recordAudit>[1];
+      const examTarget = crypto.randomUUID();
+      const userTarget = crypto.randomUUID();
+      recordAudit(
+        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+        fakeReq,
+        {
+          actorId: adminId,
+          organizationId: orgId,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        "exam.create",
+        "exam",
+        examTarget,
+      );
+      recordAudit(
+        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+        fakeReq,
+        {
+          actorId: adminId,
+          organizationId: orgId,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        "user.create",
+        "user",
+        userTarget,
+      );
+      await waitForAudit(
+        async () => (await readAuditsForTarget(examTarget)).length >= 1,
+      );
+      await waitForAudit(
+        async () => (await readAuditsForTarget(userTarget)).length >= 1,
+      );
+
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: "/api/admin/audit-logs?targetType=exam",
+        cookies: { "auth-token": adminToken },
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(
+        body.items.every(
+          (item: { targetType: string }) => item.targetType === "exam",
+        ),
+      ).toBe(true);
+      expect(
+        body.items.some((i: { targetId: string }) => i.targetId === examTarget),
+      ).toBe(true);
+      expect(
+        body.items.some((i: { targetId: string }) => i.targetId === userTarget),
+      ).toBe(false);
+    });
+
+    it("filters by inclusive date range (from / to)", async () => {
+      await clearAudits();
+      const { recordAudit } = await import("./audit.js");
+      const fakeReq = {
+        id: "t",
+        ip: "127.0.0.1",
+        headers: { "user-agent": "vitest" },
+      } as unknown as Parameters<typeof recordAudit>[1];
+      const t0 = "2026-01-01T00:00:00.000Z";
+      const t1 = "2026-02-01T00:00:00.000Z";
+      const t2 = "2026-03-01T00:00:00.000Z";
+      const t3 = "2026-04-01T00:00:00.000Z";
+      const markers: Record<string, string> = {};
+      for (const [tag, ts] of Object.entries({ t0, t1, t2, t3 })) {
+        const targetId = `range-${tag}-${crypto.randomUUID()}`;
+        markers[tag] = targetId;
+        recordAudit(
+          ctx.app as unknown as Parameters<typeof recordAudit>[0],
+          fakeReq,
+          {
+            actorId: adminId,
+            organizationId: orgId,
+            role: "Admin",
+            permissions: [],
+            sessionId: "test",
+          },
+          `range.${tag}`,
+          "range_test",
+          targetId,
+        );
+        await waitForAudit(
+          async () => (await readAuditsForTarget(targetId)).length >= 1,
+        );
+        // Backdate so the date-range bounds are deterministic.
+        const { eq: eqOp } = await import("drizzle-orm");
+        await ctx.db
+          .update(schema.auditLogs)
+          .set({ createdAt: new Date(ts) })
+          .where(eq(schema.auditLogs.targetId, targetId));
+      }
+
+      // from = t1: excludes t0.
+      const fromRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?from=${encodeURIComponent(t1)}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(fromRes.statusCode).toBe(200);
+      const fromBody = fromRes.json();
+      expect(
+        fromBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t0,
+        ),
+      ).toBe(false);
+      expect(
+        fromBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t1,
+        ),
+      ).toBe(true);
+
+      // to = t2: excludes t3.
+      const toRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?to=${encodeURIComponent(t2)}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(toRes.statusCode).toBe(200);
+      const toBody = toRes.json();
+      expect(
+        toBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t2,
+        ),
+      ).toBe(true);
+      expect(
+        toBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t3,
+        ),
+      ).toBe(false);
+
+      // from=t1, to=t2: only t1 and t2.
+      const bothRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?from=${encodeURIComponent(t1)}&to=${encodeURIComponent(t2)}`,
+        cookies: { "auth-token": adminToken },
+      });
+      expect(bothRes.statusCode).toBe(200);
+      const bothBody = bothRes.json();
+      expect(
+        bothBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t1,
+        ),
+      ).toBe(true);
+      expect(
+        bothBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t2,
+        ),
+      ).toBe(true);
+      expect(
+        bothBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t0,
+        ),
+      ).toBe(false);
+      expect(
+        bothBody.items.some(
+          (i: { targetId: string }) => i.targetId === markers.t3,
+        ),
+      ).toBe(false);
+    });
+
     it("respects pageSize parameter", async () => {
       await clearAudits();
       const { recordAudit } = await import("./audit.js");

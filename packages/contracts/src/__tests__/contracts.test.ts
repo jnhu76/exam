@@ -17,6 +17,7 @@ import {
 } from "../question.js";
 import {
   ScoreListQuerySchema,
+  AuditLogQuerySchema,
   SaveAnswerRequestSchema,
   SaveAnswerResponseSchema,
   CandidateExamDetailResponseSchema,
@@ -850,5 +851,45 @@ describe("manual grading contracts", () => {
       questionId: "any-snapshot-question-id",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe("audit contracts", () => {
+  it("AuditLogQuerySchema coerces pagination and defaults page/pageSize", () => {
+    const result = AuditLogQuerySchema.parse({ page: "2" });
+    expect(result.page).toBe(2);
+    expect(result.pageSize).toBe(20);
+  });
+
+  it("AuditLogQuerySchema accepts action + targetType optional string filters", () => {
+    const result = AuditLogQuerySchema.parse({
+      action: "exam.publish",
+      targetType: "exam",
+    });
+    expect(result.action).toBe("exam.publish");
+    expect(result.targetType).toBe("exam");
+  });
+
+  it("AuditLogQuerySchema accepts optional from/to ISO datetime bounds", () => {
+    const from = "2026-01-01T00:00:00.000Z";
+    const to = "2026-12-31T23:59:59.000Z";
+    const result = AuditLogQuerySchema.parse({ from, to });
+    expect(result.from).toBe(from);
+    expect(result.to).toBe(to);
+  });
+
+  it("AuditLogQuerySchema treats all filters as optional", () => {
+    const result = AuditLogQuerySchema.parse({});
+    expect(result.action).toBeUndefined();
+    expect(result.targetType).toBeUndefined();
+    expect(result.from).toBeUndefined();
+    expect(result.to).toBeUndefined();
+  });
+
+  it("AuditLogQuerySchema rejects a non-datetime from value", () => {
+    const result = AuditLogQuerySchema.safeParse({
+      from: "2026-01-01",
+    });
+    expect(result.success).toBe(false);
   });
 });

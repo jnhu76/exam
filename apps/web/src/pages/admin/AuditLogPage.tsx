@@ -5,6 +5,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DatePicker } from "@/components/shared/DatePicker";
 import {
   Table,
   TableBody,
@@ -20,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollText, X } from "lucide-react";
 
 interface AuditLogItem {
   id: string;
@@ -64,6 +66,20 @@ const TARGET_FILTERS = [
   { value: "organization", label: "组织" },
 ];
 
+/** ISO datetime for the start (00:00:00.000) of the given date, local time. */
+function startOfDayISO(date: Date): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+/** ISO datetime for the end (23:59:59.999) of the given date, local time. */
+function endOfDayISO(date: Date): string {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+}
+
 export function AuditLogPage() {
   const [data, setData] = useState<AuditLogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,8 +87,24 @@ export function AuditLogPage() {
   const [page, setPage] = useState(1);
   const [actionFilter, setActionFilter] = useState("all");
   const [targetFilter, setTargetFilter] = useState("all");
+  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
+  const [toDate, setToDate] = useState<Date | undefined>(undefined);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const pageSize = 20;
+
+  const hasActiveFilter =
+    actionFilter !== "all" ||
+    targetFilter !== "all" ||
+    fromDate !== undefined ||
+    toDate !== undefined;
+
+  const clearFilters = useCallback(() => {
+    setActionFilter("all");
+    setTargetFilter("all");
+    setFromDate(undefined);
+    setToDate(undefined);
+    setPage(1);
+  }, []);
 
   const loadLogs = useCallback(async () => {
     setIsLoading(true);
@@ -83,6 +115,11 @@ export function AuditLogPage() {
         pageSize: String(pageSize),
       });
       if (actionFilter !== "all") params.set("action", actionFilter);
+      if (targetFilter !== "all") params.set("targetType", targetFilter);
+      // Date bounds: inclusive on the server. `from` is the start-of-day of the
+      // picked date; `to` is pushed to end-of-day so the same day is included.
+      if (fromDate) params.set("from", startOfDayISO(fromDate));
+      if (toDate) params.set("to", endOfDayISO(toDate));
       const result = await api.get<AuditLogResponse>(
         `/api/admin/audit-logs?${params}`,
       );
@@ -92,16 +129,13 @@ export function AuditLogPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [page, actionFilter, targetFilter]);
+  }, [page, actionFilter, targetFilter, fromDate, toDate]);
 
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
 
-  const filteredItems =
-    data?.items.filter(
-      (item) => targetFilter === "all" || item.targetType === targetFilter,
-    ) ?? [];
+  const items = data?.items ?? [];
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadLogs} />;
@@ -121,7 +155,7 @@ export function AuditLogPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="审计日志" description="查看系统操作审计记录" />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select
           value={actionFilter}
           onValueChange={(v) => {
@@ -129,7 +163,7 @@ export function AuditLogPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[180px]" aria-label="全部操作">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -147,7 +181,7 @@ export function AuditLogPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-[150px]" aria-label="全部目标">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -158,6 +192,33 @@ export function AuditLogPage() {
             ))}
           </SelectContent>
         </Select>
+        <DatePicker
+          aria-label="开始日期"
+          value={fromDate}
+          onChange={(d) => {
+            setFromDate(d);
+            setPage(1);
+          }}
+        />
+        <DatePicker
+          aria-label="结束日期"
+          value={toDate}
+          onChange={(d) => {
+            setToDate(d);
+            setPage(1);
+          }}
+        />
+        {hasActiveFilter && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            className="text-muted-foreground"
+          >
+            <X className="mr-1 size-4" />
+            清空筛选
+          </Button>
+        )}
       </div>
       <div className="overflow-hidden rounded-md border">
         <Table>
@@ -171,7 +232,7 @@ export function AuditLogPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredItems.map((item) => (
+            {items.map((item) => (
               <TableRow
                 key={item.id}
                 className="cursor-pointer"
@@ -199,7 +260,7 @@ export function AuditLogPage() {
       </div>
       {expandedId &&
         (() => {
-          const item = filteredItems.find((i) => i.id === expandedId);
+          const item = items.find((i) => i.id === expandedId);
           if (!item) return null;
           return (
             <div className="rounded-md border p-4">

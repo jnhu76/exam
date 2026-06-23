@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, lte } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs } from "../schema/pg.js";
@@ -8,10 +8,25 @@ import {
 } from "./baseRepo.js";
 
 /**
+ * Filter options for {@link createAuditLogRepo}.listPaginatedFiltered.
+ *
+ * - `action` / `targetType`: exact-match string filters.
+ * - `from` / `to`: inclusive `createdAt` bounds (JS `Date` against the
+ *   `timestamptz` column). Either or both may be omitted.
+ */
+export interface AuditLogListFilter {
+  action?: string;
+  targetType?: string;
+  from?: Date;
+  to?: Date;
+}
+
+/**
  * Creates a repository for the `auditLogs` table.
  *
  * Extends the base tenant-scoped CRUD repo with paginated filtered listing
- * by action type, scoped to the caller's organization.
+ * by action / targetType / inclusive createdAt range, scoped to the caller's
+ * organization.
  *
  * @param db - Drizzle database connection.
  * @returns Object with base CRUD methods plus `listPaginatedFiltered`.
@@ -21,14 +36,15 @@ export function createAuditLogRepo(db: Database) {
   return {
     ...base,
     /**
-     * Lists audit log entries with pagination and optional action filter.
-     * Ordered by `createdAt` descending, scoped to the tenant's organization.
+     * Lists audit log entries with pagination and optional filters
+     * (action, targetType, inclusive createdAt range). Ordered by `createdAt`
+     * descending, scoped to the tenant's organization.
      */
     async listPaginatedFiltered(
       ctx: TenantContext | RequestContext,
       page: number,
       pageSize: number,
-      filter: { action?: string },
+      filter: AuditLogListFilter = {},
     ): Promise<{
       items: (typeof auditLogs.$inferSelect)[];
       total: number;
@@ -37,6 +53,15 @@ export function createAuditLogRepo(db: Database) {
       const conditions = [eq(auditLogs.organizationId, orgId)];
       if (filter.action) {
         conditions.push(eq(auditLogs.action, filter.action));
+      }
+      if (filter.targetType) {
+        conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.from) {
+        conditions.push(gte(auditLogs.createdAt, filter.from));
+      }
+      if (filter.to) {
+        conditions.push(lte(auditLogs.createdAt, filter.to));
       }
       const where =
         conditions.length === 1 ? conditions[0] : and(...conditions);

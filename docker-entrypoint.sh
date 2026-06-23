@@ -1,6 +1,19 @@
 #!/bin/sh
 set -e
 
+# E2E seed implies the E2E runtime mode: when RUN_SEED=e2e, default APP_MODE to
+# "e2e" (the E2E runtime mode). This is necessary because the image's
+# Dockerfile sets ENV APP_MODE=production, and production-mode security headers
+# (Strict-Transport-Security + Secure cookies) are wrong for the plain-HTTP E2E
+# app container: they make browsers upgrade HTTP->HTTPS, causing
+# ERR_SSL_PROTOCOL_ERROR (no TLS server). In e2e mode runtimeConfig resolves
+# isProduction=false -> no HSTS, no Secure cookie.
+# A caller may still override via FORCE_APP_MODE to validate production headers.
+if [ "$RUN_SEED" = "e2e" ]; then
+  APP_MODE="${FORCE_APP_MODE:-e2e}"
+  export APP_MODE
+fi
+
 if [ -z "$JWT_SECRET" ]; then
   echo "ERROR: JWT_SECRET environment variable is required"
   exit 1

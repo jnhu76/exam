@@ -160,4 +160,61 @@ describe("AuditLogPage", () => {
 
     expect(await screen.findByText(/questionId/)).toBeInTheDocument();
   });
+
+  it("sends targetType query param when target filter is set", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("grading.score_entered");
+
+    // Open the target filter and pick 考试 (exam).
+    const targetTrigger = screen.getByRole("combobox", {
+      name: /全部目标/,
+    });
+    await user.click(targetTrigger);
+    await user.click(await screen.findByRole("option", { name: "考试" }));
+
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toContain("targetType=exam");
+  });
+
+  it("renders 开始日期 / 结束日期 date-range pickers", async () => {
+    renderPage();
+    await screen.findByText("grading.score_entered");
+    expect(screen.getByLabelText("开始日期")).toBeInTheDocument();
+    expect(screen.getByLabelText("结束日期")).toBeInTheDocument();
+  });
+
+  it("sends from / to query params when a date range is selected", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("grading.score_entered");
+
+    // RDP v10 labels each day button with a full aria-label like
+    // "2026年6月15日 星期一", so select by a regex matching the day suffix.
+    await user.click(screen.getByLabelText("开始日期"));
+    await user.click(await screen.findByRole("button", { name: /15日/ }));
+
+    await user.click(screen.getByLabelText("结束日期"));
+    await user.click(await screen.findByRole("button", { name: /20日/ }));
+
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).toMatch(/from=\d{4}-\d{2}-\d{2}T/);
+    expect(lastCall).toMatch(/to=\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("has a clear-filters control that resets all filters", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("grading.score_entered");
+
+    // Set an action filter first.
+    await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
+    await user.click(await screen.findByRole("option", { name: "公布成绩" }));
+
+    expect(screen.getByText("清空筛选")).toBeInTheDocument();
+    await user.click(screen.getByText("清空筛选"));
+
+    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+    expect(lastCall).not.toContain("action=");
+  });
 });

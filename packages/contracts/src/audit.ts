@@ -2,10 +2,24 @@ import { z } from "zod";
 import { PaginationParamsSchema } from "./common.js";
 
 /**
- * Query schema for listing audit log entries, extending pagination with an optional action filter.
+ * Query schema for listing audit log entries, extending pagination with
+ * optional action / targetType string filters and an inclusive `createdAt`
+ * date range (`from` / `to` as ISO 8601 datetime strings).
+ *
+ * - `action`, `targetType`: exact-match filters.
+ * - `from`: inclusive lower bound on `createdAt` (ISO datetime, e.g.
+ *   `2026-01-01T00:00:00.000Z`).
+ * - `to`: inclusive upper bound on `createdAt` (ISO datetime).
+ *
+ * The route parses `from`/`to` into JS `Date` objects before reaching the repo.
+ * A bare date (`2026-01-01`) is rejected on purpose so callers must supply an
+ * unambiguous instant.
  */
 export const AuditLogQuerySchema = PaginationParamsSchema.extend({
   action: z.string().min(1).max(120).optional(),
+  targetType: z.string().min(1).max(120).optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
 });
 
 /** Type for audit log listing query parameters. */
