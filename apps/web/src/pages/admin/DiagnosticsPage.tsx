@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { DiagnosticsResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -27,39 +27,41 @@ export function DiagnosticsPage() {
   const [data, setData] = useState<DiagnosticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>(null);
-
-  const loadDiagnostics = useCallback(async () => {
-    setError(null);
+  const loadDiagnostics = useCallback(async (isInitial = false) => {
+    if (isInitial) setError(null);
     try {
       const result = await api.get<DiagnosticsResponse>(
         "/api/system/diagnostics",
       );
       setData(result);
+      setError(null);
     } catch {
-      setError("加载诊断数据失败");
+      if (isInitial) {
+        setError("加载诊断数据失败");
+      }
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadDiagnostics();
-    intervalRef.current = setInterval(loadDiagnostics, REFRESH_INTERVAL_MS);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
+    loadDiagnostics(true);
+    const interval = setInterval(() => loadDiagnostics(), REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [loadDiagnostics]);
 
   if (isLoading) {
     return <DiagnosticsSkeleton />;
   }
 
-  if (error) {
+  if (!data) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader title="系统诊断" />
-        <ErrorState message={error} onRetry={loadDiagnostics} />
+        <ErrorState
+          message={error ?? "加载诊断数据失败"}
+          onRetry={() => loadDiagnostics(true)}
+        />
       </div>
     );
   }
@@ -90,8 +92,8 @@ export function DiagnosticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <InfoRow label="版本" value={data!.version} />
-            <InfoRow label="运行时间" value={`${Math.floor(data!.uptime)}s`} />
+            <InfoRow label="版本" value={data.version} />
+            <InfoRow label="运行时间" value={`${Math.floor(data.uptime)}s`} />
           </CardContent>
         </Card>
 
@@ -103,7 +105,7 @@ export function DiagnosticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <InfoRow label="延迟" value={`${data!.dbLatency}ms`} />
+            <InfoRow label="延迟" value={`${data.dbLatency}ms`} />
           </CardContent>
         </Card>
 
@@ -117,15 +119,15 @@ export function DiagnosticsPage() {
           <CardContent>
             <InfoRow
               label="心跳间隔"
-              value={`${data!.config.heartbeatInterval}ms`}
+              value={`${data.config.heartbeatInterval}ms`}
             />
             <InfoRow
               label="心跳超时"
-              value={`${data!.config.heartbeatTimeout}ms`}
+              value={`${data.config.heartbeatTimeout}ms`}
             />
             <InfoRow
               label="截止扫描间隔"
-              value={`${data!.config.deadlineScanInterval}ms`}
+              value={`${data.config.deadlineScanInterval}ms`}
             />
           </CardContent>
         </Card>
@@ -142,19 +144,16 @@ export function DiagnosticsPage() {
           <CardContent>
             <InfoRow
               label="扫描间隔"
-              value={`${data!.heartbeatStatus.interval}ms`}
+              value={`${data.heartbeatStatus.interval}ms`}
             />
-            <InfoRow
-              label="超时"
-              value={`${data!.heartbeatStatus.timeout}ms`}
-            />
+            <InfoRow label="超时" value={`${data.heartbeatStatus.timeout}ms`} />
             <InfoRow
               label="上次扫描"
-              value={formatLastScan(data!.heartbeatStatus.lastScanAt)}
+              value={formatLastScan(data.heartbeatStatus.lastScanAt)}
             />
             <InfoRow
               label="已中断"
-              value={`${data!.heartbeatStatus.disruptedCount}`}
+              value={`${data.heartbeatStatus.disruptedCount}`}
             />
           </CardContent>
         </Card>
@@ -169,15 +168,15 @@ export function DiagnosticsPage() {
           <CardContent>
             <InfoRow
               label="扫描间隔"
-              value={`${data!.deadlineScannerStatus.interval}ms`}
+              value={`${data.deadlineScannerStatus.interval}ms`}
             />
             <InfoRow
               label="上次扫描"
-              value={formatLastScan(data!.deadlineScannerStatus.lastScanAt)}
+              value={formatLastScan(data.deadlineScannerStatus.lastScanAt)}
             />
             <InfoRow
               label="自动提交"
-              value={`${data!.deadlineScannerStatus.autoSubmitCount}`}
+              value={`${data.deadlineScannerStatus.autoSubmitCount}`}
             />
           </CardContent>
         </Card>

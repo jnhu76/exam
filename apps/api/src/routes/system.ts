@@ -197,8 +197,8 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
         uptime: process.uptime(),
         dbLatency,
         heartbeatStatus: {
-          interval: config.heartbeat.scanIntervalMs,
-          timeout: config.heartbeat.timeoutMs,
+          interval: config.heartbeat.scanIntervalMs ?? 30_000,
+          timeout: config.heartbeat.timeoutMs ?? 60_000,
           lastScanAt: heartbeatMetrics.lastScanAt?.toISOString() ?? null,
           disruptedCount: heartbeatMetrics.disruptedCount,
         },
@@ -208,8 +208,8 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           autoSubmitCount: deadlineScannerMetrics.autoSubmitCount,
         },
         config: {
-          heartbeatInterval: config.heartbeat.scanIntervalMs,
-          heartbeatTimeout: config.heartbeat.timeoutMs,
+          heartbeatInterval: config.heartbeat.scanIntervalMs ?? 30_000,
+          heartbeatTimeout: config.heartbeat.timeoutMs ?? 60_000,
           deadlineScanInterval: deadlineScannerMetrics.scanIntervalMs,
         },
       };
