@@ -36,6 +36,7 @@
     "test:db:lifecycle": "pnpm --filter @exam/db exec vitest run src/testWorkerDatabase.test.ts",
     "test:api": "pnpm --filter @exam/api test",
     "test:api:fast": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test",
+    "test:api:fast:max": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=6 pnpm --filter @exam/api test",
     "test:api:shard": "pnpm --filter @exam/api exec vitest run",
     "coverage:db": "pnpm --filter @exam/db coverage",
     "coverage:db:lifecycle": "pnpm --filter @exam/db exec vitest run src/testWorkerDatabase.test.ts --coverage",
