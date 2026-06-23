@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { downloadFile } from "@/lib/download";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -24,6 +25,8 @@ import {
   FileCheck2,
   CheckCircle2,
   HelpCircle,
+  Download,
+  FileJson,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -196,6 +199,62 @@ function formatAnswer(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.join(", ");
   return String(value);
+}
+
+/**
+ * Triggers a download for one of the attempt export formats and surfaces a
+ * toast on failure. Shared by the CSV and JSON export buttons.
+ */
+async function exportAttempt(
+  attemptId: string,
+  format: "csv" | "json",
+): Promise<void> {
+  try {
+    if (format === "csv") {
+      await downloadFile(
+        `/api/admin/attempts/${attemptId}/export/csv`,
+        `attempt-${attemptId}.csv`,
+      );
+    } else {
+      await downloadFile(
+        `/api/admin/attempts/${attemptId}/export`,
+        `attempt-${attemptId}.json`,
+      );
+    }
+  } catch {
+    toast.error("导出失败，请稍后重试");
+  }
+}
+
+/** Props for the attempt export buttons (CSV + JSON). */
+interface ExportButtonsProps {
+  attemptId: string;
+}
+
+/**
+ * Two outline buttons — 导出CSV and 导出JSON — that download the attempt via
+ * the shared {@link downloadFile} helper (cookie-authenticated, cross-origin
+ * safe). Reused by both the live and graded attempt views.
+ */
+function ExportButtons({ attemptId }: ExportButtonsProps) {
+  return (
+    <>
+      <Button
+        variant="outline"
+        onClick={() => void exportAttempt(attemptId, "csv")}
+      >
+        <Download className="size-4" aria-hidden="true" />
+        导出CSV
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => void exportAttempt(attemptId, "json")}
+      >
+        <FileJson className="size-4" aria-hidden="true" />
+        导出JSON
+      </Button>
+    </>
+  );
 }
 
 /** Props for the attempt lifecycle timeline section. */
@@ -433,9 +492,12 @@ export function AttemptDetailPage() {
         <PageHeader
           title={`${liveAttempt.examTitle} - 答卷详情`}
           actions={
-            <Button variant="outline" onClick={() => void navigate(-1)}>
-              返回
-            </Button>
+            <div className="flex gap-2">
+              <ExportButtons attemptId={id!} />
+              <Button variant="outline" onClick={() => void navigate(-1)}>
+                返回
+              </Button>
+            </div>
           }
         />
         <Card>
@@ -550,9 +612,12 @@ export function AttemptDetailPage() {
       <PageHeader
         title={`${result.examTitle} - 答卷详情`}
         actions={
-          <Button variant="outline" onClick={() => void navigate(-1)}>
-            返回
-          </Button>
+          <div className="flex gap-2">
+            <ExportButtons attemptId={id!} />
+            <Button variant="outline" onClick={() => void navigate(-1)}>
+              返回
+            </Button>
+          </div>
         }
       />
 
