@@ -20,6 +20,7 @@ export const routes = {
     results: "/admin/results",
     gradingQueue: "/admin/grading-queue",
     gradingDetail: (id: string) => `/admin/grading-queue/${id}`,
+    auditLogs: "/admin/audit-logs",
     attemptDetail: (id: string) => `/admin/attempts/${id}`,
     system: "/admin/system",
   },

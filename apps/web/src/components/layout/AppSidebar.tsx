@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   LogOut,
   Monitor,
+  ScrollText,
   Settings,
   Tags,
   UserRoundCog,
@@ -22,6 +23,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { routes } from "@/lib/routes";
 import { BrandHeader } from "./BrandHeader";
 
 /** Props for the AppSidebar component. */
@@ -36,33 +38,46 @@ interface AppSidebarProps {
 const groups = [
   {
     label: "概览",
-    items: [{ label: "仪表盘", to: "/admin/dashboard", icon: LayoutDashboard }],
+    items: [
+      { label: "仪表盘", to: routes.admin.dashboard, icon: LayoutDashboard },
+    ],
   },
   {
     label: "题库",
     items: [
-      { label: "课程管理", to: "/admin/courses", icon: GraduationCap },
-      { label: "题目管理", to: "/admin/questions", icon: BookOpen, end: true },
-      { label: "题目导入", to: "/admin/questions/import", icon: FileUp },
+      { label: "课程管理", to: routes.admin.courses, icon: GraduationCap },
+      {
+        label: "题目管理",
+        to: routes.admin.questions,
+        icon: BookOpen,
+        end: true,
+      },
+      { label: "题目导入", to: routes.admin.questionsImport, icon: FileUp },
     ],
   },
   {
     label: "考试",
     items: [
-      { label: "考试管理", to: "/admin/exams", icon: ClipboardList, end: true },
-      { label: "待评分", to: "/admin/grading-queue", icon: ClipboardCheck },
-      { label: "成绩查询", to: "/admin/results", icon: Gauge },
+      {
+        label: "考试管理",
+        to: routes.admin.exams,
+        icon: ClipboardList,
+        end: true,
+      },
+      { label: "待评分", to: routes.admin.gradingQueue, icon: ClipboardCheck },
+      { label: "成绩查询", to: routes.admin.results, icon: Gauge },
     ],
   },
 ];
 
 /** Sidebar navigation items visible only to Admin-role users. */
 const managementItems = [
-  { label: "用户管理", to: "/admin/users", icon: UserRoundCog },
-  { label: "考生管理", to: "/admin/candidates", icon: Users },
-  { label: "平台设置", to: "/admin/settings", icon: Settings },
-  { label: "考生字段", to: "/admin/candidate-fields", icon: Tags },
-  { label: "系统健康", to: "/admin/system", icon: Monitor },
+  { label: "用户管理", to: routes.admin.users, icon: UserRoundCog },
+  { label: "考生管理", to: routes.admin.candidates, icon: Users },
+  { label: "审计日志", to: routes.admin.auditLogs, icon: ScrollText },
+  { label: "平台设置", to: routes.admin.settings, icon: Settings },
+  { label: "考生字段", to: routes.admin.candidateFields, icon: Tags },
+  { label: "系统健康", to: routes.admin.system, icon: Monitor },
 ];
 
 /** A single navigation link in the sidebar with icon and active state styling. */

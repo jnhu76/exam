@@ -352,7 +352,7 @@ compose run --rm \
   -e CI="${CI:-1}" \
   e2e sh -lc '
     set -e
-    npm install --no-save --no-package-lock @playwright/test@1.57.0 >/dev/null 2>&1
+    npm install --no-save --no-package-lock @playwright/test@1.61.0 >/dev/null 2>&1
     "$@"
   ' _ "${PW_ARGS[@]}"
 EXIT_CODE=$?
