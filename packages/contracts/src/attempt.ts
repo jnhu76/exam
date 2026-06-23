@@ -325,9 +325,9 @@ export const AttemptExportQuestionResultSchema = z.object({
   content: z.string(),
   candidateAnswer: z.unknown(),
   standardAnswer: z.unknown(),
-  score: z.number(),
+  score: z.number().nullish(),
   maxScore: z.number(),
-  correct: z.boolean(),
+  correct: z.boolean().nullish(),
 });
 
 /** Type for a single question result in the export payload. */

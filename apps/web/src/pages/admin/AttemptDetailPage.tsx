@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -221,8 +221,10 @@ async function exportAttempt(
         `attempt-${attemptId}.json`,
       );
     }
-  } catch {
-    toast.error("导出失败，请稍后重试");
+  } catch (err) {
+    const message =
+      err instanceof ApiError ? err.message : "导出失败，请稍后重试";
+    toast.error(message);
   }
 }
 

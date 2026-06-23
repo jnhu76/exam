@@ -475,9 +475,9 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         题目内容: q.content,
         考生答案: formatAnswerValue(q.candidateAnswer),
         标准答案: formatAnswerValue(q.standardAnswer),
-        得分: q.score,
+        得分: q.score ?? "—",
         满分: q.maxScore,
-        是否正确: q.correct ? "是" : "否",
+        是否正确: q.correct == null ? "—" : q.correct ? "是" : "否",
       }));
       const csv = "\uFEFF" + generateCSV(csvHeaders, csvRows);
       reply.header(
@@ -521,9 +521,9 @@ async function buildAttemptExport(
         content: q.content,
         candidateAnswer: answerMap.get(q.originalQuestionId) ?? null,
         standardAnswer: q.standardAnswer,
-        score: gResult?.score ?? 0,
+        score: gResult?.score ?? null,
         maxScore: gResult?.maxScore ?? q.score,
-        correct: gResult?.correct ?? false,
+        correct: gResult?.correct ?? null,
       };
     });
 
@@ -576,5 +576,5 @@ function formatAnswerValue(value: unknown): string {
   if (value == null || value === "") return "";
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(String).join("; ");
-  return String(value);
+  return JSON.stringify(value);
 }
