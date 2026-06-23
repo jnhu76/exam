@@ -15,6 +15,7 @@ import {
   ScrollText,
   Settings,
   Tags,
+  Upload,
   UserRoundCog,
   Users,
 } from "lucide-react";
@@ -74,6 +75,7 @@ const groups = [
 const managementItems = [
   { label: "用户管理", to: routes.admin.users, icon: UserRoundCog },
   { label: "考生管理", to: routes.admin.candidates, icon: Users },
+  { label: "导入日志", to: routes.admin.importLogs, icon: Upload },
   { label: "审计日志", to: routes.admin.auditLogs, icon: ScrollText },
   { label: "平台设置", to: routes.admin.settings, icon: Settings },
   { label: "考生字段", to: routes.admin.candidateFields, icon: Tags },

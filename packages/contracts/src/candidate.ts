@@ -225,6 +225,7 @@ export const CandidateImportResultSchema = z.object({
       message: z.string(),
     }),
   ),
+  logId: z.string().uuid().optional(),
 });
 
 /** Type for a candidate import result. */

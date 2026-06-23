@@ -21,6 +21,7 @@ export const routes = {
     gradingQueue: "/admin/grading-queue",
     gradingDetail: (id: string) => `/admin/grading-queue/${id}`,
     auditLogs: "/admin/audit-logs",
+    importLogs: "/admin/import-logs",
     attemptDetail: (id: string) => `/admin/attempts/${id}`,
     system: "/admin/system",
   },

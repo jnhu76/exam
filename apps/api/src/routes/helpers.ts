@@ -1,6 +1,34 @@
 import type { RequestContext } from "@exam/domain";
+import { z } from "zod";
 import type { ZodError } from "zod";
+import { ImportJobLogStatusEnum } from "@exam/contracts";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+
+/**
+ * Import job status values persisted to `import_job_logs`, derived from the
+ * shared contracts enum so there is a single source of truth.
+ * - `completed`: no error rows at all.
+ * - `partial`:   some rows errored but at least one row succeeded.
+ * - `failed`:    all rows errored (no row succeeded).
+ */
+export type ImportJobStatus = z.infer<typeof ImportJobLogStatusEnum>;
+
+/**
+ * Resolves the import job status from the per-run outcome. Centralizes the
+ * three-state mapping so candidate and question import routes share one
+ * definition and cannot diverge.
+ *
+ * @param errors       Count of rows that errored in this run.
+ * @param affectedCount Count of rows that succeeded (created or updated).
+ * @returns The resolved status.
+ */
+export function resolveImportStatus(input: {
+  errors: number;
+  affectedCount: number;
+}): ImportJobStatus {
+  if (input.errors === 0) return "completed";
+  return input.affectedCount > 0 ? "partial" : "failed";
+}
 
 /**
  * Ensures that the request context has a `targetOrganizationId` set.

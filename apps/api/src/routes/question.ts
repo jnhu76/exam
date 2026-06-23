@@ -11,8 +11,9 @@ import {
 } from "@exam/contracts";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
+import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
 import type { RequestContext } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, resolveImportStatus } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import {
   buildErrorResponse,
@@ -500,6 +501,49 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           body.courseId,
           { total: body.rows.length, valid, errors },
         );
+        const questionLogStatus = resolveImportStatus({
+          errors,
+          affectedCount: valid,
+        });
+        let logId: string | undefined;
+        try {
+          const questionLog = await createImportJobLogRepo(fastify.db).create(
+            ctx,
+            {
+              type: "question",
+              status: questionLogStatus,
+              total: body.rows.length,
+              createdCount: valid,
+              updatedCount: 0,
+              errors,
+              metadata: { courseId: body.courseId, warnings },
+              errorsDetail:
+                errors > 0
+                  ? details
+                      .filter((d) => d.status === "error")
+                      .map((d) => ({
+                        row: d.row,
+                        code: "VALIDATION_ERROR",
+                        message: d.message ?? "",
+                      }))
+                  : null,
+            },
+          );
+          logId = questionLog.id;
+        } catch (logError) {
+          fastify.log.error(
+            { err: logError, type: "question", status: questionLogStatus },
+            "Failed to persist question import log; import result is unchanged",
+          );
+        }
+        return reply.code(200).send({
+          total: body.rows.length,
+          valid,
+          warnings,
+          errors,
+          details,
+          ...(logId ? { logId } : {}),
+        });
       }
       return reply.code(200).send({
         total: body.rows.length,
