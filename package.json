@@ -47,7 +47,9 @@
     "verify:nodb-tests": "pnpm test:nodb && pnpm coverage:nodb",
     "verify:fast": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm verify:nodb-tests && pnpm test:db:unit && pnpm test:api:fast && pnpm build",
     "verify:full": "pnpm verify",
-    "verify:ci": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm verify:nodb-tests && pnpm coverage:db && pnpm coverage:api && pnpm test:integration && pnpm build",
+    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck",
+    "verify:ci:post-static": "pnpm verify:nodb-tests && pnpm coverage:db && pnpm coverage:api && pnpm test:integration && pnpm build",
+    "verify:ci": "pnpm verify:static && pnpm verify:ci:post-static",
     "verify:coverage-gate": "pnpm verify:ci",
     "prepare": "husky"
   },

@@ -595,6 +595,88 @@ build；CI 上省去 test 重复执行后应净更快。
 - 无 CI job DAG 并行化（Phase 6F 候选）。
 - Phase 6C 的 `verify:coverage-gate` 现等于 `verify:ci`，但**未替换** local `verify`。
 
+### Phase 6F CI job DAG optimization — static-gated parallel jobs（2026-06-23）
+
+> Phase 6F 只优化 **CI DAG**（缩短 wall-clock），**不**改测试语义、**不**改 turbo / Vitest /
+> DB isolation。前置：6E 已让 verify job 用 coverage 作 test 入口（不重复 test+coverage）。
+
+#### 1. 问题
+
+CI 原先是串行 DAG：
+
+```text
+verify
+  ├─ api-fast   (needs: verify)
+  └─ e2e        (needs: verify)
+```
+
+`api-fast` / `e2e` 必须等完整 verify 跑完才开始，wall-clock ≈ `verify + max(api-fast, e2e)`。
+
+#### 2. 修复（package scripts）
+
+| Script | Change |
+|---|---|
+| `verify:static`（**新增**） | `format:check → lint → lint:copy → lint:arch → typecheck`。无 DB、无 build，可独立运行。 |
+| `verify:ci:post-static`（**新增**） | `verify:nodb-tests → coverage:db → coverage:api → test:integration → build`。仅 static 通过后用。 |
+| `verify:ci` | 改为 `pnpm verify:static && pnpm verify:ci:post-static`。**本地语义不变**（拆分仅为 CI DAG 复用）。 |
+| `verify` / `verify:db-tests` / `verify:fast` / `test:api` / `test:api:fast` / `coverage:api` / `coverage:api:fast` | **不变**。 |
+
+#### 3. 修复（CI DAG `.github/workflows/ci.yml`）
+
+| Job | Before | After |
+|---|---|---|
+| `static`（**新增**） | — | 无 PG service；`pnpm verify:static`；快速 gate。 |
+| `verify` | 无 needs；内部跑 format/lint/typecheck + post-static | `needs: static`；**不再**重复 static checks；只跑 post-static（nodb-tests/coverage:db/coverage:api/test:integration/build）。 |
+| `api-fast` | `needs: verify` | `needs: static`（matrix shard、worker-database env、`API_TEST_MAX_WORKERS: "1"`、PG service 全不变）。 |
+| `e2e` | `needs: verify` | `needs: static`（仍独立 build/migrate/seed/start/run，仍用 `exam_e2e`，无 artifact sharing）。 |
+| services / env / setup | **不变** |
+
+新 DAG：
+
+```text
+static
+  ├─ verify
+  ├─ api-fast
+  └─ e2e
+```
+
+wall-clock ≈ `static + max(verify, api-fast, e2e)`。
+
+#### 4. 语义等价性（为什么没改测试语义）
+
+- **static checks 仍跑**：移到独立 `static` job（`verify:static`），verify/api-fast/e2e 均
+  `needs: static`，即任何下游 job 启动前 static 必须通过。
+- **verify 仍跑** non-DB tests、DB coverage、API coverage、integration tests、build（Phase 6E
+  的 post-static 内容，只是不再重复 static checks）。
+- **api-fast 仍跑** 同样的 shard 测试（`vitest run --shard=N/2`），env/service 全不变。
+- **e2e 仍跑** 同样的 Playwright 流程（独立 build/migrate/seed/start/run）。
+- **没有 skip 任何测试**：只改 job 依赖关系。
+- **未引入** build artifact sharing 或新缓存策略。
+
+#### 5. 本地验证
+
+| Command | Result | Duration |
+|---|---|---|
+| `pnpm verify:static` | PASS | ~15s |
+| `pnpm verify:ci:post-static` | PASS | ~160s |
+| `pnpm verify:ci`（Phase 6E 已验证） | PASS | ~304s（cold-cache；等于 static + post-static） |
+| ci.yml YAML lint + DAG 断言 | 通过 | — |
+
+`verify:ci` 本地语义不变（= static + post-static）。CI 上 wall-clock 预期下降，但**需观察
+首次 live GitHub Actions run** 才能确认（local 无法模拟 job 调度）。
+
+#### 6. 不变项 / claim boundary
+
+- **不声称 BUG-FLAKE-001 closed**（Phase 6D 只修 physical-DB-lifecycle 子类；auth
+  amplification 仍 open）。
+- **不声称** `api-fast` 可替代 `verify`（api-fast 仍是补充 shard，不是 primary gate）。
+- **不把** worker-database 设为默认。
+- `apps/api fileParallelism:false` **不变**。
+- `verify:db-tests` 串行链 **不变**（local / full legacy gate）。
+- `turbo.json` **不变**。
+- **不声称 CI shard 已稳定**——需 live GitHub Actions run 通过后才算验证。
+- 未做 build artifact sharing / 新缓存策略。
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 - 在 ADR-007 Phase 4 调查中观察到 `examTransitions.test.ts` 在 `file-schema`

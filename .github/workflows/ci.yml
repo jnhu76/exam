@@ -14,10 +14,45 @@ permissions:
   contents: read
 
 jobs:
+  # ADR-007 Phase 6F: a fast, DB-free `static` job gates the heavier jobs.
+  # `verify`, `api-fast`, and `e2e` all now `needs: static` instead of chaining
+  # off `verify`, so they run in parallel once static checks pass. This cuts
+  # wall-clock from (verify + max(api-fast, e2e)) to
+  # (static + max(verify, api-fast, e2e)). Test semantics are unchanged; only
+  # job dependencies changed. `verify` no longer repeats format/lint/typecheck
+  # (static owns those).
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Static checks
+        run: pnpm verify:static
+
   verify:
     name: Verify (PostgreSQL 18.4)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: static
 
     services:
       postgres:
@@ -61,21 +96,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format check
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Lint copy
-        run: pnpm lint:copy
-
-      - name: Lint architecture
-        run: pnpm lint:arch
-
-      - name: Typecheck
-        run: pnpm typecheck
-
+      # ADR-007 Phase 6F: static checks (format/lint/lint:copy/lint:arch/
+      # typecheck) now run in the `static` job (this job `needs: static`).
       # ADR-007 Phase 6E: the verify job no longer runs root `pnpm test` AND
       # root `pnpm coverage` (which duplicated every DB/API test execution).
       # Instead, DB/API tests use coverage as the single test entry — `coverage`
@@ -103,7 +125,7 @@ jobs:
     name: "API fast (shard ${{ matrix.shard }}/2)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: verify
+    needs: static
 
     strategy:
       fail-fast: false
@@ -163,7 +185,7 @@ jobs:
     name: E2E (Playwright Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: verify
+    needs: static
 
     services:
       postgres:
