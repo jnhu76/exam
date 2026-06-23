@@ -29,3 +29,26 @@ export const AuditLogResponseSchema = z.object({
 
 /** Type for a single audit log entry. */
 export type AuditLogResponse = z.infer<typeof AuditLogResponseSchema>;
+
+/**
+ * Response schema for a single timeline event. A timeline event is a
+ * projection of an audit log entry scoped to one attempt target; the shape
+ * is identical to `AuditLogResponseSchema`.
+ */
+export const AttemptTimelineEventSchema = AuditLogResponseSchema;
+
+/** Type for a single timeline event. */
+export type AttemptTimelineEvent = z.infer<typeof AttemptTimelineEventSchema>;
+
+/**
+ * Response schema for `GET /api/admin/attempts/:attemptId/timeline`: the
+ * ordered list of audit-log events for one attempt, oldest-first.
+ */
+export const AttemptTimelineResponseSchema = z.object({
+  events: z.array(AttemptTimelineEventSchema),
+});
+
+/** Type for the attempt timeline response. */
+export type AttemptTimelineResponse = z.infer<
+  typeof AttemptTimelineResponseSchema
+>;

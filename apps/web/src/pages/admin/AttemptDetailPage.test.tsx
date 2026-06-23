@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -200,5 +200,87 @@ describe("AttemptDetailPage", () => {
     await screen.findByText("答题详情");
     expect(screen.getAllByText("单选").length).toBe(2);
     expect(screen.getByText("填空")).toBeInTheDocument();
+  });
+
+  // --- Timeline section (P2E-J2) ---
+  // api.get is called twice per page load (result + timeline). Route the mock
+  // by URL so each fetch resolves to the right payload.
+
+  function mockTimelineResult(
+    result: unknown,
+    timeline: { events: unknown[] },
+  ) {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/timeline")) {
+        return timeline;
+      }
+      return result;
+    });
+  }
+
+  const mockTimelineEvents = {
+    events: [
+      {
+        id: "e1",
+        organizationId: "org1",
+        actorId: "cand-1",
+        action: "attempt.start",
+        targetType: "attempt",
+        targetId: "attempt-1",
+        metadata: { source: "candidate" },
+        ipAddress: null,
+        userAgent: null,
+        createdAt: "2026-06-23T08:00:00.000Z",
+      },
+      {
+        id: "e2",
+        organizationId: "org1",
+        actorId: "admin-1",
+        action: "attempt.forceSubmit",
+        targetType: "attempt",
+        targetId: "attempt-1",
+        metadata: { reason: "proctor" },
+        ipAddress: "10.0.0.1",
+        userAgent: "test",
+        createdAt: "2026-06-23T08:30:00.000Z",
+      },
+    ],
+  };
+
+  it("renders the timeline section with human-readable event labels", async () => {
+    mockTimelineResult(mockGradedResult, mockTimelineEvents);
+    renderPage();
+    await screen.findByText("答卷时间线");
+    // attempt.start -> 开始答题, attempt.forceSubmit -> 管理员强制交卷
+    expect(await screen.findByText("开始答题")).toBeInTheDocument();
+    expect(screen.getByText("管理员强制交卷")).toBeInTheDocument();
+  });
+
+  it("shows empty state when timeline has no events", async () => {
+    mockTimelineResult(mockGradedResult, { events: [] });
+    renderPage();
+    await screen.findByText("答卷时间线");
+    expect(await screen.findByText("暂无时间线事件")).toBeInTheDocument();
+  });
+
+  it("shows timeline error fallback when timeline fetch rejects", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/timeline")) {
+        throw new Error("timeline fail");
+      }
+      return mockGradedResult;
+    });
+    renderPage();
+    expect(await screen.findByText("加载时间线失败")).toBeInTheDocument();
+  });
+
+  it("expands event metadata when an event row is clicked", async () => {
+    mockTimelineResult(mockGradedResult, mockTimelineEvents);
+    renderPage();
+    await screen.findByText("答卷时间线");
+    const startLabel = await screen.findByText("开始答题");
+    fireEvent.click(startLabel);
+    // metadata JSON for the start event contains "source".
+    expect(await screen.findByText(/source/)).toBeInTheDocument();
   });
 });
