@@ -5,6 +5,7 @@ import {
   ForceSubmitRequestSchema,
   ExtendTimeRequestSchema,
   LoadAttemptResponseSchema,
+  AttemptTimelineResponseSchema,
   AttemptIdParamsSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
@@ -319,6 +320,63 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
       );
+    },
+  );
+
+  /**
+   * GET /admin/attempts/:attemptId/timeline — returns the chronological audit
+   * trail for one attempt (start, save, disrupt, restore, submit, grade, and
+   * admin actions like force-submit/extend/misconduct), oldest-first. Read-only
+   * query over audit_logs filtered by target. Admin-only; 404 if the attempt
+   * does not exist in the caller's organization.
+   */
+  fastify.get(
+    "/admin/attempts/:attemptId/timeline",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        params: AttemptIdParamsSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: AttemptTimelineResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const { attemptId } = parsed.data;
+
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const attempt = await attemptRepo.findById(ctx, attemptId);
+      if (!attempt) {
+        throw new NotFoundError("Attempt not found");
+      }
+
+      const auditLogRepo = createAuditLogRepo(fastify.db as Database);
+      const rows = await auditLogRepo.listByTarget(ctx, "attempt", attemptId);
+
+      return reply.send({
+        events: rows.map((row) => ({
+          id: row.id,
+          organizationId: row.organizationId,
+          actorId: row.actorId,
+          action: row.action,
+          targetType: row.targetType,
+          targetId: row.targetId,
+          metadata: row.metadata,
+          ipAddress: row.ipAddress,
+          userAgent: row.userAgent,
+          createdAt: row.createdAt.toISOString(),
+        })),
+      });
     },
   );
 }

@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs } from "../schema/pg.js";
@@ -53,6 +53,28 @@ export function createAuditLogRepo(db: Database) {
         .from(auditLogs)
         .where(where);
       return { items, total: Number(countResult?.total ?? 0) };
+    },
+    /**
+     * Lists all audit log entries for a given target within the tenant's
+     * organization, ordered chronologically (oldest-first) for timeline use.
+     */
+    async listByTarget(
+      ctx: TenantContext | RequestContext,
+      targetType: string,
+      targetId: string,
+    ): Promise<(typeof auditLogs.$inferSelect)[]> {
+      const orgId = resolveOrganizationId(ctx);
+      return db
+        .select()
+        .from(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.organizationId, orgId),
+            eq(auditLogs.targetType, targetType),
+            eq(auditLogs.targetId, targetId),
+          ),
+        )
+        .orderBy(asc(auditLogs.createdAt), asc(auditLogs.id));
     },
   };
 }

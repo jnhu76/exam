@@ -5,11 +5,27 @@ import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Play,
+  Send,
+  Save,
+  WifiOff,
+  RefreshCw,
+  Clock,
+  Timer,
+  Flag,
+  FileCheck2,
+  CheckCircle2,
+  HelpCircle,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +52,96 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TYPE_LABELS } from "@/lib/constants";
+import type {
+  AttemptTimelineEvent,
+  AttemptTimelineResponse,
+} from "@exam/contracts";
+
+/**
+ * Alias for {@link AttemptTimelineEvent} from the shared contracts package,
+ * so the component reads naturally while staying in sync with the backend
+ * schema (no type drift between frontend and backend).
+ */
+type TimelineEvent = AttemptTimelineEvent;
+
+/** Tone classes for timeline event badges (semantic tokens only). */
+type EventTone =
+  | "primary"
+  | "success"
+  | "warning"
+  | "destructive"
+  | "info"
+  | "secondary"
+  | "muted";
+
+/** Display metadata for a known audit action: Chinese label, tone, and icon. */
+interface EventMeta {
+  label: string;
+  tone: EventTone;
+  icon: LucideIcon;
+}
+
+/**
+ * Maps attempt-lifecycle audit actions to human-readable labels. Audit
+ * *actions* are a distinct vocabulary from lifecycle *statuses*, so this lives
+ * here rather than in statusMeta.ts. Unknown actions fall back to a muted
+ * generic entry using the raw action string.
+ */
+const EVENT_META: Record<string, EventMeta> = {
+  "attempt.start": { label: "开始答题", tone: "primary", icon: Play },
+  "attempt.saveAnswer": { label: "保存答案", tone: "secondary", icon: Save },
+  "attempt.disrupted": { label: "连接中断", tone: "warning", icon: WifiOff },
+  "attempt.restore": { label: "重新连接", tone: "info", icon: RefreshCw },
+  "attempt.submit": { label: "提交答卷", tone: "primary", icon: Send },
+  "attempt.autoSubmit": { label: "自动交卷", tone: "secondary", icon: Send },
+  "attempt.forceSubmit": {
+    label: "管理员强制交卷",
+    tone: "destructive",
+    icon: Send,
+  },
+  "attempt.extendTime": {
+    label: "管理员延长时长",
+    tone: "warning",
+    icon: Timer,
+  },
+  "attempt.misconductFlagged": {
+    label: "标记违规",
+    tone: "destructive",
+    icon: Flag,
+  },
+  "grading.score_entered": {
+    label: "录入评分",
+    tone: "secondary",
+    icon: FileCheck2,
+  },
+  "grading.finalized": {
+    label: "评分完成",
+    tone: "success",
+    icon: CheckCircle2,
+  },
+};
+
+/** Badge tone → Tailwind class mapping for timeline events. */
+const eventToneClass: Record<EventTone, string> = {
+  primary: "bg-primary-soft text-primary-soft-foreground",
+  success: "bg-success-soft text-success",
+  warning: "bg-warning-soft text-warning",
+  destructive: "bg-destructive-soft text-destructive",
+  info: "bg-info-soft text-info",
+  secondary: "bg-secondary text-secondary-foreground",
+  muted: "bg-muted text-muted-foreground",
+};
+
+/** Resolves an audit action to its display metadata, falling back to muted. */
+function getEventMeta(action: string): EventMeta {
+  return (
+    EVENT_META[action] ?? {
+      label: action,
+      tone: "muted",
+      icon: HelpCircle,
+    }
+  );
+}
 
 /** Per-question grading result for a single exam attempt. */
 interface QuestionResult {
@@ -92,6 +198,101 @@ function formatAnswer(value: unknown): string {
   return String(value);
 }
 
+/** Props for the attempt lifecycle timeline section. */
+interface TimelineSectionProps {
+  events: TimelineEvent[] | null;
+  isLoading: boolean;
+  hasError: boolean;
+  onRetry: () => void;
+  expandedEventId: string | null;
+  onToggleEvent: (id: string) => void;
+}
+
+/**
+ * Card showing the chronological audit trail of an attempt. Reuses the shared
+ * loading/error/empty states. Each event row expands to reveal its metadata.
+ */
+function TimelineSection({
+  events,
+  isLoading,
+  hasError,
+  onRetry,
+  expandedEventId,
+  onToggleEvent,
+}: TimelineSectionProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">答卷时间线</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <LoadingState />
+        ) : hasError ? (
+          <ErrorState message="加载时间线失败" onRetry={onRetry} />
+        ) : !events || events.length === 0 ? (
+          <EmptyState
+            icon={<Clock className="size-8" />}
+            title="暂无时间线事件"
+            description="该尝试的操作记录将显示在此"
+          />
+        ) : (
+          <div className="flex flex-col gap-1">
+            {events.map((event, index) => {
+              const meta = getEventMeta(event.action);
+              const Icon = meta.icon;
+              const isExpanded = expandedEventId === event.id;
+              return (
+                <div key={event.id}>
+                  {index > 0 && <Separator className="my-1" />}
+                  <button
+                    type="button"
+                    onClick={() => onToggleEvent(event.id)}
+                    className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
+                    aria-expanded={isExpanded}
+                  >
+                    <span className="text-muted-foreground" aria-hidden="true">
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className={eventToneClass[meta.tone]}
+                        >
+                          {meta.label}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(event.createdAt).toLocaleString("zh-CN")}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground truncate">
+                        操作者 {event.actorId}
+                      </span>
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="flex flex-col gap-1 px-2 pb-2">
+                      <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                        {JSON.stringify(event.metadata, null, 2)}
+                      </pre>
+                      {event.ipAddress && (
+                        <p className="text-xs text-muted-foreground">
+                          IP: {event.ipAddress}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
  * Displays a graded exam attempt's score summary and per-question answer details.
  * Shows the earned score, passing threshold, and a table of each question with
@@ -111,6 +312,12 @@ export function AttemptDetailPage() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Timeline fetch is independent of the result fetch so it can load and
+  // render for any attempt status (live or graded).
+  const [timeline, setTimeline] = useState<TimelineEvent[] | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(true);
+  const [timelineError, setTimelineError] = useState(false);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [flagSeverity, setFlagSeverity] = useState<"warning" | "serious">(
     "warning",
@@ -160,6 +367,31 @@ export function AttemptDetailPage() {
   useEffect(() => {
     loadResult();
   }, [loadResult]);
+
+  const loadTimeline = useCallback(async () => {
+    if (!id) return;
+    setTimelineLoading(true);
+    setTimelineError(false);
+    setTimeline(null);
+    try {
+      const data = await api.get<AttemptTimelineResponse>(
+        `/api/admin/attempts/${id}/timeline`,
+      );
+      setTimeline(data.events);
+    } catch {
+      setTimelineError(true);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadTimeline();
+  }, [loadTimeline]);
+
+  const toggleEvent = useCallback((eventId: string) => {
+    setExpandedEventId((prev) => (prev === eventId ? null : eventId));
+  }, []);
 
   const handleFlag = useCallback(async () => {
     if (!liveAttempt) return;
@@ -235,6 +467,15 @@ export function AttemptDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        <TimelineSection
+          events={timeline}
+          isLoading={timelineLoading}
+          hasError={timelineError}
+          onRetry={loadTimeline}
+          expandedEventId={expandedEventId}
+          onToggleEvent={toggleEvent}
+        />
 
         <Dialog open={flagDialogOpen} onOpenChange={setFlagDialogOpen}>
           <DialogContent aria-describedby={undefined} className="max-w-sm">
@@ -400,6 +641,15 @@ export function AttemptDetailPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <TimelineSection
+        events={timeline}
+        isLoading={timelineLoading}
+        hasError={timelineError}
+        onRetry={loadTimeline}
+        expandedEventId={expandedEventId}
+        onToggleEvent={toggleEvent}
+      />
     </div>
   );
 }

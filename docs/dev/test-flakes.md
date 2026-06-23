@@ -775,6 +775,67 @@ Tests  1 failed | 527 passed (528)
 
 ---
 
+## 2026-06-23 — `testWorkerDatabase.test.ts` ensureDatabaseExists 5s timeout（`pnpm verify` coverage 模式）
+
+### 失败位置
+
+- 文件：`packages/db/src/testWorkerDatabase.test.ts`
+- 用例：`ensureDatabaseExists > creates the database if missing, idempotent on second call`
+- 调用：`pnpm verify`（→ `@exam/db coverage`，v8 instrumentation + turbo 并发）
+
+### 错误
+
+```text
+FAIL  src/testWorkerDatabase.test.ts > ensureDatabaseExists > creates the database if missing, idempotent on second call
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure a timeout globally.
+
+❯ src/testWorkerDatabase.test.ts:144:3
+   145|     const workerDb = "exam_test_w_phase3a_ensure";
+   146|     await dropDbIfPresent(workerDb);
+```
+
+### 出现场景
+
+- 分支：`feat/p2e-j2-attempt-timeline`（P2E-J2 attempt timeline 实现收尾）
+- 当时正在做：`pnpm verify` 全链路验证（已通过 format/lint:copy/lint:arch/lint/typecheck，到达 `@exam/db coverage`）
+- 触发命令：`pnpm verify`
+- 复跑结果：`pnpm --filter @exam/db test testWorkerDatabase` 立即 12/12 PASS（843ms），全部用例 green
+
+### 根因假设
+
+属 BUG-FLAKE-001 / BUG-FLAKE-002 家族：`ensureDatabaseExists` 用例在 coverage 模式（v8 instrumentation 放大 I/O）+ turbo 跨任务并发调度下，对同一个本地 PG 实例执行 `dropDbIfPresent` → `ensureDatabaseExists`（CREATE DATABASE）→ migrate → seed 的物理数据库生命周期，在 5s 默认 testTimeout 内无法收敛。`pnpm verify` 期间 `@exam/db#test`、`@exam/db#coverage`、`@exam/api#test`、`@exam/api#coverage` 多任务挤同一 PG，CREAT/DROP DATABASE 是重操作，瞬时 I/O 争用导致单个用例超时。
+
+**核心证据**：
+
+- 同代码、同环境再跑立即 12/12 PASS（843ms）——非确定性
+- 失败是 timeout（5000ms），不是断言错误
+- `testWorkerDatabase.ts` 本轮未改动（`git diff --name-only master...HEAD` 不含该文件）
+- 该用例属 worker-database 物理数据库生命周期（CREATE/DROP DATABASE），重于普通 schema create/migrate，对并发 I/O 更敏感
+
+### 已知不是的原因
+
+- 不是 P2E-J2 attempt timeline 改动引入：改动仅触及 `auditLogRepo.ts`、`audit.ts`、`attempts.admin.ts`、`AttemptDetailPage.tsx` 及其测试，全部与 `testWorkerDatabase.ts` 无因果
+- 不是 worker-database 原型代码 bug：单独复跑整文件 12/12 green
+- 不是迁移问题：物理数据库 CREATE/DROP 与 schema migration 无关
+
+### 当前缓解
+
+无单点缓解（符合登记规则——偶发、与当前改动无因果，不主动加 timeout 或 skip）。既有 PR88 `turbo.json` `@exam/db#coverage dependsOn @exam/db#test` 串行化已生效（本机 PG 启动较慢时仍可能瞬时超时），且 `verify:db-tests` 串行链已就位。
+
+### 后续动作
+
+- 观察：若该位置复发 ≥3 次或在 PR CI 上稳定出现，升级为正式条目（BUG-FLAKE-001 家族 worker-DB 变种）。
+- 根因修复走 BUG-FLAKE-001 B 方案 follow-up 方向：测试期 semaphore 串行化隔离 schema/数据库的 create/migrate/seed；或预迁移模板减少物理 CREATE DATABASE 频次。
+- **不要**因为单次 flake 而给 `testWorkerDatabase` 单点加 timeout 或 skip 该用例（会掩盖真实回归）。
+
+### 复发记录
+
+- 2026-06-23：P2E-J2 实现 `pnpm verify` 收尾时单次出现（1/151），`pnpm --filter @exam/db test testWorkerDatabase` 立即 12/12 PASS。
+
+---
+
+
 ## 模板（新增 flake 时复制使用）
 
 ```markdown
