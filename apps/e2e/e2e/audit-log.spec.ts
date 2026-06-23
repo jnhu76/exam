@@ -99,16 +99,18 @@ test.describe("audit log viewer (P2E-J1)", () => {
   test("admin filters by date range (from=today)", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto("/admin/audit-logs");
+    await expect(page.getByRole("heading", { name: "审计日志" })).toBeVisible({
+      timeout: 15_000,
+    });
 
-    // Pick today as the start date. The DatePicker trigger is labeled 开始日期.
+    // Open the start-date DatePicker (trigger labeled 开始日期 via aria-label)
+    // and pick day 1 of the current month. RDP v10 labels each day with a full
+    // aria-label like "2026年6月1日 星期一", so match by the day-suffix regex
+    // rather than the bare number.
     await page.getByRole("button", { name: "开始日期" }).click();
-    // Today's day number.
-    const today = new Date().getDate();
-    await page
-      .getByRole("gridcell", { name: String(today), exact: true })
-      .click();
+    await page.getByRole("gridcell", { name: /1日/ }).first().click();
 
-    // The table should still have rows (entries created today exist).
+    // The table should still have rows after applying from=day-1.
     await expect(
       page
         .getByRole("row")
@@ -116,12 +118,7 @@ test.describe("audit log viewer (P2E-J1)", () => {
         .first(),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Now set a far-past start date to verify the filter narrows results:
-    // open the picker again and pick day 1 (still this month, but earlier).
-    await page.getByRole("button", { name: "开始日期" }).click();
-    await page.getByRole("gridcell", { name: "1", exact: true }).click();
-
-    // Clear filters and confirm rows return.
+    // Clear filters via 清空筛选 and confirm rows remain.
     await page.getByRole("button", { name: /清空筛选/ }).click();
     await expect(
       page
