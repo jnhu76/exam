@@ -76,17 +76,28 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+      # ADR-007 Phase 6E: the verify job no longer runs root `pnpm test` AND
+      # root `pnpm coverage` (which duplicated every DB/API test execution).
+      # Instead, DB/API tests use coverage as the single test entry — `coverage`
+      # runs the same test files as `test` (verified: db 14/160, api 60/623) but
+      # also collects v8 instrumentation, so one pass covers both. Non-DB
+      # packages still run via `verify:nodb-tests`. `test:integration` and
+      # `build` are unchanged. No tests are skipped; coverage thresholds are
+      # still enforced inside `coverage:db`/`coverage:api`.
+      - name: Non-DB tests and coverage
+        run: pnpm verify:nodb-tests
+
+      - name: DB coverage
+        run: pnpm coverage:db
+
+      - name: API coverage
+        run: pnpm coverage:api
 
       - name: Integration tests
         run: pnpm test:integration
 
       - name: Build
         run: pnpm build
-
-      - name: Coverage
-        run: pnpm coverage
 
   api-fast:
     name: "API fast (shard ${{ matrix.shard }}/2)"

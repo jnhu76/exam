@@ -105,6 +105,7 @@ production code paths.
 | Phase 5B — local maxWorkers=4    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass; local recommended mode (local, test-only)             |
 | Phase 6 — CI shard               | Config prepared; live CI shard validation pending | 2 shards × 1 worker in ci.yml; live CI validation pending |
 | Phase 6D — physical DB lifecycle contention | Mitigation implemented (local-only evidence; not CI-validated; does not close BUG-FLAKE-001) | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress |
+| Phase 6E — CI verify gate dedup | CI verify job optimized to avoid root test + coverage duplication | `verify:ci` uses coverage as test entry; `verify`/`verify:db-tests`/api-fast/e2e unchanged |
 | Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes

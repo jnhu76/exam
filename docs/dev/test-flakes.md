@@ -522,6 +522,79 @@ Phase 6C coverage dedup gate 的 blocker（`coverage:db` standalone 3/3）可重
 本 Phase **不**自动推进 coverage dedup，`verify:coverage-gate` 仍为 un-wired candidate，
 `verify` 仍走 `test:db + test:api + coverage:db + coverage:api` 串行链。是否 dedup 需独立评估。
 
+### Phase 6E CI verify gate optimization — avoid root test + coverage duplication（2026-06-23）
+
+> Phase 6E 针对 **CI / package scripts 层**消除重复测试执行，**不**改 DB lifecycle 根因
+> （Phase 6D 已处理）。前置条件已满足：`coverage:db` 5/5 PASS、`pnpm verify` PASS、
+> physical-DB-lifecycle cold-start flake 已由 advisory lock / unique DB names / robust drop 缓解。
+
+#### 1. 问题
+
+CI verify job 原先同时运行：
+
+```text
+pnpm test       → turbo test（含 DB/API 全部测试）
+pnpm coverage   → turbo coverage（再跑一遍同样的 DB/API 测试 + v8 插桩）
+```
+
+`coverage` 严格是 `test` 的超集（Phase 6C 已验证：`@exam/db` 14/160、`@exam/api` 60/623
+在 test 与 coverage 下文件数与测试数完全一致）。同时跑两者等于 DB/API 测试执行两遍。
+
+#### 2. 修复（package scripts）
+
+| Script | Change |
+|---|---|
+| `verify:ci`（**新增**） | `format:check → lint → lint:copy → lint:arch → typecheck → verify:nodb-tests → coverage:db → coverage:api → test:integration → build`。用 coverage 作为 DB/API 的**单一** test 入口，省去重复 test 执行。 |
+| `verify:coverage-gate` | 改为 `pnpm verify:ci` 别名（Phase 6C 时为 un-wired candidate；现与 `verify:ci` 对齐）。 |
+| `verify` | **不变**（仍走 `verify:db-tests` 串行链）。 |
+| `verify:db-tests` | **不变**。 |
+| `verify:fast` | **不变**。 |
+| `test:api` / `test:api:fast` | **不变**。 |
+
+#### 3. 修复（CI workflow `.github/workflows/ci.yml`）
+
+| Job | Before | After |
+|---|---|---|
+| `verify` | `pnpm test` → `pnpm test:integration` → `pnpm build` → `pnpm coverage`（test + coverage 重复跑 DB/API） | static checks → `verify:nodb-tests` → `coverage:db` → `coverage:api` → `test:integration` → `build`（coverage 作 test 入口，不重复） |
+| `api-fast` | **不变**（needs: verify、2 shards） |
+| `e2e` | **不变**（needs: verify、独立 PG `exam_e2e`） |
+| services / env / setup | **不变** |
+
+#### 4. 语义等价性（为什么没 skip 任何测试）
+
+- **`coverage:db` 替代 `test:db`**：`coverage` 跑与 `test` 完全相同的测试文件（Phase 6C
+  同批次验证：db 14 文件 / 160 测试一致），同时收集 v8 覆盖率。一次执行覆盖两者。
+- **`coverage:api` 替代 `test:api`**：同理（api 60 文件 / 623 测试一致）。
+- **non-DB 测试仍跑**：`verify:nodb-tests`（`test:nodb && coverage:nodb`）覆盖
+  web/contracts/domain/import-export/exam-engine/auth 等非 DB package，不受影响。
+- **integration tests 仍跑**：`test:integration` 保留。
+- **build 仍跑**：`pnpm build` 保留。
+- **没有 skip 任何测试**：只是把 DB/API 的 test 执行与 coverage 执行合并为一次 coverage 执行。
+- **coverage threshold 不降低**：`coverage:db`/`coverage:api` 仍执行各 package
+  `vitest run --coverage` 的内置 threshold 校验。
+
+#### 5. 本地验证
+
+| Command | Result | Duration |
+|---|---|---|
+| `pnpm verify:ci` | PASS | ~304s（含 build） |
+| `pnpm verify`（旧 gate 对照，Phase 6D 记录） | PASS | ~281s + 2/2 stress PASS |
+
+`verify:ci` 在本地通过后才会改 CI workflow。本地 `verify:ci` 比 `verify` 略慢主要因 cold-cache
+build；CI 上省去 test 重复执行后应净更快。
+
+#### 6. 不变项（claim boundary）
+
+- **不声称 BUG-FLAKE-001 closed**（Phase 6D 只修了 physical-DB-lifecycle 子类；auth
+  amplification 仍 open）。
+- `apps/api fileParallelism:false` **不变**（默认串行仍是 I/O contention 缓解）。
+- `verify:db-tests` 串行链 **不变**（local / full legacy gate 仍用）。
+- `turbo.json` **不变**。
+- worker-database **不变**（仍 opt-in；CI verify job 不设 worker-database）。
+- `api-fast` / `e2e` job **不变**。
+- 无 CI job DAG 并行化（Phase 6F 候选）。
+- Phase 6C 的 `verify:coverage-gate` 现等于 `verify:ci`，但**未替换** local `verify`。
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 - 在 ADR-007 Phase 4 调查中观察到 `examTransitions.test.ts` 在 `file-schema`
