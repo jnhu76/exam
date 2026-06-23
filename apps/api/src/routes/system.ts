@@ -5,6 +5,7 @@ import { computeStatus } from "@exam/exam-engine";
 import {
   SystemHealthResponseSchema,
   DashboardResponseSchema,
+  DiagnosticsResponseSchema,
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
 import type { Database } from "@exam/db/src/types.js";
@@ -12,6 +13,8 @@ import {
   getRuntimeConfig,
   buildPublicConfig,
 } from "../config/runtimeConfig.js";
+import { heartbeatMetrics } from "../plugins/heartbeat.js";
+import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -166,6 +169,49 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
         totalCandidates: stats.totalCandidates,
         todayExams: stats.todayAttempts,
         recentExams,
+      };
+    },
+  });
+
+  /**
+   * GET /system/diagnostics
+   *
+   * Returns server version, uptime, database latency, heartbeat scanner
+   * status, deadline scanner status, and non-sensitive runtime config.
+   * Admin-only.
+   */
+  fastify.get("/system/diagnostics", {
+    preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+    schema: {
+      security: cookieAuth,
+      "x-role": ["Admin"],
+      response: { 200: DiagnosticsResponseSchema },
+    },
+    handler: async () => {
+      const config = getRuntimeConfig();
+      const statsRepo = createSystemStatsRepo(anyDb);
+      const dbLatency = await statsRepo.pingDb();
+
+      return {
+        version: process.env.npm_package_version ?? "0.0.0",
+        uptime: process.uptime(),
+        dbLatency,
+        heartbeatStatus: {
+          interval: config.heartbeat.scanIntervalMs,
+          timeout: config.heartbeat.timeoutMs,
+          lastScanAt: heartbeatMetrics.lastScanAt?.toISOString() ?? null,
+          disruptedCount: heartbeatMetrics.disruptedCount,
+        },
+        deadlineScannerStatus: {
+          interval: deadlineScannerMetrics.scanIntervalMs,
+          lastScanAt: deadlineScannerMetrics.lastScanAt?.toISOString() ?? null,
+          autoSubmitCount: deadlineScannerMetrics.autoSubmitCount,
+        },
+        config: {
+          heartbeatInterval: config.heartbeat.scanIntervalMs,
+          heartbeatTimeout: config.heartbeat.timeoutMs,
+          deadlineScanInterval: deadlineScannerMetrics.scanIntervalMs,
+        },
       };
     },
   });

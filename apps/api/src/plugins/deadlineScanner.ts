@@ -51,6 +51,20 @@ export interface ScanResult {
   failedCount: number;
 }
 
+/**
+ * In-memory metrics for the deadline scanner, updated after each scan cycle.
+ * These are single-instance counters reset on server restart.
+ */
+export const deadlineScannerMetrics = {
+  lastScanAt: null as Date | null,
+  autoSubmitCount: 0,
+  failedCount: 0,
+  /**
+   * Effective scan interval in milliseconds. Updated at plugin registration.
+   */
+  scanIntervalMs: DEFAULT_SCAN_INTERVAL_MS,
+};
+
 export async function scanExpiredAttempts(
   attempts: ExpiredAttemptCandidate[],
   now: Date,
@@ -199,6 +213,7 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
     process.env.DEADLINE_SCAN_INTERVAL_MS,
     config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS,
   );
+  deadlineScannerMetrics.scanIntervalMs = scanIntervalMs;
 
   let scanRunning = false;
   const interval = setInterval(async () => {
@@ -206,6 +221,9 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
     scanRunning = true;
     try {
       const result = await scanDatabaseForExpiredAttempts(fastify);
+      deadlineScannerMetrics.lastScanAt = fastify.now();
+      deadlineScannerMetrics.autoSubmitCount += result.submittedCount;
+      deadlineScannerMetrics.failedCount += result.failedCount;
       if (result.submittedCount > 0 || result.failedCount > 0) {
         fastify.log.info(
           {

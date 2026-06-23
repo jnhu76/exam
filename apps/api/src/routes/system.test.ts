@@ -166,4 +166,86 @@ describe("system routes", () => {
       expect(bodyText).not.toContain("password");
     });
   });
+
+  describe("GET /system/diagnostics", () => {
+    it("returns 401 without authentication", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+      });
+
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("returns 403 for candidate role", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("returns diagnostics with correct shape for admin", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(body).toHaveProperty("version");
+      expect(body).toHaveProperty("uptime");
+      expect(body).toHaveProperty("dbLatency");
+      expect(typeof body.version).toBe("string");
+      expect(typeof body.uptime).toBe("number");
+      expect(typeof body.dbLatency).toBe("number");
+      expect(body.dbLatency).toBeGreaterThanOrEqual(0);
+
+      expect(body).toHaveProperty("heartbeatStatus");
+      expect(body.heartbeatStatus).toHaveProperty("interval");
+      expect(body.heartbeatStatus).toHaveProperty("timeout");
+      expect(body.heartbeatStatus).toHaveProperty("lastScanAt");
+      expect(body.heartbeatStatus).toHaveProperty("disruptedCount");
+      expect(typeof body.heartbeatStatus.interval).toBe("number");
+      expect(typeof body.heartbeatStatus.timeout).toBe("number");
+      expect(typeof body.heartbeatStatus.disruptedCount).toBe("number");
+      expect(body.heartbeatStatus.disruptedCount).toBeGreaterThanOrEqual(0);
+
+      expect(body).toHaveProperty("deadlineScannerStatus");
+      expect(body.deadlineScannerStatus).toHaveProperty("interval");
+      expect(body.deadlineScannerStatus).toHaveProperty("lastScanAt");
+      expect(body.deadlineScannerStatus).toHaveProperty("autoSubmitCount");
+      expect(typeof body.deadlineScannerStatus.interval).toBe("number");
+      expect(typeof body.deadlineScannerStatus.autoSubmitCount).toBe("number");
+      expect(body.deadlineScannerStatus.autoSubmitCount).toBeGreaterThanOrEqual(
+        0,
+      );
+
+      expect(body).toHaveProperty("config");
+      expect(body.config).toHaveProperty("heartbeatInterval");
+      expect(body.config).toHaveProperty("heartbeatTimeout");
+      expect(body.config).toHaveProperty("deadlineScanInterval");
+      expect(typeof body.config.heartbeatInterval).toBe("number");
+      expect(typeof body.config.heartbeatTimeout).toBe("number");
+      expect(typeof body.config.deadlineScanInterval).toBe("number");
+    });
+
+    it("does not expose secrets in diagnostics response", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const bodyText = res.body;
+      expect(bodyText).not.toContain("JWT_SECRET");
+      expect(bodyText).not.toContain("DATABASE_URL");
+      expect(bodyText).not.toContain("password");
+    });
+  });
 });

@@ -24,6 +24,7 @@ export const routes = {
     importLogs: "/admin/import-logs",
     attemptDetail: (id: string) => `/admin/attempts/${id}`,
     system: "/admin/system",
+    diagnostics: "/admin/diagnostics",
   },
   exam: {
     list: "/exam/list",
