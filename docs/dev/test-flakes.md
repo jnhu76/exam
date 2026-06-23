@@ -677,6 +677,99 @@ wall-clock ≈ `static + max(verify, api-fast, e2e)`。
 - **不声称 CI shard 已稳定**——需 live GitHub Actions run 通过后才算验证。
 - 未做 build artifact sharing / 新缓存策略。
 
+### Phase 6G — Live CI validation TODO (deferred / blocked)
+
+Status: **Deferred / blocked until GitHub Actions can run.**
+
+Phase 6A–6F prepared the local and CI-side mitigations, but Phase 6G requires
+**real CI evidence**. Local stress results are useful but **cannot prove GitHub
+Actions stability**, because CI has different CPU scheduling, PostgreSQL service
+behavior, cold-start timing, cache state, and job parallelism than the local
+WSL2 + single PG container environment.
+
+预计 CI 下个月才可用，故 Phase 6G 暂停。在 live CI 证据回来前，不得据此推进任何
+default 行为变更或缓解移除。
+
+#### What must be validated when CI is available
+
+Run the current workflow (`.github/workflows/ci.yml`) on GitHub Actions and
+record the following per job:
+
+1. **`static` job**:
+   - pass/fail
+   - wall time
+   - install / pnpm cache behavior
+
+2. **`verify` job**:
+   - pass/fail
+   - wall time
+   - whether `coverage:db` remains stable on **CI cold-start** (Phase 6D fixed
+     this locally; CI must confirm)
+   - whether `coverage:api` remains stable
+   - whether **auth amplification** reappears under live CI coverage load
+
+3. **`api-fast` shards**:
+   - shard 1/2 pass/fail and duration
+   - shard 2/2 pass/fail and duration
+   - whether worker-database mode is stable on CI
+   - whether shard timing is balanced
+
+4. **`e2e` job**:
+   - pass/fail
+   - wall time
+   - whether running after `static` (instead of after `verify`) exposes any
+     ordering assumptions
+   - server startup / migration / seed stability
+
+5. **Overall workflow**:
+   - old expected wall time vs new wall time
+   - runner-minute impact
+   - whether parallel jobs increase PostgreSQL / cache / install contention
+   - whether any flake appears **only** under live CI
+
+#### Decisions blocked on Phase 6G
+
+Do **not** proceed with these until live CI evidence exists:
+
+- Do **not** make worker-database the default API test mode.
+- Do **not** remove `apps/api fileParallelism:false`.
+- Do **not** remove `verify:db-tests`.
+- Do **not** treat `api-fast` as a replacement for the main verify gate.
+- Do **not** claim ADR-007 complete.
+- Do **not** close BUG-FLAKE-001 globally.
+- Do **not** further optimize CI DAG or artifact sharing based only on local
+  evidence.
+
+#### Acceptance evidence for Phase 6G
+
+Minimum acceptable evidence:
+
+- One clean GitHub Actions run on the new DAG with:
+  - `static` PASS
+  - `verify` PASS
+  - both `api-fast` shards PASS
+  - `e2e` PASS
+
+Preferred evidence:
+
+- 3 consecutive clean GitHub Actions runs (or equivalent PR re-runs), with
+  recorded timing.
+- No recurrence of:
+  - physical-DB-lifecycle timeout
+  - auth amplification timeout
+  - worker-database shard isolation failure
+  - e2e ordering / cold-start failure
+
+#### Current claim boundary
+
+- Phase 6D fixed the **physical-DB-lifecycle sub-class locally** (not globally,
+  not on CI).
+- Phase 6E / 6F prepared CI optimization (coverage-as-test-entry + static-gated
+  parallel DAG). Live CI has **not** run yet.
+- Phase 6G remains **open** until live CI results are collected.
+- BUG-FLAKE-001 is **not** closed (auth amplification + I/O contention sub-classes
+  still mitigated by A′ serial + `verify:db-tests` chain).
+
 ### #98 `examTransitions.test.ts` reconciliation-audit "failure"（无法复现，非代码 bug）
 
 - 在 ADR-007 Phase 4 调查中观察到 `examTransitions.test.ts` 在 `file-schema`

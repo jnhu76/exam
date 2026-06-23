@@ -107,6 +107,7 @@ production code paths.
 | Phase 6D — physical DB lifecycle contention | Mitigation implemented (local-only evidence; not CI-validated; does not close BUG-FLAKE-001) | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress |
 | Phase 6E — CI verify gate dedup | CI verify job optimized to avoid root test + coverage duplication | `verify:ci` uses coverage as test entry; `verify`/`verify:db-tests`/api-fast/e2e unchanged |
 | Phase 6F — CI job DAG optimization | CI DAG optimized, static-gated parallel jobs prepared | new `static` job; `verify`/`api-fast`/`e2e` now `needs: static` (parallel); test semantics unchanged; live CI validation pending |
+| Phase 6G — Live CI validation | Deferred | Blocked until GitHub Actions can run. Must validate `static`/`verify`/`api-fast`/`e2e` on the real CI DAG before changing defaults or closing ADR-007. Local evidence is not sufficient. |
 | Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
@@ -634,6 +635,33 @@ following lands:
 
 - Phase 7 is not required to finish current PostgreSQL test-infra work.
 - Redis / Queue must not be introduced only for testing.
+
+### Phase 6G — Live CI validation TODO
+
+Status: **Deferred until GitHub Actions can run.**
+
+Phase 6G is required because **local evidence cannot prove CI stability**. The
+optimized CI DAG (Phase 6F) and the worker-database shard job (`api-fast`) must
+be validated on GitHub Actions before ADR-007 can be considered complete. Local
+stress (Phase 6D `coverage:db` 5/5, `pnpm verify` PASS) is necessary but not
+sufficient: CI differs in CPU scheduling, PostgreSQL service behavior, cold-start
+timing, cache state, and job parallelism.
+
+**Blocked decisions** (do not proceed until live CI evidence exists):
+
+- default worker-database mode
+- removing `apps/api fileParallelism:false`
+- removing `verify:db-tests`
+- treating `api-fast` as a replacement gate
+- closing BUG-FLAKE-001 globally
+- further CI DAG / artifact-sharing optimization based only on local evidence
+
+**Acceptance evidence** (minimum): one clean GitHub Actions run on the new DAG
+with `static` / `verify` / both `api-fast` shards / `e2e` all PASS, and no
+recurrence of physical-DB-lifecycle timeout, auth amplification timeout,
+worker-database shard isolation failure, or e2e ordering/cold-start failure.
+Preferred: 3 consecutive clean runs with recorded timing. Full checklist lives
+in `docs/dev/test-flakes.md` Phase 6G section.
 
 ## Completion Boundary
 
