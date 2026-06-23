@@ -20,6 +20,12 @@ Phase 2 hard rule (`docs/phase2/phase2.plan.md` §10): do not start Redis before
 
 ## Decision
 
+> **Update (Phase 2 收口):** A optional Redis **baseline** has since been
+> introduced — see "Phase 2 Decision" and "Redis Baseline (Phase 2 收口)"
+> below. The original decision below (no Redis *runtime dependency* for
+> business behavior) still holds: the baseline is optional infra only, and
+> PostgreSQL remains canonical. Read the baseline section before this paragraph.
+
 **Do not introduce Redis in Phase 2 single-instance LAN deployment.**
 
 PostgreSQL remains the sole source of truth and the only required data store. The admission queue, heartbeat scanner, and rate limiter remain in-process, backed by DB rows where durability across restart is required (the heartbeat scanner tracks its work via `exam_attempts.lastActivityAt` / `deadlineAt`, not via a Redis queue).
