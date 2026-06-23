@@ -120,7 +120,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
         提交时间: r.attempt.submittedAt?.toISOString() ?? "",
       }));
 
-      const csv = generateCSV(headers, rows);
+      const csv = "\uFEFF" + generateCSV(headers, rows);
 
       reply.header("Content-Type", "text/csv; charset=utf-8");
       reply.header(
