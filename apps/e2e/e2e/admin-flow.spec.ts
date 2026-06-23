@@ -237,10 +237,22 @@ test.describe("admin operation flow", () => {
     const csvRes = await exportScoresCsv(request, adminToken, seeded.examId);
     expect(csvRes.status()).toBe(200);
     expect(csvRes.headers()["content-type"]).toContain("text/csv");
+    expect(csvRes.headers()["content-disposition"]).toContain("attachment");
+    expect(csvRes.headers()["content-disposition"]).toContain(seeded.examId);
 
     const csv = await csvRes.text();
-    // Header row + the candidate's display name appear in the exported CSV.
+    // UTF-8 BOM for Excel compatibility
+    expect(csv.charCodeAt(0)).toBe(0xfeff);
+    // Required columns present
     expect(csv).toContain("考生姓名");
+    expect(csv).toContain("成绩");
+    expect(csv).toContain("及格状态");
+    expect(csv).toContain("尝试次数");
+    expect(csv).toContain("提交时间");
+    // Candidate row present
     expect(csv).toContain("E2E Candidate export");
+    // At least header + 1 data row
+    const lines = csv.split("\n").filter((l) => l.length > 0);
+    expect(lines.length).toBeGreaterThanOrEqual(2);
   });
 });

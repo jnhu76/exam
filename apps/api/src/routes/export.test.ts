@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import {
   buildTestApp,
   createCandidateViaApi,
@@ -544,6 +545,17 @@ describe("CSV export integration", () => {
     expect(body).toContain("DEPT001");
   });
 
+  it("CSV output starts with UTF-8 BOM for Excel compatibility", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/export/scores`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = typeof res.body === "string" ? res.body : res.body.toString();
+    expect(body.charCodeAt(0)).toBe(0xfeff);
+  });
+
   it("examId filtering — export only returns data for specified exam", async () => {
     const examAId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "Filter Exam A",
@@ -595,5 +607,132 @@ describe("CSV export integration", () => {
     const linesA = exportA.body.split("\n");
     expect(linesA.length).toBeGreaterThan(1);
     expect(exportA.body).toContain(`Candidate ${filterUsername}`);
+  });
+
+  it("handles large dataset (1000+ records) without error", async () => {
+    const largeExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "Large Dataset Export Exam",
+      courseCode: "LGE101",
+      courseName: "Large Dataset Course",
+      questionContent: "Large test?",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 60,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, largeExamId);
+
+    const RECORD_COUNT = 1001;
+    const now = new Date();
+    const passwordHash = "$argon2id$v=19$m=65536,t=3,p=4$test$test";
+
+    const userIds: string[] = [];
+    const profileIds: string[] = [];
+    const enrollmentIds: string[] = [];
+
+    const userRows = Array.from({ length: RECORD_COUNT }, (_, i) => {
+      const userId = randomUUID();
+      userIds.push(userId);
+      return {
+        id: userId,
+        organizationId: ctx.org.id,
+        username: `lg-cand-${i}-${uniquePrefix()}`,
+        passwordHash,
+        name: `LargeCandidate${i}`,
+        role: "Candidate" as const,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+
+    await ctx.db.insert(schema.users).values(userRows);
+
+    const profileRows = userIds.map((userId) => {
+      const profileId = randomUUID();
+      profileIds.push(profileId);
+      return {
+        id: profileId,
+        organizationId: ctx.org.id,
+        userId,
+        fields: {} as Record<string, unknown>,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+
+    await ctx.db.insert(schema.candidateProfiles).values(profileRows);
+
+    const enrollmentRows = profileIds.map((candidateId) => {
+      const enrollmentId = randomUUID();
+      enrollmentIds.push(enrollmentId);
+      return {
+        id: enrollmentId,
+        organizationId: ctx.org.id,
+        examId: largeExamId,
+        candidateId,
+        status: "active" as const,
+        attemptCount: 1,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+
+    await ctx.db.insert(schema.examEnrollments).values(enrollmentRows);
+
+    const examRows = await ctx.db
+      .select()
+      .from(schema.exams)
+      .where(eq(schema.exams.id, largeExamId));
+    const examRow = examRows[0]!;
+    const questionId = examRow.questionIds[0]!;
+    const questionSnapshot = examRow.questionSnapshot;
+
+    const attemptRows = enrollmentIds.map((enrollmentId, i) => ({
+      id: randomUUID(),
+      organizationId: ctx.org.id,
+      examId: largeExamId,
+      enrollmentId,
+      candidateId: profileIds[i]!,
+      attemptNo: 1,
+      status: "graded" as const,
+      questionSnapshot,
+      answers: [],
+      gradingResult: [
+        {
+          questionId,
+          score: 100,
+          maxScore: 100,
+          correct: true,
+          candidateAnswer: true,
+          standardAnswer: true,
+        },
+      ],
+      score: 100,
+      passed: true,
+      startedAt: now,
+      submittedAt: now,
+      gradedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    await ctx.db.insert(schema.examAttempts).values(attemptRows);
+
+    const start = Date.now();
+    const { body } = await exportResultsCsvAsAdmin(
+      ctx.app,
+      ctx.adminToken,
+      largeExamId,
+    );
+    const elapsed = Date.now() - start;
+
+    const lines = body.split("\n").filter((l: string) => l.length > 0);
+    expect(lines.length).toBe(RECORD_COUNT + 1);
+    expect(body).toContain("考生姓名");
+    expect(body).toContain("LargeCandidate0");
+    expect(body).toContain(`LargeCandidate${RECORD_COUNT - 1}`);
+    expect(elapsed).toBeLessThan(30000);
   });
 });
