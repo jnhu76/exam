@@ -38,6 +38,7 @@ import { DashboardPage } from "@/pages/admin/DashboardPage";
 import { SystemHealthPage } from "@/pages/admin/SystemHealthPage";
 import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
 import { GradingDetailPage } from "@/pages/admin/GradingDetailPage";
+import { AuditLogPage } from "@/pages/admin/AuditLogPage";
 
 /** Top-level route definitions for admin, candidate exam, and login views. */
 export function AppRoutes() {
@@ -65,6 +66,7 @@ export function AppRoutes() {
         <Route path="results" element={<ResultsOverviewPage />} />
         <Route path="grading-queue" element={<GradingQueuePage />} />
         <Route path="grading-queue/:id" element={<GradingDetailPage />} />
+        <Route path="audit-logs" element={<AuditLogPage />} />
         <Route path="attempts/:id" element={<AttemptDetailPage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
