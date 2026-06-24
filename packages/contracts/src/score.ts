@@ -120,6 +120,8 @@ export const GradingDetailsQuestionSchema = z.object({
   ]),
   content: z.string(),
   maxScore: z.number(),
+  /** The candidate's submitted answer for this question, or null if unanswered. */
+  candidateAnswer: z.unknown().nullable(),
   entry: z
     .object({
       score: z.number(),
@@ -170,7 +172,8 @@ export type GradeQuestionRequest = z.infer<typeof GradeQuestionRequestSchema>;
 
 /**
  * Response for `POST grade-question`: the updated grading status + whether
- * the attempt is now fully graded.
+ * the attempt is now fully graded. When fully graded, `totalScore`/`passed`
+ * carry the reconciled attempt total (objective + manual).
  */
 export const GradeQuestionResponseSchema = z.object({
   attemptId: z.string().uuid(),
@@ -178,6 +181,8 @@ export const GradeQuestionResponseSchema = z.object({
   questionId: z.string(),
   score: z.number(),
   fullyGraded: z.boolean(),
+  totalScore: z.number().optional(),
+  passed: z.boolean().optional(),
 });
 /** Response for grade-question. */
 export type GradeQuestionResponse = z.infer<typeof GradeQuestionResponseSchema>;

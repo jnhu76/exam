@@ -19,6 +19,19 @@ export function validateScore(score: number, maxScore: number): string | null {
   return null;
 }
 
+function formatAnswer(answer: unknown): string {
+  if (answer === undefined || answer === null || answer === "") return "未作答";
+  if (typeof answer === "string") return answer;
+  if (typeof answer === "boolean") return answer ? "正确" : "错误";
+  if (Array.isArray(answer)) return answer.join("、");
+  if (typeof answer === "object") {
+    return Object.values(answer as Record<string, unknown>)
+      .map(formatAnswer)
+      .join("、");
+  }
+  return String(answer);
+}
+
 interface GradingEntry {
   score: number;
   comment: string;
@@ -31,6 +44,7 @@ interface GradingQuestion {
   type: string;
   content: string;
   maxScore: number;
+  candidateAnswer: unknown;
   entry: GradingEntry | null;
 }
 
@@ -160,14 +174,24 @@ export function GradingDetailPage() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>满分: {q.maxScore}</span>
               <span>·</span>
-              <span>{q.type === "fill_blank" ? "填空题" : "选择题"}</span>
+              <span>主观题</span>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label>考生作答</Label>
+              <div
+                data-testid={`grading-candidate-answer-${q.questionId}`}
+                className="min-h-16 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+              >
+                {formatAnswer(q.candidateAnswer)}
+              </div>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor={`score-${q.questionId}`}>分数</Label>
               <Input
                 id={`score-${q.questionId}`}
+                data-testid={`grading-score-input-${q.questionId}`}
                 type="number"
                 min={0}
                 max={q.maxScore}
@@ -189,6 +213,7 @@ export function GradingDetailPage() {
               <Label htmlFor={`comment-${q.questionId}`}>评语（可选）</Label>
               <Textarea
                 id={`comment-${q.questionId}`}
+                data-testid={`grading-comment-input-${q.questionId}`}
                 value={comments[q.questionId] ?? ""}
                 onChange={(e) =>
                   setComments((prev) => ({
@@ -202,6 +227,7 @@ export function GradingDetailPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button
+                data-testid={`grading-save-btn-${q.questionId}`}
                 onClick={() => handleSave(q.questionId, q.maxScore)}
                 disabled={saving[q.questionId]}
               >

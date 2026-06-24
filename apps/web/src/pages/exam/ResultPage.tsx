@@ -136,41 +136,58 @@ export function ResultPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {result.questionResults.map((question) => (
-                    <TableRow key={question.questionId}>
-                      <TableCell>{question.order + 1}</TableCell>
-                      <TableCell>{question.content}</TableCell>
-                      <TableCell>{formatQuestionType(question.type)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {question.correct ? (
-                            <CheckCircle2
-                              aria-label="回答正确"
-                              className="size-4 text-success"
+                  {result.questionResults.map((question) => {
+                    const isManual = question.standardAnswer == null;
+                    return (
+                      <TableRow key={question.questionId}>
+                        <TableCell>{question.order + 1}</TableCell>
+                        <TableCell>{question.content}</TableCell>
+                        <TableCell>
+                          {formatQuestionType(question.type)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {question.correct ? (
+                              <CheckCircle2
+                                aria-label="回答正确"
+                                className="size-4 text-success"
+                              />
+                            ) : (
+                              <XCircle
+                                aria-label="回答错误"
+                                className="size-4 text-destructive"
+                              />
+                            )}
+                            <AnswerText
+                              answer={question.candidateAnswer}
+                              truncate={question.type === "fill_blank"}
                             />
+                          </div>
+                        </TableCell>
+                        <TableCell
+                          data-testid={
+                            isManual
+                              ? `result-question-manual-${question.questionId}`
+                              : undefined
+                          }
+                        >
+                          {isManual ? (
+                            <span className="text-muted-foreground">
+                              主观题
+                            </span>
                           ) : (
-                            <XCircle
-                              aria-label="回答错误"
-                              className="size-4 text-destructive"
+                            <AnswerText
+                              answer={question.standardAnswer}
+                              truncate={question.type === "fill_blank"}
                             />
                           )}
-                          <AnswerText
-                            answer={question.candidateAnswer}
-                            truncate={question.type === "fill_blank"}
-                          />
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <AnswerText
-                          answer={question.standardAnswer}
-                          truncate={question.type === "fill_blank"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {question.score}/{question.maxScore}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          {question.score}/{question.maxScore}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

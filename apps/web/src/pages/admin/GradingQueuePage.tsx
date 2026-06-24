@@ -108,6 +108,7 @@ export function GradingQueuePage() {
             {data.items.map((item) => (
               <TableRow
                 key={item.attemptId}
+                data-testid={`grading-queue-row-${item.attemptId}`}
                 className="cursor-pointer"
                 onClick={() =>
                   navigate(`/admin/grading-queue/${item.attemptId}`)

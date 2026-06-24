@@ -10,6 +10,16 @@ export interface SeededExam {
   examTitle: string;
   candidateIds: string[];
   candidate: SeededCandidate;
+  /** Subjective (manual-graded) question ids, when `subjectiveQuestions` was set. */
+  subjectiveQuestionIds: string[];
+}
+
+/** A subjective (manual-graded) question to seed: fill_blank with null answer. */
+export interface SubjectiveQuestionSeed {
+  /** Score weight for this question. */
+  score: number;
+  /** Content must include a `____` placeholder for the fill_blank input. */
+  content?: string;
 }
 
 async function adminLogin(request: APIRequestContext, baseURL: string) {
@@ -121,6 +131,8 @@ export async function seedExam(
     passingScore?: number;
     totalScore?: number;
     resultPublicationMode?: "immediate" | "after_grading" | "manual";
+    /** Optional subjective (manual-graded) fill_blank questions to include. */
+    subjectiveQuestions?: SubjectiveQuestionSeed[];
   } = {},
 ): Promise<SeededExam> {
   const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -144,6 +156,21 @@ export async function seedExam(
   });
   const questionId = question.id as string;
 
+  const questionIds: string[] = [questionId];
+  const subjectiveQuestionIds: string[] = [];
+  for (const sq of opts.subjectiveQuestions ?? []) {
+    const created = await adminPost(request, baseURL, token, "/api/questions", {
+      courseId,
+      type: "fill_blank",
+      content: sq.content ?? `主观题-${unique}-____`,
+      // null standardAnswer marks the question as subjective (manual-graded).
+      standardAnswer: null,
+      score: sq.score,
+    });
+    subjectiveQuestionIds.push(created.id as string);
+    questionIds.push(created.id as string);
+  }
+
   const exam = await adminPost(request, baseURL, token, "/api/exams", {
     title: examTitle,
     description: "",
@@ -155,7 +182,7 @@ export async function seedExam(
     passingScore: opts.passingScore ?? 60,
     totalScore: opts.totalScore ?? 100,
     questionSelectionMode: "manual",
-    questionIds: [questionId],
+    questionIds,
     resultPublicationMode: opts.resultPublicationMode ?? "immediate",
     controlFlags: {
       shuffleQuestions: false,
@@ -184,5 +211,6 @@ export async function seedExam(
     examTitle,
     candidateIds: [candidate.profileId],
     candidate,
+    subjectiveQuestionIds,
   };
 }

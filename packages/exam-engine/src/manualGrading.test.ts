@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { ExamAttempt, QuestionSnapshot } from "@exam/domain";
+import type {
+  ExamAttempt,
+  QuestionScoreResult,
+  QuestionSnapshot,
+} from "@exam/domain";
 import {
   NotFoundError,
   PermissionDeniedError,
   ValidationError,
 } from "@exam/domain";
-import { gradeQuestion } from "./manualGrading.js";
+import { gradeQuestion, reconcileScores } from "./manualGrading.js";
 import type { ManualGradingRepository } from "./manualGrading.js";
 import type { AttemptRepository } from "./attemptCommands.js";
 
 const fixedNow = new Date("2026-01-01T00:00:00Z");
+const DEFAULT_PASSING = 50;
 
 function subjectiveQuestion(id: string, score = 10): QuestionSnapshot {
   return {
@@ -106,6 +111,7 @@ describe("gradeQuestion command", () => {
         "",
         "grader-1",
         fixedNow,
+        DEFAULT_PASSING,
       ),
     ).rejects.toThrow(NotFoundError);
   });
@@ -127,6 +133,7 @@ describe("gradeQuestion command", () => {
         "",
         "grader-1",
         fixedNow,
+        DEFAULT_PASSING,
       ),
     ).rejects.toThrow(PermissionDeniedError);
   });
@@ -150,6 +157,7 @@ describe("gradeQuestion command", () => {
         "",
         "grader-1",
         fixedNow,
+        DEFAULT_PASSING,
       ),
     ).rejects.toThrow(ValidationError);
   });
@@ -168,6 +176,7 @@ describe("gradeQuestion command", () => {
         "",
         "grader-1",
         fixedNow,
+        DEFAULT_PASSING,
       ),
     ).rejects.toThrow(ValidationError);
   });
@@ -186,11 +195,12 @@ describe("gradeQuestion command", () => {
         "",
         "grader-1",
         fixedNow,
+        DEFAULT_PASSING,
       ),
     ).rejects.toThrow(ValidationError);
   });
 
-  it("stays pending_manual and does NOT touch status/score when questions remain", async () => {
+  it("stays pending_manual and does NOT reconcile when questions remain", async () => {
     const attempt = makeAttempt({
       questionSnapshot: [subjectiveQuestion("q-a"), subjectiveQuestion("q-b")],
     });
@@ -206,6 +216,7 @@ describe("gradeQuestion command", () => {
       "good",
       "grader-1",
       fixedNow,
+      DEFAULT_PASSING,
     );
 
     expect(result).toEqual({
@@ -215,11 +226,11 @@ describe("gradeQuestion command", () => {
     // Only ONE upsert happened (the graded question).
     expect(upserts).toHaveLength(1);
     expect(upserts[0]).toMatchObject({ questionId: "q-a", score: 7 });
-    // Decision #2: no mutation of lifecycle status / score / gradingResult / passed.
+    // Partial grading never reconciles: no score/gradingResult write.
     expect(updates).toEqual([]);
   });
 
-  it("flips gradingStatus to fully_graded when the last question is graded", async () => {
+  it("flips to fully_graded AND reconciles total when the last question is graded", async () => {
     const attempt = makeAttempt();
     const { repo: attRepo, updates } = makeAttemptRepo(attempt);
     const { repo: manualRepo } = makeManualRepo();
@@ -233,17 +244,27 @@ describe("gradeQuestion command", () => {
       "",
       "grader-1",
       fixedNow,
+      DEFAULT_PASSING,
     );
 
     expect(result).toEqual({
       gradingStatus: "fully_graded",
       fullyGraded: true,
+      totalScore: 9,
+      passed: false, // 9 < 50
     });
-    // Only gradingStatus is written — never status/score/etc (Decision #2).
-    expect(updates).toEqual([{ gradingStatus: "fully_graded" }]);
+    // Full grading writes the reconciled gradingStatus + score + passed + gradingResult.
+    expect(updates).toHaveLength(1);
+    const update = updates[0]!;
+    expect(update.gradingStatus).toBe("fully_graded");
+    expect(update.score).toBe(9);
+    expect(update.passed).toBe(false);
+    expect(update.gradingResult).toHaveLength(1);
+    const row = (update.gradingResult as QuestionScoreResult[])[0]!;
+    expect(row).toMatchObject({ questionId: "q-sub", score: 9, maxScore: 10 });
   });
 
-  it("overwrites a previous entry on re-grade via upsert", async () => {
+  it("overwrites a previous entry on re-grade and reconciles idempotently", async () => {
     const attempt = makeAttempt();
     const { repo: attRepo, updates } = makeAttemptRepo(attempt);
     const { repo: manualRepo, upserts } = makeManualRepo([
@@ -259,17 +280,18 @@ describe("gradeQuestion command", () => {
       "re-grade",
       "grader-1",
       fixedNow,
+      DEFAULT_PASSING,
     );
 
     expect(result.fullyGraded).toBe(true);
+    expect(result.totalScore).toBe(8); // recomputed from the single full entry set
     expect(upserts).toHaveLength(1);
     expect(upserts[0]).toMatchObject({ questionId: "q-sub", score: 8 });
-    // The attempt was pending_manual with one entry; grading the last question
-    // flips it to fully_graded (one gradingStatus-only update).
-    expect(updates).toEqual([{ gradingStatus: "fully_graded" }]);
+    // Re-grade reconciles again from the complete set (not 3 + 8 = double-count).
+    expect(updates[0]!.score).toBe(8);
   });
 
-  it("does not re-issue a fully_graded update when already fully_graded", async () => {
+  it("reconciles even when already fully_graded (re-grade keeps total in sync)", async () => {
     const attempt = makeAttempt({ gradingStatus: "fully_graded" });
     const { repo: attRepo, updates } = makeAttemptRepo(attempt);
     const { repo: manualRepo, upserts } = makeManualRepo([
@@ -285,11 +307,79 @@ describe("gradeQuestion command", () => {
       "re-grade",
       "grader-1",
       fixedNow,
+      DEFAULT_PASSING,
     );
 
     expect(result.fullyGraded).toBe(true);
+    expect(result.totalScore).toBe(8);
     expect(upserts).toHaveLength(1);
-    // Already fully_graded: no status update needed.
-    expect(updates).toEqual([]);
+    // Re-grade on an already-fully-graded attempt still reconciles the total.
+    expect(updates[0]!.score).toBe(8);
+  });
+});
+
+describe("reconcileScores", () => {
+  function objResult(
+    id: string,
+    score: number,
+    maxScore: number,
+  ): QuestionScoreResult {
+    return {
+      questionId: id,
+      score,
+      maxScore,
+      correct: score >= maxScore,
+      candidateAnswer: "a",
+      standardAnswer: "a",
+    };
+  }
+
+  it("sums objective auto results + manual entries and computes passed", () => {
+    const attempt = makeAttempt({
+      questionSnapshot: [
+        objectiveQuestion("q-obj"),
+        subjectiveQuestion("q-sub", 60),
+      ],
+      gradingResult: [objResult("q-obj", 40, 40)],
+    });
+    const { questionResults, totalScore, passed } = reconcileScores(
+      attempt,
+      [{ questionId: "q-sub", score: 50 }],
+      DEFAULT_PASSING,
+    );
+    expect(totalScore).toBe(90); // 40 objective + 50 manual
+    expect(passed).toBe(true); // 90 >= 50
+    const subjective = questionResults.find((r) => r.questionId === "q-sub");
+    expect(subjective).toMatchObject({ score: 50, maxScore: 60 });
+    const objective = questionResults.find((r) => r.questionId === "q-obj");
+    expect(objective).toMatchObject({ score: 40, maxScore: 40 });
+  });
+
+  it("is idempotent — re-running with the same entries yields the same total", () => {
+    const attempt = makeAttempt({
+      questionSnapshot: [
+        objectiveQuestion("q-obj"),
+        subjectiveQuestion("q-sub", 60),
+      ],
+      gradingResult: [objResult("q-obj", 40, 40)],
+    });
+    const entries = [{ questionId: "q-sub", score: 50 }];
+    const first = reconcileScores(attempt, entries, DEFAULT_PASSING);
+    const second = reconcileScores(attempt, entries, DEFAULT_PASSING);
+    expect(second.totalScore).toBe(first.totalScore);
+    expect(second.passed).toBe(first.passed);
+  });
+
+  it("marks a full-mark manual entry as correct", () => {
+    const attempt = makeAttempt({
+      questionSnapshot: [subjectiveQuestion("q-sub", 60)],
+    });
+    const { questionResults } = reconcileScores(
+      attempt,
+      [{ questionId: "q-sub", score: 60 }],
+      DEFAULT_PASSING,
+    );
+    expect(questionResults[0]!.correct).toBe(true);
+    expect(questionResults[0]!.standardAnswer).toBeNull();
   });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "questions" ALTER COLUMN "standard_answer" DROP NOT NULL;

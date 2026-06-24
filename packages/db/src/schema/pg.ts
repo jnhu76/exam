@@ -165,7 +165,10 @@ export const questions = pgTable("questions", {
   options: jsonb("options")
     .$type<Array<{ id: string; content: string; isCorrect?: boolean }>>()
     .notNull(),
-  standardAnswer: jsonb("standard_answer").$type<unknown>().notNull(),
+  // Nullable: a null/undefined standardAnswer marks the question as
+  // subjective (manually graded). Objective questions keep a typed answer.
+  // See QuestionSnapshot / hasSubjectiveQuestions for the convention.
+  standardAnswer: jsonb("standard_answer").$type<unknown>(),
   attachments: jsonb("attachments").$type<Attachment[]>().notNull(),
   score: doublePrecision("score").notNull(),
   difficulty: integer("difficulty").notNull(),

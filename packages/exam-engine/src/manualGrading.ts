@@ -1,4 +1,4 @@
-import type { ExamAttempt } from "@exam/domain";
+import type { ExamAttempt, QuestionScoreResult } from "@exam/domain";
 import {
   NotFoundError,
   PermissionDeniedError,
@@ -33,6 +33,13 @@ export interface ManualGradingRepository {
 export interface GradeQuestionResult {
   gradingStatus: ExamAttempt["gradingStatus"];
   fullyGraded: boolean;
+  /**
+   * Recomputed attempt total (objective + manual) and pass/fail, present only
+   * once the attempt becomes fully graded. Re-grading re-derives these from the
+   * full entry set, so repeated calls are idempotent.
+   */
+  totalScore?: number;
+  passed?: boolean;
 }
 
 /**
@@ -46,18 +53,91 @@ function subjectiveQuestionIds(attempt: ExamAttempt): string[] {
 }
 
 /**
+ * Pure reconciliation: folds manual grading scores into the attempt's score
+ * breakdown. Objective questions keep their auto-graded result; subjective
+ * questions take the manually-entered score (full marks = correct).
+ *
+ * Recomputed from the COMPLETE objective + manual sets every call, so a
+ * re-grade (entry overwrite) is naturally idempotent — manual scores are never
+ * added on top of an already-inclusive total. Subjective auto-graded rows
+ * always carry score 0 (a null standardAnswer never matches), so they do not
+ * double-count.
+ *
+ * @param attempt the attempt (carries questionSnapshot + existing auto-graded
+ *   gradingResult).
+ * @param entries all manual grading entries for the attempt
+ *   ({ questionId, score }).
+ * @param passingScore the exam's passing threshold.
+ * @returns the reconciled per-question results, total score, and pass/fail.
+ */
+export function reconcileScores(
+  attempt: ExamAttempt,
+  entries: Array<{ questionId: string; score: number }>,
+  passingScore: number,
+): {
+  questionResults: QuestionScoreResult[];
+  totalScore: number;
+  passed: boolean;
+} {
+  const manualByQuestion = new Map(entries.map((e) => [e.questionId, e.score]));
+  const snapshotByQuestion = new Map(
+    attempt.questionSnapshot.map((q) => [q.originalQuestionId, q]),
+  );
+  const autoByQuestion = new Map(
+    (attempt.gradingResult ?? []).map((r) => [r.questionId, r]),
+  );
+
+  const questionResults: QuestionScoreResult[] = attempt.questionSnapshot.map(
+    (q) => {
+      const auto = autoByQuestion.get(q.originalQuestionId);
+      const isSubjective = q.standardAnswer == null;
+      if (isSubjective) {
+        const manualScore = manualByQuestion.get(q.originalQuestionId) ?? 0;
+        return {
+          questionId: q.originalQuestionId,
+          score: manualScore,
+          maxScore: q.score,
+          correct: manualScore >= q.score,
+          candidateAnswer: auto?.candidateAnswer ?? null,
+          standardAnswer: null,
+        };
+      }
+      // Objective: keep the auto-graded result authoritative. Fall back to a
+      // zero-scored row if the snapshot has no auto result yet.
+      return (
+        auto ?? {
+          questionId: q.originalQuestionId,
+          score: 0,
+          maxScore: q.score,
+          correct: false,
+          candidateAnswer: null,
+          standardAnswer:
+            snapshotByQuestion.get(q.originalQuestionId)?.standardAnswer ??
+            null,
+        }
+      );
+    },
+  );
+
+  const totalScore = questionResults.reduce((sum, r) => sum + r.score, 0);
+  return { questionResults, totalScore, passed: totalScore >= passingScore };
+}
+
+/**
  * Saves (or overwrites) one manual grading entry for an attempt and, when the
  * last subjective question has been scored, flips `gradingStatus` to
- * `fully_graded`.
+ * `fully_graded` and reconciles the attempt total (objective + manual) into
+ * `score`/`passed`/`gradingResult`.
  *
  * P2D-J3 decisions (approved plan):
  * - Allowed on `pending_manual` AND `fully_graded` (re-grade overwrites,
  *   per spec §18). Only `auto_graded` attempts are rejected (FORBIDDEN) — they
  *   have no subjective questions to grade.
- * - Touches `gradingStatus` ONLY. Never mutates lifecycle `status`, `score`,
- *   `gradingResult`, `passed`, or the enrollment. Auto-grading results stay
- *   authoritative for objective questions; manual scores are layered on top
- *   for reporting (a future job may recompute the attempt total).
+ * - `gradingStatus` always reflects manual-completion. Once fully graded, the
+ *   attempt `score`/`passed`/`gradingResult` are recomputed so the candidate
+ *   result reflects objective + manual totals. Reconciliation rebuilds from the
+ *   full objective + manual sets every call, so re-grades are idempotent and
+ *   never double-count.
  *
  * The caller is responsible for wrapping this in a transaction that has
  * locked the attempt row (findByIdForUpdate) — see the route handler.
@@ -76,6 +156,7 @@ export async function gradeQuestion(
   comment: string,
   graderId: string,
   now: Date,
+  passingScore: number,
 ): Promise<GradeQuestionResult> {
   const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
@@ -118,12 +199,26 @@ export async function gradeQuestion(
   const fullyGraded =
     subjectiveIds.length > 0 && subjectiveIds.every((id) => scoredIds.has(id));
 
-  if (fullyGraded && attempt.gradingStatus !== "fully_graded") {
-    await attemptRepo.update(attemptId, { gradingStatus: "fully_graded" });
+  if (fullyGraded) {
+    // Reconcile the total from the complete objective + manual sets. Always
+    // recomputed (never incremented) so re-grades are idempotent.
+    const reconciled = reconcileScores(attempt, entries, passingScore);
+    await attemptRepo.update(attemptId, {
+      gradingStatus: "fully_graded",
+      score: reconciled.totalScore,
+      passed: reconciled.passed,
+      gradingResult: reconciled.questionResults,
+    });
+    return {
+      gradingStatus: "fully_graded",
+      fullyGraded: true,
+      totalScore: reconciled.totalScore,
+      passed: reconciled.passed,
+    };
   }
 
   return {
-    gradingStatus: fullyGraded ? "fully_graded" : "pending_manual",
-    fullyGraded,
+    gradingStatus: "pending_manual",
+    fullyGraded: false,
   };
 }
