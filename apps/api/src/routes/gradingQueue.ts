@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import { and, eq } from "drizzle-orm";
 import {
   AttemptIdParamsSchema,
   ErrorResponseSchema,
@@ -14,10 +13,10 @@ import { NotFoundError } from "@exam/domain";
 import { gradeQuestion } from "@exam/exam-engine";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createManualGradingRepo } from "@exam/db/src/repository/manualGradingRepo.js";
+import { createGradingQueueRepo } from "@exam/db/src/repository/gradingQueueRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
-import { exams, candidateProfiles, users } from "@exam/db/src/schema/pg.js";
 import {
   createAttemptRepoAdapter,
   createManualGradingRepoAdapter,
@@ -130,36 +129,18 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
 
       const attemptRepo = createAttemptRepo(fastify.db);
       const manualGradingRepo = createManualGradingRepo(fastify.db);
+      const gradingQueueRepo = createGradingQueueRepo(fastify.db);
 
       const attempt = await attemptRepo.findById(ctx, attemptId);
       if (!attempt) {
         throw new NotFoundError("Attempt not found");
       }
       // Load exam + candidate identity for display.
-      const examRows = await fastify.db
-        .select({ exam: exams })
-        .from(exams)
-        .where(
-          and(
-            eq(exams.organizationId, ctx.targetOrganizationId!),
-            eq(exams.id, attempt.examId),
-          ),
-        );
-      const candidateRows = await fastify.db
-        .select({
-          profile: candidateProfiles,
-          user: users,
-        })
-        .from(candidateProfiles)
-        .innerJoin(users, eq(candidateProfiles.userId, users.id))
-        .where(
-          and(
-            eq(candidateProfiles.organizationId, ctx.targetOrganizationId!),
-            eq(candidateProfiles.id, attempt.candidateId),
-          ),
-        );
-      const exam = examRows[0]?.exam;
-      const candidate = candidateRows[0];
+      const exam = await gradingQueueRepo.findExamById(ctx, attempt.examId);
+      const candidate = await gradingQueueRepo.findCandidateWithUser(
+        ctx,
+        attempt.candidateId,
+      );
       if (!exam || !candidate) {
         throw new NotFoundError("Attempt grading context not found");
       }
