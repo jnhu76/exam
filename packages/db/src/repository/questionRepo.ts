@@ -6,7 +6,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, sql, type SQL } from "drizzle-orm";
 
 type QuestionSelect = typeof questions.$inferSelect;
 
@@ -14,11 +14,8 @@ async function countQuestions(
   db: Database,
   where: SQL<unknown>,
 ): Promise<number> {
-  const rows = await db
-    .select({ value: sql<number>`count(*)` })
-    .from(questions)
-    .where(where);
-  return Number(rows[0]?.value ?? 0);
+  const rows = await db.select({ value: count() }).from(questions).where(where);
+  return rows[0]?.value ?? 0;
 }
 
 /** Filter options for listing questions with DB-level filtering. */
