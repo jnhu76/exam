@@ -75,6 +75,69 @@ describe("question routes", () => {
     expect(res.json().type).toBe("true_false");
   });
 
+  it("POST /api/questions creates a subjective (null standardAnswer) single_choice question", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "single_choice",
+        content: "Discuss the trade-offs in detail.",
+        options: [
+          { id: "a", content: "Option A" },
+          { id: "b", content: "Option B" },
+        ],
+        standardAnswer: null,
+        score: 20,
+        difficulty: 3,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.type).toBe("single_choice");
+    expect(body.standardAnswer).toBeNull();
+  });
+
+  it("POST /api/questions creates a subjective (null standardAnswer) fill_blank question", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "fill_blank",
+        content: "Write your essay in the blank: ____",
+        standardAnswer: null,
+        score: 30,
+        difficulty: 3,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().standardAnswer).toBeNull();
+  });
+
+  it("POST /api/questions still rejects single_choice with a non-option answer", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "single_choice",
+        content: "Objective question",
+        options: [
+          { id: "a", content: "A" },
+          { id: "b", content: "B" },
+        ],
+        standardAnswer: "zzz",
+        score: 5,
+        difficulty: 1,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it("POST /api/questions creates a fill_blank question", async () => {
     const res = await ctx.app.inject({
       method: "POST",

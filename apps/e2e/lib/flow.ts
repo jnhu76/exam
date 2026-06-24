@@ -86,6 +86,19 @@ export async function answerTrueFalse(
   await page.getByTestId(`true-false-${value}`).check();
 }
 
+/**
+ * Type free-text into the first fill_blank input on the take page. Used for
+ * subjective (null-standardAnswer) fill_blank questions, which render a text
+ * input in FillBlankInput regardless of whether a standard answer exists.
+ */
+export async function answerFillBlank(page: Page, text: string): Promise<void> {
+  const input = page
+    .getByTestId("take-question-section")
+    .locator("input[type='text']");
+  await input.first().waitFor({ state: "visible" });
+  await input.first().fill(text);
+}
+
 export async function waitForSaveSaved(page: Page): Promise<void> {
   await page.getByText("已保存").waitFor({ state: "visible", timeout: 10_000 });
 }
@@ -283,4 +296,81 @@ export async function exportScoresCsv(
   return request.get(`${BASE_URL}/api/exams/${examId}/export/scores`, {
     headers: { Cookie: `auth-token=${adminToken}` },
   });
+}
+
+/**
+ * Save one manual grading entry (Admin API). Mirrors the GradingDetailPage
+ * 保存 button → POST /api/admin/attempts/:attemptId/grade-question.
+ */
+export async function gradeQuestionApi(
+  request: APIRequestContext,
+  adminToken: string,
+  attemptId: string,
+  questionId: string,
+  score: number,
+  comment = "",
+): Promise<APIResponse> {
+  return adminPost(
+    request,
+    adminToken,
+    `/api/admin/attempts/${attemptId}/grade-question`,
+    {
+      questionId,
+      score,
+      comment,
+    },
+  );
+}
+
+/**
+ * Publish an exam's results (Admin API) — flips manual-mode result visibility
+ * from hidden → visible. Mirrors the (future) ScoreListPage publish action.
+ */
+export async function publishResultsApi(
+  request: APIRequestContext,
+  adminToken: string,
+  examId: string,
+): Promise<APIResponse> {
+  return adminPost(
+    request,
+    adminToken,
+    `/api/exams/${examId}/publish-results`,
+    {},
+  );
+}
+
+/**
+ * Fetch a candidate's attempt result as the parsed AttemptResultResponse.
+ * Branches on `showResultImmediately`: visible results carry totalScore/passed;
+ * hidden results carry a status + hiddenReason.
+ */
+export async function getCandidateResult(
+  request: APIRequestContext,
+  candidateToken: string,
+  attemptId: string,
+): Promise<{
+  showResultImmediately: boolean;
+  totalScore?: number;
+  passed?: boolean;
+  status?: string;
+  hiddenReason?: string;
+}> {
+  const res = await request.get(
+    `${BASE_URL}/api/scores/attempts/${attemptId}`,
+    {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    },
+  );
+  if (!res.ok()) {
+    throw new Error(
+      `get candidate result failed: ${res.status()} ${await res.text()}`,
+    );
+  }
+  return (await res.json()) as {
+    showResultImmediately: boolean;
+    totalScore?: number;
+    passed?: boolean;
+    status?: string;
+    hiddenReason?: string;
+  };
 }

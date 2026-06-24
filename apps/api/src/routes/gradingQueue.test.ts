@@ -5,7 +5,8 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createManualGradingRepo } from "@exam/db/src/repository/manualGradingRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import type { QuestionSnapshot } from "@exam/domain";
+import type { AnswerRecord, QuestionSnapshot } from "@exam/domain";
+import { gradeAnswers } from "@exam/domain";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp, uniquePrefix } from "./testHelpers.js";
 import examRoutes from "./exam.js";
@@ -51,6 +52,8 @@ async function seedAttempt(
     gradingStatus?: "pending_manual" | "fully_graded" | "auto_graded";
     title?: string;
     candidateName?: string;
+    answers?: AnswerRecord[];
+    passingScore?: number;
   },
 ): Promise<{ attemptId: string; examId: string }> {
   const now = new Date();
@@ -81,7 +84,7 @@ async function seedAttempt(
     durationMinutes: 60,
     openAt: now,
     closeAt: new Date(Date.now() + 86400000),
-    passingScore: 0,
+    passingScore: opts.passingScore ?? 0,
     totalScore: opts.questions.reduce((s, q) => s + q.score, 0),
     questionSelectionMode: "manual",
     questionIds: opts.questions.map((q) => q.originalQuestionId),
@@ -140,6 +143,22 @@ async function seedAttempt(
     status: "started",
     attemptCount: 1,
   });
+  // When answers are provided, simulate the auto-grade step (mirrors the real
+  // submit → finalizeGrading path) so attempts carry gradingResult/score/passed.
+  // Existing slices pass no answers, so they keep the original gradingResult-less
+  // shape and behavior.
+  const answers = opts.answers ?? [];
+  const autoGraded =
+    answers.length > 0
+      ? gradeAnswers(
+          "00000000-0000-0000-0000-000000000000",
+          opts.questions,
+          answers,
+          opts.passingScore ?? 0,
+          now,
+        )
+      : null;
+
   const attempt = await attemptRepo.create(requestContext, {
     examId,
     enrollmentId: enr.id,
@@ -149,7 +168,14 @@ async function seedAttempt(
     gradingStatus:
       opts.gradingStatus ?? (isObjective ? "auto_graded" : "pending_manual"),
     questionSnapshot: opts.questions,
-    answers: [],
+    answers,
+    ...(autoGraded
+      ? {
+          gradingResult: autoGraded.questionResults,
+          score: autoGraded.totalScore,
+          passed: autoGraded.passed,
+        }
+      : {}),
     submittedAt: now,
     gradedAt: now,
   });
@@ -648,5 +674,110 @@ describe("grading queue routes (P2D-J3)", () => {
         graderId: ctx.admin.id,
       },
     });
+  });
+
+  // ── Slice 12: grading-details surfaces the candidate's answer (P2D-J4) ──
+  it("returns the candidate's answer for a subjective question in details", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-ans")],
+      title: "Candidate Answer Exam",
+      answers: [
+        {
+          questionId: "q-ans",
+          answer: "my essay response",
+          version: 1,
+          savedAt: new Date(),
+        } satisfies AnswerRecord,
+      ],
+    });
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const questions = res.json().questions as Array<{
+      questionId: string;
+      candidateAnswer: unknown;
+    }>;
+    expect(questions[0]!.candidateAnswer).toBe("my essay response");
+    // Unanswered subjective question → null.
+    const { attemptId: unanswered } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-none")],
+      answers: [],
+    });
+    const res2 = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${unanswered}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const q2 = (
+      res2.json().questions as Array<{ candidateAnswer: unknown }>
+    )[0]!;
+    expect(q2.candidateAnswer).toBeNull();
+  });
+
+  // ── Slice 13: full grading reconciles objective + manual total (P2D-J4) ──
+  it("reconciles objective + manual into the attempt total on full grading", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [
+        objectiveQuestion("q-obj", 40),
+        subjectiveQuestion("q-sub", 60),
+      ],
+      // Objective auto-grade: answered "a" but standardAnswer is "a" → 40.
+      answers: [
+        {
+          questionId: "q-obj",
+          answer: "a",
+          version: 1,
+          savedAt: new Date(),
+        } satisfies AnswerRecord,
+      ],
+      gradingStatus: "pending_manual",
+      passingScore: 50,
+    });
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-sub", score: 50, comment: "good" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // Objective auto (40) + manual (50) = 90; passed (>= 50).
+    expect(res.json()).toMatchObject({
+      gradingStatus: "fully_graded",
+      fullyGraded: true,
+      totalScore: 90,
+      passed: true,
+    });
+  });
+
+  // ── Slice 14: re-grade reconciles idempotently (no double-count) ───────
+  it("re-grades idempotently without double-counting", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-re", 60)],
+      passingScore: 50,
+    });
+
+    const first = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-re", score: 60, comment: "" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(first.json()).toMatchObject({ totalScore: 60 });
+
+    const second = await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-re", score: 45, comment: "re-grade" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // Recomputed from the single full entry set: 45, NOT 60 + 45.
+    expect(second.json()).toMatchObject({ totalScore: 45, passed: false });
   });
 });

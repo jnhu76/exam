@@ -31,9 +31,20 @@ export const GradingRuleSchema = z.object({
   fillBlankCaseSensitive: z.boolean().optional(),
 });
 
+/**
+ * Schema for a question's standard answer.
+ *
+ * Objective questions (single_choice, multiple_choice, true_false, graded
+ * fill_blank) require a non-null, typed standardAnswer. Subjective /
+ * manually-graded questions carry `standardAnswer: null` — the platform treats
+ * a null standardAnswer as "subjective" (see hasSubjectiveQuestions /
+ * subjectiveQuestionIds). We therefore accept null here and enforce the
+ * type-specific answer shape for objective questions in validateQuestionType
+ * (which early-returns when the answer is null).
+ */
 const StandardAnswerSchema = z
   .unknown()
-  .refine((value) => value !== undefined && value !== null, {
+  .refine((value) => value !== undefined, {
     message: "standardAnswer is required",
   });
 
@@ -73,6 +84,21 @@ function validateQuestionType(
     });
   }
 
+  if (question.type === "fill_blank" && !question.content.includes("____")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "fill blank questions require a ____ placeholder",
+      path: ["content"],
+    });
+  }
+
+  // Subjective / manually-graded questions carry a null standardAnswer: skip
+  // the type-specific standardAnswer format checks below. Objective questions
+  // (non-null standardAnswer) still require a correctly-typed answer.
+  if (question.standardAnswer == null) {
+    return;
+  }
+
   if (
     question.type === "single_choice" &&
     (typeof question.standardAnswer !== "string" ||
@@ -97,14 +123,6 @@ function validateQuestionType(
       code: z.ZodIssueCode.custom,
       message: "multiple choice standardAnswer must reference options",
       path: ["standardAnswer"],
-    });
-  }
-
-  if (question.type === "fill_blank" && !question.content.includes("____")) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "fill blank questions require a ____ placeholder",
-      path: ["content"],
     });
   }
 

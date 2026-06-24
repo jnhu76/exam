@@ -50,6 +50,13 @@
       "when": 1782232302529,
       "tag": "0006_import_job_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782299226189,
+      "tag": "0007_spotty_nextwave",
+      "breakpoints": true
     }
   ]
 }

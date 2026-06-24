@@ -147,6 +147,9 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
 
       const entries = await manualGradingRepo.findByAttempt(ctx, attemptId);
       const entryByQuestion = new Map(entries.map((e) => [e.questionId, e]));
+      const answerByQuestion = new Map(
+        attempt.answers.map((a) => [a.questionId, a.answer]),
+      );
       const questions = attempt.questionSnapshot
         .filter((q) => q.standardAnswer == null)
         .map((q) => {
@@ -156,6 +159,9 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
             type: q.type,
             content: q.content,
             maxScore: q.score,
+            candidateAnswer: answerByQuestion.has(q.originalQuestionId)
+              ? (answerByQuestion.get(q.originalQuestionId) ?? null)
+              : null,
             entry: entry
               ? {
                   score: entry.score,
@@ -224,6 +230,17 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       );
       const maxScore = targetQuestion?.score ?? 0;
 
+      // Load the exam to read passingScore for manual-score reconciliation
+      // (the attempt total is recomputed as objective + manual on full grading).
+      const gradingQueueRepo = createGradingQueueRepo(fastify.db);
+      const exam = preAttempt
+        ? await gradingQueueRepo.findExamById(ctx, preAttempt.examId)
+        : null;
+      if (!preAttempt || !exam) {
+        throw new NotFoundError("Attempt grading context not found");
+      }
+      const passingScore = exam.passingScore;
+
       const manualGradingRepo = createManualGradingRepo(fastify.db);
       const existingEntries = await manualGradingRepo.findByAttempt(
         ctx,
@@ -248,6 +265,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           comment,
           ctx.actorId,
           now,
+          passingScore,
         );
       });
 
@@ -311,6 +329,8 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
         questionId,
         score,
         fullyGraded: result.fullyGraded,
+        ...(result.totalScore != null ? { totalScore: result.totalScore } : {}),
+        ...(result.passed != null ? { passed: result.passed } : {}),
       });
     },
   );
