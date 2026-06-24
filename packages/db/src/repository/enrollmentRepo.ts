@@ -8,6 +8,8 @@ import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { and, eq } from "drizzle-orm";
 
+type EnrollmentSelect = typeof examEnrollments.$inferSelect;
+
 /** Creates a tenant-scoped CRUD repository for `examEnrollments` with candidate/exam lookups. */
 export function createEnrollmentRepo(db: Database) {
   const repo = createAsyncTenantCrudRepo(db, examEnrollments);
@@ -78,7 +80,27 @@ export function createEnrollmentRepo(db: Database) {
             eq(examEnrollments.organizationId, orgId),
             eq(examEnrollments.candidateId, candidateId),
           ),
-        )) as (typeof examEnrollments.$inferSelect)[];
+        )) as EnrollmentSelect[];
+    },
+
+    /**
+     * Lists all enrollments for a given exam, scoped to the tenant.
+     * Replaces route-level list(ctx).filter() pattern.
+     */
+    async listByExam(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+    ): Promise<EnrollmentSelect[]> {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      return (await db
+        .select()
+        .from(examEnrollments)
+        .where(
+          and(
+            eq(examEnrollments.organizationId, orgId),
+            eq(examEnrollments.examId, examId),
+          ),
+        )) as EnrollmentSelect[];
     },
   };
 }
