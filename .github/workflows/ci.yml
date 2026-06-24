@@ -13,6 +13,12 @@ concurrency:
 permissions:
   contents: read
 
+# Turborepo remote cache — TURBO_TOKEN from secrets, TURBO_TEAM from vars
+# (vars keeps team slug visible in logs; secrets would be censored).
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
 jobs:
   # ADR-007 Phase 6F: a fast, DB-free `static` job gates the heavier jobs.
   # `verify`, `api-fast`, and `e2e` all now `needs: static` instead of chaining
@@ -34,11 +40,13 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
+        with:
+          version: "11"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "24.15.x"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -69,6 +77,16 @@ jobs:
           --health-timeout=3s
           --health-retries=10
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
     env:
       DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_test
       TEST_DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_test
@@ -76,6 +94,7 @@ jobs:
       NODE_ENV: test
       APP_MODE: ci
       DEPLOYMENT_MODE: singleTenant
+      REDIS_URL: redis://localhost:6379
 
     steps:
       - name: Checkout
@@ -85,11 +104,13 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
+        with:
+          version: "11"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "24.15.x"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
@@ -149,11 +170,13 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
+        with:
+          version: "11"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "24"
+          node-version: "24.15.x"
           cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 

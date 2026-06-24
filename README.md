@@ -145,9 +145,9 @@ docker compose down -v   # remove database data
 | File                      | Purpose                                                                       |
 | ------------------------- | ----------------------------------------------------------------------------- |
 | `Dockerfile`              | Multi-stage build: base → builder → production runner                         |
-| `docker-compose.yml`      | Production: app + PostgreSQL 18                                               |
-| `docker-compose.dev.yml`  | Local development DB: PostgreSQL 18 only (for `pnpm db:up` / host test runs)  |
-| `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + E2E service (Playwright, profile) |
+| `docker-compose.yml`      | Production: app + PostgreSQL 18 + Redis 7                                     |
+| `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
+| `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
 | `.env.example`            | Environment variable template                                                 |
 
@@ -191,10 +191,15 @@ packages/
 
 ## Tech Stack
 
-- **Frontend**: React 19, Vite, TypeScript, shadcn/ui, TailwindCSS v4
-- **Backend**: Fastify, TypeScript, Zod validation
-- **Database**: PostgreSQL 18 via Drizzle ORM
-- **Monorepo**: pnpm workspaces + Turborepo
+| Layer | Tech |
+|-------|------|
+| Frontend | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4 |
+| Backend | Node.js 24.15.x + Fastify + TypeScript + Zod validation |
+| Database | PostgreSQL 18.4 via Drizzle ORM |
+| Cache | Redis 7 (optional, for rate limiting/presence) |
+| Monorepo | pnpm 11 + Turborepo 2.9.16 |
+
+See `docs/dev/ci-baseline.md` for CI infrastructure details and local testing setup.
 
 ## Documentation
 
@@ -202,6 +207,7 @@ packages/
 |---|---|
 | `docs/SPEC.md` | Full product specification (authoritative) |
 | `docs/code-quality.md` | Code quality rules and conventions (authoritative) |
+| `docs/dev/ci-baseline.md` | CI infrastructure baseline (versions, job structure, local setup) |
 | `docs/phase2/phase2.plan.md` | Phase 2 Exam Runtime Closure plan (authoritative) |
 | `docs/phase2/discovery/01-frontend-inventory.md` | Phase 1 frontend route/component inventory |
 | `docs/phase2/discovery/02-backend-api-inventory.md` | Phase 1 backend API endpoint inventory |
@@ -214,6 +220,7 @@ packages/
 | `docs/dev/demo-seed-test-guide.md` | Step-by-step manual test guide for demo seed |
 | `docs/dev/exam-data-chain.md` | Entity relationships and data flow documentation |
 | `docs/dev/manual-test-bugs.md` | Known bugs from manual testing |
+| `docs/dev/redis-baseline.md` | Redis plugin architecture and test isolation |
 
 ## Environment Variables
 
@@ -226,6 +233,8 @@ packages/
 | `APP_PORT`          | `3000`                          | API server port                                               |
 | `HOST`              | `0.0.0.0`                       | API server listen address                                     |
 | `DATABASE_URL`      | `postgresql://...`              | Database connection URL (**required in production**)           |
+| `REDIS_URL`         | (empty = disabled)              | Redis connection URL (optional, enables caching/presence)     |
+| `REDIS_KEY_PREFIX`  | `""`                            | Redis key prefix for namespace separation                     |
 | `JWT_SECRET`        | auto-generated in dev           | JWT signing secret (**required in production**; fail-fast)    |
 | `NODE_ENV`          | `development`                   | Node environment (build/fallback signal)                      |
 | `COOKIE_SECURE`     | `false`                         | Whether cookies should be secure (HTTPS only)                 |
@@ -263,10 +272,27 @@ pnpm --filter db test
 ```
 
 > **Note**: DB-dependent tests (`@exam/db`, `@exam/api`) require a running
-> PostgreSQL. Start one with `pnpm db:up` (uses `docker-compose.dev.yml`,
-> PostgreSQL 18 on port `5432`) and set `DATABASE_URL` /
-> `TEST_DATABASE_URL` to point at it. In CI, GitHub Actions `services: postgres`
-> provides this instead.
+> PostgreSQL. Redis tests require a running Redis instance. Start both with
+> `pnpm db:up` (uses `docker-compose.dev.yml`, PostgreSQL 18 + Redis 7 on
+> ports `5432`/`6379`) and set `DATABASE_URL` / `TEST_DATABASE_URL` /
+> `REDIS_URL` to point at them. In CI, GitHub Actions `services: postgres` and
+> `services: redis` provide these instead.
+
+### Quick local test setup (Docker)
+
+```bash
+# Start PostgreSQL + Redis
+docker run -d --name exam-pg -p 5432:5432 \
+  -e POSTGRES_USER=exam -e POSTGRES_PASSWORD=exam -e POSTGRES_DB=exam_test \
+  postgres:18.4-bookworm
+
+docker run -d --name exam-redis -p 6379:6379 redis:7-alpine
+
+# Run tests with both services
+REDIS_URL=redis://127.0.0.1:6379 \
+DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test \
+pnpm coverage
+```
 
 ### E2E Tests (Playwright, browser)
 
