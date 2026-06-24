@@ -1052,12 +1052,17 @@ export async function seedDemo(
       },
     ],
     startedAt: ts(-10 * 60_000),
-    deadlineAt: ts(20 * 60_000),
+    // deadlineAt must stay in the future for the whole E2E run; the accelerated
+    // deadline scanner (DEADLINE_SCAN_INTERVAL_MS=5000 in docker-compose.test.yml)
+    // otherwise auto-submits this attempt. exam1.closeAt is ts(24h), so ts(2h)
+    // is safely inside the window. (The heartbeat scanner may still flip this
+    // to `disrupted` since lastActivityAt is not refreshed at runtime; the
+    // demo-seed-accounts E2E keeps it alive via the heartbeat/restore API.)
+    deadlineAt: ts(2 * HOUR),
     // lastActivityAt must be newer than the heartbeat timeout (60_000 ms;
     // see DEFAULT_HEARTBEAT_TIMEOUT_MS in apps/api/src/plugins/heartbeat.ts).
     // Using ts(0) — i.e. "right now at seed time" — keeps this attempt in
-    // `in_progress` for the lifetime of the E2E run rather than flipping to
-    // `disrupted` on the first heartbeat scan tick.
+    // `in_progress` at seed time; the E2E refreshes it before asserting.
     lastActivityAt: ts(0),
   });
   ids.attempts["open-c1-inprogress"] = openAttempt1Id;
@@ -1074,7 +1079,12 @@ export async function seedDemo(
       },
     ],
     startedAt: ts(-20 * 60_000),
-    deadlineAt: ts(10 * 60_000),
+    // deadlineAt must stay in the future for the whole E2E run, otherwise the
+    // deadline scanner (DEADLINE_SCAN_INTERVAL_MS=5000 in docker-compose.test.yml)
+    // auto-submits this disrupted attempt → graded, breaking the demo-seed
+    // contract (candidate3 = resumable/resume). exam1.closeAt is ts(24h), so
+    // ts(2h) is safely inside the window and well past any suite duration.
+    deadlineAt: ts(2 * HOUR),
     lastActivityAt: ts(-8 * 60_000),
   });
   ids.attempts["open-c3-disrupted"] = openAttempt3Id;

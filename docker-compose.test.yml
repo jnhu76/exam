@@ -51,7 +51,15 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - exam-net
+      exam-net:
+        # Chromium's HSTS preload list includes the bare hostname `app` (Google's
+        # `.app` TLD is force-HTTPS). Visiting `http://app:3000/` from the e2e
+        # container therefore upgrades to HTTPS → ERR_SSL_PROTOCOL_ERROR, since
+        # the app container is plain HTTP. We expose a safe alias `examapp` so
+        # `docker compose --profile e2e run e2e` works without the IP-resolution
+        # dance that scripts/e2e/run.sh performs.
+        aliases:
+          - examapp
     restart: unless-stopped
 
   db:
@@ -104,7 +112,12 @@ services:
       - ./packages:/app/packages:ro
       - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
     environment:
-      E2E_BASE_URL: "http://app:3000"
+      # Use the `examapp` alias instead of the service name `app`:
+      # Chromium HSTS-preloads the bare name `app` and forces HTTPS, which breaks
+      # plain-HTTP navigation with ERR_SSL_PROTOCOL_ERROR. `examapp` is not on
+      # any HSTS preload list. (scripts/e2e/run.sh overrides this with the app
+      # container IP for parity; both paths work.)
+      E2E_BASE_URL: "http://examapp:3000"
       HOME: /tmp
       HTTP_PROXY: ${E2E_PROXY:-}
       HTTPS_PROXY: ${E2E_PROXY:-}

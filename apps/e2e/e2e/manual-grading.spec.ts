@@ -77,7 +77,10 @@ test.describe("manual grading (P2D-J4)", () => {
     // The submitted attempt appears in the pending queue.
     const row = page.getByTestId(`grading-queue-row-${attemptId}`);
     await row.waitFor({ state: "visible", timeout: 15_000 });
-    await expect(row).toContainText(seeded.candidate.username);
+    // The grading-queue row renders the candidate's display `name`
+    // (user.name), not the login `username` — assert against the displayed
+    // identifier, which is unique per seeded candidate.
+    await expect(row).toContainText(seeded.candidate.name);
     await row.click();
     await page.waitForURL(
       (url) => /\/admin\/grading-queue\/[^/]+$/.test(url.pathname),
@@ -103,7 +106,10 @@ test.describe("manual grading (P2D-J4)", () => {
       .getByTestId(`grading-comment-input-${subjectiveQuestionId}`)
       .fill("good effort");
     await page.getByTestId(`grading-save-btn-${subjectiveQuestionId}`).click();
-    await expect(page.getByText("评分已完成")).toBeVisible({
+    // Use exact match: the page also renders a status label containing
+    // "评分已完成" as a substring (e.g. "手动评分已完成评分"), which would
+    // make a substring getByText match two elements and trip strict mode.
+    await expect(page.getByText("评分已完成", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
 
