@@ -1,17 +1,10 @@
 import type { Database } from "../types.js";
-import {
-  exams,
-  candidateProfiles,
-  users,
-  examAttempts,
-  manualGradingEntries,
-} from "../schema/pg.js";
+import { exams, candidateProfiles, users } from "../schema/pg.js";
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-type AttemptSelect = typeof examAttempts.$inferSelect;
 type ExamSelect = typeof exams.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
 type UserSelect = typeof users.$inferSelect;

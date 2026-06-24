@@ -6,9 +6,20 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 
 type QuestionSelect = typeof questions.$inferSelect;
+
+async function countQuestions(
+  db: Database,
+  where: SQL<unknown>,
+): Promise<number> {
+  const rows = await db
+    .select({ value: sql<number>`count(*)` })
+    .from(questions)
+    .where(where);
+  return Number(rows[0]?.value ?? 0);
+}
 
 /** Filter options for listing questions with DB-level filtering. */
 export interface QuestionListFilters {
@@ -56,10 +67,10 @@ export function createQuestionRepo(db: Database) {
         }
       }
 
-      const where = and(...conditions);
+      const where = and(...conditions)!;
       const offset = (pagination.page - 1) * pagination.pageSize;
 
-      const [items, totalRows] = await Promise.all([
+      const [items, total] = await Promise.all([
         db
           .select()
           .from(questions)
@@ -67,16 +78,10 @@ export function createQuestionRepo(db: Database) {
           .orderBy(questions.createdAt)
           .limit(pagination.pageSize)
           .offset(offset),
-        db
-          .select({ value: sql<number>`count(*)` })
-          .from(questions)
-          .where(where),
+        countQuestions(db, where),
       ]);
 
-      return {
-        items: items as QuestionSelect[],
-        total: Number(totalRows[0]?.value ?? 0),
-      };
+      return { items: items as QuestionSelect[], total };
     },
 
     /**
@@ -88,16 +93,11 @@ export function createQuestionRepo(db: Database) {
       courseId: string,
     ): Promise<number> {
       const orgId = resolveOrganizationId(ctx);
-      const rows = await db
-        .select({ value: sql<number>`count(*)` })
-        .from(questions)
-        .where(
-          and(
-            eq(questions.organizationId, orgId),
-            eq(questions.courseId, courseId),
-          ),
-        );
-      return Number(rows[0]?.value ?? 0);
+      const where = and(
+        eq(questions.organizationId, orgId),
+        eq(questions.courseId, courseId),
+      )!;
+      return countQuestions(db, where);
     },
   };
 }
