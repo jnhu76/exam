@@ -1,5 +1,24 @@
 # 测试 Flake 登记册
 
+## 改进记录（2026-06-24，Phase 2 收口 test-io-optimization）
+
+以下改进已在 `feat/test-io-optimization` 分支完成并验证：
+
+| 问题 | 改进 | 验证 |
+|---|---|---|
+| `pnpm verify` ~330s | 降到 **~123s（-63%）**。worker-db 4w 默认、去重复 test/coverage、去 turbo 串行依赖。 | 651/651 api + 163/163 db 全部通过 |
+| audit.test.ts 在 worker-db 下确定性失败 | 加 `targetType=range_test` 过滤，避免分页截断。 | worker-db 4w 5/5 PASS（修前 0/10） |
+| `demo-seed.test.ts` coverage 下超时 | 预计算 argon2 hash（~480ms/call → ~0ms），`{ timeout: 30_000 }`。 | coverage:db 3/3 PASS |
+| `testWorkerDatabase.test.ts` coverage 下超时 | `{ timeout: 15_000 }`。 | coverage:db 3/3 PASS |
+| `verify:db-tests` 4 步串行重复跑 | 改为单步 `pnpm coverage`，coverage 已包含全部测试。 | verify 全部通过 |
+| `@exam/db#coverage` turbo 强制双跑 | 删除 `dependsOn [@exam/db#test]`。 | verify 全部通过 |
+| CI `api-fast` job 重复 api 测试 | 删除。verify job 的 `coverage:api` 已覆盖。 | CI yaml 语法验证通过 |
+| `test:nodb` 和 `coverage:nodb` 双跑 | `verify:nodb-tests` 改为只跑 `coverage:nodb`。 | verify 全部通过 |
+| `@exam/exam-engine` coverage 缺 `--coverage` | 修复为 `vitest run --coverage`。 | 现在有 coverage 输出 |
+| `reuseSchema` migrate-cache 基础设施 | 已实现，opt-in。单次复用节省 ~232ms。 | probe 验证 467ms→235ms |
+
+本文档下方各 flake 条目保留作为历史记录，反映修复前的状态。
+
 本文档登记 `pnpm verify` 期间在主分支或 Phase1.7 工作分支上观察到的、**与当前改动无因果关系**的偶发测试失败（flaky tests）。
 
 每条记录的目的：

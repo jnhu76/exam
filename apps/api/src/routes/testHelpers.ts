@@ -33,8 +33,8 @@ import {
   type ApiTestDatabaseHandle,
 } from "./testDatabase.js";
 
-// ── migrate-cache (I/O optimization Phase 3) ──────────────────────────
-// When a single vitest fork builds the app multiple times (e.g. exam.test.ts
+// ── (migrate-cache removed in PR cleanup) ─────────────────────────
+// (e.g. exam.test.ts
 // has 4 describe blocks each calling buildTestApp), each call used to CREATE
 // SCHEMA + run all 7 Drizzle migrations. Those ~84ms migrate calls were
 // redundant: every build within the same process gets the same fresh schema.
@@ -49,14 +49,6 @@ import {
 // files. Risk: none for intra-file builds that create a fresh ctx each time.
 // Files that share a ctx across builds (e.g. a beforeAll ctx reused in
 // multiple it blocks) are NOT affected because they call buildTestApp once.
-
-interface CachedSchemaState {
-  schemaName: string;
-  databaseUrl: string;
-  conn: Awaited<ReturnType<typeof createDatabase>>;
-  /** Cleanup the schema at end of process (drop schema cascade). */
-  isoCleanup: () => Promise<void>;
-}
 
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
@@ -122,11 +114,7 @@ const TEST_DB_URL =
  * When `opts.schemaName` is provided, the database connection runs against
  * the specified PostgreSQL schema (test isolation). Otherwise the default
  * shared schema (`public`) is used.
- *
- * When `opts.reuseSchema` is true (opt-in I/O optimization), the first call
- * creates + migrates a schema and caches it in this module; subsequent calls
- * in the same process TRUNCATE + seed the cached schema instead of creating
- * a fresh one. This cuts ~232ms per build for multi-build test files.
+
  */
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,

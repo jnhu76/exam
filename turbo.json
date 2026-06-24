@@ -27,9 +27,6 @@
     "@exam/api#coverage": {
       "dependsOn": ["^build", "@exam/db#coverage"]
     },
-    "@exam/db#coverage": {
-      "dependsOn": ["^build", "@exam/db#test"]
-    },
     "test:integration": {
       "dependsOn": ["^build"]
     },
