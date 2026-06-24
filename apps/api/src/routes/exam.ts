@@ -1224,9 +1224,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollments = (await enrollmentRepo.list(ctx)).filter(
-        (e) => e.examId === examId,
-      );
+      const enrollments = await enrollmentRepo.listByExam(ctx, examId);
       const candidateRepo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
 
@@ -1297,9 +1295,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       const enrollmentRepo = createEnrollmentRepo(fastify.db);
       const candidateRepo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
-      const existing = (await enrollmentRepo.list(ctx)).filter(
-        (e) => e.examId === examId,
-      );
+      const existing = await enrollmentRepo.listByExam(ctx, examId);
       const existingIds = new Set(existing.map((e) => e.candidateId));
 
       let added = 0;

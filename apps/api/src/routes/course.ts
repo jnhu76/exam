@@ -4,12 +4,14 @@ import {
   CreateCourseRequestSchema,
   UpdateCourseRequestSchema,
   PaginationParamsSchema,
+  ErrorResponseSchema,
 } from "@exam/contracts";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** OpenAPI security scheme: HTTP-only cookie authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -83,7 +85,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
-        response: { 200: courseItemSchema },
+        response: { 200: courseItemSchema, 404: ErrorResponseSchema },
       },
     },
     /** Get a single course by ID. Returns 404 if not found. */
@@ -95,7 +97,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       if (!course) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Course not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       return {
         id: course.id,
@@ -117,7 +119,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         body: CreateCourseRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
-        response: { 201: courseItemSchema },
+        response: { 201: courseItemSchema, 409: ErrorResponseSchema },
       },
     },
     /** Create a new course. Returns 409 if the course code already exists. */
@@ -128,12 +130,17 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
 
       const existing = await repo.list(ctx);
       if (existing.some((c) => c.code === data.code)) {
-        return reply.code(409).send({
-          error: {
-            code: "DUPLICATE",
-            message: "Course code already exists",
-          },
-        });
+        return reply.code(409).send(
+          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            fields: [
+              {
+                field: "code",
+                code: "RESOURCE_CONFLICT",
+                message: "课程代码已存在",
+              },
+            ],
+          }),
+        );
       }
 
       const course = await repo.create(ctx, {
@@ -163,7 +170,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         body: UpdateCourseRequestSchema,
         security: cookieAuth,
         "x-role": ["Admin"],
-        response: { 200: courseItemSchema },
+        response: { 200: courseItemSchema, 404: ErrorResponseSchema },
       },
     },
     /** Update an existing course by ID. Returns 404 if not found. */
@@ -180,7 +187,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       if (!updated) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Course not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "course.update", "course", id);
       return {
@@ -205,6 +212,8 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         "x-role": ["Admin"],
         response: {
           204: z.null(),
+          404: ErrorResponseSchema,
+          409: ErrorResponseSchema,
         },
       },
     },
@@ -213,20 +222,27 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { id } = request.params as { id: string };
       const repo = createCourseRepo(fastify.db);
-      const questions = await createQuestionRepo(fastify.db).list(ctx);
-      if (questions.some((q) => q.courseId === id)) {
-        return reply.code(409).send({
-          error: {
-            code: "CONFLICT",
-            message: "Course still contains questions",
-          },
-        });
+      const questionCount = await createQuestionRepo(
+        fastify.db,
+      ).countByCourseId(ctx, id);
+      if (questionCount > 0) {
+        return reply.code(409).send(
+          buildErrorResponse(request.id, "RESOURCE_CONFLICT", {
+            fields: [
+              {
+                field: "courseId",
+                code: "RESOURCE_CONFLICT",
+                message: "课程下仍有题目，无法删除",
+              },
+            ],
+          }),
+        );
       }
       const deleted = await repo.delete(ctx, id);
       if (!deleted) {
         return reply
           .code(404)
-          .send({ error: { code: "NOT_FOUND", message: "Course not found" } });
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "course.delete", "course", id);
       return reply.code(204).send();

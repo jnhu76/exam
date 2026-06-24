@@ -64,35 +64,29 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any) => {
       const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
-      const repo = createQuestionRepo(fastify.db);
-      const all = await repo.list(ctx);
-
       const query = request.query as Record<string, string | undefined>;
-      let filtered = all;
-      if (query.courseId) {
-        filtered = filtered.filter((q) => q.courseId === query.courseId);
-      }
-      if (query.type) {
-        filtered = filtered.filter((q) => q.type === query.type);
-      }
-      if (query.difficulty) {
-        filtered = filtered.filter(
-          (q) => q.difficulty === Number(query.difficulty),
-        );
-      }
+      const repo = createQuestionRepo(fastify.db);
+
+      const filters: {
+        courseId?: string;
+        type?: string;
+        difficulty?: number;
+        tags?: string[];
+      } = {};
+      if (query.courseId) filters.courseId = query.courseId;
+      if (query.type) filters.type = query.type;
+      if (query.difficulty) filters.difficulty = Number(query.difficulty);
       if (query.tags) {
-        const tags = query.tags
+        filters.tags = query.tags
           .split(",")
           .map((tag) => tag.trim())
           .filter(Boolean);
-        filtered = filtered.filter((q) =>
-          tags.every((tag) => q.tags.includes(tag)),
-        );
       }
 
-      const total = filtered.length;
-      const offset = (page - 1) * pageSize;
-      const items = filtered.slice(offset, offset + pageSize);
+      const { items, total } = await repo.listFiltered(ctx, filters, {
+        page,
+        pageSize,
+      });
 
       return {
         items: items.map((q) => ({
