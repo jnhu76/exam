@@ -26,15 +26,14 @@ import {
   setupIsolatedTestDb,
   isTestDbIsolationEnabled,
 } from "@exam/db/src/testIsolation.js";
-import { truncateBusinessTables } from "@exam/db/src/testWorkerDatabase.js";
 import {
   setupApiTestDatabaseFromEnv,
   isWorkerDatabaseMode,
   type ApiTestDatabaseHandle,
 } from "./testDatabase.js";
 
-// ── migrate-cache (I/O optimization Phase 3) ──────────────────────────
-// When a single vitest fork builds the app multiple times (e.g. exam.test.ts
+// ── (migrate-cache removed in PR cleanup) ─────────────────────────
+// (e.g. exam.test.ts
 // has 4 describe blocks each calling buildTestApp), each call used to CREATE
 // SCHEMA + run all 7 Drizzle migrations. Those ~84ms migrate calls were
 // redundant: every build within the same process gets the same fresh schema.
@@ -49,14 +48,6 @@ import {
 // files. Risk: none for intra-file builds that create a fresh ctx each time.
 // Files that share a ctx across builds (e.g. a beforeAll ctx reused in
 // multiple it blocks) are NOT affected because they call buildTestApp once.
-
-interface CachedSchemaState {
-  schemaName: string;
-  databaseUrl: string;
-  conn: Awaited<ReturnType<typeof createDatabase>>;
-  /** Cleanup the schema at end of process (drop schema cascade). */
-  isoCleanup: () => Promise<void>;
-}
 
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
@@ -122,11 +113,7 @@ const TEST_DB_URL =
  * When `opts.schemaName` is provided, the database connection runs against
  * the specified PostgreSQL schema (test isolation). Otherwise the default
  * shared schema (`public`) is used.
- *
- * When `opts.reuseSchema` is true (opt-in I/O optimization), the first call
- * creates + migrates a schema and caches it in this module; subsequent calls
- * in the same process TRUNCATE + seed the cached schema instead of creating
- * a fresh one. This cuts ~232ms per build for multi-build test files.
+
  */
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,
@@ -135,58 +122,9 @@ export async function buildTestApp(
     rateLimit?: boolean;
     databaseUrl?: string;
     schemaName?: string;
-    reuseSchema?: boolean;
   },
 ): Promise<TestContext> {
   const dbUrl = opts?.databaseUrl ?? TEST_DB_URL;
-
-  // ── migrate-cache fast path (opt-in) ────────────────────────────
-  if (
-    opts?.reuseSchema &&
-    isTestDbIsolationEnabled() &&
-    !isWorkerDatabaseMode()
-  ) {
-    if (cachedSchema) {
-      // Reuse the already-migrated schema: TRUNCATE business tables to
-      // give this build a clean slate, then seed fresh org+users.
-      await truncateBusinessTables(
-        cachedSchema.conn.sql,
-        cachedSchema.schemaName,
-      );
-      return finishBuildTestApp({
-        routePlugin,
-        conn: cachedSchema.conn,
-        opts,
-        customCleanup: async () => {
-          // conn stays alive for the next reuse; individual builds do not
-          // close the pool. The pool is closed by the schema's own cleanup
-          // (drop schema cascade) at process exit.
-        },
-      });
-    }
-    // First use: create + migrate the schema, cache it.
-    const iso = await setupIsolatedTestDb({
-      namespace: "api-cached",
-      databaseUrl: dbUrl,
-    });
-    const conn = await createDatabase(dbUrl, iso.schemaName);
-    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
-    cachedSchema = {
-      schemaName: iso.schemaName,
-      databaseUrl: dbUrl,
-      conn,
-      isoCleanup: iso.cleanup,
-    };
-    return finishBuildTestApp({
-      routePlugin,
-      conn,
-      opts,
-      customCleanup: async () => {
-        // conn + schema persist for the next reuse; cleaned only at
-        // process exit by the module-level cleanup.
-      },
-    });
-  }
   let resolvedSchemaName = opts?.schemaName;
   let isolatedCleanup: (() => Promise<void>) | undefined;
 
@@ -657,22 +595,4 @@ export async function exportResultsCsvAsAdmin(
     headers: res.headers,
     body: typeof res.body === "string" ? res.body : res.body.toString(),
   };
-}
-
-// ── migrate-cache module state ───────────────────────────────────────
-let cachedSchema: CachedSchemaState | null = null;
-
-/**
- * Drop the cached schema (if any). Called by tests that need to verify
- * cleanup behavior; also safe to call in `afterAll` hooks.
- */
-export async function clearCachedSchema(): Promise<void> {
-  if (!cachedSchema) return;
-  try {
-    await cachedSchema.conn.sql.end();
-    await cachedSchema.isoCleanup();
-  } catch {
-    /* best-effort */
-  }
-  cachedSchema = null;
 }
