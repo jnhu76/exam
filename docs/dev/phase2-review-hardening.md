@@ -82,3 +82,80 @@ The existing `fastify.db.select()` rule was already in place.
 - `pnpm --filter @exam/api exec vitest run src/routes/course.test.ts` — 8/8 PASS
 - `node scripts/check-architecture.mjs` — PASS
 - `node scripts/check-hardcoded-copy.mjs` — PASS
+
+---
+
+## P2.1-B P0-like Audit Sweep (2026-06-24)
+
+### P0-like 判定标准
+
+P0-like 是指与原始 P0 同类的真实工程风险：
+- DB/repository boundary violations (route 直接 import drizzle-orm / schema / raw db.select)
+- In-memory filtering on full DB results (repo.list() 后 .filter()/.some()/.find())
+- Inline error responses bypassing the standard error contract
+- Missing CI guards allowing pattern violations to regress
+
+纯风格问题（分页 helper 抽取、request.ctx! vs request["ctx"] 统一、schema 去重）不算 P0-like。
+
+### 扫描方法
+
+使用 `rg` 扫描 5 类问题：
+- **A. DB/repository boundary**: `from "drizzle-orm" | from "@exam/db/src/schema" | fastify.db.(select|insert|update|delete)` in routes
+- **B. Tenant/context boundary**: `targetOrganizationId | organizationId` in routes/lib
+- **C. API error contract**: `send({ error | code: "..."` in routes
+- **D. List/query performance**: `repo.list(ctx)` then `.filter()/.some()/.find()` in routes
+- **E. State/audit/transaction**: `executeInTransaction | recordAudit | status changes` in routes
+
+### Findings Summary
+
+| # | Category | File | Finding | Verdict |
+|---|----------|------|---------|---------|
+| 1 | A | gradingQueue.ts | drizzle-orm + schema imports | **Fixed** (P0) |
+| 2 | D | question.ts | repo.list() + in-memory filter | **Fixed** (P0) |
+| 3 | C | course.ts | inline error objects | **Fixed** (P0) |
+| 4 | D | course.ts | repo.list().some() for duplicate check | **Fixed** (P0) |
+| 5 | D | exam.ts:1227,1300 | enrollmentRepo.list().filter() | **Fixed** (new) |
+| 6 | D | candidateField.ts:93,145 | repo.list().some() for uniqueness | **Defer** — tiny table (5-10 rows) |
+| 7 | D | attempts.candidate.ts | .find()/.filter() on in-memory queue/state | **Defer** — runtime state, not DB |
+| 8 | D | gradingQueue.ts:78,170,241,251 | filtering on snapshot data in memory | **Defer** — snapshot is immutable |
+| 9 | D | exam.ts:109,123,408,411,466 | filtering on loaded data | **Defer** — post-load presentation logic |
+| 10 | — | attempts/attempts.testHelpers.ts | drizzle-orm import | **False positive** — test file |
+| 11 | — | apps/api/src/scripts/* | drizzle-orm + schema imports | **False positive** — scripts, not routes |
+| 12 | — | packages/db/* | drizzle-orm imports | **False positive** — db package allowed |
+
+**Results**: 12 candidates scanned, 5 fix, 4 defer, 3 false positive.
+
+### Fixed (new in P2.1-B)
+
+#### 5. Push enrollment filtering into repository
+
+**Problem:** `apps/api/src/routes/exam.ts` lines 1227 and 1300 called `enrollmentRepo.list(ctx)` (loads ALL org enrollments) then filtered by `examId` in JavaScript. This is the same pattern as the question.ts P0 — loading potentially thousands of rows when only a few dozen are needed.
+
+**Fix:** Added `listByExam(ctx, examId)` method to `enrollmentRepo.ts`. The route handler now calls this method instead of `list(ctx).filter()`.
+
+**Files:**
+- `packages/db/src/repository/enrollmentRepo.ts` (add listByExam)
+- `apps/api/src/routes/exam.ts` (use listByExam at lines 1227 and 1300)
+
+**Tests:** All 44 exam tests pass.
+
+### Deferred (with rationale)
+
+- **candidateField.ts repo.list().some()**: Candidate fields are a tiny table (5-10 rows max). Adding a `hasUniqueField()` method would add abstraction without meaningful performance gain.
+- **attempts.candidate.ts in-memory operations**: Exam queue state, attempt state derivation, and answer versioning are runtime state operations on small in-memory collections. These are not DB query patterns.
+- **exam.ts post-load filtering**: Filtering on already-loaded data for presentation logic (completedCount, passedCount, etc.) is acceptable — the data is already in memory.
+- **gradingQueue.ts snapshot filtering**: Question snapshots are immutable JSONB arrays loaded with the attempt. Filtering for subjective questions is a presentation concern, not a DB concern.
+
+### False Positives
+
+- `attempts/attempts.testHelpers.ts` — test infrastructure, not production code
+- `apps/api/src/scripts/*` — one-off scripts (bootstrap, reset-password), not route handlers
+- `packages/db/*` — the db package is the correct location for drizzle-orm usage
+
+### Verification
+
+- `pnpm --filter @exam/db build` — PASS
+- `pnpm --filter @exam/api typecheck` — PASS
+- `pnpm --filter @exam/api exec vitest run src/routes/exam.test.ts` — 44/44 PASS
+- `node scripts/check-architecture.mjs` — PASS
+- `node scripts/check-hardcoded-copy.mjs` — PASS
