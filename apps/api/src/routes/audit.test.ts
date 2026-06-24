@@ -447,10 +447,14 @@ describe("audit log baseline (S06-lite)", () => {
           .where(eq(schema.auditLogs.targetId, targetId));
       }
 
+      // Filter by targetType=range_test so these queries only see the 4
+      // rows this test created — not residual audit rows from other test
+      // files sharing the worker database (default pageSize=20 would
+      // paginate the range markers out otherwise).
       // from = t1: excludes t0.
       const fromRes = await ctx.app.inject({
         method: "GET",
-        url: `/api/admin/audit-logs?from=${encodeURIComponent(t1)}`,
+        url: `/api/admin/audit-logs?targetType=range_test&from=${encodeURIComponent(t1)}`,
         cookies: { "auth-token": adminToken },
       });
       expect(fromRes.statusCode).toBe(200);
@@ -469,7 +473,7 @@ describe("audit log baseline (S06-lite)", () => {
       // to = t2: excludes t3.
       const toRes = await ctx.app.inject({
         method: "GET",
-        url: `/api/admin/audit-logs?to=${encodeURIComponent(t2)}`,
+        url: `/api/admin/audit-logs?targetType=range_test&to=${encodeURIComponent(t2)}`,
         cookies: { "auth-token": adminToken },
       });
       expect(toRes.statusCode).toBe(200);
@@ -488,7 +492,7 @@ describe("audit log baseline (S06-lite)", () => {
       // from=t1, to=t2: only t1 and t2.
       const bothRes = await ctx.app.inject({
         method: "GET",
-        url: `/api/admin/audit-logs?from=${encodeURIComponent(t1)}&to=${encodeURIComponent(t2)}`,
+        url: `/api/admin/audit-logs?targetType=range_test&from=${encodeURIComponent(t1)}&to=${encodeURIComponent(t2)}`,
         cookies: { "auth-token": adminToken },
       });
       expect(bothRes.statusCode).toBe(200);
