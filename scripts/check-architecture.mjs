@@ -46,6 +46,11 @@ await forbid("apps/api/src/routes", [
     /\bdb\.(?:select|insert|update|delete)\s*\(/,
     "routes must use repositories",
   ],
+  [/from ["']drizzle-orm/, "routes must not import drizzle-orm directly"],
+  [
+    /from ["']@exam\/db\/src\/schema\//,
+    "routes must not import DB schema directly",
+  ],
 ]);
 
 if (violations.length > 0) {
