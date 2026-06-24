@@ -78,5 +78,26 @@ export function createQuestionRepo(db: Database) {
         total: Number(totalRows[0]?.value ?? 0),
       };
     },
+
+    /**
+     * Returns the count of questions belonging to a specific course,
+     * scoped to the tenant. Used by course deletion guard.
+     */
+    async countByCourseId(
+      ctx: TenantContext | RequestContext,
+      courseId: string,
+    ): Promise<number> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({ value: sql<number>`count(*)` })
+        .from(questions)
+        .where(
+          and(
+            eq(questions.organizationId, orgId),
+            eq(questions.courseId, courseId),
+          ),
+        );
+      return Number(rows[0]?.value ?? 0);
+    },
   };
 }
