@@ -8,6 +8,7 @@ import cors from "./plugins/cors.js";
 import setupSecurity from "./plugins/security.js";
 import authPlugin from "./plugins/auth.js";
 import dbPlugin from "./plugins/db.js";
+import redisPlugin from "./plugins/redis.js";
 import nowPlugin from "./plugins/now.js";
 import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
@@ -52,6 +53,7 @@ async function main() {
   setupErrorHandler(app);
   await app.register(zodProviderPlugin);
   await app.register(dbPlugin);
+  await app.register(redisPlugin);
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);

@@ -32,6 +32,23 @@ import {
   type ApiTestDatabaseHandle,
 } from "./testDatabase.js";
 
+// ── (migrate-cache removed in PR cleanup) ─────────────────────────
+// (e.g. exam.test.ts
+// has 4 describe blocks each calling buildTestApp), each call used to CREATE
+// SCHEMA + run all 7 Drizzle migrations. Those ~84ms migrate calls were
+// redundant: every build within the same process gets the same fresh schema.
+//
+// This module-level cache records the first migrated schema+connection per
+// process and reuses it for subsequent builds. Between builds the schema is
+// TRUNCATE-reset (RESTART IDENTITY CASCADE, preserving migration metadata),
+// so each build still sees a clean business-data slate — exactly the same
+// post-migrate state the original CREATE SCHEMA + migrate provided.
+//
+// Probed savings: ~232ms/build (467ms fresh → 235ms cached) for multi-build
+// files. Risk: none for intra-file builds that create a fresh ctx each time.
+// Files that share a ctx across builds (e.g. a beforeAll ctx reused in
+// multiple it blocks) are NOT affected because they call buildTestApp once.
+
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
   "SuperAdmin",
@@ -96,6 +113,7 @@ const TEST_DB_URL =
  * When `opts.schemaName` is provided, the database connection runs against
  * the specified PostgreSQL schema (test isolation). Otherwise the default
  * shared schema (`public`) is used.
+
  */
 export async function buildTestApp(
   routePlugin: FastifyPluginAsync,

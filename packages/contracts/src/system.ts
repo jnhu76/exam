@@ -57,6 +57,10 @@ export const DiagnosticsResponseSchema = z.object({
   version: z.string(),
   uptime: z.number(),
   dbLatency: z.number().min(0),
+  redisStatus: z.object({
+    connected: z.boolean(),
+    latencyMs: z.number().nullable(),
+  }),
   heartbeatStatus: z.object({
     interval: z.number().int().min(0),
     timeout: z.number().int().min(0),

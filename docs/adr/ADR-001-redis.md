@@ -2,7 +2,8 @@
 
 ## Status
 
-Deferred
+Redis Baseline: **Accepted** (Phase 2 收口)
+Full Redis adoption: **Deferred** (per trigger conditions below)
 
 ## Context
 
@@ -18,6 +19,12 @@ Discovery (`docs/phase2/discovery/06-phase2-gap-analysis.md` §Redis / MQ / Job 
 Phase 2 hard rule (`docs/phase2/phase2.plan.md` §10): do not start Redis before Phase 2A Candidate Runtime P0 correctness is complete.
 
 ## Decision
+
+> **Update (Phase 2 收口):** A optional Redis **baseline** has since been
+> introduced — see "Phase 2 Decision" and "Redis Baseline (Phase 2 收口)"
+> below. The original decision below (no Redis *runtime dependency* for
+> business behavior) still holds: the baseline is optional infra only, and
+> PostgreSQL remains canonical. Read the baseline section before this paragraph.
 
 **Do not introduce Redis in Phase 2 single-instance LAN deployment.**
 
@@ -95,8 +102,47 @@ Rollback is safe because the design rule (Redis = ephemeral coordination only) g
 
 ## Phase 2 Decision
 
-**Do not introduce Redis in Phase 2 single-instance LAN deployment.**
+**Redis baseline has been introduced in Phase 2 收口.** Redis is available as an optional runtime dependency. Full adoption (shared rate limit, presence, queue) requires trigger conditions to be met.
 
 - Phase 2 remains single-instance. PostgreSQL is the source of truth.
+- Redis is optional: deployments without Redis continue to work unchanged.
 - The admission queue, heartbeat scanner, and rate limiter stay in-process / DB-backed.
-- Any future Redis adoption requires (a) a documented, measured trigger from the table above, (b) a minimal per-concern rollout, and (c) an update to this ADR.
+- Any future Redis adoption beyond baseline requires (a) a documented, measured trigger from the table above, (b) a minimal per-concern rollout, and (c) an update to this ADR.
+
+## Redis Baseline (Phase 2 收口)
+
+The Redis baseline provides infrastructure for future ADR-007 isolation audit and optional Redis-backed features.
+
+### What's included
+
+- **Docker Compose**: Redis 7 service in production, dev, and test compose files.
+- **Runtime config**: `REDIS_URL` (optional, defaults to disabled), `REDIS_KEY_PREFIX` for namespace separation.
+- **Fastify plugin**: `apps/api/src/plugins/redis.ts` — connects, decorates `fastify.redis`, graceful close via `onClose` hook.
+- **Healthcheck**: `GET /system/diagnostics` reports Redis connectivity and latency.
+- **Test isolation helper**: `apps/api/src/routes/testRedis.ts` — prefix-scoped Redis for test isolation.
+- **ADR-007 alignment**: Test scope resolver's `redisPrefix` is now functional.
+
+### What's NOT included
+
+- No Redis-backed rate limiting (stays in-memory).
+- No Redis-backed heartbeat/presence (stays in-process).
+- No queue/BullMQ integration.
+- No Redis lock replacing PostgreSQL `FOR UPDATE`.
+- No changes to exam/attempt/enrollment canonical state.
+
+### Environment variables
+
+```
+REDIS_URL=redis://localhost:6379     # optional, leave unset to disable
+REDIS_KEY_PREFIX=""                  # optional, for namespace separation
+```
+
+### Next steps
+
+This baseline unlocks ADR-007 isolation audit:
+- PostgreSQL schema/data isolation
+- Redis key prefix isolation
+- Queue job isolation
+- Background worker isolation
+- Seed/default org/user isolation
+- Rate limit/presence state isolation

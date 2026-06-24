@@ -7,8 +7,24 @@ services:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
       POSTGRES_DB: exam_test
+      # ADR-006: display/session timezone only; business time is instant-based.
+      # Parity with docker-compose.yml (production) so local PG logs/sessions
+      # show Asia/Shanghai instead of the default Etc/UTC. Does NOT change
+      # timestamptz comparison semantics.
+      TZ: ${TZ:-Asia/Shanghai}
+      PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 2s
       timeout: 3s
       retries: 10
