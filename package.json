@@ -44,7 +44,7 @@
     "coverage:api:fast": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
     "test:nodb": "turbo test --filter=!@exam/db --filter=!@exam/api",
     "coverage:nodb": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
-    "verify:db-tests": "pnpm test:db && pnpm test:api && pnpm coverage:db && pnpm coverage:api",
+    "verify:db-tests": "pnpm test:db && pnpm test:api:fast && pnpm coverage:db && pnpm coverage:api:fast",
     "verify:nodb-tests": "pnpm test:nodb && pnpm coverage:nodb",
     "verify:fast": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm verify:nodb-tests && pnpm test:db:unit && pnpm test:api:fast && pnpm build",
     "verify:full": "pnpm verify",
