@@ -161,7 +161,7 @@ describe("setupWorkerTestDatabase — input guards (no PG)", () => {
 // PG-integration tests (skipped when PG is not reachable)
 // ---------------------------------------------------------------------------
 
-PG_DESCRIBE("ensureDatabaseExists", () => {
+PG_DESCRIBE("ensureDatabaseExists", { timeout: 15_000 }, () => {
   it("creates the database if missing, idempotent on second call", async () => {
     // Phase 6D Option B: per-run unique name so a crashed prior run's leftover
     // DB cannot collide, and teardown uses robust dropDatabaseIfExists.

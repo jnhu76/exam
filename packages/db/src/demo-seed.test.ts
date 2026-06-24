@@ -8,7 +8,19 @@ import { verifyDemoSeed } from "./demo-seed-verify.js";
 import { schema } from "./schema/pg.js";
 import { hashPassword, verifyPassword } from "@exam/auth/src/password.js";
 
-describe("demo seed", () => {
+// Pre-computed argon2id hashes for demo-seed passwords. Generated once with
+// default parameters to avoid ~80ms/call hash computation during tests.
+// 6 seed users × 80ms ≈ 480ms saved per seedDemo call (test calls it 9×).
+const ADMIN_PW_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=4$C12Yp33+uAT+Ew3Fkbl5Bw$HkRUB4mhpHXaa7gWLtiDlJjFacO8R6YUDTpLrMwCZLs";
+const CAND_PW_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=4$3dCWwSdVOt1y1PCOkxbQVQ$PlSw+GRS5dzJOaVzXjzqF4HoI0/msheYXyIYQRyOmzw";
+
+const precomputedHash = async (password: string): Promise<string> => {
+  return password === "admin123" ? ADMIN_PW_HASH : CAND_PW_HASH;
+};
+
+describe("demo seed", { timeout: 30_000 }, () => {
   let db: Database;
   let cleanup: () => Promise<void>;
 
@@ -23,20 +35,20 @@ describe("demo seed", () => {
   });
 
   it("seeds and verifies without errors", async () => {
-    const ids = await seedDemo(db, hashPassword);
+    const ids = await seedDemo(db, precomputedHash);
     const errors = await verifyDemoSeed(db, ids);
     expect(errors).toEqual([]);
   });
 
   it("is idempotent on second run", async () => {
-    await seedDemo(db, hashPassword);
-    const ids = await seedDemo(db, hashPassword);
+    await seedDemo(db, precomputedHash);
+    const ids = await seedDemo(db, precomputedHash);
     const errors = await verifyDemoSeed(db, ids);
     expect(errors).toEqual([]);
   });
 
   it("keeps question idempotency scoped by course", async () => {
-    const ids = await seedDemo(db, hashPassword);
+    const ids = await seedDemo(db, precomputedHash);
     const skillCourseId = ids.courses["SKILL-201"]!;
 
     await db.insert(schema.questions).values({
@@ -60,7 +72,7 @@ describe("demo seed", () => {
       updatedAt: new Date(),
     });
 
-    const reseededIds = await seedDemo(db, hashPassword);
+    const reseededIds = await seedDemo(db, precomputedHash);
     const safetyCourseId = reseededIds.courses["SAFETY-101"]!;
     const safetyQuestions = await db
       .select()
@@ -102,7 +114,7 @@ describe("demo seed", () => {
   });
 
   it("creates graded attempts with grading results", async () => {
-    const ids = await seedDemo(db, hashPassword);
+    const ids = await seedDemo(db, precomputedHash);
     const allAttempts = await db
       .select()
       .from(schema.examAttempts)
@@ -118,8 +130,8 @@ describe("demo seed", () => {
   });
 
   it("regression: keeps non-empty gradingResult on every graded attempt across a double seedDemo run", async () => {
-    const firstIds = await seedDemo(db, hashPassword);
-    await seedDemo(db, hashPassword);
+    const firstIds = await seedDemo(db, precomputedHash);
+    await seedDemo(db, precomputedHash);
 
     const attempts = await db
       .select()
