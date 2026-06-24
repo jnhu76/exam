@@ -123,58 +123,10 @@ export async function buildTestApp(
     rateLimit?: boolean;
     databaseUrl?: string;
     schemaName?: string;
-    reuseSchema?: boolean;
   },
 ): Promise<TestContext> {
   const dbUrl = opts?.databaseUrl ?? TEST_DB_URL;
 
-  // ── migrate-cache fast path (opt-in) ────────────────────────────
-  if (
-    opts?.reuseSchema &&
-    isTestDbIsolationEnabled() &&
-    !isWorkerDatabaseMode()
-  ) {
-    if (cachedSchema) {
-      // Reuse the already-migrated schema: TRUNCATE business tables to
-      // give this build a clean slate, then seed fresh org+users.
-      await truncateBusinessTables(
-        cachedSchema.conn.sql,
-        cachedSchema.schemaName,
-      );
-      return finishBuildTestApp({
-        routePlugin,
-        conn: cachedSchema.conn,
-        opts,
-        customCleanup: async () => {
-          // conn stays alive for the next reuse; individual builds do not
-          // close the pool. The pool is closed by the schema's own cleanup
-          // (drop schema cascade) at process exit.
-        },
-      });
-    }
-    // First use: create + migrate the schema, cache it.
-    const iso = await setupIsolatedTestDb({
-      namespace: "api-cached",
-      databaseUrl: dbUrl,
-    });
-    const conn = await createDatabase(dbUrl, iso.schemaName);
-    await migratePostgres(conn.db, { migrationsSchema: iso.schemaName });
-    cachedSchema = {
-      schemaName: iso.schemaName,
-      databaseUrl: dbUrl,
-      conn,
-      isoCleanup: iso.cleanup,
-    };
-    return finishBuildTestApp({
-      routePlugin,
-      conn,
-      opts,
-      customCleanup: async () => {
-        // conn + schema persist for the next reuse; cleaned only at
-        // process exit by the module-level cleanup.
-      },
-    });
-  }
   let resolvedSchemaName = opts?.schemaName;
   let isolatedCleanup: (() => Promise<void>) | undefined;
 
@@ -645,22 +597,4 @@ export async function exportResultsCsvAsAdmin(
     headers: res.headers,
     body: typeof res.body === "string" ? res.body : res.body.toString(),
   };
-}
-
-// ── migrate-cache module state ───────────────────────────────────────
-let cachedSchema: CachedSchemaState | null = null;
-
-/**
- * Drop the cached schema (if any). Called by tests that need to verify
- * cleanup behavior; also safe to call in `afterAll` hooks.
- */
-export async function clearCachedSchema(): Promise<void> {
-  if (!cachedSchema) return;
-  try {
-    await cachedSchema.conn.sql.end();
-    await cachedSchema.isoCleanup();
-  } catch {
-    /* best-effort */
-  }
-  cachedSchema = null;
 }
