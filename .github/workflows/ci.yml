@@ -96,24 +96,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # ADR-007 Phase 6F: static checks (format/lint/lint:copy/lint:arch/
-      # typecheck) now run in the `static` job (this job `needs: static`).
-      # ADR-007 Phase 6E: the verify job no longer runs root `pnpm test` AND
-      # root `pnpm coverage` (which duplicated every DB/API test execution).
-      # Instead, DB/API tests use coverage as the single test entry — `coverage`
-      # runs the same test files as `test` (verified: db 14/160, api 60/623) but
-      # also collects v8 instrumentation, so one pass covers both. Non-DB
-      # packages still run via `verify:nodb-tests`. `test:integration` and
-      # `build` are unchanged. No tests are skipped; coverage thresholds are
-      # still enforced inside `coverage:db`/`coverage:api`.
-      - name: Non-DB tests and coverage
-        run: pnpm verify:nodb-tests
-
-      - name: DB coverage
-        run: pnpm coverage:db
-
-      - name: API coverage
-        run: pnpm coverage:api
+      # Coverage runs ALL packages (web/auth/domain/contracts/exam-engine/
+      # import-export via turbo, db/api via vitest run --coverage) in a single
+      # pass. `turbo coverage` internally parallelizes packages. No separate
+      # `test` pass needed — coverage already executes every test.
+      - name: Coverage (all packages)
+        run: pnpm coverage
 
       - name: Integration tests
         run: pnpm test:integration
