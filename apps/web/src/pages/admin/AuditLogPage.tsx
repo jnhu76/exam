@@ -92,6 +92,24 @@ export function AuditLogPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const pageSize = 20;
 
+  const handleDateChange = useCallback(
+    (newDate: Date | undefined, isStartDate: boolean) => {
+      if (isStartDate && newDate && toDate && newDate > toDate) {
+        setFromDate(toDate);
+        setToDate(newDate);
+      } else if (!isStartDate && newDate && fromDate && newDate < fromDate) {
+        setToDate(fromDate);
+        setFromDate(newDate);
+      } else if (isStartDate) {
+        setFromDate(newDate);
+      } else {
+        setToDate(newDate);
+      }
+      setPage(1);
+    },
+    [fromDate, toDate],
+  );
+
   const hasActiveFilter =
     actionFilter !== "all" ||
     targetFilter !== "all" ||
@@ -184,29 +202,13 @@ export function AuditLogPage() {
           aria-label="开始日期"
           placeholder="开始日期"
           value={fromDate}
-          onChange={(d) => {
-            if (d && toDate && d > toDate) {
-              setFromDate(toDate);
-              setToDate(d);
-            } else {
-              setFromDate(d);
-            }
-            setPage(1);
-          }}
+          onChange={(d) => handleDateChange(d, true)}
         />
         <DatePicker
           aria-label="结束日期"
           placeholder="结束日期"
           value={toDate}
-          onChange={(d) => {
-            if (d && fromDate && d < fromDate) {
-              setToDate(fromDate);
-              setFromDate(d);
-            } else {
-              setToDate(d);
-            }
-            setPage(1);
-          }}
+          onChange={(d) => handleDateChange(d, false)}
         />
         {hasActiveFilter && (
           <Button

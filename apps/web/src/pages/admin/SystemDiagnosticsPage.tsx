@@ -6,13 +6,15 @@ import type {
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { cn, formatDuration } from "@/lib/utils";
-import { getStatusMeta } from "@/lib/statusMeta";
+import { getStatusMeta, getToneTextColor } from "@/lib/statusMeta";
 import {
   Activity,
+  CircleAlert,
   Database,
   HardDrive,
   RefreshCw,
@@ -55,6 +57,7 @@ export function SystemDiagnosticsPage() {
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [staleWarning, setStaleWarning] = useState<string | null>(null);
   const healthTimer = useRef<ReturnType<typeof setInterval>>(null);
   const diagTimer = useRef<ReturnType<typeof setInterval>>(null);
   const uptimeTimer = useRef<ReturnType<typeof setInterval>>(null);
@@ -69,8 +72,10 @@ export function SystemDiagnosticsPage() {
   const loadHealth = useCallback(async () => {
     try {
       setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
+      setStaleWarning(null);
     } catch {
       if (!initialLoadDone.current) setError("加载系统健康数据失败");
+      else setStaleWarning("系统状态刷新失败，当前显示上次成功数据");
     }
   }, []);
 
@@ -84,8 +89,10 @@ export function SystemDiagnosticsPage() {
         serverUptime: result.uptime,
         fetchedAt: Date.now(),
       };
+      setStaleWarning(null);
     } catch {
       if (!initialLoadDone.current) setError("加载诊断数据失败");
+      else setStaleWarning("诊断数据刷新失败，当前显示上次成功数据");
     }
   }, []);
 
@@ -134,15 +141,19 @@ export function SystemDiagnosticsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {staleWarning && (
+        <Alert variant="destructive">
+          <CircleAlert />
+          <AlertDescription>{staleWarning}</AlertDescription>
+        </Alert>
+      )}
       <div className="flex items-center justify-between">
         <PageHeader title="系统监控" />
         <div className="flex items-center gap-3">
           <span
             className={cn(
               "flex items-center gap-1 text-sm font-medium",
-              statusView.tone === "success" && "text-success",
-              statusView.tone === "warning" && "text-warning",
-              statusView.tone === "destructive" && "text-destructive",
+              getToneTextColor(statusView.tone),
             )}
           >
             <StatusIcon className="size-3.5" aria-hidden="true" />
@@ -334,9 +345,7 @@ function MetricCard({
         <p
           className={cn(
             "mt-1 flex items-center gap-1 text-xs font-medium",
-            meta.tone === "success" && "text-success",
-            meta.tone === "warning" && "text-warning",
-            meta.tone === "destructive" && "text-destructive",
+            getToneTextColor(meta.tone),
           )}
         >
           <MetricIcon className="size-3" aria-hidden="true" />
