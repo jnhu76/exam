@@ -37,6 +37,7 @@ import type {
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
+import { trackExamEvent, clearPendingForAttempt } from "@/lib/examTelemetry";
 
 type SaveRejectionDisplay = {
   Icon: typeof TimerOff;
@@ -112,6 +113,12 @@ export function TakeExamPage() {
   const submittingRef = useRef(false);
   const deadlineHandledRef = useRef(false);
   const serverOffsetRef = useRef(0);
+  // Heartbeat consecutive-failure tracking for telemetry. The heartbeat
+  // network call itself is unchanged; these only decide when to emit
+  // heartbeat_failed / heartbeat_restored so the table is not written on
+  // every successful beat.
+  const heartbeatFailureRef = useRef(0);
+  const heartbeatFailureReportedRef = useRef(false);
   const { scheduleSave, flush } = useSubmitFlush();
 
   /** Returns the current time adjusted by the server clock offset. */
@@ -136,6 +143,14 @@ export function TakeExamPage() {
           new Date(data.serverNow).getTime() - Date.now();
       }
       setAttempt(data);
+      trackExamEvent(
+        "exam_page_loaded",
+        { status: data.status },
+        {
+          attemptId,
+          examId: data.examId,
+        },
+      );
 
       const answerMap = new Map<string, unknown>();
       const versionMap = new Map<string, number>();
@@ -159,6 +174,11 @@ export function TakeExamPage() {
       setQuestionStates(states);
       setIsDisconnected(false);
     } catch {
+      trackExamEvent(
+        "exam_page_loaded",
+        { outcome: "failed" },
+        { attemptId, level: "warn" },
+      );
       setLoadError("无法加载答题记录，请检查连接后重试");
     } finally {
       setIsLoading(false);
@@ -169,10 +189,44 @@ export function TakeExamPage() {
     loadAttempt();
   }, [loadAttempt]);
 
+  // exam_page_unloaded: best-effort telemetry on unmount. attemptId is captured
+  // in the ref so the cleanup closure records the id even after it changes.
+  // Also clears any pending coalesced telemetry events to prevent memory leaks.
+  const unloadedAttemptRef = useRef<string | undefined>(attemptId);
+  unloadedAttemptRef.current = attemptId;
+  useEffect(
+    () => () => {
+      const id = unloadedAttemptRef.current;
+      trackExamEvent("exam_page_unloaded", {}, { attemptId: id });
+      if (id) clearPendingForAttempt(id);
+    },
+    [],
+  );
+
   const currentQuestion = attempt?.questionSnapshot[currentIndex];
   const currentAnswer = currentQuestion
     ? answers.get(currentQuestion.originalQuestionId)
     : undefined;
+
+  // question_viewed: fire on question change. Throttled in examTelemetry so
+  // rapid back-and-forth navigation does not flood events. Records only
+  // structural info (id/index/total/type) — never the question content.
+  useEffect(() => {
+    if (!attempt || !currentQuestion || !attemptId) return;
+    trackExamEvent(
+      "question_viewed",
+      {
+        index: currentIndex + 1,
+        total: attempt.questionSnapshot.length,
+        type: currentQuestion.type,
+      },
+      {
+        attemptId,
+        examId: attempt.examId,
+        questionId: currentQuestion.originalQuestionId,
+      },
+    );
+  }, [attempt, currentIndex, currentQuestion, attemptId]);
 
   /** Updates local answer state and schedules a versioned save to the server via the Answer Save Protocol. */
   async function saveAnswer(questionId: string, answer: unknown) {
@@ -191,10 +245,20 @@ export function TakeExamPage() {
     setSaveState("saving");
 
     scheduleSave(questionId, async () => {
+      const saveStartedAt = Date.now();
+      trackExamEvent("answer_autosave_started", {}, { attemptId, questionId });
       const baseVersion = versionsRef.current.get(questionId) ?? 0;
       const clientSeq = (clientSeqsRef.current.get(questionId) ?? 0) + 1;
       clientSeqsRef.current.set(questionId, clientSeq);
       let rejected = false;
+
+      const emitSaveSuccess = (saveMode: "autosave" | "stale_reconcile") => {
+        trackExamEvent(
+          "answer_autosave_success",
+          { durationMs: Date.now() - saveStartedAt, saveMode },
+          { attemptId, questionId },
+        );
+      };
 
       try {
         const result = await api.post<SaveAnswerResponseDTO>(
@@ -214,6 +278,7 @@ export function TakeExamPage() {
           setSaveState("saved");
           setIsDisconnected(false);
           setSaveRejection(null);
+          emitSaveSuccess("autosave");
           return;
         }
 
@@ -233,16 +298,37 @@ export function TakeExamPage() {
           setSaveState("saved");
           setIsDisconnected(false);
           setSaveRejection(null);
+          emitSaveSuccess("stale_reconcile");
           return;
         }
 
         rejected = true;
         setSaveState("error");
         setSaveRejection(result);
+        trackExamEvent(
+          "answer_autosave_failed",
+          {
+            saveMode: "autosave",
+            durationMs: Date.now() - saveStartedAt,
+            errorCode: result.reason,
+          },
+          { attemptId, questionId, level: "warn" },
+        );
         throw new Error("save rejected by server");
       } catch (err) {
         setSaveState("error");
-        if (!rejected) setIsDisconnected(true);
+        if (!rejected) {
+          setIsDisconnected(true);
+          trackExamEvent(
+            "answer_autosave_failed",
+            {
+              saveMode: "autosave",
+              durationMs: Date.now() - saveStartedAt,
+              errorCode: "NETWORK",
+            },
+            { attemptId, questionId, level: "warn" },
+          );
+        }
         throw err;
       }
     });
@@ -253,12 +339,19 @@ export function TakeExamPage() {
     if (!attemptId || submittingRef.current) return;
     submittingRef.current = true;
     setIsSubmitting(true);
+    trackExamEvent("submit_requested", {}, { attemptId });
     try {
       await api.post(`/api/attempts/${attemptId}/submit`);
+      trackExamEvent("submit_success", {}, { attemptId });
       navigate(routes.exam.result(attemptId));
     } catch (err) {
       submittingRef.current = false;
       setIsSubmitting(false);
+      trackExamEvent(
+        "submit_failed",
+        { errorCode: err instanceof Error ? "SUBMIT_ERROR" : "UNKNOWN" },
+        { attemptId, level: "error" },
+      );
       toast.error("提交失败，请重试");
       throw err;
     }
@@ -277,9 +370,19 @@ export function TakeExamPage() {
 
   /** Opens the submit confirmation dialog and triggers a pending-save flush. */
   const openSubmitDialog = useCallback(async () => {
+    if (!attemptId) return;
+    trackExamEvent("submit_clicked", {}, { attemptId });
     setShowSubmitDialog(true);
+    trackExamEvent("submit_confirm_opened", {}, { attemptId });
     await runSubmitFlush();
-  }, [runSubmitFlush]);
+  }, [runSubmitFlush, attemptId]);
+
+  /** Cancels the submit confirmation dialog (继续答题 button). */
+  const cancelSubmitDialog = useCallback(() => {
+    if (!attemptId) return;
+    trackExamEvent("submit_confirm_cancelled", {}, { attemptId });
+    setShowSubmitDialog(false);
+  }, [attemptId]);
 
   /** Handles exam timer expiry by flushing saves then auto-submitting. */
   const handleTimeout = useCallback(async () => {
@@ -338,8 +441,32 @@ export function TakeExamPage() {
           new Date(result.serverNow).getTime() - Date.now();
       }
       setIsDisconnected(false);
+      // Recovery: if we had been reporting failures, emit a restored event.
+      if (heartbeatFailureReportedRef.current) {
+        trackExamEvent(
+          "heartbeat_restored",
+          { failedCount: heartbeatFailureRef.current },
+          { attemptId },
+        );
+      }
+      heartbeatFailureRef.current = 0;
+      heartbeatFailureReportedRef.current = false;
     } catch {
       setIsDisconnected(true);
+      heartbeatFailureRef.current += 1;
+      // Only report once per outage, after 3 consecutive failures, to avoid
+      // writing a client_event on every failed beat.
+      if (
+        heartbeatFailureRef.current >= 3 &&
+        !heartbeatFailureReportedRef.current
+      ) {
+        heartbeatFailureReportedRef.current = true;
+        trackExamEvent(
+          "heartbeat_failed",
+          { failedCount: heartbeatFailureRef.current },
+          { attemptId, level: "warn" },
+        );
+      }
     }
   }, [attemptId]);
 
@@ -347,6 +474,51 @@ export function TakeExamPage() {
     const interval = setInterval(() => void handleHeartbeat(), 30000);
     return () => clearInterval(interval);
   }, [handleHeartbeat]);
+
+  // Browser connectivity + visibility telemetry. Pure flow records — no
+  // cheating detection. Listeners register on mount and are removed on
+  // unmount. Visibility transitions are de-duplicated so rapid tab toggling
+  // does not flood events (only true hidden→visible transitions emit, with a
+  // durationMs for how long the page was hidden).
+  useEffect(() => {
+    if (typeof window === "undefined" || !attemptId) return;
+    const ctxAttemptId = attemptId;
+
+    const onOffline = () =>
+      trackExamEvent("browser_offline", {}, { attemptId: ctxAttemptId });
+    const onOnline = () =>
+      trackExamEvent("browser_online", {}, { attemptId: ctxAttemptId });
+
+    let hiddenSince: number | null = null;
+    const onVisibilityChange = () => {
+      const hidden = document.visibilityState === "hidden";
+      if (hidden) {
+        // Record the moment the page became hidden; only the first transition
+        // in a hidden streak is recorded (dedup of rapid toggles).
+        if (hiddenSince === null) hiddenSince = Date.now();
+        trackExamEvent("visibility_lost", {}, { attemptId: ctxAttemptId });
+      } else if (hiddenSince !== null) {
+        // Restored: emit once with the duration hidden, then reset so the
+        // next hide begins a fresh measurement.
+        const durationMs = Date.now() - hiddenSince;
+        hiddenSince = null;
+        trackExamEvent(
+          "visibility_restored",
+          { durationMs },
+          { attemptId: ctxAttemptId },
+        );
+      }
+    };
+
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [attemptId]);
 
   useEffect(() => {
     if (!attempt?.deadlineAt) return;
@@ -365,14 +537,26 @@ export function TakeExamPage() {
         deadlineHandledRef.current = true;
         setDeadlinePassed(true);
         void (async () => {
+          trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
           try {
             await flush();
           } catch {
+            trackExamEvent(
+              "deadline_auto_submit_failed",
+              { stage: "flush", errorCode: "FLUSH_ERROR" },
+              { attemptId, level: "error" },
+            );
             toast.error("保存答案时出错，系统将尝试提交");
           } finally {
             try {
               await handleSubmit();
+              trackExamEvent("deadline_auto_submit_success", {}, { attemptId });
             } catch {
+              trackExamEvent(
+                "deadline_auto_submit_failed",
+                { stage: "submit", errorCode: "SUBMIT_ERROR" },
+                { attemptId, level: "error" },
+              );
               setAutoSubmitFailed(true);
               toast.error("自动提交失败，请点击重试");
             }
@@ -679,7 +863,7 @@ export function TakeExamPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowSubmitDialog(false)}
+              onClick={cancelSubmitDialog}
               disabled={isFlushing}
             >
               继续答题

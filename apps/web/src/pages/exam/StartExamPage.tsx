@@ -15,6 +15,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import type { CandidateExamDetailResponse } from "@exam/contracts";
+import { trackExamEvent } from "@/lib/examTelemetry";
 
 interface AttemptResponse {
   id: string;
@@ -61,8 +62,14 @@ export function StartExamPage() {
       const attempt = await api.post<AttemptResponse>(
         `/api/attempts/${examId}/start`,
       );
+      trackExamEvent("exam_started", {}, { examId, attemptId: attempt.id });
       navigate(routes.exam.take(attempt.id));
     } catch (err) {
+      trackExamEvent(
+        "exam_start_failed",
+        { errorCode: err instanceof ApiError ? err.code : "UNKNOWN" },
+        { examId, level: "warn" },
+      );
       let message = "无法开始考试，请稍后重试";
       if (err instanceof ApiError) {
         switch (err.code) {
@@ -92,6 +99,14 @@ export function StartExamPage() {
     switch (exam.primaryAction) {
       case "resume":
         if (exam.activeAttemptId) {
+          trackExamEvent(
+            "attempt_resume_requested",
+            {},
+            {
+              examId,
+              attemptId: exam.activeAttemptId,
+            },
+          );
           navigate(routes.exam.take(exam.activeAttemptId));
         } else {
           await enterExam();
