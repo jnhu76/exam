@@ -38,17 +38,15 @@ Strict closed-book proctored exam operation is Phase 2+. Teacher-like roles, Pro
 | -------- | ------------------------------------------------------------------ |
 | Frontend | React 19 + Vite + TypeScript + shadcn/ui + TailwindCSS v4          |
 | Backend  | Node.js LTS + Fastify + TypeScript + Zod validation                |
-| Database | PostgreSQL (prod default) / SQLite (dev/demo only) via Drizzle ORM |
+| Database | PostgreSQL via Drizzle ORM |
 | Auth     | HTTP-only Cookie + JWT, argon2/bcrypt password hashing             |
 | Monorepo | pnpm workspace: `apps/`, `packages/`                               |
 
-### Database Rollout Strategy
+### Database Notes
 
-- J1-J8 use SQLite as the default development, test, and demo database.
-- J9 adds PostgreSQL support and switches the production deployment default to PostgreSQL.
-- SQLite remains supported after J9 for local development, CI, and single-machine demos only.
-- Repository and service code must remain database-agnostic. Do not add SQLite-specific SQL outside the Drizzle database layer.
-- Before Phase 1 release, run migrations, integration tests, and smoke tests against PostgreSQL.
+- PostgreSQL is the only supported database.
+- Repository and service code must remain database-agnostic.
+- Run migrations, integration tests, and smoke tests against PostgreSQL before any release.
 
 ## Commands
 
