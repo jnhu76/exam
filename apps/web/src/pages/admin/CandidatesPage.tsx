@@ -175,18 +175,21 @@ export function CandidatesPage() {
     setSaveError(null);
     setSaving(true);
     try {
-      if (editing)
+      if (editing) {
         await api.patch(`/api/candidates/${editing.id}`, {
           name,
           fields: payloadFields(),
         });
-      else
+        toast.success("考生已更新");
+      } else {
         await api.post("/api/candidates", {
           username,
           password,
           name,
           fields: payloadFields(),
         });
+        toast.success("考生已创建");
+      }
       setDialogOpen(false);
       await load();
     } catch (err) {

@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
+import * as downloadModule from "@/lib/download";
 import { ScoreListPage } from "./ScoreListPage";
 
 vi.mock("@/lib/api", () => ({
@@ -15,6 +16,9 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const getMock = vi.mocked(api.get);
+const downloadFileSpy = vi
+  .spyOn(downloadModule, "downloadFile")
+  .mockResolvedValue(undefined);
 
 const mockScoreData = {
   items: [
@@ -69,6 +73,8 @@ describe("ScoreListPage", () => {
   beforeEach(() => {
     getMock.mockReset();
     getMock.mockResolvedValue(mockScoreData);
+    downloadFileSpy.mockReset();
+    downloadFileSpy.mockResolvedValue(undefined);
   });
 
   it("renders score stats cards", async () => {
@@ -87,24 +93,41 @@ describe("ScoreListPage", () => {
     expect(screen.getAllByText("及格").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("export URL includes /api prefix", async () => {
+  it("export calls authenticated downloadFile with the scores export path", async () => {
     renderPage();
     await screen.findByText("张三");
 
-    const createObjectURLSpy = vi
-      .spyOn(URL, "createObjectURL")
-      .mockReturnValue("blob:mock");
-    const createElementSpy = vi.spyOn(document, "createElement");
+    const user = userEvent.setup();
+    await user.click(screen.getByText("导出CSV"));
+
+    await waitFor(() => {
+      expect(downloadFileSpy).toHaveBeenCalledTimes(1);
+    });
+    // Must request the scores export endpoint with a csv filename.
+    const [path, filename] = downloadFileSpy.mock.calls[0]!;
+    expect(path).toContain("/api/exams/exam-1/export/scores");
+    expect(filename).toMatch(/\.csv$/);
+  });
+
+  it("export failure shows an error toast (no silent swallow)", async () => {
+    renderPage();
+    await screen.findByText("张三");
+
+    const { toast } = await import("sonner");
+    const toastErrorSpy = vi
+      .spyOn(toast, "error")
+      .mockImplementation(() => "x");
+    downloadFileSpy.mockRejectedValueOnce(new Error("401"));
 
     const user = userEvent.setup();
-    const exportBtn = screen.getByText("导出CSV");
-    await user.click(exportBtn);
+    await user.click(screen.getByText("导出CSV"));
 
-    const anchor = createElementSpy.mock.results[0]?.value as HTMLAnchorElement;
-    expect(anchor?.href).toContain("/api/exams/exam-1/export/scores");
-
-    createObjectURLSpy.mockRestore();
-    createElementSpy.mockRestore();
+    await waitFor(() => {
+      expect(toastErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("导出失败"),
+      );
+    });
+    toastErrorSpy.mockRestore();
   });
 
   it("shows pass filter tabs without dead search input", async () => {
@@ -133,5 +156,15 @@ describe("ScoreListPage", () => {
     });
     renderPage();
     expect(await screen.findByText("暂无成绩")).toBeInTheDocument();
+  });
+
+  it("shows a visible error state (no white screen) when data is null", async () => {
+    // Simulate a malformed/null response body. Previously `if (!scores) return null`
+    // produced a white screen; now it renders a retryable ErrorState.
+    getMock.mockResolvedValue(null);
+    renderPage();
+    expect(
+      await screen.findByText("成绩数据加载异常，请重试"),
+    ).toBeInTheDocument();
   });
 });

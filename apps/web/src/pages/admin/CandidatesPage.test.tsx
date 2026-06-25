@@ -1,6 +1,7 @@
 import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { toast } from "sonner";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
@@ -184,6 +185,9 @@ describe("CandidatesPage", () => {
       name: "New Candidate",
       fields: { employeeId: 3, department: "" },
     });
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith("考生已创建");
+    });
   });
 
   it("opens edit dialog with candidate data", async () => {
@@ -209,6 +213,9 @@ describe("CandidatesPage", () => {
       "/api/candidates/c1",
       expect.objectContaining({ name: "Updated Name" }),
     );
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith("考生已更新");
+    });
   });
 
   it("opens confirmation before toggling candidate active status", async () => {

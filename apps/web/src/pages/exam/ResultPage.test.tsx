@@ -90,6 +90,73 @@ describe("ResultPage", () => {
     expect(screen.queryByText("及格线")).not.toBeInTheDocument();
   });
 
+  it("shows pending_publish message when hiddenReason is pending_publish", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      hiddenReason: "pending_publish",
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("成绩正在审核中，将在公布后可见");
+  });
+
+  it("shows not_graded message when hiddenReason is not_graded", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      hiddenReason: "not_graded",
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("考试尚未完成评分，请等待");
+  });
+
+  it("falls back to generic message when hiddenReason is unknown/missing", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: false,
+      examTitle: "能力测验",
+      // no hiddenReason → fallback
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByTestId("result-status-message"),
+    ).toHaveTextContent("成绩尚未公布");
+  });
+
+  it("published (visible) result still displays score details", async () => {
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "能力测验",
+      passingScore: 6,
+      totalScore: 8,
+      passed: true,
+      gradedAt: "2026-06-01T00:00:00.000Z",
+      questionResults: [],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("已通过")).toBeInTheDocument();
+    expect(screen.getByText("8")).toBeInTheDocument();
+  });
+
   it("shows '已提交，等待评分' when status is submitted and no score", async () => {
     getMock.mockResolvedValue({
       attemptId: "attempt-1",

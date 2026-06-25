@@ -201,15 +201,22 @@ export function ResultPage() {
               className="text-lg font-medium"
               data-testid="result-status-message"
             >
-              {result.status === "submitted"
-                ? "已提交，等待评分"
-                : result.status === "grading"
-                  ? "正在评分"
-                  : result.status === "graded"
-                    ? "成绩尚未公布"
-                    : result.status === "disrupted"
-                      ? "答题中断，请联系管理员或重新进入"
-                      : "已交卷，等待成绩公布"}
+              {(() => {
+                // hiddenReason takes precedence when present — it distinguishes
+                // pending_publish (graded but not released) from not_graded.
+                const reason = result.hiddenReason;
+                if (reason === "pending_publish")
+                  return "成绩正在审核中，将在公布后可见";
+                if (reason === "not_graded") return "考试尚未完成评分，请等待";
+                if (reason === "not_started") return "考试尚未开始，暂无成绩";
+                // No hiddenReason: fall back to status-based copy.
+                if (result.status === "submitted") return "已提交，等待评分";
+                if (result.status === "grading") return "正在评分";
+                if (result.status === "graded") return "成绩尚未公布";
+                if (result.status === "disrupted")
+                  return "答题中断，请联系管理员或重新进入";
+                return "已交卷，等待成绩公布";
+              })()}
             </p>
           </CardContent>
         </Card>

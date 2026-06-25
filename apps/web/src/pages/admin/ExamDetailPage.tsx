@@ -301,7 +301,8 @@ export function ExamDetailPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExam} />;
-  if (!exam) return null;
+  if (!exam)
+    return <ErrorState message="考试数据加载异常，请重试" onRetry={loadExam} />;
 
   return (
     <div className="flex flex-col gap-6">
