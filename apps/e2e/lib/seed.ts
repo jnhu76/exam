@@ -91,6 +91,8 @@ export interface SeededCandidate {
   profileId: string;
   userId: string;
   username: string;
+  /** Display name (user.name). Surfaced because admin surfaces show this. */
+  name: string;
   password: string;
   token?: string;
 }
@@ -107,16 +109,21 @@ async function createCandidate(
   // Demo seed registers `candidateNo` as required+unique on the default org.
   // Always supply a unique value here so tests work whether or not the demo
   // seed has been applied (canonical seed:e2e in Docker E2E always applies it).
+  // `name` is made unique (carries the stamp) because several admin surfaces
+  // (e.g. the grading-queue row) display the user `name`, not the `username`;
+  // a unique name lets specs match the displayed text deterministically.
+  const candidateName = `E2E Candidate ${unique} ${stamp}`;
   const body = await adminPost(request, baseURL, token, "/api/candidates", {
     username,
     password,
-    name: `E2E Candidate ${unique}`,
+    name: candidateName,
     fields: { candidateNo: `E2E-${unique}-${stamp}` },
   });
   return {
     profileId: body.id as string,
     userId: body.userId as string,
     username,
+    name: candidateName,
     password,
   };
 }

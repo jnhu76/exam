@@ -284,6 +284,58 @@ async function getCandidateSummariesByApi(
   return JSON.parse(text) as CandidateExamSummary[];
 }
 
+/**
+ * Ensures a candidate whose demo-seed contract is `in_progress/resume` reads
+ * as `in_progress` regardless of the accelerated heartbeat scanner's timing.
+ *
+ * The demo seed plants candidate1's attempt as `in_progress` with
+ * `lastActivityAt = seedTime`. docker-compose.test.yml accelerates the
+ * heartbeat scanner (HEARTBEAT_TIMEOUT_MS=15000) for the disconnect/restore
+ * specs, so by the time this test runs that attempt may already have been
+ * auto-marked `disrupted` — surfacing as `resumable/resume` instead of the
+ * contracted `in_progress/resume`.
+ *
+ * This helper detects either state (`in_progress` or `resumable`), restores
+ * the attempt to `in_progress` if needed, then pings the heartbeat endpoint to
+ * re-stamp `lastActivityAt` to "now". The candidate is then guaranteed to read
+ * `in_progress/resume`, independent of scanner timing.
+ *
+ * No-op when the candidate has neither an in_progress nor resumable attempt
+ * (their seed contract is neither), so it is safe to call for every candidate.
+ */
+async function ensureInProgressAttempt(
+  request: APIRequestContext,
+  token: string,
+): Promise<void> {
+  const summaries = await getCandidateSummariesByApi(request, token);
+  const live = summaries.find(
+    (s) =>
+      s.availabilityStatus === "in_progress" ||
+      s.availabilityStatus === "resumable",
+  );
+  const attemptId = live?.latestAttemptId;
+  if (!attemptId) return;
+  // Restore flips disrupted → in_progress (no-op if already in_progress).
+  const restoreRes = await apiCall(
+    request,
+    "POST",
+    `/api/attempts/${attemptId}/restore`,
+    undefined,
+    token,
+  );
+  assertOk(restoreRes, "restore attempt");
+  // Heartbeat re-stamps lastActivityAt to "now", keeping it in_progress
+  // past the next scanner tick.
+  const heartbeatRes = await apiCall(
+    request,
+    "POST",
+    `/api/attempts/${attemptId}/heartbeat`,
+    undefined,
+    token,
+  );
+  assertOk(heartbeatRes, "heartbeat attempt");
+}
+
 function findExpectedSummary(
   summaries: CandidateExamSummary[],
   expected: Pick<ExpectedSeedState, "availabilityStatus" | "primaryAction">,
@@ -370,6 +422,14 @@ test.describe("demo seed candidate accounts", () => {
         expected.username,
         CANDIDATE_PASSWORD,
       );
+      // Keep a seeded in_progress attempt from being auto-disrupted by the
+      // accelerated heartbeat scanner before we assert the seed contract.
+      // Only candidates whose contract IS in_progress need this — e.g.
+      // candidate3's contract is `resumable` (disrupted) and must NOT be
+      // restored, so guard on the expected status.
+      if (expected.availabilityStatus === "in_progress") {
+        await ensureInProgressAttempt(request, token);
+      }
       const summaries = await getCandidateSummariesByApi(request, token);
       const summary = findExpectedSummary(summaries, expected);
       expect(summary.availabilityStatus).toBe(expected.availabilityStatus);

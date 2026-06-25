@@ -297,38 +297,45 @@ pnpm coverage
 ### E2E Tests (Playwright, browser)
 
 E2E browser tests live in `apps/e2e/e2e/*.spec.ts` and cover the candidate
-exam lifecycle (happy-path, resume, submit-flush, demo-seed accounts). They run
-in two environments:
+exam lifecycle (happy-path, resume, submit-flush, demo-seed accounts, manual
+grading, result publishing, proctor runtime, disconnect/restore, deadline
+crash). See **[`docs/dev/e2e-testing.md`](docs/dev/e2e-testing.md)** for the
+full guide (prerequisites, flags, env vars, targeting, seed, debugging).
 
-**CI** — the `e2e` job in `.github/workflows/ci.yml` builds the app, seeds
-(`db:seed` + `db:seed:demo`), starts the API, and runs `playwright test` with
-`APP_MODE=e2e` (rate limiting disabled).
-
-**Local via Docker** (canonical browser entry — requires Docker, no local
-Playwright install needed):
+**Canonical one-command entry** (builds, starts the stack, runs Playwright,
+cleans up — requires Docker, no local Playwright install):
 
 ```bash
-# 1. Start the full stack + DB (app must be healthy for E2E to target it)
-docker compose -f docker-compose.test.yml up -d --build
+bash scripts/e2e/run.sh                       # run all specs
+bash scripts/e2e/run.sh candidate-happy-path  # spec filename keyword
+bash scripts/e2e/run.sh --grep "happy path"   # Playwright title regex
+bash scripts/e2e/run.sh --no-build            # reuse last image
+```
+
+**Manual `docker compose` profile** (for debugging / single-spec runs):
+
+```bash
+# 1. Start the full stack + DB (app runs migrate + canonical E2E seed on boot)
+docker compose -f docker-compose.test.yml up -d --build db redis app
 
 # 2. Run the E2E service (Playwright image) against the running app
 docker compose -f docker-compose.test.yml --profile e2e run --rm e2e
 
-# 3. Tear down
+# 3. Tear down (wipe the DB volume for a clean reseed)
 docker compose -f docker-compose.test.yml down -v
 ```
 
-The E2E service uses the official `mcr.microsoft.com/playwright` image and
-targets `http://app:3000` inside the compose network.
+**CI** — the `e2e` job in `.github/workflows/ci.yml` builds the app, seeds
+(`db:seed:e2e`), starts the API, and runs `playwright test` with `APP_MODE=e2e`
+(rate limiting disabled). It targets `http://localhost:3000` because app and
+Playwright share the runner host.
 
-> **Local Playwright residue**: if you previously ran `sudo playwright install`
-> locally, `apps/e2e/node_modules/playwright-core` may be root-owned and block
-> `pnpm install` with `EPERM`. Clean it up (needs sudo):
-> ```bash
-> sudo rm -rf apps/e2e/node_modules
-> pnpm install
-> ```
-> After that, prefer the Docker entry above — local browsers are not required.
+> **Targeting note**: inside the compose network the browser targets
+> `http://examapp:3000` (a network alias), **not** the service name `app`.
+> Chromium HSTS-preloads the bare hostname `app` (Google's `.app` TLD is
+> force-HTTPS), so `http://app:3000/` fails with `ERR_SSL_PROTOCOL_ERROR`.
+> `run.sh` avoids this by pointing at the app container IP. Do not revert
+> `E2E_BASE_URL` to `http://app:3000`. Details in the E2E guide.
 
 ## Build
 
