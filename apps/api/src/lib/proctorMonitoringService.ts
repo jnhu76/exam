@@ -8,6 +8,8 @@ import type {
 import {
   MONITORING_ONLINE_THRESHOLD_MS,
   MONITORING_OFFLINE_THRESHOLD_MS,
+  ProctorAttemptStatusEnum,
+  ProctorAttemptEventSchema,
 } from "@exam/contracts";
 import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -27,6 +29,55 @@ import type { ClientEventTimelineRow } from "@exam/db/src/repository/clientEvent
  * NAMING: "proctor" here is the monitoring DOMAIN, not a standalone role.
  * Phase 2.1 keeps Admin-only access; a formal Proctor role is Phase 3.
  */
+
+/**
+ * Parses a raw attempt-status string from the DB into the closed enum, falling
+ * back to `"in_progress"` for any stray value. Avoids a silent `as` cast that
+ * could hide a corrupted/unknown status.
+ */
+function parseAttemptStatus(raw: string): ProctorAttemptStatus["status"] {
+  const parsed = ProctorAttemptStatusEnum.safeParse(raw);
+  return parsed.success ? parsed.data : "in_progress";
+}
+
+/**
+ * Builds one timeline row from a raw client_event row, validating the
+ * `level`/`kind` strings against the ProctorAttemptEventSchema instead of
+ * `as`-casting them. Unknown values fall back to safe defaults.
+ */
+function toTimelineEventFromClient(
+  r: ClientEventTimelineRow,
+): ProctorAttemptEvent {
+  // Validate the full event shape; override the validated/derived fields below.
+  const base = ProctorAttemptEventSchema.safeParse({
+    id: r.id,
+    occurredAt: r.occurredAt.toISOString(),
+    name: r.name,
+    level: r.level,
+    kind: r.kind,
+    metadata: projectSafeMetadata(r.name, r.metadata),
+    ...(r.route ? { route: r.route } : {}),
+    source: "client_event",
+  });
+  if (base.success) return base.data;
+  // Fallback for a stray level/kind: coerce to safe values.
+  const level: ProctorAttemptEvent["level"] =
+    r.level === "error" || r.level === "warn" || r.level === "debug"
+      ? r.level
+      : "info";
+  const kind: ProctorAttemptEvent["kind"] =
+    r.kind === "proctor" || r.kind === "log" ? r.kind : "exam_telemetry";
+  return {
+    id: r.id,
+    occurredAt: r.occurredAt.toISOString(),
+    name: r.name,
+    level,
+    kind,
+    metadata: projectSafeMetadata(r.name, r.metadata),
+    ...(r.route ? { route: r.route } : {}),
+    source: "client_event",
+  };
+}
 
 /** Event names whose counts feed the monitoring table / warningLevel. */
 const COUNTED_EVENT_NAMES = [
@@ -231,7 +282,7 @@ export async function buildProctorAttemptStatuses(
       attemptId,
       candidateId: row.attempt.candidateId,
       candidateName: row.candidateUser?.name ?? "-",
-      status: row.attempt.status as ProctorAttemptStatus["status"],
+      status: parseAttemptStatus(row.attempt.status),
       onlineState,
       lastHeartbeatAt: lastHeartbeatAt?.toISOString() ?? null,
       lastSaveAt: lastSaveAt?.toISOString() ?? null,
@@ -279,16 +330,7 @@ export async function buildProctorAttemptEventTimeline(
   const merged: ProctorAttemptEvent[] = [];
 
   for (const r of clientRows) {
-    merged.push({
-      id: r.id,
-      occurredAt: r.occurredAt.toISOString(),
-      name: r.name,
-      level: r.level as ProctorAttemptEvent["level"],
-      kind: r.kind as ProctorAttemptEvent["kind"],
-      metadata: projectSafeMetadata(r.name, r.metadata),
-      ...(r.route ? { route: r.route } : {}),
-      source: "client_event",
-    });
+    merged.push(toTimelineEventFromClient(r));
   }
 
   for (const a of auditRows) {

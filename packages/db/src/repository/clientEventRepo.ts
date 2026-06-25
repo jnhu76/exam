@@ -168,7 +168,7 @@ export function createClientEventRepo(db: Database) {
         )
         .orderBy(desc(clientEvents.occurredAt))
         .limit(limit);
-      return rows as ClientEventTimelineRow[];
+      return rows;
     },
 
     /**
