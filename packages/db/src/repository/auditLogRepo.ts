@@ -10,13 +10,14 @@ import {
 /**
  * Filter options for {@link createAuditLogRepo}.listPaginatedFiltered.
  *
- * - `action` / `targetType`: exact-match string filters.
+ * - `action` / `targetType` / `targetId`: exact-match string filters.
  * - `from` / `to`: inclusive `createdAt` bounds (JS `Date` against the
  *   `timestamptz` column). Either or both may be omitted.
  */
 export interface AuditLogListFilter {
   action?: string;
   targetType?: string;
+  targetId?: string;
   from?: Date;
   to?: Date;
 }
@@ -56,6 +57,9 @@ export function createAuditLogRepo(db: Database) {
       }
       if (filter.targetType) {
         conditions.push(eq(auditLogs.targetType, filter.targetType));
+      }
+      if (filter.targetId) {
+        conditions.push(eq(auditLogs.targetId, filter.targetId));
       }
       if (filter.from) {
         conditions.push(gte(auditLogs.createdAt, filter.from));

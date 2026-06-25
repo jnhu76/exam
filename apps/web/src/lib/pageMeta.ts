@@ -38,6 +38,7 @@ const dynamicRouteTitles: RouteTitleRule[] = [
   { pattern: /^\/admin\/exams\/[^/]+$/, title: "考试详情" },
   { pattern: /^\/admin\/exams\/[^/]+\/scores$/, title: "成绩列表" },
   { pattern: /^\/admin\/exams\/[^/]+\/proctor$/, title: "监考" },
+  { pattern: /^\/admin\/exams\/[^/]+\/proctor\/monitor$/, title: "考试监控" },
   { pattern: /^\/admin\/attempts\/[^/]+$/, title: "答题详情" },
   { pattern: /^\/exam\/[^/]+\/start$/, title: "考试准备" },
   { pattern: /^\/exam\/[^/]+\/take$/, title: "正在答题" },

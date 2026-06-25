@@ -17,7 +17,7 @@ export const MisconductFlagSchema = z.object({
 /** DTO for a misconduct flag. */
 export type MisconductFlagDTO = z.infer<typeof MisconductFlagSchema>;
 
-const AttemptStatusEnum = z.enum([
+export const AttemptStatusEnum = z.enum([
   "not_started",
   "queued",
   "in_progress",
@@ -27,6 +27,7 @@ const AttemptStatusEnum = z.enum([
   "graded",
   "voided",
 ]);
+export type AttemptStatusValue = z.infer<typeof AttemptStatusEnum>;
 
 /**
  * Zod enum of reasons a save-answer request may be rejected by the server.
