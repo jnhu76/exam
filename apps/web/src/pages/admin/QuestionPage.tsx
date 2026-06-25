@@ -219,7 +219,7 @@ export function QuestionPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-auto lg:w-[180px]">
                 <SelectValue placeholder="按课程筛选" />
               </SelectTrigger>
               <SelectContent>
@@ -239,7 +239,7 @@ export function QuestionPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-auto lg:w-[150px]">
                 <SelectValue placeholder="按题型筛选" />
               </SelectTrigger>
               <SelectContent>
@@ -258,7 +258,7 @@ export function QuestionPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-auto lg:w-[140px]">
                 <SelectValue placeholder="按难度筛选" />
               </SelectTrigger>
               <SelectContent>
@@ -272,7 +272,7 @@ export function QuestionPage() {
             </Select>
 
             <Input
-              className="w-[180px]"
+              className="w-auto lg:w-[180px]"
               placeholder="标签，逗号分隔"
               value={filterTags}
               onChange={(e) => {

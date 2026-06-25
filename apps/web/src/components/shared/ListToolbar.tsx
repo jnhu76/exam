@@ -32,7 +32,7 @@ export function ListToolbar({
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center">
         {search != null && <div className="min-w-0 flex-1">{search}</div>}
         {filters != null && (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
