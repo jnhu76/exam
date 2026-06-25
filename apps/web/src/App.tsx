@@ -34,6 +34,7 @@ import { ScoreListPage } from "@/pages/admin/ScoreListPage";
 import { ResultsOverviewPage } from "@/pages/admin/ResultsOverviewPage";
 import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
 import { ProctorDashboardPage } from "@/pages/admin/ProctorDashboardPage";
+import { ExamMonitoringPage } from "@/pages/admin/ExamMonitoringPage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
 import { SystemDiagnosticsPage } from "@/pages/admin/SystemDiagnosticsPage";
 import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
@@ -68,6 +69,10 @@ export function AppRoutes() {
         <Route path="exams/:id" element={<ExamDetailPage />} />
         <Route path="exams/:id/scores" element={<ScoreListPage />} />
         <Route path="exams/:id/proctor" element={<ProctorDashboardPage />} />
+        <Route
+          path="exams/:id/proctor/monitor"
+          element={<ExamMonitoringPage />}
+        />
         <Route path="results" element={<ResultsOverviewPage />} />
         <Route path="grading-queue" element={<GradingQueuePage />} />
         <Route path="grading-queue/:id" element={<GradingDetailPage />} />

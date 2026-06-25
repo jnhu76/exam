@@ -31,6 +31,7 @@ import systemRoutes from "./routes/system.js";
 import auditRoutes from "./routes/audit.js";
 import importLogRoutes from "./routes/importLogs.js";
 import clientEventRoutes from "./routes/clientEvents.js";
+import proctorMonitoringRoutes from "./routes/proctorMonitoring.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
@@ -89,6 +90,7 @@ async function main() {
   await app.register(auditRoutes, { prefix: "/api" });
   await app.register(importLogRoutes, { prefix: "/api" });
   await app.register(clientEventRoutes, { prefix: "/api" });
+  await app.register(proctorMonitoringRoutes, { prefix: "/api" });
 
   const publicDir = resolve(
     fileURLToPath(new URL("../public", import.meta.url)),
