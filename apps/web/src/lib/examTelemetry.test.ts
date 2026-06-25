@@ -6,6 +6,7 @@ import {
   trackExamEvent,
   __resetExamTelemetryForTest,
   __flushPendingForTest,
+  clearPendingForAttempt,
 } from "./examTelemetry";
 
 /** Build a buffer whose transport records every flushed event. */
@@ -196,5 +197,62 @@ describe("trackExamEvent — dual-emit on warn/error", () => {
     expect(errSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
     errSpy.mockRestore();
+  });
+});
+
+describe("clearPendingForAttempt — unmount cleanup", () => {
+  let send: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    setBuffer(null);
+    __resetExamTelemetryForTest();
+    const rec = recordingBuffer();
+    send = rec.send;
+    setBuffer(rec.buf);
+  });
+  afterEach(() => {
+    setBuffer(null);
+    __resetExamTelemetryForTest();
+  });
+
+  it("discards pending coalesced events for the given attempt (no emission)", async () => {
+    // Queue a coalesced event for att-1 (held in the window, not yet emitted).
+    trackExamEvent(
+      "question_viewed",
+      { index: 1 },
+      { attemptId: "att-1", questionId: "q-1" },
+    );
+    // Simulate unmount of att-1: pending events for att-1 must be discarded.
+    clearPendingForAttempt("att-1");
+    // Flushing now must NOT emit the discarded event.
+    __flushPendingForTest();
+    await flushAll();
+    expect(
+      emitted(send).filter((e) => e.name === "question_viewed"),
+    ).toHaveLength(0);
+  });
+
+  it("leaves pending events for OTHER attempts untouched", async () => {
+    trackExamEvent(
+      "question_viewed",
+      { index: 1 },
+      { attemptId: "att-1", questionId: "q-1" },
+    );
+    trackExamEvent(
+      "question_viewed",
+      { index: 2 },
+      { attemptId: "att-2", questionId: "q-2" },
+    );
+    // Unmount att-1 only.
+    clearPendingForAttempt("att-1");
+    __flushPendingForTest();
+    await flushAll();
+    const events = emitted(send).filter((e) => e.name === "question_viewed");
+    // att-2's event survives; att-1's is gone.
+    expect(events).toHaveLength(1);
+    expect(events[0]!.attemptId).toBe("att-2");
+  });
+
+  it("is a no-op for an attempt with no pending events", () => {
+    expect(() => clearPendingForAttempt("no-such-attempt")).not.toThrow();
   });
 });

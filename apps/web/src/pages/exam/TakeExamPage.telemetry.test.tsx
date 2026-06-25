@@ -17,6 +17,7 @@ import { TakeExamPage } from "./TakeExamPage";
 const trackExamEvent = vi.fn();
 vi.mock("@/lib/examTelemetry", () => ({
   trackExamEvent: (...a: unknown[]) => trackExamEvent(...a),
+  clearPendingForAttempt: vi.fn(),
 }));
 
 const { apiGet, apiPost, mockAttempt } = vi.hoisted(() => {

@@ -161,6 +161,26 @@ export function trackExamEvent(
   emitOne(name, metadata, opts);
 }
 
+/**
+ * Cleans up all pending coalesced events for a given attempt, clearing their
+ * timers to prevent memory leaks. Call this when an exam session unmounts
+ * (e.g. in TakeExamPage's unmount effect) so any in-flight coalesced events
+ * for that attempt are discarded rather than firing their timers after the
+ * page is gone.
+ *
+ * Note: events are NOT flushed here — they are discarded. Unmount typically
+ * means the session is over and a deferred coalesced event is no longer
+ * meaningful.
+ */
+export function clearPendingForAttempt(attemptId: string): void {
+  for (const [key, entry] of pending.entries()) {
+    if (entry.opts.attemptId === attemptId) {
+      clearTimeout(entry.timer);
+      pending.delete(key);
+    }
+  }
+}
+
 /** Test-only: flushes all pending coalesced events. */
 export function __flushPendingForTest(): void {
   for (const key of [...pending.keys()]) flushCoalesced(key);
