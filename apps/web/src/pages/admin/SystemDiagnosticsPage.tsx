@@ -4,6 +4,7 @@ import type {
   DiagnosticsResponse,
 } from "@exam/contracts";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/logger";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -84,14 +85,24 @@ export function SystemDiagnosticsPage() {
     fetchedAt: 0,
   });
   const [liveUptime, setLiveUptime] = useState(0);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
 
   const loadHealth = useCallback(async () => {
     try {
       setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
       clearStaleWarning("health");
-    } catch {
-      if (!initialLoadDone.current) setError("加载系统健康数据失败");
-      else setStaleWarning("health", "系统状态刷新失败，当前显示上次成功数据");
+      setLastRefreshedAt(Date.now());
+      logger.info("system_diagnostics.refreshed", { source: "health" });
+    } catch (err) {
+      if (!initialLoadDone.current) {
+        setError("加载系统健康数据失败");
+      } else {
+        setStaleWarning("health", "系统状态刷新失败，当前显示上次成功数据");
+        logger.warn("system_diagnostics.poll_failed", {
+          source: "health",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }, [clearStaleWarning, setStaleWarning]);
 
@@ -106,13 +117,21 @@ export function SystemDiagnosticsPage() {
         fetchedAt: Date.now(),
       };
       clearStaleWarning("diagnostics");
-    } catch {
-      if (!initialLoadDone.current) setError("加载诊断数据失败");
-      else
+      setLastRefreshedAt(Date.now());
+      logger.info("system_diagnostics.refreshed", { source: "diagnostics" });
+    } catch (err) {
+      if (!initialLoadDone.current) {
+        setError("加载诊断数据失败");
+      } else {
         setStaleWarning(
           "diagnostics",
           "诊断数据刷新失败，当前显示上次成功数据",
         );
+        logger.warn("system_diagnostics.poll_failed", {
+          source: "diagnostics",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }, [clearStaleWarning, setStaleWarning]);
 
@@ -170,6 +189,11 @@ export function SystemDiagnosticsPage() {
       <div className="flex items-center justify-between">
         <PageHeader title="系统监控" />
         <div className="flex items-center gap-3">
+          {lastRefreshedAt !== null && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
+            </span>
+          )}
           <span
             className={cn(
               "flex items-center gap-1 text-sm font-medium",

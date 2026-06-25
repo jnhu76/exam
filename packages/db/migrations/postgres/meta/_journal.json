@@ -57,6 +57,13 @@
       "when": 1782299226189,
       "tag": "0007_spotty_nextwave",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782385600000,
+      "tag": "0008_client_events",
+      "breakpoints": true
     }
   ]
 }

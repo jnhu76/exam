@@ -14,3 +14,4 @@ export * from "./audit.js";
 export * from "./messageRegistry.js";
 export * from "./passwordPolicy.js";
 export * from "./importLog.js";
+export * from "./clientEvent.js";

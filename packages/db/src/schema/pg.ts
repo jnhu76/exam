@@ -421,6 +421,77 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: createdAt(),
 });
 
+/**
+ * Client events table — observational telemetry reported by the browser
+ * (frontend logger, future exam runtime / proctor instrumentation).
+ *
+ * Deliberately separate from `auditLogs`: audit logs are compliance records
+ * of admin/actor actions; client events are best-effort frontend
+ * observability. The single-tenant boundary is enforced via `organizationId`
+ * on every row, populated server-side from the authenticated context.
+ *
+ * `userId` is nullable so anonymous-but-authenticated-edge events can still
+ * be recorded; `receivedAt` is server time and the source of truth for
+ * ordering, while `occurredAt` is the client-reported instant.
+ */
+export const clientEvents = pgTable(
+  "client_events",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    userId: text("user_id"),
+    attemptId: text("attempt_id"),
+    examId: text("exam_id"),
+    questionId: text("question_id"),
+    kind: text("kind").notNull(),
+    level: text("level").notNull(),
+    name: text("name").notNull(),
+    route: text("route"),
+    occurredAt: timestamp("occurred_at", {
+      withTimezone: true,
+      mode: "date",
+    }).notNull(),
+    receivedAt: timestamp("received_at", {
+      withTimezone: true,
+      mode: "date",
+    })
+      .defaultNow()
+      .notNull(),
+    clientSessionId: text("client_session_id"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    userAgent: text("user_agent"),
+  },
+  (table) => [
+    index("client_events_org_received_at_idx").on(
+      table.organizationId,
+      table.receivedAt,
+    ),
+    index("client_events_org_kind_received_at_idx").on(
+      table.organizationId,
+      table.kind,
+      table.receivedAt,
+    ),
+    index("client_events_org_attempt_received_at_idx").on(
+      table.organizationId,
+      table.attemptId,
+      table.receivedAt,
+    ),
+    index("client_events_org_exam_received_at_idx").on(
+      table.organizationId,
+      table.examId,
+      table.receivedAt,
+    ),
+    index("client_events_org_name_received_at_idx").on(
+      table.organizationId,
+      table.name,
+      table.receivedAt,
+    ),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -435,5 +506,6 @@ export const schema = {
   examAttempts,
   manualGradingEntries,
   auditLogs,
+  clientEvents,
   importJobLogs,
 };

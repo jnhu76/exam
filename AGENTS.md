@@ -81,7 +81,7 @@ Before modifying files, the agent must use available MCP/search tools when the t
 - pnpm workspace behavior, `pnpm deploy`, lockfile issues, package filters, or workspace symlinks
 - Node.js ESM/CJS resolution, `package.json` `exports`, `main`, `type`, or module resolution errors
 - TypeScript build configuration, tsconfig output, test files leaking into `dist`, or declaration/map generation
-- Vite, React, Tailwind, shadcn/ui, Fastify, Drizzle, Zod, argon2/bcrypt, better-sqlite3, PostgreSQL, or SQLite behavior
+- Vite, React, Tailwind, shadcn/ui, Fastify, Drizzle, Zod, argon2/bcrypt, or PostgreSQL behavior
 - CI, GitHub Actions, lint/test/build failures, dependency upgrades, or package manager changes
 - Any error message that the agent cannot fully explain from the current repository evidence
 
