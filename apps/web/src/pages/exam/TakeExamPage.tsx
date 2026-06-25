@@ -37,7 +37,7 @@ import type {
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
-import { trackExamEvent } from "@/lib/examTelemetry";
+import { trackExamEvent, clearPendingForAttempt } from "@/lib/examTelemetry";
 
 type SaveRejectionDisplay = {
   Icon: typeof TimerOff;
@@ -200,6 +200,11 @@ export function TakeExamPage() {
         {},
         { attemptId: unloadedAttemptRef.current },
       );
+      // Discard any in-flight coalesced events for this attempt so their
+      // deferred timers do not fire (and leak) after the page unmounts.
+      if (unloadedAttemptRef.current) {
+        clearPendingForAttempt(unloadedAttemptRef.current);
+      }
     },
     [],
   );
