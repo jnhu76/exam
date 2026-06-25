@@ -316,14 +316,24 @@ async function ensureInProgressAttempt(
   const attemptId = live?.latestAttemptId;
   if (!attemptId) return;
   // Restore flips disrupted → in_progress (no-op if already in_progress).
-  await request.post(`${BASE_URL}/api/attempts/${attemptId}/restore`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
+  const restoreRes = await apiCall(
+    request,
+    "POST",
+    `/api/attempts/${attemptId}/restore`,
+    undefined,
+    token,
+  );
+  assertOk(restoreRes, "restore attempt");
   // Heartbeat re-stamps lastActivityAt to "now", keeping it in_progress
   // past the next scanner tick.
-  await request.post(`${BASE_URL}/api/attempts/${attemptId}/heartbeat`, {
-    headers: { Cookie: `auth-token=${token}` },
-  });
+  const heartbeatRes = await apiCall(
+    request,
+    "POST",
+    `/api/attempts/${attemptId}/heartbeat`,
+    undefined,
+    token,
+  );
+  assertOk(heartbeatRes, "heartbeat attempt");
 }
 
 function findExpectedSummary(

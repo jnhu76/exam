@@ -112,18 +112,18 @@ async function createCandidate(
   // `name` is made unique (carries the stamp) because several admin surfaces
   // (e.g. the grading-queue row) display the user `name`, not the `username`;
   // a unique name lets specs match the displayed text deterministically.
+  const candidateName = `E2E Candidate ${unique} ${stamp}`;
   const body = await adminPost(request, baseURL, token, "/api/candidates", {
     username,
     password,
-    name: `E2E Candidate ${unique} ${stamp}`,
+    name: candidateName,
     fields: { candidateNo: `E2E-${unique}-${stamp}` },
   });
   return {
     profileId: body.id as string,
     userId: body.userId as string,
     username,
-    name:
-      (body.name as string | undefined) ?? `E2E Candidate ${unique} ${stamp}`,
+    name: candidateName,
     password,
   };
 }
