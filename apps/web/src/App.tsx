@@ -35,8 +35,7 @@ import { ResultsOverviewPage } from "@/pages/admin/ResultsOverviewPage";
 import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
 import { ProctorDashboardPage } from "@/pages/admin/ProctorDashboardPage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
-import { SystemHealthPage } from "@/pages/admin/SystemHealthPage";
-import { DiagnosticsPage } from "@/pages/admin/DiagnosticsPage";
+import { SystemDiagnosticsPage } from "@/pages/admin/SystemDiagnosticsPage";
 import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
 import { GradingDetailPage } from "@/pages/admin/GradingDetailPage";
 import { AuditLogPage } from "@/pages/admin/AuditLogPage";
@@ -50,8 +49,11 @@ export function AppRoutes() {
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="system" element={<SystemHealthPage />} />
-        <Route path="diagnostics" element={<DiagnosticsPage />} />
+        <Route path="system" element={<SystemDiagnosticsPage />} />
+        <Route
+          path="diagnostics"
+          element={<Navigate to="/admin/system" replace />}
+        />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="candidate-fields" element={<CandidateFieldsPage />} />
         <Route path="users" element={<UsersPage />} />

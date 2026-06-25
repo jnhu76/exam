@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
@@ -97,6 +98,15 @@ export type StatusKey = keyof typeof statusMeta;
 /** Returns true if the given string is a known status key. */
 export function isStatusKey(status: string): status is StatusKey {
   return status in statusMeta;
+}
+
+/** Returns the Tailwind text-color class for a given status tone. */
+export function getToneTextColor(tone: StatusTone): string {
+  return cn(
+    tone === "success" && "text-success",
+    tone === "warning" && "text-warning",
+    tone === "destructive" && "text-destructive",
+  );
 }
 
 /** Returns the display metadata for a status key, falling back to "unknown". */

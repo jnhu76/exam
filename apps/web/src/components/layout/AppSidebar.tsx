@@ -1,7 +1,6 @@
 import type { MeResponse } from "@exam/contracts";
 import { Role } from "@exam/domain";
 import {
-  Activity,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -80,8 +79,7 @@ const managementItems = [
   { label: "审计日志", to: routes.admin.auditLogs, icon: ScrollText },
   { label: "平台设置", to: routes.admin.settings, icon: Settings },
   { label: "考生字段", to: routes.admin.candidateFields, icon: Tags },
-  { label: "系统健康", to: routes.admin.system, icon: Monitor },
-  { label: "系统诊断", to: routes.admin.diagnostics, icon: Activity },
+  { label: "系统监控", to: routes.admin.system, icon: Monitor },
 ];
 
 /** A single navigation link in the sidebar with icon and active state styling. */

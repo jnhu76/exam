@@ -22,6 +22,7 @@ export default defineConfig({
     },
   },
   server: {
+    port: process.env.VITE_PORT ? Number(process.env.VITE_PORT) : 4173,
     allowedHosts: ["host.docker.internal"],
     proxy: {
       "/api": {
