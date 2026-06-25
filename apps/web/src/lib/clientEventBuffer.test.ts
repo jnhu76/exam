@@ -75,15 +75,33 @@ describe("ClientEventBuffer", () => {
     expect(sent).toBe(0);
   });
 
-  it("does not throw and drops the batch when send fails", async () => {
+  it("does not throw and requeues the batch on transient send failure", async () => {
+    // H-requeue: a failed flush re-enqueues the batch to the FRONT of the
+    // queue so the next (post-backoff) flush retries it, instead of silently
+    // dropping it. Combined with maxBufferSize this stays memory-bounded.
     const send = vi.fn().mockResolvedValue(false);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("x"));
-    await expect(buf.flush()).resolves.toBe(0);
-    // Failed batch is dropped, not re-enqueued.
-    expect(buf.size).toBe(0);
-    // Does not throw / reject.
-    expect(true).toBe(true);
+    await buf.flush();
+    // Batch survives in the queue for retry.
+    expect(buf.size).toBe(1);
+  });
+
+  it("retried batch is sent again once backoff elapses (transient recovery)", async () => {
+    // First flush fails (transient), second succeeds -> data not lost.
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
+    buf.push(makeEvent("keep"));
+    await buf.flush(); // fails, requeued
+    expect(buf.size).toBe(1);
+    // Force the backoff window to be in the past so the next flush can run.
+    buf.clearBackoffForTest();
+    const sent = await buf.flush();
+    expect(sent).toBe(1);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   it("does not throw when send rejects (defensive)", async () => {
@@ -91,20 +109,84 @@ describe("ClientEventBuffer", () => {
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("y"));
     await expect(buf.flush()).resolves.toBe(0);
-    expect(buf.size).toBe(0);
+    // Requeued for retry (same as a boolean failure).
+    expect(buf.size).toBe(1);
   });
 
-  it("backs off after a failed flush", async () => {
+  it("backs off after a failed flush (skips retries within backoff window)", async () => {
     const send = vi.fn().mockResolvedValue(false);
     const buf = makeBuffer({ send, batchSize: 100, flushIntervalMs: 0 });
     buf.push(makeEvent("f1"));
-    await buf.flush();
+    await buf.flush(); // fails, requeued to front
     expect(send).toHaveBeenCalledTimes(1);
-    // Immediately after a failure, backoff skips the next flush.
+    // Immediately after a failure, backoff skips the next flush attempt even
+    // though the batch is still queued.
     buf.push(makeEvent("f2"));
     const sent = await buf.flush();
     expect(sent).toBe(0);
     expect(send).toHaveBeenCalledTimes(1); // still only the first attempt
+    // The failed batch remains queued for a later retry.
+    expect(buf.size).toBe(2);
+  });
+
+  it("grows backoff exponentially across consecutive failures (M12)", async () => {
+    // Exponential backoff: each consecutive failure roughly doubles the wait.
+    const send = vi.fn().mockResolvedValue(false);
+    const buf = makeBuffer({
+      send,
+      batchSize: 100,
+      flushIntervalMs: 0,
+      // Tiny base so the test runs fast; doubling still observable.
+      failureBackoffBaseMs: 10,
+    });
+    buf.push(makeEvent("b1"));
+    await buf.flush();
+    const firstBackoff = buf.currentBackoffForTest();
+    expect(firstBackoff).toBeGreaterThanOrEqual(10);
+
+    // Second consecutive failure should produce a larger backoff than the first.
+    buf.clearBackoffForTest();
+    buf.push(makeEvent("b2"));
+    await buf.flush();
+    const secondBackoff = buf.currentBackoffForTest();
+    expect(secondBackoff).toBeGreaterThan(firstBackoff);
+  });
+
+  it("resets backoff to zero after a successful flush", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const buf = makeBuffer({
+      send,
+      batchSize: 100,
+      flushIntervalMs: 0,
+      failureBackoffBaseMs: 10,
+    });
+    buf.push(makeEvent("r"));
+    await buf.flush(); // fail
+    expect(buf.currentBackoffForTest()).toBeGreaterThan(0);
+    buf.clearBackoffForTest();
+    await buf.flush(); // success
+    expect(buf.currentBackoffForTest()).toBe(0);
+  });
+
+  it("bounds memory: requeued batch is still subject to max buffer size", async () => {
+    // Requeue must not grow the queue beyond maxBufferSize even under failures.
+    const send = vi.fn().mockResolvedValue(false);
+    const buf = makeBuffer({
+      send,
+      batchSize: 2,
+      flushIntervalMs: 0,
+      maxBufferSize: 3,
+    });
+    buf.push(makeEvent("1"));
+    buf.push(makeEvent("2")); // triggers flush (batchSize 2), fails, requeued
+    await vi.waitFor(() => expect(send).toHaveBeenCalled());
+    buf.push(makeEvent("3"));
+    buf.push(makeEvent("4"));
+    buf.push(makeEvent("5")); // over cap regardless of requeue
+    expect(buf.size).toBeLessThanOrEqual(3);
   });
 
   it("drops oldest events when exceeding max buffer size", () => {

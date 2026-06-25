@@ -152,4 +152,48 @@ describe("POST /api/client-events", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.userAgent?.length).toBe(500);
   });
+
+  it("server-side sanitizes sensitive metadata as defense-in-depth (H7)", async () => {
+    // A client that bypassed (or never ran) client-side redaction sends raw
+    // secrets / exam content. The server MUST redact before persisting.
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/client-events",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: {
+        events: [
+          validEvent({
+            name: "test.event.sanitize",
+            metadata: {
+              password: "pwn",
+              authorization: "Bearer evil",
+              answer: "A",
+              answerText: "the real answer",
+              questionText: "leaked question",
+              keep: 42,
+            },
+          }),
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const rows = await ctx.db
+      .select()
+      .from(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, "test.event.sanitize"));
+    expect(rows).toHaveLength(1);
+    const meta = rows[0]!.metadata as Record<string, unknown>;
+    expect(meta.password).toBe("[redacted]");
+    expect(meta.authorization).toBe("[redacted]");
+    expect(meta.answer).toBe("[redacted]");
+    expect(meta.answerText).toBe("[redacted]");
+    expect(meta.questionText).toBe("[redacted]");
+    // Non-sensitive data is preserved.
+    expect(meta.keep).toBe(42);
+
+    await ctx.db
+      .delete(schema.clientEvents)
+      .where(eq(schema.clientEvents.name, "test.event.sanitize"));
+  });
 });

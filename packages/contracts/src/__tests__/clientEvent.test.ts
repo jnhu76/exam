@@ -5,6 +5,7 @@ import {
   CLIENT_EVENT_BATCH_MAX_SIZE,
   CLIENT_EVENT_METADATA_MAX_BYTES,
   CLIENT_EVENT_METADATA_MAX_DEPTH,
+  utf8ByteLength,
 } from "../clientEvent.js";
 
 /** Minimal valid event factory. */
@@ -99,6 +100,34 @@ describe("ClientEventSchema", () => {
     );
     expect(result.success).toBe(false);
   });
+
+  it("measures payload in UTF-8 BYTES, not characters (multi-byte safety)", () => {
+    // Each "🚀" is 1 UTF-16 code unit (char) but 4 UTF-8 bytes. A payload that
+    // is under the limit by char count but over it by byte count must be rejected.
+    // Craft a serialized JSON whose char length is < MAX but byte length > MAX.
+    const chars = Math.floor(CLIENT_EVENT_METADATA_MAX_BYTES / 2); // half by char count
+    const emojiBlob = "🚀".repeat(chars); // ~2x MAX in bytes
+    // Sanity: by characters this is at/under the limit...
+    expect(emojiBlob.length).toBeLessThanOrEqual(
+      CLIENT_EVENT_METADATA_MAX_BYTES,
+    );
+    // ...but by bytes it overflows.
+    expect(utf8ByteLength(emojiBlob)).toBeGreaterThan(
+      CLIENT_EVENT_METADATA_MAX_BYTES,
+    );
+    const result = ClientEventSchema.safeParse(
+      baseEvent({ metadata: { blob: emojiBlob } }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts an event with empty-string name boundaries already covered; name regex is case-insensitive", () => {
+    // Documents the deliberate /i behavior (H1): mixed-case names are accepted.
+    const result = ClientEventSchema.safeParse(
+      baseEvent({ name: "SystemDiagnostics.Refreshed" }),
+    );
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("ClientEventBatchSchema", () => {
@@ -126,5 +155,33 @@ describe("ClientEventBatchSchema", () => {
       events: [baseEvent(), baseEvent({ level: "bogus" })],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("utf8ByteLength", () => {
+  it("counts ASCII as 1 byte per char", () => {
+    expect(utf8ByteLength("hello")).toBe(5);
+    expect(utf8ByteLength("")).toBe(0);
+  });
+
+  it("counts 2-byte UTF-8 (Latin extended)", () => {
+    // 'é' is U+00E9 -> 2 bytes in UTF-8.
+    expect(utf8ByteLength("ééé")).toBe(6);
+  });
+
+  it("counts 3-byte UTF-8 (CJK)", () => {
+    // '中' is U+4E2D -> 3 bytes in UTF-8.
+    expect(utf8ByteLength("中文")).toBe(6);
+  });
+
+  it("counts 4-byte UTF-8 (astral plane / emoji)", () => {
+    // '🚀' is U+1F680 -> 4 bytes in UTF-8 (2 UTF-16 code units).
+    expect(utf8ByteLength("🚀")).toBe(4);
+    expect(utf8ByteLength("🚀🚀")).toBe(8);
+  });
+
+  it("handles mixed ASCII / 2-byte / 3-byte / 4-byte content consistently", () => {
+    // "a中é🚀" = 1 (a) + 3 (中) + 2 (é) + 4 (🚀) = 10 bytes.
+    expect(utf8ByteLength("a中é🚀")).toBe(10);
   });
 });

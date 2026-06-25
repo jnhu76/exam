@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
   ClientEventBatchSchema,
+  sanitizeClientEvent,
   type ClientEventBatchResponse,
 } from "@exam/contracts";
 import type { RequestContext } from "@exam/domain";
@@ -81,7 +82,11 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
           occurredAt: new Date(event.occurredAt),
           receivedAt,
           clientSessionId: event.clientSessionId ?? null,
-          metadata: event.metadata ?? {},
+          // Defense-in-depth: re-sanitize server-side so a malicious client
+          // that bypassed (or skipped) client-side redaction cannot persist
+          // credentials or exam content. The shared implementation in
+          // @exam/contracts is the single source of truth.
+          metadata: sanitizeClientEvent(event.metadata),
           userAgent,
         })),
       );

@@ -16,10 +16,10 @@ export const ClientEventLevelEnum = z.enum(["debug", "info", "warn", "error"]);
 export type ClientEventLevel = z.infer<typeof ClientEventLevelEnum>;
 
 /**
- * Maximum serialized JSON byte length of a single event's `metadata` blob.
- * Guards against abusive or accidentally huge payloads (e.g. an error that
- * captured a giant object). 32 KiB is generous for structured telemetry
- * while keeping per-row storage bounded.
+ * Maximum serialized JSON **byte** length of a single event's `metadata` blob.
+ * Measured in UTF-8 bytes (not UTF-16 code units) so multi-byte payloads
+ * (CJK, emoji) cannot inflate to several times the limit by character count.
+ * 32 KiB is generous for structured telemetry while bounding per-row storage.
  */
 export const CLIENT_EVENT_METADATA_MAX_BYTES = 32 * 1024;
 
@@ -59,6 +59,24 @@ function measureDepth(value: unknown): number {
 }
 
 /**
+ * Returns the UTF-8 byte length of a string WITHOUT relying on `TextEncoder`
+ * or `Buffer`, so it type-checks in every consumer (Node and browser) under a
+ * plain ES2022 lib. The technique collapses UTF-16 surrogate pairs first
+ * (each astral-plane code point is 4 UTF-8 bytes), then expands the BMP ranges
+ * to one '#' per UTF-8 byte they consume (2-byte, 3-byte), leaving ASCII at 1.
+ *
+ * This is used for the metadata size cap so multi-byte payloads (CJK, emoji)
+ * are measured in bytes rather than UTF-16 code units — preventing a payload
+ * from inflating to up to 4x the byte limit by char count.
+ */
+export function utf8ByteLength(str: string): number {
+  return str
+    .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "####") // astral pair = 4 bytes
+    .replace(/[\u0800-\uFFFF]/g, "###") // 3-byte BMP range
+    .replace(/[\u0080-\u07FF]/g, "##").length; // 2-byte range // remaining chars (ASCII + the substituted '#'s) are 1 byte each
+}
+
+/**
  * Schema for a single client event reported from the browser. The server
  * derives `organizationId`, `userId`, `receivedAt`, and `userAgent` itself
  * — they are intentionally absent here so a client cannot forge them.
@@ -74,7 +92,10 @@ export const ClientEventSchema = z
       .string()
       .min(1)
       .max(120)
-      // Stable, machine-friendly names only: lower/snake-kebab identifiers.
+      // Stable, machine-friendly identifiers: letters, digits, and . _ -.
+      // The /i flag makes the check case-insensitive, so BOTH lower-case
+      // ("system_diagnostics.refreshed") and PascalCase names are accepted;
+      // free-form prose / whitespace is still rejected.
       .regex(/^[a-z0-9][a-z0-9._-]{0,119}$/i),
     occurredAt: z.string().datetime(),
     route: z.string().min(1).max(500).optional(),
@@ -95,15 +116,10 @@ export const ClientEventSchema = z
         });
         return;
       }
-      let serializedLength: number;
+      let serialized: string;
       try {
-        // Measure the serialized JSON length in characters. We use character
-        // count rather than UTF-8 byte count so the contract type-checks in
-        // every consumer (Node and browser) without requiring DOM/lib types.
-        // The limit's purpose is to bound payload size; character length is a
-        // perfectly adequate proxy and stays within a small constant factor of
-        // the byte length for typical telemetry metadata.
-        serializedLength = JSON.stringify(event.metadata).length;
+        // Serialize once; the byte length is measured on this string.
+        serialized = JSON.stringify(event.metadata);
       } catch {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -112,11 +128,12 @@ export const ClientEventSchema = z
         });
         return;
       }
-      if (serializedLength > CLIENT_EVENT_METADATA_MAX_BYTES) {
+      const byteLength = utf8ByteLength(serialized);
+      if (byteLength > CLIENT_EVENT_METADATA_MAX_BYTES) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["metadata"],
-          message: `metadata exceeds ${CLIENT_EVENT_METADATA_MAX_BYTES} bytes`,
+          message: `metadata exceeds ${CLIENT_EVENT_METADATA_MAX_BYTES} bytes (got ${byteLength})`,
         });
       }
     }
