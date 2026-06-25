@@ -57,7 +57,23 @@ export function SystemDiagnosticsPage() {
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [staleWarning, setStaleWarning] = useState<string | null>(null);
+  const [staleWarnings, setStaleWarnings] = useState<{
+    health?: string;
+    diagnostics?: string;
+  }>({});
+  const clearStaleWarning = useCallback((key: "health" | "diagnostics") => {
+    setStaleWarnings((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+  const setStaleWarning = useCallback(
+    (key: "health" | "diagnostics", message: string) => {
+      setStaleWarnings((prev) => ({ ...prev, [key]: message }));
+    },
+    [],
+  );
   const healthTimer = useRef<ReturnType<typeof setInterval>>(null);
   const diagTimer = useRef<ReturnType<typeof setInterval>>(null);
   const uptimeTimer = useRef<ReturnType<typeof setInterval>>(null);
@@ -72,12 +88,12 @@ export function SystemDiagnosticsPage() {
   const loadHealth = useCallback(async () => {
     try {
       setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
-      setStaleWarning(null);
+      clearStaleWarning("health");
     } catch {
       if (!initialLoadDone.current) setError("加载系统健康数据失败");
-      else setStaleWarning("系统状态刷新失败，当前显示上次成功数据");
+      else setStaleWarning("health", "系统状态刷新失败，当前显示上次成功数据");
     }
-  }, []);
+  }, [clearStaleWarning, setStaleWarning]);
 
   const loadDiag = useCallback(async () => {
     try {
@@ -89,12 +105,16 @@ export function SystemDiagnosticsPage() {
         serverUptime: result.uptime,
         fetchedAt: Date.now(),
       };
-      setStaleWarning(null);
+      clearStaleWarning("diagnostics");
     } catch {
       if (!initialLoadDone.current) setError("加载诊断数据失败");
-      else setStaleWarning("诊断数据刷新失败，当前显示上次成功数据");
+      else
+        setStaleWarning(
+          "diagnostics",
+          "诊断数据刷新失败，当前显示上次成功数据",
+        );
     }
-  }, []);
+  }, [clearStaleWarning, setStaleWarning]);
 
   useEffect(() => {
     Promise.all([loadHealth(), loadDiag()]).finally(() => {
@@ -141,12 +161,12 @@ export function SystemDiagnosticsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {staleWarning && (
-        <Alert variant="destructive">
+      {Object.values(staleWarnings).map((message) => (
+        <Alert key={message} variant="default">
           <CircleAlert />
-          <AlertDescription>{staleWarning}</AlertDescription>
+          <AlertDescription>{message}</AlertDescription>
         </Alert>
-      )}
+      ))}
       <div className="flex items-center justify-between">
         <PageHeader title="系统监控" />
         <div className="flex items-center gap-3">

@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
@@ -100,13 +99,19 @@ export function isStatusKey(status: string): status is StatusKey {
   return status in statusMeta;
 }
 
+const toneTextColorMap: Record<StatusTone, string> = {
+  success: "text-success",
+  warning: "text-warning",
+  destructive: "text-destructive",
+  info: "text-info",
+  muted: "text-muted-foreground",
+  primary: "text-primary",
+  secondary: "text-secondary-foreground",
+};
+
 /** Returns the Tailwind text-color class for a given status tone. */
 export function getToneTextColor(tone: StatusTone): string {
-  return cn(
-    tone === "success" && "text-success",
-    tone === "warning" && "text-warning",
-    tone === "destructive" && "text-destructive",
-  );
+  return toneTextColorMap[tone];
 }
 
 /** Returns the display metadata for a status key, falling back to "unknown". */

@@ -3,6 +3,16 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+function readPort(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return fallback;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(`${name} must be an integer between 0 and 65535`);
+  }
+  return port;
+}
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -22,7 +32,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: process.env.VITE_PORT ? Number(process.env.VITE_PORT) : 4173,
+    port: readPort("VITE_PORT", 4173),
     allowedHosts: ["host.docker.internal"],
     proxy: {
       "/api": {
