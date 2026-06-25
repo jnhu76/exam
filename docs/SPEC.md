@@ -880,7 +880,7 @@ Phase 2 运营人员点击"开考"
 | 运行时 | Node.js LTS | - |
 | Schema 校验 | Zod | TypeBox |
 | ORM | Drizzle ORM | - |
-| 数据库 | PostgreSQL（生产默认） | SQLite（仅 dev/demo） |
+| 数据库 | PostgreSQL | - |
 | 认证 | HTTP-only Cookie + JWT，argon2 密码哈希 | bcrypt |
 | 实时通信 | 轮询（Phase 1）/ WebSocket（Phase 2） | - |
 | 包管理 | pnpm workspace | - |
@@ -979,17 +979,15 @@ exam/
 
 | 场景 | 方式 | 数据库 | 说明 |
 |------|------|--------|------|
-| 开发演示 | `pnpm dev` | SQLite | 零配置，单命令启动 |
-| 单机演示 | Docker 单容器 | SQLite | 快速体验 |
+| 开发演示 | `pnpm dev` | PostgreSQL | 需本地或 Docker PostgreSQL |
+| 单机演示 | Docker Compose | PostgreSQL | app + DB 一键部署 |
 | 正式生产 | Docker Compose | PostgreSQL | app + DB 一键部署 |
 | 手动部署 | systemd + Nginx | PostgreSQL | 不用 Docker，传统方式 |
 
-**Phase 1 数据库落地节奏**：
+**数据库说明**：
 
-- J1-J8：SQLite-first。开发、CI、集成测试和单机演示默认使用 SQLite，优先完成业务闭环。
-- J9：增加 PostgreSQL schema、migration 和 Docker Compose 生产部署，执行 PostgreSQL 兼容性验证。
-- Phase 1 正式发布：PostgreSQL 是生产默认数据库；SQLite 仅保留给本地开发、测试和单机演示。
-- Phase 2 不承担首次 PostgreSQL 切换。Phase 2 在已经验证过的 PostgreSQL 生产基线上继续开发。
+- PostgreSQL 是唯一受支持的数据库。
+- 所有开发、测试和部署均使用 PostgreSQL。
 
 **Docker Compose（正式生产）**：
 
@@ -1001,7 +999,7 @@ services:
 
 通过 `.env` 配置切换：
 
-- `DATABASE_URL` 指向 PostgreSQL 或 SQLite 文件路径
+- `DATABASE_URL` 指向 PostgreSQL 连接字符串
 - `DEGRADATION_THRESHOLDS` 调整降级阈值
 - `AUTH_MODE` 选择认证方式（local / cas / oauth）
 

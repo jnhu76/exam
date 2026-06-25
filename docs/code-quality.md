@@ -394,13 +394,11 @@ DEPLOYMENT_MODE
 
 ## 12. Database Migration
 
-### 数据库落地策略
+### 数据库说明
 
-- J1-J8 默认使用 SQLite 完成开发、CI 和集成测试。
-- J9 增加 PostgreSQL 支持，并将 PostgreSQL 设为生产部署默认数据库。
-- SQLite 仅用于 dev/demo，不作为多人考试生产数据库。
-- repository 和 service 代码必须保持数据库无关；SQLite 专属 SQL 只能出现在 Drizzle 数据库层。
-- Phase 1 发布前必须在 PostgreSQL 上运行 migration、integration test 和 smoke test。首次 PostgreSQL 切换不能推迟到 Phase 2。
+- PostgreSQL 是唯一受支持的数据库。
+- repository 和 service 代码必须保持数据库无关。
+- Phase 1 发布前必须在 PostgreSQL 上运行 migration、integration test 和 smoke test。
 
 规则：
 
@@ -410,7 +408,6 @@ DEPLOYMENT_MODE
 4. 不允许随意清空业务数据
 5. Seed 只用于 dev/test，不用于生产覆盖数据
 6. 所有 migration 必须在 CI/test db 上跑过
-7. J9 必须验证 SQLite 与 PostgreSQL 在 JSON、时间戳、布尔值、唯一约束、事务和并发写入上的差异
 
 涉及 DB 的 Job 必须运行：
 
@@ -457,12 +454,12 @@ Artifacts must include `server.log`, screenshot, video, and Playwright trace whe
 
 ### API Route 测试（apps/api）
 
-所有 API route 测试必须使用 **in-memory SQLite** 数据库，确保测试隔离和快速运行。
+所有 API route 测试使用 **PostgreSQL 临时数据库** 来确保测试隔离。
 
 **架构：**
 
-- `apps/api/src/plugins/db.ts` — 注册 `fastify.db` 装饰器，生产环境使用 `createDatabase()`
-- `apps/api/src/routes/testHelpers.ts` — 提供 `buildTestApp()` 函数，注入 `:memory:` 数据库
+- `apps/api/src/plugins/db.ts` — 注册 `fastify.db` 装饰器，使用 `createDatabase()`
+- `apps/api/src/routes/testHelpers.ts` — 提供 `buildTestApp()` 函数，注入测试数据库
 - Route handlers 通过 `fastify.db` 访问数据库，永不直接调用 `createDatabase()`
 
 **测试模式：**
@@ -496,10 +493,7 @@ describe("my routes", () => {
 **规则：**
 
 1. Route handlers 绝不直接调用 `createDatabase()` — 必须通过 `fastify.db` 装饰器
-2. 测试使用 `createSqliteDatabase(":memory:")` 注入内存数据库
-3. 每个 `buildTestApp()` 调用创建独立的数据库实例，测试之间零共享状态
-4. `packages/db` 层测试也必须使用 `:memory:` 模式
-5. 禁止在测试中使用文件数据库（`dev.db`）
+2. 每个 `buildTestApp()` 调用创建独立的数据库实例，测试之间零共享状态
 
 **验证：**
 
