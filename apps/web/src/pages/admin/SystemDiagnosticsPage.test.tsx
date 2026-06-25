@@ -24,6 +24,7 @@ vi.mock("@/lib/logger", () => ({
 const getMock = vi.mocked(api.get);
 const warnMock = vi.mocked(logger.warn);
 const infoMock = vi.mocked(logger.info);
+const debugMock = vi.mocked(logger.debug);
 
 /** Health response shape used by the page. */
 function health() {
@@ -68,32 +69,35 @@ describe("SystemDiagnosticsPage", () => {
     vi.clearAllMocks();
   });
 
-  it("renders normally and logs refresh on successful initial load", async () => {
+  it("renders normally and logs refresh on successful initial load (debug level)", async () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());
     renderPage();
     expect(await screen.findByText("系统监控")).toBeInTheDocument();
-    // Successful loads emit refresh telemetry.
+    // Routine successful refreshes are debug-level telemetry (S3): polling
+    // fires health every 10s and diag every 30s, so info would flood the table.
     await waitFor(() => {
-      expect(infoMock).toHaveBeenCalledWith(
+      expect(debugMock).toHaveBeenCalledWith(
         "system_diagnostics.refreshed",
         expect.objectContaining({ source: "health" }),
       );
     });
-    expect(infoMock).toHaveBeenCalledWith(
+    expect(debugMock).toHaveBeenCalledWith(
       "system_diagnostics.refreshed",
       expect.objectContaining({ source: "diagnostics" }),
     );
+    // info is NOT used for routine refreshes.
+    expect(infoMock).not.toHaveBeenCalled();
   });
 
-  it("emits logger.warn on a subsequent poll failure (stale path)", async () => {
+  it("emits logger.warn and renders the stale-warning Alert on a subsequent poll failure", async () => {
     // Initial load: both succeed. The page fires Promise.all([health, diag])
     // so the call order matches the array order ([health, diag]).
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());
     renderPage();
     expect(await screen.findByText("系统监控")).toBeInTheDocument();
-    await waitFor(() => expect(infoMock).toHaveBeenCalled());
+    await waitFor(() => expect(debugMock).toHaveBeenCalled());
 
     // Subsequent scheduled poll: health fails, diagnostics ok. Order again
     // follows the page's call sequence (health first).
@@ -110,5 +114,11 @@ describe("SystemDiagnosticsPage", () => {
       },
       { timeout: 15000 },
     );
+
+    // S5: the stale warning must actually render in the DOM — the user sees a
+    // visible "stale data" Alert, not just a swallowed log.
+    expect(
+      await screen.findByText("系统状态刷新失败，当前显示上次成功数据"),
+    ).toBeInTheDocument();
   }, 20000);
 });

@@ -92,7 +92,9 @@ export function SystemDiagnosticsPage() {
       setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
       clearStaleWarning("health");
       setLastRefreshedAt(Date.now());
-      logger.info("system_diagnostics.refreshed", { source: "health" });
+      // Routine successful refreshes are debug-level (S3): health polls every
+      // 10s and diag every 30s, so info would flood the client_events table.
+      logger.debug("system_diagnostics.refreshed", { source: "health" });
     } catch (err) {
       if (!initialLoadDone.current) {
         setError("加载系统健康数据失败");
@@ -118,7 +120,8 @@ export function SystemDiagnosticsPage() {
       };
       clearStaleWarning("diagnostics");
       setLastRefreshedAt(Date.now());
-      logger.info("system_diagnostics.refreshed", { source: "diagnostics" });
+      // See loadHealth: routine refresh is debug, not info (S3).
+      logger.debug("system_diagnostics.refreshed", { source: "diagnostics" });
     } catch (err) {
       if (!initialLoadDone.current) {
         setError("加载诊断数据失败");
