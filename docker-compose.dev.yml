@@ -2,15 +2,11 @@ services:
   db:
     image: postgres:18.4-bookworm
     ports:
-      - "5432:5432"
+      - "15432:5432"
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
       POSTGRES_DB: exam_test
-      # ADR-006: display/session timezone only; business time is instant-based.
-      # Parity with docker-compose.yml (production) so local PG logs/sessions
-      # show Asia/Shanghai instead of the default Etc/UTC. Does NOT change
-      # timestamptz comparison semantics.
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     healthcheck:

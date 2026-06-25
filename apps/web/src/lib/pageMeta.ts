@@ -26,8 +26,8 @@ const staticRouteTitles = new Map<string, string>([
   [routes.admin.exams, "考试管理"],
   [routes.admin.examsNew, "新建考试"],
   [routes.admin.results, "成绩查询"],
-  [routes.admin.system, "系统健康"],
-  [routes.admin.diagnostics, "系统诊断"],
+  [routes.admin.system, "系统监控"],
+  [routes.admin.auditLogs, "审计日志"],
   [routes.admin.importLogs, "导入日志"],
   [routes.exam.list, "我的考试"],
 ]);

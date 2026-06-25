@@ -139,18 +139,6 @@ export function AuditLogPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadLogs} />;
-  if (!data || data.items.length === 0) {
-    return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="审计日志" description="查看系统操作审计记录" />
-        <EmptyState
-          icon={<ScrollText className="size-8" />}
-          title="暂无审计日志"
-          description="系统操作将自动记录在此"
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -194,17 +182,29 @@ export function AuditLogPage() {
         </Select>
         <DatePicker
           aria-label="开始日期"
+          placeholder="开始日期"
           value={fromDate}
           onChange={(d) => {
-            setFromDate(d);
+            if (d && toDate && d > toDate) {
+              setFromDate(toDate);
+              setToDate(d);
+            } else {
+              setFromDate(d);
+            }
             setPage(1);
           }}
         />
         <DatePicker
           aria-label="结束日期"
+          placeholder="结束日期"
           value={toDate}
           onChange={(d) => {
-            setToDate(d);
+            if (d && fromDate && d < fromDate) {
+              setToDate(fromDate);
+              setFromDate(d);
+            } else {
+              setToDate(d);
+            }
             setPage(1);
           }}
         />
@@ -220,68 +220,82 @@ export function AuditLogPage() {
           </Button>
         )}
       </div>
-      <div className="overflow-hidden rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>时间</TableHead>
-              <TableHead>操作者</TableHead>
-              <TableHead>操作</TableHead>
-              <TableHead>目标类型</TableHead>
-              <TableHead>目标 ID</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((item) => (
-              <TableRow
-                key={item.id}
-                className="cursor-pointer"
-                onClick={() =>
-                  setExpandedId(expandedId === item.id ? null : item.id)
-                }
-              >
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {new Date(item.createdAt).toLocaleString("zh-CN")}
-                </TableCell>
-                <TableCell className="font-medium">{item.actorId}</TableCell>
-                <TableCell>
-                  <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
-                    {item.action}
-                  </span>
-                </TableCell>
-                <TableCell>{item.targetType}</TableCell>
-                <TableCell className="max-w-[120px] truncate text-sm text-muted-foreground">
-                  {item.targetId}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      {expandedId &&
-        (() => {
-          const item = items.find((i) => i.id === expandedId);
-          if (!item) return null;
-          return (
-            <div className="rounded-md border p-4">
-              <h3 className="mb-2 text-sm font-medium">元数据</h3>
-              <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
-                {JSON.stringify(item.metadata, null, 2)}
-              </pre>
-              {item.ipAddress && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  IP: {item.ipAddress}
-                </p>
-              )}
-            </div>
-          );
-        })()}
-      <DataTablePagination
-        page={data.page}
-        pageSize={data.pageSize}
-        total={data.total}
-        onPageChange={setPage}
-      />
+      {items.length === 0 ? (
+        <EmptyState
+          icon={<ScrollText className="size-8" />}
+          title="暂无审计日志"
+          description="系统操作将自动记录在此"
+        />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>时间</TableHead>
+                  <TableHead>操作者</TableHead>
+                  <TableHead>操作</TableHead>
+                  <TableHead>目标类型</TableHead>
+                  <TableHead>目标 ID</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow
+                    key={item.id}
+                    className="cursor-pointer"
+                    onClick={() =>
+                      setExpandedId(expandedId === item.id ? null : item.id)
+                    }
+                  >
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleString("zh-CN")}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {item.actorId}
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
+                        {item.action}
+                      </span>
+                    </TableCell>
+                    <TableCell>{item.targetType}</TableCell>
+                    <TableCell className="max-w-[120px] truncate text-sm text-muted-foreground">
+                      {item.targetId}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {expandedId &&
+            (() => {
+              const item = items.find((i) => i.id === expandedId);
+              if (!item) return null;
+              return (
+                <div className="rounded-md border p-4">
+                  <h3 className="mb-2 text-sm font-medium">元数据</h3>
+                  <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                    {JSON.stringify(item.metadata, null, 2)}
+                  </pre>
+                  {item.ipAddress && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      IP: {item.ipAddress}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+          {data && (
+            <DataTablePagination
+              page={data.page}
+              pageSize={data.pageSize}
+              total={data.total}
+              onPageChange={setPage}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
