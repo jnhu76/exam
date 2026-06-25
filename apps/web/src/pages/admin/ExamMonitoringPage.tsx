@@ -92,6 +92,10 @@ export function ExamMonitoringPage() {
   const [timeline, setTimeline] =
     useState<ProctorAttemptEventListResponse | null>(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const attemptsRef = useRef(attempts);
+  attemptsRef.current = attempts;
 
   const loadAttempts = useCallback(async () => {
     if (!examId) return;
@@ -103,7 +107,7 @@ export function ExamMonitoringPage() {
       setStaleWarning(null);
       setLastRefreshedAt(Date.now());
     } catch {
-      if (attempts.length === 0) {
+      if (attemptsRef.current.length === 0) {
         setLoadError("加载监控数据失败");
       } else {
         setStaleWarning("监控数据刷新失败，当前为上次成功数据");
@@ -112,32 +116,51 @@ export function ExamMonitoringPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [examId, attempts.length]);
+  }, [examId]);
 
   const loadTimeline = useCallback(async (attemptId: string) => {
     setTimelineLoading(true);
     setTimeline(null);
+    setTimelineError(null);
     try {
       const data = await api.get<ProctorAttemptEventListResponse>(
         `/api/admin/attempts/${attemptId}/proctor-events?limit=50`,
       );
       setTimeline(data);
     } catch {
-      // Swallow — timeline is secondary to the list.
+      setTimelineError("加载事件时间线失败");
+      logger.warn("monitoring.timeline_load_failed", { attemptId });
     } finally {
       setTimelineLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadAttempts();
+      }
+    };
+
     loadAttempts();
     const interval = setInterval(loadAttempts, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [loadAttempts]);
 
   useEffect(() => {
     if (selectedAttemptId) loadTimeline(selectedAttemptId);
   }, [selectedAttemptId, loadTimeline]);
+
+  // Refresh time labels every minute
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (isLoading && attempts.length === 0) {
     return (
@@ -304,6 +327,11 @@ export function ExamMonitoringPage() {
                 <Skeleton key={i} className="h-8 w-full" />
               ))}
             </div>
+          ) : timelineError ? (
+            <Alert variant="destructive">
+              <CircleAlert />
+              <AlertDescription>{timelineError}</AlertDescription>
+            </Alert>
           ) : timeline && timeline.items.length > 0 ? (
             <div className="flex flex-col gap-1">
               {timeline.items.map((ev) => (
@@ -359,12 +387,14 @@ function Td({
 }
 
 function EventBadge({ level, kind }: { level: string; kind: string }) {
-  const color =
-    level === "error"
-      ? "bg-destructive/10 text-destructive"
-      : level === "warn"
-        ? "bg-warning/10 text-warning"
-        : "bg-muted text-muted-foreground";
+  let color: string;
+  if (level === "error") {
+    color = "bg-destructive/10 text-destructive";
+  } else if (level === "warn") {
+    color = "bg-warning/10 text-warning";
+  } else {
+    color = "bg-muted text-muted-foreground";
+  }
   return (
     <Badge variant="secondary" className={`shrink-0 ${color}`}>
       {kind === "audit_log" ? "操作" : "前端"}

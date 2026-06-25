@@ -106,7 +106,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const ctx = ensureTargetOrg(request.ctx as RequestContext);
       const { attemptId } = attemptEventsParamsSchema.parse(request.params);
-      const { limit } = attemptEventsQuerySchema.parse(request.query);
+      const { limit, page } = attemptEventsQuerySchema.parse(request.query);
 
       // Verify the attempt belongs to the caller's org (cross-org → 404).
       const attemptRepo = createAttemptRepo(fastify.db);
@@ -121,14 +121,14 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.db,
         ctx,
         attemptId,
-        { limit },
+        { limit, page },
       );
       return {
         items,
         total,
-        page: 1,
+        page,
         pageSize: limit,
-        totalPages: total === 0 ? 0 : 1,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
       };
     },
   );

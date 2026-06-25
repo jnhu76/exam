@@ -35,6 +35,7 @@ const COUNTED_EVENT_NAMES = [
   "answer_autosave_failed",
   "answer_manual_save_failed",
   "submit_failed",
+  "deadline_auto_submit_failed",
 ] as const;
 
 /** Audit-log actions surfaced in the per-attempt timeline (compliance ops). */
@@ -58,6 +59,13 @@ function auditActionToEventName(action: string): string | null {
   }
 }
 
+const SAVE_ERROR_METADATA = [
+  "questionId",
+  "saveMode",
+  "durationMs",
+  "errorCode",
+] as const;
+
 /**
  * Per-event-name allowlist for timeline `metadata`. Only the keys listed here
  * are projected from the raw client_events/audit_logs metadata; everything else
@@ -65,13 +73,8 @@ function auditActionToEventName(action: string): string | null {
  * An entry of `undefined` means "no fields allowed" (empty metadata).
  */
 const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
-  answer_autosave_failed: ["questionId", "saveMode", "durationMs", "errorCode"],
-  answer_manual_save_failed: [
-    "questionId",
-    "saveMode",
-    "durationMs",
-    "errorCode",
-  ],
+  answer_autosave_failed: SAVE_ERROR_METADATA,
+  answer_manual_save_failed: SAVE_ERROR_METADATA,
   submit_failed: ["durationMs", "errorCode"],
   deadline_auto_submit_failed: ["durationMs", "errorCode"],
   visibility_restored: ["durationMs", "hiddenDurationMs"],
@@ -84,6 +87,8 @@ const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
   extend_time: ["durationMs"],
 };
 
+type SafeMetadataValue = string | number | boolean | null;
+
 /**
  * Projects a raw metadata blob into the allowlisted safe metadata for the
  * given event name. Unknown event names → empty object (default-deny).
@@ -92,13 +97,23 @@ const SAFE_METADATA_ALLOWLIST: Record<string, readonly string[] | undefined> = {
 export function projectSafeMetadata(
   eventName: string,
   raw: Record<string, unknown> | null | undefined,
-): Record<string, unknown> {
+): Record<string, SafeMetadataValue> {
   const allowed = SAFE_METADATA_ALLOWLIST[eventName];
   if (!allowed || allowed.length === 0) return {};
   if (!raw) return {};
-  const out: Record<string, unknown> = {};
+  const out: Record<string, SafeMetadataValue> = {};
   for (const key of allowed) {
-    if (key in raw) out[key] = raw[key];
+    if (key in raw) {
+      const val = raw[key];
+      if (
+        typeof val === "string" ||
+        typeof val === "number" ||
+        typeof val === "boolean" ||
+        val === null
+      ) {
+        out[key] = val;
+      }
+    }
   }
   return out;
 }
@@ -239,17 +254,27 @@ export async function buildProctorAttemptEventTimeline(
   db: Database,
   ctx: RequestContext,
   attemptId: string,
-  opts: { limit: number },
+  opts: { limit: number; page: number },
 ): Promise<{ items: ProctorAttemptEvent[]; total: number }> {
   const limit = Math.max(1, Math.min(opts.limit, 100));
+  const page = Math.max(1, opts.page);
+  const offset = (page - 1) * limit;
   const eventRepo = createClientEventRepo(db);
   const auditRepo = createAuditLogRepo(db);
 
-  // Fetch client events (already newest-first) and audit rows for this attempt.
-  // We over-fetch audit rows (no limit in listByTarget) then merge + trim.
+  // Fetch client events (already newest-first) and the most recent audit rows for this attempt
   const clientRows: ClientEventTimelineRow[] =
     await eventRepo.listRecentByAttempt(ctx, attemptId, { limit });
-  const auditRows = await auditRepo.listByTarget(ctx, "attempt", attemptId);
+  // Get all matching audit logs but limit to the same number of items we return to avoid over-fetching
+  const { items: auditRows } = await auditRepo.listPaginatedFiltered(
+    ctx,
+    1,
+    limit,
+    {
+      targetType: "attempt",
+      targetId: attemptId,
+    },
+  );
 
   const merged: ProctorAttemptEvent[] = [];
 
@@ -280,8 +305,8 @@ export async function buildProctorAttemptEventTimeline(
     });
   }
 
-  // Newest first, then trim to limit.
+  // Newest first, then apply pagination.
   merged.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-  const items = merged.slice(0, limit);
+  const items = merged.slice(offset, offset + limit);
   return { items, total: merged.length };
 }

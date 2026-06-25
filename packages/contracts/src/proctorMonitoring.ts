@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PaginatedResponseSchema } from "./common.js";
+import { AttemptStatusEnum, type AttemptStatusValue } from "./attempt.js";
 
 /**
  * Contracts for the proctor monitoring dashboard (status-type monitoring only).
@@ -25,23 +26,8 @@ import { PaginatedResponseSchema } from "./common.js";
 export const MONITORING_ONLINE_THRESHOLD_MS = 30_000;
 export const MONITORING_OFFLINE_THRESHOLD_MS = 90_000;
 
-/**
- * Attempt lifecycle status, mirrored from the core attempt status space. Kept
- * local (not re-exported from attempt.ts) so this module stays self-contained.
- */
-export const ProctorAttemptStatusEnum = z.enum([
-  "not_started",
-  "queued",
-  "in_progress",
-  "disrupted",
-  "submitted",
-  "grading",
-  "graded",
-  "voided",
-]);
-export type ProctorAttemptStatusValue = z.infer<
-  typeof ProctorAttemptStatusEnum
->;
+export const ProctorAttemptStatusEnum = AttemptStatusEnum;
+export type ProctorAttemptStatusValue = AttemptStatusValue;
 
 /** Connectivity classification derived from heartbeat freshness (server-computed). */
 export const OnlineStateEnum = z.enum(["online", "stale", "offline"]);
@@ -101,7 +87,10 @@ export const ProctorAttemptEventSchema = z.object({
   level: z.enum(["debug", "info", "warn", "error"]),
   kind: z.enum(["log", "exam_telemetry", "proctor"]),
   /** Server-projected, allowlisted metadata (never the raw client blob). */
-  metadata: z.record(z.string(), z.unknown()),
+  metadata: z.record(
+    z.string(),
+    z.string().or(z.number()).or(z.boolean()).or(z.null()),
+  ),
   route: z.string().min(1).max(500).optional(),
   /** Origin of the timeline row: frontend telemetry vs. compliance audit log. */
   source: z.enum(["client_event", "audit_log"]),
