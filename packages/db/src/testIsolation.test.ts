@@ -21,6 +21,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
+  process.env.DATABASE_URL ??
   "postgresql://exam:exam@localhost:5432/exam_test";
 
 describe("sanitizeSchemaName", () => {

@@ -1,4 +1,10 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.resolve(__dirname, "../..");
 
 // File parallelism is RESTORED to the Vitest default here (no fileParallelism
 // override). packages/db is safe to parallelize for several reasons that do
@@ -26,8 +32,9 @@ import { defineConfig } from "vitest/config";
 // packages/db test becomes heavy enough to flake under parallelism, add a
 // targeted fix (semaphore around schema create/migrate, or a heavier
 // testTimeout on that specific test), not a package-wide serial override.
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   test: {
     exclude: ["dist/**", "node_modules/**"],
+    env: loadEnv(mode, workspaceRoot, ""),
   },
-});
+}));

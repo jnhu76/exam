@@ -10,6 +10,7 @@ import type { Database } from "./types.js";
 /** Database URL for the test database, defaults to `exam_test`. */
 export const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ??
+  process.env.DATABASE_URL ??
   "postgresql://exam:exam@localhost:5432/exam_test";
 
 /** Shared database instance (lazy-initialized). */

@@ -298,7 +298,9 @@ function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
   }
   if (mode === "test" || mode === "ci") {
     return (
-      env.TEST_DATABASE_URL ?? "postgresql://exam:exam@localhost:5432/exam_test"
+      env.TEST_DATABASE_URL ??
+      env.DATABASE_URL ??
+      "postgresql://exam:exam@localhost:5432/exam_test"
     );
   }
   const url = env.DATABASE_URL;
