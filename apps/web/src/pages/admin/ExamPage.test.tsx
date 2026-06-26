@@ -88,15 +88,10 @@ describe("ExamPage", () => {
     expect(deleteButtons[1]).toBeDisabled();
   });
 
-  it("renders through the shared list-page template", async () => {
+  it("renders through the admin list-page shell", async () => {
     renderPage();
 
-    expect(
-      await screen.findByRole("toolbar", { name: "考试列表工具栏" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "考试列表" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("考试管理")).toBeInTheDocument();
     expect(screen.getByText("共 2 场考试")).toBeInTheDocument();
   });
 });

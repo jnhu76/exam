@@ -1,0 +1,31 @@
+@layer base {
+  :root {
+    --admin-bg-page: var(--bg);
+    --admin-bg-card: var(--surface);
+    --admin-bg-muted: var(--surface-muted);
+    --admin-bg-search: #f3f4f6;
+    --admin-bg-table-header: #f9fafb;
+    --admin-text: var(--text);
+    --admin-text-muted: var(--text-muted);
+    --admin-text-subtle: var(--text-subtle);
+    --admin-border: var(--border);
+    --admin-border-light: #f0f1f3;
+    --admin-primary: var(--primary);
+    --admin-primary-soft: var(--primary-soft);
+    --admin-success: var(--success);
+    --admin-success-soft: var(--success-soft);
+    --admin-warning: var(--warning);
+    --admin-warning-soft: var(--warning-soft);
+    --admin-danger: var(--danger);
+    --admin-danger-soft: var(--danger-soft);
+    --admin-radius-sm: 6px;
+    --admin-radius: var(--radius);
+    --admin-radius-lg: 10px;
+    --admin-shadow-card:
+      0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+    --admin-shadow-search: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --admin-header-height: 56px;
+    --admin-sidebar-width: 232px;
+    --admin-sidebar-collapsed-width: 56px;
+  }
+}

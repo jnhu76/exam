@@ -2,14 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import { DataToolbar } from "@/components/shared/DataToolbar";
-import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -26,8 +22,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminToolbar,
+  AdminTableShell,
+  AdminStatusTag,
+} from "@/components/admin";
 
-/** Row shape returned by the exams list API. */
 interface ExamRow {
   id: string;
   title: string;
@@ -43,7 +45,6 @@ interface ExamRow {
   deleteDisabledReason: string | null;
 }
 
-/** Generic paginated API response wrapper. */
 interface PaginatedResponse<T> {
   items: T[];
   total: number;
@@ -52,14 +53,12 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-/** Admin page for listing, viewing, and deleting exams. */
 export function ExamPage() {
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /** Fetches the exam list from the API and updates local state. */
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -77,7 +76,6 @@ export function ExamPage() {
     loadExams();
   }, [loadExams]);
 
-  /** Deletes an exam by id and refreshes the list. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/exams/${id}`);
@@ -93,8 +91,8 @@ export function ExamPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6">
-        <PageHeader
+      <AdminShell>
+        <AdminShellHeader
           title="考试管理"
           actions={
             <Button onClick={() => void navigate("/admin/exams/new")}>
@@ -112,14 +110,8 @@ export function ExamPage() {
           />
         ) : (
           <>
-            <DataToolbar
-              aria-label="考试列表工具栏"
-              summary={`共 ${exams.length} 场考试`}
-            />
-            <DataTableShell
-              title="考试列表"
-              description="查看当前考试状态、时间窗口与基础配置。"
-            >
+            <AdminToolbar summary={`共 ${exams.length} 场考试`} />
+            <AdminTableShell>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -152,7 +144,7 @@ export function ExamPage() {
                           {exam.title}
                         </TableCell>
                         <TableCell>
-                          <StatusBadge status={exam.status} />
+                          <AdminStatusTag status={exam.status} />
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(exam.openAt).toLocaleDateString()} -{" "}
@@ -203,10 +195,10 @@ export function ExamPage() {
                   })}
                 </TableBody>
               </Table>
-            </DataTableShell>
+            </AdminTableShell>
           </>
         )}
-      </div>
+      </AdminShell>
     </TooltipProvider>
   );
 }

@@ -5,7 +5,6 @@ import type {
 } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +21,11 @@ import {
   Server,
   Timer,
 } from "lucide-react";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+} from "@/components/admin";
 
 type HealthStatus = SystemHealthResponse["status"];
 
@@ -92,8 +96,6 @@ export function SystemDiagnosticsPage() {
       setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
       clearStaleWarning("health");
       setLastRefreshedAt(Date.now());
-      // Routine successful refreshes are debug-level (S3): health polls every
-      // 10s and diag every 30s, so info would flood the client_events table.
       logger.debug("system_diagnostics.refreshed", { source: "health" });
     } catch (err) {
       if (!initialLoadDone.current) {
@@ -120,7 +122,6 @@ export function SystemDiagnosticsPage() {
       };
       clearStaleWarning("diagnostics");
       setLastRefreshedAt(Date.now());
-      // See loadHealth: routine refresh is debug, not info (S3).
       logger.debug("system_diagnostics.refreshed", { source: "diagnostics" });
     } catch (err) {
       if (!initialLoadDone.current) {
@@ -170,10 +171,10 @@ export function SystemDiagnosticsPage() {
 
   if (error && !health && !diag) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="系统监控" />
+      <AdminShell>
+        <AdminShellHeader title="系统监控" />
         <ErrorState message={error} onRetry={handleRefresh} />
-      </div>
+      </AdminShell>
     );
   }
 
@@ -182,40 +183,42 @@ export function SystemDiagnosticsPage() {
   const StatusIcon = statusView.icon;
 
   return (
-    <div className="flex flex-col gap-6">
+    <AdminShell>
       {Object.values(staleWarnings).map((message) => (
         <Alert key={message} variant="default">
           <CircleAlert />
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ))}
-      <div className="flex items-center justify-between">
-        <PageHeader title="系统监控" />
-        <div className="flex items-center gap-3">
-          {lastRefreshedAt !== null && (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
-            </span>
-          )}
-          <span
-            className={cn(
-              "flex items-center gap-1 text-sm font-medium",
-              getToneTextColor(statusView.tone),
+      <AdminShellHeader
+        title="系统监控"
+        actions={
+          <div className="flex items-center gap-3">
+            {lastRefreshedAt !== null && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
+              </span>
             )}
-          >
-            <StatusIcon className="size-3.5" aria-hidden="true" />
-            {statusView.label}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="刷新系统数据"
-            onClick={handleRefresh}
-          >
-            <RefreshCw />
-          </Button>
-        </div>
-      </div>
+            <span
+              className={cn(
+                "flex items-center gap-1 text-sm font-medium",
+                getToneTextColor(statusView.tone),
+              )}
+            >
+              <StatusIcon className="size-3.5" aria-hidden="true" />
+              {statusView.label}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="刷新系统数据"
+              onClick={handleRefresh}
+            >
+              <RefreshCw />
+            </Button>
+          </div>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard
@@ -244,120 +247,110 @@ export function SystemDiagnosticsPage() {
       {diag && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Server className="size-4" aria-hidden="true" />
+            <AdminPageCard>
+              <div className="flex items-center gap-2 pb-3">
+                <Server className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">
                   服务器信息
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow label="版本" value={diag.version} />
-                <InfoRow
-                  label="运行时间"
-                  value={formatDuration(liveUptime * 1000)}
-                />
-              </CardContent>
-            </Card>
+                </span>
+              </div>
+              <InfoRow label="版本" value={diag.version} />
+              <InfoRow
+                label="运行时间"
+                value={formatDuration(liveUptime * 1000)}
+              />
+            </AdminPageCard>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Database className="size-4" aria-hidden="true" />
+            <AdminPageCard>
+              <div className="flex items-center gap-2 pb-3">
+                <Database className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">
                   数据库状态
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow label="延迟" value={`${diag.dbLatency}ms`} />
-                <InfoRow
-                  label="Redis"
-                  value={
-                    diag.redisStatus.connected
-                      ? `已连接 (${diag.redisStatus.latencyMs}ms)`
-                      : "未连接"
-                  }
-                />
-              </CardContent>
-            </Card>
+                </span>
+              </div>
+              <InfoRow label="延迟" value={`${diag.dbLatency}ms`} />
+              <InfoRow
+                label="Redis"
+                value={
+                  diag.redisStatus.connected
+                    ? `已连接 (${diag.redisStatus.latencyMs}ms)`
+                    : "未连接"
+                }
+              />
+            </AdminPageCard>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Activity className="size-4" aria-hidden="true" />
+            <AdminPageCard>
+              <div className="flex items-center gap-2 pb-3">
+                <Activity className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">
                   运行时配置
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label="心跳间隔"
-                  value={formatDuration(diag.config.heartbeatInterval)}
-                />
-                <InfoRow
-                  label="心跳超时"
-                  value={formatDuration(diag.config.heartbeatTimeout)}
-                />
-                <InfoRow
-                  label="截止扫描间隔"
-                  value={formatDuration(diag.config.deadlineScanInterval)}
-                />
-              </CardContent>
-            </Card>
+                </span>
+              </div>
+              <InfoRow
+                label="心跳间隔"
+                value={formatDuration(diag.config.heartbeatInterval)}
+              />
+              <InfoRow
+                label="心跳超时"
+                value={formatDuration(diag.config.heartbeatTimeout)}
+              />
+              <InfoRow
+                label="截止扫描间隔"
+                value={formatDuration(diag.config.deadlineScanInterval)}
+              />
+            </AdminPageCard>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Timer className="size-4" aria-hidden="true" />
+            <AdminPageCard>
+              <div className="flex items-center gap-2 pb-3">
+                <Timer className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">
                   心跳扫描器
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label="扫描间隔"
-                  value={formatDuration(diag.heartbeatStatus.interval)}
-                />
-                <InfoRow
-                  label="超时"
-                  value={formatDuration(diag.heartbeatStatus.timeout)}
-                />
-                <InfoRow
-                  label="上次扫描"
-                  value={formatLastScan(diag.heartbeatStatus.lastScanAt)}
-                />
-                <InfoRow
-                  label="已中断"
-                  value={`${diag.heartbeatStatus.disruptedCount}`}
-                />
-              </CardContent>
-            </Card>
+                </span>
+              </div>
+              <InfoRow
+                label="扫描间隔"
+                value={formatDuration(diag.heartbeatStatus.interval)}
+              />
+              <InfoRow
+                label="超时"
+                value={formatDuration(diag.heartbeatStatus.timeout)}
+              />
+              <InfoRow
+                label="上次扫描"
+                value={formatLastScan(diag.heartbeatStatus.lastScanAt)}
+              />
+              <InfoRow
+                label="已中断"
+                value={`${diag.heartbeatStatus.disruptedCount}`}
+              />
+            </AdminPageCard>
 
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Timer className="size-4" aria-hidden="true" />
+            <AdminPageCard>
+              <div className="flex items-center gap-2 pb-3">
+                <Timer className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">
                   截止扫描器
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label="扫描间隔"
-                  value={formatDuration(diag.deadlineScannerStatus.interval)}
-                />
-                <InfoRow
-                  label="上次扫描"
-                  value={formatLastScan(diag.deadlineScannerStatus.lastScanAt)}
-                />
-                <InfoRow
-                  label="自动提交"
-                  value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
-                />
-              </CardContent>
-            </Card>
+                </span>
+              </div>
+              <InfoRow
+                label="扫描间隔"
+                value={formatDuration(diag.deadlineScannerStatus.interval)}
+              />
+              <InfoRow
+                label="上次扫描"
+                value={formatLastScan(diag.deadlineScannerStatus.lastScanAt)}
+              />
+              <InfoRow
+                label="自动提交"
+                value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
+              />
+            </AdminPageCard>
           </div>
         </>
       )}
-    </div>
+    </AdminShell>
   );
 }
 
@@ -405,7 +398,7 @@ function MetricCard({
 
 function CombinedSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
+    <AdminShell>
       <div className="flex items-center justify-between">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-8 w-24" />
@@ -439,6 +432,6 @@ function CombinedSkeleton() {
           </div>
         ))}
       </div>
-    </div>
+    </AdminShell>
   );
 }
