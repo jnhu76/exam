@@ -154,29 +154,35 @@ export const courses = pgTable(
 );
 
 /** Questions table — stores question bank items with options, scoring, and grading rules. */
-export const questions = pgTable("questions", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  courseId: text("course_id")
-    .notNull()
-    .references(() => courses.id),
-  type: text("type").notNull(),
-  content: text("content").notNull(),
-  options: jsonb("options")
-    .$type<Array<{ id: string; content: string; isCorrect?: boolean }>>()
-    .notNull(),
-  // Nullable: a null/undefined standardAnswer marks the question as
-  // subjective (manually graded). Objective questions keep a typed answer.
-  // See QuestionSnapshot / hasSubjectiveQuestions for the convention.
-  standardAnswer: jsonb("standard_answer").$type<unknown>(),
-  attachments: jsonb("attachments").$type<Attachment[]>().notNull(),
-  score: doublePrecision("score").notNull(),
-  difficulty: integer("difficulty").notNull(),
-  tags: jsonb("tags").$type<string[]>().notNull(),
-  gradingRule: jsonb("grading_rule").$type<GradingRule>().notNull(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const questions = pgTable(
+  "questions",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    courseId: text("course_id")
+      .notNull()
+      .references(() => courses.id),
+    type: text("type").notNull(),
+    content: text("content").notNull(),
+    options: jsonb("options")
+      .$type<Array<{ id: string; content: string; isCorrect?: boolean }>>()
+      .notNull(),
+    // Nullable: a null/undefined standardAnswer marks the question as
+    // subjective (manually graded). Objective questions keep a typed answer.
+    // See QuestionSnapshot / hasSubjectiveQuestions for the convention.
+    standardAnswer: jsonb("standard_answer").$type<unknown>(),
+    attachments: jsonb("attachments").$type<Attachment[]>().notNull(),
+    score: doublePrecision("score").notNull(),
+    difficulty: integer("difficulty").notNull(),
+    tags: jsonb("tags").$type<string[]>().notNull(),
+    gradingRule: jsonb("grading_rule").$type<GradingRule>().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("questions_org_course_idx").on(table.organizationId, table.courseId),
+  ],
+);
 
 /** Exams table — stores exam configurations including timing, scoring, and question snapshots. */
 export const exams = pgTable(
@@ -408,18 +414,27 @@ export const importJobLogs = pgTable(
 );
 
 /** Audit logs table — records user actions for compliance and debugging. */
-export const auditLogs = pgTable("audit_logs", {
-  id: id(),
-  organizationId: organizationId().references(() => organizations.id),
-  actorId: text("actor_id").notNull(),
-  action: text("action").notNull(),
-  targetType: text("target_type").notNull(),
-  targetId: text("target_id").notNull(),
-  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  createdAt: createdAt(),
-});
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    actorId: text("actor_id").notNull(),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("audit_logs_org_created_at_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+  ],
+);
 
 /**
  * Client events table — observational telemetry reported by the browser

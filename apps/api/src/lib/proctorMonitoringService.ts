@@ -334,15 +334,15 @@ export async function buildProctorAttemptEventTimeline(
   }
 
   for (const a of auditRows) {
-    const name = auditActionToEventName(a.action);
+    const name = auditActionToEventName(a.auditLog.action);
     if (!name) continue; // not a timeline-relevant audit action
     merged.push({
-      id: a.id,
-      occurredAt: a.createdAt.toISOString(),
+      id: a.auditLog.id,
+      occurredAt: a.auditLog.createdAt.toISOString(),
       name,
       level: "warn",
       kind: "proctor",
-      metadata: projectSafeMetadata(name, a.metadata),
+      metadata: projectSafeMetadata(name, a.auditLog.metadata),
       source: "audit_log",
     });
   }

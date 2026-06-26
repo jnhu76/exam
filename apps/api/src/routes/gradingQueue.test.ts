@@ -617,18 +617,21 @@ describe("grading queue routes (P2D-J3)", () => {
       50,
       { action: "grading.score_entered" },
     );
-    const mine = items.find((i) => i.targetId === attemptId);
+    const mine = items.find((i) => i.auditLog.targetId === attemptId);
     expect(mine).toBeDefined();
     expect(mine).toMatchObject({
-      action: "grading.score_entered",
-      targetType: "attempt",
-      targetId: attemptId,
-      metadata: {
-        questionId: "q-aud",
-        score: 6,
-        maxScore: 10,
-        graderId: ctx.admin.id,
+      auditLog: {
+        action: "grading.score_entered",
+        targetType: "attempt",
+        targetId: attemptId,
+        metadata: {
+          questionId: "q-aud",
+          score: 6,
+          maxScore: 10,
+          graderId: ctx.admin.id,
+        },
       },
+      actorName: ctx.admin.name,
     });
   });
 
@@ -663,16 +666,19 @@ describe("grading queue routes (P2D-J3)", () => {
       50,
       { action: "grading.finalized" },
     );
-    const mine = items.find((i) => i.targetId === attemptId);
+    const mine = items.find((i) => i.auditLog.targetId === attemptId);
     expect(mine).toBeDefined();
     expect(mine).toMatchObject({
-      action: "grading.finalized",
-      targetType: "attempt",
-      targetId: attemptId,
-      metadata: {
-        gradingStatus: "fully_graded",
-        graderId: ctx.admin.id,
+      auditLog: {
+        action: "grading.finalized",
+        targetType: "attempt",
+        targetId: attemptId,
+        metadata: {
+          gradingStatus: "fully_graded",
+          graderId: ctx.admin.id,
+        },
       },
+      actorName: ctx.admin.name,
     });
   });
 

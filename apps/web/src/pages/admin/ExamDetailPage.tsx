@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { routes } from "@/lib/routes";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -100,6 +101,7 @@ export function ExamDetailPage() {
   const [publishing, setPublishing] = useState(false);
   const [closing, setClosing] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const [unpublishing, setUnpublishing] = useState(false);
   const [extending, setExtending] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
@@ -299,6 +301,21 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Cancels the exam (published/open → canceled). Documented Phase 2 op (ADR-005). */
+  async function handleCancel() {
+    if (!id || canceling) return;
+    setCanceling(true);
+    try {
+      await api.post(`/api/exams/${id}/cancel`);
+      toast.success("考试已取消");
+      await loadExam();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "取消失败，请稍后重试");
+    } finally {
+      setCanceling(false);
+    }
+  }
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExam} />;
   if (!exam)
@@ -310,6 +327,14 @@ export function ExamDetailPage() {
         title={exam.title}
         actions={
           <div className="flex gap-2">
+            {exam.status === "draft" && (
+              <Button
+                variant="outline"
+                onClick={() => void navigate(routes.admin.examEdit(id!))}
+              >
+                编辑
+              </Button>
+            )}
             {exam.status === "draft" && (
               <Button
                 onClick={() => void handlePublish()}
@@ -379,6 +404,19 @@ export function ExamDetailPage() {
                 description={`确定要归档考试「${exam.title}」吗？归档后将从当前考试列表中移出。`}
                 destructive
                 onConfirm={() => void handleArchive()}
+              />
+            )}
+            {(exam.status === "published" || exam.status === "open") && (
+              <ConfirmDialog
+                trigger={
+                  <Button variant="outline" disabled={canceling}>
+                    {canceling ? "取消中..." : "取消考试"}
+                  </Button>
+                }
+                title="确认取消"
+                description={`确定要取消考试「${exam.title}」吗？取消后已发布的考试将作废，此操作不可撤销。`}
+                destructive
+                onConfirm={() => void handleCancel()}
               />
             )}
             <Button

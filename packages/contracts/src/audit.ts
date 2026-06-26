@@ -32,6 +32,7 @@ export const AuditLogResponseSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   actorId: z.string(),
+  actorName: z.string().nullable().optional(),
   action: z.string(),
   targetType: z.string(),
   targetId: z.string(),
