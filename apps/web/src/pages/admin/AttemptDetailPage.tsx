@@ -485,7 +485,10 @@ export function AttemptDetailPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
-  if (!result && !liveAttempt) return null;
+  if (!result && !liveAttempt)
+    return (
+      <ErrorState message="答题数据加载异常，请重试" onRetry={loadResult} />
+    );
 
   // Live (in_progress/disrupted) attempt: admin misconduct-flag action view.
   if (liveAttempt && !result) {
@@ -602,7 +605,10 @@ export function AttemptDetailPage() {
   }
 
   // Past this point the attempt is graded with a visible result.
-  if (!result) return null;
+  if (!result)
+    return (
+      <ErrorState message="成绩数据加载异常，请重试" onRetry={loadResult} />
+    );
 
   const sortedQuestions = [...result.questionResults].sort(
     (a, b) => a.order - b.order,

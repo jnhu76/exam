@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { api } from "@/lib/api";
+import { downloadFile } from "@/lib/download";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -67,6 +69,7 @@ export function ScoreListPage() {
   const [scores, setScores] = useState<ScoreListResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const page = parseInt(searchParams.get("page") || "1", 10);
   const passFilter = (searchParams.get("passFilter") || "all") as
@@ -95,6 +98,26 @@ export function ScoreListPage() {
     }
   }, [id, page, passFilter]);
 
+  /** Downloads the scores CSV via the authenticated blob helper (cookie auth). */
+  const exportScores = useCallback(async () => {
+    if (!id || exporting) return;
+    setExporting(true);
+    try {
+      await downloadFile(
+        `/api/exams/${id}/export/scores`,
+        `scores-exam-${id}.csv`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message
+          ? `导出失败：${err.message}`
+          : "导出失败，请稍后重试",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [id, exporting]);
+
   useEffect(() => {
     loadScores();
   }, [loadScores]);
@@ -117,7 +140,10 @@ export function ScoreListPage() {
         }
       />
     );
-  if (!scores) return null;
+  if (!scores)
+    return (
+      <ErrorState message="成绩数据加载异常，请重试" onRetry={loadScores} />
+    );
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,17 +153,10 @@ export function ScoreListPage() {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => {
-                // Download CSV
-                const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
-                const url = `${baseUrl}/api/exams/${id}/export/scores`;
-                const a = document.createElement("a");
-                a.href = url;
-                a.target = "_blank";
-                a.click();
-              }}
+              onClick={() => void exportScores()}
+              disabled={exporting}
             >
-              导出CSV
+              {exporting ? "导出中..." : "导出CSV"}
             </Button>
             <Button
               variant="outline"

@@ -290,4 +290,15 @@ describe("validateScore", () => {
   it("returns error when score exceeds maxScore", () => {
     expect(validateScore(15, 10)).toBe("分数不能超过满分 (10)");
   });
+
+  it("does not white-screen on a malformed/null response (shows a retryable error)", async () => {
+    // A null body causes a downstream TypeError that the page catches; the
+    // key behavior is "no white screen" — a retryable ErrorState is shown.
+    getMock.mockResolvedValue(null);
+    renderPage();
+    // Either the catch-block message or the !data fallback message is fine;
+    // both are visible error states with a retry button.
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+  });
 });

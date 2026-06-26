@@ -149,7 +149,10 @@ export function GradingDetailPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadDetail} />;
-  if (!data) return null;
+  if (!data)
+    return (
+      <ErrorState message="评分数据加载异常，请重试" onRetry={loadDetail} />
+    );
 
   return (
     <div className="flex flex-col gap-6">
