@@ -80,6 +80,7 @@ command -v pnpm >/dev/null 2>&1 || { err "未找到 pnpm"; exit 127; }
 command -v docker >/dev/null 2>&1 || { err "未找到 docker"; exit 127; }
 
 API_PID=""
+API_Pgid=""
 cleanup() {
   local code=$?
   if [[ -n "$API_PID" ]] && kill -0 "$API_PID" 2>/dev/null; then
@@ -87,7 +88,17 @@ cleanup() {
       warn "KEEP_SERVER=1，保留 dev server (pid $API_PID)。手动停：kill $API_PID"
     else
       log "停 dev server (pid $API_PID)..."
-      kill "$API_PID" 2>/dev/null || true
+      # `pnpm dev` -> tsx watch -> forked node children. Killing only the top
+      # PID leaves orphaned watch/child processes holding :3000 across runs.
+      # Kill the whole process group (created via setsid at launch) so the
+      # entire tree dies, then reap.
+      if [[ -n "$API_Pgid" ]]; then
+        kill -TERM "-$API_Pgid" 2>/dev/null || true
+        sleep 1
+        kill -KILL "-$API_Pgid" 2>/dev/null || true
+      else
+        kill "$API_PID" 2>/dev/null || true
+      fi
       wait "$API_PID" 2>/dev/null || true
     fi
   fi
@@ -123,10 +134,12 @@ pnpm --filter @exam/web build >/dev/null
 rm -rf apps/api/public
 cp -r apps/web/dist apps/api/public
 
-# 5. 起 api dev server（带 E2E env，后台）
+# 5. 起 api dev server（带 E2E env，后台）。用 setsid 建独立进程组，cleanup
+#    时整组杀掉，避免 tsx watch fork 的子进程残留占住 :3000。
 log "启动 api dev server (:$APP_PORT, RATE_LIMIT_DISABLED, fast scanners)..."
-pnpm --filter @exam/api dev >/tmp/e2e-wsl-api.log 2>&1 &
+setsid pnpm --filter @exam/api dev >/tmp/e2e-wsl-api.log 2>&1 &
 API_PID=$!
+API_Pgid=$!
 
 # 6. 等 health
 log "等待 api 健康..."
