@@ -95,6 +95,7 @@ async function main() {
   const publicDir = resolve(
     fileURLToPath(new URL("../public", import.meta.url)),
   );
+  app.log.info({ publicDir, exists: existsSync(publicDir) }, "static dir");
   if (existsSync(publicDir)) {
     await app.register(fastifyStatic, {
       root: publicDir,
@@ -109,7 +110,18 @@ async function main() {
         }
       },
     });
-    app.setNotFoundHandler((_req, reply) => {
+    app.setNotFoundHandler((req, reply) => {
+      // SPA fallback: serve index.html only for navigation (route) requests,
+      // NOT for static asset requests. With `wildcard: false`, @fastify/static
+      // does not register a catch-all route, so requests for missing assets
+      // (e.g. /assets/*.js with a stale hash) would otherwise fall through here
+      // and return index.html as text/html — the browser then rejects the JS
+      // module (wrong MIME) and the app white-screens. Asset-looking requests
+      // get a real 404 instead. See fastify/fastify-static#299, fastify/help#74.
+      if (req.url.startsWith("/assets/") || /\.[^/]+$/.test(req.url)) {
+        reply.code(404).send("Not Found");
+        return;
+      }
       reply.sendFile("index.html");
     });
   }
