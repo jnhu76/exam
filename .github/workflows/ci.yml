@@ -124,7 +124,12 @@ jobs:
       # every test. (test:integration is a literal alias of `test`/`vitest run`
       # in db+api, so running it again would duplicate the full DB/API suites.)
       - name: Coverage (all packages)
-        run: pnpm coverage
+        # API_TEST_MAX_WORKERS + TEST_DB_ISOLATION=worker-database enable
+        # parallel file execution for @exam/api (each worker gets its own DB
+        # schema). Other packages ignore these env vars. ~2.5x faster than the
+        # serial default (fileParallelism:false). Validated stable across
+        # repeated runs (auth.test.ts timeouts resolved by per-worker isolation).
+        run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage
 
       - name: Build
         run: pnpm build
