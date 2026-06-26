@@ -1,15 +1,11 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { createDatabase, migratePostgres, schema } from "@exam/db";
+import { TEST_DB_URL } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { seed } from "@exam/db/src/seed.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
-
-const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  "postgresql://exam:exam@localhost:5432/exam_test";
 
 interface Deferred<T = void> {
   promise: Promise<T>;

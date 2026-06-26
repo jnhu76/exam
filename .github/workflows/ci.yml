@@ -120,12 +120,11 @@ jobs:
       # Coverage runs ALL packages (web/auth/domain/contracts/exam-engine/
       # import-export via turbo, db/api via vitest run --coverage) in a single
       # pass. `turbo coverage` internally parallelizes packages. No separate
-      # `test` pass needed — coverage already executes every test.
+      # `test` or `test:integration` pass needed — coverage already executes
+      # every test. (test:integration is a literal alias of `test`/`vitest run`
+      # in db+api, so running it again would duplicate the full DB/API suites.)
       - name: Coverage (all packages)
         run: pnpm coverage
-
-      - name: Integration tests
-        run: pnpm test:integration
 
       - name: Build
         run: pnpm build
