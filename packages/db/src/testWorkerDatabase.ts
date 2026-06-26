@@ -39,6 +39,7 @@
  */
 
 import postgres from "postgres";
+import { parseAppMode, resolveTestBranchUrl } from "./databaseUrl.js";
 import { createPostgresDatabase, migratePostgres } from "./postgres.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 import {
@@ -124,16 +125,12 @@ function assertPgNameSafe(name: string): void {
 
 /**
  * Reject if the environment looks like production. The helper is test-only.
- * Mirrors `apps/api/src/config/runtimeConfig.ts` `parseAppMode` semantics:
- * `APP_MODE` is authoritative; `NODE_ENV=production` is treated as production
- * when `APP_MODE` is unset.
+ * Delegates mode semantics to the single-source `parseAppMode` (APP_MODE is
+ * authoritative; NODE_ENV=production is treated as production when APP_MODE
+ * is unset).
  */
 function assertNotProduction(env: ResolverEnv): void {
-  const appMode = env.APP_MODE;
-  const isProduction =
-    appMode === "production" ||
-    (appMode === undefined && env.NODE_ENV === "production");
-  if (isProduction) {
+  if (parseAppMode(env) === "production") {
     throw new Error(
       "[testWorkerDatabase] refusing to run in production mode (APP_MODE=production or NODE_ENV=production)",
     );
@@ -141,21 +138,28 @@ function assertNotProduction(env: ResolverEnv): void {
 }
 
 /**
- * Resolve the base test database URL (the maintenance-DB-peer that the admin
- * connection uses to reach the server). Falls back to the conventional
- * `exam_test` URL used across the test harness.
+ * Resolve the base database URL from environment.
+ * Uses TEST_DATABASE_URL or TEST_DB_URL only — never falls back to DATABASE_URL.
+ * Validates the postgres protocol FIRST (a worker-specific precondition,
+ * checked before name-safety so a malformed scheme is reported as such), then
+ * delegates URL + name-safety to the single-source test-branch resolver.
  */
 function resolveBaseUrl(env: ResolverEnv): string {
-  const url =
-    env.TEST_DATABASE_URL ??
-    env.DATABASE_URL ??
-    "postgresql://exam:exam@localhost:5432/exam_test";
-  if (!url.startsWith("postgresql://") && !url.startsWith("postgres://")) {
+  const raw = env.TEST_DATABASE_URL ?? env.TEST_DB_URL;
+  if (!raw) {
     throw new Error(
-      `[testWorkerDatabase] base database URL must be postgresql:// or postgres://, got: ${url}`,
+      "TEST_DATABASE_URL is required for worker-database test isolation. " +
+        "Refusing to use DATABASE_URL as test database.",
     );
   }
-  return url;
+  if (!raw.startsWith("postgresql://") && !raw.startsWith("postgres://")) {
+    throw new Error(
+      `[testWorkerDatabase] base database URL must be postgresql:// or postgres://, got: ${raw}`,
+    );
+  }
+  // Protocol-valid: now delegate to the single-source resolver for the full
+  // name-safety guard (TEST_DATABASE_URL ?? TEST_DB_URL + test/e2e/ci check).
+  return resolveTestBranchUrl(env);
 }
 
 /**

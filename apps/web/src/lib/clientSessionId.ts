@@ -40,14 +40,61 @@ function store(id: string): void {
  * Returns the stable per-tab session id, generating and persisting it on first
  * use. Never throws: on any storage failure it falls back to a freshly
  * generated id that lives for the page lifetime.
+ *
+ * `crypto.randomUUID` requires a secure context (HTTPS or localhost). The exam
+ * platform is LAN/on-premise and may be served over plain HTTP at a raw IP
+ * (not localhost), where `crypto.randomUUID` is `undefined` and calling it
+ * throws — which would crash the exam flow (e.g. enterExam's navigate). We
+ * guard for that and fall back to a manual RFC-4122 v4 UUID built from
+ * `crypto.getRandomValues`, which is available in all contexts (it is NOT
+ * gated behind secure context, unlike randomUUID/crypto.subtle). A final
+ * Math.random-based fallback covers the theoretical case where `crypto` is
+ * entirely absent, so the "never throws" contract holds unconditionally.
  */
+function generateId(): string {
+  try {
+    if (
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+    ) {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // secure-context rejection or other failure — fall through to fallback
+  }
+  // Fallback 1: RFC-4122 v4 via getRandomValues (available in all contexts,
+  // including plain-HTTP raw-IP origins — not gated behind secure context).
+  if (typeof crypto?.getRandomValues === "function") {
+    try {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      // Per RFC 4122 §4.4: set version (4) and variant (10xx).
+      bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+      bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+      const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0"));
+      return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex
+        .slice(6, 8)
+        .join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+    } catch {
+      // fall through to Math.random fallback
+    }
+  }
+  // Fallback 2: Math.random-based id (no Web Crypto available at all). Not a
+  // standards-conformant UUID, but unique enough for a per-tab session id.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function getClientSessionId(): string {
   if (!hasBrowserStorage()) return NON_BROWSER_SENTINEL;
 
   const existing = readStored();
   if (existing) return existing;
 
-  const id = crypto.randomUUID();
+  const id = generateId();
   store(id);
   return id;
 }

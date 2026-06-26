@@ -19,19 +19,22 @@
       "dependsOn": ["^build"]
     },
     "@exam/api#test": {
-      "dependsOn": ["^build", "@exam/db#test"]
+      "dependsOn": ["^build", "@exam/db#test"],
+      "passThroughEnv": ["TEST_DB_ISOLATION", "API_TEST_MAX_WORKERS"]
     },
     "coverage": {
       "dependsOn": ["^build"]
     },
     "@exam/api#coverage": {
-      "dependsOn": ["^build", "@exam/db#coverage"]
+      "dependsOn": ["^build", "@exam/db#coverage"],
+      "passThroughEnv": ["TEST_DB_ISOLATION", "API_TEST_MAX_WORKERS"]
     },
     "test:integration": {
       "dependsOn": ["^build"]
     },
     "@exam/api#test:integration": {
-      "dependsOn": ["^build", "@exam/db#test:integration"]
+      "dependsOn": ["^build", "@exam/db#test:integration"],
+      "passThroughEnv": ["TEST_DB_ISOLATION", "API_TEST_MAX_WORKERS"]
     },
     "test:e2e": {},
     "smoke": {}

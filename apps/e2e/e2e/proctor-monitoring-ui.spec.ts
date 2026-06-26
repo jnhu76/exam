@@ -41,7 +41,9 @@ test.describe("Proctor Monitoring UI E2E", () => {
     await page.goto(`/admin/exams/${(seeded as any).examId}/proctor/monitor`);
     await page.waitForURL("**/proctor/monitor**", { timeout: 15_000 });
 
-    await expect(page.getByText("考试监控")).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("heading", { name: "考试监控", level: 1 }),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText((seeded as any).candidate.name)).toBeVisible({
       timeout: 15_000,
     });
@@ -56,7 +58,9 @@ test.describe("Proctor Monitoring UI E2E", () => {
     await page.goto(`/admin/exams/${(seeded as any).examId}/proctor/monitor`);
     await page.waitForURL("**/proctor/monitor**", { timeout: 15_000 });
 
-    await expect(page.getByText("考试监控")).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("heading", { name: "考试监控", level: 1 }),
+    ).toBeVisible({ timeout: 15_000 });
 
     const statusBadge = page.getByText("在线");
     await expect(statusBadge.first()).toBeVisible({ timeout: 15_000 });
@@ -69,7 +73,9 @@ test.describe("Proctor Monitoring UI E2E", () => {
     await page.goto(`/admin/exams/${(seeded as any).examId}/proctor/monitor`);
     await page.waitForURL("**/proctor/monitor**", { timeout: 15_000 });
 
-    await expect(page.getByText("考试监控")).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("heading", { name: "考试监控", level: 1 }),
+    ).toBeVisible({ timeout: 15_000 });
 
     await expect(page.getByText("最近心跳")).toBeVisible();
     await expect(page.getByText("最近保存")).toBeVisible();
@@ -85,7 +91,9 @@ test.describe("Proctor Monitoring UI E2E", () => {
     await page.goto(`/admin/exams/${(seeded as any).examId}/proctor/monitor`);
     await page.waitForURL("**/proctor/monitor**", { timeout: 15_000 });
 
-    await expect(page.getByText("考试监控")).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("heading", { name: "考试监控", level: 1 }),
+    ).toBeVisible({ timeout: 15_000 });
 
     const timelineBtn = page.getByRole("button", { name: "时间线" });
     await expect(timelineBtn.first()).toBeVisible({ timeout: 15_000 });

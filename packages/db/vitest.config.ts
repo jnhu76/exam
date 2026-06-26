@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
+import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
@@ -35,6 +36,11 @@ const workspaceRoot = path.resolve(__dirname, "../..");
 export default defineConfig(({ mode }) => ({
   test: {
     exclude: ["dist/**", "node_modules/**"],
-    env: loadEnv(mode, workspaceRoot, ""),
+    // Force test runtime mode via the monorepo-shared constant so every
+    // package's vitest config agrees (see ../../vitest.shared.ts for why).
+    env: {
+      ...loadEnv(mode, workspaceRoot, ""),
+      ...TEST_RUNTIME_ENV,
+    },
   },
 }));

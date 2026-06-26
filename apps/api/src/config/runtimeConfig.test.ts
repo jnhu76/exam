@@ -154,6 +154,7 @@ describe("runtimeConfig", () => {
 
     it("is enabled when API_DOCS_ENABLED=true and not production", () => {
       process.env.NODE_ENV = "test";
+      process.env.TEST_DATABASE_URL = "postgresql://t:t@h:5432/test_db";
       process.env.API_DOCS_ENABLED = "true";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
@@ -163,6 +164,7 @@ describe("runtimeConfig", () => {
     it("is disabled when API_DOCS_ENABLED is not set", () => {
       delete process.env.API_DOCS_ENABLED;
       process.env.NODE_ENV = "test";
+      process.env.TEST_DATABASE_URL = "postgresql://t:t@h:5432/test_db";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.apiReference.enabled).toBe(false);
@@ -232,6 +234,8 @@ describe("runtimeConfig", () => {
     it("respects explicit APP_MODE over NODE_ENV", () => {
       process.env.NODE_ENV = "production";
       process.env.APP_MODE = "test";
+      process.env.TEST_DATABASE_URL =
+        "postgresql://test:test@host:5432/test_db";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("test");
@@ -278,6 +282,8 @@ describe("runtimeConfig", () => {
     it("APP_MODE=ci NODE_ENV=production resolves ci", () => {
       process.env.APP_MODE = "ci";
       process.env.NODE_ENV = "production";
+      process.env.TEST_DATABASE_URL =
+        "postgresql://test:test@host:5432/test_db";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("ci");
@@ -298,6 +304,8 @@ describe("runtimeConfig", () => {
     it("APP_MODE unset + NODE_ENV=test resolves test", () => {
       delete process.env.APP_MODE;
       process.env.NODE_ENV = "test";
+      process.env.TEST_DATABASE_URL =
+        "postgresql://test:test@host:5432/test_db";
       resetRuntimeConfigForTest();
       const config = getRuntimeConfig();
       expect(config.app.mode).toBe("test");
@@ -415,13 +423,13 @@ describe("runtimeConfig", () => {
       expect(config.database.url).toBe("postgresql://t:t@h:5432/testdb");
     });
 
-    it("uses DATABASE_URL in e2e mode when TEST_DATABASE_URL is unset", () => {
+    it("throws in e2e mode when TEST_DATABASE_URL is unset", () => {
       process.env.APP_MODE = "e2e";
       delete process.env.TEST_DATABASE_URL;
+      delete process.env.TEST_DB_URL;
       process.env.DATABASE_URL = "postgresql://e:e@h:5432/e2edb";
       resetRuntimeConfigForTest();
-      const config = getRuntimeConfig();
-      expect(config.database.url).toBe("postgresql://e:e@h:5432/e2edb");
+      expect(() => getRuntimeConfig()).toThrow(/TEST_DATABASE_URL is required/);
     });
 
     it("uses DATABASE_URL in development", () => {
@@ -535,6 +543,7 @@ describe("runtimeConfig", () => {
     it("test comma list → string[]", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "test",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/test_db",
         CORS_ORIGIN: "http://a,http://b",
       });
       expect(config.cors.origin).toEqual(["http://a", "http://b"]);
@@ -543,6 +552,7 @@ describe("runtimeConfig", () => {
     it("e2e comma list → string[]", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
         CORS_ORIGIN: "http://a,http://b",
       });
       expect(config.cors.origin).toEqual(["http://a", "http://b"]);
@@ -551,6 +561,7 @@ describe("runtimeConfig", () => {
     it("ci comma list → string[]", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "ci",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/ci_db",
         CORS_ORIGIN: "http://a,http://b",
       });
       expect(config.cors.origin).toEqual(["http://a", "http://b"]);
@@ -682,6 +693,7 @@ describe("runtimeConfig", () => {
     it("APP_MODE=e2e disables rate limiting for deterministic browser tests", () => {
       const config = loadRuntimeConfig({
         APP_MODE: "e2e",
+        TEST_DATABASE_URL: "postgresql://t:t@h:5432/e2e_db",
         RATE_LIMIT_MAX: "1",
         RATE_LIMIT_WINDOW_MS: "60000",
       });

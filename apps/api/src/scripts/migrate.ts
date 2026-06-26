@@ -4,21 +4,9 @@ import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 
 loadRootEnv();
 
-let databaseUrl: string;
-try {
-  databaseUrl = resolveDatabaseUrlFromEnv(process.env);
-} catch (err) {
-  process.stderr.write(`FATAL: ${(err as Error).message}\n`);
-  process.exit(1);
-}
-
-if (!databaseUrl) {
-  process.stderr.write(
-    "FATAL: DATABASE_URL is required for migrations. Set it in your environment or .env file.\n",
-  );
-  process.exit(1);
-}
-
+// resolveDatabaseUrlFromEnv throws (RuntimeConfigError) when the required DB
+// URL is missing for the resolved mode — no separate empty-check needed.
+const databaseUrl = resolveDatabaseUrlFromEnv(process.env);
 const conn = await createDatabase(databaseUrl);
 
 process.stdout.write("Running PostgreSQL migrations...\n");

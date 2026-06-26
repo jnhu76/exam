@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { withTestInfraLifecycleLock } from "./testInfraLock.js";
 
 /**
@@ -182,7 +183,7 @@ export interface TestDbIsolationOptions {
   namespace: string;
   /** Optional worker/process identifier. */
   workerId?: string;
-  /** Base database URL (without search_path). Falls back to TEST_DATABASE_URL then DATABASE_URL. */
+  /** Base database URL (without search_path). Falls back to TEST_DATABASE_URL/TEST_DB_URL (never DATABASE_URL). */
   databaseUrl?: string;
   /** If true, the schema will NOT be dropped on cleanup (useful for debugging). */
   keepSchema?: boolean;
@@ -202,14 +203,13 @@ export interface IsolatedTestDb {
 
 /**
  * Resolve the base database URL from options or environment.
+ * Uses TEST_DATABASE_URL or TEST_DB_URL only — never falls back to DATABASE_URL.
+ * Delegates the env path to the single-source test-branch resolver so the
+ * test name-safety guard is applied uniformly.
  */
 function resolveBaseUrl(options: TestDbIsolationOptions): string {
   if (options.databaseUrl) return stripOptionsFromUrl(options.databaseUrl);
-  return (
-    process.env.TEST_DATABASE_URL ??
-    process.env.DATABASE_URL ??
-    "postgresql://exam:exam@localhost:5432/exam_test"
-  );
+  return resolveTestBranchUrl(process.env);
 }
 
 /**

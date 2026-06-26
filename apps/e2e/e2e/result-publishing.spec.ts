@@ -86,7 +86,9 @@ test.describe("result publishing policy (P2D-J5)", () => {
     await expect(page.getByTestId("result-status-message")).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByText("成绩尚未公布")).toBeVisible();
+    await expect(
+      page.getByText("成绩正在审核中，将在公布后可见"),
+    ).toBeVisible();
     await expect(page.getByTestId("result-total-score")).toHaveCount(0);
 
     // Confirm via API: hidden with the pending_publish reason.

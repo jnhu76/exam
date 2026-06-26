@@ -1,5 +1,6 @@
 export * from "./schema/pg.js";
 export * from "./database.js";
+export * from "./databaseUrl.js";
 export * from "./postgres.js";
 export * from "./types.js";
 export * from "./testScope.js";

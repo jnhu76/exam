@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
+import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
@@ -17,7 +18,8 @@ const workspaceRoot = path.resolve(__dirname, "../..");
 // 此处保留 fileParallelism: false 作为默认安全网：apps/api 的 auth.test.ts 在
 // 默认并行下仍会因并发 buildTestApp() + 6 轮 audit-polling 叠加导致偶发超时。
 // packages/db 已恢复并行（见其 vitest.config.ts），turbo 层通过
-// @exam/db#coverage dependsOn @exam/db#test 避免 DB-heavy task 叠压。
+// @exam/api#{test,coverage,test:integration} dependsOn @exam/db#{...}
+// 施加 db→api 顺序，避免 DB-heavy task 叠压（见 turbo.json）。
 //
 // PR86 诊断矩阵（vitest 4.1.x，8 core，10 GB）：
 //   A 串行（默认）                  → 8/8 PASS
@@ -88,7 +90,12 @@ const parallelism = resolveParallelism();
 export default defineConfig(({ mode }) => ({
   test: {
     exclude: ["dist/**", "node_modules/**"],
-    env: loadEnv(mode, workspaceRoot, ""),
+    // Force test runtime mode via the monorepo-shared constant so every
+    // package's vitest config agrees (see ../../vitest.shared.ts for why).
+    env: {
+      ...loadEnv(mode, workspaceRoot, ""),
+      ...TEST_RUNTIME_ENV,
+    },
     fileParallelism: parallelism.fileParallelism,
     ...(parallelism.maxWorkers !== undefined
       ? { maxWorkers: parallelism.maxWorkers }

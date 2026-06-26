@@ -36,7 +36,12 @@ test.describe("audit log viewer (P2E-J1)", () => {
     await loginAsAdmin(page);
     await page.goto("/admin/audit-logs");
 
-    await expect(page.getByRole("heading", { name: "审计日志" })).toBeVisible({
+    // Use level:1 to disambiguate from the sidebar's <h2>审计日志</h2> nav item
+    // (both match getByRole("heading", { name: "审计日志" }); without level the
+    // strict-mode locator resolves to 2 elements and fails).
+    await expect(
+      page.getByRole("heading", { name: "审计日志", level: 1 }),
+    ).toBeVisible({
       timeout: 15_000,
     });
     // The table should render at least one data row.
@@ -99,7 +104,12 @@ test.describe("audit log viewer (P2E-J1)", () => {
   test("admin filters by date range (from=today)", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto("/admin/audit-logs");
-    await expect(page.getByRole("heading", { name: "审计日志" })).toBeVisible({
+    // Use level:1 to disambiguate from the sidebar's <h2>审计日志</h2> nav item
+    // (both match getByRole("heading", { name: "审计日志" }); without level the
+    // strict-mode locator resolves to 2 elements and fails).
+    await expect(
+      page.getByRole("heading", { name: "审计日志", level: 1 }),
+    ).toBeVisible({
       timeout: 15_000,
     });
 

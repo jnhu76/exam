@@ -279,26 +279,34 @@ pnpm --filter db test
 
 > **Note**: DB-dependent tests (`@exam/db`, `@exam/api`) require a running
 > PostgreSQL. Redis tests require a running Redis instance. Start both with
-> `pnpm db:up` (uses `docker-compose.dev.yml`, PostgreSQL 18 + Redis 7 on
-> ports `5432`/`6379`) and set `DATABASE_URL` / `TEST_DATABASE_URL` /
-> `REDIS_URL` to point at them. In CI, GitHub Actions `services: postgres` and
-> `services: redis` provide these instead.
+> `pnpm db:up` (uses `docker-compose.dev.yml`, PostgreSQL 18 + Redis 7). The
+> dev compose maps PostgreSQL to host port **`15432`** (host `:5432` is
+> commonly occupied on Windows/WSL; override via `DB_HOST_PORT`).
+> `pnpm db:up` auto-creates both `exam` (dev runtime) and `exam_test` (tests)
+> databases; set `DATABASE_URL` / `TEST_DATABASE_URL` / `REDIS_URL` in `.env`
+> to point at them (see `.env.example`). In CI, GitHub Actions `services:
+> postgres` and `services: redis` provide these instead (on `:5432`/`:6379`,
+> since CI runs in an isolated VM).
 
-### Quick local test setup (Docker)
+### Quick local test setup
 
 ```bash
-# Start PostgreSQL + Redis
-docker run -d --name exam-pg -p 5432:5432 \
-  -e POSTGRES_USER=exam -e POSTGRES_PASSWORD=exam -e POSTGRES_DB=exam_test \
-  postgres:18.4-bookworm
+# 1. Start PostgreSQL + Redis (creates exam + exam_test databases)
+pnpm db:up
 
-docker run -d --name exam-redis -p 6379:6379 redis:7-alpine
+# 2. Copy .env.example → .env and adjust ports if needed:
+#    DATABASE_URL=postgresql://exam:exam@localhost:15432/exam
+#    TEST_DATABASE_URL=postgresql://exam:exam@localhost:15432/exam_test
+#    REDIS_URL=redis://localhost:6379
 
-# Run tests with both services
-REDIS_URL=redis://127.0.0.1:6379 \
-DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test \
+# 3. Run tests (vitest loads .env; @exam/db + @exam/api hit exam_test)
 pnpm coverage
 ```
+
+> WSL/Windows users: host `:5432` is often taken by a Windows-side service, so
+> the dev compose publishes `15432` instead. CI uses `:5432` (isolated VM).
+> The single-source DB resolver (`packages/db/src/databaseUrl.ts`) reads the
+> URL from env; tests never silently fall back to a guessed localhost.
 
 ### E2E Tests (Playwright, browser)
 
@@ -308,7 +316,28 @@ grading, result publishing, proctor runtime, disconnect/restore, deadline
 crash, fill_blank, multi_select, proctor monitoring UI). See **[`docs/dev/e2e-testing.md`](docs/dev/e2e-testing.md)** for the
 full guide (prerequisites, flags, env vars, targeting, seed, debugging).
 
-**Canonical one-command entry** (builds, starts the stack, runs Playwright,
+**Two execution modes — choose by environment:**
+
+- **WSL / local** (`scripts/e2e/run-wsl.sh`) — runs the API dev server + a local
+  Chromium on the host. Faster iteration; requires Node/pnpm/Playwright locally
+  and the dev compose (`pnpm db:up`). Best for development.
+- **Docker** (`scripts/e2e/run.sh`) — builds the full app image and runs
+  Playwright in a container. No local Node/Playwright needed; matches CI most
+  closely. Best for CI-parity and isolated runs.
+
+Both should produce the same pass/fail set.
+
+**WSL / local one-command entry**:
+
+```bash
+bash scripts/e2e/run-wsl.sh                       # run all specs (host Chromium)
+bash scripts/e2e/run-wsl.sh candidate-happy-path  # spec filename keyword
+bash scripts/e2e/run-wsl.sh --grep "happy path"   # Playwright title regex
+bash scripts/e2e/run-wsl.sh --no-reseed           # reuse existing seed data
+bash scripts/e2e/run-wsl.sh --keep-server         # leave dev server running
+```
+
+**Docker one-command entry** (builds, starts the stack, runs Playwright,
 cleans up — requires Docker, no local Playwright install):
 
 ```bash

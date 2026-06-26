@@ -1,0 +1,14 @@
+-- Dev/test dual-database initialization.
+--
+-- POSTGRES_DB (docker-compose.dev.yml) auto-creates exactly one database (exam,
+-- the dev runtime DB). pnpm test requires a separate exam_test database whose
+-- name satisfies the testDb.ts name-safety check (must contain test/e2e/ci).
+--
+-- This script runs once on first container initialization (empty data dir) per
+-- the official postgres image /docker-entrypoint-initdb.d convention, so the
+-- database is guaranteed not to exist yet — no idempotency guard needed.
+-- POSTGRES_USER (exam) is a superuser and may CREATE DATABASE.
+--
+-- Note: CREATE DATABASE cannot run inside a function/transaction block, so this
+-- must be a bare statement (not wrapped in DO $$ ... $$).
+CREATE DATABASE exam_test;

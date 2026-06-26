@@ -163,6 +163,11 @@ export async function seedExam(
   });
   const questionId = question.id as string;
 
+  // Objective (true_false) question renders FIRST, subjective (fill_blank)
+  // questions AFTER — this matches spec assumptions (e.g. manual-grading answers
+  // the objective Q1 first, then navigates to subjective Q2). HEAD had this
+  // order; a later edit (to fix totalScore) accidentally reversed it by
+  // initializing questionIds empty and pushing base last.
   const questionIds: string[] = [questionId];
   const subjectiveQuestionIds: string[] = [];
   for (const sq of opts.subjectiveQuestions ?? []) {
@@ -178,6 +183,11 @@ export async function seedExam(
     questionIds.push(created.id as string);
   }
 
+  const subjectiveTotal =
+    opts.subjectiveQuestions?.reduce((sum, q) => sum + q.score, 0) ?? 0;
+  const baseQuestionScore = opts.questionScore ?? 100;
+  const computedTotalScore = baseQuestionScore + subjectiveTotal;
+
   const exam = await adminPost(request, baseURL, token, "/api/exams", {
     title: examTitle,
     description: "",
@@ -187,7 +197,7 @@ export async function seedExam(
     openAt: new Date(Date.now() - 3600_000).toISOString(),
     closeAt: new Date(Date.now() + 86400_000).toISOString(),
     passingScore: opts.passingScore ?? 60,
-    totalScore: opts.totalScore ?? 100,
+    totalScore: opts.totalScore ?? computedTotalScore,
     questionSelectionMode: "manual",
     questionIds,
     resultPublicationMode: opts.resultPublicationMode ?? "immediate",

@@ -1,16 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase, migratePostgres } from "@exam/db";
+import { TEST_DB_URL } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
 import { eq } from "drizzle-orm";
 import { verifyPassword } from "@exam/auth/src/password.js";
 import { bootstrapAdmin } from "./bootstrap-admin.js";
-
-const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  "postgresql://exam:exam@localhost:5432/exam_test";
 
 let _counter = 0;
 async function freshOrg(db: Database): Promise<string> {

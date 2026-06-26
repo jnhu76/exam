@@ -1,4 +1,5 @@
 import { createDatabase } from "./database.js";
+import { resolveTestBranchUrl } from "./databaseUrl.js";
 import { migratePostgres } from "./postgres.js";
 import {
   isTestDbIsolationEnabled,
@@ -7,11 +8,27 @@ import {
 } from "./testIsolation.js";
 import type { Database } from "./types.js";
 
-/** Database URL for the test database, defaults to `exam_test`. */
-export const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  "postgresql://exam:exam@localhost:5432/exam_test";
+/**
+ * Resolve the test database URL from environment variables.
+ *
+ * Delegates to the shared single-source test-branch resolver
+ * ({@link resolveTestBranchUrl}) in `databaseUrl.ts`. This function is kept as
+ * a stable, named export because 16+ test files import it directly. It is
+ * intentionally mode-agnostic: it ALWAYS reads TEST_DATABASE_URL ?? TEST_DB_URL
+ * and enforces the test name-safety guard, regardless of APP_MODE.
+ *
+ * @param env - Process environment to read from (defaults to `process.env`).
+ * @returns A validated test database URL.
+ * @throws If no test DB URL is set or the database name is unsafe.
+ */
+export function resolveTestDatabaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return resolveTestBranchUrl(env);
+}
+
+/** Canonical test database URL — resolved once at module load. */
+export const TEST_DB_URL = resolveTestDatabaseUrl();
 
 /** Shared database instance (lazy-initialized). */
 let _sharedDb: Database | null = null;

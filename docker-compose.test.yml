@@ -4,7 +4,10 @@ services:
     ports:
       - "${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://exam:exam@db:5432/exam
+      # DB URLs are templated from the db service's POSTGRES_* vars so the db
+      # name has a single source (POSTGRES_DB) — no 4-way hardcoded duplication.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam_test}
+      TEST_DATABASE_URL: postgresql://${POSTGRES_USER:-exam}:${POSTGRES_PASSWORD:-exam}@db:5432/${POSTGRES_DB:-exam_test}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-e2e-test-secret}
       NODE_ENV: development
@@ -67,16 +70,26 @@ services:
     ports:
       - "${DB_HOST_PORT:-5432}:5432"
     environment:
-      POSTGRES_USER: exam
-      POSTGRES_PASSWORD: exam
-      POSTGRES_DB: exam
+      # Single source for the db name/creds; the app URLs and healthcheck
+      # interpolate these same vars so they can never diverge.
+      POSTGRES_USER: ${POSTGRES_USER:-exam}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-exam}
+      POSTGRES_DB: ${POSTGRES_DB:-exam_test}
       # ADR-006: display/session timezone only; business time is instant-based.
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-U",
+          "${POSTGRES_USER:-exam}",
+          "-d",
+          "${POSTGRES_DB:-exam_test}",
+        ]
       interval: 5s
       timeout: 3s
       retries: 5
