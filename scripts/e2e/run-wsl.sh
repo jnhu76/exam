@@ -80,7 +80,6 @@ command -v pnpm >/dev/null 2>&1 || { err "未找到 pnpm"; exit 127; }
 command -v docker >/dev/null 2>&1 || { err "未找到 docker"; exit 127; }
 
 API_PID=""
-API_Pgid=""
 cleanup() {
   local code=$?
   if [[ -n "$API_PID" ]] && kill -0 "$API_PID" 2>/dev/null; then
@@ -88,17 +87,15 @@ cleanup() {
       warn "KEEP_SERVER=1，保留 dev server (pid $API_PID)。手动停：kill $API_PID"
     else
       log "停 dev server (pid $API_PID)..."
-      # `pnpm dev` -> tsx watch -> forked node children. Killing only the top
-      # PID leaves orphaned watch/child processes holding :3000 across runs.
-      # Kill the whole process group (created via setsid at launch) so the
-      # entire tree dies, then reap.
-      if [[ -n "$API_Pgid" ]]; then
-        kill -TERM "-$API_Pgid" 2>/dev/null || true
-        sleep 1
-        kill -KILL "-$API_Pgid" 2>/dev/null || true
-      else
-        kill "$API_PID" 2>/dev/null || true
-      fi
+      # The dev server is launched via `setsid` (see launch below), so it is a
+      # session + process-group leader and PID == PGID. `pnpm dev` -> tsx watch
+      # forks node children that would survive a single kill of $API_PID;
+      # signaling the negative PID kills the whole group. (man setpgid(2): the
+      # leader's PID equals the PGID; man kill(1): a negative pid signals the
+      # process group.)
+      kill -TERM "-$API_PID" 2>/dev/null || true
+      sleep 1
+      kill -KILL "-$API_PID" 2>/dev/null || true
       wait "$API_PID" 2>/dev/null || true
     fi
   fi
@@ -116,9 +113,9 @@ docker compose -f "$DEV_COMPOSE" up -d --wait >/dev/null
 docker run --rm -v "$ROOT_DIR/apps/e2e:/data" alpine \
   sh -c "rm -rf /data/test-results /data/playwright-report" 2>/dev/null || true
 
-# 2. migrate
+# 2. migrate（stdout 安静，stderr 保留以便看到失败原因）
 log "迁移 exam 库..."
-pnpm --filter @exam/api exec tsx src/scripts/migrate.ts >/dev/null
+pnpm --filter @exam/api exec tsx src/scripts/migrate.ts 1>/dev/null
 
 # 3. e2e seed（admin + candidate1..4 demo）
 if [[ "$RESEED" == "1" ]]; then
@@ -134,12 +131,12 @@ pnpm --filter @exam/web build >/dev/null
 rm -rf apps/api/public
 cp -r apps/web/dist apps/api/public
 
-# 5. 起 api dev server（带 E2E env，后台）。用 setsid 建独立进程组，cleanup
-#    时整组杀掉，避免 tsx watch fork 的子进程残留占住 :3000。
+# 5. 起 api dev server（带 E2E env，后台）。用 setsid 建独立 session/进程组，
+#    cleanup 时 kill -PID 杀整组（PID==PGID for a session leader），避免 tsx
+#    watch fork 的子进程残留占住 :3000。
 log "启动 api dev server (:$APP_PORT, RATE_LIMIT_DISABLED, fast scanners)..."
 setsid pnpm --filter @exam/api dev >/tmp/e2e-wsl-api.log 2>&1 &
 API_PID=$!
-API_Pgid=$!
 
 # 6. 等 health
 log "等待 api 健康..."
