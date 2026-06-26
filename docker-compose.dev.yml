@@ -6,11 +6,17 @@ services:
     environment:
       POSTGRES_USER: exam
       POSTGRES_PASSWORD: exam
-      POSTGRES_DB: exam_test
+      POSTGRES_DB: exam
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
+    # Create the exam_test database (required by pnpm test's testDb.ts
+    # name-safety check) alongside the exam dev DB. POSTGRES_DB auto-creates
+    # only one DB; this init script creates the second. Runs once on first
+    # initialization (empty data dir) per the postgres image convention.
+    volumes:
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam_test"]
+      test: ["CMD", "pg_isready", "-U", "exam", "-d", "exam"]
       interval: 2s
       timeout: 3s
       retries: 10

@@ -13,10 +13,17 @@
  * - production must fail fast on missing JWT_SECRET / DATABASE_URL / CORS_ORIGIN.
  */
 
+import {
+  parseAppMode as parseAppModeCore,
+  resolveDatabaseUrl as resolveDatabaseUrlCore,
+  type AppMode as AppModeCore,
+} from "@exam/db";
 import { RuntimeConfigError } from "@exam/domain";
 import { z } from "zod";
 
-export type AppMode = "development" | "test" | "e2e" | "ci" | "production";
+// AppMode is sourced from the single-source resolver in @exam/db. Re-exported
+// here for backward compatibility with existing importers.
+export type AppMode = AppModeCore;
 export type AppEnv = "development" | "test" | "production";
 
 /**
@@ -121,8 +128,6 @@ export interface AppRuntimeConfig {
   timezone: TimezoneConfig;
 }
 
-const APP_MODES = ["development", "test", "e2e", "ci", "production"] as const;
-
 const DEFAULT_JWT_SECRET = "development-only-change-me";
 
 /**
@@ -169,27 +174,21 @@ const positiveIntSchema = z
 
 /**
  * Resolve the application runtime mode from `APP_MODE`, falling back to
- * `NODE_ENV` when `APP_MODE` is unset. Throws if `APP_MODE` is set to
- * an invalid value.
+ * `NODE_ENV` when `APP_MODE` is unset.
+ *
+ * Delegates the mode-selection logic to the single-source resolver in
+ * `@exam/db` and wraps any error as a {@link RuntimeConfigError} so callers
+ * that rely on this typed error are unaffected.
  *
  * @param env - Process environment to read from.
  * @returns The resolved {@link AppMode}.
  */
 function parseAppMode(env: NodeJS.ProcessEnv): AppMode {
-  const appMode = env.APP_MODE;
-  if (appMode === undefined || appMode === "") {
-    // Fallback: infer from NODE_ENV (build/toolchain signal).
-    if (env.NODE_ENV === "production") return "production";
-    if (env.NODE_ENV === "test") return "test";
-    return "development";
+  try {
+    return parseAppModeCore(env);
+  } catch (err) {
+    throw new RuntimeConfigError((err as Error).message);
   }
-  if ((APP_MODES as readonly string[]).includes(appMode)) {
-    return appMode as AppMode;
-  }
-  // APP_MODE is set but invalid — fail fast.
-  throw new RuntimeConfigError(
-    `Invalid APP_MODE "${appMode}". Valid values: ${APP_MODES.join(", ")}`,
-  );
 }
 
 /**
@@ -279,35 +278,24 @@ function resolveJwtSecret(env: NodeJS.ProcessEnv, mode: AppMode): string {
 }
 
 /**
- * Resolve the database connection URL. E2E and test/CI modes prefer
- * `TEST_DATABASE_URL`, falling back to `DATABASE_URL` (e2e only) and
- * then to a localhost default. Production requires `DATABASE_URL` or
- * fails fast.
+ * Resolve the database connection URL.
+ *
+ * Delegates to the single-source resolver in `@exam/db` (which routes by
+ * APP_MODE: test/ci/e2e → TEST_DATABASE_URL, else DATABASE_URL) and wraps any
+ * error as a {@link RuntimeConfigError}. The `mode` argument is retained for
+ * signature compatibility but the core resolver re-derives mode from env so
+ * the two cannot diverge.
  *
  * @param env - Process environment to read from.
- * @param mode - Current {@link AppMode}.
+ * @param mode - Current {@link AppMode} (unused; kept for API compatibility).
  * @returns The resolved database connection URL.
  */
-function resolveDatabaseUrl(env: NodeJS.ProcessEnv, mode: AppMode): string {
-  if (mode === "e2e") {
-    return (
-      env.TEST_DATABASE_URL ??
-      env.DATABASE_URL ??
-      "postgresql://exam:exam@localhost:5432/exam_test"
-    );
+function resolveDatabaseUrl(env: NodeJS.ProcessEnv, _mode: AppMode): string {
+  try {
+    return resolveDatabaseUrlCore(env);
+  } catch (err) {
+    throw new RuntimeConfigError((err as Error).message);
   }
-  if (mode === "test" || mode === "ci") {
-    return (
-      env.TEST_DATABASE_URL ??
-      env.DATABASE_URL ??
-      "postgresql://exam:exam@localhost:5432/exam_test"
-    );
-  }
-  const url = env.DATABASE_URL;
-  if (!url && mode === "production") {
-    throw new RuntimeConfigError("DATABASE_URL is required in production");
-  }
-  return url ?? "postgresql://exam:exam@localhost:5432/exam";
 }
 
 /**
@@ -350,8 +338,11 @@ function resolveCorsOrigin(
  * (which requires JWT_SECRET / CORS_ORIGIN in production).
  */
 export function resolveDatabaseUrlFromEnv(env: NodeJS.ProcessEnv): string {
-  const mode = parseAppMode(env);
-  return resolveDatabaseUrl(env, mode);
+  try {
+    return resolveDatabaseUrlCore(env);
+  } catch (err) {
+    throw new RuntimeConfigError((err as Error).message);
+  }
 }
 
 /**

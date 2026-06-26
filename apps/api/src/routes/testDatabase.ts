@@ -108,8 +108,13 @@ export async function setupApiTestDatabaseFromEnv(options?: {
   const baseUrl =
     options?.databaseUrl ??
     env.TEST_DATABASE_URL ??
-    env.DATABASE_URL ??
-    "postgresql://exam:exam@localhost:5432/exam_test";
+    env.TEST_DB_URL ??
+    (() => {
+      throw new Error(
+        "TEST_DATABASE_URL is required for API test database setup. " +
+          "Refusing to use DATABASE_URL as test database.",
+      );
+    })();
 
   if (isWorkerDatabaseMode(env)) {
     const worker = await setupWorkerTestDatabase({ env });
