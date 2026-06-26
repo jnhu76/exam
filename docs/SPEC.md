@@ -451,13 +451,30 @@ db.select().from(question).where(eq(question.id, id))
 
 考试不是普通 CRUD。所有状态变更必须通过 command function，禁止 route 直接改状态字段。
 
-**Exam 状态**：
+**Exam 状态**（6 个，全部已实现）：
 
 ```
 draft → published → open → closed → archived
+                ↘           ↘
+                 → canceled → archived
 ```
 
-> Phase 1.7 当前实现仅接线 `draft → published`（以及内部 archived 字段）。`open` / `closed` 作为运营态属于 Phase 2 范围（与 §2.5 的 `timed_sync` / `deadline` / `untimed` 计时模式与 admin 手动 open/close 入口一同推进）。详见 closeout §2.4。
+状态迁移规则：
+
+| From | Operation | To | Guard | Side effects |
+|---|---|---|---|---|
+| draft | publish | published | exam has ≥1 question, valid schedule | QuestionSnapshot built, audit event |
+| published | unpublish | draft | exam not yet open | audit event |
+| published | open | open | now ≥ openAt (auto) or admin operation | audit event |
+| published | cancel | canceled | admin cancels, no terminal state | candidate/result/export gates apply |
+| published | archive | archived | admin archives | audit event |
+| open | close | closed | admin closes or now ≥ closeAt (auto) | attempt gates apply, audit event |
+| open | extend | open | admin extends closeAt | audit event, deadline updated |
+| open | cancel | canceled | admin cancels | candidate/result/export gates apply |
+| closed | archive | archived | admin archives | audit event |
+| canceled | archive | archived | admin archives | audit event |
+
+> Phase 2 已实现全部 6 个状态和上述所有迁移。`canceled` 状态表示考试被异常取消，不等于 `closed`（正常结束）。`canceled` 考试的结果/导出需要明确的 cancellation marker（Phase 3 语义）。
 
 **ExamAttempt 状态**（见 §2.2）：
 
@@ -469,22 +486,27 @@ not_started → queued → in_progress → submitted → grading → graded
 
 > 当前实现仅有 `in_progress / submitted / disrupted / graded` 四个状态进入运行时主流程；`not_started / queued / grading / voided` 保留为目标设计但**当前无写入路径**。完整接线表见 §2.2。
 
-**Command functions**：
+**Command functions**（Phase 2 全部已实现）：
 
 ```ts
-publishExam(ctx, examId)        // Phase 1.7 已接线
-openExam(ctx, examId)           // Phase 2 / planned
-closeExam(ctx, examId)          // Phase 2 / planned
-startAttempt(ctx, examId, candidateId)        // Phase 1.7 已接线
-saveAnswer(ctx, attemptId, questionId, payload) // Phase 1.7 已接线（见 §3.5）
-submitAttempt(ctx, attemptId)   // Phase 1.7 已接线（4-phase 内联批改 → graded）
-gradeAttempt(ctx, attemptId)    // Phase 1.7 已接线（由 submitAttempt 内联调用）
-markDisrupted(ctx, attemptId)   // Phase 1.7 后端已接线：心跳扫描器默认注册并运行，会真实调用此命令；前端恢复入口与监考裁决仍未产品化（属 P2A-J3 / P2A-J4）
-restoreAttempt(ctx, attemptId)  // Phase 1.7 后端路由已存在；前端恢复 UI 与监考介入流程未产品化（属 P2A-J3 / P2A-J4）
-voidAttempt(ctx, attemptId, reason) // Phase 2 / planned（无 admin / proctor 入口）
+publishExam(ctx, examId)        // draft → published
+openExam(ctx, examId)           // published → open
+closeExam(ctx, examId)          // open → closed（幂等）
+cancelExam(ctx, examId)         // published/open → canceled
+archiveExam(ctx, examId)        // closed/canceled → archived
+extendExam(ctx, examId, minutes) // open → open（仅更新 closeAt）
+unpublishExam(ctx, examId)      // published → draft
+publishResults(ctx, examId)     // 设置 resultsPublishedAt（非状态迁移）
+startAttempt(ctx, examId, candidateId)
+saveAnswer(ctx, attemptId, questionId, payload)
+submitAttempt(ctx, attemptId)
+gradeAttempt(ctx, attemptId)
+markDisrupted(ctx, attemptId)
+restoreAttempt(ctx, attemptId)
+voidAttempt(ctx, attemptId, reason) // Phase 3 / planned（无 admin / proctor 入口）
 ```
 
-> 上述 command 列表是状态机的**目标合约**。被标注 _Phase 2 / planned_ 的命令并不代表 Phase 1.7 已实现，请勿据此假定可在产品中调用；具体接线情况见各命令注释与 closeout §3.
+> `voidAttempt` 是唯一仍标注为 Phase 3 / planned 的命令。其余 command 均已在 Phase 2 实现。
 
 ### 3.4 Server Time Authority：服务端权威计时
 
