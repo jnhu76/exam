@@ -12,17 +12,17 @@ data contract the specs rely on, see
 
 ## TL;DR
 
-```bash
-# Canonical one-command entry (builds, starts stack, runs Playwright, cleans up)
-bash scripts/e2e/run.sh
+Two execution modes — pick by environment:
 
-# Or, run the compose profile manually
-docker compose -f docker-compose.test.yml up -d --build db redis app
-docker compose -f docker-compose.test.yml --profile e2e run --rm e2e
-docker compose -f docker-compose.test.yml down -v
+```bash
+# WSL / local dev — host Chromium against the API dev server (faster iteration)
+bash scripts/e2e/run-wsl.sh
+
+# Docker — full app image + Playwright in containers (CI parity, no local deps)
+bash scripts/e2e/run.sh
 ```
 
-Both paths bring up four services on the `exam-net` bridge network:
+The Docker path brings up four services on the `exam-net` bridge network:
 
 | Service | Image | Role |
 | ------- | ----- | ---- |
@@ -47,7 +47,67 @@ Both paths bring up four services on the `exam-net` bridge network:
 
 ---
 
-## Option A — `scripts/e2e/run.sh` (recommended)
+## Option A — `scripts/e2e/run-wsl.sh` (WSL / local dev)
+
+Runs the API dev server (`tsx src/server.ts`) on the host and drives a **local
+Chromium** against it. Faster iteration than Docker (no image build), and the
+dev server reflects source changes immediately. Requires a local Node/pnpm
+install, Playwright browsers, and the dev compose for PostgreSQL+Redis.
+
+```bash
+bash scripts/e2e/run-wsl.sh                       # run all specs
+bash scripts/e2e/run-wsl.sh candidate-happy-path  # spec filename keyword
+bash scripts/e2e/run-wsl.sh --grep "happy path"   # Playwright title regex
+bash scripts/e2e/run-wsl.sh --no-reseed           # reuse existing seed
+bash scripts/e2e/run-wsl.sh --keep-server         # leave dev server up
+```
+
+### What the script does
+
+1. `docker compose -f docker-compose.dev.yml up -d --wait` — PostgreSQL
+   (host `:15432`, auto-creates `exam` + `exam_test`) + Redis (`:6379`).
+2. Cleans `test-results/`/`playwright-report/` (Docker runs may leave
+   root-owned files the host user can't unlink; uses an alpine container).
+3. `tsx src/scripts/migrate.ts` + `tsx src/e2e-seed.ts` — migrate + canonical
+   E2E seed into the `exam` dev database.
+4. `pnpm --filter @exam/web build` + sync to `apps/api/public` — the API dev
+   server serves the built frontend statically (it is not the vite dev server).
+5. Starts the API dev server with **E2E env** (see below) in the background.
+6. Waits for `/api/health`, then runs `npx playwright test`.
+
+### E2E env the dev server is started with
+
+These must match `docker-compose.test.yml` (the Docker E2E stack), or the two
+modes diverge:
+
+| Var | WSL value | Why |
+| --- | --------- | --- |
+| `RATE_LIMIT_DISABLED` | `1` | E2E makes many rapid login/API calls; rate limiting would 429 them |
+| `HEARTBEAT_TIMEOUT_MS` | `15000` | `disconnect-restore`/`deadline-crash` specs depend on a 15s timeout |
+| `HEARTBEAT_SCAN_INTERVAL_MS` | `5000` | scanner must mark disrupted within the spec's wait window |
+| `DEADLINE_SCAN_INTERVAL_MS` | `5000` | deadline auto-submit must fire promptly |
+
+Missing these (e.g. a bare `pnpm dev`) leaves the production scanner timing
+(60s/30s) and the disconnect/deadline specs time out.
+
+### Flags & env
+
+| Flag / Var | Effect |
+| ---------- | ------ |
+| `--no-reseed` | Skip `e2e-seed.ts` (reuse current DB state) |
+| `--keep-server` / `KEEP_SERVER=1` | Leave the dev server running after the run |
+| `--grep "<pattern>"` | Playwright `--grep` title filter |
+| `APP_PORT` (default `3000`) | Dev server port |
+| `DB_HOST_PORT` (default `15432`) | Override if dev compose publishes a different port |
+
+> **WSL/Windows port note**: the dev compose publishes PostgreSQL on `15432`,
+> not `5432`, because host `:5432` is commonly occupied on Windows/WSL. The
+> script sets `DATABASE_URL=...@localhost:15432/exam`. Override with
+> `DB_HOST_PORT` if you changed the compose mapping.
+
+---
+
+## Option B — `scripts/e2e/run.sh` (Docker, recommended for CI parity)
 
 The wrapper script orchestrates the whole flow and is the canonical entry used
 by maintainers. It builds the image, starts the stack, waits for the app health
@@ -91,7 +151,7 @@ bash scripts/e2e/run.sh --rebuild             # force --no-cache rebuild
 
 ---
 
-## Option B — manual `docker compose` profile
+## Option C — manual `docker compose` profile
 
 Useful for debugging, running a single spec repeatedly, or inspecting the
 running stack.
