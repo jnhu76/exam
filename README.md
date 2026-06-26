@@ -3,6 +3,9 @@
 LAN/on-premise exam and assessment platform. Single-tenant, auto-graded, supports open-book quizzes and strict proctored exams.
 
 > **Current scope (Phase 1 + Phase 2)**: single-tenant, Admin + Candidate only.
+> Phase 2 adds exam lifecycle operations (publish/open/close/cancel/archive/extend),
+> candidate attempt flow with answer save protocol, deadline auto-submit, manual
+> grading, result publishing, monitoring/diagnostics, and export/audit.
 > Tenant schema, role enums, and `organizationId` boundaries are retained for
 > forward compatibility. MultiTenant product paths, SuperAdmin UI, tenant
 > switcher, organizationSlug login, API keys, service tokens, webhooks, and
@@ -180,6 +183,7 @@ docker compose down -v   # remove database data
 apps/
   web/          React 19 + Vite + TypeScript frontend
   api/          Fastify + TypeScript backend
+  e2e/          Playwright E2E browser tests
 
 packages/
   domain/       Domain types, enums, errors
@@ -221,6 +225,8 @@ See `docs/dev/ci-baseline.md` for CI infrastructure details and local testing se
 | `docs/dev/exam-data-chain.md` | Entity relationships and data flow documentation |
 | `docs/dev/manual-test-bugs.md` | Known bugs from manual testing |
 | `docs/dev/redis-baseline.md` | Redis plugin architecture and test isolation |
+| `docs/dev/AUDIT-PHASE2-REALITY.md` | Phase 2 implementation reality audit (code vs spec drift) |
+| `docs/dev/phase2-closeout-report.md` | Phase 2 closeout report (final status, known gaps) |
 
 ## Environment Variables
 
@@ -299,7 +305,7 @@ pnpm coverage
 E2E browser tests live in `apps/e2e/e2e/*.spec.ts` and cover the candidate
 exam lifecycle (happy-path, resume, submit-flush, demo-seed accounts, manual
 grading, result publishing, proctor runtime, disconnect/restore, deadline
-crash). See **[`docs/dev/e2e-testing.md`](docs/dev/e2e-testing.md)** for the
+crash, fill_blank, multi_select, proctor monitoring UI). See **[`docs/dev/e2e-testing.md`](docs/dev/e2e-testing.md)** for the
 full guide (prerequisites, flags, env vars, targeting, seed, debugging).
 
 **Canonical one-command entry** (builds, starts the stack, runs Playwright,
