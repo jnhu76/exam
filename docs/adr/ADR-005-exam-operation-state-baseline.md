@@ -63,8 +63,8 @@ events** in one place. Phase 2B/2C jobs then implement slices of it.
 
 | Concern | Existing convention | ADR decision |
 | --- | --- | --- |
-| Spelling of cancel | Codebase uses **US** `canceled` (30) over `cancelled` (0). | Use **`canceled`** for the state and any related code. (Cancel op itself is **deferred** — see §Layer 3.5.) |
-| Exam status enum | `packages/domain/src/enums.ts:104` `ExamStatus = {draft, published, open, closed, archived}` (5 states). | **Extend** to 6 by adding `Canceled` — **only when the cancel op is implemented** (Slice 4, deferred). |
+| Spelling of cancel | Codebase uses **US** `canceled` (30) over `cancelled` (0). | Use **`canceled`** for the state and any related code. (Cancel op is **implemented** in Phase 2 — see §Layer 3.5.) |
+| Exam status enum | `packages/domain/src/enums.ts:104` `ExamStatus = {draft, published, open, closed, canceled, archived}` (6 states). | All 6 states are **implemented** in Phase 2. |
 | Error code format | `SCREAMING_SNAKE_CASE` in `packages/contracts/src/messageRegistry.ts`. | New codes follow this exactly. |
 | Error response shape | `{ code, message, requestId, details }`. | No second format introduced. |
 | Audit action format | **dot.case**: `"exam.publish"`, `"exam.archive"`, `"enrollment.add"`. | New actions use dot.case. |
@@ -277,26 +277,32 @@ mutate** rule, all record audit. Error envelope is the existing
 - Audit: `exam.extend`, metadata
   `{extendMinutes, oldCloseAt, newCloseAt, reason?}`.
 
-### 3.5 `POST /api/exams/:id/cancel` — **DEFERRED** (Slice 4)
+### 3.5 `POST /api/exams/:id/cancel` — **Implemented** (Slice 4, Phase 2)
 
-`cancel` is **not in the first implementation**. It is deferred because its
-semantics (attempt voiding, result/export behavior with a cancellation marker)
-are not yet decided. If it lands later, the ADR will be amended to specify,
-at minimum:
+`cancel` has been implemented in Phase 2. The engine performs the status
+transition (`published -> canceled`, `open -> canceled`). The route layer
+enforces the unresolved-attempts guard (rejecting with
+`EXAM_CANCEL_NOT_ALLOWED` when open with in-progress/disrupted/submitted/grading
+attempts).
 
-- allowed: `published -> canceled`, `open -> canceled`;
-- rejected: `draft|closed|canceled|archived` → `EXAM_CANCEL_NOT_ALLOWED`;
-- attempt behavior (void vs leave) must be explicit and tested;
-- result/export behavior must use an explicit **cancellation marker** — silent
-  normal scores/export for `canceled` exams is **not allowed**.
+- Allowed: `published -> canceled`, `open -> canceled`;
+- Rejected: `draft|closed|canceled|archived` → `EXAM_CANCEL_NOT_ALLOWED`;
+- Attempt behavior: attempts are NOT voided or force-submitted by cancel.
+  The unresolved-attempts guard prevents cancel while attempts are active.
+- Result/export behavior: `publishResults` and score/export endpoints reject
+  `canceled` exams until cancellation-marker result/export semantics are
+  implemented (Phase 3).
 
-Until then, admins end exams via `close` (Slice 1).
+Note: `canceled` exams can be archived (`canceled -> archived`). Cancel is
+NOT idempotent (`canceled -> canceled` is rejected); to settle a canceled exam,
+archive it.
 
-### 3.6 `POST /api/exams/:id/archive` — exists, verify (no `canceled` until Slice 4)
+`cancel` evidence package / signed cancellation report remains Phase 3+.
 
-- Allowed: `published -> archived`, `closed -> archived`.
-- Reject: `draft|open|archived` (and `canceled -> archived` is **not** added
-  until `cancel` ships in Slice 4).
+### 3.6 `POST /api/exams/:id/archive` — exists, verify (includes `canceled`)
+
+- Allowed: `published -> archived`, `closed -> archived`, `canceled -> archived`.
+- Reject: `draft|open|archived`.
 - Audit: `exam.archive` (existing).
 
 ### 3.7 `PATCH /api/exams/:id` — clarify, keep draft-default
@@ -400,8 +406,10 @@ type SubmitSource = "candidate" | "deadline_scanner" | "proctor" | "system";
   `EXAM_NOT_FINISHED` / `details.reason = "UNRESOLVED_ATTEMPTS_EXIST"` when
   unfinalized attempts exist, even if `now >= closeAt`. This prevents exporting
   partial results while candidates are still mid-exam.
-- `cancel` (deferred) would carry its own export marker; until it ships, the
-  only ended-with-results path is `closed`.
+- `cancel` carries its own export marker; `publishResults` and score/export
+  endpoints reject `canceled` exams until cancellation-marker result/export
+  semantics are implemented (Phase 3). The only ended-with-results path for
+  now is `closed` (with `resultsPublishedAt`).
 
 ## Error contract (new codes, existing format)
 
@@ -414,8 +422,8 @@ type SubmitSource = "candidate" | "deadline_scanner" | "proctor" | "system";
 | `ATTEMPT_LATE_ENTRY_CLOSED` | 409 | new startAttempt past cutoff |
 | `ATTEMPT_SUBMIT_TOO_EARLY` | 409 | candidate submit before min duration |
 
-`EXAM_CANCEL_NOT_ALLOWED` and the `canceled` enum value are **not** added until
-Slice 4 (cancel deferred). No second error format.
+`EXAM_CANCEL_NOT_ALLOWED` and the `canceled` enum value are **implemented** in
+Phase 2 (Slice 4). No second error format.
 
 ## Audit events (dot.case, existing helper)
 
@@ -427,23 +435,23 @@ Slice 4 (cancel deferred). No second error format.
 | `exam.extend` | extend | `{extendMinutes, oldCloseAt, newCloseAt, reason?}` |
 | `exam.archive` | archive | (existing) |
 
-`exam.cancel` is **not** added until Slice 4. `actorId` from `ctx`; no noisy
+`exam.cancel` is **implemented** in Phase 2 (Slice 4). `actorId` from `ctx`; no noisy
 audit for rejected candidate submits.
 
 ## Admin UI controls (minimal, with stable testids)
 
 ```
 draft      : publish, edit
-published  : unpublish, edit-schedule, archive (if allowed)
-open       : close, extend
+published  : unpublish, edit-schedule, cancel, archive (if allowed)
+open       : close, extend, cancel
 closed     : scores, export, archive
-canceled   : (deferred)
+canceled   : archive
 archived   : read-only
 ```
 
 New `data-testid`s: `exam-detail-unpublish-btn`, `exam-detail-close-btn`,
-`exam-detail-extend-btn`. (`exam-detail-cancel-btn` deferred with cancel.)
-Dialogs: close (reason optional), extend (`extendMinutes` required). No full
+`exam-detail-extend-btn`, `exam-detail-cancel-btn`.
+Dialogs: close (reason optional), extend (`extendMinutes` required), cancel (reason optional). No full
 proctor/session UI in this baseline.
 
 ## Implementation Slices
@@ -505,19 +513,17 @@ attempts (P2C-J2) so `close` can then succeed.
 
 ## Implemented now vs future
 
-### This baseline implements (across Slices 1–3)
+### This baseline implements (across Slices 1–4)
 
 - Admin ops: `close` (S1), `unpublish`/`extend`/PATCH-clarify (S2); verify
-  `publish`/`archive`.
+  `publish`/`archive`; `cancel` (S4).
 - Runtime policy fields + the two guards + `SubmitSource` (S3).
 - Lock-reconcile-assert-mutate rule across all admin ops.
-- New error codes (minus cancel) + audit events.
-- Minimal admin UI controls with testids.
+- New error codes (including cancel) + audit events.
+- Minimal admin UI controls with testids (including cancel).
 
 ### Future / explicitly NOT this baseline
 
-- `cancel` lifecycle state and op (Slice 4 — deferred; needs voiding + marker
-  decisions).
 - `pause` / `resume` exam.
 - Per-candidate device replacement / rebind.
 - Account unlock / session reset.
@@ -528,6 +534,7 @@ attempts (P2C-J2) so `close` can then succeed.
 - Live/provisional score monitor.
 - Additional lifecycle states: `paused`, `suspended`, `result_published`,
   `force_closed` — documented as future only; not added now.
+- `canceled` evidence package / signed cancellation report (Phase 3+).
 
 ## P2B-J1 findings this baseline fixes
 
@@ -551,7 +558,9 @@ attempts (P2C-J2) so `close` can then succeed.
 - **Extend body shape**: `extendMinutes` (chosen, explicit op) vs absolute
   `closeAt`.
 - **Cancel in first implementation**: **deferred** per review feedback; its
-  attempt/result/export semantics need explicit decisions first.
+  attempt/result/export semantics needed explicit decisions first. Now
+  implemented in Phase 2 (Slice 4) with minimal cancel semantics (no attempt
+  voiding, export rejection pending Phase 3 cancellation-marker).
 - **`submit source` as a body field**: rejected — command-layer discriminator,
   never client-controlled.
 
@@ -569,14 +578,13 @@ attempts (P2C-J2) so `close` can then succeed.
 
 ## Resolved review decisions
 
-All six review questions are now owner-resolved. Slices 1–3 already implement
-decisions 2–5; decision 1 and 6 govern the deferred Slice 4 (cancel).
+All six review questions are now owner-resolved. Slices 1–4 already implement
+all decisions.
 
 1. **`canceled` spelling**
    Use US spelling: `canceled`. `cancelled` MUST NOT appear in enum values,
    contracts, state-machine transitions, tests, or API responses. The
-   `canceled` enum value is deferred and MUST only be added when Slice 4
-   implements the cancel operation.
+   `canceled` enum value is implemented in Phase 2 (Slice 4).
 
 2. **`close` idempotency**
    `POST /api/exams/:id/close` is idempotent. If the exam is already `closed`
@@ -617,20 +625,19 @@ decisions 2–5; decision 1 and 6 govern the deferred Slice 4 (cancel).
    when the field exceeds `durationMinutes`.)*
 
 6. **`canceled` scores/export behavior**
-   No current action in Slices 1–3. `cancel` / `canceled` are deferred and
-   MUST NOT be added before Slice 4.
+   Implemented in Phase 2 (Slice 4). `cancel` / `canceled` are implemented.
 
-   When Slice 4 introduces `canceled`, scores/export MUST initially reject
-   canceled exams with an explicit error unless the same slice also defines
-   and implements cancellation-marker result/export semantics. Silent normal
-   scores/export for `canceled` exams is forbidden.
+   `publishResults` and score/export endpoints reject `canceled` exams with
+   an explicit error. Silent normal scores/export for `canceled` exams is
+   forbidden. Cancellation-marker result/export semantics are deferred to
+   Phase 3.
 
-   Future Slice 4 candidate error code (do NOT implement before Slice 4):
+   Current error code for canceled exams:
 
    - `EXAM_CANCELED_RESULTS_UNAVAILABLE` — 409 — scores/export for canceled
      exams before cancellation-marker result/export semantics are implemented.
 
-   Intended Slice 4 shape:
+   Current shape:
 
    ```ts
    if (exam.status === "canceled") {
@@ -642,6 +649,6 @@ decisions 2–5; decision 1 and 6 govern the deferred Slice 4 (cancel).
        }),
      );
    }
-   // TODO(Slice 4+): Replace this rejection with explicit cancellation-marker
+   // TODO(Phase 3+): Replace this rejection with explicit cancellation-marker
    // result/export semantics once canceled exam behavior is defined.
    ```
