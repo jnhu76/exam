@@ -90,6 +90,103 @@ describe("SystemDiagnosticsPage", () => {
     expect(infoMock).not.toHaveBeenCalled();
   });
 
+  it("renders health metric cards (CPU, memory, DB response time)", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("系统监控")).toBeInTheDocument();
+    expect(await screen.findByText("CPU 使用率")).toBeInTheDocument();
+    expect(screen.getByText("内存使用率")).toBeInTheDocument();
+    expect(screen.getByText("数据库响应时间")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(screen.getByText("20")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
+  });
+
+  it("renders DB status card with latency and Redis connected status", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("数据库状态")).toBeInTheDocument();
+    expect(screen.getByText("5ms")).toBeInTheDocument();
+    expect(screen.getByText("已连接 (1ms)")).toBeInTheDocument();
+  });
+
+  it("shows Redis as disconnected when redisStatus.connected is false", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      redisStatus: { connected: false, latencyMs: 0 },
+    });
+    renderPage();
+    expect(await screen.findByText("数据库状态")).toBeInTheDocument();
+    expect(screen.getByText("未连接")).toBeInTheDocument();
+  });
+
+  it("renders heartbeat scanner and deadline scanner status cards", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("心跳扫描器")).toBeInTheDocument();
+    expect(screen.getByText("截止扫描器")).toBeInTheDocument();
+    expect(screen.getByText("已中断")).toBeInTheDocument();
+    expect(screen.getByText("自动提交")).toBeInTheDocument();
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders server info with version", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("服务器信息")).toBeInTheDocument();
+    expect(screen.getByText("1.0.0")).toBeInTheDocument();
+  });
+
+  it("renders runtime config card with heartbeat and deadline intervals", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("运行时配置")).toBeInTheDocument();
+    expect(screen.getByText("心跳间隔")).toBeInTheDocument();
+    expect(screen.getByText("心跳超时")).toBeInTheDocument();
+    expect(screen.getByText("截止扫描间隔")).toBeInTheDocument();
+  });
+
+  it("renders page when health fails but diag succeeds (no white screen)", async () => {
+    getMock.mockRejectedValueOnce(new Error("health down"));
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("系统监控")).toBeInTheDocument();
+    expect(screen.getByText("服务器信息")).toBeInTheDocument();
+    expect(screen.getByText("1.0.0")).toBeInTheDocument();
+  });
+
+  it("renders page when diag fails but health succeeds (no white screen)", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockRejectedValueOnce(new Error("diag down"));
+    renderPage();
+    expect(await screen.findByText("系统监控")).toBeInTheDocument();
+    expect(screen.getByText("CPU 使用率")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+  });
+
+  it("shows refresh button that triggers data reload", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    expect(await screen.findByText("系统监控")).toBeInTheDocument();
+    expect(debugMock).toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    const refreshBtn = screen.getByRole("button", { name: "刷新系统数据" });
+    refreshBtn.click();
+    await waitFor(() => {
+      expect(debugMock).toHaveBeenCalled();
+    });
+  });
+
   it("emits logger.warn and renders the stale-warning Alert on a subsequent poll failure", async () => {
     // Initial load: both succeed. The page fires Promise.all([health, diag])
     // so the call order matches the array order ([health, diag]).

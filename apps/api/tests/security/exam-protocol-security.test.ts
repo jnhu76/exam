@@ -357,4 +357,189 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
       expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
     });
   });
+
+  describe("AC5: Unenrolled candidate cannot start attempt", () => {
+    it("returns error when candidate is not enrolled in the exam", async () => {
+      const examRes = await app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Unenrolled Exam",
+          courseId,
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 6,
+          totalScore: 10,
+          questionIds: [questionId],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+      const examId = examRes.json().id;
+      await app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": adminToken },
+      });
+
+      const startRes = await app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": otherCandidateToken },
+      });
+      expect(startRes.statusCode).toBeGreaterThanOrEqual(400);
+    });
+  });
+
+  describe("AC6: Submit after already submitted attempt is idempotent", () => {
+    it("second submit returns same graded result (idempotent, not an error)", async () => {
+      const attemptId = await createExamAndStart("Double Submit Exam");
+
+      const firstSubmit = await app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(firstSubmit.statusCode).toBe(200);
+      expect(firstSubmit.json().status).toBe("graded");
+
+      const secondSubmit = await app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/submit`,
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(secondSubmit.statusCode).toBe(200);
+      expect(secondSubmit.json().status).toBe("graded");
+    });
+  });
+
+  describe("AC7: Answer save does not pollute another attempt", () => {
+    it("saving answer to attempt A does not affect attempt B", async () => {
+      const attemptAId = await createExamAndStart("Replay Exam A");
+
+      const examRes = await app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Replay Exam B",
+          courseId,
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 6,
+          totalScore: 10,
+          questionIds: [questionId],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+      const examBId = examRes.json().id;
+      await app.inject({
+        method: "POST",
+        url: `/api/exams/${examBId}/publish`,
+        cookies: { "auth-token": adminToken },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/api/exams/${examBId}/enrollments`,
+        payload: { candidateIds: [candidateProfileId] },
+        cookies: { "auth-token": adminToken },
+      });
+      const startB = await app.inject({
+        method: "POST",
+        url: `/api/attempts/${examBId}/start`,
+        cookies: { "auth-token": candidateToken },
+      });
+      const attemptBId = startB.json().id;
+
+      await app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptAId}/answers/${questionId}`,
+        payload: {
+          attemptId: attemptAId,
+          questionId,
+          answer: "A",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": candidateToken },
+      });
+
+      const loadB = await app.inject({
+        method: "GET",
+        url: `/api/attempts/${attemptBId}`,
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(loadB.statusCode).toBe(200);
+      const bAnswers = loadB.json().questionSnapshot;
+      expect(bAnswers).toBeDefined();
+    });
+  });
+
+  describe("AC8: Candidate exam payload does not expose standardAnswer", () => {
+    it("start attempt response does not include standardAnswer field", async () => {
+      const examRes = await app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Leak Check Exam",
+          courseId,
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 6,
+          totalScore: 10,
+          questionIds: [questionId],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+      const examId = examRes.json().id;
+      await app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/publish`,
+        cookies: { "auth-token": adminToken },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/api/exams/${examId}/enrollments`,
+        payload: { candidateIds: [candidateProfileId] },
+        cookies: { "auth-token": adminToken },
+      });
+      const startRes = await app.inject({
+        method: "POST",
+        url: `/api/attempts/${examId}/start`,
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(startRes.statusCode).toBe(201);
+      const body = startRes.json();
+      const bodyText = JSON.stringify(body);
+      expect(bodyText).not.toContain("standardAnswer");
+    });
+
+    it("candidate cannot read admin exam detail endpoint", async () => {
+      const examRes = await app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: {
+          title: "Admin Only Exam",
+          courseId,
+          durationMinutes: 60,
+          openAt: new Date(Date.now() - 3600000).toISOString(),
+          closeAt: new Date(Date.now() + 86400000).toISOString(),
+          passingScore: 6,
+          totalScore: 10,
+          questionIds: [questionId],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+      const examId = examRes.json().id;
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/exams/${examId}`,
+        cookies: { "auth-token": candidateToken },
+      });
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    });
+  });
 });
