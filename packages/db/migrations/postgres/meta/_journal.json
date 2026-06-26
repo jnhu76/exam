@@ -64,6 +64,13 @@
       "when": 1782385600000,
       "tag": "0008_client_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782472000000,
+      "tag": "0009_audit_question_indexes",
+      "breakpoints": true
     }
   ]
 }

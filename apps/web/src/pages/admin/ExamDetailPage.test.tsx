@@ -192,6 +192,37 @@ describe("ExamDetailPage", () => {
         expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/archive");
       });
     });
+
+    it("does not show cancel button for draft exams", async () => {
+      // draft → no cancel button
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({ ...mockDraftExam, status: "draft" });
+      });
+      renderPage();
+      await screen.findByText("期末能力测评");
+      expect(screen.queryByText("取消考试")).not.toBeInTheDocument();
+    });
+
+    it("opens confirmation and cancels a published exam", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({ ...mockDraftExam, status: "published" });
+      });
+      postMock.mockResolvedValue({});
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("期末能力测评");
+      await user.click(screen.getByText("取消考试"));
+      const dialog = await screen.findByRole("alertdialog");
+      expect(within(dialog).getByText(/期末能力测评/)).toBeInTheDocument();
+      const confirm = within(dialog).getByRole("button", { name: "确认" });
+      expect(confirm).toHaveAttribute("data-variant", "destructive");
+      await user.click(confirm);
+      await waitFor(() => {
+        expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/cancel");
+      });
+    });
   });
 
   describe("enrollment management", () => {

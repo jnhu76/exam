@@ -6,6 +6,7 @@ import { getIsolatedTestDb } from "../testDb.js";
 import { auditLogs } from "../schema/pg.js";
 import { createAuditLogRepo } from "./auditLogRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
+import { createUserRepo } from "./userRepo.js";
 import type { Database } from "../types.js";
 
 const permissions: RequestContext["permissions"] = [];
@@ -85,9 +86,9 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
     const { items } = await repo.listPaginatedFiltered(ctx, 1, 50, {
       targetType: "exam",
     });
-    expect(items.every((r) => r.targetType === "exam")).toBe(true);
-    expect(items.some((r) => r.targetId === examTarget)).toBe(true);
-    expect(items.some((r) => r.targetId === userTarget)).toBe(false);
+    expect(items.every((r) => r.auditLog.targetType === "exam")).toBe(true);
+    expect(items.some((r) => r.auditLog.targetId === examTarget)).toBe(true);
+    expect(items.some((r) => r.auditLog.targetId === userTarget)).toBe(false);
   });
 
   it("filters by inclusive date range (from / to)", async () => {
@@ -115,8 +116,12 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
       await backdate(db, created.id, ts);
     }
 
-    const tagsOf = (rows: { targetType: string; action: string }[]) =>
-      rows.filter((r) => r.targetType === "range_test").map((r) => r.action);
+    const tagsOf = (
+      rows: { auditLog: { targetType: string; action: string } }[],
+    ) =>
+      rows
+        .filter((r) => r.auditLog.targetType === "range_test")
+        .map((r) => r.auditLog.action);
 
     // from = t1: includes t1, t2, t3 (>=).
     const fromOnly = await repo.listPaginatedFiltered(ctx, 1, 50, {
@@ -173,6 +178,80 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
       to: new Date("2026-03-01T00:00:00.000Z"),
     });
     expect(items.length).toBe(1);
-    expect(items[0]!.action).toBe("combo.keep");
+    expect(items[0]!.auditLog.action).toBe("combo.keep");
+  });
+});
+
+describe("auditLogRepo.listPaginatedFiltered (actorName join)", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+  const rootContext = createContext("system", "Admin", "system");
+
+  beforeAll(async () => {
+    const result = await getIsolatedTestDb("db-repo-audit-actor");
+    db = result.db;
+    cleanup = result.cleanup;
+    const orgRepo = createOrganizationRepo(db);
+    const suffix = randomUUID().slice(0, 8);
+    const org = await orgRepo.create(rootContext, {
+      name: `audit-actor-${suffix}`,
+      displayName: `AuditActor ${suffix}`,
+      slug: `audit-actor-${suffix}`,
+    });
+    const ctx = createContext(org.id);
+    // Seed a user to be the audit actor.
+    const userRepo = createUserRepo(db);
+    const actor = await userRepo.create(ctx, {
+      username: `actor-${suffix}`,
+      passwordHash: "x",
+      name: "张审计",
+      role: "Admin",
+      isActive: true,
+    });
+    // Seed an audit log referencing that user.
+    const auditRepo = createAuditLogRepo(db);
+    await auditRepo.create(ctx, {
+      actorId: actor.id,
+      action: "exam.create",
+      targetType: "exam",
+      targetId: randomUUID(),
+      metadata: {},
+    });
+    // Also seed one with an actorId that has NO matching user (e.g. "system").
+    await auditRepo.create(ctx, {
+      actorId: "system",
+      action: "admin.bootstrap",
+      targetType: "system",
+      targetId: randomUUID(),
+      metadata: {},
+    });
+    // Stash org id on the context for the test below.
+    (rootContext as unknown as { _orgId?: string })._orgId = org.id;
+    (rootContext as unknown as { _ctx?: RequestContext })._ctx = ctx;
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  it("resolves actorId → actorName via LEFT JOIN users", async () => {
+    const stored = rootContext as unknown as { _ctx: RequestContext };
+    const ctx = stored._ctx;
+    const repo = createAuditLogRepo(db);
+    const { items } = await repo.listPaginatedFiltered(ctx, 1, 50, {});
+    const createRow = items.find((r) => r.auditLog.action === "exam.create");
+    expect(createRow).toBeDefined();
+    expect(createRow!.actorName).toBe("张审计");
+  });
+
+  it("returns null actorName when no matching user exists", async () => {
+    const stored = rootContext as unknown as { _ctx: RequestContext };
+    const ctx = stored._ctx;
+    const repo = createAuditLogRepo(db);
+    const { items } = await repo.listPaginatedFiltered(ctx, 1, 50, {
+      action: "admin.bootstrap",
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.actorName).toBeNull();
   });
 });

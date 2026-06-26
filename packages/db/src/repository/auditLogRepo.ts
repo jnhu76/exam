@@ -1,11 +1,17 @@
 import { and, asc, count, desc, eq, gte, lte } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
-import { auditLogs } from "../schema/pg.js";
+import { auditLogs, users } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOrganizationId,
 } from "./baseRepo.js";
+
+/** An audit-log row enriched with the actor's display name (when resolvable). */
+export interface AuditLogRowWithActor {
+  auditLog: typeof auditLogs.$inferSelect;
+  actorName: string | null;
+}
 
 /**
  * Filter options for {@link createAuditLogRepo}.listPaginatedFiltered.
@@ -47,7 +53,7 @@ export function createAuditLogRepo(db: Database) {
       pageSize: number,
       filter: AuditLogListFilter = {},
     ): Promise<{
-      items: (typeof auditLogs.$inferSelect)[];
+      items: AuditLogRowWithActor[];
       total: number;
     }> {
       const orgId = resolveOrganizationId(ctx);
@@ -71,8 +77,12 @@ export function createAuditLogRepo(db: Database) {
         conditions.length === 1 ? conditions[0] : and(...conditions);
       const offset = (page - 1) * pageSize;
       const items = await db
-        .select()
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+        })
         .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
         .where(where)
         .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
         .limit(pageSize)
@@ -91,11 +101,15 @@ export function createAuditLogRepo(db: Database) {
       ctx: TenantContext | RequestContext,
       targetType: string,
       targetId: string,
-    ): Promise<(typeof auditLogs.$inferSelect)[]> {
+    ): Promise<AuditLogRowWithActor[]> {
       const orgId = resolveOrganizationId(ctx);
       return db
-        .select()
+        .select({
+          auditLog: auditLogs,
+          actorName: users.name,
+        })
         .from(auditLogs)
+        .leftJoin(users, eq(users.id, auditLogs.actorId))
         .where(
           and(
             eq(auditLogs.organizationId, orgId),

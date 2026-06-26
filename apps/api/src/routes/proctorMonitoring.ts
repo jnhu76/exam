@@ -71,7 +71,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.db,
         ctx,
         examId,
-        new Date(),
+        fastify.now(),
       );
       return { items, total: items.length };
     },

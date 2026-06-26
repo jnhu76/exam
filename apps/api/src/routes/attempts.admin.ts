@@ -370,16 +370,17 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
 
       return reply.send({
         events: rows.map((row) => ({
-          id: row.id,
-          organizationId: row.organizationId,
-          actorId: row.actorId,
-          action: row.action,
-          targetType: row.targetType,
-          targetId: row.targetId,
-          metadata: row.metadata,
-          ipAddress: row.ipAddress,
-          userAgent: row.userAgent,
-          createdAt: row.createdAt.toISOString(),
+          id: row.auditLog.id,
+          organizationId: row.auditLog.organizationId,
+          actorId: row.auditLog.actorId,
+          actorName: row.actorName,
+          action: row.auditLog.action,
+          targetType: row.auditLog.targetType,
+          targetId: row.auditLog.targetId,
+          metadata: row.auditLog.metadata,
+          ipAddress: row.auditLog.ipAddress,
+          userAgent: row.auditLog.userAgent,
+          createdAt: row.auditLog.createdAt.toISOString(),
         })),
       });
     },

@@ -70,9 +70,9 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
     });
 
     const rows = await repo.listByTarget(ctx, "attempt", attemptId);
-    expect(rows.map((r) => r.id)).toEqual([first.id, second.id]);
-    expect(rows[0]!.action).toBe("attempt.start");
-    expect(rows[1]!.action).toBe("attempt.submit");
+    expect(rows.map((r) => r.auditLog.id)).toEqual([first.id, second.id]);
+    expect(rows[0]!.auditLog.action).toBe("attempt.start");
+    expect(rows[1]!.auditLog.action).toBe("attempt.submit");
   });
 
   it("excludes rows for a different targetId (boundary isolation)", async () => {
@@ -96,7 +96,7 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
     });
 
     const rowsForA = await repo.listByTarget(ctx, "attempt", targetA);
-    expect(rowsForA.every((r) => r.targetId === targetA)).toBe(true);
-    expect(rowsForA.some((r) => r.targetId === targetB)).toBe(false);
+    expect(rowsForA.every((r) => r.auditLog.targetId === targetA)).toBe(true);
+    expect(rowsForA.some((r) => r.auditLog.targetId === targetB)).toBe(false);
   });
 });

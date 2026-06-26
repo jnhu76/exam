@@ -22,6 +22,7 @@ const mockAuditData = {
       id: "log-1",
       organizationId: "org-1",
       actorId: "admin-1",
+      actorName: "管理员张三",
       action: "grading.score_entered",
       targetType: "attempt",
       targetId: "att-1",
@@ -216,5 +217,29 @@ describe("AuditLogPage", () => {
 
     const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
     expect(lastCall).not.toContain("action=");
+  });
+
+  it("renders resolved actorName instead of raw actorId when present", async () => {
+    renderPage();
+    // log-1 has actorName "管理员张三"; that should show, not the raw "admin-1".
+    expect(await screen.findByText("管理员张三")).toBeInTheDocument();
+  });
+
+  it("falls back to raw actorId when actorName is absent", async () => {
+    renderPage();
+    await screen.findByText("管理员张三");
+    // log-2 has no actorName → its raw actorId "admin-1" is shown.
+    // (log-1 also has actorId admin-1 but renders the name; there will be at
+    // least one "admin-1" cell from log-2.)
+    expect(screen.getAllByText("admin-1").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("includes expanded audit actions in the action filter", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("管理员张三");
+    // Open the action filter and verify a previously-missing action is present.
+    await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
+    expect(await screen.findByText("取消考试")).toBeInTheDocument();
   });
 });
