@@ -31,6 +31,7 @@ import {
 
 const BASE_URL =
   process.env.TEST_DATABASE_URL ??
+  process.env.DATABASE_URL ??
   "postgresql://exam:exam@localhost:5432/exam_test";
 
 /** A real admin URL derived from BASE_URL → maintenance DB `postgres`. */

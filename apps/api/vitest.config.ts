@@ -1,4 +1,10 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.resolve(__dirname, "../..");
 
 // FIXME(BUG-FLAKE-001): apps/api 跨文件并行 + 共享 PostgreSQL schema + coverage
 // instrumentation 会造成 attempts.test.ts:1070 后台扫描用例在 pnpm verify 路径下
@@ -79,9 +85,10 @@ function resolveParallelism(): {
 
 const parallelism = resolveParallelism();
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   test: {
     exclude: ["dist/**", "node_modules/**"],
+    env: loadEnv(mode, workspaceRoot, ""),
     fileParallelism: parallelism.fileParallelism,
     ...(parallelism.maxWorkers !== undefined
       ? { maxWorkers: parallelism.maxWorkers }
@@ -94,4 +101,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

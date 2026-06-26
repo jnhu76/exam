@@ -87,24 +87,36 @@ Deliver a LAN/on-premise single-tenant exam system where one deployment represen
 
 Add real exam operation capabilities around the core exam loop without turning the product into a permissions platform.
 
-### In scope
+### Status
 
-- Richer exam lifecycle: open / closed / archived.
-- Disrupted attempt recovery UI.
-- Proctor intervention workflow.
-- Force submit.
-- Extend time.
-- Misconduct marking.
-- timed_sync / deadline / untimed timing modes.
-- Queue admission.
-- Retake policy.
-- Score strategy.
-- Exam operation timeline.
-- Attempt timeline.
-- Import/export job logs.
-- Larger result export.
-- Exam operation audit coverage.
-- Diagnostics page.
+**Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/dev/AUDIT-PHASE2-REALITY.md`). The remaining items below (timed_sync / untimed timing modes, queue admission) are deferred to Phase 2+ hardening or Phase 3.
+
+### In scope — Implemented
+
+- ✅ Richer exam lifecycle: open / closed / archived.
+- ✅ Disrupted attempt recovery UI.
+- ✅ Proctor intervention workflow (polling dashboard).
+- ✅ Force submit.
+- ✅ Extend time.
+- ✅ Misconduct marking.
+- ✅ Retake policy (enum + enrollment logic).
+- ✅ Score strategy (highest / latest / first).
+- ✅ Exam operation timeline.
+- ✅ Attempt timeline.
+- ✅ Import/export job logs.
+- ✅ Larger result export (CSV scores + attempt JSON/CSV).
+- ✅ Exam operation audit coverage.
+- ✅ Diagnostics page (DB / Redis / scanner health).
+- ✅ Manual grading queue and detail page (candidate answer visible).
+- ✅ Result publishing modes (immediate / after_grading / manual).
+- ✅ Client telemetry pipeline (logger → buffer → batch POST → sanitize → DB).
+- ✅ Proctor monitoring (candidate status + event timeline).
+- ✅ Permission boundary (candidate cannot access admin / monitoring APIs).
+
+### In scope — Deferred
+
+- timed_sync / untimed timing modes (only `timed_window` is implemented; other modes deferred to Phase 2+ hardening).
+- Queue admission (code exists but not yet operationally wired; deferred to Phase 2+ hardening).
 
 ### Out of scope
 
@@ -121,12 +133,12 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 ### Acceptance signals
 
-- Operational staff can recover disrupted attempts through a documented UI flow.
-- Force submit, extend time, and misconduct marking are audited.
-- Non-`timed_window` timing modes have documented lifecycle behavior.
-- Queue admission is observable and recoverable.
-- Exam and attempt timelines support incident diagnosis.
-- Larger exports have job logs and failure evidence.
+- ✅ Operational staff can recover disrupted attempts through a documented UI flow.
+- ✅ Force submit, extend time, and misconduct marking are audited.
+- ⏳ Non-`timed_window` timing modes have documented lifecycle behavior (deferred).
+- ⏳ Queue admission is observable and recoverable (deferred).
+- ✅ Exam and attempt timelines support incident diagnosis.
+- ✅ Larger exports have job logs and failure evidence.
 
 ### Explicitly deferred items
 
