@@ -80,7 +80,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function ExamMonitoringPage() {
-  const { examId } = useParams<{ examId: string }>();
+  const { id: examId } = useParams<{ id: string }>();
   const [attempts, setAttempts] = useState<ProctorAttemptStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
