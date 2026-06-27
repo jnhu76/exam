@@ -1,8 +1,17 @@
-import { NavLink, Navigate, Outlet } from "react-router";
+import { NavLink, Navigate, Outlet, useNavigate } from "react-router";
 import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
+import { routes } from "@/lib/routes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +22,7 @@ import { cn } from "@/lib/utils";
  */
 export function ExamLayout() {
   const { user, isLoading, logout } = useAuth();
+  const navigate = useNavigate();
   if (isLoading) {
     return (
       <div className="min-h-screen bg-admin-page">
@@ -41,7 +51,7 @@ export function ExamLayout() {
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild>
             <NavLink
-              to="/exam/list"
+              to={routes.exam.list}
               className={({ isActive }) =>
                 cn(isActive && "font-medium text-primary")
               }
@@ -50,15 +60,38 @@ export function ExamLayout() {
             </NavLink>
           </Button>
           <span className="mx-2 h-4 w-px bg-border" />
-          <div className="flex items-center gap-2">
-            <Avatar className="size-7">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
-            <span className="text-sm">{user.name}</span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => void logout()}>
-            退出
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="账号菜单"
+                className="flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Avatar className="size-7">
+                  <AvatarFallback className="text-xs">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm">{user.name}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                data-testid="exam-settings-link"
+                onSelect={() => void navigate(routes.exam.settings)}
+              >
+                账号设置
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+                onSelect={() => void logout()}
+              >
+                退出登录
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
       <main>

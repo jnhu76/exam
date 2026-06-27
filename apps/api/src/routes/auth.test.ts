@@ -31,7 +31,10 @@ describe("auth routes", () => {
   afterAll(async () => {
     await ctx.db
       .update(schema.users)
-      .set({ passwordHash: await hashPassword("admin123") })
+      .set({
+        passwordHash: await hashPassword("admin123"),
+        name: ctx.admin.name,
+      })
       .where(eq(schema.users.id, ctx.admin.id));
     await ctx.cleanup();
   });
@@ -400,6 +403,42 @@ describe("auth routes", () => {
         requestId: expect.any(String),
       },
     });
+  });
+
+  it("PATCH /api/auth/me/profile updates the display name for authenticated user", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: "/api/auth/me/profile",
+      payload: { name: "Updated Admin Name" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode, `status ${res.statusCode}, body: ${res.body}`).toBe(
+      200,
+    );
+    const body = res.json();
+    expect(body.name).toBe("Updated Admin Name");
+    expect(body.id).toBe(ctx.admin.id);
+    expect(body.username).toBe(ctx.admin.username);
+    expect(body.role).toBe(ctx.admin.role);
+  });
+
+  it("PATCH /api/auth/me/profile rejects empty name", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: "/api/auth/me/profile",
+      payload: { name: "" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("PATCH /api/auth/me/profile requires authentication", async () => {
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: "/api/auth/me/profile",
+      payload: { name: "No Auth" },
+    });
+    expect(res.statusCode).toBe(401);
   });
 
   it("POST /api/auth/login rejects legacy future-role rows with generic auth failure", async () => {

@@ -48,6 +48,49 @@ Strict closed-book proctored exam operation is Phase 2+. Teacher-like roles, Pro
 - Repository and service code must remain database-agnostic.
 - Run migrations, integration tests, and smoke tests against PostgreSQL before any release.
 
+### Local Database Discipline (READ THIS BEFORE TOUCHING ANY DB)
+
+The local dev Postgres container (`pnpm db:up`) intentionally runs **three databases**. They have **separate, non-overlapping purposes**. An agent MUST keep them separate — mixing them corrupts dev state or breaks tests.
+
+| Database | Env var | Purpose | Seeded by | Used by |
+| --- | --- | --- | --- | --- |
+| `exam` | `DATABASE_URL` | **Dev runtime** — what `pnpm dev` and humans read/write | `pnpm db:seed:demo` (full demo data) | API/web dev servers, manual UI testing |
+| `exam_test` | `TEST_DATABASE_URL` | **vitest runtime only** — isolated, disposable | nothing persistent (tests create/truncate their own data via worker-DB isolation) | `pnpm test`, `pnpm test:integration`, `pnpm verify`, `pnpm coverage` |
+| `exam_e2e` | `DATABASE_URL` (only inside `run-wsl.sh`) | **WSL Playwright E2E only** — fast local e2e without building the Docker image; reseeded every run | `scripts/e2e/run-wsl.sh` (baseline + demo seed, idempotent; `--no-reseed` to skip) | `bash scripts/e2e/run-wsl.sh` |
+
+> **Why `exam_e2e` is a third DB:** WSL E2E reseeds every run to a known demo state. Pointing it at `exam` would clobber the human's manual dev data; pointing it at `exam_test` would collide with vitest's worker-DB isolation. A dedicated `exam_e2e` keeps fast-iteration e2e, dev, and unit tests all isolated. The Docker E2E path (`scripts/e2e/run.sh` + `docker-compose.test.yml`) uses its own throwaway container volume instead and does NOT touch any of these host databases.
+
+**Connection facts:**
+- Container: `exam-db-1` (postgres:18.4), host port `15432` → container `5432`, user/pass `exam`/`exam`.
+- `exam_test` is created once at first container init by `docker/db/init/01-create-databases.sql`. It MUST exist (the test name-safety guard in `packages/db/src/testDb.ts` refuses any name without `test`/`e2e`/`ci`).
+- The DB name is resolved by APP_MODE: `test`/`ci`/`e2e` → `TEST_DATABASE_URL` (fail-fast, never falls back to `DATABASE_URL`); otherwise → `DATABASE_URL`. See `packages/db/src/databaseUrl.ts`.
+
+**Agent rules — do NOT deviate:**
+
+1. **`pnpm dev` uses `exam`, period.** Do not point the dev server at `exam_test`. The human's manual data lives in `exam`; polluting it with test fixtures or truncating it is a bug.
+2. **`pnpm test` / `verify` use `exam_test`, period.** They never read or write `exam`. Tests manage their own data (worker-DB isolation / per-test truncate); an agent must not pre-seed `exam_test` with demo data.
+3. **`pnpm db:seed:demo` seeds `exam` only.** It is the one command that fills the dev DB with the demo dataset (org, users, courses, questions, exams, settings). Never run it against `exam_test`.
+4. **Do not invent a fourth database.** The three-DB split (`exam` / `exam_test` / `exam_e2e`) is the contract. Do not create `exam_dev`, `exam_local`, or any other name.
+5. **Env-var priority (SOTA: shell > `.env.local` > `.env`).** This is Vite/dotenv native behavior and is NOT negotiable:
+   - `process.env` (shell export) always wins; `.env` files never overwrite it.
+   - `.env` MUST define **both** `DATABASE_URL` (→ `exam`) and `TEST_DATABASE_URL` (→ `exam_test`) with local defaults, so a bare `pnpm verify` / `pnpm test` / `pnpm dev` works with **zero** shell setup. Never comment out `TEST_DATABASE_URL` in `.env` — doing so breaks bare `pnpm verify`.
+   - An agent must NOT rely on a shell `export` to fix a missing `.env` value. If `.env` is missing a required DB URL, fix `.env`, not the shell.
+   - Shell env residue is per-session only and does not persist; treat any inherited `DATABASE_URL`/`TEST_DATABASE_URL`/`APP_MODE` as suspect. When in doubt, prefix the command with an explicit `unset` or the intended values, e.g.:
+     ```bash
+     # Bare run (relies on .env — preferred):
+     pnpm verify
+     # Force dev DB explicitly when a stale shell var is present:
+     DATABASE_URL="postgresql://exam:exam@localhost:15432/exam" pnpm dev
+     ```
+6. **Always verify the resolved DB, never assume.** Before trusting that dev uses `exam` or tests use `exam_test`, prove it:
+   ```bash
+   # Which DB does a process actually see? Query it, don't guess from .env:
+   docker exec exam-db-1 psql -U exam -d exam -tAc "SELECT current_database(), count(*) FROM exams;"
+   docker exec exam-db-1 psql -U exam -d exam_test -tAc "SELECT current_database(), count(*) FROM exams;"
+   ```
+7. **Resetting `exam_test` is allowed and expected** (tests are disposable). Resetting `exam` wipes the human's working demo data — only do it if explicitly asked, and re-run `pnpm db:seed:demo` afterward.
+8. **If unsure which DB a running process is using, prove it by querying the API or the DB directly** — never guess from `.env` alone.
+
 ## Commands
 
 ```bash

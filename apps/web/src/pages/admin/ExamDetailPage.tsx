@@ -57,6 +57,8 @@ interface ExamDetail {
   retakePolicy: string;
   scoreStrategy: string;
   maxAttempts: number;
+  resultPublicationMode: "immediate" | "after_grading" | "manual";
+  resultsPublishedAt: string | null;
   stats: {
     participantCount: number;
     completedCount: number;
@@ -106,6 +108,7 @@ export function ExamDetailPage() {
   const [archiving, setArchiving] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [unpublishing, setUnpublishing] = useState(false);
+  const [releasing, setReleasing] = useState(false);
   const [extending, setExtending] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [extendMinutes, setExtendMinutes] = useState(15);
@@ -273,6 +276,23 @@ export function ExamDetailPage() {
     }
   }
 
+  /** Publishes exam results (manual mode) so candidates can see their scores. */
+  async function handlePublishResults() {
+    if (!id || releasing) return;
+    setReleasing(true);
+    try {
+      await api.post(`/api/exams/${id}/publish-results`);
+      toast.success("成绩已发布");
+      await loadExam();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "发布成绩失败，请稍后重试",
+      );
+    } finally {
+      setReleasing(false);
+    }
+  }
+
   /** Extends the open exam's closeAt (open -> open). ADR-005 Slice 2 §3.4. */
   async function handleExtend() {
     if (!id || extending) return;
@@ -422,6 +442,25 @@ export function ExamDetailPage() {
                 onConfirm={() => void handleCancel()}
               />
             )}
+            {exam.resultPublicationMode === "manual" &&
+              !exam.resultsPublishedAt &&
+              (exam.status === "published" ||
+                exam.status === "open" ||
+                exam.status === "closed") && (
+                <ConfirmDialog
+                  trigger={
+                    <Button
+                      data-testid="exam-detail-publish-results-btn"
+                      disabled={releasing}
+                    >
+                      {releasing ? "发布中..." : "发布成绩"}
+                    </Button>
+                  }
+                  title="确认发布成绩"
+                  description={`确定要发布考试「${exam.title}」的成绩吗？发布后考生将可以查看成绩。`}
+                  onConfirm={() => void handlePublishResults()}
+                />
+              )}
             <Button
               variant="outline"
               onClick={() => void navigate("/admin/exams")}

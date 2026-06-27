@@ -9,6 +9,7 @@ import {
 } from "@exam/contracts";
 import { createSettingsRepo } from "@exam/db/src/repository/settingsRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
+import type { Database } from "@exam/db/src/types.js";
 import type { PublicBrandingContext } from "@exam/domain";
 import { ensureTargetOrg } from "./helpers.js";
 import { recordAudit } from "./audit.js";
@@ -32,6 +33,37 @@ const brandingSettingsResponseSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+/**
+ * Zod schema for the admin settings response. Returns either the full
+ * `OrganizationSettings` or an empty object when no settings have been
+ * configured yet. Shared by the aggregate and branding-scoped read endpoints.
+ */
+const adminSettingsResponseSchema = z.union([
+  OrganizationSettingsSchema,
+  z.object({}).strict(),
+]);
+
+/**
+ * Reads the full organization settings for a tenant context and shapes them
+ * for the admin settings response. Returns the validated settings object, or
+ * `{}` when no settings row exists yet. Shared by the aggregate and
+ * branding-scoped read endpoints to avoid duplicated read/serialize logic.
+ */
+async function readAdminSettings(
+  db: Database,
+  ctx: ReturnType<typeof ensureTargetOrg>,
+): Promise<z.infer<typeof adminSettingsResponseSchema>> {
+  const settingsRepo = createSettingsRepo(db);
+  const settings = await settingsRepo.get(ctx);
+  return settings
+    ? OrganizationSettingsSchema.parse({
+        ...settings,
+        createdAt: settings.createdAt.toISOString(),
+        updatedAt: settings.updatedAt.toISOString(),
+      })
+    : {};
+}
 
 /**
  * Fastify plugin that registers branding and organization settings routes.
@@ -74,14 +106,29 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
-   * Zod schema for the admin branding settings response. Returns either
-   * the full `OrganizationSettings` or an empty object when no settings
-   * have been configured yet.
+   * GET /admin/settings
+   *
+   * Returns the full organization settings for the current organization.
+   * Admin-only. Returns an empty object if no settings exist yet. This is the
+   * aggregate read endpoint; branding-specific reads remain at
+   * `/admin/settings/branding` and return the same shape.
    */
-  const adminSettingsResponseSchema = z.union([
-    OrganizationSettingsSchema,
-    z.object({}).strict(),
-  ]);
+  fastify.get(
+    "/admin/settings",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: adminSettingsResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      return readAdminSettings(fastify.db, ensureTargetOrg(request.ctx!));
+    },
+  );
 
   /**
    * GET /admin/settings/branding
@@ -102,15 +149,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request) => {
-      const settingsRepo = createSettingsRepo(fastify.db);
-      const settings = await settingsRepo.get(ensureTargetOrg(request.ctx!));
-      return settings
-        ? OrganizationSettingsSchema.parse({
-            ...settings,
-            createdAt: settings.createdAt.toISOString(),
-            updatedAt: settings.updatedAt.toISOString(),
-          })
-        : {};
+      return readAdminSettings(fastify.db, ensureTargetOrg(request.ctx!));
     },
   );
 

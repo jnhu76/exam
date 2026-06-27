@@ -605,6 +605,7 @@ export async function seedDemo(
     retakePolicy: RetakePolicy;
     scoreStrategy: ScoreStrategy;
     maxAttempts: number;
+    resultPublicationMode: "immediate" | "after_grading" | "manual";
     createdAt: Date;
     updatedAt: Date;
   };
@@ -667,6 +668,7 @@ export async function seedDemo(
     retakePolicy: "max_attempts",
     scoreStrategy: "highest",
     maxAttempts: 2,
+    resultPublicationMode: "immediate",
     createdAt: ts(-2 * DAY),
     updatedAt: ts(),
   });
@@ -693,6 +695,7 @@ export async function seedDemo(
     retakePolicy: "unlimited",
     scoreStrategy: "latest",
     maxAttempts: 99,
+    resultPublicationMode: "immediate",
     createdAt: ts(-1 * DAY),
     updatedAt: ts(),
   });
@@ -718,6 +721,7 @@ export async function seedDemo(
     retakePolicy: "max_attempts",
     scoreStrategy: "highest",
     maxAttempts: 2,
+    resultPublicationMode: "immediate",
     createdAt: ts(-3 * DAY),
     updatedAt: ts(),
   });
@@ -743,6 +747,9 @@ export async function seedDemo(
     retakePolicy: "pass_then_stop",
     scoreStrategy: "highest",
     maxAttempts: 3,
+    // Manual mode + unpublished so the admin "发布成绩" button is visible and
+    // testable on this closed exam's detail page.
+    resultPublicationMode: "manual",
     createdAt: ts(-10 * DAY),
     updatedAt: ts(-1 * DAY),
   });

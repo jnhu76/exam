@@ -5,6 +5,7 @@ import {
   LoginResponseSchema,
   MeResponseSchema,
   ChangePasswordRequestSchema,
+  UpdateProfileRequestSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
 
@@ -380,6 +381,69 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       return { ok: true as const };
+    },
+  );
+
+  fastify.patch(
+    "/me/profile",
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        security: cookieAuth,
+        body: UpdateProfileRequestSchema,
+        response: {
+          200: MeResponseSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    /**
+     * PATCH /me/profile — update the authenticated user's own profile.
+     *
+     * Phase 1 supports editing the display name only. Returns the updated
+     * user profile, or 404 if the user record is missing.
+     */
+    async (request, reply) => {
+      const parsed = UpdateProfileRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply
+          .code(400)
+          .send(buildValidationErrorResponse(request.id, parsed.error));
+      }
+      const { name } = parsed.data;
+      const ctx = request.ctx as RequestContext;
+      const targetCtx = {
+        ...ctx,
+        targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
+      };
+      const userRepo = createUserRepo(fastify.db);
+      const updated = await userRepo.update(targetCtx, targetCtx.actorId, {
+        name,
+      });
+      if (!updated) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+      recordAudit(
+        fastify,
+        request,
+        targetCtx,
+        "auth.profile_update",
+        "user",
+        updated.id,
+        { name },
+      );
+      const profile = {
+        id: updated.id,
+        username: updated.username,
+        name: updated.name,
+        role: updated.role,
+        organizationId: updated.organizationId,
+      };
+      const validated = MeResponseSchema.safeParse(profile);
+      return validated.success ? validated.data : profile;
     },
   );
 };

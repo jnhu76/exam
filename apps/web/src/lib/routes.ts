@@ -33,5 +33,6 @@ export const routes = {
     start: (id: string) => `/exam/${id}/start`,
     take: (id: string) => `/exam/${id}/take`,
     result: (id: string) => `/exam/${id}/result`,
+    settings: "/exam/settings",
   },
 } as const;

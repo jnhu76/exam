@@ -5,7 +5,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { LoginRequest, LoginResponse, MeResponse } from "@exam/contracts";
+import type {
+  LoginRequest,
+  LoginResponse,
+  MeResponse,
+  UpdateProfileRequest,
+} from "@exam/contracts";
 import { useNavigate } from "react-router";
 import { api, setNavigate } from "@/lib/api";
 
@@ -21,6 +26,7 @@ export interface AuthContextValue {
   error: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (name: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -109,6 +115,21 @@ export function AuthProvider({
     }
   }
 
+  async function updateProfile(name: string) {
+    setError(null);
+    try {
+      const updated = await api.patch<MeResponse, UpdateProfileRequest>(
+        "/api/auth/me/profile",
+        { name },
+      );
+      setUser(updated);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "更新失败";
+      setError(message);
+      throw e;
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -119,6 +140,7 @@ export function AuthProvider({
         error,
         login,
         logout,
+        updateProfile,
       }}
     >
       {children}
