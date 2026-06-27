@@ -85,7 +85,7 @@ export function ExamLayout() {
                 账号设置
               </DropdownMenuItem>
               <DropdownMenuItem
-                variant="destructive"
+                className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
                 onSelect={() => void logout()}
               >
                 退出登录
