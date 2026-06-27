@@ -10,35 +10,34 @@
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
 
-  /* Wegent token → Tailwind v4 color mapping.
-     Values are RGB triplets (space-separated) enabling rgb(var(...) / alpha). */
-  --color-background: 255 255 255;
-  --color-foreground: 51 51 51;
-  --color-card: 249 249 249;
-  --color-card-foreground: 51 51 51;
-  --color-popover: 255 255 255;
-  --color-popover-foreground: 51 51 51;
-  --color-primary: 93 94 201;
-  --color-primary-foreground: 255 255 255;
-  --color-secondary: 243 244 246;
-  --color-secondary-foreground: 99 99 99;
-  --color-muted: 243 244 246;
-  --color-muted-foreground: 147 147 147;
-  --color-accent: 93 94 201 / 0.06;
-  --color-accent-foreground: 51 51 51;
-  --color-destructive: 239 68 68;
-  --color-destructive-foreground: 255 255 255;
-  --color-success: 34 197 94;
-  --color-success-foreground: 255 255 255;
-  --color-warning: 245 158 11;
-  --color-warning-foreground: 255 255 255;
-  --color-info: 93 94 201;
-  --color-info-foreground: 255 255 255;
-  --color-border: 228 228 228;
-  --color-input: 228 228 228;
-  --color-ring: 93 94 201;
+  /* Wegent tokens — wrapped in rgb() for valid CSS output */
+  --color-background: rgb(255 255 255);
+  --color-foreground: rgb(51 51 51);
+  --color-card: rgb(249 249 249);
+  --color-card-foreground: rgb(51 51 51);
+  --color-popover: rgb(255 255 255);
+  --color-popover-foreground: rgb(51 51 51);
+  --color-primary: rgb(93 94 201);
+  --color-primary-foreground: rgb(255 255 255);
+  --color-secondary: rgb(243 244 246);
+  --color-secondary-foreground: rgb(99 99 99);
+  --color-muted: rgb(243 244 246);
+  --color-muted-foreground: rgb(147 147 147);
+  --color-accent: rgb(93 94 201 / 0.06);
+  --color-accent-foreground: rgb(51 51 51);
+  --color-destructive: rgb(239 68 68);
+  --color-destructive-foreground: rgb(255 255 255);
+  --color-success: rgb(34 197 94);
+  --color-success-foreground: rgb(255 255 255);
+  --color-warning: rgb(245 158 11);
+  --color-warning-foreground: rgb(255 255 255);
+  --color-info: rgb(93 94 201);
+  --color-info-foreground: rgb(255 255 255);
+  --color-border: rgb(228 228 228);
+  --color-input: rgb(228 228 228);
+  --color-ring: rgb(93 94 201);
 
-  /* Sidebar (keep existing) */
+  /* Sidebar */
   --color-sidebar: var(--sidebar-bg);
   --color-sidebar-foreground: var(--sidebar-text);
   --color-sidebar-accent: var(--sidebar-active);
@@ -49,14 +48,14 @@
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-border: var(--sidebar-border);
 
-  /* Admin tokens → Wegent */
-  --color-admin-page: 255 255 255;
-  --color-admin-card: 249 249 249;
-  --color-admin-muted: 243 244 246;
-  --color-admin-search: 243 244 246;
-  --color-admin-table-header: 243 244 246;
-  --color-admin-border: 228 228 228;
-  --color-admin-border-light: 243 244 246;
+  /* Admin tokens → Wegent (with rgb()) */
+  --color-admin-page: rgb(255 255 255);
+  --color-admin-card: rgb(249 249 249);
+  --color-admin-muted: rgb(243 244 246);
+  --color-admin-search: rgb(243 244 246);
+  --color-admin-table-header: rgb(243 244 246);
+  --color-admin-border: rgb(228 228 228);
+  --color-admin-border-light: rgb(243 244 246);
 
   /* Radius */
   --radius: 0.5rem;
@@ -75,7 +74,6 @@
    ══════════════════════════════════════════ */
 
 :root {
-  /* Sidebar */
   --sidebar-bg: #102a43;
   --sidebar-active: #1f4e79;
   --sidebar-active-soft: rgba(255 255 255 / 12%);
@@ -86,32 +84,31 @@
 }
 
 .dark {
-  --color-background: 14 15 15;
-  --color-foreground: 212 212 212;
-  --color-card: 26 28 28;
-  --color-card-foreground: 212 212 212;
-  --color-popover: 26 28 28;
-  --color-popover-foreground: 212 212 212;
-  --color-primary: 118 119 218;
-  --color-primary-foreground: 255 255 255;
-  --color-secondary: 33 36 36;
-  --color-secondary-foreground: 176 176 176;
-  --color-muted: 33 36 36;
-  --color-muted-foreground: 136 136 136;
-  --color-accent: 118 119 218 / 0.1;
-  --color-accent-foreground: 212 212 212;
-  --color-destructive: 248 81 73;
-  --color-destructive-foreground: 14 15 15;
-  --color-success: 34 197 94;
-  --color-success-foreground: 255 255 255;
-  --color-warning: 245 158 11;
-  --color-warning-foreground: 255 255 255;
-  --color-info: 118 119 218;
-  --color-info-foreground: 255 255 255;
-  --color-border: 42 45 45;
-  --color-input: 42 45 45;
-  --color-ring: 118 119 218;
-  --shadow-popover: 0 8px 24px rgba(0 0 0 / 0.5);
+  --color-background: rgb(14 15 15);
+  --color-foreground: rgb(212 212 212);
+  --color-card: rgb(26 28 28);
+  --color-card-foreground: rgb(212 212 212);
+  --color-popover: rgb(26 28 28);
+  --color-popover-foreground: rgb(212 212 212);
+  --color-primary: rgb(118 119 218);
+  --color-primary-foreground: rgb(255 255 255);
+  --color-secondary: rgb(33 36 36);
+  --color-secondary-foreground: rgb(176 176 176);
+  --color-muted: rgb(33 36 36);
+  --color-muted-foreground: rgb(136 136 136);
+  --color-accent: rgb(118 119 218 / 0.1);
+  --color-accent-foreground: rgb(212 212 212);
+  --color-destructive: rgb(248 81 73);
+  --color-destructive-foreground: rgb(14 15 15);
+  --color-success: rgb(34 197 94);
+  --color-success-foreground: rgb(255 255 255);
+  --color-warning: rgb(245 158 11);
+  --color-warning-foreground: rgb(255 255 255);
+  --color-info: rgb(118 119 218);
+  --color-info-foreground: rgb(255 255 255);
+  --color-border: rgb(42 45 45);
+  --color-input: rgb(42 45 45);
+  --color-ring: rgb(118 119 218);
 
   --sidebar-bg: #141414;
   --sidebar-active: #1f4e79;
