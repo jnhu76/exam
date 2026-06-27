@@ -1,0 +1,215 @@
+{
+  "legacyComponents": [
+    {
+      "loc": "apps/web/src/components/shared/DataTableShell.tsx:8",
+      "match": "export function DataTableShell({"
+    },
+    {
+      "loc": "apps/web/src/components/shared/DataToolbar.tsx:8",
+      "match": "export function DataToolbar({"
+    },
+    {
+      "loc": "apps/web/src/components/shared/ListToolbar.tsx:4",
+      "match": "/** Props for the ListToolbar component. */"
+    },
+    {
+      "loc": "apps/web/src/components/shared/ListToolbar.tsx:5",
+      "match": "type ListToolbarProps = {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/ListToolbar.tsx:18",
+      "match": "export function ListToolbar({"
+    },
+    {
+      "loc": "apps/web/src/components/shared/ListToolbar.tsx:25",
+      "match": "}: ListToolbarProps) {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/PageHeader.tsx:8",
+      "match": "export function PageHeader({"
+    },
+    {
+      "loc": "apps/web/src/components/shared/consistency.test.tsx:6",
+      "match": "import { PageHeader } from \"./PageHeader\";"
+    },
+    {
+      "loc": "apps/web/src/components/shared/consistency.test.tsx:38",
+      "match": "describe(\"PageHeader\", () => {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/consistency.test.tsx:40",
+      "match": "const { container } = render(<PageHeader title=\"测试\" />);"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:9",
+      "match": "import { DataTableShell } from \"./DataTableShell\";"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:10",
+      "match": "import { DataToolbar } from \"./DataToolbar\";"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:16",
+      "match": "import { ListToolbar } from \"./ListToolbar\";"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:18",
+      "match": "import { PageHeader } from \"./PageHeader\";"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:25",
+      "match": "describe(\"PageHeader\", () => {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:27",
+      "match": "render(<PageHeader title=\"考试管理\" />);"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:35",
+      "match": "<PageHeader"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:44",
+      "match": "render(<PageHeader title=\"成绩查询\" />);"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:49",
+      "match": "render(<PageHeader title=\"考试详情\" status={<span>已发布</span>} />);"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:244",
+      "match": "describe(\"ListToolbar\", () => {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:247",
+      "match": "<ListToolbar"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:265",
+      "match": "render(<ListToolbar search={0} filters={0} actions={0} summary={0} />);"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:590",
+      "match": "describe(\"DataToolbar\", () => {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:593",
+      "match": "<DataToolbar"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:599",
+      "match": "</DataToolbar>,"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:612",
+      "match": "<DataToolbar aria-label=\"考试筛选\">"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:614",
+      "match": "</DataToolbar>,"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:623",
+      "match": "describe(\"DataTableShell\", () => {"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:626",
+      "match": "<DataTableShell title=\"考试列表\" description=\"展示当前考试\">"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:634",
+      "match": "</DataTableShell>,"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:647",
+      "match": "<DataTableShell"
+    },
+    {
+      "loc": "apps/web/src/components/shared/shared.test.tsx:658",
+      "match": "</DataTableShell>,"
+    }
+  ],
+  "badgeVariants": [
+    {
+      "loc": "apps/web/src/components/exam/ExamTopbar.tsx:41",
+      "match": "<Badge variant=\"outline\" className=\"gap-1.5\">"
+    },
+    {
+      "loc": "apps/web/src/components/exam/QuestionHeader.tsx:32",
+      "match": "<Badge variant=\"secondary\">{typeLabel}</Badge>"
+    },
+    {
+      "loc": "apps/web/src/components/exam/QuestionHeader.tsx:33",
+      "match": "<Badge variant=\"outline\">{score} 分</Badge>"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/AttemptDetailPage.tsx:676",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/ExamCreatePage.tsx:266",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/ExamCreatePage.tsx:333",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/ExamEditPage.tsx:305",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/ExamEditPage.tsx:368",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/ExamMonitoringPage.tsx:396",
+      "match": "<Badge variant=\"secondary\" className={`shrink-0 ${color}`}>"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/QuestionImportPage.tsx:277",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/UsersPage.tsx:206",
+      "match": "<Badge variant=\"outline\">"
+    },
+    {
+      "loc": "apps/web/src/pages/exam/ExamListPage.tsx:94",
+      "match": "<Badge variant=\"default\" data-testid=\"exam-best-score\">"
+    }
+  ],
+  "spaceClasses": [
+    {
+      "loc": "apps/web/src/components/exam/ExamConfigForm.tsx:422",
+      "match": "<div className=\"space-y-2\">"
+    },
+    {
+      "loc": "apps/web/src/components/ui/avatar.tsx:76",
+      "match": "\"group/avatar-group flex -space-x-2 *:data-[slot=avatar]:ring-2 *:data-[slot=avatar]:ring-background\","
+    },
+    {
+      "loc": "apps/web/src/components/ui/calendar.tsx:46",
+      "match": "month_grid: \"w-full border-collapse space-y-1\","
+    },
+    {
+      "loc": "apps/web/src/pages/admin/GradingDetailPage.tsx:184",
+      "match": "<div className=\"space-y-4\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/GradingDetailPage.tsx:185",
+      "match": "<div className=\"space-y-2\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/GradingDetailPage.tsx:194",
+      "match": "<div className=\"space-y-2\">"
+    },
+    {
+      "loc": "apps/web/src/pages/admin/GradingDetailPage.tsx:216",
+      "match": "<div className=\"space-y-2\">"
+    }
+  ],
+  "sizeClasses": [],
+  "hardcodedColors": [],
+  "koiRefs": []
+}

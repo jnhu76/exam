@@ -18,6 +18,7 @@ const ignoreDirs = new Set([
   "coverage",
   ".turbo",
   ".git",
+  "public",
 ]);
 
 const files = [];
