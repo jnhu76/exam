@@ -6,6 +6,7 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -94,8 +95,12 @@ export function ExamPage() {
       <AdminShell>
         <AdminShellHeader
           title="考试管理"
+          description="创建、发布并管理组织内的考试场次。"
           actions={
-            <Button onClick={() => void navigate("/admin/exams/new")}>
+            <Button
+              variant="primary"
+              onClick={() => void navigate("/admin/exams/new")}
+            >
               <Plus data-icon="inline-start" />
               创建考试
             </Button>
@@ -116,13 +121,13 @@ export function ExamPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>考试名称</TableHead>
-                    <TableHead className="w-20">状态</TableHead>
-                    <TableHead>时间窗口</TableHead>
-                    <TableHead className="w-16">时长</TableHead>
-                    <TableHead className="w-16">题目数</TableHead>
-                    <TableHead className="w-16">参与人数</TableHead>
-                    <TableHead className="w-16">及格分</TableHead>
-                    <TableHead className="w-32">操作</TableHead>
+                    <TableHead className="w-28">状态</TableHead>
+                    <TableHead className="w-56">时间窗口</TableHead>
+                    <TableHead className="w-20 text-right">时长</TableHead>
+                    <TableHead className="w-20 text-right">题目数</TableHead>
+                    <TableHead className="w-20 text-right">参与人数</TableHead>
+                    <TableHead className="w-24 text-right">及格分</TableHead>
+                    <TableHead className="w-24 text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -140,24 +145,30 @@ export function ExamPage() {
 
                     return (
                       <TableRow key={exam.id}>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium text-foreground">
                           {exam.title}
                         </TableCell>
                         <TableCell>
                           <AdminStatusTag status={exam.status} />
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        <TableCell className="tabular-nums text-sm text-muted-foreground">
                           {new Date(exam.openAt).toLocaleDateString()} -{" "}
                           {new Date(exam.closeAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>{exam.durationMinutes}分钟</TableCell>
-                        <TableCell>{exam.questionIds.length}</TableCell>
-                        <TableCell>{exam.participantCount}</TableCell>
-                        <TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {exam.durationMinutes}分钟
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {exam.questionIds.length}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {exam.participantCount}
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
                           {exam.passingScore}/{exam.totalScore}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <RowActions>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -188,7 +199,7 @@ export function ExamPage() {
                                 </TooltipContent>
                               </Tooltip>
                             )}
-                          </div>
+                          </RowActions>
                         </TableCell>
                       </TableRow>
                     );

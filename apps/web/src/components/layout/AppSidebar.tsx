@@ -98,9 +98,8 @@ function SidebarLink({
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
-          "flex min-h-10 items-center gap-3 rounded-[var(--admin-radius)] px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
-          isActive &&
-            "bg-sidebar-active-soft font-medium text-sidebar-foreground",
+          "flex min-h-10 items-center gap-3 rounded-[var(--admin-radius)] px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-text",
+          isActive && "bg-sidebar-active-soft font-medium text-sidebar-active",
         )
       }
     >
@@ -213,7 +212,7 @@ export function AppSidebar({
           )}
         >
           <Avatar className="size-8">
-            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-foreground">
+            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-accent-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>

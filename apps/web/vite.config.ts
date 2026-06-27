@@ -39,6 +39,12 @@ export default defineConfig({
         target: "http://localhost:3000",
         changeOrigin: true,
       },
+      // Serve the API-hosted offline fonts (Noto Sans CJK SC) in dev, mirroring
+      // production where @fastify/static serves /fonts at prefix "/".
+      "/fonts": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
     },
   },
 });

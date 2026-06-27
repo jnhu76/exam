@@ -1,9 +1,9 @@
 import type { LucideIcon } from "lucide-react";
 import { forwardRef, type ComponentProps } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** CRUD verb → semantic color (Wegent token-based). */
+/** CRUD verb → Wegent action-semantic mapping (no per-verb Koi outline colors). */
 export type Verb =
   | "add"
   | "edit"
@@ -13,14 +13,33 @@ export type Verb =
   | "search"
   | "reset";
 
-const VERB_VARIANT: Record<Verb, string> = {
-  add: "border-primary/40 text-primary hover:bg-primary/10",
-  edit: "border-success/40 text-success hover:bg-success/10",
-  delete: "border-destructive/40 text-destructive hover:bg-destructive/10",
-  export: "border-warning/40 text-warning hover:bg-warning/10",
-  import: "border-info/40 text-info hover:bg-info/10",
-  search: "border-primary/40 text-primary hover:bg-primary/10",
-  reset: "border-destructive/40 text-destructive hover:bg-destructive/10",
+/**
+ * Verb → Wegent Action Semantic mapping.
+ * - add     → primary-action   (solid primary purple) — page's main CTA
+ * - edit    → secondary-action (outline)
+ * - delete  → secondary-action with destructive text (list-safe; confirmation dialog owns destructive fill)
+ * - export  → secondary-action (outline)
+ * - import  → secondary-action (outline)
+ * - search  → primary-action   (solid primary)
+ * - reset   → secondary-action with destructive text
+ */
+const VERB_CONFIG: Record<
+  Verb,
+  { variant: ButtonProps["variant"]; className?: string }
+> = {
+  add: { variant: "primary" },
+  search: { variant: "primary" },
+  edit: { variant: "outline" },
+  export: { variant: "outline" },
+  import: { variant: "outline" },
+  delete: {
+    variant: "outline",
+    className: "text-destructive hover:bg-destructive/10",
+  },
+  reset: {
+    variant: "outline",
+    className: "text-destructive hover:bg-destructive/10",
+  },
 };
 
 export interface AdminToolbarButtonProps extends Omit<
@@ -47,12 +66,13 @@ export const AdminToolbarButton = forwardRef<
   { verb, icon: Icon, className, children, size = "sm", ...props },
   ref,
 ) {
+  const config = VERB_CONFIG[verb];
   return (
     <Button
       ref={ref}
-      variant="outline"
+      variant={config.variant}
       size={size}
-      className={cn("bg-card font-medium", VERB_VARIANT[verb], className)}
+      className={cn("font-medium", config.className, className)}
       {...props}
     >
       {Icon && <Icon data-icon="inline-start" />}

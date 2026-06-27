@@ -2,60 +2,180 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ════════════════════════════════════════════════════════════════════════
+   LAYER 1 — Raw Wegent color facts (bare space-separated RGB triplets)
+   ────────────────────────────────────────────────────────────────────────
+   The single source of truth for every color. Stored as bare triplets
+   (e.g. `93 94 201`) so they can be reused by Layer 2's `rgb(var(--raw-x))`
+   bridge AND composed with alpha in plain CSS. Never reference a color
+   value directly above this layer — always go through a `--raw-*` token.
+
+   Why bare triplets (not `rgb(...)`): the Wegent model. A bare triplet can
+   be wrapped by a bridge as `rgb(var(--raw-x))` and still participate in
+   Tailwind v4's `color-mix()` opacity modifiers (verified by local build:
+   `bg-primary/10` emits `color-mix(in oklab, rgb(var(--raw-primary)) 10%, transparent)`),
+   while ALSO remaining dynamic — `.dark` only needs to re-point the same
+   `--raw-*` var. (A literal `rgb(93 94 201)` in `@theme inline` would be
+   statically baked to `#5d5ec9`, silently breaking dark-mode primary.)
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Surfaces */
+  --raw-bg-base: 255 255 255;
+  --raw-bg-surface: 249 249 249;
+  --raw-bg-muted: 243 244 246;
+  --raw-bg-hover: 93 94 201;
+  --raw-bg-hover-alpha: 0.06;
+
+  /* Text */
+  --raw-text-primary: 51 51 51;
+  --raw-text-secondary: 99 99 99;
+  --raw-text-muted: 147 147 147;
+  --raw-text-inverted: 255 255 255;
+
+  /* Borders */
+  --raw-border: 228 228 228;
+  --raw-border-strong: 200 200 200;
+
+  /* Brand / status */
+  --raw-primary: 93 94 201;
+  --raw-primary-contrast: 255 255 255;
+  --raw-success: 34 197 94;
+  --raw-warning: 245 158 11;
+  --raw-error: 239 68 68;
+  --raw-info: 93 94 201;
+  --raw-ring: 93 94 201;
+
+  /* Sidebar (light: same surface family, primary-tinted active state) */
+  --raw-sidebar-bg: 255 255 255;
+  --raw-sidebar-active: 93 94 201;
+  --raw-sidebar-active-soft: 93 94 201;
+  --raw-sidebar-active-soft-alpha: 0.1;
+  --raw-sidebar-hover: 243 244 246;
+  --raw-sidebar-text: 51 51 51;
+  --raw-sidebar-muted: 147 147 147;
+  --raw-sidebar-border: 228 228 228;
+}
+
+.dark {
+  /* Surfaces */
+  --raw-bg-base: 14 15 15;
+  --raw-bg-surface: 26 28 28;
+  --raw-bg-muted: 33 36 36;
+  --raw-bg-hover: 118 119 218;
+  --raw-bg-hover-alpha: 0.1;
+
+  /* Text */
+  --raw-text-primary: 212 212 212;
+  --raw-text-secondary: 176 176 176;
+  --raw-text-muted: 136 136 136;
+  --raw-text-inverted: 14 15 15;
+
+  /* Borders */
+  --raw-border: 42 45 45;
+  --raw-border-strong: 52 53 53;
+
+  /* Brand / status */
+  --raw-primary: 118 119 218;
+  --raw-primary-contrast: 255 255 255;
+  --raw-success: 34 197 94;
+  --raw-warning: 245 158 11;
+  --raw-error: 248 81 73;
+  --raw-info: 118 119 218;
+  --raw-ring: 118 119 218;
+
+  /* Sidebar (dark) */
+  --raw-sidebar-bg: 26 28 28;
+  --raw-sidebar-active: 118 119 218;
+  --raw-sidebar-active-soft: 118 119 218;
+  --raw-sidebar-active-soft-alpha: 0.16;
+  --raw-sidebar-hover: 255 255 255;
+  --raw-sidebar-hover-alpha: 0.06;
+  --raw-sidebar-text: 212 212 212;
+  --raw-sidebar-muted: 136 136 136;
+  --raw-sidebar-border: 42 45 45;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   LAYER 2 — Tailwind v4 @theme inline semantic bridge
+   ────────────────────────────────────────────────────────────────────────
+   Maps each `--color-*` utility namespace to Layer 1 raw triplets via
+   `rgb(var(--raw-x))`. Because the value is a var() reference (not a
+   literal), Tailwind keeps it dynamic: `.dark` re-points `--raw-*` and the
+   utility follows, while `color-mix()` still powers `/N` opacity modifiers.
+   (This layer is the Tailwind v4 equivalent of Wegent's
+   `withOpacity('--color-x')` => `rgb(var(--color-x) / <alpha-value>)`
+   bridge from tailwind.config.js.)
+   ════════════════════════════════════════════════════════════════════════ */
+
 @theme inline {
   --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+    "Noto Sans CJK SC", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC",
+    sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
 
-  /* Wegent tokens — wrapped in rgb() for valid CSS output */
-  --color-background: rgb(255 255 255);
-  --color-foreground: rgb(51 51 51);
-  --color-card: rgb(249 249 249);
-  --color-card-foreground: rgb(51 51 51);
-  --color-popover: rgb(255 255 255);
-  --color-popover-foreground: rgb(51 51 51);
-  --color-primary: rgb(93 94 201);
-  --color-primary-foreground: rgb(255 255 255);
-  --color-secondary: rgb(243 244 246);
-  --color-secondary-foreground: rgb(99 99 99);
-  --color-muted: rgb(243 244 246);
-  --color-muted-foreground: rgb(147 147 147);
-  --color-accent: rgb(93 94 201 / 0.06);
-  --color-accent-foreground: rgb(51 51 51);
-  --color-destructive: rgb(239 68 68);
-  --color-destructive-foreground: rgb(255 255 255);
-  --color-success: rgb(34 197 94);
-  --color-success-foreground: rgb(255 255 255);
-  --color-warning: rgb(245 158 11);
-  --color-warning-foreground: rgb(255 255 255);
-  --color-info: rgb(93 94 201);
-  --color-info-foreground: rgb(255 255 255);
-  --color-border: rgb(228 228 228);
-  --color-input: rgb(228 228 228);
-  --color-ring: rgb(93 94 201);
+  /* ── Layer 2: surfaces ── */
+  --color-background: rgb(var(--raw-bg-base));
+  --color-foreground: rgb(var(--raw-text-primary));
+  --color-card: rgb(var(--raw-bg-surface));
+  --color-card-foreground: rgb(var(--raw-text-primary));
+  --color-popover: rgb(var(--raw-bg-base));
+  --color-popover-foreground: rgb(var(--raw-text-primary));
+  --color-secondary: rgb(var(--raw-bg-muted));
+  --color-secondary-foreground: rgb(var(--raw-text-secondary));
+  --color-muted: rgb(var(--raw-bg-muted));
+  --color-muted-foreground: rgb(var(--raw-text-muted));
 
-  /* Sidebar */
-  --color-sidebar: var(--sidebar-bg);
-  --color-sidebar-foreground: var(--sidebar-text);
-  --color-sidebar-accent: var(--sidebar-active);
-  --color-sidebar-accent-foreground: #ffffff;
-  --color-sidebar-active-soft: var(--sidebar-active-soft);
-  --color-sidebar-hover: var(--sidebar-hover);
-  --color-sidebar-text: var(--sidebar-text);
-  --color-sidebar-muted: var(--sidebar-muted);
-  --color-sidebar-border: var(--sidebar-border);
+  /* ── Layer 2: brand / status ── */
+  --color-primary: rgb(var(--raw-primary));
+  --color-primary-foreground: rgb(var(--raw-primary-contrast));
+  --color-success: rgb(var(--raw-success));
+  --color-success-foreground: rgb(var(--raw-text-inverted));
+  --color-warning: rgb(var(--raw-warning));
+  --color-warning-foreground: rgb(var(--raw-text-inverted));
+  --color-info: rgb(var(--raw-info));
+  --color-info-foreground: rgb(var(--raw-text-inverted));
+  --color-destructive: rgb(var(--raw-error));
+  --color-destructive-foreground: rgb(var(--raw-text-inverted));
 
-  /* Admin tokens → Wegent (with rgb()) */
-  --color-admin-page: rgb(255 255 255);
-  --color-admin-card: rgb(249 249 249);
-  --color-admin-muted: rgb(243 244 246);
-  --color-admin-search: rgb(243 244 246);
-  --color-admin-table-header: rgb(243 244 246);
-  --color-admin-border: rgb(228 228 228);
-  --color-admin-border-light: rgb(243 244 246);
+  /* ── Layer 2: borders / rings ── */
+  --color-border: rgb(var(--raw-border));
+  --color-input: rgb(var(--raw-border));
+  --color-ring: rgb(var(--raw-ring));
+
+  /* ── Layer 2: accent (primary-tinted hover) ── */
+  --color-accent: rgb(var(--raw-primary) / var(--raw-bg-hover-alpha));
+  --color-accent-foreground: rgb(var(--raw-text-primary));
+
+  /* ── Layer 2: sidebar (bridges to raw sidebar triplets) ── */
+  --color-sidebar: rgb(var(--raw-sidebar-bg));
+  --color-sidebar-foreground: rgb(var(--raw-sidebar-text));
+  --color-sidebar-accent: rgb(var(--raw-sidebar-active));
+  --color-sidebar-accent-foreground: rgb(var(--raw-text-inverted));
+  --color-sidebar-active-soft: rgb(
+    var(--raw-sidebar-active-soft) / var(--raw-sidebar-active-soft-alpha)
+  );
+  --color-sidebar-hover: rgb(
+    var(--raw-sidebar-hover) / var(--raw-sidebar-hover-alpha, 1)
+  );
+  --color-sidebar-text: rgb(var(--raw-sidebar-text));
+  --color-sidebar-muted: rgb(var(--raw-sidebar-muted));
+  --color-sidebar-border: rgb(var(--raw-sidebar-border));
+
+  /* ── Layer 3: admin aliases (all alias to raw — no second color facts) ──
+     These bridge the admin namespace directly to Layer 1 so there is exactly
+     ONE source of truth per color. See admin-theme.css for the legacy
+     --admin-* names which now also alias forward to these. */
+  --color-admin-page: rgb(var(--raw-bg-base));
+  --color-admin-card: rgb(var(--raw-bg-surface));
+  --color-admin-muted: rgb(var(--raw-bg-muted));
+  --color-admin-search: rgb(var(--raw-bg-muted));
+  --color-admin-table-header: rgb(var(--raw-bg-muted));
+  --color-admin-border: rgb(var(--raw-border));
+  --color-admin-border-light: rgb(var(--raw-bg-muted));
 
   /* Radius */
   --radius: 0.5rem;
@@ -64,64 +184,14 @@
   --radius-admin-lg: calc(var(--radius) + 2px);
 
   /* Shadows */
-  --shadow-popover: 0 12px 32px rgba(93 94 201 / 0.12);
+  --shadow-popover: 0 12px 32px rgb(var(--raw-primary) / 0.12);
   --shadow-admin-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-admin-search: none;
 }
 
-/* ══════════════════════════════════════════
-   CSS Variables for non-Tailwind usage
-   ══════════════════════════════════════════ */
-
-:root {
-  --sidebar-bg: #102a43;
-  --sidebar-active: #1f4e79;
-  --sidebar-active-soft: rgba(255 255 255 / 12%);
-  --sidebar-hover: rgb(255 255 255 / 8%);
-  --sidebar-text: #d9e2ec;
-  --sidebar-muted: #9fb3c8;
-  --sidebar-border: #1b3a57;
-}
-
-.dark {
-  --color-background: rgb(14 15 15);
-  --color-foreground: rgb(212 212 212);
-  --color-card: rgb(26 28 28);
-  --color-card-foreground: rgb(212 212 212);
-  --color-popover: rgb(26 28 28);
-  --color-popover-foreground: rgb(212 212 212);
-  --color-primary: rgb(118 119 218);
-  --color-primary-foreground: rgb(255 255 255);
-  --color-secondary: rgb(33 36 36);
-  --color-secondary-foreground: rgb(176 176 176);
-  --color-muted: rgb(33 36 36);
-  --color-muted-foreground: rgb(136 136 136);
-  --color-accent: rgb(118 119 218 / 0.1);
-  --color-accent-foreground: rgb(212 212 212);
-  --color-destructive: rgb(248 81 73);
-  --color-destructive-foreground: rgb(14 15 15);
-  --color-success: rgb(34 197 94);
-  --color-success-foreground: rgb(255 255 255);
-  --color-warning: rgb(245 158 11);
-  --color-warning-foreground: rgb(255 255 255);
-  --color-info: rgb(118 119 218);
-  --color-info-foreground: rgb(255 255 255);
-  --color-border: rgb(42 45 45);
-  --color-input: rgb(42 45 45);
-  --color-ring: rgb(118 119 218);
-
-  --sidebar-bg: #141414;
-  --sidebar-active: #1f4e79;
-  --sidebar-active-soft: rgba(118 119 218 / 0.16);
-  --sidebar-hover: rgb(255 255 255 / 8%);
-  --sidebar-text: #e5eaf3;
-  --sidebar-muted: #a3a6ad;
-  --sidebar-border: #2a2a2a;
-}
-
-/* ══════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════════════
    Base Styles
-   ══════════════════════════════════════════ */
+   ════════════════════════════════════════════════════════════════════════ */
 
 * {
   @apply border-border;

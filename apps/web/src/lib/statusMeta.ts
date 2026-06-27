@@ -126,15 +126,15 @@ const toneTextColorMap: Record<StatusTone, string> = {
   secondary: "text-secondary-foreground",
 };
 
-/** Soft-filled tag background + text classes for each status tone (Wegent-style). */
+/** Soft-filled tag background + text + border classes for each status tone (Wegent-style). */
 export const toneTagClass: Record<StatusTone, string> = {
-  primary: "bg-primary/10 text-primary",
-  secondary: "bg-muted text-secondary-foreground",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  destructive: "bg-destructive/10 text-destructive",
-  info: "bg-primary/10 text-primary",
-  muted: "bg-muted text-muted-foreground",
+  primary: "border-primary/20 bg-primary/10 text-primary",
+  secondary: "border-border bg-muted text-secondary-foreground",
+  success: "border-success/20 bg-success/10 text-success",
+  warning: "border-warning/20 bg-warning/10 text-warning",
+  destructive: "border-destructive/20 bg-destructive/10 text-destructive",
+  info: "border-primary/20 bg-primary/10 text-primary",
+  muted: "border-border bg-muted text-muted-foreground",
 };
 
 /** Returns the Tailwind text-color class for a given status tone. */

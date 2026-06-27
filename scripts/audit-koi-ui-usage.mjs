@@ -163,7 +163,7 @@ fs.mkdirSync("docs/ui", { recursive: true });
 fs.writeFileSync("docs/ui/koi-migration-audit.md", report);
 fs.writeFileSync(
   "docs/ui/koi-migration-audit.json",
-  JSON.stringify(results, null, 2),
+  JSON.stringify(results, null, 2) + "\n",
 );
 
 console.log(report);

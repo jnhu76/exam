@@ -8,8 +8,11 @@ interface AdminSearchPanelProps {
 }
 
 /**
- * Inline search/filter panel (Wegent-style): muted background, rounded-lg,
- * wraps fields left-to-right and action buttons right.
+ * Inline search/filter toolbar (Wegent list-toolbar semantic): borderless,
+ * transparent, gap-based flex layout. Intended to live INSIDE an AdminTableShell
+ * (list-card) as the card's top toolbar, so search and table share one card
+ * rhythm — NOT a standalone gray box. Use `className` to add an inner divider
+ * (e.g. "border-b border-border") when nested in a card.
  */
 export function AdminSearchPanel({
   children,
@@ -19,11 +22,11 @@ export function AdminSearchPanel({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-lg border border-border bg-muted p-4 sm:flex-row sm:items-end sm:flex-wrap",
+        "flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:flex-wrap",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
         {children}
       </div>
       {actions && (

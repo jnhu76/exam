@@ -21,13 +21,13 @@ export function AdminStatusTag({
     <span
       data-status-tone={meta.tone}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md font-medium leading-none",
+        "inline-flex min-w-fit items-center gap-1 whitespace-nowrap rounded-md border font-medium leading-none",
         size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-2.5 text-sm",
         toneTagClass[meta.tone],
         className,
       )}
     >
-      {showIcon && <Icon className="size-3.5" aria-hidden="true" />}
+      {showIcon && <Icon className="size-3.5 shrink-0" aria-hidden="true" />}
       {meta.label}
     </span>
   );

@@ -9,7 +9,11 @@ import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
-import { AdminShell, AdminShellHeader } from "@/components/admin";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,46 +109,53 @@ export function SettingsPage() {
         </TabsList>
 
         <TabsContent value="profile">
-          {profileError && (
-            <InlineErrorBanner>{profileError}</InlineErrorBanner>
-          )}
-          <form className="max-w-sm" onSubmit={handleSaveProfile}>
-            <FieldGroup>
-              <Field>
-                <Label htmlFor="profile-name">姓名</Label>
-                <Input
-                  id="profile-name"
-                  value={profileName}
-                  maxLength={100}
-                  onChange={(e) => {
-                    setProfileName(e.target.value);
-                    if (profileError) setProfileError("");
-                  }}
-                />
-                <FieldError>{profileError}</FieldError>
-              </Field>
-              <Button
-                type="submit"
-                disabled={savingProfile}
-                data-testid="profile-save-btn"
-              >
-                {savingProfile ? "保存中..." : "保存"}
-              </Button>
-            </FieldGroup>
-          </form>
+          <AdminPageCard>
+            {profileError && (
+              <InlineErrorBanner>{profileError}</InlineErrorBanner>
+            )}
+            <form className="max-w-sm" onSubmit={handleSaveProfile}>
+              <FieldGroup>
+                <Field>
+                  <Label htmlFor="profile-name">姓名</Label>
+                  <Input
+                    id="profile-name"
+                    value={profileName}
+                    maxLength={100}
+                    onChange={(e) => {
+                      setProfileName(e.target.value);
+                      if (profileError) setProfileError("");
+                    }}
+                  />
+                  <FieldError>{profileError}</FieldError>
+                </Field>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={savingProfile}
+                  data-testid="profile-save-btn"
+                >
+                  {savingProfile ? "保存中..." : "保存"}
+                </Button>
+              </FieldGroup>
+            </form>
+          </AdminPageCard>
         </TabsContent>
 
         <TabsContent value="branding">
-          {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
-          <PlatformSettingsForm
-            initialValues={settings ?? undefined}
-            onSave={handleSave}
-            isLoading={isSaving}
-          />
+          <AdminPageCard>
+            {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
+            <PlatformSettingsForm
+              initialValues={settings ?? undefined}
+              onSave={handleSave}
+              isLoading={isSaving}
+            />
+          </AdminPageCard>
         </TabsContent>
 
         <TabsContent value="security">
-          <PasswordChangeForm cardWrapper={false} />
+          <AdminPageCard>
+            <PasswordChangeForm cardWrapper={false} />
+          </AdminPageCard>
         </TabsContent>
       </Tabs>
     </AdminShell>

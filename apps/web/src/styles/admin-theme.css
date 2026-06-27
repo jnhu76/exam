@@ -1,23 +1,39 @@
+/* ════════════════════════════════════════════════════════════════════════
+   LAYER 4 — Admin namespace aliases
+   ────────────────────────────────────────────────────────────────────────
+   Every `--admin-*` color here is an ALIAS — it points at the Layer 1 raw
+   tokens (via the Layer 2 bridge defined in index.css) and never declares a
+   second color value. This collapses the previous duplicate color facts
+   (`--admin-primary: rgb(93 94 201)` existed alongside `--color-primary`)
+   into a single source of truth.
+
+   Non-color structural values (radius, layout metrics, shadows) remain
+   literal here — they are not colors and have no Layer-1 equivalent.
+   ════════════════════════════════════════════════════════════════════════ */
+
 @layer base {
   :root {
-    --admin-bg-page: rgb(255 255 255);
-    --admin-bg-card: rgb(249 249 249);
-    --admin-bg-muted: rgb(243 244 246);
-    --admin-bg-search: rgb(243 244 246);
-    --admin-bg-table-header: rgb(243 244 246);
-    --admin-text: rgb(51 51 51);
-    --admin-text-muted: rgb(147 147 147);
-    --admin-text-subtle: rgb(147 147 147);
-    --admin-border: rgb(228 228 228);
-    --admin-border-light: rgb(243 244 246);
-    --admin-primary: rgb(93 94 201);
-    --admin-primary-soft: rgb(93 94 201 / 0.1);
-    --admin-success: rgb(34 197 94);
-    --admin-success-soft: rgb(34 197 94 / 0.1);
-    --admin-warning: rgb(245 158 11);
-    --admin-warning-soft: rgb(245 158 11 / 0.1);
-    --admin-danger: rgb(239 68 68);
-    --admin-danger-soft: rgb(239 68 68 / 0.1);
+    /* Color aliases → Layer 2 bridge (single source of truth: --raw-* ) */
+    --admin-bg-page: var(--color-background);
+    --admin-bg-card: var(--color-card);
+    --admin-bg-muted: var(--color-muted);
+    --admin-bg-search: var(--color-muted);
+    --admin-bg-table-header: var(--color-muted);
+    --admin-text: var(--color-foreground);
+    --admin-text-muted: var(--color-muted-foreground);
+    --admin-text-subtle: var(--color-muted-foreground);
+    --admin-border: var(--color-border);
+    --admin-border-light: var(--color-muted);
+    --admin-primary: var(--color-primary);
+    --admin-primary-soft: rgb(var(--raw-primary) / 0.1);
+    --admin-success: var(--color-success);
+    --admin-success-soft: rgb(var(--raw-success) / 0.1);
+    --admin-warning: var(--color-warning);
+    --admin-warning-soft: rgb(var(--raw-warning) / 0.1);
+    --admin-danger: var(--color-destructive);
+    --admin-danger-soft: rgb(var(--raw-error) / 0.1);
+
+    /* Structural values (not colors — no Layer-1 equivalent) */
     --admin-radius-sm: calc(var(--radius) - 2px);
     --admin-radius: var(--radius);
     --admin-radius-lg: calc(var(--radius) + 2px);

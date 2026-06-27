@@ -254,8 +254,8 @@ export function SystemDiagnosticsPage() {
           value={health?.cpu ?? 0}
           unit="%"
           icon={Activity}
-          iconBg="bg-[rgba(91,143,249,0.12)]"
-          iconColor="text-[#5b8ff9]"
+          iconBg="bg-primary/10"
+          iconColor="text-primary"
           trend={
             <span
               className={getToneTextColor(
@@ -271,8 +271,8 @@ export function SystemDiagnosticsPage() {
           value={health?.memory ?? 0}
           unit="%"
           icon={HardDrive}
-          iconBg="bg-[rgba(90,216,166,0.14)]"
-          iconColor="text-[#5ad8a6]"
+          iconBg="bg-success/10"
+          iconColor="text-success"
           trend={
             <span
               className={getToneTextColor(
@@ -288,8 +288,8 @@ export function SystemDiagnosticsPage() {
           value={health?.dbResponseMs ?? 0}
           unit="ms"
           icon={Database}
-          iconBg="bg-[rgba(146,112,202,0.12)]"
-          iconColor="text-[#9270ca]"
+          iconBg="bg-warning/10"
+          iconColor="text-warning"
           trend={
             <span
               className={getToneTextColor(
@@ -317,24 +317,32 @@ export function SystemDiagnosticsPage() {
                   <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="0%"
-                      stopColor="var(--primary)"
+                      stopColor="var(--color-primary)"
                       stopOpacity={0.3}
                     />
                     <stop
                       offset="100%"
-                      stopColor="var(--primary)"
+                      stopColor="var(--color-primary)"
                       stopOpacity={0}
                     />
                   </linearGradient>
                   <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#5ad8a6" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#5ad8a6" stopOpacity={0} />
+                    <stop
+                      offset="0%"
+                      stopColor="var(--color-success)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--color-success)"
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="var(--border)"
+                  stroke="var(--color-border)"
                 />
                 <XAxis
                   dataKey="t"
@@ -345,21 +353,21 @@ export function SystemDiagnosticsPage() {
                       second: "2-digit",
                     })
                   }
-                  tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
                   minTickGap={32}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                  tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
                   width={32}
                 />
                 <Tooltip
                   contentStyle={{
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
                     borderRadius: 8,
                     fontSize: 12,
                   }}
@@ -371,7 +379,7 @@ export function SystemDiagnosticsPage() {
                   type="monotone"
                   dataKey="cpu"
                   name="CPU %"
-                  stroke="var(--primary)"
+                  stroke="var(--color-primary)"
                   strokeWidth={2}
                   fill="url(#cpuGrad)"
                   isAnimationActive={false}
@@ -380,7 +388,7 @@ export function SystemDiagnosticsPage() {
                   type="monotone"
                   dataKey="memory"
                   name="内存 %"
-                  stroke="#5ad8a6"
+                  stroke="var(--color-success)"
                   strokeWidth={2}
                   fill="url(#memGrad)"
                   isAnimationActive={false}

@@ -7,7 +7,8 @@ interface AdminShellProps {
 }
 
 export function AdminShell({ children, className }: AdminShellProps) {
-  return <div className={cn("flex flex-col gap-4", className)}>{children}</div>;
+  // Wegent page semantic: page-level background + consistent section gap.
+  return <div className={cn("flex flex-col gap-5", className)}>{children}</div>;
 }
 
 interface AdminShellHeaderProps {
@@ -26,12 +27,16 @@ export function AdminShellHeader({
   return (
     <div className={cn("flex items-start justify-between gap-4", className)}>
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h1>
         {description && (
-          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         )}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {actions && (
+        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+      )}
     </div>
   );
 }

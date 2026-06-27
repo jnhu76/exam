@@ -116,33 +116,33 @@ export function ImportLogsPage() {
         title="导入日志"
         description="查看考生和题目导入的历史记录"
       />
-      <AdminSearchPanel>
-        <Select
-          value={typeFilter}
-          onValueChange={(v) => {
-            setTypeFilter(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[160px]" aria-label="全部类型">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TYPE_FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {hasActiveFilter && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <RotateCcw data-icon="inline-start" />
-            清空筛选
-          </Button>
-        )}
-      </AdminSearchPanel>
       <AdminTableShell>
+        <AdminSearchPanel className="border-b border-border">
+          <Select
+            value={typeFilter}
+            onValueChange={(v) => {
+              setTypeFilter(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-[160px]" aria-label="全部类型">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TYPE_FILTERS.map((f) => (
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {hasActiveFilter && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <RotateCcw data-icon="inline-start" />
+              清空筛选
+            </Button>
+          )}
+        </AdminSearchPanel>
         <Table>
           <TableHeader>
             <TableRow>

@@ -187,6 +187,7 @@ export function CoursePage() {
       <AdminShell>
         <AdminShellHeader
           title="课程管理"
+          description="维护课程库，作为题库与考试的基础分类。"
           actions={
             <AdminToolbarButton verb="add" icon={Plus} onClick={openCreate}>
               新增课程
@@ -194,91 +195,104 @@ export function CoursePage() {
           }
         />
 
-        {courses.length > 0 && (
-          <AdminSearchPanel>
-            <SearchInput
-              aria-label="搜索课程"
-              placeholder="搜索课程名称、代码或描述..."
-              value={search}
-              onChange={setSearch}
-              onClear={() => setSearch("")}
-              clearLabel="清除课程搜索"
-              containerClassName="max-w-md flex-1"
-            />
-          </AdminSearchPanel>
-        )}
-
         {courses.length === 0 ? (
           <EmptyState
             icon={<BookOpen className="size-8" />}
             title="暂无课程"
             description="还没有创建任何课程，点击上方按钮创建。"
           />
-        ) : filteredCourses.length === 0 ? (
-          <EmptyState
-            icon={<Search className="size-8" />}
-            title="未找到匹配的课程"
-            description={`没有符合「${search}」的课程。`}
-            action={
-              <Button variant="outline" onClick={() => setSearch("")}>
-                清除搜索
-              </Button>
-            }
-          />
         ) : (
           <AdminTableShell>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>课程名称</TableHead>
-                  <TableHead>课程代码</TableHead>
-                  <TableHead>描述</TableHead>
-                  <TableHead className="w-24">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCourses.map((course) => (
-                  <TableRow key={course.id}>
-                    <TableCell className="font-medium">{course.name}</TableCell>
-                    <TableCell>{course.code}</TableCell>
-                    <TableCell className="max-w-[360px]">
-                      {course.description ? (
-                        <TruncatedCell text={course.description} />
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <RowActions>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEdit(course)}
-                          aria-label="编辑课程"
-                        >
-                          <Pencil />
-                        </Button>
-                        <ConfirmDialog
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="删除课程"
-                            >
-                              <Trash2 className="text-destructive" />
-                            </Button>
-                          }
-                          title="确认删除"
-                          description={`确定要删除课程「${course.name}」吗？`}
-                          destructive
-                          onConfirm={() => void handleDelete(course.id)}
-                        />
-                      </RowActions>
-                    </TableCell>
+            <AdminSearchPanel
+              className="border-b border-border"
+              actions={
+                <span className="text-xs text-muted-foreground">
+                  共 {filteredCourses.length} 门课程
+                </span>
+              }
+            >
+              <SearchInput
+                aria-label="搜索课程"
+                placeholder="搜索课程名称、代码或描述..."
+                value={search}
+                onChange={setSearch}
+                onClear={() => setSearch("")}
+                clearLabel="清除课程搜索"
+                containerClassName="max-w-md flex-1"
+              />
+            </AdminSearchPanel>
+
+            {filteredCourses.length === 0 ? (
+              <div className="p-4">
+                <EmptyState
+                  icon={<Search className="size-8" />}
+                  title="未找到匹配的课程"
+                  description={`没有符合「${search}」的课程。`}
+                  action={
+                    <Button variant="outline" onClick={() => setSearch("")}>
+                      清除搜索
+                    </Button>
+                  }
+                />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>课程名称</TableHead>
+                    <TableHead className="w-40">课程代码</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead className="w-24 text-right">操作</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredCourses.map((course) => (
+                    <TableRow key={course.id}>
+                      <TableCell className="font-medium text-foreground">
+                        {course.name}
+                      </TableCell>
+                      <TableCell className="font-medium tabular-nums text-muted-foreground">
+                        {course.code}
+                      </TableCell>
+                      <TableCell className="max-w-[360px]">
+                        {course.description ? (
+                          <TruncatedCell text={course.description} />
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <RowActions>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEdit(course)}
+                            aria-label="编辑课程"
+                          >
+                            <Pencil />
+                          </Button>
+                          <ConfirmDialog
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="删除课程"
+                              >
+                                <Trash2 className="text-destructive" />
+                              </Button>
+                            }
+                            title="确认删除"
+                            description={`确定要删除课程「${course.name}」吗？`}
+                            destructive
+                            onConfirm={() => void handleDelete(course.id)}
+                          />
+                        </RowActions>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </AdminTableShell>
         )}
 
