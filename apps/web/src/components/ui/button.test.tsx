@@ -5,8 +5,16 @@ import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 
 describe("Button", () => {
-  it("uses shared primary color for the default variant", () => {
+  it("uses transparent bg with border for default variant (Wegent style)", () => {
     render(<Button>主要操作</Button>);
+
+    const btn = screen.getByRole("button", { name: "主要操作" });
+    expect(btn).toHaveClass("border");
+    expect(btn).toHaveClass("border-border");
+  });
+
+  it("uses primary bg for primary variant", () => {
+    render(<Button variant="primary">主要操作</Button>);
 
     expect(screen.getByRole("button", { name: "主要操作" })).toHaveClass(
       "bg-primary",
@@ -21,13 +29,10 @@ describe("Button", () => {
     );
   });
 
-  it("distinguishes secondary buttons from outline buttons", () => {
+  it("secondary variant has border (Wegent style)", () => {
     render(<Button variant="secondary">次要操作</Button>);
 
     expect(screen.getByRole("button", { name: "次要操作" })).toHaveClass(
-      "bg-muted",
-    );
-    expect(screen.getByRole("button", { name: "次要操作" })).not.toHaveClass(
       "border",
     );
   });

@@ -87,6 +87,7 @@ export function LoginPage() {
             )}
             <Button
               type="submit"
+              variant="primary"
               className="w-full"
               disabled={isSubmittingLogin}
             >
