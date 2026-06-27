@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Class-based dark mode for Tailwind v4 (per tailwind-design-system skill). */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
@@ -10,40 +9,36 @@
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
-  --color-background: var(--bg);
-  --color-foreground: var(--text);
-  --color-card: var(--surface);
-  --color-card-foreground: var(--text);
-  --color-popover: var(--surface);
-  --color-popover-foreground: var(--text);
-  --color-primary: var(--primary);
-  --color-primary-foreground: #ffffff;
-  --color-primary-soft: var(--primary-soft);
-  --color-primary-soft-foreground: var(--primary-hover);
-  --color-secondary: var(--surface);
-  --color-secondary-foreground: var(--text);
-  --color-muted: var(--surface-muted);
-  --color-muted-foreground: var(--text-muted);
-  --color-accent: var(--surface-muted);
-  --color-accent-foreground: var(--text);
-  --color-destructive: var(--danger);
-  --color-destructive-foreground: #ffffff;
-  --color-destructive-soft: var(--danger-soft);
-  --color-success: var(--success);
-  --color-success-foreground: #ffffff;
-  --color-success-soft: var(--success-soft);
-  --color-warning: var(--warning);
-  --color-warning-foreground: #ffffff;
-  --color-warning-soft: var(--warning-soft);
-  --color-info: var(--info);
-  --color-info-foreground: #ffffff;
-  --color-info-soft: var(--info-soft);
-  --color-neutral: var(--text-muted);
-  --color-neutral-foreground: #ffffff;
-  --color-neutral-soft: var(--surface-muted);
-  --color-border: var(--border);
-  --color-input: var(--border-strong);
-  --color-ring: var(--primary);
+
+  /* Wegent token → Tailwind v4 color mapping.
+     Values are RGB triplets (space-separated) enabling rgb(var(...) / alpha). */
+  --color-background: 255 255 255;
+  --color-foreground: 51 51 51;
+  --color-card: 249 249 249;
+  --color-card-foreground: 51 51 51;
+  --color-popover: 255 255 255;
+  --color-popover-foreground: 51 51 51;
+  --color-primary: 93 94 201;
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 243 244 246;
+  --color-secondary-foreground: 99 99 99;
+  --color-muted: 243 244 246;
+  --color-muted-foreground: 147 147 147;
+  --color-accent: 93 94 201 / 0.06;
+  --color-accent-foreground: 51 51 51;
+  --color-destructive: 239 68 68;
+  --color-destructive-foreground: 255 255 255;
+  --color-success: 34 197 94;
+  --color-success-foreground: 255 255 255;
+  --color-warning: 245 158 11;
+  --color-warning-foreground: 255 255 255;
+  --color-info: 93 94 201;
+  --color-info-foreground: 255 255 255;
+  --color-border: 228 228 228;
+  --color-input: 228 228 228;
+  --color-ring: 93 94 201;
+
+  /* Sidebar (keep existing) */
   --color-sidebar: var(--sidebar-bg);
   --color-sidebar-foreground: var(--sidebar-text);
   --color-sidebar-accent: var(--sidebar-active);
@@ -54,35 +49,31 @@
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-border: var(--sidebar-border);
 
-  /* Admin design tokens (koi-inspired) surfaced as Tailwind utilities. */
-  --color-admin-page: var(--admin-bg-page);
-  --color-admin-card: var(--admin-bg-card);
-  --color-admin-muted: var(--admin-bg-muted);
-  --color-admin-search: var(--admin-bg-search);
-  --color-admin-table-header: var(--admin-bg-table-header);
+  /* Admin tokens → Wegent */
+  --color-admin-page: 255 255 255;
+  --color-admin-card: 249 249 249;
+  --color-admin-muted: 243 244 246;
+  --color-admin-search: 243 244 246;
+  --color-admin-table-header: 243 244 246;
 
-  /* Tiered radius scale (koi: panels/buttons 8px, tabs 6px, tags 4px). */
-  --radius-admin-sm: var(--admin-radius-sm);
-  --radius-admin: var(--admin-radius);
-  --radius-admin-lg: var(--admin-radius-lg);
+  /* Radius */
+  --radius: 0.5rem;
+  --radius-admin-sm: calc(var(--radius) - 2px);
+  --radius-admin: var(--radius);
+  --radius-admin-lg: calc(var(--radius) + 2px);
 
-  /* Soft elevation (koi avoids heavy shadows; hairline borders + subtle lift). */
-  --shadow-admin-card: var(--admin-shadow-card);
-  --shadow-admin-search: var(--admin-shadow-search);
+  /* Shadows */
+  --shadow-popover: 0 12px 32px rgba(93 94 201 / 0.12);
+  --shadow-admin-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-admin-search: none;
 }
 
+/* ══════════════════════════════════════════
+   CSS Variables for non-Tailwind usage
+   ══════════════════════════════════════════ */
+
 :root {
-  --bg: #f7f8fb;
-  --surface: #ffffff;
-  --surface-muted: #f9fafb;
-  --text: #111827;
-  --text-muted: #6b7280;
-  --text-subtle: #9ca3af;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-soft: #eff6ff;
+  /* Sidebar */
   --sidebar-bg: #102a43;
   --sidebar-active: #1f4e79;
   --sidebar-active-soft: rgba(255 255 255 / 12%);
@@ -90,50 +81,48 @@
   --sidebar-text: #d9e2ec;
   --sidebar-muted: #9fb3c8;
   --sidebar-border: #1b3a57;
-  --danger: #b42318;
-  --danger-hover: #912018;
-  --danger-soft: #fef3f2;
-  --danger-border: #fecdca;
-  --success: #047857;
-  --success-soft: #ecfdf5;
-  --warning: #b54708;
-  --warning-soft: #fffbeb;
-  --info: #175cd3;
-  --info-soft: #eff6ff;
-  --radius: 0.5rem;
 }
 
-/* Dark theme (koi-inspired palette: chrome #141414, card #1D1E1F, content #000). */
 .dark {
-  --bg: #000000;
-  --surface: #1d1e1f;
-  --surface-muted: #262626;
-  --text: #e5eaf3;
-  --text-muted: #cfd3dc;
-  --text-subtle: #9fb3c8;
-  --border: #414243;
-  --border-strong: #4c4d4f;
-  --primary: #2992ff;
-  --primary-hover: #1f7ae0;
-  --primary-soft: rgba(41, 146, 255, 0.14);
+  --color-background: 14 15 15;
+  --color-foreground: 212 212 212;
+  --color-card: 26 28 28;
+  --color-card-foreground: 212 212 212;
+  --color-popover: 26 28 28;
+  --color-popover-foreground: 212 212 212;
+  --color-primary: 118 119 218;
+  --color-primary-foreground: 255 255 255;
+  --color-secondary: 33 36 36;
+  --color-secondary-foreground: 176 176 176;
+  --color-muted: 33 36 36;
+  --color-muted-foreground: 136 136 136;
+  --color-accent: 118 119 218 / 0.1;
+  --color-accent-foreground: 212 212 212;
+  --color-destructive: 248 81 73;
+  --color-destructive-foreground: 14 15 15;
+  --color-success: 34 197 94;
+  --color-success-foreground: 255 255 255;
+  --color-warning: 245 158 11;
+  --color-warning-foreground: 255 255 255;
+  --color-info: 118 119 218;
+  --color-info-foreground: 255 255 255;
+  --color-border: 42 45 45;
+  --color-input: 42 45 45;
+  --color-ring: 118 119 218;
+  --shadow-popover: 0 8px 24px rgba(0 0 0 / 0.5);
+
   --sidebar-bg: #141414;
   --sidebar-active: #1f4e79;
-  --sidebar-active-soft: rgba(41, 146, 255, 0.16);
+  --sidebar-active-soft: rgba(118 119 218 / 0.16);
   --sidebar-hover: rgb(255 255 255 / 8%);
   --sidebar-text: #e5eaf3;
   --sidebar-muted: #a3a6ad;
   --sidebar-border: #2a2a2a;
-  --danger: #f46a6a;
-  --danger-hover: #f23a3a;
-  --danger-soft: rgba(244, 106, 106, 0.14);
-  --danger-border: rgba(244, 106, 106, 0.3);
-  --success: #3ad58e;
-  --success-soft: rgba(58, 213, 142, 0.14);
-  --warning: #f6bd16;
-  --warning-soft: rgba(246, 189, 22, 0.14);
-  --info: #5b8ff9;
-  --info-soft: rgba(91, 143, 249, 0.14);
 }
+
+/* ══════════════════════════════════════════
+   Base Styles
+   ══════════════════════════════════════════ */
 
 * {
   @apply border-border;
@@ -155,6 +144,5 @@ body {
 h1,
 h2,
 h3 {
-  color: var(--text);
-  font-weight: 600;
+  @apply text-foreground font-semibold;
 }

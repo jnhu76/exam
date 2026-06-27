@@ -1,41 +1,30 @@
 @layer base {
   :root {
-    --admin-bg-page: var(--bg);
-    --admin-bg-card: var(--surface);
-    --admin-bg-muted: var(--surface-muted);
-    --admin-bg-search: #f3f4f6;
-    --admin-bg-table-header: #f9fafb;
-    --admin-text: var(--text);
-    --admin-text-muted: var(--text-muted);
-    --admin-text-subtle: var(--text-subtle);
-    --admin-border: var(--border);
-    --admin-border-light: #f0f1f3;
-    --admin-primary: var(--primary);
-    --admin-primary-soft: var(--primary-soft);
-    --admin-success: var(--success);
-    --admin-success-soft: var(--success-soft);
-    --admin-warning: var(--warning);
-    --admin-warning-soft: var(--warning-soft);
-    --admin-danger: var(--danger);
-    --admin-danger-soft: var(--danger-soft);
-    /* koi radius vocabulary: panels/buttons 8px, tabs 6px, tags 4px. */
-    --admin-radius-sm: 6px;
-    --admin-radius: 8px;
-    --admin-radius-lg: 10px;
-    --admin-shadow-card:
-      0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-    --admin-shadow-search: 0 1px 2px 0 rgb(0 0 0 / 0.03);
+    --admin-bg-page: rgb(var(--color-bg-base));
+    --admin-bg-card: rgb(var(--color-bg-surface));
+    --admin-bg-muted: rgb(var(--color-bg-muted));
+    --admin-bg-search: rgb(var(--color-bg-muted));
+    --admin-bg-table-header: rgb(var(--color-bg-muted));
+    --admin-text: rgb(var(--color-text-primary));
+    --admin-text-muted: rgb(var(--color-text-muted));
+    --admin-text-subtle: rgb(var(--color-text-muted));
+    --admin-border: rgb(var(--color-border));
+    --admin-border-light: rgb(var(--color-border-light));
+    --admin-primary: rgb(var(--color-primary));
+    --admin-primary-soft: rgb(var(--color-primary) / 0.1);
+    --admin-success: rgb(var(--color-success));
+    --admin-success-soft: rgb(var(--color-success) / 0.1);
+    --admin-warning: rgb(var(--color-warning));
+    --admin-warning-soft: rgb(var(--color-warning) / 0.1);
+    --admin-danger: rgb(var(--color-error));
+    --admin-danger-soft: rgb(var(--color-error) / 0.1);
+    --admin-radius-sm: calc(var(--radius) - 2px);
+    --admin-radius: var(--radius);
+    --admin-radius-lg: calc(var(--radius) + 2px);
+    --admin-shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --admin-shadow-search: none;
     --admin-header-height: 56px;
     --admin-sidebar-width: 232px;
     --admin-sidebar-collapsed-width: 56px;
-  }
-
-  .dark {
-    --admin-bg-page: var(--bg);
-    --admin-bg-card: var(--surface);
-    --admin-bg-muted: var(--surface-muted);
-    --admin-bg-search: #262626;
-    --admin-bg-table-header: #1f1f1f;
-    --admin-border-light: #2a2a2a;
   }
 }
