@@ -140,6 +140,12 @@
   --color-info-foreground: rgb(var(--raw-text-inverted));
   --color-destructive: rgb(var(--raw-error));
   --color-destructive-foreground: rgb(var(--raw-text-inverted));
+  /* `error` is a Wegent-semantic alias of the same raw fact as `destructive`
+     (single source: --raw-error). Exposed so component tone APIs can emit
+     `text-error` / `bg-error/10` rather than the shadcn-specific
+     `destructive` name. */
+  --color-error: rgb(var(--raw-error));
+  --color-error-foreground: rgb(var(--raw-text-inverted));
 
   /* ── Layer 2: borders / rings ── */
   --color-border: rgb(var(--raw-border));

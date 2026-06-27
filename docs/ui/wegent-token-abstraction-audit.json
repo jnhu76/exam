@@ -1,70 +1,6 @@
 {
   "scannedFiles": 503,
-  "blocking": [
-    {
-      "loc": "apps/web/src/pages/admin/DashboardPage.tsx:82",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#5b8ff9]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/DashboardPage.tsx:89",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#faad14]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/DashboardPage.tsx:96",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#9270ca]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/DashboardPage.tsx:103",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#5ad8a6]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/ScoreListPage.tsx:191",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#5b8ff9]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/ScoreListPage.tsx:198",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#5ad8a6]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/ScoreListPage.tsx:205",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#f46a6a]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/ScoreListPage.tsx:213",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#f6bd16]\""
-    },
-    {
-      "loc": "apps/web/src/pages/admin/ScoreListPage.tsx:220",
-      "key": "hardcoded-hex-class",
-      "count": 1,
-      "note": "hardcoded hex in className — use a token utility",
-      "match": "iconColor=\"text-[#9270ca]\""
-    }
-  ],
+  "blocking": [],
   "informational": [
     {
       "loc": "apps/web/src/index.css",
@@ -74,5 +10,5 @@
       "match": "--raw-primary (both themes)"
     }
   ],
-  "generatedAt": "2026-06-27T11:46:47.833Z"
+  "generatedAt": "2026-06-27T12:02:05.283Z"
 }

@@ -154,3 +154,98 @@ The audit writes `docs/ui/wegent-token-abstraction-audit.{md,json}`.
 - Replace the 9 `text-[#…]` iconColor literals with semantic tokens.
 - Re-run `node scripts/audit-wegent-token-abstraction.mjs` and confirm exit 0.
 - Add the audit to CI as a blocking check alongside `audit-koi-ui-usage.mjs`.
+
+---
+
+## Follow-up: token audit green
+
+> Completed in the follow-up task on the same branch. The 9 hardcoded-hex
+> violations tracked in §8/§9.1 are resolved; the token audit now exits 0.
+> No API, route, permission, data-testid, test semantics, or page structure
+> were changed — only icon coloring.
+
+### Hex values cleaned (9 → 0)
+
+All were `MetricCard` icon colors using Koi-palette hex + rgba literals:
+
+| Page | Label | Was (Koi) | Now (Wegent tone) |
+| --- | --- | --- | --- |
+| DashboardPage | 题目总数 | `text-[#5b8ff9]` + `bg-[rgba(91,143,249,0.12)]` | `tone="primary"` |
+| DashboardPage | 考试进行中 | `text-[#faad14]` + `bg-[rgba(250,173,20,0.14)]` | `tone="warning"` |
+| DashboardPage | 考生总数 | `text-[#9270ca]` + `bg-[rgba(146,112,202,0.12)]` | `tone="muted"` |
+| DashboardPage | 今日考试 | `text-[#5ad8a6]` + `bg-[rgba(90,216,166,0.14)]` | `tone="success"` |
+| ScoreListPage | 平均分 | `text-[#5b8ff9]` + `bg-[rgba(91,143,249,0.12)]` | `tone="primary"` |
+| ScoreListPage | 最高分 | `text-[#5ad8a6]` + `bg-[rgba(90,216,166,0.14)]` | `tone="success"` |
+| ScoreListPage | 最低分 | `text-[#f46a6a]` + `bg-[rgba(244,106,106,0.12)]` | `tone="error"` |
+| ScoreListPage | 及格率 | `text-[#f6bd16]` + `bg-[rgba(246,189,22,0.14)]` | `tone="warning"` |
+| ScoreListPage | 已评分 | `text-[#9270ca]` + `bg-[rgba(146,112,202,0.12)]` | `tone="muted"` |
+
+Note: the audit only flagged the 9 `text-[#…]` values (its pattern matches
+hardcoded hex, not `rgba()`). The paired `bg-[rgba(...)]` literals were the
+same Koi debt visually and are removed by the tone migration as well.
+
+### Semantic tone API added
+
+`apps/web/src/components/admin/MetricCard.tsx` gained a `tone` prop:
+
+```ts
+type MetricTone = "primary" | "success" | "warning" | "error" | "muted";
+```
+
+Each tone resolves exclusively to Wegent semantic utilities (single source:
+`--raw-*` triplets), never a hardcoded color:
+
+```ts
+{
+  primary: { bg: "bg-primary/10", fg: "text-primary" },
+  success: { bg: "bg-success/10", fg: "text-success" },
+  warning: { bg: "bg-warning/10", fg: "text-warning" },
+  error:   { bg: "bg-error/10",   fg: "text-error" },
+  muted:   { bg: "bg-muted",      fg: "text-muted-foreground" },
+}
+```
+
+To support the `error` tone, a `--color-error` bridge was added to `index.css`
+as a pure alias of the existing `--raw-error` fact (single source; `destructive`
+already aliased the same fact — `error` is the Wegent-semantic name for
+component tone APIs). Verified build output:
+
+```css
+.text-error { color: rgb(var(--raw-error)); }
+.bg-error\/10 { background-color: color-mix(in oklab, rgb(var(--raw-error)) 10%, transparent); }
+```
+
+### Compatibility props retained
+
+The legacy `iconBg` / `iconColor` props are **not removed** — they are marked
+`@deprecated` and kept for backward compatibility. Resolution order is
+`tone` > (`iconBg`+`iconColor`) > `primary`. The existing token-based caller
+`SystemDiagnosticsPage` (which passes `bg-primary/10` / `text-primary` etc.
+directly) continues to render unchanged. No call site was broken.
+
+### Audit status
+
+- `node scripts/audit-wegent-token-abstraction.mjs` → **exit 0** (was exit 1).
+  Blocking violations: 9 → 0. Hardcoded colors: 0. The only remaining output is
+  the informational `raw-primary-present` line confirming Layer 1.
+- `node scripts/audit-koi-ui-usage.mjs` → **exit 0** (Koi direct imports: 0).
+
+### Verification (follow-up)
+
+| Check | Result |
+| --- | --- |
+| `pnpm typecheck` | ✅ 15/15 tasks |
+| `pnpm lint` / `lint:copy` / `lint:arch` | ✅ all pass |
+| `pnpm format:check` | ✅ clean |
+| `pnpm --filter web build` | ✅ OK |
+| `pnpm test` | ✅ 625/625 |
+| token-abstraction audit | ✅ exit 0 (0 violations) |
+| koi-ui audit | ✅ exit 0 |
+
+### Remaining note
+
+The follow-up scope was intentionally limited to making the token audit green
+via a semantic tone API. True Wegent page refactoring (WegentList primitives,
+list/detail templates across CoursePage/ExamPage/QuestionPage/UsersPage/
+CandidatesPage) is the next, separate body of work.
+

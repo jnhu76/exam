@@ -187,37 +187,32 @@ export function ScoreListPage() {
           label="平均分"
           value={scores.stats.averageScore.toFixed(2)}
           icon={Award}
-          iconBg="bg-[rgba(91,143,249,0.12)]"
-          iconColor="text-[#5b8ff9]"
+          tone="primary"
         />
         <MetricCard
           label="最高分"
           value={scores.stats.maxScore}
           icon={TrendingUp}
-          iconBg="bg-[rgba(90,216,166,0.14)]"
-          iconColor="text-[#5ad8a6]"
+          tone="success"
         />
         <MetricCard
           label="最低分"
           value={scores.stats.minScore}
           icon={TrendingDown}
-          iconBg="bg-[rgba(244,106,106,0.12)]"
-          iconColor="text-[#f46a6a]"
+          tone="error"
         />
         <MetricCard
           label="及格率"
           value={(scores.stats.passRate * 100).toFixed(1)}
           unit="%"
           icon={Award}
-          iconBg="bg-[rgba(246,189,22,0.14)]"
-          iconColor="text-[#f6bd16]"
+          tone="warning"
         />
         <MetricCard
           label="已评分"
           value={scores.stats.totalGraded}
           icon={FileText}
-          iconBg="bg-[rgba(146,112,202,0.12)]"
-          iconColor="text-[#9270ca]"
+          tone="muted"
         />
       </div>
 

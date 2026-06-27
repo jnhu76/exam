@@ -78,29 +78,25 @@ export function DashboardPage() {
           label="题目总数"
           value={data?.totalQuestions ?? 0}
           icon={BookOpen}
-          iconBg="bg-[rgba(91,143,249,0.12)]"
-          iconColor="text-[#5b8ff9]"
+          tone="primary"
         />
         <MetricCard
           label="考试进行中"
           value={data?.activeExams ?? 0}
           icon={Activity}
-          iconBg="bg-[rgba(250,173,20,0.14)]"
-          iconColor="text-[#faad14]"
+          tone="warning"
         />
         <MetricCard
           label="考生总数"
           value={data?.totalCandidates ?? 0}
           icon={Users}
-          iconBg="bg-[rgba(146,112,202,0.12)]"
-          iconColor="text-[#9270ca]"
+          tone="muted"
         />
         <MetricCard
           label="今日考试"
           value={data?.todayExams ?? 0}
           icon={CalendarCheck}
-          iconBg="bg-[rgba(90,216,166,0.14)]"
-          iconColor="text-[#5ad8a6]"
+          tone="success"
         />
       </div>
 
