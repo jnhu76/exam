@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
+import { routes } from "@/lib/routes";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Users } from "lucide-react";
+import { RefreshCw, Users, MonitorPlay } from "lucide-react";
 import type {
   CandidateStatusItem,
   CandidateStatusResponse,
@@ -206,6 +207,17 @@ export function ProctorDashboardPage() {
             >
               <RefreshCw data-icon="inline-start" />
               刷新
+            </Button>
+            <Button
+              data-testid="proctor-monitor-link"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                examId && void navigate(routes.admin.examProctorMonitor(examId))
+              }
+            >
+              <MonitorPlay data-icon="inline-start" />
+              实时监控
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>
               返回

@@ -431,4 +431,94 @@ describe("CandidatesPage", () => {
       await screen.findByRole("button", { name: "导入" }),
     ).toBeInTheDocument();
   });
+
+  describe("reset password", () => {
+    it("opens reset-password dialog with candidate context", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Candidate One");
+      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText("重置密码")).toBeInTheDocument();
+      expect(within(dialog).getByText(/Candidate One/)).toBeInTheDocument();
+    });
+
+    it("rejects a too-short password before submitting", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Candidate One");
+      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const dialog = await screen.findByRole("dialog");
+      const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
+      await user.type(inputs[0]!, "short");
+      await user.type(inputs[1]!, "short");
+      await user.click(
+        within(dialog).getByRole("button", { name: "确认重置" }),
+      );
+      await waitFor(() => {
+        expect(within(dialog).getByText(/密码长度必须在/)).toBeInTheDocument();
+      });
+      expect(apiPost).not.toHaveBeenCalled();
+    });
+
+    it("rejects mismatched passwords before submitting", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Candidate One");
+      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const dialog = await screen.findByRole("dialog");
+      const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
+      await user.type(inputs[0]!, "newpassword123");
+      await user.type(inputs[1]!, "differentpass1");
+      await user.click(
+        within(dialog).getByRole("button", { name: "确认重置" }),
+      );
+      await waitFor(() => {
+        expect(
+          within(dialog).getByText("两次输入的密码不一致"),
+        ).toBeInTheDocument();
+      });
+      expect(apiPost).not.toHaveBeenCalled();
+    });
+
+    it("submits reset-password request with valid matching password", async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Candidate One");
+      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const dialog = await screen.findByRole("dialog");
+      const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
+      await user.type(inputs[0]!, "newpassword123");
+      await user.type(inputs[1]!, "newpassword123");
+      await user.click(
+        within(dialog).getByRole("button", { name: "确认重置" }),
+      );
+      await waitFor(() => {
+        expect(apiPost).toHaveBeenCalledWith("/api/users/c1/reset-password", {
+          newPassword: "newpassword123",
+        });
+      });
+      await waitFor(() => {
+        expect(toast.success).toHaveBeenCalledWith("密码已重置");
+      });
+    });
+
+    it("shows error toast when reset fails", async () => {
+      apiPost.mockRejectedValue(new Error("重置密码失败"));
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByText("Candidate One");
+      await user.click(screen.getByTestId("candidate-reset-password-c1"));
+      const dialog = await screen.findByRole("dialog");
+      const inputs = within(dialog).getAllByPlaceholderText(/位|再次/);
+      await user.type(inputs[0]!, "newpassword123");
+      await user.type(inputs[1]!, "newpassword123");
+      await user.click(
+        within(dialog).getByRole("button", { name: "确认重置" }),
+      );
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith("重置密码失败");
+      });
+    });
+  });
 });

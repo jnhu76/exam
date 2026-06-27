@@ -32,6 +32,30 @@ describe("settings routes", () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it("GET /api/admin/settings requires auth", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/settings",
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("GET /api/admin/settings returns settings for authenticated admin", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/settings",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode, `status ${res.statusCode}, body: ${res.body}`).toBe(
+      200,
+    );
+    // Returns either the full settings object or `{}` when none exist yet.
+    const body = res.json();
+    expect(
+      typeof body === "object" && body !== null && !Array.isArray(body),
+    ).toBe(true);
+  });
+
   it("PATCH /api/admin/settings/branding updates branding", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",

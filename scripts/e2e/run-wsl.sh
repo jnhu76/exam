@@ -64,10 +64,13 @@ while (( "$#" )); do
 done
 
 # E2E 专用 env（与 docker-compose.test.yml 对齐）。导出给 dev server + migrate +
-# seed 进程。TEST_DATABASE_URL 显式不设，使 resolver 走 dev 分支连 DATABASE_URL
-# （exam 库），与 E2E seed 的目标库一致。
+# seed 进程。WSL 快速 E2E 走独立的 exam_e2e 库（不是 dev 的 exam，也不是 vitest 的
+# exam_test），这样 reseed 只覆盖 e2e 数据，绝不污染 dev/vitest 库（AGENTS.md
+# "Local Database Discipline"）。TEST_DATABASE_URL 显式不设，使 resolver 走 dev
+# 分支连 DATABASE_URL（exam_e2e 库），与 E2E seed 的目标库一致。
+E2E_DB_NAME="exam_e2e"
 export APP_MODE=development
-export DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-15432}/exam"
+export DATABASE_URL="postgresql://exam:exam@localhost:${DB_HOST_PORT:-15432}/${E2E_DB_NAME}"
 export RATE_LIMIT_DISABLED=1
 export HEARTBEAT_TIMEOUT_MS=15000
 export HEARTBEAT_SCAN_INTERVAL_MS=5000
@@ -78,6 +81,11 @@ unset TEST_DATABASE_URL TEST_DB_URL 2>/dev/null || true
 # 预检
 command -v pnpm >/dev/null 2>&1 || { err "未找到 pnpm"; exit 127; }
 command -v docker >/dev/null 2>&1 || { err "未找到 docker"; exit 127; }
+
+# 记录 dev compose 在 run-wsl 启动前的状态，cleanup 时恢复原状：
+# 跑前已运行的，不关；由本脚本启动的，跑完关掉（含数据卷）。
+DEV_COMPOSE_WAS_UP=0
+docker compose -f "$DEV_COMPOSE" ps -q db >/dev/null 2>&1 && DEV_COMPOSE_WAS_UP=1
 
 API_PID=""
 cleanup() {
@@ -99,6 +107,11 @@ cleanup() {
       wait "$API_PID" 2>/dev/null || true
     fi
   fi
+  # 由本脚本启动的 dev compose，跑完关掉；进来前已运行的，不动。
+  if [[ "$DEV_COMPOSE_WAS_UP" == "0" ]] && docker compose -f "$DEV_COMPOSE" ps -q db >/dev/null 2>&1; then
+    log "关 dev compose（由 run-wsl.sh 启动）..."
+    docker compose -f "$DEV_COMPOSE" down -v >/dev/null 2>&1 || true
+  fi
   return $code
 }
 trap cleanup EXIT
@@ -108,13 +121,22 @@ trap 'err "中断"; exit 130' INT TERM
 log "启动 dev compose (db + redis)..."
 docker compose -f "$DEV_COMPOSE" up -d --wait >/dev/null
 
+# 1a. 确保 exam_e2e 库存在（idempotent）。dev compose 只自动建 exam + exam_test；
+#     WSL E2E 用第三个库 exam_e2e，首次运行时按需创建。
+DEV_DB_CID="$(docker compose -f "$DEV_COMPOSE" ps -q db)"
+if ! docker exec "$DEV_DB_CID" psql -U exam -tAc \
+  "SELECT 1 FROM pg_database WHERE datname='${E2E_DB_NAME}'" | grep -q 1; then
+  log "首次运行：创建 ${E2E_DB_NAME} 库..."
+  docker exec "$DEV_DB_CID" psql -U exam -c "CREATE DATABASE ${E2E_DB_NAME}" >/dev/null
+fi
+
 # 1b. 清理 test-results/playwright-report（可能含 Docker run 残留的 root 拥有文件，
 #     宿主用户无权 unlink）。用 alpine 容器以 root 清理，避免 EACCES。
 docker run --rm -v "$ROOT_DIR/apps/e2e:/data" alpine \
   sh -c "rm -rf /data/test-results /data/playwright-report" 2>/dev/null || true
 
 # 2. migrate（stdout 安静，stderr 保留以便看到失败原因）
-log "迁移 exam 库..."
+log "迁移 ${E2E_DB_NAME} 库..."
 pnpm --filter @exam/api exec tsx src/scripts/migrate.ts 1>/dev/null
 
 # 3. e2e seed（admin + candidate1..4 demo）
