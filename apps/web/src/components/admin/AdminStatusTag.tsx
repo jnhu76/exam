@@ -21,7 +21,7 @@ export function AdminStatusTag({
     <span
       data-status-tone={meta.tone}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[4px] font-medium leading-none",
+        "inline-flex items-center gap-1 rounded-md font-medium leading-none",
         size === "sm" ? "h-6 px-2 text-xs" : "h-7 px-2.5 text-sm",
         toneTagClass[meta.tone],
         className,

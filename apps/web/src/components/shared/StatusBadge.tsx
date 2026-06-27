@@ -2,8 +2,8 @@ import { getStatusMeta, toneTagClass } from "@/lib/statusMeta";
 import { cn } from "@/lib/utils";
 
 /**
- * Inline badge that displays a status label with a color-coded background
- * and optional icon, resolved from the status metadata lookup.
+ * Inline badge that displays a status label with a Wegent-style
+ * rounded-md background and optional icon.
  */
 export function StatusBadge({
   status,
@@ -21,7 +21,7 @@ export function StatusBadge({
     <span
       data-status-tone={meta.tone}
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-xs font-medium",
+        "inline-flex h-6 items-center gap-1 rounded-md px-2 text-xs font-medium",
         toneTagClass[meta.tone],
         className,
       )}

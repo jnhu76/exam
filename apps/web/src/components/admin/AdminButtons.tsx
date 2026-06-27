@@ -3,7 +3,7 @@ import { forwardRef, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** koi CRUD verb → semantic color. */
+/** CRUD verb → semantic color (Wegent token-based). */
 export type Verb =
   | "add"
   | "edit"
@@ -13,24 +13,14 @@ export type Verb =
   | "search"
   | "reset";
 
-/**
- * koi-inspired "plain" verb button. koi maps CRUD verbs to semantic colors
- * with a plain (soft) treatment: add=primary, edit=success, delete=danger,
- * export=warning, import=info. We approximate plain via outline + semantic
- * border/text so it reads correctly in both light and dark.
- */
 const VERB_VARIANT: Record<Verb, string> = {
-  add: "border-primary/40 text-primary hover:bg-primary-soft hover:text-primary",
-  edit: "border-success/40 text-success hover:bg-success-soft hover:text-success",
-  delete:
-    "border-destructive/40 text-destructive hover:bg-destructive-soft hover:text-destructive",
-  export:
-    "border-warning/40 text-warning hover:bg-warning-soft hover:text-warning",
-  import: "border-info/40 text-info hover:bg-info-soft hover:text-info",
-  search:
-    "border-primary/40 text-primary hover:bg-primary-soft hover:text-primary",
-  reset:
-    "border-destructive/40 text-destructive hover:bg-destructive-soft hover:text-destructive",
+  add: "border-primary/40 text-primary hover:bg-primary/10",
+  edit: "border-success/40 text-success hover:bg-success/10",
+  delete: "border-destructive/40 text-destructive hover:bg-destructive/10",
+  export: "border-warning/40 text-warning hover:bg-warning/10",
+  import: "border-info/40 text-info hover:bg-primary/10",
+  search: "border-primary/40 text-primary hover:bg-primary/10",
+  reset: "border-destructive/40 text-destructive hover:bg-destructive/10",
 };
 
 export interface AdminToolbarButtonProps extends Omit<
@@ -39,7 +29,6 @@ export interface AdminToolbarButtonProps extends Omit<
 > {
   verb: Verb;
   icon?: LucideIcon;
-  /** Mirrors the shadcn Button size; defaults to "sm". */
   size?:
     | "default"
     | "xs"
@@ -73,8 +62,7 @@ export const AdminToolbarButton = forwardRef<
 });
 
 /**
- * 32x32 square icon-only button (koi KoiToolbar pattern): hairline border,
- * subtle fill, primary-tinted hover with a gentle active scale.
+ * Square icon-only button (Wegent ghost style): subtle hover with primary tint.
  */
 export type AdminIconButtonProps = Omit<ComponentProps<"button">, "ref"> & {
   size?:
@@ -98,10 +86,10 @@ export const AdminIconButton = forwardRef<
   return (
     <Button
       ref={ref}
-      variant="outline"
+      variant="ghost"
       size={size}
       className={cn(
-        "rounded-[var(--admin-radius-sm)] bg-card text-muted-foreground hover:border-primary/40 hover:bg-primary-soft hover:text-primary active:scale-95",
+        "text-muted-foreground hover:text-foreground active:scale-95",
         className,
       )}
       {...props}

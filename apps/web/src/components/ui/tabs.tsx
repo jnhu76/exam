@@ -10,7 +10,7 @@ function Tabs({
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
-      className={cn("group/tabs flex gap-2 data-[orientation=horizontal]:flex-col", className)}
+      className={cn("flex flex-col gap-2", className)}
       {...props}
     />
   )
@@ -18,19 +18,13 @@ function Tabs({
 
 function TabsList({
   className,
-  variant = "default",
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List> & {
-  variant?: "default" | "line"
-}) {
+}: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
-      data-variant={variant}
       className={cn(
-        "group/tabs-list inline-flex w-fit items-center justify-center",
-        variant === "default" && "gap-1 rounded-[var(--admin-radius)] border border-admin-border bg-card p-1",
-        variant === "line" && "gap-1 rounded-none bg-transparent",
+        "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
         className,
       )}
       {...props}
@@ -40,28 +34,17 @@ function TabsList({
 
 function TabsTrigger({
   className,
-  variant = "default",
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger> & {
-  variant?: "default" | "line"
-}) {
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
-      data-variant={variant}
       className={cn(
-        "relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-sm font-medium transition-colors outline-none",
-        "text-muted-foreground hover:text-foreground",
-        "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         "disabled:pointer-events-none disabled:opacity-50",
-        variant === "default" && [
-          "rounded-[6px] border border-transparent",
-          "data-[state=active]:border-primary data-[state=active]:bg-primary-soft data-[state=active]:text-primary data-[state=active]:shadow-none",
-        ],
-        variant === "line" && [
-          "rounded-none border-b-2 border-transparent bg-transparent px-4 py-2",
-          "data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground",
-        ],
+        "text-muted-foreground hover:text-foreground hover:bg-background/50",
+        "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
@@ -77,7 +60,11 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
+      className={cn(
+        "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "data-[state=inactive]:hidden",
+        className,
+      )}
       {...props}
     />
   )

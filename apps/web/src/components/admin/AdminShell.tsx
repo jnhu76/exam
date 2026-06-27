@@ -7,7 +7,7 @@ interface AdminShellProps {
 }
 
 export function AdminShell({ children, className }: AdminShellProps) {
-  return <div className={cn("flex flex-col gap-5", className)}>{children}</div>;
+  return <div className={cn("flex flex-col gap-4", className)}>{children}</div>;
 }
 
 interface AdminShellHeaderProps {
@@ -26,7 +26,7 @@ export function AdminShellHeader({
   return (
     <div className={cn("flex items-start justify-between gap-4", className)}>
       <div className="min-w-0">
-        <h1 className="text-lg font-semibold text-foreground">{title}</h1>
+        <h1 className="text-xl font-semibold text-foreground">{title}</h1>
         {description && (
           <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
         )}

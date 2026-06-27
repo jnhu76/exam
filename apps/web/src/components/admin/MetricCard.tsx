@@ -7,19 +7,15 @@ export interface MetricCardProps {
   value: ReactNode;
   unit?: string;
   icon: LucideIcon;
-  /** Tailwind background utility for the icon tile (a pastel tint). */
   iconBg: string;
-  /** Tailwind text-color utility for the icon (a saturated tone). */
   iconColor: string;
-  /** Optional trend/footer line below the value (e.g. status text). */
   trend?: ReactNode;
   className?: string;
 }
 
 /**
- * koi-inspired KPI tile (mirrors koi HomeStatCards): two-column inner flex with
- * an info block (label + big number + trend) on the left and a 46x46 pastel
- * icon square (12px radius) on the right. No heavy shadow — hairline border.
+ * Wegent-style KPI tile: two-column flex with info block (label + value + trend)
+ * on the left and a 46x46 pastel icon square on the right.
  */
 export function MetricCard({
   label,
@@ -34,15 +30,15 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "rounded-[var(--admin-radius)] border border-admin-border bg-card p-5",
+        "rounded-lg border border-border bg-card p-5 shadow-sm",
         className,
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] text-muted-foreground">{label}</p>
+          <p className="text-sm text-muted-foreground">{label}</p>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-[28px] font-bold leading-tight tracking-tight tabular-nums text-foreground">
+            <span className="text-2xl font-bold leading-tight tracking-tight tabular-nums text-foreground">
               {value}
             </span>
             {unit && (

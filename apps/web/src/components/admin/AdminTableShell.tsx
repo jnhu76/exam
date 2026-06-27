@@ -7,15 +7,14 @@ interface AdminTableShellProps {
 }
 
 /**
- * Bordered table card (koi-style): 8px radius, 1px hairline border, no heavy
- * shadow. The inner Table should rely on its own row hover; header tint is
- * applied via the `--admin-bg-table-header` token on TableHead.
+ * Bordered table card (Wegent-style): rounded-lg, surface background,
+ * subtle shadow. The inner Table relies on its own row hover.
  */
 export function AdminTableShell({ children, className }: AdminTableShellProps) {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[var(--admin-radius)] border border-admin-border bg-card",
+        "overflow-hidden rounded-lg border border-border bg-card shadow-sm",
         className,
       )}
     >

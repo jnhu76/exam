@@ -23,18 +23,20 @@ export function AdminPageCard({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-[var(--admin-radius)] border border-admin-border bg-card",
+        "overflow-hidden rounded-lg border border-border bg-card shadow-sm",
         className,
       )}
     >
       {(title || actions) && (
-        <div className="flex items-center justify-between gap-3 border-b border-admin-border-light px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
             {title && (
-              <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+              <h3 className="text-base font-semibold text-foreground">
+                {title}
+              </h3>
             )}
             {description && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 {description}
               </p>
             )}

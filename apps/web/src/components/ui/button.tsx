@@ -5,27 +5,29 @@ import { Slot } from "radix-ui"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-[var(--primary-hover)]",
-        destructive:
-          "bg-destructive text-white hover:bg-[var(--danger-hover)] focus-visible:ring-destructive/20",
-        outline:
-          "border border-border bg-card text-foreground shadow-xs hover:bg-muted hover:text-foreground",
+        default:
+          "bg-transparent border border-border text-foreground hover:bg-muted",
+        primary:
+          "bg-primary text-primary-foreground hover:bg-primary/90 border-primary",
         secondary:
-          "bg-muted text-foreground hover:bg-muted/80",
-        ghost:
-          "hover:bg-muted hover:text-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-transparent border border-border text-foreground hover:bg-muted",
+        outline:
+          "bg-transparent border border-border text-foreground hover:bg-muted",
+        ghost: "hover:bg-muted text-foreground",
+        link: "text-muted-foreground underline-offset-4 hover:underline hover:text-foreground",
+        destructive:
+          "bg-destructive hover:bg-destructive/90 text-destructive-foreground border-destructive",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-lg px-6 has-[>svg]:px-4",
-        icon: "size-8",
+        default: "h-10 px-4 py-2",
+        xs: "h-6 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "size-10",
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8",
         "icon-lg": "size-10",
