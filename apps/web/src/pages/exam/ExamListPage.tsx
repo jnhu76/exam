@@ -102,12 +102,12 @@ function ExamCard({
   const actionIcon = (() => {
     switch (exam.primaryAction) {
       case "start":
-        return <Play className="mr-1 size-3" />;
+        return <Play data-icon="inline-start" />;
       case "resume":
-        return <RotateCcw className="mr-1 size-3" />;
+        return <RotateCcw data-icon="inline-start" />;
       case "view_result":
       case "view_history":
-        return <Eye className="mr-1 size-3" />;
+        return <Eye data-icon="inline-start" />;
       default:
         return undefined;
     }
@@ -127,14 +127,17 @@ function ExamCard({
   }
 
   return (
-    <Card className="shadow-sm" data-testid={`exam-card-${exam.examId}`}>
+    <Card
+      className="rounded-[var(--admin-radius)] border-admin-border shadow-none"
+      data-testid={`exam-card-${exam.examId}`}
+    >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{exam.title}</CardTitle>
           <div className="flex items-center gap-2 shrink-0">
             {exam.bestScore != null && (
               <Badge variant="default" data-testid="exam-best-score">
-                <Trophy className="mr-1 size-3" />
+                <Trophy data-icon="inline-start" />
                 {exam.bestScore}
               </Badge>
             )}
@@ -147,7 +150,7 @@ function ExamCard({
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
-            <Clock className="size-3.5" />
+            <Clock data-icon="inline-start" />
             {exam.durationMinutes}分钟
           </span>
           <span>

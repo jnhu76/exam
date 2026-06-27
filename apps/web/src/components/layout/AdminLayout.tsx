@@ -4,6 +4,8 @@ import { AppSidebar } from "./AppSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { NotificationBell } from "@/components/notification/NotificationBell";
 
 /**
  * Shell layout for the admin console. Renders a collapsible sidebar,
@@ -24,10 +26,10 @@ export function AdminLayout() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <header className="flex h-14 items-center border-b bg-card px-6 shadow-xs">
+          <header className="flex h-14 items-center border-b border-admin-border-light bg-card px-6">
             <Skeleton className="h-4 w-24" />
           </header>
-          <main className="flex flex-col gap-4 p-6">
+          <main className="flex flex-col gap-4 bg-admin-page p-6">
             <Skeleton className="h-8 w-32" />
             <Skeleton className="h-32 w-full rounded-lg" />
             <Skeleton className="h-32 w-full rounded-lg" />
@@ -54,12 +56,16 @@ export function AdminLayout() {
         onLogout={() => void logout()}
       />
       <div className="min-w-0 flex-1">
-        <header className="flex h-14 items-center border-b bg-card px-6">
+        <header className="flex h-14 items-center justify-between border-b border-admin-border-light bg-card px-6">
           <h2 className="text-sm font-medium text-muted-foreground">
             {topbarTitle}
           </h2>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <ThemeToggle />
+          </div>
         </header>
-        <main className="p-6 lg:p-8">
+        <main className="bg-admin-page p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

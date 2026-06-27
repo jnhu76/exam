@@ -8,7 +8,6 @@ import { logger } from "@/lib/logger";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatDuration } from "@/lib/utils";
 import { getStatusMeta, getToneTextColor } from "@/lib/statusMeta";
@@ -22,15 +21,33 @@ import {
   Timer,
 } from "lucide-react";
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   AdminShell,
   AdminShellHeader,
   AdminPageCard,
+  MetricCard,
 } from "@/components/admin";
 
 type HealthStatus = SystemHealthResponse["status"];
 
 const HEALTH_REFRESH_MS = 10_000;
 const DIAG_REFRESH_MS = 30_000;
+const HISTORY_MAX = 20;
+
+interface HistoryPoint {
+  t: number;
+  cpu: number;
+  memory: number;
+  db: number;
+}
 
 function getStatusLevel(value: number): HealthStatus {
   if (value > 95) return "critical";
@@ -62,6 +79,7 @@ export function SystemDiagnosticsPage() {
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [staleWarnings, setStaleWarnings] = useState<{
     health?: string;
     diagnostics?: string;
@@ -93,7 +111,17 @@ export function SystemDiagnosticsPage() {
 
   const loadHealth = useCallback(async () => {
     try {
-      setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
+      const next = await api.get<SystemHealthResponse>("/api/system/health");
+      setHealth(next);
+      setHistory((prev) => {
+        const point: HistoryPoint = {
+          t: Date.now(),
+          cpu: next.cpu,
+          memory: next.memory,
+          db: next.dbResponseMs,
+        };
+        return [...prev, point].slice(-HISTORY_MAX);
+      });
       clearStaleWarning("health");
       setLastRefreshedAt(Date.now());
       logger.debug("system_diagnostics.refreshed", { source: "health" });
@@ -222,27 +250,146 @@ export function SystemDiagnosticsPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard
-          title="CPU 使用率"
+          label="CPU 使用率"
           value={health?.cpu ?? 0}
           unit="%"
-          status={getStatusLevel(health?.cpu ?? 0)}
-          icon={<Activity className="size-5" />}
+          icon={Activity}
+          iconBg="bg-[rgba(91,143,249,0.12)]"
+          iconColor="text-[#5b8ff9]"
+          trend={
+            <span
+              className={getToneTextColor(
+                getStatusMeta(getStatusLevel(health?.cpu ?? 0)).tone,
+              )}
+            >
+              {getStatusMeta(getStatusLevel(health?.cpu ?? 0)).label}
+            </span>
+          }
         />
         <MetricCard
-          title="内存使用率"
+          label="内存使用率"
           value={health?.memory ?? 0}
           unit="%"
-          status={getStatusLevel(health?.memory ?? 0)}
-          icon={<HardDrive className="size-5" />}
+          icon={HardDrive}
+          iconBg="bg-[rgba(90,216,166,0.14)]"
+          iconColor="text-[#5ad8a6]"
+          trend={
+            <span
+              className={getToneTextColor(
+                getStatusMeta(getStatusLevel(health?.memory ?? 0)).tone,
+              )}
+            >
+              {getStatusMeta(getStatusLevel(health?.memory ?? 0)).label}
+            </span>
+          }
         />
         <MetricCard
-          title="数据库响应时间"
+          label="数据库响应时间"
           value={health?.dbResponseMs ?? 0}
           unit="ms"
-          status={getDbStatusLevel(health?.dbResponseMs ?? 0)}
-          icon={<Database className="size-5" />}
+          icon={Database}
+          iconBg="bg-[rgba(146,112,202,0.12)]"
+          iconColor="text-[#9270ca]"
+          trend={
+            <span
+              className={getToneTextColor(
+                getStatusMeta(getDbStatusLevel(health?.dbResponseMs ?? 0)).tone,
+              )}
+            >
+              {getStatusMeta(getDbStatusLevel(health?.dbResponseMs ?? 0)).label}
+            </span>
+          }
         />
       </div>
+
+      {history.length > 1 && (
+        <AdminPageCard
+          title="资源使用趋势"
+          description="近 20 次采样的实时走势"
+        >
+          <div className="h-[260px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={history}
+                margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                      offset="0%"
+                      stopColor="var(--primary)"
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="var(--primary)"
+                      stopOpacity={0}
+                    />
+                  </linearGradient>
+                  <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#5ad8a6" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#5ad8a6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="var(--border)"
+                />
+                <XAxis
+                  dataKey="t"
+                  tickFormatter={(v: number) =>
+                    new Date(v).toLocaleTimeString("zh-CN", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })
+                  }
+                  tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  minTickGap={32}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "var(--text-muted)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={32}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  labelFormatter={(label) =>
+                    new Date(Number(label)).toLocaleTimeString("zh-CN")
+                  }
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cpu"
+                  name="CPU %"
+                  stroke="var(--primary)"
+                  strokeWidth={2}
+                  fill="url(#cpuGrad)"
+                  isAnimationActive={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="memory"
+                  name="内存 %"
+                  stroke="#5ad8a6"
+                  strokeWidth={2}
+                  fill="url(#memGrad)"
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </AdminPageCard>
+      )}
 
       {diag && (
         <>
@@ -351,48 +498,6 @@ export function SystemDiagnosticsPage() {
         </>
       )}
     </AdminShell>
-  );
-}
-
-function MetricCard({
-  title,
-  value,
-  unit,
-  status,
-  icon,
-}: {
-  title: string;
-  value: number;
-  unit: string;
-  status: HealthStatus;
-  icon: React.ReactNode;
-}) {
-  const meta = getStatusMeta(status);
-  const MetricIcon = meta.icon;
-  return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          {icon}
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-baseline gap-1">
-          <p className="text-3xl font-bold">{value}</p>
-          <span className="text-sm text-muted-foreground">{unit}</span>
-        </div>
-        <p
-          className={cn(
-            "mt-1 flex items-center gap-1 text-xs font-medium",
-            getToneTextColor(meta.tone),
-          )}
-        >
-          <MetricIcon className="size-3" aria-hidden="true" />
-          {meta.label}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 

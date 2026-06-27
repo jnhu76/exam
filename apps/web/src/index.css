@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode for Tailwind v4 (per tailwind-design-system skill). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
@@ -45,10 +48,27 @@
   --color-sidebar-foreground: var(--sidebar-text);
   --color-sidebar-accent: var(--sidebar-active);
   --color-sidebar-accent-foreground: #ffffff;
+  --color-sidebar-active-soft: var(--sidebar-active-soft);
   --color-sidebar-hover: var(--sidebar-hover);
   --color-sidebar-text: var(--sidebar-text);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-border: var(--sidebar-border);
+
+  /* Admin design tokens (koi-inspired) surfaced as Tailwind utilities. */
+  --color-admin-page: var(--admin-bg-page);
+  --color-admin-card: var(--admin-bg-card);
+  --color-admin-muted: var(--admin-bg-muted);
+  --color-admin-search: var(--admin-bg-search);
+  --color-admin-table-header: var(--admin-bg-table-header);
+
+  /* Tiered radius scale (koi: panels/buttons 8px, tabs 6px, tags 4px). */
+  --radius-admin-sm: var(--admin-radius-sm);
+  --radius-admin: var(--admin-radius);
+  --radius-admin-lg: var(--admin-radius-lg);
+
+  /* Soft elevation (koi avoids heavy shadows; hairline borders + subtle lift). */
+  --shadow-admin-card: var(--admin-shadow-card);
+  --shadow-admin-search: var(--admin-shadow-search);
 }
 
 :root {
@@ -81,6 +101,38 @@
   --info: #175cd3;
   --info-soft: #eff6ff;
   --radius: 0.5rem;
+}
+
+/* Dark theme (koi-inspired palette: chrome #141414, card #1D1E1F, content #000). */
+.dark {
+  --bg: #000000;
+  --surface: #1d1e1f;
+  --surface-muted: #262626;
+  --text: #e5eaf3;
+  --text-muted: #cfd3dc;
+  --text-subtle: #9fb3c8;
+  --border: #414243;
+  --border-strong: #4c4d4f;
+  --primary: #2992ff;
+  --primary-hover: #1f7ae0;
+  --primary-soft: rgba(41, 146, 255, 0.14);
+  --sidebar-bg: #141414;
+  --sidebar-active: #1f4e79;
+  --sidebar-active-soft: rgba(41, 146, 255, 0.16);
+  --sidebar-hover: rgb(255 255 255 / 8%);
+  --sidebar-text: #e5eaf3;
+  --sidebar-muted: #a3a6ad;
+  --sidebar-border: #2a2a2a;
+  --danger: #f46a6a;
+  --danger-hover: #f23a3a;
+  --danger-soft: rgba(244, 106, 106, 0.14);
+  --danger-border: rgba(244, 106, 106, 0.3);
+  --success: #3ad58e;
+  --success-soft: rgba(58, 213, 142, 0.14);
+  --warning: #f6bd16;
+  --warning-soft: rgba(246, 189, 22, 0.14);
+  --info: #5b8ff9;
+  --info-soft: rgba(91, 143, 249, 0.14);
 }
 
 * {

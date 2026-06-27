@@ -17,11 +17,11 @@ export function AdminToolbar({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between shadow-sm",
+        "flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
         {children}
       </div>
       {(summary || actions) && (

@@ -608,10 +608,10 @@ export function TakeExamPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-admin-border-light bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-lg font-semibold">
+            <div className="text-lg font-semibold text-foreground">
               {deadlinePassed ? "考试已结束" : "答题中"}
             </div>
             <div className="text-sm text-muted-foreground">
@@ -642,7 +642,7 @@ export function TakeExamPage() {
       </header>
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start">
-        <aside className="rounded-lg border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
+        <aside className="rounded-[var(--admin-radius)] border border-admin-border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
           <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground xl:block">
             <span>题号</span>
             <span className="xl:hidden">
@@ -702,12 +702,12 @@ export function TakeExamPage() {
             )}
 
             <section
-              className="relative rounded-lg border bg-card p-5 shadow-sm md:p-8"
+              className="relative rounded-[var(--admin-radius)] border border-admin-border bg-card p-5 md:p-8"
               data-testid="take-question-section"
             >
               {deadlinePassed && (
                 <div
-                  className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm"
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-[var(--admin-radius)] bg-background/80 backdrop-blur-sm"
                   data-testid="deadline-overlay"
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
@@ -779,7 +779,7 @@ export function TakeExamPage() {
       </div>
 
       <Separator />
-      <footer className="sticky bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur">
+      <footer className="sticky bottom-0 z-20 border-t border-admin-border-light bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-sm text-muted-foreground">
             已答 {answeredCount} / 未答 {unansweredCount} / 标记 {flaggedCount}{" "}

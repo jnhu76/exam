@@ -18,8 +18,9 @@
     --admin-warning-soft: var(--warning-soft);
     --admin-danger: var(--danger);
     --admin-danger-soft: var(--danger-soft);
+    /* koi radius vocabulary: panels/buttons 8px, tabs 6px, tags 4px. */
     --admin-radius-sm: 6px;
-    --admin-radius: var(--radius);
+    --admin-radius: 8px;
     --admin-radius-lg: 10px;
     --admin-shadow-card:
       0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.06);
@@ -27,5 +28,14 @@
     --admin-header-height: 56px;
     --admin-sidebar-width: 232px;
     --admin-sidebar-collapsed-width: 56px;
+  }
+
+  .dark {
+    --admin-bg-page: var(--bg);
+    --admin-bg-card: var(--surface);
+    --admin-bg-muted: var(--surface-muted);
+    --admin-bg-search: #262626;
+    --admin-bg-table-header: #1f1f1f;
+    --admin-border-light: #2a2a2a;
   }
 }

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -9,6 +8,13 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminSearchPanel,
+  AdminTableShell,
+  AdminToolbarButton,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -178,27 +184,28 @@ export function CoursePage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6">
-        <PageHeader
+      <AdminShell>
+        <AdminShellHeader
           title="课程管理"
           actions={
-            <Button onClick={openCreate}>
-              <Plus data-icon="inline-start" />
+            <AdminToolbarButton verb="add" icon={Plus} onClick={openCreate}>
               新增课程
-            </Button>
+            </AdminToolbarButton>
           }
         />
 
         {courses.length > 0 && (
-          <SearchInput
-            aria-label="搜索课程"
-            placeholder="搜索课程名称、代码或描述..."
-            value={search}
-            onChange={setSearch}
-            onClear={() => setSearch("")}
-            clearLabel="清除课程搜索"
-            containerClassName="max-w-md"
-          />
+          <AdminSearchPanel>
+            <SearchInput
+              aria-label="搜索课程"
+              placeholder="搜索课程名称、代码或描述..."
+              value={search}
+              onChange={setSearch}
+              onClear={() => setSearch("")}
+              clearLabel="清除课程搜索"
+              containerClassName="max-w-md flex-1"
+            />
+          </AdminSearchPanel>
         )}
 
         {courses.length === 0 ? (
@@ -219,58 +226,60 @@ export function CoursePage() {
             }
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>课程名称</TableHead>
-                <TableHead>课程代码</TableHead>
-                <TableHead>描述</TableHead>
-                <TableHead className="w-24">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCourses.map((course) => (
-                <TableRow key={course.id}>
-                  <TableCell className="font-medium">{course.name}</TableCell>
-                  <TableCell>{course.code}</TableCell>
-                  <TableCell className="max-w-[360px]">
-                    {course.description ? (
-                      <TruncatedCell text={course.description} />
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(course)}
-                        aria-label="编辑课程"
-                      >
-                        <Pencil />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="删除课程"
-                          >
-                            <Trash2 className="text-destructive" />
-                          </Button>
-                        }
-                        title="确认删除"
-                        description={`确定要删除课程「${course.name}」吗？`}
-                        destructive
-                        onConfirm={() => void handleDelete(course.id)}
-                      />
-                    </RowActions>
-                  </TableCell>
+          <AdminTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>课程名称</TableHead>
+                  <TableHead>课程代码</TableHead>
+                  <TableHead>描述</TableHead>
+                  <TableHead className="w-24">操作</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredCourses.map((course) => (
+                  <TableRow key={course.id}>
+                    <TableCell className="font-medium">{course.name}</TableCell>
+                    <TableCell>{course.code}</TableCell>
+                    <TableCell className="max-w-[360px]">
+                      {course.description ? (
+                        <TruncatedCell text={course.description} />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RowActions>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(course)}
+                          aria-label="编辑课程"
+                        >
+                          <Pencil />
+                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="删除课程"
+                            >
+                              <Trash2 className="text-destructive" />
+                            </Button>
+                          }
+                          title="确认删除"
+                          description={`确定要删除课程「${course.name}」吗？`}
+                          destructive
+                          onConfirm={() => void handleDelete(course.id)}
+                        />
+                      </RowActions>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </AdminTableShell>
         )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -330,7 +339,7 @@ export function CoursePage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </AdminShell>
     </TooltipProvider>
   );
 }

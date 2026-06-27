@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
@@ -13,6 +12,11 @@ import {
   type QuestionFormData,
 } from "@/components/question/QuestionForm";
 import { QuestionPreview } from "@/components/question/QuestionPreview";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+} from "@/components/admin";
 
 /** Minimal course representation used to populate the course selector. */
 /** A course record used in the course selector dropdown. */
@@ -127,25 +131,25 @@ export function QuestionEditPage() {
   if (!formData) return null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={isEdit ? "编辑题目" : "新增题目"} />
+    <AdminShell>
+      <AdminShellHeader title={isEdit ? "编辑题目" : "新增题目"} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <AdminPageCard>
           <QuestionForm
             courses={courses}
             initial={formData}
             onChange={setFormData}
           />
-        </div>
-        <div>
+        </AdminPageCard>
+        <AdminPageCard>
           <QuestionPreview
             type={formData.type}
             content={formData.content}
             options={formData.options}
             standardAnswer={formData.standardAnswer}
           />
-        </div>
+        </AdminPageCard>
       </div>
 
       <Separator />
@@ -162,6 +166,6 @@ export function QuestionEditPage() {
           {saving ? "保存中..." : "保存"}
         </Button>
       </div>
-    </div>
+    </AdminShell>
   );
 }

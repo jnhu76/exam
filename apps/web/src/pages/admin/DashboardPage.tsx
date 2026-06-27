@@ -2,14 +2,18 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import type { DashboardResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { StatsCard } from "@/components/shared/StatsCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/shared/StatusBadge";
+import { AdminStatusTag } from "@/components/admin/AdminStatusTag";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+  AdminTableShell,
+  MetricCard,
+} from "@/components/admin";
 import {
   Table,
   TableBody,
@@ -29,18 +33,12 @@ import {
   Upload,
 } from "lucide-react";
 
-/** Admin dashboard page displaying stats cards, quick actions, and recent exams. */
-/**
- * Admin dashboard page showing summary statistics (question count, active exams,
- * candidate count, today's exams), quick-action buttons, and a table of recent exams.
- */
 export function DashboardPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /** Fetches dashboard summary data from the system API. */
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -64,37 +62,45 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="仪表盘" />
+      <AdminShell>
+        <AdminShellHeader title="仪表盘" />
         <ErrorState message={error} onRetry={loadDashboard} />
-      </div>
+      </AdminShell>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="仪表盘" />
+    <AdminShell>
+      <AdminShellHeader title="仪表盘" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard
+        <MetricCard
           label="题目总数"
           value={data?.totalQuestions ?? 0}
-          icon={<BookOpen className="size-5" />}
+          icon={BookOpen}
+          iconBg="bg-[rgba(91,143,249,0.12)]"
+          iconColor="text-[#5b8ff9]"
         />
-        <StatsCard
+        <MetricCard
           label="考试进行中"
           value={data?.activeExams ?? 0}
-          icon={<Activity className="size-5" />}
+          icon={Activity}
+          iconBg="bg-[rgba(250,173,20,0.14)]"
+          iconColor="text-[#faad14]"
         />
-        <StatsCard
+        <MetricCard
           label="考生总数"
           value={data?.totalCandidates ?? 0}
-          icon={<Users className="size-5" />}
+          icon={Users}
+          iconBg="bg-[rgba(146,112,202,0.12)]"
+          iconColor="text-[#9270ca]"
         />
-        <StatsCard
+        <MetricCard
           label="今日考试"
           value={data?.todayExams ?? 0}
-          icon={<CalendarCheck className="size-5" />}
+          icon={CalendarCheck}
+          iconBg="bg-[rgba(90,216,166,0.14)]"
+          iconColor="text-[#5ad8a6]"
         />
       </div>
 
@@ -112,22 +118,21 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">近期考试</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <AdminPageCard title="近期考试">
+        <AdminTableShell>
           {!data?.recentExams || data.recentExams.length === 0 ? (
-            <EmptyState
-              icon={<ClipboardList className="size-10" />}
-              title="暂无考试"
-              description="还没有创建任何考试"
-              action={
-                <Button onClick={() => navigate("/admin/exams/new")}>
-                  创建考试
-                </Button>
-              }
-            />
+            <div className="p-5">
+              <EmptyState
+                icon={<ClipboardList className="size-10" />}
+                title="暂无考试"
+                description="还没有创建任何考试"
+                action={
+                  <Button onClick={() => navigate("/admin/exams/new")}>
+                    创建考试
+                  </Button>
+                }
+              />
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -143,7 +148,7 @@ export function DashboardPage() {
                   <TableRow key={exam.id}>
                     <TableCell className="font-medium">{exam.title}</TableCell>
                     <TableCell>
-                      <StatusBadge status={exam.status} />
+                      <AdminStatusTag status={exam.status} />
                     </TableCell>
                     <TableCell>{exam.participantCount}</TableCell>
                     <TableCell>
@@ -161,17 +166,15 @@ export function DashboardPage() {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </AdminTableShell>
+      </AdminPageCard>
+    </AdminShell>
   );
 }
 
-/** Skeleton placeholder shown while the dashboard data is loading. */
-/** Placeholder skeleton shown while the dashboard data is loading. */
 function DashboardSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
+    <AdminShell>
       <Skeleton className="h-8 w-32" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -187,6 +190,6 @@ function DashboardSkeleton() {
           <Skeleton key={i} className="h-12 w-full" />
         ))}
       </div>
-    </div>
+    </AdminShell>
   );
 }

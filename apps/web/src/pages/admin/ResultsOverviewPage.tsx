@@ -2,12 +2,16 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminTableShell,
+} from "@/components/admin";
 import {
   Table,
   TableBody,
@@ -16,7 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -86,83 +89,78 @@ export function ResultsOverviewPage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col gap-6">
-        <PageHeader title="成绩查询" />
+      <AdminShell>
+        <AdminShellHeader title="成绩查询" />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">成绩管理</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {exams.length === 0 ? (
-              <EmptyState
-                icon={<Gauge className="size-12" />}
-                title="暂无相关考试"
-                description="已结束、已归档或进行中的考试将显示在此处"
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>考试名称</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>考试时间</TableHead>
-                    <TableHead>已评分</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {exams.map((exam) => {
-                    const canView = gradable(exam);
-                    const reason = gradableReason(exam);
-                    const viewButton = (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={!canView}
-                        onClick={() =>
-                          void navigate(routes.admin.examScores(exam.id))
-                        }
-                      >
-                        <Eye data-icon="inline-start" />
-                        查看成绩
-                      </Button>
-                    );
-                    return (
-                      <TableRow key={exam.id}>
-                        <TableCell className="font-medium">
-                          {exam.title}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={exam.status} />
-                        </TableCell>
-                        <TableCell>
-                          {exam.openAt
-                            ? new Date(exam.openAt).toLocaleString()
-                            : "-"}
-                        </TableCell>
-                        <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
-                        <TableCell>
-                          {canView ? (
-                            viewButton
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}>{viewButton}</span>
-                              </TooltipTrigger>
-                              <TooltipContent>{reason}</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        {exams.length === 0 ? (
+          <EmptyState
+            icon={<Gauge className="size-8" />}
+            title="暂无相关考试"
+            description="已结束、已归档或进行中的考试将显示在此处"
+          />
+        ) : (
+          <AdminTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>考试名称</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>考试时间</TableHead>
+                  <TableHead>已评分</TableHead>
+                  <TableHead>操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {exams.map((exam) => {
+                  const canView = gradable(exam);
+                  const reason = gradableReason(exam);
+                  const viewButton = (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canView}
+                      onClick={() =>
+                        void navigate(routes.admin.examScores(exam.id))
+                      }
+                    >
+                      <Eye data-icon="inline-start" />
+                      查看成绩
+                    </Button>
+                  );
+                  return (
+                    <TableRow key={exam.id}>
+                      <TableCell className="font-medium">
+                        {exam.title}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={exam.status} />
+                      </TableCell>
+                      <TableCell>
+                        {exam.openAt
+                          ? new Date(exam.openAt).toLocaleString()
+                          : "-"}
+                      </TableCell>
+                      <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
+                      <TableCell>
+                        {canView ? (
+                          viewButton
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0}>{viewButton}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>{reason}</TooltipContent>
+                          </Tooltip>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </AdminTableShell>
+        )}
+      </AdminShell>
     </TooltipProvider>
   );
 }

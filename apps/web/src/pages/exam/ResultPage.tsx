@@ -5,6 +5,7 @@ import type { AttemptResultResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -194,32 +195,30 @@ export function ResultPage() {
           </Card>
         </>
       ) : (
-        <Card>
-          <CardContent className="py-10 text-center">
-            <CheckCircle2 className="mx-auto mb-3 size-10 text-success" />
-            <p
-              className="text-lg font-medium"
-              data-testid="result-status-message"
-            >
-              {(() => {
-                // hiddenReason takes precedence when present — it distinguishes
-                // pending_publish (graded but not released) from not_graded.
-                const reason = result.hiddenReason;
-                if (reason === "pending_publish")
-                  return "成绩正在审核中，将在公布后可见";
-                if (reason === "not_graded") return "考试尚未完成评分，请等待";
-                if (reason === "not_started") return "考试尚未开始，暂无成绩";
-                // No hiddenReason: fall back to status-based copy.
-                if (result.status === "submitted") return "已提交，等待评分";
-                if (result.status === "grading") return "正在评分";
-                if (result.status === "graded") return "成绩尚未公布";
-                if (result.status === "disrupted")
-                  return "答题中断，请联系管理员或重新进入";
-                return "已交卷，等待成绩公布";
-              })()}
-            </p>
-          </CardContent>
-        </Card>
+        <Alert variant="default" className="py-10 text-center border-0">
+          <CheckCircle2
+            className="mx-auto mb-3 size-10 text-success"
+            aria-hidden="true"
+          />
+          <AlertDescription
+            className="text-lg font-medium"
+            data-testid="result-status-message"
+          >
+            {(() => {
+              const reason = result.hiddenReason;
+              if (reason === "pending_publish")
+                return "成绩正在审核中，将在公布后可见";
+              if (reason === "not_graded") return "考试尚未完成评分，请等待";
+              if (reason === "not_started") return "考试尚未开始，暂无成绩";
+              if (result.status === "submitted") return "已提交，等待评分";
+              if (result.status === "grading") return "正在评分";
+              if (result.status === "graded") return "成绩尚未公布";
+              if (result.status === "disrupted")
+                return "答题中断，请联系管理员或重新进入";
+              return "已交卷，等待成绩公布";
+            })()}
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="flex justify-end">

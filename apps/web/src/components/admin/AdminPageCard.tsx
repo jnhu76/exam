@@ -23,12 +23,12 @@ export function AdminPageCard({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-lg border bg-card shadow-sm",
+        "overflow-hidden rounded-[var(--admin-radius)] border border-admin-border bg-card",
         className,
       )}
     >
       {(title || actions) && (
-        <div className="flex items-start justify-between border-b px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-admin-border-light px-5 py-4">
           <div className="min-w-0">
             {title && (
               <h3 className="text-sm font-semibold text-foreground">{title}</h3>

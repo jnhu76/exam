@@ -3,13 +3,18 @@ import { useParams, useNavigate, useSearchParams } from "react-router";
 import { api } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminTableShell,
+  AdminToolbarButton,
+  MetricCard,
+} from "@/components/admin";
 import {
   Table,
   TableBody,
@@ -27,7 +32,13 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { FileText } from "lucide-react";
+import {
+  Award,
+  Download,
+  FileText,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 
 /** Aggregate score statistics for an exam. */
 interface ScoreListStats {
@@ -146,20 +157,22 @@ export function ScoreListPage() {
     );
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title={`${scores.items[0]?.examTitle || "考试"} - 成绩管理`}
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="outline"
+            <AdminToolbarButton
+              verb="export"
+              icon={Download}
               onClick={() => void exportScores()}
               disabled={exporting}
             >
               {exporting ? "导出中..." : "导出CSV"}
-            </Button>
+            </AdminToolbarButton>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => void navigate(`/admin/exams/${id}`)}
             >
               返回考试详情
@@ -169,199 +182,168 @@ export function ScoreListPage() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              平均分
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {scores.stats.averageScore.toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              最高分
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{scores.stats.maxScore}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              最低分
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{scores.stats.minScore}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              及格率
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {(scores.stats.passRate * 100).toFixed(1)}%
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              已评分
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{scores.stats.totalGraded}</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <MetricCard
+          label="平均分"
+          value={scores.stats.averageScore.toFixed(2)}
+          icon={Award}
+          iconBg="bg-[rgba(91,143,249,0.12)]"
+          iconColor="text-[#5b8ff9]"
+        />
+        <MetricCard
+          label="最高分"
+          value={scores.stats.maxScore}
+          icon={TrendingUp}
+          iconBg="bg-[rgba(90,216,166,0.14)]"
+          iconColor="text-[#5ad8a6]"
+        />
+        <MetricCard
+          label="最低分"
+          value={scores.stats.minScore}
+          icon={TrendingDown}
+          iconBg="bg-[rgba(244,106,106,0.12)]"
+          iconColor="text-[#f46a6a]"
+        />
+        <MetricCard
+          label="及格率"
+          value={(scores.stats.passRate * 100).toFixed(1)}
+          unit="%"
+          icon={Award}
+          iconBg="bg-[rgba(246,189,22,0.14)]"
+          iconColor="text-[#f6bd16]"
+        />
+        <MetricCard
+          label="已评分"
+          value={scores.stats.totalGraded}
+          icon={FileText}
+          iconBg="bg-[rgba(146,112,202,0.12)]"
+          iconColor="text-[#9270ca]"
+        />
       </div>
 
       {/* Filters */}
-      <Card className="shadow-sm">
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <Tabs
-              defaultValue={passFilter}
-              onValueChange={(v) => {
-                const newParams = new URLSearchParams(searchParams);
-                newParams.set("passFilter", v);
-                newParams.delete("page");
-                setSearchParams(newParams);
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value="all">全部</TabsTrigger>
-                <TabsTrigger value="passed">及格</TabsTrigger>
-                <TabsTrigger value="failed">不及格</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs
+        defaultValue={passFilter}
+        onValueChange={(v) => {
+          const newParams = new URLSearchParams(searchParams);
+          newParams.set("passFilter", v);
+          newParams.delete("page");
+          setSearchParams(newParams);
+        }}
+      >
+        <TabsList>
+          <TabsTrigger value="all">全部</TabsTrigger>
+          <TabsTrigger value="passed">及格</TabsTrigger>
+          <TabsTrigger value="failed">不及格</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Scores Table */}
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">成绩列表</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {scores.items.length === 0 ? (
-            <EmptyState
-              icon={<FileText className="size-12" />}
-              title="暂无成绩"
-              description="该考试暂未有已评分的答卷"
-            />
-          ) : (
-            <div className="flex flex-col gap-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>考生姓名</TableHead>
-                    <TableHead>考生信息</TableHead>
-                    <TableHead>成绩</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>提交时间</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {scores.items.map((item) => (
-                    <TableRow key={item.attemptId}>
-                      <TableCell className="font-medium">
-                        {item.candidateName}
-                      </TableCell>
-                      <TableCell>
-                        {Object.values(item.candidateFields)
-                          .map(String)
-                          .join(" / ") || "-"}
-                      </TableCell>
-                      <TableCell className="font-bold">{item.score}</TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          status={item.passed ? "passed" : "not_passed"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {item.submittedAt
-                          ? new Date(item.submittedAt).toLocaleString()
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            void navigate(`/admin/attempts/${item.attemptId}`)
-                          }
-                        >
-                          查看详情
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+      {scores.items.length === 0 ? (
+        <EmptyState
+          icon={<FileText className="size-8" />}
+          title="暂无成绩"
+          description="该考试暂未有已评分的答卷"
+        />
+      ) : (
+        <AdminTableShell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>考生姓名</TableHead>
+                <TableHead>考生信息</TableHead>
+                <TableHead>成绩</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>提交时间</TableHead>
+                <TableHead>操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scores.items.map((item) => (
+                <TableRow key={item.attemptId}>
+                  <TableCell className="font-medium">
+                    {item.candidateName}
+                  </TableCell>
+                  <TableCell>
+                    {Object.values(item.candidateFields)
+                      .map(String)
+                      .join(" / ") || "-"}
+                  </TableCell>
+                  <TableCell className="font-bold">{item.score}</TableCell>
+                  <TableCell>
+                    <StatusBadge
+                      status={item.passed ? "passed" : "not_passed"}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {item.submittedAt
+                      ? new Date(item.submittedAt).toLocaleString()
+                      : "-"}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        void navigate(`/admin/attempts/${item.attemptId}`)
+                      }
+                    >
+                      查看详情
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </AdminTableShell>
+      )}
 
-              {/* Pagination */}
-              {scores.total > scores.pageSize && (
-                <Pagination>
-                  <PaginationContent>
-                    {page > 1 && (
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => {
-                            const newParams = new URLSearchParams(searchParams);
-                            newParams.set("page", String(page - 1));
-                            setSearchParams(newParams);
-                          }}
-                        />
-                      </PaginationItem>
-                    )}
-                    {Array.from(
-                      { length: Math.ceil(scores.total / scores.pageSize) },
-                      (_, i) => i + 1,
-                    ).map((p) => (
-                      <PaginationItem key={p}>
-                        <PaginationLink
-                          isActive={p === page}
-                          onClick={() => {
-                            const newParams = new URLSearchParams(searchParams);
-                            newParams.set("page", String(p));
-                            setSearchParams(newParams);
-                          }}
-                        >
-                          {p}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    {page < Math.ceil(scores.total / scores.pageSize) && (
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => {
-                            const newParams = new URLSearchParams(searchParams);
-                            newParams.set("page", String(page + 1));
-                            setSearchParams(newParams);
-                          }}
-                        />
-                      </PaginationItem>
-                    )}
-                  </PaginationContent>
-                </Pagination>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      {/* Pagination */}
+      {scores.total > scores.pageSize && (
+        <Pagination>
+          <PaginationContent>
+            {page > 1 && (
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.set("page", String(page - 1));
+                    setSearchParams(newParams);
+                  }}
+                />
+              </PaginationItem>
+            )}
+            {Array.from(
+              { length: Math.ceil(scores.total / scores.pageSize) },
+              (_, i) => i + 1,
+            ).map((p) => (
+              <PaginationItem key={p}>
+                <PaginationLink
+                  isActive={p === page}
+                  onClick={() => {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.set("page", String(p));
+                    setSearchParams(newParams);
+                  }}
+                >
+                  {p}
+                </PaginationLink>
+              </PaginationItem>
+            ))}
+            {page < Math.ceil(scores.total / scores.pageSize) && (
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => {
+                    const newParams = new URLSearchParams(searchParams);
+                    newParams.set("page", String(page + 1));
+                    setSearchParams(newParams);
+                  }}
+                />
+              </PaginationItem>
+            )}
+          </PaginationContent>
+        </Pagination>
+      )}
+    </AdminShell>
   );
 }

@@ -7,8 +7,13 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { LoadingState } from "@/components/shared/LoadingState";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { RowActions } from "@/components/shared/RowActions";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminTableShell,
+  AdminToolbarButton,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -223,19 +228,21 @@ export function CandidateFieldsPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title="考生字段配置"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void download()}>
-              <Download data-icon="inline-start" />
+            <AdminToolbarButton
+              verb="export"
+              icon={Download}
+              onClick={() => void download()}
+            >
               下载模板
-            </Button>
-            <Button onClick={() => dialog()}>
-              <Plus data-icon="inline-start" />
+            </AdminToolbarButton>
+            <AdminToolbarButton verb="add" icon={Plus} onClick={() => dialog()}>
               添加字段
-            </Button>
+            </AdminToolbarButton>
           </div>
         }
       />
@@ -247,89 +254,91 @@ export function CandidateFieldsPage() {
           description="请先配置唯一身份字段和需要采集的信息。"
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>字段名</TableHead>
-              <TableHead>标签</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>必填</TableHead>
-              <TableHead>唯一</TableHead>
-              <TableHead>排序</TableHead>
-              <TableHead>操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fields.map((field, index) => (
-              <TableRow
-                key={field.id}
-                draggable
-                onDragStart={() => setDraggingId(field.id)}
-                onDragEnd={() => setDraggingId(null)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => void drop(field)}
-              >
-                <TableCell>{field.name}</TableCell>
-                <TableCell>{field.label}</TableCell>
-                <TableCell>
-                  {field.fieldType === "text"
-                    ? "文本"
-                    : field.fieldType === "number"
-                      ? "数字"
-                      : "选项"}
-                </TableCell>
-                <TableCell>{field.required ? "是" : "否"}</TableCell>
-                <TableCell>{field.unique ? "是" : "否"}</TableCell>
-                <TableCell>{field.sortOrder}</TableCell>
-                <TableCell>
-                  <RowActions>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={index === 0}
-                      onClick={() => void move(field, -1)}
-                      aria-label="上移"
-                    >
-                      <ArrowUp />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={index === fields.length - 1}
-                      onClick={() => void move(field, 1)}
-                      aria-label="下移"
-                    >
-                      <ArrowDown />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => dialog(field)}
-                      aria-label="编辑字段"
-                    >
-                      <Pencil />
-                    </Button>
-                    <ConfirmDialog
-                      trigger={
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label="删除字段"
-                        >
-                          <Trash2 className="text-destructive" />
-                        </Button>
-                      }
-                      title="确认删除"
-                      description={`确定删除字段「${field.label}」吗？`}
-                      destructive
-                      onConfirm={() => void remove(field.id)}
-                    />
-                  </RowActions>
-                </TableCell>
+        <AdminTableShell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>字段名</TableHead>
+                <TableHead>标签</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>必填</TableHead>
+                <TableHead>唯一</TableHead>
+                <TableHead>排序</TableHead>
+                <TableHead>操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {fields.map((field, index) => (
+                <TableRow
+                  key={field.id}
+                  draggable
+                  onDragStart={() => setDraggingId(field.id)}
+                  onDragEnd={() => setDraggingId(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => void drop(field)}
+                >
+                  <TableCell>{field.name}</TableCell>
+                  <TableCell>{field.label}</TableCell>
+                  <TableCell>
+                    {field.fieldType === "text"
+                      ? "文本"
+                      : field.fieldType === "number"
+                        ? "数字"
+                        : "选项"}
+                  </TableCell>
+                  <TableCell>{field.required ? "是" : "否"}</TableCell>
+                  <TableCell>{field.unique ? "是" : "否"}</TableCell>
+                  <TableCell>{field.sortOrder}</TableCell>
+                  <TableCell>
+                    <RowActions>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={index === 0}
+                        onClick={() => void move(field, -1)}
+                        aria-label="上移"
+                      >
+                        <ArrowUp />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={index === fields.length - 1}
+                        onClick={() => void move(field, 1)}
+                        aria-label="下移"
+                      >
+                        <ArrowDown />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => dialog(field)}
+                        aria-label="编辑字段"
+                      >
+                        <Pencil />
+                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label="删除字段"
+                          >
+                            <Trash2 className="text-destructive" />
+                          </Button>
+                        }
+                        title="确认删除"
+                        description={`确定删除字段「${field.label}」吗？`}
+                        destructive
+                        onConfirm={() => void remove(field.id)}
+                      />
+                    </RowActions>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </AdminTableShell>
       )}
       <Dialog open={open} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
@@ -410,6 +419,6 @@ export function CandidateFieldsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }

@@ -10,7 +10,11 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn(
+          "w-full caption-bottom border-collapse text-sm",
+          "[&_tr]:border-b [&_tr]:border-admin-border [&_th]:border-r [&_th]:border-admin-border-light [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-admin-border-light [&_td:last-child]:border-r-0",
+          className,
+        )}
         {...props}
       />
     </div>
@@ -55,8 +59,8 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
-        className
+        "border-b border-admin-border transition-colors hover:bg-admin-muted has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        className,
       )}
       {...props}
     />
@@ -68,8 +72,8 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-11 px-3 text-left align-middle text-[13px] font-medium whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
+        "h-11 bg-admin-table-header px-3 text-left align-middle text-[13px] font-semibold whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        className,
       )}
       {...props}
     />

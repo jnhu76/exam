@@ -24,16 +24,17 @@ const stateMeta = {
   unanswered: {
     label: "未作答",
     className:
-      "border-border bg-background text-muted-foreground hover:bg-muted",
+      "border-admin-border bg-background text-muted-foreground hover:bg-muted",
   },
   answered: {
     label: "已作答",
     className:
-      "border-success bg-success text-success-foreground hover:bg-success/90",
+      "border-success/40 bg-success-soft text-success hover:bg-success/15",
   },
   flagged: {
     label: "已标记",
-    className: "border-warning bg-warning/10 text-warning hover:bg-warning/20",
+    className:
+      "border-warning/40 bg-warning-soft text-warning hover:bg-warning/20",
   },
 } satisfies Record<
   QuestionNavigatorState,
@@ -67,7 +68,7 @@ export function QuestionNavigator({
               aria-label={label}
               aria-current={isCurrent ? "true" : undefined}
               className={cn(
-                "relative flex size-9 items-center justify-center rounded-md border text-sm font-medium transition-colors",
+                "relative flex size-9 items-center justify-center rounded-[var(--admin-radius-sm)] border text-sm font-medium transition-colors",
                 meta.className,
                 isCurrent &&
                   "ring-2 ring-primary ring-offset-2 ring-offset-background",
@@ -88,15 +89,15 @@ export function QuestionNavigator({
       </div>
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-3 rounded-sm border border-border bg-background" />
+          <span className="inline-block size-3 rounded-[2px] border border-admin-border bg-background" />
           未作答
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-3 rounded-sm border border-success bg-success" />
+          <span className="inline-block size-3 rounded-[2px] border border-success/40 bg-success-soft" />
           已作答
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-3 rounded-sm border border-warning bg-warning/10" />
+          <span className="inline-block size-3 rounded-[2px] border border-warning/40 bg-warning-soft" />
           已标记
         </span>
       </div>

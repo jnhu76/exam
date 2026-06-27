@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminTableShell,
+} from "@/components/admin";
 import {
   Table,
   TableBody,
@@ -77,23 +81,23 @@ export function GradingQueuePage() {
   if (error) return <ErrorState message={error} onRetry={loadQueue} />;
   if (!data || data.items.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="待评分" description="管理需要手动评分的试卷" />
+      <AdminShell>
+        <AdminShellHeader title="待评分" description="管理需要手动评分的试卷" />
         <EmptyState
           icon={<ClipboardCheck className="size-8" />}
           title="暂无待评分的试卷"
           description="当前没有需要手动评分的试卷"
         />
-      </div>
+      </AdminShell>
     );
   }
 
   const totalPages = Math.ceil(data.total / pageSize);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="待评分" description="管理需要手动评分的试卷" />
-      <div className="overflow-hidden rounded-md border">
+    <AdminShell>
+      <AdminShellHeader title="待评分" description="管理需要手动评分的试卷" />
+      <AdminTableShell>
         <Table>
           <TableHeader>
             <TableRow>
@@ -131,7 +135,7 @@ export function GradingQueuePage() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </AdminTableShell>
       {totalPages > 1 && (
         <Pagination>
           <PaginationContent>
@@ -160,6 +164,6 @@ export function GradingQueuePage() {
           </PaginationContent>
         </Pagination>
       )}
-    </div>
+    </AdminShell>
   );
 }

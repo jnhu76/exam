@@ -2,15 +2,19 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+  AdminStatusTag,
+} from "@/components/admin";
 import {
   Dialog,
   DialogContent,
@@ -191,8 +195,8 @@ export function ProctorDashboardPage() {
   const hasAnyCandidates = data.candidates.length > 0;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title="监考"
         actions={
           <div className="flex gap-2">
@@ -349,7 +353,7 @@ export function ProctorDashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 
   /** Renders a grid of candidate status cards. */
@@ -374,10 +378,10 @@ export function ProctorDashboardPage() {
             <Card key={candidate.candidateId} className="shadow-sm">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium truncate">
+                  <span className="text-sm font-medium truncate">
                     {candidate.name}
-                  </CardTitle>
-                  <StatusBadge status={candidate.status} />
+                  </span>
+                  <AdminStatusTag status={candidate.status} />
                 </div>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 text-xs">

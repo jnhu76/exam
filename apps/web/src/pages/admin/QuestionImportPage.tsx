@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FileUpload } from "@/components/shared/FileUpload";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminSearchPanel,
+  AdminTableShell,
+  AdminToolbarButton,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -219,64 +225,68 @@ export function QuestionImportPage() {
   if (error) return <ErrorState message={error} onRetry={loadCourses} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="导入题目" />
+    <AdminShell>
+      <AdminShellHeader title="导入题目" />
 
-      <div className="flex items-end gap-4">
-        <div className="flex flex-col gap-2">
-          <Label>目标课程</Label>
-          <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="选择课程" />
-            </SelectTrigger>
-            <SelectContent>
-              {courses.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <AdminSearchPanel>
+        <div className="flex items-end gap-4">
+          <div className="flex flex-col gap-2">
+            <Label>目标课程</Label>
+            <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="选择课程" />
+              </SelectTrigger>
+              <SelectContent>
+                {courses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <AdminToolbarButton verb="export" onClick={downloadTemplate}>
+            下载模板
+          </AdminToolbarButton>
+
+          <FileUpload onText={loadCsv} />
         </div>
-
-        <Button variant="outline" onClick={downloadTemplate}>
-          下载模板
-        </Button>
-
-        <FileUpload onText={loadCsv} />
-      </div>
+      </AdminSearchPanel>
 
       {parsedRows.length > 0 && !importResult && (
         <>
           <div className="text-sm text-muted-foreground">
             已解析 {parsedRows.length} 条数据
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">行号</TableHead>
-                <TableHead className="w-16">题型</TableHead>
-                <TableHead>题目内容</TableHead>
-                <TableHead className="w-16">分值</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {parsedRows.slice(0, 20).map((row, i) => (
-                <TableRow key={i}>
-                  <TableCell>{i + 1}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {TYPE_LABELS[row.type] ?? row.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[400px] truncate">
-                    {row.content}
-                  </TableCell>
-                  <TableCell>{row.score}</TableCell>
+          <AdminTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">行号</TableHead>
+                  <TableHead className="w-16">题型</TableHead>
+                  <TableHead>题目内容</TableHead>
+                  <TableHead className="w-16">分值</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {parsedRows.slice(0, 20).map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{i + 1}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {TYPE_LABELS[row.type] ?? row.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[400px] truncate">
+                      {row.content}
+                    </TableCell>
+                    <TableCell>{row.score}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </AdminTableShell>
           {parsedRows.length > 20 && (
             <p className="text-sm text-muted-foreground">
               ...还有 {parsedRows.length - 20} 条数据
@@ -305,36 +315,38 @@ export function QuestionImportPage() {
             </span>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">行号</TableHead>
-                <TableHead className="w-16">状态</TableHead>
-                <TableHead>详情</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {importResult.details.map((d) => (
-                <TableRow key={d.row}>
-                  <TableCell>{d.row}</TableCell>
-                  <TableCell>
-                    {d.status === "valid" && (
-                      <CheckCircle2 className="size-4 text-success" />
-                    )}
-                    {d.status === "warning" && (
-                      <AlertCircle className="size-4 text-warning" />
-                    )}
-                    {d.status === "error" && (
-                      <XCircle className="size-4 text-destructive" />
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {d.message ?? "-"}
-                  </TableCell>
+          <AdminTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">行号</TableHead>
+                  <TableHead className="w-16">状态</TableHead>
+                  <TableHead>详情</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {importResult.details.map((d) => (
+                  <TableRow key={d.row}>
+                    <TableCell>{d.row}</TableCell>
+                    <TableCell>
+                      {d.status === "valid" && (
+                        <CheckCircle2 className="size-4 text-success" />
+                      )}
+                      {d.status === "warning" && (
+                        <AlertCircle className="size-4 text-warning" />
+                      )}
+                      {d.status === "error" && (
+                        <XCircle className="size-4 text-destructive" />
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {d.message ?? "-"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </AdminTableShell>
 
           <div className="flex gap-3">
             {!confirmed && importResult.errors === 0 && (
@@ -364,6 +376,6 @@ export function QuestionImportPage() {
           </div>
         </div>
       )}
-    </div>
+    </AdminShell>
   );
 }

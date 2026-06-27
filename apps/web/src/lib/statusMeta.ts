@@ -109,6 +109,17 @@ const toneTextColorMap: Record<StatusTone, string> = {
   secondary: "text-secondary-foreground",
 };
 
+/** Soft-filled tag background + text classes for each status tone (single source of truth). */
+export const toneTagClass: Record<StatusTone, string> = {
+  primary: "bg-primary-soft text-primary",
+  secondary: "bg-secondary text-secondary-foreground",
+  success: "bg-success-soft text-success",
+  warning: "bg-warning-soft text-warning",
+  destructive: "bg-destructive-soft text-destructive",
+  info: "bg-info-soft text-info",
+  muted: "bg-neutral-soft text-muted-foreground",
+};
+
 /** Returns the Tailwind text-color class for a given status tone. */
 export function getToneTextColor(tone: StatusTone): string {
   return toneTextColorMap[tone];

@@ -13,11 +13,17 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
-import { PageHeader } from "@/components/shared/PageHeader";
 import {
   ImportWizard,
   type ImportPreviewRow,
 } from "@/components/shared/ImportWizard";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminSearchPanel,
+  AdminTableShell,
+  AdminToolbarButton,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -307,38 +313,39 @@ export function CandidatesPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title="考生管理"
         actions={
           <div className="flex gap-2">
-            <Button onClick={() => open()}>
-              <Plus data-icon="inline-start" />
+            <AdminToolbarButton verb="add" icon={Plus} onClick={() => open()}>
               新增考生
-            </Button>
-            <Button
-              variant="outline"
+            </AdminToolbarButton>
+            <AdminToolbarButton
+              verb="import"
+              icon={Upload}
               onClick={() => {
                 setImportOpen(true);
                 setImportSummary("");
                 setCsv("");
               }}
             >
-              <Upload data-icon="inline-start" />
               导入
-            </Button>
+            </AdminToolbarButton>
           </div>
         }
       />
-      <SearchInput
-        aria-label="搜索考生"
-        placeholder="搜索考生姓名或用户名..."
-        value={search}
-        onChange={setSearch}
-        onClear={() => setSearch("")}
-        clearLabel="清除考生搜索"
-        containerClassName="max-w-md flex-1"
-      />
+      <AdminSearchPanel>
+        <SearchInput
+          aria-label="搜索考生"
+          placeholder="搜索考生姓名或用户名..."
+          value={search}
+          onChange={setSearch}
+          onClear={() => setSearch("")}
+          clearLabel="清除考生搜索"
+          containerClassName="max-w-md flex-1"
+        />
+      </AdminSearchPanel>
       {filteredCandidates.length === 0 && search ? (
         <EmptyState
           icon={<Search className="size-8" />}
@@ -372,7 +379,7 @@ export function CandidatesPage() {
           }
         />
       ) : (
-        <>
+        <AdminTableShell>
           <Table>
             <TableHeader>
               <TableRow>
@@ -431,7 +438,7 @@ export function CandidatesPage() {
               ))}
             </TableBody>
           </Table>
-        </>
+        </AdminTableShell>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
@@ -550,6 +557,6 @@ export function CandidatesPage() {
         summary={importSummary}
         onConfirm={() => void importCsv()}
       />
-    </div>
+    </AdminShell>
   );
 }

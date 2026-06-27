@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FieldError } from "@/components/shared/FieldError";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
@@ -84,12 +85,9 @@ export function LoginPage() {
                 <FieldError>{fieldErrors.password}</FieldError>
               </Field>
               {error && (
-                <div
-                  role="alert"
-                  className="text-sm text-destructive bg-destructive/10 p-2 rounded"
-                >
-                  {error}
-                </div>
+                <Alert variant="destructive" className="py-2">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
               <Button
                 type="submit"

@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminSearchPanel,
+  AdminTableShell,
+  AdminPageCard,
+} from "@/components/admin";
 import {
   Table,
   TableBody,
@@ -22,7 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload, X } from "lucide-react";
+import { RotateCcw, Upload } from "lucide-react";
 import type { ImportJobLog, ImportLogListResponse } from "@exam/contracts";
 
 type ImportLogResponse = ImportLogListResponse;
@@ -93,8 +99,8 @@ export function ImportLogsPage() {
   if (error) return <ErrorState message={error} onRetry={loadLogs} />;
   if (!data || data.items.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader
+      <AdminShell>
+        <AdminShellHeader
           title="导入日志"
           description="查看考生和题目导入的历史记录"
         />
@@ -103,14 +109,17 @@ export function ImportLogsPage() {
           title="暂无导入日志"
           description="导入操作后将自动记录在此"
         />
-      </div>
+      </AdminShell>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="导入日志" description="查看考生和题目导入的历史记录" />
-      <div className="flex flex-wrap items-center gap-3">
+    <AdminShell>
+      <AdminShellHeader
+        title="导入日志"
+        description="查看考生和题目导入的历史记录"
+      />
+      <AdminSearchPanel>
         <Select
           value={typeFilter}
           onValueChange={(v) => {
@@ -130,18 +139,13 @@ export function ImportLogsPage() {
           </SelectContent>
         </Select>
         {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="text-muted-foreground"
-          >
-            <X className="mr-1 size-4" />
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <RotateCcw data-icon="inline-start" />
             清空筛选
           </Button>
         )}
-      </div>
-      <div className="overflow-hidden rounded-md border">
+      </AdminSearchPanel>
+      <AdminTableShell>
         <Table>
           <TableHeader>
             <TableRow>
@@ -180,13 +184,13 @@ export function ImportLogsPage() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </AdminTableShell>
       {expandedId &&
         (() => {
           const item = items.find((i) => i.id === expandedId);
           if (!item) return null;
           return (
-            <div className="rounded-md border p-4">
+            <AdminPageCard>
               {item.errorsDetail && item.errorsDetail.length > 0 && (
                 <>
                   <h3 className="mb-2 text-sm font-medium">错误详情</h3>
@@ -203,7 +207,7 @@ export function ImportLogsPage() {
                   </pre>
                 </>
               )}
-            </div>
+            </AdminPageCard>
           );
         })()}
       <DataTablePagination
@@ -212,6 +216,6 @@ export function ImportLogsPage() {
         total={data.total}
         onPageChange={setPage}
       />
-    </div>
+    </AdminShell>
   );
 }

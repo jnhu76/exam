@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import type { UpdateBrandingRequest } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { PlatformSettingsForm } from "@/components/settings/PlatformSettingsForm";
 import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FormSection } from "@/components/shared/FormSection";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
+import { AdminShell, AdminShellHeader } from "@/components/admin";
 
 /** Branding settings data shape, reusing the contract type directly. */
 type SettingsData = UpdateBrandingRequest;
@@ -64,8 +64,8 @@ export function SettingsPage() {
   if (error) return <ErrorState message={error} onRetry={loadSettings} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="平台与机构设置" />
+    <AdminShell>
+      <AdminShellHeader title="平台与机构设置" />
       <FormSection
         title="品牌设置"
         description="配置当前部署显示给用户的名称与页脚。"
@@ -80,6 +80,6 @@ export function SettingsPage() {
       <FormSection title="账号安全" description="修改当前账号的登录密码。">
         <PasswordChangeForm cardWrapper={false} />
       </FormSection>
-    </div>
+    </AdminShell>
   );
 }

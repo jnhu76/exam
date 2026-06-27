@@ -1,15 +1,5 @@
-import { getStatusMeta, type StatusTone } from "@/lib/statusMeta";
+import { getStatusMeta, toneTagClass } from "@/lib/statusMeta";
 import { cn } from "@/lib/utils";
-
-const toneClasses: Record<StatusTone, string> = {
-  primary: "bg-primary-soft text-primary-soft-foreground",
-  secondary: "bg-secondary text-secondary-foreground",
-  success: "bg-success-soft text-success",
-  warning: "bg-warning-soft text-warning",
-  destructive: "bg-destructive-soft text-destructive",
-  info: "bg-info-soft text-info",
-  muted: "bg-neutral-soft text-muted-foreground",
-};
 
 interface AdminStatusTagProps {
   status: string;
@@ -31,9 +21,9 @@ export function AdminStatusTag({
     <span
       data-status-tone={meta.tone}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md font-medium leading-none",
+        "inline-flex items-center gap-1 rounded-[4px] font-medium leading-none",
         size === "sm" ? "h-5 px-1.5 text-[11px]" : "h-6 px-2 text-xs",
-        toneClasses[meta.tone],
+        toneTagClass[meta.tone],
         className,
       )}
     >

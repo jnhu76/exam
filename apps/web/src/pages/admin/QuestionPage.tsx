@@ -2,15 +2,20 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { ListToolbar } from "@/components/shared/ListToolbar";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminSearchPanel,
+  AdminTableShell,
+  AdminToolbarButton,
+} from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,7 +42,6 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  X,
 } from "lucide-react";
 import { TYPE_LABELS, TYPE_VARIANT } from "@/lib/constants";
 
@@ -188,135 +192,130 @@ export function QuestionPage() {
   if (error) return <ErrorState message={error} onRetry={loadQuestions} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title="题目管理"
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="outline"
+            <AdminToolbarButton
+              verb="import"
+              icon={FileUp}
               onClick={() => void navigate("/admin/questions/import")}
             >
-              <FileUp data-icon="inline-start" />
               导入题目
-            </Button>
-            <Button onClick={() => void navigate("/admin/questions/new")}>
-              <Plus data-icon="inline-start" />
+            </AdminToolbarButton>
+            <AdminToolbarButton
+              verb="add"
+              icon={Plus}
+              onClick={() => void navigate("/admin/questions/new")}
+            >
               新增题目
-            </Button>
+            </AdminToolbarButton>
           </div>
         }
       />
 
-      <ListToolbar
-        aria-label="题目筛选工具栏"
-        filters={
-          <>
-            <Select
-              value={filterCourse}
-              onValueChange={(value) => {
-                setFilterCourse(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-auto lg:w-[180px]">
-                <SelectValue placeholder="按课程筛选" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部课程</SelectItem>
-                {courses.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <AdminSearchPanel>
+        <Select
+          value={filterCourse}
+          onValueChange={(value) => {
+            setFilterCourse(value);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-auto lg:w-[180px]">
+            <SelectValue placeholder="按课程筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部课程</SelectItem>
+            {courses.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-            <Select
-              value={filterType}
-              onValueChange={(value) => {
-                setFilterType(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-auto lg:w-[150px]">
-                <SelectValue placeholder="按题型筛选" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部题型</SelectItem>
-                <SelectItem value="single_choice">单选题</SelectItem>
-                <SelectItem value="multiple_choice">多选题</SelectItem>
-                <SelectItem value="fill_blank">填空题</SelectItem>
-                <SelectItem value="true_false">判断题</SelectItem>
-              </SelectContent>
-            </Select>
+        <Select
+          value={filterType}
+          onValueChange={(value) => {
+            setFilterType(value);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-auto lg:w-[150px]">
+            <SelectValue placeholder="按题型筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部题型</SelectItem>
+            <SelectItem value="single_choice">单选题</SelectItem>
+            <SelectItem value="multiple_choice">多选题</SelectItem>
+            <SelectItem value="fill_blank">填空题</SelectItem>
+            <SelectItem value="true_false">判断题</SelectItem>
+          </SelectContent>
+        </Select>
 
-            <Select
-              value={filterDifficulty}
-              onValueChange={(value) => {
-                setFilterDifficulty(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-auto lg:w-[140px]">
-                <SelectValue placeholder="按难度筛选" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部难度</SelectItem>
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <SelectItem key={value} value={String(value)}>
-                    难度 {value}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <Select
+          value={filterDifficulty}
+          onValueChange={(value) => {
+            setFilterDifficulty(value);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-auto lg:w-[140px]">
+            <SelectValue placeholder="按难度筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部难度</SelectItem>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <SelectItem key={value} value={String(value)}>
+                难度 {value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-            <Input
-              className="w-auto lg:w-[180px]"
-              placeholder="标签，逗号分隔"
-              value={filterTags}
-              onChange={(e) => {
-                setFilterTags(e.target.value);
-                setPage(1);
-              }}
-            />
-          </>
-        }
-        search={
-          <SearchInput
-            aria-label="搜索当前页题目"
-            placeholder="搜索当前页题目内容..."
-            value={search}
-            onChange={setSearch}
-            onClear={() => setSearch("")}
-            clearLabel="清除题目搜索"
-          />
-        }
-        actions={
-          <>
-            {isTableLoading && (
-              <span
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground"
-                aria-live="polite"
-              >
-                <LoaderCircle className="size-4 animate-spin" />
-                加载中…
-              </span>
-            )}
-            {hasActiveFilter && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                aria-label="清空筛选"
-              >
-                <RotateCcw data-icon="inline-start" />
-                清空筛选
-              </Button>
-            )}
-          </>
-        }
-      />
+        <Input
+          className="w-auto lg:w-[180px]"
+          placeholder="标签，逗号分隔"
+          value={filterTags}
+          onChange={(e) => {
+            setFilterTags(e.target.value);
+            setPage(1);
+          }}
+        />
+
+        <SearchInput
+          aria-label="搜索当前页题目"
+          placeholder="搜索当前页题目内容..."
+          value={search}
+          onChange={setSearch}
+          onClear={() => setSearch("")}
+          clearLabel="清除题目搜索"
+          containerClassName="w-auto lg:w-[220px]"
+        />
+
+        {hasActiveFilter && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            aria-label="清空筛选"
+          >
+            <RotateCcw data-icon="inline-start" />
+            清空筛选
+          </Button>
+        )}
+        {isTableLoading && (
+          <span
+            className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+            aria-live="polite"
+          >
+            <LoaderCircle className="size-4 animate-spin" />
+            加载中…
+          </span>
+        )}
+      </AdminSearchPanel>
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -337,74 +336,80 @@ export function QuestionPage() {
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">题型</TableHead>
-                <TableHead>题目内容</TableHead>
-                <TableHead>所属课程</TableHead>
-                <TableHead className="w-16">分值</TableHead>
-                <TableHead className="w-16">难度</TableHead>
-                <TableHead>标签</TableHead>
-                <TableHead className="w-24">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((q) => (
-                <TableRow key={q.id}>
-                  <TableCell>
-                    <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
-                      {TYPE_LABELS[q.type] ?? q.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[300px] truncate">
-                    {q.content}
-                  </TableCell>
-                  <TableCell>{courseMap.get(q.courseId) ?? "-"}</TableCell>
-                  <TableCell>{q.score}</TableCell>
-                  <TableCell>{q.difficulty}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {q.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          void navigate(`/admin/questions/${q.id}/edit`)
-                        }
-                        aria-label="编辑题目"
-                      >
-                        <Pencil />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="删除题目"
-                          >
-                            <Trash2 className="text-destructive" />
-                          </Button>
-                        }
-                        title="确认删除"
-                        description="确定要删除这道题目吗？"
-                        destructive
-                        onConfirm={() => void handleDelete(q.id)}
-                      />
-                    </RowActions>
-                  </TableCell>
+          <AdminTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-16">题型</TableHead>
+                  <TableHead>题目内容</TableHead>
+                  <TableHead>所属课程</TableHead>
+                  <TableHead className="w-16">分值</TableHead>
+                  <TableHead className="w-16">难度</TableHead>
+                  <TableHead>标签</TableHead>
+                  <TableHead className="w-24">操作</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((q) => (
+                  <TableRow key={q.id}>
+                    <TableCell>
+                      <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
+                        {TYPE_LABELS[q.type] ?? q.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[300px] truncate">
+                      {q.content}
+                    </TableCell>
+                    <TableCell>{courseMap.get(q.courseId) ?? "-"}</TableCell>
+                    <TableCell>{q.score}</TableCell>
+                    <TableCell>{q.difficulty}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {q.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <RowActions>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void navigate(`/admin/questions/${q.id}/edit`)
+                          }
+                          aria-label="编辑题目"
+                        >
+                          <Pencil />
+                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="删除题目"
+                            >
+                              <Trash2 className="text-destructive" />
+                            </Button>
+                          }
+                          title="确认删除"
+                          description="确定要删除这道题目吗？"
+                          destructive
+                          onConfirm={() => void handleDelete(q.id)}
+                        />
+                      </RowActions>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </AdminTableShell>
           <DataTablePagination
             page={page}
             pageSize={pageSize}
@@ -413,6 +418,6 @@ export function QuestionPage() {
           />
         </>
       )}
-    </div>
+    </AdminShell>
   );
 }

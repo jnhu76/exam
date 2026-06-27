@@ -1,11 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DatePicker } from "@/components/shared/DatePicker";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminSearchPanel,
+  AdminTableShell,
+  AdminPageCard,
+} from "@/components/admin";
 import {
   Table,
   TableBody,
@@ -22,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ScrollText, X } from "lucide-react";
+import { RotateCcw, ScrollText } from "lucide-react";
 
 interface AuditLogItem {
   id: string;
@@ -213,9 +219,9 @@ export function AuditLogPage() {
   if (error) return <ErrorState message={error} onRetry={loadLogs} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="审计日志" description="查看系统操作审计记录" />
-      <div className="flex flex-wrap items-center gap-3">
+    <AdminShell>
+      <AdminShellHeader title="审计日志" description="查看系统操作审计记录" />
+      <AdminSearchPanel>
         <Select
           value={actionFilter}
           onValueChange={(v) => {
@@ -265,17 +271,12 @@ export function AuditLogPage() {
           onChange={(d) => handleDateChange(d, false)}
         />
         {hasActiveFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="text-muted-foreground"
-          >
-            <X className="mr-1 size-4" />
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <RotateCcw data-icon="inline-start" />
             清空筛选
           </Button>
         )}
-      </div>
+      </AdminSearchPanel>
       {items.length === 0 ? (
         <EmptyState
           icon={<ScrollText className="size-8" />}
@@ -284,7 +285,7 @@ export function AuditLogPage() {
         />
       ) : (
         <>
-          <div className="overflow-hidden rounded-md border">
+          <AdminTableShell>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -311,7 +312,7 @@ export function AuditLogPage() {
                       {item.actorName ?? item.actorId}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
+                      <span className="inline-flex items-center rounded-[4px] bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary">
                         {item.action}
                       </span>
                     </TableCell>
@@ -323,14 +324,13 @@ export function AuditLogPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </AdminTableShell>
           {expandedId &&
             (() => {
               const item = items.find((i) => i.id === expandedId);
               if (!item) return null;
               return (
-                <div className="rounded-md border p-4">
-                  <h3 className="mb-2 text-sm font-medium">元数据</h3>
+                <AdminPageCard title="元数据">
                   <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
                     {JSON.stringify(item.metadata, null, 2)}
                   </pre>
@@ -339,7 +339,7 @@ export function AuditLogPage() {
                       IP: {item.ipAddress}
                     </p>
                   )}
-                </div>
+                </AdminPageCard>
               );
             })()}
           {data && (
@@ -352,6 +352,6 @@ export function AuditLogPage() {
           )}
         </>
       )}
-    </div>
+    </AdminShell>
   );
 }

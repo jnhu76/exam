@@ -7,6 +7,20 @@
     <link rel="stylesheet" href="/fonts/noto-sans-cjk-sc/css/medium.css" />
     <link rel="stylesheet" href="/fonts/noto-sans-cjk-sc/css/bold.css" />
     <title>考试平台</title>
+    <script>
+      // Apply persisted theme before paint to avoid a flash of the wrong theme.
+      (function () {
+        try {
+          var t = localStorage.getItem("exam-theme");
+          if (!t) {
+            t = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          if (t === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

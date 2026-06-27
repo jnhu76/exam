@@ -98,8 +98,9 @@ function SidebarLink({
       title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
-          "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
-          isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
+          "flex min-h-10 items-center gap-3 rounded-[var(--admin-radius)] px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
+          isActive &&
+            "bg-sidebar-active-soft font-medium text-sidebar-foreground",
         )
       }
     >

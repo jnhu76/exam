@@ -7,6 +7,10 @@ interface AdminSearchPanelProps {
   className?: string;
 }
 
+/**
+ * Inline search/filter panel (koi-style): white card, 8px radius, subtle search
+ * tint background, wraps fields left-to-right and action buttons right.
+ */
 export function AdminSearchPanel({
   children,
   actions,
@@ -15,7 +19,7 @@ export function AdminSearchPanel({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-lg border bg-muted/40 p-4 sm:flex-row sm:items-end sm:flex-wrap",
+        "flex flex-col gap-3 rounded-[var(--admin-radius)] border border-admin-border bg-admin-search p-4 sm:flex-row sm:items-end sm:flex-wrap",
         className,
       )}
     >

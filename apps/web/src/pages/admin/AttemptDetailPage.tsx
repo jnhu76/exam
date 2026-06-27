@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -11,8 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+  AdminStatusTag,
+} from "@/components/admin";
 import {
   Play,
   Send,
@@ -282,75 +285,70 @@ function TimelineSection({
   onToggleEvent,
 }: TimelineSectionProps) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">答卷时间线</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <LoadingState />
-        ) : hasError ? (
-          <ErrorState message="加载时间线失败" onRetry={onRetry} />
-        ) : !events || events.length === 0 ? (
-          <EmptyState
-            icon={<Clock className="size-8" />}
-            title="暂无时间线事件"
-            description="该尝试的操作记录将显示在此"
-          />
-        ) : (
-          <div className="flex flex-col gap-1">
-            {events.map((event, index) => {
-              const meta = getEventMeta(event.action);
-              const Icon = meta.icon;
-              const isExpanded = expandedEventId === event.id;
-              return (
-                <div key={event.id}>
-                  {index > 0 && <Separator className="my-1" />}
-                  <button
-                    type="button"
-                    onClick={() => onToggleEvent(event.id)}
-                    className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
-                    aria-expanded={isExpanded}
-                  >
-                    <span className="text-muted-foreground" aria-hidden="true">
-                      <Icon className="size-4" />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className={eventToneClass[meta.tone]}
-                        >
-                          {meta.label}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(event.createdAt).toLocaleString("zh-CN")}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground truncate">
-                        操作者 {event.actorId}
+    <AdminPageCard title="答卷时间线">
+      {isLoading ? (
+        <LoadingState />
+      ) : hasError ? (
+        <ErrorState message="加载时间线失败" onRetry={onRetry} />
+      ) : !events || events.length === 0 ? (
+        <EmptyState
+          icon={<Clock className="size-8" />}
+          title="暂无时间线事件"
+          description="该尝试的操作记录将显示在此"
+        />
+      ) : (
+        <div className="flex flex-col gap-1">
+          {events.map((event, index) => {
+            const meta = getEventMeta(event.action);
+            const Icon = meta.icon;
+            const isExpanded = expandedEventId === event.id;
+            return (
+              <div key={event.id}>
+                {index > 0 && <Separator className="my-1" />}
+                <button
+                  type="button"
+                  onClick={() => onToggleEvent(event.id)}
+                  className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-accent"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="text-muted-foreground" aria-hidden="true">
+                    <Icon className="size-4" />
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant="secondary"
+                        className={eventToneClass[meta.tone]}
+                      >
+                        {meta.label}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(event.createdAt).toLocaleString("zh-CN")}
                       </span>
                     </span>
-                  </button>
-                  {isExpanded && (
-                    <div className="flex flex-col gap-1 px-2 pb-2">
-                      <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
-                        {JSON.stringify(event.metadata, null, 2)}
-                      </pre>
-                      {event.ipAddress && (
-                        <p className="text-xs text-muted-foreground">
-                          IP: {event.ipAddress}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                    <span className="mt-0.5 block text-xs text-muted-foreground truncate">
+                      操作者 {event.actorId}
+                    </span>
+                  </span>
+                </button>
+                {isExpanded && (
+                  <div className="flex flex-col gap-1 px-2 pb-2">
+                    <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
+                      {JSON.stringify(event.metadata, null, 2)}
+                    </pre>
+                    {event.ipAddress && (
+                      <p className="text-xs text-muted-foreground">
+                        IP: {event.ipAddress}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </AdminPageCard>
   );
 }
 
@@ -493,8 +491,8 @@ export function AttemptDetailPage() {
   // Live (in_progress/disrupted) attempt: admin misconduct-flag action view.
   if (liveAttempt && !result) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader
+      <AdminShell>
+        <AdminShellHeader
           title={`${liveAttempt.examTitle} - 答卷详情`}
           actions={
             <div className="flex gap-2">
@@ -505,35 +503,30 @@ export function AttemptDetailPage() {
             </div>
           }
         />
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">尝试状态</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <StatusBadge status={liveAttempt.status} />
-                {liveMisconduct && (
-                  <StatusBadge
-                    status={`misconduct_${liveMisconduct.severity}`}
-                  />
-                )}
-                {liveMisconduct && (
-                  <span className="text-sm text-muted-foreground">
-                    {liveMisconduct.notes}
-                  </span>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                className="w-fit"
-                onClick={() => setFlagDialogOpen(true)}
-              >
-                标记违规
-              </Button>
+        <AdminPageCard title="尝试状态">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <AdminStatusTag status={liveAttempt.status} />
+              {liveMisconduct && (
+                <AdminStatusTag
+                  status={`misconduct_${liveMisconduct.severity}`}
+                />
+              )}
+              {liveMisconduct && (
+                <span className="text-sm text-muted-foreground">
+                  {liveMisconduct.notes}
+                </span>
+              )}
             </div>
-          </CardContent>
-        </Card>
+            <Button
+              variant="outline"
+              className="w-fit"
+              onClick={() => setFlagDialogOpen(true)}
+            >
+              标记违规
+            </Button>
+          </div>
+        </AdminPageCard>
 
         <TimelineSection
           events={timeline}
@@ -600,7 +593,7 @@ export function AttemptDetailPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </AdminShell>
     );
   }
 
@@ -616,8 +609,8 @@ export function AttemptDetailPage() {
   const earnedScore = sortedQuestions.reduce((sum, q) => sum + q.score, 0);
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title={`${result.examTitle} - 答卷详情`}
         actions={
           <div className="flex gap-2">
@@ -629,91 +622,78 @@ export function AttemptDetailPage() {
         }
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">成绩概览</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <div>
-              <p className="text-sm text-muted-foreground">总分</p>
-              <p className="text-3xl font-bold tabular-nums">
-                {result.totalScore}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">得分</p>
-              <p
-                data-testid="earned-score"
-                className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
-              >
-                {earnedScore}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">及格线</p>
-              <p className="text-3xl font-bold tabular-nums">
-                {result.passingScore}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">状态</p>
-              <StatusBadge
-                status={result.passed ? "passed" : "not_passed"}
-                className="mt-1"
-              />
-            </div>
+      <AdminPageCard title="成绩概览">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div>
+            <p className="text-sm text-muted-foreground">总分</p>
+            <p className="text-3xl font-bold tabular-nums">
+              {result.totalScore}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <p className="text-sm text-muted-foreground">得分</p>
+            <p
+              data-testid="earned-score"
+              className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
+            >
+              {earnedScore}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">及格线</p>
+            <p className="text-3xl font-bold tabular-nums">
+              {result.passingScore}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">状态</p>
+            <AdminStatusTag status={result.passed ? "passed" : "not_passed"} />
+          </div>
+        </div>
+      </AdminPageCard>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">答题详情</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">题号</TableHead>
-                <TableHead>题目</TableHead>
-                <TableHead>题型</TableHead>
-                <TableHead>考生答案</TableHead>
-                <TableHead>标准答案</TableHead>
-                <TableHead className="text-right">得分</TableHead>
-                <TableHead className="text-right">满分</TableHead>
+      <AdminPageCard title="答题详情">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-16">题号</TableHead>
+              <TableHead>题目</TableHead>
+              <TableHead>题型</TableHead>
+              <TableHead>考生答案</TableHead>
+              <TableHead>标准答案</TableHead>
+              <TableHead className="text-right">得分</TableHead>
+              <TableHead className="text-right">满分</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedQuestions.map((q) => (
+              <TableRow key={q.questionId}>
+                <TableCell className="font-medium">{q.order}</TableCell>
+                <TableCell className="max-w-md truncate" title={q.content}>
+                  {q.content}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {TYPE_LABELS[q.type] ?? q.type}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={q.correct ? "default" : "destructive"}>
+                    {formatAnswer(q.candidateAnswer)}
+                  </Badge>
+                </TableCell>
+                <TableCell>{formatAnswer(q.standardAnswer)}</TableCell>
+                <TableCell className="text-right font-bold tabular-nums">
+                  {q.score}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {q.maxScore}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedQuestions.map((q) => (
-                <TableRow key={q.questionId}>
-                  <TableCell className="font-medium">{q.order}</TableCell>
-                  <TableCell className="max-w-md truncate" title={q.content}>
-                    {q.content}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {TYPE_LABELS[q.type] ?? q.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={q.correct ? "default" : "destructive"}>
-                      {formatAnswer(q.candidateAnswer)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{formatAnswer(q.standardAnswer)}</TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {q.score}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {q.maxScore}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            ))}
+          </TableBody>
+        </Table>
+      </AdminPageCard>
 
       <TimelineSection
         events={timeline}
@@ -723,6 +703,6 @@ export function AttemptDetailPage() {
         expandedEventId={expandedEventId}
         onToggleEvent={toggleEvent}
       />
-    </div>
+    </AdminShell>
   );
 }

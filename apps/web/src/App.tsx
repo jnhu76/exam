@@ -10,6 +10,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AdminLayout } from "@/components/layout/AdminLayout";
 import { BrandProvider, useBranding } from "@/components/layout/BrandProvider";
 import { ExamLayout } from "@/components/layout/ExamLayout";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { getDocumentTitle } from "@/lib/pageMeta";
@@ -115,15 +116,17 @@ export function AppTitle() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <BrandProvider loadRemote>
-          <AuthProvider restoreSession>
-            <AppTitle />
-            <AppRoutes />
-            <Toaster />
-          </AuthProvider>
-        </BrandProvider>
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <BrandProvider loadRemote>
+            <AuthProvider restoreSession>
+              <AppTitle />
+              <AppRoutes />
+              <Toaster />
+            </AuthProvider>
+          </BrandProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

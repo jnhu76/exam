@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -33,6 +32,12 @@ import { Separator } from "@/components/ui/separator";
 import { BookOpen, Trash2 } from "lucide-react";
 import { TYPE_LABELS } from "@/lib/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+  AdminTableShell,
+} from "@/components/admin";
 
 /** Minimal course representation used in the exam edit form. */
 interface CourseRow {
@@ -246,8 +251,8 @@ export function ExamEditPage() {
   const scheduleOnly = examStatus === "published";
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title="编辑考试" />
+    <AdminShell>
+      <AdminShellHeader title="编辑考试" />
 
       {scheduleOnly && (
         <Alert>
@@ -258,68 +263,70 @@ export function ExamEditPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
+        <AdminPageCard>
           <ExamConfigForm
             courses={courses}
             questions={questions.map((q) => ({ id: q.id, score: q.score }))}
             data={config}
             onChange={setConfig}
           />
-        </div>
+        </AdminPageCard>
 
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">
-              已选题目 ({config.questionIds.length})
-            </h3>
-            <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
-              手动选题
-            </Button>
-          </div>
-
-          {selectedQuestions.length === 0 ? (
-            <EmptyState
-              icon={<BookOpen className="size-8" />}
-              title="尚未选择题目"
-              description="请点击「手动选题」按钮选择题目。"
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">题型</TableHead>
-                  <TableHead>题目内容</TableHead>
-                  <TableHead className="w-16">分值</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {selectedQuestions.map((q) => (
-                  <TableRow key={q.id}>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {TYPE_LABELS[q.type] ?? q.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[250px] truncate">
-                      {q.content}
-                    </TableCell>
-                    <TableCell>{q.score}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeQuestion(q.id)}
-                        aria-label="删除题目"
-                      >
-                        <Trash2 />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <AdminPageCard
+            title={`已选题目 (${config.questionIds.length})`}
+            actions={
+              <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
+                手动选题
+              </Button>
+            }
+          >
+            {selectedQuestions.length === 0 ? (
+              <EmptyState
+                icon={<BookOpen className="size-8" />}
+                title="尚未选择题目"
+                description="请点击「手动选题」按钮选择题目。"
+              />
+            ) : (
+              <AdminTableShell>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">题型</TableHead>
+                      <TableHead>题目内容</TableHead>
+                      <TableHead className="w-16">分值</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedQuestions.map((q) => (
+                      <TableRow key={q.id}>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {TYPE_LABELS[q.type] ?? q.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[250px] truncate">
+                          {q.content}
+                        </TableCell>
+                        <TableCell>{q.score}</TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeQuestion(q.id)}
+                            aria-label="删除题目"
+                          >
+                            <Trash2 />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </AdminTableShell>
+            )}
+          </AdminPageCard>
         </div>
       </div>
 
@@ -389,6 +396,6 @@ export function ExamEditPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }

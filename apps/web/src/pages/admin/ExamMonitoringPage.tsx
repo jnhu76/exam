@@ -7,7 +7,6 @@ import type {
 } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -21,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AdminShell, AdminShellHeader } from "@/components/admin";
 import {
   CircleAlert,
   RefreshCw,
@@ -164,19 +164,19 @@ export function ExamMonitoringPage() {
 
   if (isLoading && attempts.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="考试监控" />
+      <AdminShell>
+        <AdminShellHeader title="考试监控" />
         <LoadingState label="正在加载监控数据..." />
-      </div>
+      </AdminShell>
     );
   }
 
   if (loadError && attempts.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="考试监控" />
+      <AdminShell>
+        <AdminShellHeader title="考试监控" />
         <ErrorState message={loadError} onRetry={loadAttempts} />
-      </div>
+      </AdminShell>
     );
   }
 
@@ -185,34 +185,36 @@ export function ExamMonitoringPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6">
+    <AdminShell>
       {staleWarning && (
         <Alert variant="default">
           <CircleAlert />
           <AlertDescription>{staleWarning}</AlertDescription>
         </Alert>
       )}
-      <div className="flex items-center justify-between">
-        <PageHeader title="考试监控" />
-        <div className="flex items-center gap-3">
-          {lastRefreshedAt !== null && (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
-            </span>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="刷新监控数据"
-            onClick={() => {
-              setIsLoading(true);
-              loadAttempts();
-            }}
-          >
-            <RefreshCw />
-          </Button>
-        </div>
-      </div>
+      <AdminShellHeader
+        title="考试监控"
+        actions={
+          <div className="flex items-center gap-3">
+            {lastRefreshedAt !== null && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="刷新监控数据"
+              onClick={() => {
+                setIsLoading(true);
+                loadAttempts();
+              }}
+            >
+              <RefreshCw />
+            </Button>
+          </div>
+        }
+      />
 
       {attempts.length === 0 ? (
         <EmptyState
@@ -362,7 +364,7 @@ export function ExamMonitoringPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }
 

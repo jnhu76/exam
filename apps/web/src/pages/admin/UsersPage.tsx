@@ -7,7 +7,13 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
-import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminTableShell,
+  AdminToolbar,
+  AdminToolbarButton,
+} from "@/components/admin";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,14 +170,13 @@ export function UsersPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadUsers} />;
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title="用户管理"
         actions={
-          <Button onClick={() => open()}>
-            <Plus data-icon="inline-start" />
+          <AdminToolbarButton verb="add" icon={Plus} onClick={() => open()}>
             新增用户
-          </Button>
+          </AdminToolbarButton>
         }
       />
       {users.length === 0 ? (
@@ -181,62 +186,64 @@ export function UsersPage() {
           description="还没有创建任何管理用户。"
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>用户名</TableHead>
-              <TableHead>姓名</TableHead>
-              <TableHead>角色</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.username}</TableCell>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">
-                    {roleLabels[user.role] ?? user.role}
-                  </Badge>
-                </TableCell>
-                <TableCell>{user.isActive ? "启用" : "禁用"}</TableCell>
-                <TableCell>
-                  <RowActions>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => open(user)}
-                      aria-label="编辑用户"
-                    >
-                      <Pencil />
-                    </Button>
-                    <ConfirmDialog
-                      trigger={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={togglingId !== null}
-                        >
-                          {togglingId === user.id
-                            ? "处理中..."
-                            : user.isActive
-                              ? "禁用"
-                              : "启用"}
-                        </Button>
-                      }
-                      title={user.isActive ? "确认禁用" : "确认启用"}
-                      description={`确定要${user.isActive ? "禁用" : "启用"}用户「${user.name}」吗？`}
-                      destructive={user.isActive}
-                      onConfirm={() => void toggle(user)}
-                    />
-                  </RowActions>
-                </TableCell>
+        <AdminTableShell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>用户名</TableHead>
+                <TableHead>姓名</TableHead>
+                <TableHead>角色</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell>{user.username}</TableCell>
+                  <TableCell>{user.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {roleLabels[user.role] ?? user.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{user.isActive ? "启用" : "禁用"}</TableCell>
+                  <TableCell>
+                    <RowActions>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => open(user)}
+                        aria-label="编辑用户"
+                      >
+                        <Pencil />
+                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={togglingId !== null}
+                          >
+                            {togglingId === user.id
+                              ? "处理中..."
+                              : user.isActive
+                                ? "禁用"
+                                : "启用"}
+                          </Button>
+                        }
+                        title={user.isActive ? "确认禁用" : "确认启用"}
+                        description={`确定要${user.isActive ? "禁用" : "启用"}用户「${user.name}」吗？`}
+                        destructive={user.isActive}
+                        onConfirm={() => void toggle(user)}
+                      />
+                    </RowActions>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </AdminTableShell>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
@@ -314,6 +321,6 @@ export function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }

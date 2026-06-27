@@ -2,16 +2,19 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+  AdminStatusTag,
+} from "@/components/admin";
 
 export function validateScore(score: number, maxScore: number): string | null {
   if (score < 0) return "分数不能为负数";
@@ -155,32 +158,30 @@ export function GradingDetailPage() {
     );
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title="手动评分"
         description={`${data.examTitle} — ${data.candidateName}`}
         actions={
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/admin/grading-queue")}
-          >
-            <ArrowLeft className="mr-2 size-4" />
-            返回队列
-          </Button>
+          <div className="flex items-center gap-2">
+            <AdminStatusTag status={data.gradingStatus} />
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/admin/grading-queue")}
+            >
+              <ArrowLeft className="mr-2 size-4" />
+              返回队列
+            </Button>
+          </div>
         }
-        status={<StatusBadge status={data.gradingStatus} />}
       />
       {data.questions.map((q) => (
-        <Card key={q.questionId}>
-          <CardHeader>
-            <CardTitle className="text-base">{q.content}</CardTitle>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>满分: {q.maxScore}</span>
-              <span>·</span>
-              <span>主观题</span>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <AdminPageCard
+          key={q.questionId}
+          title={q.content}
+          description={`满分: ${q.maxScore} · 主观题`}
+        >
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label>考生作答</Label>
               <div
@@ -242,9 +243,9 @@ export function GradingDetailPage() {
                 </span>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </AdminPageCard>
       ))}
-    </div>
+    </AdminShell>
   );
 }

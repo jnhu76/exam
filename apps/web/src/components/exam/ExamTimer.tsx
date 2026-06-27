@@ -32,7 +32,7 @@ export function ExamTimer({
 
   return (
     <div
-      className={`rounded-md border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
+      className={`rounded-[var(--admin-radius-sm)] border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-admin-border bg-card text-foreground"}`}
     >
       <div className="text-[11px] font-medium leading-none text-muted-foreground">
         剩余时间

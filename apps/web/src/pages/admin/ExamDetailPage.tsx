@@ -3,14 +3,11 @@ import { useParams, useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +31,12 @@ import {
   EnrollmentPicker,
   type CandidateItem,
 } from "@/components/exam/EnrollmentPicker";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminPageCard,
+  AdminStatusTag,
+} from "@/components/admin";
 
 /** Full exam detail including stats and participant list. */
 /** Full exam detail including configuration, statistics, and participant summaries. */
@@ -322,8 +325,8 @@ export function ExamDetailPage() {
     return <ErrorState message="考试数据加载异常，请重试" onRetry={loadExam} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
+    <AdminShell>
+      <AdminShellHeader
         title={exam.title}
         actions={
           <div className="flex gap-2">
@@ -439,71 +442,44 @@ export function ExamDetailPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              状态
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <StatusBadge status={exam.status} />
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              考试时长
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{exam.durationMinutes}分钟</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              及格分
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {exam.passingScore}/{exam.totalScore}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              题目数量
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{exam.questionIds.length}</p>
-          </CardContent>
-        </Card>
+        <AdminPageCard>
+          <p className="text-[13px] text-muted-foreground">状态</p>
+          <div className="mt-2">
+            <AdminStatusTag status={exam.status} />
+          </div>
+        </AdminPageCard>
+        <AdminPageCard>
+          <p className="text-[13px] text-muted-foreground">考试时长</p>
+          <p className="mt-2 text-2xl font-bold">{exam.durationMinutes}分钟</p>
+        </AdminPageCard>
+        <AdminPageCard>
+          <p className="text-[13px] text-muted-foreground">及格分</p>
+          <p className="mt-2 text-2xl font-bold">
+            {exam.passingScore}/{exam.totalScore}
+          </p>
+        </AdminPageCard>
+        <AdminPageCard>
+          <p className="text-[13px] text-muted-foreground">题目数量</p>
+          <p className="mt-2 text-2xl font-bold">{exam.questionIds.length}</p>
+        </AdminPageCard>
       </div>
 
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">考试配置</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2 text-sm">
-          <div className="grid grid-cols-2 gap-2">
-            <span className="text-muted-foreground">时间模式：</span>
-            <span>{exam.timingMode}</span>
-            <span className="text-muted-foreground">重考策略：</span>
-            <span>{exam.retakePolicy}</span>
-            <span className="text-muted-foreground">分数策略：</span>
-            <span>{exam.scoreStrategy}</span>
-            <span className="text-muted-foreground">最大尝试次数：</span>
-            <span>{exam.maxAttempts}</span>
-            <span className="text-muted-foreground">开始时间：</span>
-            <span>{new Date(exam.openAt).toLocaleString()}</span>
-            <span className="text-muted-foreground">结束时间：</span>
-            <span>{new Date(exam.closeAt).toLocaleString()}</span>
-          </div>
-        </CardContent>
-      </Card>
+      <AdminPageCard title="考试配置">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <span className="text-muted-foreground">时间模式：</span>
+          <span>{exam.timingMode}</span>
+          <span className="text-muted-foreground">重考策略：</span>
+          <span>{exam.retakePolicy}</span>
+          <span className="text-muted-foreground">分数策略：</span>
+          <span>{exam.scoreStrategy}</span>
+          <span className="text-muted-foreground">最大尝试次数：</span>
+          <span>{exam.maxAttempts}</span>
+          <span className="text-muted-foreground">开始时间：</span>
+          <span>{new Date(exam.openAt).toLocaleString()}</span>
+          <span className="text-muted-foreground">结束时间：</span>
+          <span>{new Date(exam.closeAt).toLocaleString()}</span>
+        </div>
+      </AdminPageCard>
 
       <Tabs defaultValue="enrollment">
         <TabsList>
@@ -513,129 +489,107 @@ export function ExamDetailPage() {
 
         <TabsContent value="enrollment" className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  参与人数
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {exam.stats.participantCount}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  已完成
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">
-                  {exam.stats.completedCount}
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-muted-foreground">
-                  已通过
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">{exam.stats.passedCount}</p>
-              </CardContent>
-            </Card>
+            <AdminPageCard>
+              <p className="text-[13px] text-muted-foreground">参与人数</p>
+              <p className="mt-2 text-2xl font-bold">
+                {exam.stats.participantCount}
+              </p>
+            </AdminPageCard>
+            <AdminPageCard>
+              <p className="text-[13px] text-muted-foreground">已完成</p>
+              <p className="mt-2 text-2xl font-bold">
+                {exam.stats.completedCount}
+              </p>
+            </AdminPageCard>
+            <AdminPageCard>
+              <p className="text-[13px] text-muted-foreground">已通过</p>
+              <p className="mt-2 text-2xl font-bold">
+                {exam.stats.passedCount}
+              </p>
+            </AdminPageCard>
           </div>
 
-          <Card className="shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">考生资格</CardTitle>
+          <AdminPageCard
+            title="考生资格"
+            actions={
               <Button size="sm" onClick={handleOpenAddDialog}>
                 <Plus data-icon="inline-start" />
                 添加考生
               </Button>
-            </CardHeader>
-            <CardContent>
-              {enrollments.length === 0 ? (
-                <EmptyState
-                  icon={<Users className="size-8" />}
-                  title="暂无考生"
-                  description="还没有为此考试分配考生。"
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>身份信息</TableHead>
-                      <TableHead>姓名</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>尝试次数</TableHead>
-                      <TableHead>成绩</TableHead>
-                      <TableHead className="w-16">操作</TableHead>
+            }
+          >
+            {enrollments.length === 0 ? (
+              <EmptyState
+                icon={<Users className="size-8" />}
+                title="暂无考生"
+                description="还没有为此考试分配考生。"
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>身份信息</TableHead>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>状态</TableHead>
+                    <TableHead>尝试次数</TableHead>
+                    <TableHead>成绩</TableHead>
+                    <TableHead className="w-16">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enrollments.map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell>
+                        {enrollment.candidateIdentity ??
+                          enrollment.candidateId.slice(0, 8)}
+                      </TableCell>
+                      <TableCell>{enrollment.candidateDisplayName}</TableCell>
+                      <TableCell>
+                        <AdminStatusTag status={enrollment.status} />
+                      </TableCell>
+                      <TableCell>{enrollment.attemptCount}</TableCell>
+                      <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
+                      <TableCell>
+                        {enrollment.status === "assigned" && (
+                          <ConfirmDialog
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="移除考生"
+                              >
+                                <Trash2 className="text-destructive" />
+                              </Button>
+                            }
+                            title="确认移除"
+                            description={`确定要移除「${enrollment.candidateDisplayName}」吗？`}
+                            destructive
+                            onConfirm={() =>
+                              void handleRemoveEnrollment(enrollment.id)
+                            }
+                          />
+                        )}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {enrollments.map((enrollment) => (
-                      <TableRow key={enrollment.id}>
-                        <TableCell>
-                          {enrollment.candidateIdentity ??
-                            enrollment.candidateId.slice(0, 8)}
-                        </TableCell>
-                        <TableCell>{enrollment.candidateDisplayName}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={enrollment.status} />
-                        </TableCell>
-                        <TableCell>{enrollment.attemptCount}</TableCell>
-                        <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
-                        <TableCell>
-                          {enrollment.status === "assigned" && (
-                            <ConfirmDialog
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="移除考生"
-                                >
-                                  <Trash2 className="text-destructive" />
-                                </Button>
-                              }
-                              title="确认移除"
-                              description={`确定要移除「${enrollment.candidateDisplayName}」吗？`}
-                              destructive
-                              onConfirm={() =>
-                                void handleRemoveEnrollment(enrollment.id)
-                              }
-                            />
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </AdminPageCard>
         </TabsContent>
 
         <TabsContent value="scores">
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">成绩管理</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                查看和导出考试成绩数据。
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => void navigate(`/admin/exams/${id}/scores`)}
-              >
-                前往成绩管理
-              </Button>
-            </CardContent>
-          </Card>
+          <AdminPageCard title="成绩管理">
+            <p className="text-sm text-muted-foreground mb-4">
+              查看和导出考试成绩数据。
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => void navigate(`/admin/exams/${id}/scores`)}
+            >
+              前往成绩管理
+            </Button>
+          </AdminPageCard>
         </TabsContent>
       </Tabs>
 
@@ -711,6 +665,6 @@ export function ExamDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </AdminShell>
   );
 }
