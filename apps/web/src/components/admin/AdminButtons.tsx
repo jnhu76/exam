@@ -18,7 +18,7 @@ const VERB_VARIANT: Record<Verb, string> = {
   edit: "border-success/40 text-success hover:bg-success/10",
   delete: "border-destructive/40 text-destructive hover:bg-destructive/10",
   export: "border-warning/40 text-warning hover:bg-warning/10",
-  import: "border-info/40 text-info hover:bg-primary/10",
+  import: "border-info/40 text-info hover:bg-info/10",
   search: "border-primary/40 text-primary hover:bg-primary/10",
   reset: "border-destructive/40 text-destructive hover:bg-destructive/10",
 };

@@ -1,23 +1,23 @@
 @layer base {
   :root {
-    --admin-bg-page: rgb(var(--color-bg-base));
-    --admin-bg-card: rgb(var(--color-bg-surface));
-    --admin-bg-muted: rgb(var(--color-bg-muted));
-    --admin-bg-search: rgb(var(--color-bg-muted));
-    --admin-bg-table-header: rgb(var(--color-bg-muted));
-    --admin-text: rgb(var(--color-text-primary));
-    --admin-text-muted: rgb(var(--color-text-muted));
-    --admin-text-subtle: rgb(var(--color-text-muted));
+    --admin-bg-page: rgb(var(--color-background));
+    --admin-bg-card: rgb(var(--color-card));
+    --admin-bg-muted: rgb(var(--color-muted));
+    --admin-bg-search: rgb(var(--color-muted));
+    --admin-bg-table-header: rgb(var(--color-muted));
+    --admin-text: rgb(var(--color-foreground));
+    --admin-text-muted: rgb(var(--color-muted-foreground));
+    --admin-text-subtle: rgb(var(--color-muted-foreground));
     --admin-border: rgb(var(--color-border));
-    --admin-border-light: rgb(var(--color-border-light));
+    --admin-border-light: rgb(var(--color-border));
     --admin-primary: rgb(var(--color-primary));
     --admin-primary-soft: rgb(var(--color-primary) / 0.1);
     --admin-success: rgb(var(--color-success));
     --admin-success-soft: rgb(var(--color-success) / 0.1);
     --admin-warning: rgb(var(--color-warning));
     --admin-warning-soft: rgb(var(--color-warning) / 0.1);
-    --admin-danger: rgb(var(--color-error));
-    --admin-danger-soft: rgb(var(--color-error) / 0.1);
+    --admin-danger: rgb(var(--color-destructive));
+    --admin-danger-soft: rgb(var(--color-destructive) / 0.1);
     --admin-radius-sm: calc(var(--radius) - 2px);
     --admin-radius: var(--radius);
     --admin-radius-lg: calc(var(--radius) + 2px);

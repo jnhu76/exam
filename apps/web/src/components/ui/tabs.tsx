@@ -10,7 +10,7 @@ function Tabs({
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn("group/tabs flex gap-2 data-[orientation=horizontal]:flex-col", className)}
       {...props}
     />
   )
@@ -18,11 +18,15 @@ function Tabs({
 
 function TabsList({
   className,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List>) {
+}: React.ComponentProps<typeof TabsPrimitive.List> & {
+  variant?: "default" | "line"
+}) {
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
+      data-variant={variant}
       className={cn(
         "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
         className,
@@ -34,11 +38,15 @@ function TabsList({
 
 function TabsTrigger({
   className,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+}: React.ComponentProps<typeof TabsPrimitive.Trigger> & {
+  variant?: "default" | "line"
+}) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
+      data-variant={variant}
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
