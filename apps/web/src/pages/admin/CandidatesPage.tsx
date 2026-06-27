@@ -36,7 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Plus, Search, Upload, Users } from "lucide-react";
+import { Pencil, Plus, Search, Upload, Users, KeyRound } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
@@ -93,6 +93,12 @@ export function CandidatesPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [resetTarget, setResetTarget] = useState<Candidate | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [resetFieldError, setResetFieldError] = useState("");
+  const [resetting, setResetting] = useState(false);
   /** Fetches the candidate list and field definitions in parallel. */
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -213,6 +219,48 @@ export function CandidatesPage() {
       toast.error(getApiErrorMessage(err, "操作失败，请稍后重试"));
     } finally {
       setTogglingId(null);
+    }
+  }
+  /** Opens the reset-password dialog for the given candidate. */
+  function openReset(candidate: Candidate) {
+    setResetTarget(candidate);
+    setResetPassword("");
+    setResetConfirmPassword("");
+    setResetFieldError("");
+    setResetOpen(true);
+  }
+  /** Resets the targeted candidate's password via the admin API. */
+  async function confirmResetPassword() {
+    if (!resetTarget || resetting) return;
+    const len = resetPassword.length;
+    if (
+      len < DEFAULT_PASSWORD_POLICY.minLength ||
+      len > DEFAULT_PASSWORD_POLICY.maxLength
+    ) {
+      setResetFieldError(
+        `密码长度必须在 ${DEFAULT_PASSWORD_POLICY.minLength} 到 ${DEFAULT_PASSWORD_POLICY.maxLength} 位之间`,
+      );
+      return;
+    }
+    if (resetPassword !== resetConfirmPassword) {
+      setResetFieldError("两次输入的密码不一致");
+      return;
+    }
+    setResetting(true);
+    try {
+      await api.post(`/api/users/${resetTarget.id}/reset-password`, {
+        newPassword: resetPassword,
+      });
+      toast.success("密码已重置");
+      setResetOpen(false);
+      setResetTarget(null);
+      setResetPassword("");
+      setResetConfirmPassword("");
+      setResetFieldError("");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "重置密码失败，请稍后重试"));
+    } finally {
+      setResetting(false);
     }
   }
   /** Converts field definitions to the CandidateFieldConfig format used by the import parser. */
@@ -406,6 +454,15 @@ export function CandidatesPage() {
                       >
                         <Pencil />
                       </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => openReset(candidate)}
+                        aria-label="重置密码"
+                        data-testid={`candidate-reset-password-${candidate.id}`}
+                      >
+                        <KeyRound />
+                      </Button>
                       <ConfirmDialog
                         trigger={
                           <Button
@@ -530,6 +587,67 @@ export function CandidatesPage() {
             </Button>
             <Button onClick={() => void save()} disabled={saving}>
               {saving ? "保存中..." : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>重置密码</DialogTitle>
+          </DialogHeader>
+          <FieldGroup className="py-4">
+            <Field>
+              <Label htmlFor="candidate-reset-password">
+                新密码 <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="candidate-reset-password"
+                type="password"
+                value={resetPassword}
+                onChange={(e) => {
+                  setResetPassword(e.target.value);
+                  if (resetFieldError) setResetFieldError("");
+                }}
+                placeholder={`${DEFAULT_PASSWORD_POLICY.minLength}-${DEFAULT_PASSWORD_POLICY.maxLength} 位`}
+              />
+            </Field>
+            <Field>
+              <Label htmlFor="candidate-reset-password-confirm">
+                确认新密码 <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="candidate-reset-password-confirm"
+                type="password"
+                value={resetConfirmPassword}
+                onChange={(e) => {
+                  setResetConfirmPassword(e.target.value);
+                  if (resetFieldError) setResetFieldError("");
+                }}
+                placeholder="请再次输入新密码"
+              />
+              <FieldError>{resetFieldError}</FieldError>
+            </Field>
+            {resetTarget && (
+              <p className="text-xs text-muted-foreground">
+                将重置考生「{resetTarget.name}」的登录密码。
+              </p>
+            )}
+          </FieldGroup>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setResetOpen(false)}
+              disabled={resetting}
+            >
+              取消
+            </Button>
+            <Button
+              data-testid="reset-password-confirm-btn"
+              onClick={() => void confirmResetPassword()}
+              disabled={resetting}
+            >
+              {resetting ? "重置中..." : "确认重置"}
             </Button>
           </DialogFooter>
         </DialogContent>

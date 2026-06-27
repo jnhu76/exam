@@ -73,6 +73,19 @@ export const MeResponseSchema = z.object({
 /** Type for the current-user profile response. */
 export type MeResponse = z.infer<typeof MeResponseSchema>;
 
+// ── Update Profile ────────────────────────────────────────────────
+
+/**
+ * Request schema for updating the authenticated user's own profile.
+ * Phase 1 supports editing the display name only.
+ */
+export const UpdateProfileRequestSchema = z.object({
+  name: z.string().min(1).max(100),
+});
+
+/** Type for an update-profile request. */
+export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
+
 // ── Logout ────────────────────────────────────────────────────────
 
 /**

@@ -223,6 +223,84 @@ describe("ExamDetailPage", () => {
         expect(postMock).toHaveBeenCalledWith("/api/exams/exam-1/cancel");
       });
     });
+
+    it("shows publish-results button for manual-mode unpublished published exam", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          status: "published",
+          resultPublicationMode: "manual",
+          resultsPublishedAt: null,
+        });
+      });
+      renderPage();
+      expect(
+        await screen.findByTestId("exam-detail-publish-results-btn"),
+      ).toBeInTheDocument();
+    });
+
+    it("hides publish-results button when results already published", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          status: "published",
+          resultPublicationMode: "manual",
+          resultsPublishedAt: new Date().toISOString(),
+        });
+      });
+      renderPage();
+      await screen.findByText("期末能力测评");
+      expect(
+        screen.queryByTestId("exam-detail-publish-results-btn"),
+      ).toBeNull();
+    });
+
+    it("hides publish-results button for immediate-mode exam", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          status: "published",
+          resultPublicationMode: "immediate",
+          resultsPublishedAt: null,
+        });
+      });
+      renderPage();
+      await screen.findByText("期末能力测评");
+      expect(
+        screen.queryByTestId("exam-detail-publish-results-btn"),
+      ).toBeNull();
+    });
+
+    it("publishes results after confirmation", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          status: "published",
+          resultPublicationMode: "manual",
+          resultsPublishedAt: null,
+        });
+      });
+      postMock.mockResolvedValue({
+        ok: true,
+        resultsPublishedAt: new Date().toISOString(),
+        alreadyPublished: false,
+      });
+      const user = userEvent.setup();
+      renderPage();
+      await screen.findByTestId("exam-detail-publish-results-btn");
+      await user.click(screen.getByTestId("exam-detail-publish-results-btn"));
+      const dialog = await screen.findByRole("alertdialog");
+      await user.click(within(dialog).getByRole("button", { name: "确认" }));
+      await waitFor(() => {
+        expect(postMock).toHaveBeenCalledWith(
+          "/api/exams/exam-1/publish-results",
+        );
+      });
+    });
   });
 
   describe("enrollment management", () => {
