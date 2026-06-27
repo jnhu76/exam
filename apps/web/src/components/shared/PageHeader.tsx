@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
+ * @deprecated Use AdminShellHeader inside AdminShell instead.
+ * This component is kept for backward compatibility during the Wegent-style migration.
+ *
  * Page-level header with a title, optional description, status badge,
  * and action buttons. Responsive layout stacks vertically on small screens.
  */

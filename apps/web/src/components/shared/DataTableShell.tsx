@@ -2,6 +2,9 @@ import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
+ * @deprecated Use AdminTableShell inside AdminShell instead.
+ * This component is kept for backward compatibility during the Wegent-style migration.
+ *
  * Standard shell for data table pages, providing an optional title, description,
  * toolbar slot, content area, and footer within a bordered card container.
  */

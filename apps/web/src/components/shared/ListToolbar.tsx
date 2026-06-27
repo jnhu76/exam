@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-/** Props for the ListToolbar component. */
+/**
+ * @deprecated Use AdminToolbar / AdminSearchPanel inside AdminShell instead.
+ * This component is kept for backward compatibility during the Wegent-style migration.
+ *
+ * Toolbar for list pages with slots for search input, filter controls,
+ * action buttons, and a summary line. Responsive layout adapts to screen size.
+ */
 type ListToolbarProps = {
   search?: ReactNode;
   filters?: ReactNode;
@@ -11,10 +17,6 @@ type ListToolbarProps = {
   "aria-label"?: string;
 };
 
-/**
- * Toolbar for list pages with slots for search input, filter controls,
- * action buttons, and a summary line. Responsive layout adapts to screen size.
- */
 export function ListToolbar({
   search,
   filters,

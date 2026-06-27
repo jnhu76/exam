@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
+ * @deprecated Use AdminToolbar / AdminSearchPanel inside AdminShell instead.
+ * This component is kept for backward compatibility during the Wegent-style migration.
+ *
  * Horizontal toolbar for data table pages, providing slots for filter children,
  * action buttons, and a summary line with responsive layout.
  */
