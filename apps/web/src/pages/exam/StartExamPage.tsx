@@ -155,7 +155,7 @@ export function StartExamPage() {
     <div className="mx-auto max-w-2xl flex flex-col gap-6 p-6">
       <h1 className="text-2xl font-semibold">{exam.title}</h1>
 
-      <Card className="rounded-[var(--admin-radius)] border-admin-border shadow-none">
+      <Card className="rounded-lg border border-border bg-card shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">考试信息</CardTitle>
         </CardHeader>

@@ -26,7 +26,7 @@ export function AdminLayout() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <header className="flex h-14 items-center border-b border-admin-border-light bg-card px-6">
+          <header className="flex h-14 items-center border-b border-border bg-background/95 px-6 backdrop-blur">
             <Skeleton className="h-4 w-24" />
           </header>
           <main className="flex flex-col gap-4 bg-admin-page p-6">
@@ -56,7 +56,7 @@ export function AdminLayout() {
         onLogout={() => void logout()}
       />
       <div className="min-w-0 flex-1">
-        <header className="flex h-14 items-center justify-between border-b border-admin-border-light bg-card px-6">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur">
           <h2 className="text-sm font-medium text-muted-foreground">
             {topbarTitle}
           </h2>

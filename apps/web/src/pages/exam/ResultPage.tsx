@@ -94,7 +94,7 @@ export function ResultPage() {
 
       {result.showResultImmediately ? (
         <>
-          <Card className="rounded-[var(--admin-radius)] border-admin-border shadow-none">
+          <Card className="rounded-lg border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle>考试成绩</CardTitle>
             </CardHeader>
@@ -120,7 +120,7 @@ export function ResultPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[var(--admin-radius)] border-admin-border shadow-none">
+          <Card className="rounded-lg border border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle>答题明细</CardTitle>
             </CardHeader>

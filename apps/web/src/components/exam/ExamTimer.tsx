@@ -32,7 +32,7 @@ export function ExamTimer({
 
   return (
     <div
-      className={`flex h-8 items-center gap-2 rounded-[var(--admin-radius-sm)] border px-3 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-admin-border bg-card text-foreground"}`}
+      className={`flex h-8 items-center gap-2 rounded-md border px-3 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
     >
       <span className="text-xs text-muted-foreground">剩余</span>
       <span className="font-mono text-sm font-bold tabular-nums">

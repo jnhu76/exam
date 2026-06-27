@@ -83,7 +83,7 @@ function ExamCard({
 
   return (
     <Card
-      className="flex flex-col rounded-[var(--admin-radius)] border-admin-border shadow-none transition-shadow hover:shadow-md"
+      className="flex flex-col rounded-lg border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
       data-testid={`exam-card-${exam.examId}`}
     >
       <CardHeader className="pb-3">

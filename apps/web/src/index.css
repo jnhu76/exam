@@ -55,6 +55,8 @@
   --color-admin-muted: 243 244 246;
   --color-admin-search: 243 244 246;
   --color-admin-table-header: 243 244 246;
+  --color-admin-border: 228 228 228;
+  --color-admin-border-light: 243 244 246;
 
   /* Radius */
   --radius: 0.5rem;

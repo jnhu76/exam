@@ -24,7 +24,7 @@ const stateMeta = {
   unanswered: {
     label: "未作答",
     className:
-      "border-admin-border bg-background text-muted-foreground hover:bg-muted",
+      "border-border bg-background text-muted-foreground hover:bg-muted",
   },
   answered: {
     label: "已作答",
@@ -89,7 +89,7 @@ export function QuestionNavigator({
       </div>
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-3 rounded-[2px] border border-admin-border bg-background" />
+          <span className="inline-block size-3 rounded-[2px] border border-border bg-background" />
           未作答
         </span>
         <span className="flex items-center gap-1.5">
