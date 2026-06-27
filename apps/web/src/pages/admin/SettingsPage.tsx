@@ -111,6 +111,7 @@ export function SettingsPage() {
               <Input
                 id="profile-name"
                 value={profileName}
+                maxLength={100}
                 onChange={(e) => {
                   setProfileName(e.target.value);
                   if (profileError) setProfileError("");
