@@ -1,11 +1,11 @@
 {
   "legacyComponents": [
     {
-      "loc": "apps/web/src/components/shared/DataTableShell.tsx:8",
+      "loc": "apps/web/src/components/shared/DataTableShell.tsx:11",
       "match": "export function DataTableShell({"
     },
     {
-      "loc": "apps/web/src/components/shared/DataToolbar.tsx:8",
+      "loc": "apps/web/src/components/shared/DataToolbar.tsx:11",
       "match": "export function DataToolbar({"
     },
     {
@@ -25,7 +25,7 @@
       "match": "}: ListToolbarProps) {"
     },
     {
-      "loc": "apps/web/src/components/shared/PageHeader.tsx:8",
+      "loc": "apps/web/src/components/shared/PageHeader.tsx:11",
       "match": "export function PageHeader({"
     },
     {

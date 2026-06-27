@@ -5,13 +5,13 @@
 
 ## Legacy Components (should use AdminShell/AdminStatusTag): 32 issues
 
-- `apps/web/src/components/shared/DataTableShell.tsx:8` — export function DataTableShell({
-- `apps/web/src/components/shared/DataToolbar.tsx:8` — export function DataToolbar({
+- `apps/web/src/components/shared/DataTableShell.tsx:11` — export function DataTableShell({
+- `apps/web/src/components/shared/DataToolbar.tsx:11` — export function DataToolbar({
 - `apps/web/src/components/shared/ListToolbar.tsx:4` — /** Props for the ListToolbar component. */
 - `apps/web/src/components/shared/ListToolbar.tsx:5` — type ListToolbarProps = {
 - `apps/web/src/components/shared/ListToolbar.tsx:18` — export function ListToolbar({
 - `apps/web/src/components/shared/ListToolbar.tsx:25` — }: ListToolbarProps) {
-- `apps/web/src/components/shared/PageHeader.tsx:8` — export function PageHeader({
+- `apps/web/src/components/shared/PageHeader.tsx:11` — export function PageHeader({
 - `apps/web/src/components/shared/consistency.test.tsx:6` — import { PageHeader } from "./PageHeader";
 - `apps/web/src/components/shared/consistency.test.tsx:38` — describe("PageHeader", () => {
 - `apps/web/src/components/shared/consistency.test.tsx:40` — const { container } = render(<PageHeader title="测试" />);
