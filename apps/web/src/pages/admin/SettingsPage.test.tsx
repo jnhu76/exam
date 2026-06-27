@@ -62,38 +62,39 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("平台与机构设置")).toBeInTheDocument();
   });
 
-  it("renders product name field with loaded value", async () => {
+  it("renders tab triggers for profile, branding, and security", async () => {
     renderPage();
+    expect(
+      await screen.findByRole("tab", { name: "个人信息" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "品牌设置" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "账号安全" })).toBeInTheDocument();
+  });
+
+  it("renders product name field after switching to branding tab", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("tab", { name: "品牌设置" });
+    await user.click(screen.getByRole("tab", { name: "品牌设置" }));
     const input = await screen.findByLabelText("产品标题");
     expect(input).toHaveValue("Test Platform");
   });
 
-  it("renders save button", async () => {
+  it("renders save button in branding tab", async () => {
+    const user = userEvent.setup();
     renderPage();
+    await screen.findByRole("tab", { name: "品牌设置" });
+    await user.click(screen.getByRole("tab", { name: "品牌设置" }));
     expect(
       await screen.findByRole("button", { name: "保存设置" }),
-    ).toBeInTheDocument();
-  });
-
-  it("shows card headers for branding and security", async () => {
-    renderPage();
-    expect(await screen.findByText("品牌设置")).toBeInTheDocument();
-    expect(screen.getByText("账号安全")).toBeInTheDocument();
-  });
-
-  it("renders settings through shared form sections", async () => {
-    renderPage();
-    expect(
-      await screen.findByRole("heading", { name: "品牌设置" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "账号安全" }),
     ).toBeInTheDocument();
   });
 
   it("strips empty strings from save payload", async () => {
     const user = userEvent.setup();
     renderPage();
+    await screen.findByRole("tab", { name: "品牌设置" });
+    await user.click(screen.getByRole("tab", { name: "品牌设置" }));
 
     const input = await screen.findByLabelText("产品标题");
     await user.clear(input);
@@ -116,6 +117,8 @@ describe("SettingsPage", () => {
     vi.mocked(api.patch).mockRejectedValue(new Error("品牌保存失败"));
     const user = userEvent.setup();
     renderPage();
+    await screen.findByRole("tab", { name: "品牌设置" });
+    await user.click(screen.getByRole("tab", { name: "品牌设置" }));
 
     await screen.findByLabelText("产品标题");
     await user.click(await screen.findByRole("button", { name: "保存设置" }));

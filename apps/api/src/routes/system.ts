@@ -96,7 +96,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async () => {
       return {
-        version: process.env.npm_package_version ?? "0.0.0",
+        version: process.env.npm_package_version || "1.0.0-dev",
         uptime: process.uptime(),
       };
     },
@@ -212,7 +212,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       return {
-        version: process.env.npm_package_version ?? "0.0.0",
+        version: process.env.npm_package_version || "1.0.0-dev",
         uptime: process.uptime(),
         dbLatency,
         redisStatus,

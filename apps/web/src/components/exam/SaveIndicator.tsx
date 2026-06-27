@@ -57,7 +57,7 @@ export function SaveIndicator({
 
   return (
     <span
-      className={`inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${config.className}`}
+      className={`inline-flex h-8 min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 text-sm font-medium ${config.className}`}
     >
       <Icon
         className={`size-4 ${effectiveStatus === "saving" ? "animate-spin" : ""}`}

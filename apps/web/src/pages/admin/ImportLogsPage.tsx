@@ -10,6 +10,7 @@ import {
   AdminSearchPanel,
   AdminTableShell,
   AdminPageCard,
+  AdminStatusTag,
 } from "@/components/admin";
 import {
   Table,
@@ -27,7 +28,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { RotateCcw, Upload } from "lucide-react";
 import type { ImportJobLog, ImportLogListResponse } from "@exam/contracts";
 
@@ -44,13 +44,10 @@ const TYPE_LABELS: Record<string, string> = {
   question: "题目导入",
 };
 
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; variant: "default" | "secondary" | "destructive" }
-> = {
-  completed: { label: "完成", variant: "default" },
-  partial: { label: "部分成功", variant: "secondary" },
-  failed: { label: "失败", variant: "destructive" },
+const STATUS_MAP: Record<string, string> = {
+  completed: "completed",
+  partial: "import_partial",
+  failed: "failed",
 };
 
 export function ImportLogsPage() {
@@ -172,9 +169,9 @@ export function ImportLogsPage() {
                 </TableCell>
                 <TableCell>{TYPE_LABELS[item.type] ?? item.type}</TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_CONFIG[item.status]?.variant}>
-                    {STATUS_CONFIG[item.status]?.label ?? item.status}
-                  </Badge>
+                  <AdminStatusTag
+                    status={STATUS_MAP[item.status] ?? item.status}
+                  />
                 </TableCell>
                 <TableCell>{item.total}</TableCell>
                 <TableCell>{item.createdCount}</TableCell>

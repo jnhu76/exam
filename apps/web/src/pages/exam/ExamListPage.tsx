@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AdminStatusTag } from "@/components/admin";
 import {
   ClipboardList,
   Clock,
@@ -26,52 +27,6 @@ function formatTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-/** Maps an exam availability status to its Chinese display label. */
-function statusLabel(
-  status: CandidateExamSummary["availabilityStatus"],
-): string {
-  switch (status) {
-    case "available":
-      return "可参加";
-    case "in_progress":
-      return "进行中";
-    case "resumable":
-      return "可恢复";
-    case "submitted_pending_grade":
-      return "待评分";
-    case "graded":
-      return "已评分";
-    case "max_attempts_exhausted":
-      return "次数已用完";
-    case "not_started_yet":
-      return "未开放";
-    case "expired":
-      return "已过期";
-    case "unavailable":
-      return "不可用";
-  }
-}
-
-/** Returns the shadcn Badge variant for a given exam availability status. */
-function statusBadgeVariant(
-  status: CandidateExamSummary["availabilityStatus"],
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "available":
-    case "in_progress":
-    case "resumable":
-      return "default";
-    case "graded":
-    case "max_attempts_exhausted":
-    case "expired":
-      return "secondary";
-    case "submitted_pending_grade":
-      return "outline";
-    default:
-      return "destructive";
-  }
 }
 
 /** Renders a single exam summary card with metadata, status badge, and a primary action button. */
@@ -128,7 +83,7 @@ function ExamCard({
 
   return (
     <Card
-      className="rounded-[var(--admin-radius)] border-admin-border shadow-none"
+      className="flex flex-col rounded-[var(--admin-radius)] border-admin-border shadow-none transition-shadow hover:shadow-md"
       data-testid={`exam-card-${exam.examId}`}
     >
       <CardHeader className="pb-3">
@@ -141,13 +96,11 @@ function ExamCard({
                 {exam.bestScore}
               </Badge>
             )}
-            <Badge variant={statusBadgeVariant(exam.availabilityStatus)}>
-              {statusLabel(exam.availabilityStatus)}
-            </Badge>
+            <AdminStatusTag status={exam.availabilityStatus} />
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+      <CardContent className="flex flex-1 flex-col gap-3">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Clock data-icon="inline-start" />
@@ -164,7 +117,7 @@ function ExamCard({
         <div className="text-sm text-muted-foreground">
           {formatTime(exam.windowStartAt)} — {formatTime(exam.windowEndAt)}
         </div>
-        <div className="flex justify-end">
+        <div className="mt-auto flex justify-end pt-2">
           {actionLabel && (
             <Button
               size="sm"

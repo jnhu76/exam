@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { BrandHeader } from "@/components/layout/BrandHeader";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useBranding } from "@/components/layout/BrandProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -10,10 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FieldError } from "@/components/shared/FieldError";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
-/**
- * Login page with username/password form, field validation,
- * and branding header. Redirects to the appropriate dashboard on success.
- */
 export function LoginPage() {
   const branding = useBranding();
   const { login, isSubmittingLogin, error } = useAuth();
@@ -40,66 +35,66 @@ export function LoginPage() {
       data-testid="login-layout"
       className="flex min-h-screen items-center justify-center bg-background p-6"
     >
-      <Card className="w-full max-w-sm">
-        <CardHeader>
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex justify-center">
           <BrandHeader textClassName="text-foreground" />
-        </CardHeader>
-        <CardContent>
-          {branding.productSubtitle && (
-            <p className="text-sm text-muted-foreground mb-6">
-              {branding.productSubtitle}
-            </p>
-          )}
-          <form onSubmit={handleSubmit}>
-            <FieldGroup data-testid="login-field-group" className="gap-4">
-              <Field>
-                <Label htmlFor="username">用户名</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="请输入用户名"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    if (fieldErrors.username)
-                      setFieldErrors((prev) => ({ ...prev, username: "" }));
-                  }}
-                  disabled={isSubmittingLogin}
-                />
-                <FieldError>{fieldErrors.username}</FieldError>
-              </Field>
-              <Field>
-                <Label htmlFor="password">密码</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="请输入密码"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password)
-                      setFieldErrors((prev) => ({ ...prev, password: "" }));
-                  }}
-                  disabled={isSubmittingLogin}
-                />
-                <FieldError>{fieldErrors.password}</FieldError>
-              </Field>
-              {error && (
-                <Alert variant="destructive" className="py-2">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <Button
-                type="submit"
-                className="w-full"
+        </div>
+
+        {branding.productSubtitle && (
+          <p className="mb-6 text-center text-sm text-muted-foreground">
+            {branding.productSubtitle}
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <FieldGroup data-testid="login-field-group" className="gap-5">
+            <Field>
+              <Label htmlFor="username">用户名</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="请输入用户名"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (fieldErrors.username)
+                    setFieldErrors((prev) => ({ ...prev, username: "" }));
+                }}
                 disabled={isSubmittingLogin}
-              >
-                {isSubmittingLogin ? "登录中..." : "登录"}
-              </Button>
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
+              />
+              <FieldError>{fieldErrors.username}</FieldError>
+            </Field>
+            <Field>
+              <Label htmlFor="password">密码</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="请输入密码"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password)
+                    setFieldErrors((prev) => ({ ...prev, password: "" }));
+                }}
+                disabled={isSubmittingLogin}
+              />
+              <FieldError>{fieldErrors.password}</FieldError>
+            </Field>
+            {error && (
+              <Alert variant="destructive" className="py-2">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isSubmittingLogin}
+            >
+              {isSubmittingLogin ? "登录中..." : "登录"}
+            </Button>
+          </FieldGroup>
+        </form>
+      </div>
     </main>
   );
 }

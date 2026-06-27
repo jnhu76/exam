@@ -16,6 +16,7 @@ import {
   Radio,
   Send,
   ShieldCheck,
+  Timer,
   Trophy,
   Wifi,
   WifiOff,
@@ -56,7 +57,7 @@ export const statusMeta = {
   disrupted: { label: "断线", tone: "warning", icon: WifiOff },
   submitted: { label: "已交卷", tone: "secondary", icon: Send },
   grading: { label: "批改中", tone: "primary", icon: LoaderCircle },
-  graded: { label: "已出分", tone: "success", icon: Trophy },
+  graded: { label: "已评分", tone: "success", icon: Trophy },
   voided: { label: "已作废", tone: "destructive", icon: Ban },
   saving: { label: "保存中", tone: "warning", icon: LoaderCircle },
   saved: { label: "已保存", tone: "success", icon: CheckCircle2 },
@@ -89,6 +90,22 @@ export const statusMeta = {
     tone: "destructive",
     icon: Flag,
   },
+  available: { label: "可参加", tone: "success", icon: LockOpen },
+  resumable: { label: "可恢复", tone: "primary", icon: Play },
+  submitted_pending_grade: {
+    label: "待评分",
+    tone: "warning",
+    icon: Clock,
+  },
+  max_attempts_exhausted: {
+    label: "次数已用完",
+    tone: "destructive",
+    icon: Ban,
+  },
+  not_started_yet: { label: "未开放", tone: "muted", icon: Timer },
+  unavailable: { label: "不可用", tone: "destructive", icon: Ban },
+  import_success: { label: "成功", tone: "success", icon: CheckCircle2 },
+  import_partial: { label: "部分成功", tone: "warning", icon: CircleAlert },
 } as const satisfies Record<string, StatusMeta>;
 
 /** Union of all recognized status keys. */

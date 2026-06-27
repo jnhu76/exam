@@ -74,7 +74,7 @@ describe("ExamListPage", () => {
     );
 
     expect(await screen.findByText("继续考试")).toBeInTheDocument();
-    expect(screen.getByText("进行中")).toBeInTheDocument();
+    expect(screen.getByText("答题中")).toBeInTheDocument();
   });
 
   it("renders resumable exam with resume button", async () => {

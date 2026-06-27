@@ -85,7 +85,7 @@ describe("LoginPage smoke", () => {
   it("uses comfortable spacing between login fields and submit button", () => {
     renderLogin();
 
-    expect(screen.getByTestId("login-field-group")).toHaveClass("gap-4");
+    expect(screen.getByTestId("login-field-group")).toHaveClass("gap-5");
   });
 
   it("shows dark product title text on the login card", () => {

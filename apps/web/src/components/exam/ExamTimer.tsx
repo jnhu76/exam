@@ -32,12 +32,10 @@ export function ExamTimer({
 
   return (
     <div
-      className={`rounded-[var(--admin-radius-sm)] border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-admin-border bg-card text-foreground"}`}
+      className={`flex h-8 items-center gap-2 rounded-[var(--admin-radius-sm)] border px-3 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-admin-border bg-card text-foreground"}`}
     >
-      <div className="text-[11px] font-medium leading-none text-muted-foreground">
-        剩余时间
-      </div>
-      <span className="font-mono text-xl font-bold leading-tight tabular-nums">
+      <span className="text-xs text-muted-foreground">剩余</span>
+      <span className="font-mono text-sm font-bold tabular-nums">
         {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
       </span>
     </div>

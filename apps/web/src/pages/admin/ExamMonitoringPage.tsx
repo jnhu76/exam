@@ -20,7 +20,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdminShell, AdminShellHeader } from "@/components/admin";
+import {
+  AdminShell,
+  AdminShellHeader,
+  AdminStatusTag,
+} from "@/components/admin";
 import {
   CircleAlert,
   RefreshCw,
@@ -36,18 +40,6 @@ import {
 } from "lucide-react";
 
 const POLL_INTERVAL_MS = 15_000;
-
-const ONLINE_LABEL: Record<string, string> = {
-  online: "在线",
-  stale: "离线中",
-  offline: "离线",
-};
-
-const ONLINE_COLOR: Record<string, string> = {
-  online: "bg-success text-success-foreground",
-  stale: "bg-warning text-warning-foreground",
-  offline: "bg-destructive text-destructive-foreground",
-};
 
 const WARNING_LABEL: Record<string, string> = {
   normal: "正常",
@@ -256,12 +248,15 @@ export function ExamMonitoringPage() {
                   </Td>
                   <Td>{STATUS_LABEL[a.status] ?? a.status}</Td>
                   <Td>
-                    <Badge
-                      variant="secondary"
-                      className={ONLINE_COLOR[a.onlineState]}
-                    >
-                      {ONLINE_LABEL[a.onlineState]}
-                    </Badge>
+                    <AdminStatusTag
+                      status={
+                        a.onlineState === "online"
+                          ? "connected"
+                          : a.onlineState === "stale"
+                            ? "degraded"
+                            : "offline"
+                      }
+                    />
                   </Td>
                   <Td className="tabular-nums">
                     {a.lastHeartbeatAt ? formatTimeAgo(a.lastHeartbeatAt) : "—"}

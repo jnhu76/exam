@@ -29,12 +29,12 @@ const stateMeta = {
   answered: {
     label: "已作答",
     className:
-      "border-success/40 bg-success-soft text-success hover:bg-success/15",
+      "border-success bg-success text-success-foreground hover:bg-success/90",
   },
   flagged: {
     label: "已标记",
     className:
-      "border-warning/40 bg-warning-soft text-warning hover:bg-warning/20",
+      "border-warning bg-warning text-warning-foreground hover:bg-warning/90",
   },
 } satisfies Record<
   QuestionNavigatorState,
@@ -93,11 +93,11 @@ export function QuestionNavigator({
           未作答
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-3 rounded-[2px] border border-success/40 bg-success-soft" />
+          <span className="inline-block size-3 rounded-[2px] border border-success bg-success" />
           已作答
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block size-3 rounded-[2px] border border-warning/40 bg-warning-soft" />
+          <span className="inline-block size-3 rounded-[2px] border border-warning bg-warning" />
           已标记
         </span>
       </div>

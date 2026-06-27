@@ -4,12 +4,10 @@ import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { PlatformSettingsForm } from "@/components/settings/PlatformSettingsForm";
 import { PasswordChangeForm } from "@/components/settings/PasswordChangeForm";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { FormSection } from "@/components/shared/FormSection";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { AdminShell, AdminShellHeader } from "@/components/admin";
 import { Button } from "@/components/ui/button";
@@ -17,11 +15,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { FieldError } from "@/components/shared/FieldError";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-/** Branding settings data shape, reusing the contract type directly. */
 type SettingsData = UpdateBrandingRequest;
 
-/** Admin page for managing platform branding and the current admin's password. */
 export function SettingsPage() {
   const { user, updateProfile } = useAuth();
   const [settings, setSettings] = useState<SettingsData | null>(null);
@@ -33,7 +30,6 @@ export function SettingsPage() {
   const [profileError, setProfileError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  /** Fetches the full organization settings from the aggregate API. */
   const loadSettings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -55,7 +51,6 @@ export function SettingsPage() {
     setProfileName(user?.name ?? "");
   }, [user]);
 
-  /** Saves updated branding settings and dispatches a global refresh event. */
   async function handleSave(data: SettingsData) {
     const filtered = Object.fromEntries(
       Object.entries(data).filter(([, v]) => v !== ""),
@@ -76,7 +71,6 @@ export function SettingsPage() {
     }
   }
 
-  /** Saves the current admin's display name via the profile API. */
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = profileName.trim();
@@ -103,47 +97,56 @@ export function SettingsPage() {
   return (
     <AdminShell>
       <AdminShellHeader title="平台与机构设置" />
-      <FormSection title="个人信息" description="编辑当前账号的显示姓名。">
-        {profileError && <InlineErrorBanner>{profileError}</InlineErrorBanner>}
-        <form className="max-w-sm" onSubmit={handleSaveProfile}>
-          <FieldGroup>
-            <Field>
-              <Label htmlFor="profile-name">姓名</Label>
-              <Input
-                id="profile-name"
-                value={profileName}
-                maxLength={100}
-                onChange={(e) => {
-                  setProfileName(e.target.value);
-                  if (profileError) setProfileError("");
-                }}
-              />
-              <FieldError>{profileError}</FieldError>
-            </Field>
-            <Button
-              type="submit"
-              disabled={savingProfile}
-              data-testid="profile-save-btn"
-            >
-              {savingProfile ? "保存中..." : "保存"}
-            </Button>
-          </FieldGroup>
-        </form>
-      </FormSection>
-      <FormSection
-        title="品牌设置"
-        description="配置当前部署显示给用户的名称与页脚。"
-      >
-        {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
-        <PlatformSettingsForm
-          initialValues={settings ?? undefined}
-          onSave={handleSave}
-          isLoading={isSaving}
-        />
-      </FormSection>
-      <FormSection title="账号安全" description="修改当前账号的登录密码。">
-        <PasswordChangeForm cardWrapper={false} />
-      </FormSection>
+      <Tabs defaultValue="profile">
+        <TabsList>
+          <TabsTrigger value="profile">个人信息</TabsTrigger>
+          <TabsTrigger value="branding">品牌设置</TabsTrigger>
+          <TabsTrigger value="security">账号安全</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          {profileError && (
+            <InlineErrorBanner>{profileError}</InlineErrorBanner>
+          )}
+          <form className="max-w-sm" onSubmit={handleSaveProfile}>
+            <FieldGroup>
+              <Field>
+                <Label htmlFor="profile-name">姓名</Label>
+                <Input
+                  id="profile-name"
+                  value={profileName}
+                  maxLength={100}
+                  onChange={(e) => {
+                    setProfileName(e.target.value);
+                    if (profileError) setProfileError("");
+                  }}
+                />
+                <FieldError>{profileError}</FieldError>
+              </Field>
+              <Button
+                type="submit"
+                disabled={savingProfile}
+                data-testid="profile-save-btn"
+              >
+                {savingProfile ? "保存中..." : "保存"}
+              </Button>
+            </FieldGroup>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="branding">
+          {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
+          <PlatformSettingsForm
+            initialValues={settings ?? undefined}
+            onSave={handleSave}
+            isLoading={isSaving}
+          />
+        </TabsContent>
+
+        <TabsContent value="security">
+          <PasswordChangeForm cardWrapper={false} />
+        </TabsContent>
+      </Tabs>
     </AdminShell>
   );
 }

@@ -224,7 +224,7 @@ export function ScoreListPage() {
       {/* Filters */}
       <Tabs
         defaultValue={passFilter}
-        onValueChange={(v) => {
+        onValueChange={(v: string) => {
           const newParams = new URLSearchParams(searchParams);
           newParams.set("passFilter", v);
           newParams.delete("page");
