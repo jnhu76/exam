@@ -29,12 +29,18 @@ import {
  * Subjective questions are created over HTTP (standardAnswer: null is now a
  * valid, type-validated input). No DB seed is used.
  */
-// Phase 3 scope: subjective (fill_blank with null standardAnswer) answering is
-// not implemented in Phase 1, so the candidate cannot answer the subjective
-// question and the full manual-grading flow cannot run. Re-enable when
-// subjective question answering lands in Phase 3.
+// Phase 3 pending: subjective answer runtime, candidate-answer visibility,
+// rich-text/manual grading workflow are NOT part of the Phase 2 baseline.
+// Phase 2 closes the objective-question exam loop only. The take page does
+// not render a usable subjective-answer input, so the candidate cannot
+// answer the subjective question and the full manual-grading flow cannot
+// run. Re-enable when subjective question answering + manual grading detail
+// land in Phase 3.
 test.describe("manual grading (P2D-J4)", () => {
-  test.skip(true, "Phase 3: subjective fill_blank answering not implemented");
+  test.skip(
+    true,
+    "Phase 3 pending: subjective answer runtime / candidate-answer visibility / rich-text+manual grading workflow are not part of Phase 2 baseline",
+  );
   test("candidate submits subjective answer → admin grades → candidate sees reconciled total", async ({
     page,
     request,

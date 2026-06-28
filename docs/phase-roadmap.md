@@ -107,7 +107,7 @@ Add real exam operation capabilities around the core exam loop without turning t
 - ✅ Larger result export (CSV scores + attempt JSON/CSV).
 - ✅ Exam operation audit coverage.
 - ✅ Diagnostics page (DB / Redis / scanner health).
-- ✅ Manual grading queue and detail page (candidate answer visible).
+- ✅ Manual grading queue and detail page (admin route + repo infrastructure; the full subjective-answer runtime + candidate-answer-detail E2E is Phase 3 — see below).
 - ✅ Result publishing modes (immediate / after_grading / manual).
 - ✅ Client telemetry pipeline (logger → buffer → batch POST → sanitize → DB).
 - ✅ Proctor monitoring (candidate status + event timeline).
@@ -140,11 +140,33 @@ Add real exam operation capabilities around the core exam loop without turning t
 - ✅ Exam and attempt timelines support incident diagnosis.
 - ✅ Larger exports have job logs and failure evidence.
 
+### Phase 2 included (objective-question exam loop)
+
+```text
+- start / resume / save / submit
+- deadline auto-submit
+- restore / heartbeat
+- objective auto-grading for supported types (single_choice, multi_select, true_false)
+- result display for supported types
+- audit coverage and E2E stability
+```
+
+### Phase 2 excluded (moved to Phase 3 by scope decision)
+
+```text
+- fill-blank runtime / grading / result E2E
+- subjective answer runtime
+- rich-text answering
+- manual-grading candidate-answer detail E2E (admin route + repo infra remain in Phase 2)
+- full grading workflow for subjective questions
+```
+
 ### Explicitly deferred items
 
 - Collaboration and scoped staff roles move to Phase 3.
 - Platform integration moves to Phase 4.
 - Optional multiTenant remains Phase 4.
+- fill-blank answering runtime, subjective/rich-text answering, and the full manual-grading E2E (candidate-answer visibility, scoring rubric/comments) are Phase 3 by scope decision — see `apps/e2e/e2e/fill-blank-e2e.spec.ts` and `apps/e2e/e2e/manual-grading.spec.ts` (skipped, `Phase 3 pending`).
 
 ## Phase 3: Collaboration, Permissions, and Account Lifecycle
 
@@ -168,6 +190,9 @@ Add multi-user collaboration, scoped authorization, and account lifecycle manage
 - User activation / deactivation.
 - Permission audit.
 - Audit log search / export UI.
+- Fill-blank answer protocol and auto-grading (deferred from Phase 2 — see `apps/e2e/e2e/fill-blank-e2e.spec.ts`).
+- Subjective / rich-text answer runtime + manual-grading candidate-answer detail and full grading workflow (deferred from Phase 2 — see `apps/e2e/e2e/manual-grading.spec.ts`).
+- WYSIWYG submit final-answer barrier (Option D, ADR-008 — `/submit` carries a final-answer payload / version barrier so the UI answer at submit-click time is the grading authority).
 
 ### Out of scope
 

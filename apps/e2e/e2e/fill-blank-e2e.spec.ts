@@ -8,12 +8,17 @@ import {
   submitExam,
 } from "../lib/flow";
 
-// Phase 3 scope: subjective (fill_blank with null standardAnswer) answering
-// interaction is not implemented in Phase 1. The take page does not render a
-// usable subjective-answer input, so this end-to-end flow cannot run. Re-enable
-// when subjective question answering lands in Phase 3.
+// Phase 3 pending: fill-blank runtime, answer protocol, auto-grading, and
+// result rendering are NOT part of the Phase 2 baseline. Phase 2 closes the
+// objective-question exam loop only (start/resume/save/submit/deadline/
+// restore + objective auto-grading). The take page does not render a usable
+// fill-blank/subjective input, so this end-to-end flow cannot run. Re-enable
+// when fill-blank answering lands in Phase 3.
 test.describe("fill_blank question E2E", () => {
-  test.skip(true, "Phase 3: subjective fill_blank answering not implemented");
+  test.skip(
+    true,
+    "Phase 3 pending: fill-blank runtime/answer-protocol/auto-grading/result rendering are not part of Phase 2 baseline",
+  );
   test("login → start → fill blank answer → save → submit → graded result", async ({
     page,
     request,
