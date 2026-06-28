@@ -222,6 +222,14 @@ export async function startOrRestoreAttempt(
 /**
  * Submits an attempt, transitioning in_progress/disrupted -> submitted.
  *
+ * Row-lock discipline: the attempt is read via `findByIdForUpdate` so the
+ * read → validate → write window is serialized against a concurrent
+ * deadline-scanner autoSubmit (and admin force-submit) on the same row. This
+ * matches `restoreAttempt` / `extendAttemptTime`. Callers that already hold a
+ * transaction and a locked row (e.g. `submitAndGradeAttempt` TX1,
+ * `autoSubmitAndGrade`, force-submit) pay only a harmless re-lock on the same
+ * row; callers that do not pre-lock are still defended here.
+ *
  * ADR-005 Slice 3 §4.4 guard ordering (binding):
  * 1. Idempotent already-submitted path FIRST: if the attempt is already in a
  *    terminal/post-submit state (submitted/grading/graded), return it as-is.
@@ -241,7 +249,7 @@ export async function submitAttempt(
     minSubmitAfterStartMinutes?: number | null;
   } = {},
 ): Promise<ExamAttempt> {
-  const attempt = await attemptRepo.findById(attemptId);
+  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }

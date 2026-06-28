@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   startAttempt,
   submitAttempt,
@@ -727,6 +727,145 @@ describe("attemptCommands", () => {
       await expect(
         submitAttempt(attRepo, "attempt-1", fixedNow),
       ).rejects.toThrow(ValidationError);
+    });
+
+    // --- P0-1: row-lock TOCTOU defense (findByIdForUpdate) ---
+
+    // Case A: submitAttempt must read via the row-locking path, not a bare
+    // findById. Proves the read that feeds the idempotency/state checks is the
+    // FOR UPDATE read, matching restoreAttempt / extendAttemptTime.
+    it("reads the attempt via findByIdForUpdate (row lock), not bare findById", async () => {
+      const attempt = makeAttempt();
+      const attRepo: AttemptRepository = {
+        findById: () => attempt,
+        findByIdForUpdate: () => attempt,
+        findActiveByEnrollment: () => null,
+        findByEnrollmentAndAttemptNo: () => null,
+        create: () => attempt,
+        update: (id, data) => ({ ...attempt, id, ...data }),
+      };
+      const findByIdSpy = vi.spyOn(attRepo, "findById");
+      const findForUpdateSpy = vi.spyOn(attRepo, "findByIdForUpdate");
+
+      await submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      expect(findForUpdateSpy).toHaveBeenCalledTimes(1);
+      expect(findForUpdateSpy).toHaveBeenCalledWith("attempt-1");
+      expect(findByIdSpy).not.toHaveBeenCalled();
+    });
+
+    // Case B (deterministic lock-ordering): the candidate submit and the
+    // deadline-scanner autoSubmit both target the same in_progress row. With a
+    // lock read, the second submitter observes the freshly-submitted row and
+    // takes the idempotent path -> exactly one status write, one stable
+    // terminal state, no duplicate scoring/audit trigger (the engine itself
+    // emits no extra write here).
+    it("candidate submit + scanner autoSubmit converge on one submitted result (single status write)", async () => {
+      const attempt = makeAttempt({ status: "in_progress" });
+      const store: ExamAttempt[] = [attempt];
+
+      const attRepo: AttemptRepository = {
+        findById: (id) => store.find((a) => a.id === id) ?? null,
+        findByIdForUpdate: (id) => store.find((a) => a.id === id) ?? null,
+        findActiveByEnrollment: () => null,
+        findByEnrollmentAndAttemptNo: () => null,
+        create: (input) => {
+          const created = {
+            ...input,
+            id: "x",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as ExamAttempt;
+          store.push(created);
+          return created;
+        },
+        // Single mutating write shared by both submitters.
+        update: (id, data) => {
+          const idx = store.findIndex((a) => a.id === id);
+          if (idx === -1) return null;
+          store[idx] = { ...store[idx]!, ...data };
+          return store[idx]!;
+        },
+      };
+      const updateSpy = vi.spyOn(attRepo, "update");
+
+      // Candidate submits first, then the scanner observes the locked row and
+      // must NOT mutate it again.
+      const candidateNow = new Date("2025-01-01T10:45:00Z");
+      const scannerNow = new Date("2025-01-01T10:46:00Z");
+      const first = await submitAttempt(attRepo, "attempt-1", candidateNow, {
+        source: "candidate",
+      });
+      const second = await submitAttempt(attRepo, "attempt-1", scannerNow, {
+        source: "deadline_scanner",
+      });
+
+      expect(first.status).toBe("submitted");
+      expect(first.submittedAt).toEqual(candidateNow);
+      // Second submitter converged on the existing terminal state.
+      expect(second.status).toBe("submitted");
+      expect(second.submittedAt).toEqual(candidateNow);
+
+      // Exactly one status-mutating write across both submitters; the scanner
+      // took the idempotent branch (no extra write, no overwrite of submittedAt).
+      const statusWrites = updateSpy.mock.calls.filter(([, data]) =>
+        Boolean(data && typeof data === "object" && "status" in data),
+      );
+      expect(statusWrites).toHaveLength(1);
+
+      const final = await attRepo.findByIdForUpdate("attempt-1");
+      expect(final?.status).toBe("submitted");
+      expect(final?.submittedAt).toEqual(candidateNow);
+    });
+
+    // Case C: a re-submit of an already-terminal attempt returns the current
+    // attempt and performs NO mutating write (idempotency survives the lock
+    // read — the locked row is already terminal).
+    it("re-submit of a graded attempt is idempotent and performs no write", async () => {
+      const graded = makeAttempt({
+        status: "graded",
+        score: 80,
+        submittedAt: new Date("2025-01-01T10:45:00Z"),
+      });
+      const store: ExamAttempt[] = [graded];
+      const attRepo: AttemptRepository = {
+        findById: (id) => store.find((a) => a.id === id) ?? null,
+        findByIdForUpdate: (id) => store.find((a) => a.id === id) ?? null,
+        findActiveByEnrollment: () => null,
+        findByEnrollmentAndAttemptNo: () => null,
+        create: (input) => {
+          const created = {
+            ...input,
+            id: "x",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } as ExamAttempt;
+          store.push(created);
+          return created;
+        },
+        update: (id, data) => {
+          const idx = store.findIndex((a) => a.id === id);
+          if (idx === -1) return null;
+          store[idx] = { ...store[idx]!, ...data };
+          return store[idx]!;
+        },
+      };
+      const updateSpy = vi.spyOn(attRepo, "update");
+
+      const result = await submitAttempt(
+        attRepo,
+        "attempt-1",
+        new Date("2025-01-01T12:00:00Z"),
+        { source: "candidate" },
+      );
+
+      expect(result.status).toBe("graded");
+      expect(result.score).toBe(80);
+      expect(updateSpy).not.toHaveBeenCalled();
+
+      const final = await attRepo.findByIdForUpdate("attempt-1");
+      expect(final?.status).toBe("graded");
+      expect(final?.score).toBe(80);
     });
   });
 
