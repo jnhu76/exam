@@ -124,6 +124,17 @@ async function findAttemptIdForExam(
 }
 
 test.describe("disconnect → disrupted → restore (P2A-J5)", () => {
+  // This test depends on the heartbeat scanner timing out the attempt
+  // (HEARTBEAT_TIMEOUT_MS=15000) then a scan (every 5s) marking it disrupted,
+  // then the restore polling (waitForResumable) flipping it to resumable. That
+  // is ~15s of wall-clock before any business state can change, observed at
+  // ~23-26s locally. The Playwright default per-test timeout (30s) leaves only
+  // 4-7s of headroom, which flakes under CI/load. There is no faster
+  // observable business condition to wait on — the whole point of the test is
+  // the real scanner-driven transition — so raise this test's timeout to a
+  // value with safe headroom over the deterministic floor.
+  test.setTimeout(60_000);
+
   test("saved answer preserved and deadlineAt extended after disconnect/restore", async ({
     browser,
     request,

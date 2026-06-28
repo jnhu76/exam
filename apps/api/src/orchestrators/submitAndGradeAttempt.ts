@@ -1,4 +1,4 @@
-import type { RequestContext, Exam, ExamAttempt } from "@exam/domain";
+import type { RequestContext, ExamAttempt } from "@exam/domain";
 import { InvalidStateTransitionError, NotFoundError } from "@exam/domain";
 import type { Database } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -21,10 +21,21 @@ export interface SubmitAndGradeResult {
 /**
  * Orchestrates the candidate submit + grade flow.
  *
- * TX1: lock attempt → ownership check → submitAttempt
- * readGradingSnapshot + computeGradingResult (outside TX)
- * TX2: finalizeGrading
- * Re-read final attempt state
+ * Submit freeze barrier (ADR-008): submit, answer snapshot read, score
+ * computation, and finalization all run inside ONE transaction holding the
+ * attempt row lock. Previously this was split into TX1 (submit) → non-tx
+ * `readGradingSnapshot`/`computeGradingResult` → TX2 (finalize), and a
+ * concurrent `saveAnswer(baseVersion === currentVersion)` landing in the
+ * inter-tx window could change which answer the score was computed from
+ * (0/100 swing). Folding everything into the locked transaction makes the
+ * answers captured under the submit lock the grading authority: any save that
+ * arrives after `submitAttempt` flips the row to `submitted` is rejected by
+ * the answer protocol (`ATTEMPT_ALREADY_SUBMITTED`), and the score is
+ * computed from the locked, post-submit answers in the same tx.
+ *
+ * `submitted` (not yet `graded`) is treated as a crash-recovery case: submit
+ * landed but grading didn't, so a retry grades it idempotently without
+ * re-submitting. `graded` is the only truly terminal state.
  *
  * Does NOT handle: request validation, candidate profile lookup,
  * audit recording, or HTTP response serialization.
@@ -36,7 +47,7 @@ export async function submitAndGradeAttempt(
   candidateProfileId: string,
   now: Date,
 ): Promise<SubmitAndGradeResult> {
-  const phaseOne = await executeInTransaction(db, async (tx) => {
+  const alreadyGraded = await executeInTransaction(db, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
     const lockedAttempt = await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
     if (!lockedAttempt || lockedAttempt.candidateId !== candidateProfileId) {
@@ -44,12 +55,20 @@ export async function submitAndGradeAttempt(
     }
 
     const status = lockedAttempt.status;
-    if (status === "in_progress" || status === "disrupted") {
-      const exam = (await createExamRepo(tx).findById(
-        ctx,
-        lockedAttempt.examId,
-      )) as Exam | null;
-      const { attempts } = createExamEngineRepos(
+    // `graded` is the only truly terminal, nothing-more-to-do state.
+    if (status === "graded") {
+      return true;
+    }
+    // `in_progress`/`disrupted` need the submit transition first; `submitted`
+    // is a crash-recovery case (submit landed but grading didn't) and is
+    // graded directly without re-submitting. Both then run the SAME
+    // locked-tx grading block below (the freeze barrier).
+    if (
+      status === "in_progress" ||
+      status === "disrupted" ||
+      status === "submitted"
+    ) {
+      const { exams, enrollments, attempts } = createExamEngineRepos(
         {
           examRepo: createExamRepo(tx),
           attemptRepo: txAttemptRepo,
@@ -57,86 +76,58 @@ export async function submitAndGradeAttempt(
         },
         ctx,
       );
-      await submitAttempt(attempts, attemptId, now, {
-        source: "candidate",
-        minSubmitAfterStartMinutes: exam?.minSubmitAfterStartMinutes ?? null,
-      });
-      return { alreadyGraded: false } as const;
-    }
-    if (status === "submitted") {
-      return { alreadyGraded: false } as const;
-    }
-    if (status === "graded") {
-      return { alreadyGraded: true } as const;
+
+      if (status === "in_progress" || status === "disrupted") {
+        // Submit flips the row to `submitted` under the same lock. After this,
+        // any concurrent saveAnswer sees `submitted` and is rejected
+        // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
+        await submitAttempt(attempts, attemptId, now, {
+          source: "candidate",
+          minSubmitAfterStartMinutes:
+            (await exams.findById(lockedAttempt.examId))
+              ?.minSubmitAfterStartMinutes ?? null,
+        });
+      }
+
+      // Re-read the grading snapshot from the SAME transaction so the answers
+      // feeding the score are the locked, post-submit answers. This is the
+      // freeze barrier: the score is derived from exactly the answer set that
+      // existed when the submit lock was held. (For the crash-recovery
+      // `submitted` path this also re-grades idempotently.)
+      const snapshot = await readGradingSnapshot(
+        exams,
+        enrollments,
+        attempts,
+        attemptId,
+      );
+      if (!snapshot) {
+        throw new NotFoundError("Attempt not found after submit");
+      }
+
+      const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+      await finalizeGrading(
+        enrollments,
+        attempts,
+        attemptId,
+        snapshot.enrollment.id,
+        result,
+        snapshot.exam,
+      );
+      return false;
     }
     throw new InvalidStateTransitionError(
       `Cannot submit attempt in ${status} state`,
     );
   });
 
+  // Read the final committed attempt state for the response. Outside the tx
+  // is safe here: this is a pure read of the now-committed result, and no
+  // further mutation depends on it.
   const attemptRepo = createAttemptRepo(db);
-
-  if (phaseOne.alreadyGraded) {
-    const graded = await attemptRepo.findById(ctx, attemptId);
-    if (!graded) {
-      throw new NotFoundError("Attempt not found");
-    }
-    return { attempt: graded as ExamAttempt, alreadyGraded: true };
-  }
-
-  const examRepo = createExamRepo(db);
-  const enrollmentRepo = createEnrollmentRepo(db);
-
-  const { exams, enrollments, attempts } = createExamEngineRepos(
-    {
-      examRepo,
-      enrollmentRepo,
-      attemptRepo,
-    },
-    ctx,
-  );
-
-  const snapshot = await readGradingSnapshot(
-    exams,
-    enrollments,
-    attempts,
-    attemptId,
-  );
-  if (!snapshot) {
-    throw new NotFoundError("Attempt not found after submit");
-  }
-
-  const gradingResult = computeGradingResult(
-    snapshot.attempt,
-    snapshot.exam,
-    now,
-  );
-
-  await executeInTransaction(db, async (tx) => {
-    const txAttemptRepo = createAttemptRepo(tx);
-    await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
-    const { enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: createExamRepo(tx),
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: createEnrollmentRepo(tx),
-      },
-      ctx,
-    );
-    await finalizeGrading(
-      enrollments,
-      attempts,
-      attemptId,
-      snapshot.enrollment.id,
-      gradingResult,
-      snapshot.exam,
-    );
-  });
-
   const attempt = await attemptRepo.findById(ctx, attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found after grading");
   }
 
-  return { attempt: attempt as ExamAttempt, alreadyGraded: false };
+  return { attempt: attempt as ExamAttempt, alreadyGraded };
 }

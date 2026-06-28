@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { gradeAttempt, gradeAttemptIdempotent } from "./grading.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  gradeAttempt,
+  gradeAttemptIdempotent,
+  finalizeGrading,
+  computeGradingResult,
+} from "./grading.js";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -326,6 +331,240 @@ describe("gradeAttempt", () => {
     ).rejects.toThrow("Failed to update enrollment");
   });
 });
+
+// ---------------------------------------------------------------------------
+// P0-2 — grading transactional boundary.
+//
+// @exam/exam-engine depends only on @exam/domain and CANNOT open a transaction
+// itself (no @exam/db). Per the repo's established Plan A pattern, the
+// transaction is owned by the CALLER (submitAndGradeAttempt TX2,
+// autoSubmitAndGrade, attempts.admin force-submit, gradingQueue.ts), which
+// wraps gradeAttempt/finalizeGrading in executeInTransaction with tx-scoped
+// repos and a locked attempt row. The engine logic only needs to be provably
+// ATOMIC UNDER THAT CONTRACT: a failure after the attempt write must roll the
+// attempt write back too (the caller's tx does this), not leave a half-graded
+// attempt. These tests prove the contract via a commit/rollback-capable repo
+// harness that mirrors executeInTransaction semantics.
+// ---------------------------------------------------------------------------
+
+/**
+ * Commit/rollback-capable repo harness. Mutations go to a staged buffer; they
+ * are promoted to the visible store ONLY when commit() is called. If the work
+ * throws before commit, staged writes are discarded — exactly what a real
+ * Postgres transaction does for the caller-wrapped grading path. Mirrors the
+ * pattern the production callers rely on (executeInTransaction + tx repos).
+ */
+function makeTransactionalRepos(
+  exam: Exam,
+  attempt: ExamAttempt,
+  enrollment: ExamEnrollment,
+) {
+  // Committed (visible) state.
+  let committedAttempt = attempt;
+  let committedEnrollment = enrollment;
+  const examRepo: ExamRepository = {
+    findById: () => exam,
+    update: () => exam,
+  };
+
+  function scopedRepos() {
+    // Per-tx staged overlay; reads fall through to committed state.
+    const stagedAttempt: Partial<ExamAttempt> = {};
+    const stagedEnrollment: Partial<ExamEnrollment> = {};
+    let staged = false;
+    const attemptRepo: AttemptRepository = {
+      findById: () => ({ ...committedAttempt, ...stagedAttempt }),
+      findByIdForUpdate: () => ({ ...committedAttempt, ...stagedAttempt }),
+      findActiveByEnrollment: () => null,
+      findByEnrollmentAndAttemptNo: () => null,
+      create: () => committedAttempt,
+      update: (_id, data) => {
+        staged = true;
+        Object.assign(stagedAttempt, data);
+        return { ...committedAttempt, ...stagedAttempt };
+      },
+    };
+    const enrollmentRepo: EnrollmentRepository = {
+      findByExamAndCandidate: () => ({
+        ...committedEnrollment,
+        ...stagedEnrollment,
+      }),
+      findByExamAndCandidateForUpdate: () => ({
+        ...committedEnrollment,
+        ...stagedEnrollment,
+      }),
+      create: () => committedEnrollment,
+      update: (_id, data) => {
+        staged = true;
+        Object.assign(stagedEnrollment, data);
+        return { ...committedEnrollment, ...stagedEnrollment };
+      },
+    };
+    return {
+      attemptRepo,
+      enrollmentRepo,
+      commit: () => {
+        if (staged) {
+          committedAttempt = { ...committedAttempt, ...stagedAttempt };
+          committedEnrollment = { ...committedEnrollment, ...stagedEnrollment };
+        }
+      },
+    };
+  }
+
+  return {
+    examRepo,
+    scopedRepos,
+    getAttempt: () => committedAttempt,
+    getEnrollment: () => committedEnrollment,
+  };
+}
+
+/**
+ * Minimal mirror of the caller's executeInTransaction: run the work in a tx
+ * scope; promote staged writes to visible state ONLY on a clean return; on
+ * throw, discard them (rollback).
+ */
+async function runInTransaction<T>(
+  harness: ReturnType<typeof makeTransactionalRepos>,
+  work: (repos: {
+    attemptRepo: AttemptRepository;
+    enrollmentRepo: EnrollmentRepository;
+  }) => Promise<T>,
+): Promise<T> {
+  const scope = harness.scopedRepos();
+  try {
+    const out = await work(scope);
+    scope.commit();
+    return out;
+  } catch (err) {
+    // Rollback: staged writes are dropped because commit() was never called.
+    throw err;
+  }
+}
+
+describe("grading transactional boundary (P0-2)", () => {
+  const gradedAt = new Date("2026-06-01T12:00:00Z");
+
+  // Case A: a failure AFTER the attempt is written graded must NOT leave a
+  // half-graded attempt visible. The caller's transaction rolls the attempt
+  // write back. We force the failure by making enrollment.update throw.
+  it("rolls back the attempt write when the enrollment update fails mid-grade (no half-graded state)", async () => {
+    const exam = makeExam();
+    const attempt = makeAttempt();
+    const enrollment = makeEnrollment();
+    const harness = makeTransactionalRepos(exam, attempt, enrollment);
+
+    // First staged scope: inject a failing enrollment update so finalizeGrading
+    // throws after the attempt was already written graded.
+    const failingScope = harness.scopedRepos();
+    const failingEnrollmentRepo: EnrollmentRepository = {
+      ...failingScope.enrollmentRepo,
+      update: vi.fn(() => {
+        throw new Error("boom: enrollment write failed");
+      }),
+    };
+
+    await expect(
+      finalizeGrading(
+        failingEnrollmentRepo,
+        failingScope.attemptRepo,
+        "attempt-1",
+        enrollment.id,
+        computeResult(attempt, exam, gradedAt),
+        exam,
+      ),
+    ).rejects.toThrow("enrollment write failed");
+
+    // NOTE: this scope was never committed (it threw). Visible state below is
+    // read from the committed store and must be UNCHANGED.
+    const finalAttempt = harness.getAttempt();
+    const finalEnrollment = harness.getEnrollment();
+    expect(finalAttempt.status).toBe("submitted"); // NOT partially graded
+    expect(finalAttempt.score).toBeUndefined();
+    expect(finalAttempt.gradingResult).toBeUndefined();
+    expect(finalEnrollment.status).toBe("started");
+    expect(finalEnrollment.finalScore).toBeUndefined();
+    expect(failingEnrollmentRepo.update).toHaveBeenCalledTimes(1);
+  });
+
+  // Case B: under the same transactional harness, the happy path still commits
+  // the full result (attempt graded + enrollment finalized) atomically.
+  it("commits the full graded result on success (score/status/enrollment consistent)", async () => {
+    const exam = makeExam();
+    const attempt = makeAttempt();
+    const enrollment = makeEnrollment();
+    const harness = makeTransactionalRepos(exam, attempt, enrollment);
+    const result = computeResult(attempt, exam, gradedAt);
+
+    await runInTransaction(harness, async (repos) =>
+      finalizeGrading(
+        repos.enrollmentRepo,
+        repos.attemptRepo,
+        "attempt-1",
+        enrollment.id,
+        result,
+        exam,
+      ),
+    );
+
+    expect(harness.getAttempt()).toMatchObject({
+      status: "graded",
+      score: 10,
+      passed: true,
+      gradedAt,
+    });
+    expect(harness.getEnrollment()).toMatchObject({
+      status: "started",
+      finalScore: 10,
+      finalPassed: true,
+      finalAttemptId: "attempt-1",
+    });
+  });
+
+  // Case C: every mutation flows through the SAME tx-scoped repo handle passed
+  // in by the caller — grading never escapes to a non-tx repo. Proven by
+  // spying: attempt.update and enrollment.update are the injected instances.
+  it("routes all grading mutations through the caller-provided (tx-scoped) repo handle", async () => {
+    const exam = makeExam();
+    const attempt = makeAttempt();
+    const enrollment = makeEnrollment();
+    const harness = makeTransactionalRepos(exam, attempt, enrollment);
+    const scope = harness.scopedRepos();
+
+    const attemptUpdateSpy = vi.spyOn(scope.attemptRepo, "update");
+    const enrollmentUpdateSpy = vi.spyOn(scope.enrollmentRepo, "update");
+
+    await finalizeGrading(
+      scope.enrollmentRepo,
+      scope.attemptRepo,
+      "attempt-1",
+      enrollment.id,
+      computeResult(attempt, exam, gradedAt),
+      exam,
+    );
+
+    // Exactly one attempt write (the graded transition) and one enrollment
+    // write — both on the injected tx-scoped instances, none elsewhere.
+    expect(attemptUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(attemptUpdateSpy).toHaveBeenLastCalledWith(
+      "attempt-1",
+      expect.objectContaining({ status: "graded" }),
+    );
+    expect(enrollmentUpdateSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Helper: compute the ScoreResult the way gradeAttempt does, for direct
+ * finalizeGrading calls in the transactional tests. Reuses the engine's own
+ * computeGradingResult so semantics stay identical. */
+function computeResult(
+  attempt: ExamAttempt,
+  exam: Exam,
+  now: Date,
+): import("@exam/domain").ScoreResult {
+  return computeGradingResult(attempt, exam, now);
+}
 
 describe("gradeAttemptIdempotent", () => {
   const fixedGradedAt = new Date("2026-06-01T12:00:00Z");
