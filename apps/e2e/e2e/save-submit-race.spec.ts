@@ -10,19 +10,29 @@ import {
 
 // P2A-J6 — save-submit-race
 //
-// Distinct from submit-flush.spec.ts (which proves the client-side flush
-// path). This spec proves the SERVER-side determinism of the save vs submit
-// race:
+// Proves the SERVER-side invariants of the save vs submit race under the
+// current Phase-2 contract (ADR-008):
 //
 //   - Answer is saved and confirmed on the server.
-//   - Concurrently with /submit, fire additional /answers requests.
-//   - Outcome must be deterministic:
+//   - Concurrently with /submit, fire additional /answers requests (legal
+//     currentVersion baseVersion — NOT stale-version rejection).
+//   - Outcome invariants (what the contract actually guarantees):
 //       * attempt ends up graded (never corrupted / half-saved)
 //       * every concurrent save either:
 //           (a) is accepted as idempotent, or
 //           (b) is rejected with a deterministic conflict reason
-//       * the saved answer is reflected in the graded score
+//       * the score is CONSISTENT with the final persisted answer (J1: grading
+//         runs inside the submit transaction, so it can never grade against a
+//         stale out-of-tx snapshot)
 //   - A second full submit (idempotent) must not re-grade or alter state.
+//
+// NOT guaranteed (and intentionally NOT asserted): score === 100. /submit
+// carries no final-answer payload / version barrier, so when a legal
+// currentVersion save races with submit the Postgres row lock serializes them
+// and whichever locks first wins (save first → false → score 0; submit first
+// → later saves rejected → score 100). Both are protocol-legitimate. "The UI
+// answer at submit time always wins" (WYSIWYG submit) needs Option D, a
+// contract change tracked as a follow-up.
 //
 // Racing saves use the current persisted answer version as baseVersion to
 // ensure they test save-vs-submit race, not stale-version rejection.
@@ -223,13 +233,31 @@ test.describe("save vs submit race — deterministic outcome", () => {
       }
     }
 
-    // Phase 3 — re-read the attempt. It must still be graded with the
-    // originally saved (correct) answer; no partial writes from the racing
-    // saves may have leaked through.
+    // Phase 3 — re-read the attempt. Current Phase-2 contract (ADR-008):
+    // /submit carries no final-answer payload or version barrier, so the
+    // server cannot define "the answer the candidate saw the instant they
+    // clicked submit". When a legal currentVersion save races with submit,
+    // the Postgres row lock serializes them; whichever request locks first
+    // wins (save first → false persisted → score 0; submit first → later
+    // saves rejected → score 100). BOTH outcomes are protocol-legitimate.
+    //
+    // What this test enforces is NOT a fixed score===100. It enforces the
+    // real invariants the contract guarantees:
+    //   - the attempt ends up graded, never corrupted / half-saved
+    //   - the score is CONSISTENT with the final persisted answer (J1: the
+    //     score is computed inside the locked transaction, so it can never
+    //     grade against a stale out-of-tx snapshot)
+    // Achieving "the UI answer at submit time always wins" (WYSIWYG submit)
+    // requires Option D — submit carrying a final-answer payload/version
+    // barrier — which is a contract change tracked as a follow-up, not this
+    // Phase-2 scope.
     const finalAttempt = await fetchAttempt(request, token, attemptId);
     expect(finalAttempt.status).toBe("graded");
-    expect(finalAttempt.score).toBe(100);
-    expect(finalAttempt.passed).toBe(true);
+    const finalAnswer = (finalAttempt.answers as Array<{ answer: unknown }>)[0]
+      ?.answer;
+    const expectedScore = finalAnswer === true ? 100 : 0;
+    expect(finalAttempt.score).toBe(expectedScore);
+    expect(finalAttempt.passed).toBe(expectedScore >= 60);
   });
 
   test("double submit is idempotent — no re-grade, same result", async ({
