@@ -14,7 +14,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/react-act-env.ts", "./src/test/setup.ts"],
     pool: "forks",
-    maxWorkers: 1,
+    // P0-infra: parallelize the web suite. Was `maxWorkers: 1` (serial) since
+    // 8ef3b9e. Raised to 4; each worker gets its own fork so module state is
+    // isolated. If flake reappears, step down to 2 before considering 1 again.
+    maxWorkers: 4,
+    minWorkers: 2,
     server: {
       deps: {
         inline: ["react-dom"],
