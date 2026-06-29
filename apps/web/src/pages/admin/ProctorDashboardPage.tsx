@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -79,6 +80,7 @@ function groupByStatus(candidates: CandidateStatusItem[]): StatusGroups {
  * for force-submit, extend-time, and misconduct flag.
  */
 export function ProctorDashboardPage() {
+  const { t } = useTranslation();
   const { id: examId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<CandidateStatusResponse | null>(null);
@@ -115,11 +117,11 @@ export function ProctorDashboardPage() {
       );
       setData(result);
     } catch {
-      setError("加载监考数据失败");
+      setError(t("admin.proctorDashboard.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [examId]);
+  }, [examId, t]);
 
   useEffect(() => {
     loadStatus();
@@ -134,12 +136,16 @@ export function ProctorDashboardPage() {
     setForceSubmitting(true);
     try {
       await api.post(`/api/admin/attempts/${attemptId}/force-submit`, {
-        reason: "管理员强制交卷",
+        reason: t("admin.proctorDashboard.forceSubmit.reason"),
       });
-      toast.success("已强制交卷");
+      toast.success(t("admin.proctorDashboard.forceSubmit.done"));
       await loadStatus();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "强制交卷失败");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.proctorDashboard.errors.forceSubmitFailed"),
+      );
     } finally {
       setForceSubmitting(false);
     }
@@ -154,11 +160,19 @@ export function ProctorDashboardPage() {
         `/api/admin/attempts/${extendTarget.attemptId}/extend-time`,
         { additionalMinutes: extendMinutes },
       );
-      toast.success(`已延长 ${extendMinutes} 分钟`);
+      toast.success(
+        t("admin.proctorDashboard.extendDialog.done", {
+          minutes: extendMinutes,
+        }),
+      );
       setExtendDialogOpen(false);
       await loadStatus();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "延长失败");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.proctorDashboard.errors.extendFailed"),
+      );
     } finally {
       setExtending(false);
     }
@@ -171,14 +185,23 @@ export function ProctorDashboardPage() {
     try {
       await api.post(
         `/api/admin/attempts/${misconductTarget.attemptId}/misconduct`,
-        { severity: misconductSeverity, notes: misconductNotes || "监考标记" },
+        {
+          severity: misconductSeverity,
+          notes:
+            misconductNotes ||
+            t("admin.proctorDashboard.misconductDialog.defaultNotes"),
+        },
       );
-      toast.success("已标记违规");
+      toast.success(t("admin.proctorDashboard.misconductDialog.done"));
       setMisconductDialogOpen(false);
       setMisconductNotes("");
       await loadStatus();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "标记违规失败");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.proctorDashboard.errors.flagFailed"),
+      );
     } finally {
       setFlagging(false);
     }
@@ -194,7 +217,7 @@ export function ProctorDashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="监考"
+        title={t("admin.proctorDashboard.title")}
         actions={
           <div className="flex gap-2">
             <Button
@@ -206,7 +229,7 @@ export function ProctorDashboardPage() {
               }}
             >
               <RefreshCw data-icon="inline-start" />
-              刷新
+              {t("admin.proctorDashboard.actions.refresh")}
             </Button>
             <Button
               data-testid="proctor-monitor-link"
@@ -217,10 +240,10 @@ export function ProctorDashboardPage() {
               }
             >
               <MonitorPlay data-icon="inline-start" />
-              实时监控
+              {t("admin.proctorDashboard.actions.monitor")}
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>
-              返回
+              {t("admin.proctorDashboard.actions.back")}
             </Button>
           </div>
         }
@@ -228,18 +251,28 @@ export function ProctorDashboardPage() {
 
       <Tabs defaultValue="all">
         <TabsList>
-          <TabsTrigger value="all">全部 ({data.total})</TabsTrigger>
+          <TabsTrigger value="all">
+            {t("admin.proctorDashboard.tabs.all", { count: data.total })}
+          </TabsTrigger>
           <TabsTrigger value="active">
-            答题中 ({groups.active.length})
+            {t("admin.proctorDashboard.tabs.active", {
+              count: groups.active.length,
+            })}
           </TabsTrigger>
           <TabsTrigger value="disrupted">
-            断线 ({groups.disrupted.length})
+            {t("admin.proctorDashboard.tabs.disrupted", {
+              count: groups.disrupted.length,
+            })}
           </TabsTrigger>
           <TabsTrigger value="submitted">
-            已交卷 ({groups.submitted.length})
+            {t("admin.proctorDashboard.tabs.submitted", {
+              count: groups.submitted.length,
+            })}
           </TabsTrigger>
           <TabsTrigger value="graded">
-            已出分 ({groups.graded.length})
+            {t("admin.proctorDashboard.tabs.graded", {
+              count: groups.graded.length,
+            })}
           </TabsTrigger>
         </TabsList>
 
@@ -247,8 +280,8 @@ export function ProctorDashboardPage() {
           <div className="mt-4">
             <EmptyState
               icon={<Users className="size-8" />}
-              title="暂无考生数据"
-              description="目前没有正在考试的考生。"
+              title={t("admin.proctorDashboard.empty.title")}
+              description={t("admin.proctorDashboard.empty.description")}
             />
           </div>
         )}
@@ -274,13 +307,19 @@ export function ProctorDashboardPage() {
       <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>延长时间</DialogTitle>
+            <DialogTitle>
+              {t("admin.proctorDashboard.extendDialog.title")}
+            </DialogTitle>
             <DialogDescription>
-              为考生 {extendTarget?.name} 延长考试时间
+              {t("admin.proctorDashboard.extendDialog.description", {
+                name: extendTarget?.name ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
-            <Label htmlFor="extend-minutes">延长分钟数</Label>
+            <Label htmlFor="extend-minutes">
+              {t("admin.proctorDashboard.extendDialog.minutesLabel")}
+            </Label>
             <Input
               id="extend-minutes"
               type="number"
@@ -296,13 +335,17 @@ export function ProctorDashboardPage() {
               variant="outline"
               onClick={() => setExtendDialogOpen(false)}
             >
-              取消
+              {t("admin.proctorDashboard.extendDialog.cancel")}
             </Button>
             <Button
               disabled={extending || extendMinutes <= 0}
               onClick={() => void handleExtendTime()}
             >
-              {extending ? "延长中..." : `延长 ${extendMinutes} 分钟`}
+              {extending
+                ? t("admin.proctorDashboard.extendDialog.confirming")
+                : t("admin.proctorDashboard.extendDialog.confirm", {
+                    minutes: extendMinutes,
+                  })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -315,13 +358,19 @@ export function ProctorDashboardPage() {
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>标记违规</DialogTitle>
+            <DialogTitle>
+              {t("admin.proctorDashboard.misconductDialog.title")}
+            </DialogTitle>
             <DialogDescription>
-              为考生 {misconductTarget?.name} 标记违规行为
+              {t("admin.proctorDashboard.misconductDialog.description", {
+                name: misconductTarget?.name ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
-            <Label htmlFor="misconduct-severity">严重程度</Label>
+            <Label htmlFor="misconduct-severity">
+              {t("admin.proctorDashboard.misconductDialog.severityLabel")}
+            </Label>
             <Select
               value={misconductSeverity}
               onValueChange={(v: "warning" | "serious") =>
@@ -332,16 +381,24 @@ export function ProctorDashboardPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="warning">警告</SelectItem>
-                <SelectItem value="serious">严重</SelectItem>
+                <SelectItem value="warning">
+                  {t("admin.proctorDashboard.misconductDialog.severityWarning")}
+                </SelectItem>
+                <SelectItem value="serious">
+                  {t("admin.proctorDashboard.misconductDialog.severitySerious")}
+                </SelectItem>
               </SelectContent>
             </Select>
-            <Label htmlFor="misconduct-notes">违规说明</Label>
+            <Label htmlFor="misconduct-notes">
+              {t("admin.proctorDashboard.misconductDialog.notesLabel")}
+            </Label>
             <Textarea
               id="misconduct-notes"
               value={misconductNotes}
               onChange={(e) => setMisconductNotes(e.target.value)}
-              placeholder="请填写违规说明"
+              placeholder={t(
+                "admin.proctorDashboard.misconductDialog.notesPlaceholder",
+              )}
             />
           </div>
           <DialogFooter>
@@ -349,14 +406,16 @@ export function ProctorDashboardPage() {
               variant="outline"
               onClick={() => setMisconductDialogOpen(false)}
             >
-              取消
+              {t("admin.proctorDashboard.misconductDialog.cancel")}
             </Button>
             <Button
               variant="destructive"
               disabled={flagging || !misconductNotes.trim()}
               onClick={() => void handleFlagMisconduct()}
             >
-              {flagging ? "标记中..." : "确认标记"}
+              {flagging
+                ? t("admin.proctorDashboard.misconductDialog.flagging")
+                : t("admin.proctorDashboard.misconductDialog.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -370,8 +429,8 @@ export function ProctorDashboardPage() {
       return (
         <EmptyState
           icon={<Users className="size-8" />}
-          title="暂无数据"
-          description="当前筛选条件下没有考生。"
+          title={t("admin.proctorDashboard.empty.filteredTitle")}
+          description={t("admin.proctorDashboard.empty.filteredDescription")}
         />
       );
     }
@@ -395,7 +454,9 @@ export function ProctorDashboardPage() {
               <CardContent className="flex flex-col gap-2 text-xs">
                 {candidate.deadlineAt && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">截止时间</span>
+                    <span className="text-muted-foreground">
+                      {t("admin.proctorDashboard.card.deadline")}
+                    </span>
                     <span>
                       {new Date(candidate.deadlineAt).toLocaleTimeString()}
                     </span>
@@ -403,7 +464,9 @@ export function ProctorDashboardPage() {
                 )}
                 {candidate.lastActivityAt && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">最后活跃</span>
+                    <span className="text-muted-foreground">
+                      {t("admin.proctorDashboard.card.lastActivity")}
+                    </span>
                     <span>
                       {new Date(candidate.lastActivityAt).toLocaleTimeString()}
                     </span>
@@ -418,10 +481,10 @@ export function ProctorDashboardPage() {
                     }
                     className="w-fit"
                   >
-                    违规:{" "}
+                    {t("admin.proctorDashboard.card.misconductPrefix")}：{" "}
                     {candidate.misconduct.severity === "serious"
-                      ? "严重"
-                      : "警告"}
+                      ? t("admin.proctorDashboard.card.severitySerious")
+                      : t("admin.proctorDashboard.card.severityWarning")}
                   </Badge>
                 )}
                 {isLive && candidate.attemptId && (
@@ -435,11 +498,14 @@ export function ProctorDashboardPage() {
                             variant="destructive"
                             disabled={forceSubmitting}
                           >
-                            强制交卷
+                            {t("admin.proctorDashboard.card.forceSubmit")}
                           </Button>
                         }
-                        title="确认强制交卷"
-                        description={`确定要强制提交考生「${candidate.name}」的答卷吗？此操作不可撤销。`}
+                        title={t("admin.proctorDashboard.forceSubmit.title")}
+                        description={t(
+                          "admin.proctorDashboard.forceSubmit.description",
+                          { name: candidate.name },
+                        )}
                         destructive
                         onConfirm={() =>
                           void handleForceSubmit(candidate.attemptId!)
@@ -456,7 +522,7 @@ export function ProctorDashboardPage() {
                           setExtendDialogOpen(true);
                         }}
                       >
-                        延长时间
+                        {t("admin.proctorDashboard.card.extend")}
                       </Button>
                     )}
                     {candidate.attemptId && (
@@ -470,7 +536,7 @@ export function ProctorDashboardPage() {
                           setMisconductDialogOpen(true);
                         }}
                       >
-                        标记违规
+                        {t("admin.proctorDashboard.card.flag")}
                       </Button>
                     )}
                   </div>
