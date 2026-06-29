@@ -12,6 +12,7 @@ import type {
   UpdateProfileRequest,
 } from "@exam/contracts";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api, setNavigate } from "@/lib/api";
 
 /** User shape returned by the /api/auth/me endpoint. */
@@ -49,6 +50,7 @@ export function AuthProvider({
   initialUser?: SessionUser | null;
   restoreSession?: boolean;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [user, setUser] = useState<SessionUser | null>(initialUser);
   const [isRestoringSession, setIsRestoringSession] = useState(
@@ -95,7 +97,7 @@ export function AuthProvider({
       setUser(nextUser);
       navigate(dashboardFor(nextUser));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "登录失败");
+      setError(e instanceof Error ? e.message : t("auth.errors.loginFailed"));
     } finally {
       setIsSubmittingLogin(false);
     }
@@ -109,7 +111,7 @@ export function AuthProvider({
       setUser(null);
       navigate("/login");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "退出失败");
+      setError(e instanceof Error ? e.message : t("auth.errors.logoutFailed"));
     } finally {
       setIsLoggingOut(false);
     }
@@ -124,7 +126,8 @@ export function AuthProvider({
       );
       setUser(updated);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "更新失败";
+      const message =
+        e instanceof Error ? e.message : t("auth.errors.updateFailed");
       setError(message);
       throw e;
     }

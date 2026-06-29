@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -23,15 +24,18 @@ export function QuestionPreview({
   options,
   standardAnswer,
 }: QuestionPreviewProps) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-sm text-muted-foreground">
-          考生视角预览
+          {t("admin.questionPreview.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <p className="text-sm">{content || "（题目内容为空）"}</p>
+        <p className="text-sm">
+          {content || t("admin.questionPreview.emptyContent")}
+        </p>
 
         {(type === "single_choice" || type === "true_false") && (
           <RadioGroup disabled>
@@ -81,12 +85,12 @@ export function QuestionPreview({
         <Separator />
         <div className="pt-2 text-xs text-muted-foreground">
           <p>
-            标准答案：
+            {t("admin.questionPreview.standardAnswer")}
             {type === "true_false"
               ? standardAnswer === true
-                ? "是"
-                : "否"
-              : String(standardAnswer ?? "未设置")}
+                ? t("common.boolean.yes")
+                : t("common.boolean.no")
+              : String(standardAnswer ?? t("admin.questionPreview.notSet"))}
           </p>
         </div>
       </CardContent>

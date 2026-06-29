@@ -1,5 +1,4 @@
 import type { QuestionType } from "@exam/domain";
-import i18n from "i18next";
 
 export type { QuestionType };
 
@@ -16,8 +15,9 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, string> = {
   true_false: "questionType.true_false",
 };
 
-/** Minimal translation function shape (mirrors statusMeta.StatusTranslateFn). */
-export type QuestionTypeTranslateFn = (key: string) => string;
+/** Minimal translation function shape — accepts i18next's TFunction. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type QuestionTypeTranslateFn = (...args: any[]) => string;
 
 /** Returns true if the given string is a known QuestionType key. */
 export function isQuestionType(key: string): key is QuestionType {
@@ -61,20 +61,3 @@ export const TYPE_VARIANT: Record<string, "default" | "secondary" | "outline"> =
     fill_blank: "outline",
     true_false: "outline",
   };
-
-/**
- * @deprecated Convenience map resolving each question type to its current
- * localized label via the default i18n instance. Kept for the few legacy
- * call sites that still read `TYPE_LABELS[key]` directly; new code should
- * render via `t(getTypeLabelKey(key))` (or `getTypeLabel(key, t)`) so the
- * label is resolved by the caller's own `useTranslation()` scope. No
- * hardcoded copy lives here — the values come from `questionType.*` keys.
- * Typed as `Record<string, string>` (not `Record<QuestionType, ...>`) so the
- * legacy `TYPE_LABELS[q.type]` lookup with a runtime `string` stays valid.
- */
-export const TYPE_LABELS: Record<string, string> = Object.fromEntries(
-  (Object.keys(QUESTION_TYPE_LABEL_KEYS) as QuestionType[]).map((key) => [
-    key,
-    i18n.t(QUESTION_TYPE_LABEL_KEYS[key] as never),
-  ]),
-);

@@ -8,12 +8,22 @@ import {
   type ReactNode,
 } from "react";
 import type { BrandingView } from "@exam/domain";
+import i18n from "@/i18n";
 import { api } from "@/lib/api";
 
-/** Default branding values used when no remote or prop override is provided. */
+/**
+ * Default branding sentinel — resolves from the default i18n instance so the
+ * provider can reference it as a structural sentinel for override-detection
+ * while keeping display copy in the catalog. The provider's `value` prop
+ * overrides this; external config (orgDisplayName) also takes priority.
+ */
 const fallbackBranding: BrandingView = {
-  productName: "考试平台",
-  productSubtitle: "内部考核与准入控制",
+  get productName() {
+    return i18n.t("branding.defaultName" as never);
+  },
+  get productSubtitle() {
+    return i18n.t("branding.defaultDescription" as never);
+  },
 };
 
 const BrandingContext = createContext<BrandingView>(fallbackBranding);

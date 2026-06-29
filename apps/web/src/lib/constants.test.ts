@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import i18n from "i18next";
+import i18n from "@/i18n";
 import {
-  TYPE_LABELS,
   TYPE_VARIANT,
   QUESTION_TYPE_LABEL_KEYS,
   isQuestionType,
@@ -20,15 +19,6 @@ describe("QUESTION_TYPE_LABEL_KEYS", () => {
     );
     expect(QUESTION_TYPE_LABEL_KEYS.fill_blank).toBe("questionType.fill_blank");
     expect(QUESTION_TYPE_LABEL_KEYS.true_false).toBe("questionType.true_false");
-  });
-});
-
-describe("TYPE_LABELS (deprecated convenience)", () => {
-  it("resolves to the localized zh-CN label via the default i18n instance", () => {
-    expect(TYPE_LABELS.single_choice).toBe("单选");
-    expect(TYPE_LABELS.multiple_choice).toBe("多选");
-    expect(TYPE_LABELS.fill_blank).toBe("填空");
-    expect(TYPE_LABELS.true_false).toBe("判断");
   });
 });
 

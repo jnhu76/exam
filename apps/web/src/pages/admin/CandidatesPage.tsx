@@ -657,7 +657,9 @@ export function CandidatesPage() {
                   setResetPassword(e.target.value);
                   if (resetFieldError) setResetFieldError("");
                 }}
-                placeholder={`至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`}
+                placeholder={t("validation.passwordMinChars", {
+                  min: DEFAULT_PASSWORD_POLICY.minLength,
+                })}
               />
             </Field>
             <Field>

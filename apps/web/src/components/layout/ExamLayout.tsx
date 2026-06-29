@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { routes } from "@/lib/routes";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
  * Redirects non-candidate users to /login.
  */
 export function ExamLayout() {
+  const { t } = useTranslation();
   const { user, isLoading, logout } = useAuth();
   const navigate = useNavigate();
   if (isLoading) {
@@ -56,7 +58,7 @@ export function ExamLayout() {
                 cn(isActive && "font-medium text-primary")
               }
             >
-              我的考试
+              {t("examLayout.myExams")}
             </NavLink>
           </Button>
           <span className="mx-2 h-4 w-px bg-border" />
@@ -64,7 +66,7 @@ export function ExamLayout() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label="账号菜单"
+                aria-label={t("examLayout.accountMenu")}
                 className="flex items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Avatar className="size-7">
@@ -82,13 +84,13 @@ export function ExamLayout() {
                 data-testid="exam-settings-link"
                 onSelect={() => void navigate(routes.exam.settings)}
               >
-                账号设置
+                {t("examLayout.accountSettings")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
                 onSelect={() => void logout()}
               >
-                退出登录
+                {t("examLayout.logout")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

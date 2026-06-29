@@ -1,5 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
-import i18n from "i18next";
+import i18n from "@/i18n";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
