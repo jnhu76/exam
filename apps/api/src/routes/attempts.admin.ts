@@ -72,7 +72,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
       const { severity, notes } = body.data;
 
@@ -113,8 +113,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /admin/attempts/:attemptId/force-submit — Admin force-submits an
-   * in_progress or disrupted attempt, then grades it. Idempotent for
-   * submitted/grading/graded (returns current result). voided is rejected.
+   * in_progress or disrupted attempt, then grades it inside the SAME
+   * transaction (no submitted-but-not-graded crash window). A `submitted` row
+   * left by a crashed earlier operation is recovered to `graded` here.
+   * Idempotent for grading/graded (returns current result). voided is rejected.
    * Audit event: attempt.forceSubmit (with admin identity + optional reason).
    */
   fastify.post(
@@ -144,10 +146,17 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
       const reason = body.data.reason;
 
+      // Submit + grade in ONE transaction so there is no submitted-but-not-graded
+      // crash window. Matches `autoSubmitAndGrade` / `submitAndGradeAttempt`:
+      // lock the attempt row, submit (if needed) under that lock, then grade
+      // idempotently inside the same tx. If the process dies mid-operation the
+      // whole tx rolls back atomically — the attempt can never be left
+      // `submitted` without grading. The `forceSubmitted` flag still drives the
+      // audit-on-real-transition-only rule below.
       const forceSubmitted = await executeInTransaction(
         fastify.db,
         async (tx) => {
@@ -162,30 +171,6 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
               `Cannot force-submit attempt in ${locked.status} state`,
             );
           }
-          // Idempotent: already terminal (submitted/grading/graded) -> no-op.
-          const needsSubmit =
-            locked.status === "in_progress" || locked.status === "disrupted";
-          if (needsSubmit) {
-            // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
-            // guard (source = "proctor" — the SubmitSource for admin/proctor
-            // intervention; "admin" is not a valid SubmitSource value).
-            await submitAttempt(
-              createAttemptRepoAdapter(txAttemptRepo, ctx),
-              attemptId,
-              fastify.now(),
-              { source: "proctor" },
-            );
-            return true;
-          }
-          return false;
-        },
-      );
-
-      if (forceSubmitted) {
-        // Grade outside the submit transaction (matches candidate submit path).
-        await executeInTransaction(fastify.db, async (tx) => {
-          const txAttemptRepo = createAttemptRepo(tx);
-          await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
           const { exams, enrollments, attempts } = createExamEngineRepos(
             {
               examRepo: createExamRepo(tx),
@@ -194,15 +179,40 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
             },
             ctx,
           );
-          await gradeAttemptIdempotent(
-            exams,
-            enrollments,
-            attempts,
-            attemptId,
-            fastify.now(),
-          );
-        });
-      }
+
+          // Idempotent: already terminal (submitted/grading/graded) -> skip
+          // submit, but still run gradeAttemptIdempotent so a `submitted` row
+          // left by a crashed earlier attempt is recovered to `graded` here.
+          const needsSubmit =
+            locked.status === "in_progress" || locked.status === "disrupted";
+          if (needsSubmit) {
+            // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
+            // guard (source = "proctor" — the SubmitSource for admin/proctor
+            // intervention; "admin" is not a valid SubmitSource value).
+            await submitAttempt(attempts, attemptId, fastify.now(), {
+              source: "proctor",
+            });
+          }
+
+          // Grade inside the SAME locked tx. `gradeAttemptIdempotent` handles
+          // `submitted`->graded (the crash-recovery path: a submitted row left
+          // by a crashed earlier attempt, or the row we just submitted) and is
+          // a no-op for `graded`. `grading` is a transient mid-flight state we
+          // cannot resume from a row read alone (it is the candidate-path's
+          // own submit-tx mid-transition) — leave it untouched.
+          if (locked.status !== "grading") {
+            await gradeAttemptIdempotent(
+              exams,
+              enrollments,
+              attempts,
+              attemptId,
+              fastify.now(),
+            );
+          }
+
+          return needsSubmit;
+        },
+      );
 
       const attemptRepo = createAttemptRepo(fastify.db);
       const attempt = await attemptRepo.findById(ctx, attemptId);
@@ -275,7 +285,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
       const { additionalMinutes } = body.data;
 
@@ -356,7 +366,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
 
       const attemptRepo = createAttemptRepo(fastify.db);
@@ -413,7 +423,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
 
       const exportData = await buildAttemptExport(fastify, ctx, attemptId);
@@ -453,7 +463,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
 
       const exportData = await buildAttemptExport(fastify, ctx, attemptId);
