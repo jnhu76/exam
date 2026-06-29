@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -24,13 +25,18 @@ export function QuestionHeader({
   meta,
   className,
 }: QuestionHeaderProps) {
+  const { t } = useTranslation();
   return (
     <div className={cn("flex flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold">第 {number} 题</h2>
+          <h2 className="text-base font-semibold">
+            {t("candidateRuntime.question.number", { number })}
+          </h2>
           <Badge variant="secondary">{typeLabel}</Badge>
-          <Badge variant="outline">{score} 分</Badge>
+          <Badge variant="outline">
+            {t("candidateRuntime.question.score", { score })}
+          </Badge>
         </div>
         {meta && <div className="text-sm text-muted-foreground">{meta}</div>}
       </div>

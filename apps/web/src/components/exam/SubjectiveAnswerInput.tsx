@@ -1,4 +1,5 @@
 import { type ChangeEvent, useId } from "react";
+import { useTranslation } from "react-i18next";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -21,20 +22,26 @@ type SubjectiveAnswerInputProps = {
 export function SubjectiveAnswerInput({
   value,
   onChange,
-  label = "主观题答案",
-  placeholder = "请输入答案",
+  label,
+  placeholder,
   maxLength,
   readOnly = false,
   error,
   className,
 }: SubjectiveAnswerInputProps) {
+  const { t } = useTranslation();
   const generatedId = useId();
   const inputId = `${generatedId}-subjective-answer`;
   const helpId = `${inputId}-help`;
   const safeValue = value ?? "";
   const countLabel = maxLength
-    ? `${safeValue.length} / ${maxLength}`
-    : `${safeValue.length} 字`;
+    ? t("candidateRuntime.answer.subjective.charCountWithMax", {
+        count: safeValue.length,
+        max: maxLength,
+      })
+    : t("candidateRuntime.answer.subjective.charCount", {
+        count: safeValue.length,
+      });
 
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     onChange(event.target.value);
@@ -44,7 +51,7 @@ export function SubjectiveAnswerInput({
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-center justify-between gap-3">
         <label htmlFor={inputId} className="text-sm font-medium">
-          {label}
+          {label ?? t("candidateRuntime.answer.subjective.label")}
         </label>
         <span className="text-xs text-muted-foreground">{countLabel}</span>
       </div>
@@ -52,7 +59,9 @@ export function SubjectiveAnswerInput({
         id={inputId}
         value={safeValue}
         onChange={handleChange}
-        placeholder={placeholder}
+        placeholder={
+          placeholder ?? t("candidateRuntime.answer.subjective.placeholder")
+        }
         maxLength={maxLength}
         readOnly={readOnly}
         aria-invalid={error ? true : undefined}

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 /** Displays a countdown timer that fires onTimeout when the deadline is reached. */
 export function ExamTimer({
@@ -10,6 +11,7 @@ export function ExamTimer({
   onTimeout: () => void;
   serverOffsetMs?: number;
 }) {
+  const { t } = useTranslation();
   const [remaining, setRemaining] = useState(() =>
     getRemainingSeconds(deadlineAt, serverOffsetMs),
   );
@@ -35,7 +37,7 @@ export function ExamTimer({
       className={`rounded-md border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
     >
       <div className="text-[11px] font-medium leading-none text-muted-foreground">
-        剩余时间
+        {t("candidateRuntime.timer.remaining")}
       </div>
       <span className="font-mono text-xl font-bold leading-tight tabular-nums">
         {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}

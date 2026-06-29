@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { SingleChoiceInput } from "./SingleChoiceInput";
 import { MultipleChoiceInput } from "./MultipleChoiceInput";
 import { FillBlankInput } from "./FillBlankInput";
@@ -19,6 +20,7 @@ export function QuestionRenderer({
   onChange: (answer: unknown) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   switch (question.type) {
     case "single_choice":
       return (
@@ -59,7 +61,9 @@ export function QuestionRenderer({
     default:
       return (
         <p className="text-sm text-destructive">
-          不支持的题目类型: {question.type}
+          {t("candidateRuntime.answer.unsupportedType", {
+            type: question.type,
+          })}
         </p>
       );
   }

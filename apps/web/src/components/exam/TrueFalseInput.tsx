@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 /**
  * Radio-button input for true/false (judgment) questions,
  * offering "正确" (true) and "错误" (false) options.
@@ -11,9 +13,16 @@ export function TrueFalseInput({
   onChange: (answer: unknown) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const options = [
-    { value: true, label: "正确" },
-    { value: false, label: "错误" },
+    {
+      value: true,
+      labelKey: "candidateRuntime.answer.trueFalse.true" as const,
+    },
+    {
+      value: false,
+      labelKey: "candidateRuntime.answer.trueFalse.false" as const,
+    },
   ];
 
   return (
@@ -33,7 +42,7 @@ export function TrueFalseInput({
             className="size-4 accent-primary"
             data-testid={`true-false-${option.value}`}
           />
-          <span>{option.label}</span>
+          <span>{t(option.labelKey)}</span>
         </label>
       ))}
     </div>

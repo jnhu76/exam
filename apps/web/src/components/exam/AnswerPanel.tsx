@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Card,
   CardContent,
@@ -22,16 +23,19 @@ type AnswerPanelProps = {
  * Renders a title, optional description, answer children, and an optional footer.
  */
 export function AnswerPanel({
-  title = "作答区",
+  title,
   description,
   children,
   footer,
   className,
 }: AnswerPanelProps) {
+  const { t } = useTranslation();
   return (
     <Card className={cn("gap-4", className)}>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle>
+          {title ?? t("candidateRuntime.answer.panelTitle")}
+        </CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
