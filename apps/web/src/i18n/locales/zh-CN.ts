@@ -175,6 +175,11 @@ const zhCN = {
       details: "查看详细信息",
       reload: "重新加载",
     },
+    /** Boolean display labels (yes/no), reused across components. */
+    boolean: {
+      yes: "是",
+      no: "否",
+    },
   },
 
   validation: {
@@ -1589,9 +1594,25 @@ const zhCN = {
         saved: "评分已保存",
       },
     },
+    /** EnrollmentPicker (exam enrollment candidate picker) copy. */
+    enrollmentPicker: {
+      searchPlaceholder: "搜索考生",
+      selectAll: "全选",
+      empty: "无匹配结果",
+      added: "已添加",
+      loading: "加载中...",
+      loadMore: "加载更多",
+    },
+    /** QuestionPreview (candidate-perspective read-only preview) copy. */
+    questionPreview: {
+      title: "考生视角预览",
+      emptyContent: "（题目内容为空）",
+      standardAnswer: "标准答案：",
+      notSet: "未设置",
+    },
   },
 
-  /** LoginPage copy. */
+  /** LoginPage + auth-context copy. */
   auth: {
     login: {
       usernameLabel: "用户名",
@@ -1602,6 +1623,12 @@ const zhCN = {
       passwordRequired: "请输入密码",
       submit: "登录",
       submitting: "登录中...",
+    },
+    /** AuthContext fallback messages (used only when no error.message). */
+    errors: {
+      loginFailed: "登录失败",
+      logoutFailed: "退出失败",
+      updateFailed: "更新失败",
     },
   },
 
@@ -1641,6 +1668,25 @@ const zhCN = {
       maxAttemptsExhausted: "已达到最大考试次数，无法再次开始考试。",
       retakeAvailable: "可重考，当前最高成绩将保留。",
     },
+  },
+
+  /** ExamLayout (candidate runtime shell) nav/menu copy. */
+  examLayout: {
+    myExams: "我的考试",
+    accountMenu: "账号菜单",
+    accountSettings: "账号设置",
+    logout: "退出登录",
+  },
+
+  /** BrandProvider default branding (used only when no remote/prop override). */
+  branding: {
+    defaultName: "考试平台",
+    defaultDescription: "内部考核与准入控制",
+  },
+
+  /** ExamSettingsPage (candidate account settings) copy. */
+  examSettings: {
+    title: "账号设置",
   },
 
   pageMeta: {

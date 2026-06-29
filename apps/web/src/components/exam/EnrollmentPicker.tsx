@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,6 +37,7 @@ export function EnrollmentPicker({
   onLoadMore,
   isLoadingMore,
 }: EnrollmentPickerProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -85,7 +87,7 @@ export function EnrollmentPicker({
   return (
     <div className="flex flex-col gap-3">
       <Input
-        placeholder="搜索考生"
+        placeholder={t("admin.enrollmentPicker.searchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -95,16 +97,18 @@ export function EnrollmentPicker({
           <Checkbox
             checked={allSelected}
             onCheckedChange={handleToggleAll}
-            aria-label="全选"
+            aria-label={t("admin.enrollmentPicker.selectAll")}
           />
-          <span className="text-muted-foreground">全选</span>
+          <span className="text-muted-foreground">
+            {t("admin.enrollmentPicker.selectAll")}
+          </span>
         </label>
       )}
 
       <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
         {filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">
-            无匹配结果
+            {t("admin.enrollmentPicker.empty")}
           </p>
         ) : (
           filtered.map((candidate) => {
@@ -129,7 +133,7 @@ export function EnrollmentPicker({
                 </div>
                 {enrolled && (
                   <span className="text-xs text-muted-foreground shrink-0">
-                    已添加
+                    {t("admin.enrollmentPicker.added")}
                   </span>
                 )}
               </label>
@@ -146,7 +150,9 @@ export function EnrollmentPicker({
             onClick={onLoadMore}
             disabled={isLoadingMore}
           >
-            {isLoadingMore ? "加载中..." : "加载更多"}
+            {isLoadingMore
+              ? t("admin.enrollmentPicker.loading")
+              : t("admin.enrollmentPicker.loadMore")}
           </Button>
         </div>
       )}
