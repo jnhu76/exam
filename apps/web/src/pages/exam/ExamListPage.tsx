@@ -71,13 +71,13 @@ function ExamCard({
   const actionLabel = (() => {
     switch (exam.primaryAction) {
       case "start":
-        return "开始考试";
+        return t("examList.actions.start");
       case "resume":
-        return "继续考试";
+        return t("examList.actions.resume");
       case "view_result":
-        return "查看成绩";
+        return t("examList.actions.viewResult");
       case "view_history":
-        return "查看记录";
+        return t("examList.actions.viewHistory");
       default:
         return undefined;
     }
@@ -136,14 +136,22 @@ function ExamCard({
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
             <Clock className="size-3.5" />
-            {exam.durationMinutes}分钟
+            {t("examList.meta.duration", { minutes: exam.durationMinutes })}
           </span>
           <span>
-            及格分: {exam.passingScore}/{exam.totalScore}
+            {t("examList.meta.passingScore", {
+              score: exam.passingScore,
+              total: exam.totalScore,
+            })}
           </span>
-          <span>题目数: {exam.totalQuestions}</span>
           <span>
-            已考: {exam.attemptsUsed}/{exam.maxAttempts}次
+            {t("examList.meta.questionCount", { count: exam.totalQuestions })}
+          </span>
+          <span>
+            {t("examList.meta.attempts", {
+              used: exam.attemptsUsed,
+              max: exam.maxAttempts,
+            })}
           </span>
         </div>
         <div className="text-sm text-muted-foreground">
@@ -170,6 +178,7 @@ function ExamCard({
 
 /** Candidate-facing page that lists all assigned exams grouped by availability status. */
 export function ExamListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [exams, setExams] = useState<CandidateExamSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -185,7 +194,7 @@ export function ExamListPage() {
       );
       setExams(data.filter(Boolean));
     } catch {
-      setError("加载考试列表失败");
+      setError(t("examList.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -225,7 +234,9 @@ export function ExamListPage() {
     <div className="mx-auto max-w-4xl flex flex-col gap-6 p-6">
       {canTake.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">可参加的考试</h2>
+          <h2 className="text-lg font-semibold">
+            {t("examList.sections.canTake")}
+          </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {canTake.map((exam) => (
               <ExamCard
@@ -241,7 +252,9 @@ export function ExamListPage() {
 
       {others.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">历史考试</h2>
+          <h2 className="text-lg font-semibold">
+            {t("examList.sections.history")}
+          </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {others.map((exam) => (
               <ExamCard
@@ -257,7 +270,9 @@ export function ExamListPage() {
 
       {upcoming.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">即将开始</h2>
+          <h2 className="text-lg font-semibold">
+            {t("examList.sections.upcoming")}
+          </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {upcoming.map((exam) => (
               <ExamCard
@@ -274,8 +289,8 @@ export function ExamListPage() {
       {exams.length === 0 && (
         <EmptyState
           icon={<ClipboardList className="size-8" />}
-          title="暂无可参加的考试"
-          description="当前没有可用的考试。"
+          title={t("examList.empty.title")}
+          description={t("examList.empty.description")}
         />
       )}
     </div>

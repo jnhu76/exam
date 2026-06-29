@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { NavLink } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -35,51 +36,115 @@ interface AppSidebarProps {
   onLogout: () => void;
 }
 
-/** Sidebar navigation group definitions (overview, question bank, exams). */
-const groups = [
+/** A navigation item: route + icon + the i18n key for its label. */
+interface NavItem {
+  labelKey: string;
+  to: string;
+  icon: typeof BookOpen;
+  end?: boolean;
+}
+
+/** A navigation group: the i18n key for its heading + its items. */
+interface NavGroup {
+  labelKey: string;
+  items: NavItem[];
+}
+
+/** Sidebar navigation group definitions (overview, question bank, exams).
+ * Labels are i18n keys resolved at render via `t()`; no hardcoded copy. */
+const groups: NavGroup[] = [
   {
-    label: "概览",
+    labelKey: "nav.groups.overview",
     items: [
-      { label: "仪表盘", to: routes.admin.dashboard, icon: LayoutDashboard },
+      {
+        labelKey: "nav.items.dashboard",
+        to: routes.admin.dashboard,
+        icon: LayoutDashboard,
+      },
     ],
   },
   {
-    label: "题库",
+    labelKey: "nav.groups.questionBank",
     items: [
-      { label: "课程管理", to: routes.admin.courses, icon: GraduationCap },
       {
-        label: "题目管理",
+        labelKey: "nav.items.courses",
+        to: routes.admin.courses,
+        icon: GraduationCap,
+      },
+      {
+        labelKey: "nav.items.questions",
         to: routes.admin.questions,
         icon: BookOpen,
         end: true,
       },
-      { label: "题目导入", to: routes.admin.questionsImport, icon: FileUp },
+      {
+        labelKey: "nav.items.questionsImport",
+        to: routes.admin.questionsImport,
+        icon: FileUp,
+      },
     ],
   },
   {
-    label: "考试",
+    labelKey: "nav.groups.exams",
     items: [
       {
-        label: "考试管理",
+        labelKey: "nav.items.exams",
         to: routes.admin.exams,
         icon: ClipboardList,
         end: true,
       },
-      { label: "待评分", to: routes.admin.gradingQueue, icon: ClipboardCheck },
-      { label: "成绩查询", to: routes.admin.results, icon: Gauge },
+      {
+        labelKey: "nav.items.gradingQueue",
+        to: routes.admin.gradingQueue,
+        icon: ClipboardCheck,
+      },
+      {
+        labelKey: "nav.items.results",
+        to: routes.admin.results,
+        icon: Gauge,
+      },
     ],
   },
 ];
 
-/** Sidebar navigation items visible only to Admin-role users. */
-const managementItems = [
-  { label: "用户管理", to: routes.admin.users, icon: UserRoundCog },
-  { label: "考生管理", to: routes.admin.candidates, icon: Users },
-  { label: "导入日志", to: routes.admin.importLogs, icon: Upload },
-  { label: "审计日志", to: routes.admin.auditLogs, icon: ScrollText },
-  { label: "平台设置", to: routes.admin.settings, icon: Settings },
-  { label: "考生字段", to: routes.admin.candidateFields, icon: Tags },
-  { label: "系统监控", to: routes.admin.system, icon: Monitor },
+/** Sidebar navigation items visible only to Admin-role users.
+ * Labels are i18n keys resolved at render via `t()`. */
+const managementItems: NavItem[] = [
+  {
+    labelKey: "nav.items.users",
+    to: routes.admin.users,
+    icon: UserRoundCog,
+  },
+  {
+    labelKey: "nav.items.candidates",
+    to: routes.admin.candidates,
+    icon: Users,
+  },
+  {
+    labelKey: "nav.items.importLogs",
+    to: routes.admin.importLogs,
+    icon: Upload,
+  },
+  {
+    labelKey: "nav.items.auditLogs",
+    to: routes.admin.auditLogs,
+    icon: ScrollText,
+  },
+  {
+    labelKey: "nav.items.settings",
+    to: routes.admin.settings,
+    icon: Settings,
+  },
+  {
+    labelKey: "nav.items.candidateFields",
+    to: routes.admin.candidateFields,
+    icon: Tags,
+  },
+  {
+    labelKey: "nav.items.system",
+    to: routes.admin.system,
+    icon: Monitor,
+  },
 ];
 
 /** A single navigation link in the sidebar with icon and active state styling. */
@@ -88,14 +153,16 @@ function SidebarLink({
   item,
 }: {
   collapsed: boolean;
-  item: { label: string; to: string; icon: typeof BookOpen; end?: boolean };
+  item: NavItem;
 }) {
+  const { t } = useTranslation();
   const Icon = item.icon;
+  const label = t(item.labelKey as never);
   return (
     <NavLink
       to={item.to}
       end={item.end}
-      title={collapsed ? item.label : undefined}
+      title={collapsed ? label : undefined}
       className={({ isActive }) =>
         cn(
           "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
@@ -104,7 +171,7 @@ function SidebarLink({
       }
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      {!collapsed && <span>{item.label}</span>}
+      {!collapsed && <span>{label}</span>}
     </NavLink>
   );
 }
@@ -119,6 +186,7 @@ export function AppSidebar({
   onCollapse,
   onLogout,
 }: AppSidebarProps) {
+  const { t } = useTranslation();
   const showManagement = user.role === Role.Admin;
   const management = managementItems;
 
@@ -152,7 +220,7 @@ export function AppSidebar({
             size="icon"
             className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
             data-testid="sidebar-collapse-button"
-            aria-label="折叠侧栏"
+            aria-label={t("nav.actions.collapse")}
             onClick={onCollapse}
           >
             <ChevronLeft className="size-4" aria-hidden="true" />
@@ -165,7 +233,7 @@ export function AppSidebar({
             size="icon-sm"
             className="text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
             data-testid="sidebar-collapse-button"
-            aria-label="展开侧栏"
+            aria-label={t("nav.actions.expand")}
             onClick={onCollapse}
           >
             <ChevronRight className="size-4" aria-hidden="true" />
@@ -175,10 +243,10 @@ export function AppSidebar({
 
       <nav className="flex-1 flex flex-col gap-1 overflow-y-auto px-2 py-2">
         {groups.map((group, gi) => (
-          <section key={group.label} className="flex flex-col gap-0.5">
+          <section key={group.labelKey} className="flex flex-col gap-0.5">
             {!collapsed && (
               <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
-                {group.label}
+                {t(group.labelKey as never)}
               </p>
             )}
             {gi > 0 && collapsed && <Separator className="my-2" />}
@@ -191,7 +259,7 @@ export function AppSidebar({
           <section className="flex flex-col gap-0.5">
             {!collapsed && (
               <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
-                管理
+                {t("nav.groups.management")}
               </p>
             )}
             {collapsed && <Separator className="my-2" />}
@@ -227,11 +295,13 @@ export function AppSidebar({
           variant="ghost"
           size="sm"
           className="mt-1 w-full justify-center text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
-          aria-label="退出登录"
+          aria-label={t("nav.actions.logout")}
           onClick={onLogout}
         >
           <LogOut className="size-4" aria-hidden="true" />
-          {!collapsed && <span className="ml-2">退出</span>}
+          {!collapsed && (
+            <span className="ml-2">{t("nav.actions.logoutShort")}</span>
+          )}
         </Button>
       </div>
     </aside>
