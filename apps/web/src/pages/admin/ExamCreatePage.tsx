@@ -32,7 +32,7 @@ import {
 } from "@/components/exam/ExamConfigForm";
 import { Separator } from "@/components/ui/separator";
 import { BookOpen, Trash2 } from "lucide-react";
-import { TYPE_LABELS } from "@/lib/constants";
+import { getTypeLabel } from "@/lib/constants";
 
 /** A course record used in the course selector dropdown. */
 /** Minimal course representation used in the exam creation form. */
@@ -276,7 +276,7 @@ export function ExamCreatePage() {
                   <TableRow key={q.id}>
                     <TableCell>
                       <Badge variant="outline">
-                        {TYPE_LABELS[q.type] ?? q.type}
+                        {getTypeLabel(q.type, t) ?? q.type}
                       </Badge>
                     </TableCell>
                     <TableCell className="max-w-[250px] truncate">
@@ -353,7 +353,7 @@ export function ExamCreatePage() {
                 <TableRow key={q.id}>
                   <TableCell>
                     <Badge variant="outline">
-                      {TYPE_LABELS[q.type] ?? q.type}
+                      {getTypeLabel(q.type, t) ?? q.type}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate">

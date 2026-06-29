@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import i18n from "i18next";
+import i18n from "@/i18n";
 
 /** Merges Tailwind CSS class names, deduplicating and resolving conflicts. */
 export function cn(...inputs: ClassValue[]) {

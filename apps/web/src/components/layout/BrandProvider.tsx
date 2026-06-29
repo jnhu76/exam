@@ -18,8 +18,12 @@ import { api } from "@/lib/api";
  * overrides this; external config (orgDisplayName) also takes priority.
  */
 const fallbackBranding: BrandingView = {
-  productName: i18n.t("branding.defaultName" as never),
-  productSubtitle: i18n.t("branding.defaultDescription" as never),
+  get productName() {
+    return i18n.t("branding.defaultName" as never);
+  },
+  get productSubtitle() {
+    return i18n.t("branding.defaultDescription" as never);
+  },
 };
 
 const BrandingContext = createContext<BrandingView>(fallbackBranding);

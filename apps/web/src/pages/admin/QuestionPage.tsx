@@ -40,7 +40,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { TYPE_LABELS, TYPE_VARIANT } from "@/lib/constants";
+import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 
 /** Row shape returned by the questions list API. */
 /** A question record for the admin question list table. */
@@ -384,7 +384,7 @@ export function QuestionPage() {
                 <TableRow key={q.id}>
                   <TableCell>
                     <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
-                      {TYPE_LABELS[q.type] ?? q.type}
+                      {getTypeLabel(q.type, t) ?? q.type}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate">
