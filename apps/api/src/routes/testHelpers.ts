@@ -8,6 +8,7 @@ import tenantPlugin from "../plugins/tenant.js";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import nowPlugin from "../plugins/now.js";
 import zodProviderPlugin from "../plugins/zodProvider.js";
+import emailPlugin from "../plugins/email.js";
 import { setupErrorHandler } from "../plugins/errors.js";
 import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -226,6 +227,9 @@ async function finishBuildTestApp(args: {
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(tenantPlugin);
+  // Email sender is built from runtime config (M3). Tests that need to drive
+  // transport selection stub env + resetRuntimeConfigForTest before building.
+  await app.register(emailPlugin);
   if (opts?.rateLimit) {
     await app.register(rateLimitPlugin);
   }

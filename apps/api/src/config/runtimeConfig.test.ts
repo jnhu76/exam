@@ -39,6 +39,24 @@ const ENV_KEYS = [
   "RATE_LIMIT_WINDOW_MS",
   "RATE_LIMIT_DISABLED",
   "APP_TIMEZONE",
+  "EMAIL_ENABLED",
+  "EMAIL_TRANSPORT",
+  "EMAIL_FROM",
+  "EMAIL_FROM_NAME",
+  "EMAIL_MAX_ATTEMPTS",
+  "EMAIL_RETRY_BASE_SECONDS",
+  "EMAIL_FAKE_MODE",
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_SECURE",
+  "SMTP_USER",
+  "SMTP_PASSWORD",
+  "SMTP_REQUIRE_TLS",
+  "SMTP_TLS_REJECT_UNAUTHORIZED",
+  "SMTP_TLS_SERVERNAME",
+  "SMTP_CONNECTION_TIMEOUT_MS",
+  "SMTP_GREETING_TIMEOUT_MS",
+  "SMTP_SOCKET_TIMEOUT_MS",
 ] as const;
 
 describe("runtimeConfig", () => {
@@ -898,6 +916,127 @@ describe("runtimeConfig", () => {
       );
       expect(compose).toMatch(/TZ:\s*\$\{TZ:-Asia\/Shanghai\}/);
       expect(compose).toMatch(/PGTZ:\s*\$\{APP_TIMEZONE:-Asia\/Shanghai\}/);
+    });
+  });
+
+  describe("email config", () => {
+    it("defaults to disabled + fake transport + success fake mode + safe TLS", () => {
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.email.enabled).toBe(false);
+      expect(config.email.transport).toBe("fake");
+      expect(config.email.fakeMode).toBe("success");
+      expect(config.email.from).toBe("no-reply@example.local");
+      expect(config.email.fromName).toBe("Exam Platform");
+      expect(config.email.maxAttempts).toBe(3);
+      expect(config.email.retryBaseSeconds).toBe(60);
+      expect(config.email.smtp).toBeNull();
+    });
+
+    it("enabled=true + transport=fake parses without SMTP config", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "fake";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.email.enabled).toBe(true);
+      expect(config.email.transport).toBe("fake");
+      expect(config.email.smtp).toBeNull();
+    });
+
+    it("enabled=true + transport=smtp parses a full SMTP config", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "smtp";
+      process.env.SMTP_HOST = "smtp.example.com";
+      process.env.SMTP_PORT = "587";
+      process.env.SMTP_SECURE = "false";
+      process.env.SMTP_USER = "u";
+      process.env.SMTP_PASSWORD = "p";
+      process.env.SMTP_REQUIRE_TLS = "true";
+      process.env.SMTP_TLS_REJECT_UNAUTHORIZED = "true";
+      process.env.SMTP_TLS_SERVERNAME = "";
+      process.env.SMTP_CONNECTION_TIMEOUT_MS = "10000";
+      process.env.SMTP_GREETING_TIMEOUT_MS = "10000";
+      process.env.SMTP_SOCKET_TIMEOUT_MS = "10000";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.email.transport).toBe("smtp");
+      expect(config.email.smtp).toMatchObject({
+        host: "smtp.example.com",
+        port: 587,
+        secure: false,
+        user: "u",
+        password: "p",
+        requireTls: true,
+        tlsRejectUnauthorized: true,
+        tlsServername: null,
+        connectionTimeoutMs: 10000,
+        greetingTimeoutMs: 10000,
+        socketTimeoutMs: 10000,
+      });
+    });
+
+    it("fails fast on an unsupported EMAIL_TRANSPORT", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "ses";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("fails fast when transport=smtp but SMTP_HOST is missing", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "smtp";
+      delete process.env.SMTP_HOST;
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow(/SMTP_HOST/);
+    });
+
+    it("fails fast on a non-numeric SMTP_PORT", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "smtp";
+      process.env.SMTP_HOST = "smtp.example.com";
+      process.env.SMTP_PORT = "not-a-port";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("fails fast on a non-boolean SMTP_SECURE", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "smtp";
+      process.env.SMTP_HOST = "smtp.example.com";
+      process.env.SMTP_PORT = "587";
+      process.env.SMTP_SECURE = "yes";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("fails fast on an unsupported EMAIL_FAKE_MODE", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "fake";
+      process.env.EMAIL_FAKE_MODE = "maybe";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("fails fast when EMAIL_MAX_ATTEMPTS < 1", () => {
+      process.env.EMAIL_MAX_ATTEMPTS = "0";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("fails fast when EMAIL_RETRY_BASE_SECONDS < 1", () => {
+      process.env.EMAIL_RETRY_BASE_SECONDS = "0";
+      resetRuntimeConfigForTest();
+      expect(() => getRuntimeConfig()).toThrow();
+    });
+
+    it("tlsServername is parsed when set, null when empty", () => {
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "smtp";
+      process.env.SMTP_HOST = "smtp.example.com";
+      process.env.SMTP_TLS_SERVERNAME = "smtp.real.com";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.email.smtp?.tlsServername).toBe("smtp.real.com");
     });
   });
 });

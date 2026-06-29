@@ -104,6 +104,42 @@ export interface HeartbeatConfig {
   timeoutMs: number;
 }
 
+/** Email transport selection (M3 — Email Outbox). */
+export type EmailTransport = "fake" | "smtp";
+/** Fake-sender deterministic behavior (M3 — tests/dev only). */
+export type EmailFakeMode = "success" | "failure";
+
+/** SMTP-specific options. Present only when transport is `smtp`. */
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
+  requireTls: boolean;
+  tlsRejectUnauthorized: boolean;
+  tlsServername: string | null;
+  connectionTimeoutMs: number;
+  greetingTimeoutMs: number;
+  socketTimeoutMs: number;
+}
+
+/**
+ * Email runtime config (M3). Disabled by default so a bare deployment sends
+ * nothing, needs no SMTP secret, and touches no network. See
+ * `docs/phase3/jobs/email.md`.
+ */
+export interface EmailConfig {
+  enabled: boolean;
+  transport: EmailTransport;
+  from: string;
+  fromName: string;
+  fakeMode: EmailFakeMode;
+  maxAttempts: number;
+  retryBaseSeconds: number;
+  smtp: SmtpConfig | null;
+}
+
 export interface AppRuntimeConfig {
   app: {
     mode: AppMode;
@@ -126,6 +162,7 @@ export interface AppRuntimeConfig {
   rateLimit: RateLimitConfig;
   security: SecurityConfig;
   timezone: TimezoneConfig;
+  email: EmailConfig;
 }
 
 const DEFAULT_JWT_SECRET = "development-only-change-me";
@@ -360,6 +397,110 @@ function resolveRedisUrl(env: NodeJS.ProcessEnv): string | null {
 }
 
 /**
+ * Parse a boolean env value strictly: only `"true"` and `"false"` (case-
+ * sensitive) are accepted. Anything else throws, so a misconfigured boolean
+ * fails fast rather than silently coercing.
+ */
+function parseStrictBool(value: string | undefined, name: string): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new RuntimeConfigError(
+    `${name} must be "true" or "false" (got: ${String(value)})`,
+  );
+}
+
+/**
+ * Resolve the email runtime config from env (M3 — Email Outbox).
+ *
+ * Defaults are safe: disabled, fake transport, success fake mode, and (when
+ * SMTP is configured) TLS-required + certificate-validation-on. Invalid
+ * combinations fail fast: unsupported transport/fakeMode, non-numeric port,
+ * non-boolean secure, smtp transport without SMTP_HOST, and out-of-range
+ * maxAttempts / retryBaseSeconds.
+ *
+ * Note: `SMTP_TLS_REJECT_UNAUTHORIZED=false` in production is a security risk;
+ * this resolver surfaces it but does NOT hard-fail (per job spec it may warn).
+ * Hard enforcement is left to the SMTP sender / deployment policy.
+ *
+ * @param env - Process environment to read from.
+ * @returns The resolved {@link EmailConfig}.
+ */
+function resolveEmailConfig(env: NodeJS.ProcessEnv): EmailConfig {
+  const enabled = isTruthy(env.EMAIL_ENABLED);
+  const transportRaw = (env.EMAIL_TRANSPORT ?? "fake").trim();
+  if (transportRaw !== "fake" && transportRaw !== "smtp") {
+    throw new RuntimeConfigError(
+      `EMAIL_TRANSPORT must be "fake" or "smtp" (got: ${transportRaw})`,
+    );
+  }
+  const fakeModeRaw = (env.EMAIL_FAKE_MODE ?? "success").trim();
+  if (fakeModeRaw !== "success" && fakeModeRaw !== "failure") {
+    throw new RuntimeConfigError(
+      `EMAIL_FAKE_MODE must be "success" or "failure" (got: ${fakeModeRaw})`,
+    );
+  }
+
+  const maxAttempts = positiveIntSchema.parse(env.EMAIL_MAX_ATTEMPTS ?? "3");
+  const retryBaseSeconds = positiveIntSchema.parse(
+    env.EMAIL_RETRY_BASE_SECONDS ?? "60",
+  );
+
+  let smtp: SmtpConfig | null = null;
+  if (transportRaw === "smtp") {
+    const host = (env.SMTP_HOST ?? "").trim();
+    if (host.length === 0) {
+      throw new RuntimeConfigError(
+        "EMAIL_TRANSPORT=smtp requires SMTP_HOST to be set",
+      );
+    }
+    const port = positiveIntSchema.parse(env.SMTP_PORT ?? "587");
+    const secure = parseStrictBool(env.SMTP_SECURE ?? "false", "SMTP_SECURE");
+    const requireTls = parseStrictBool(
+      env.SMTP_REQUIRE_TLS ?? "true",
+      "SMTP_REQUIRE_TLS",
+    );
+    const tlsRejectUnauthorized = parseStrictBool(
+      env.SMTP_TLS_REJECT_UNAUTHORIZED ?? "true",
+      "SMTP_TLS_REJECT_UNAUTHORIZED",
+    );
+    const servernameRaw = (env.SMTP_TLS_SERVERNAME ?? "").trim();
+    const connectionTimeoutMs = positiveIntSchema.parse(
+      env.SMTP_CONNECTION_TIMEOUT_MS ?? "10000",
+    );
+    const greetingTimeoutMs = positiveIntSchema.parse(
+      env.SMTP_GREETING_TIMEOUT_MS ?? "10000",
+    );
+    const socketTimeoutMs = positiveIntSchema.parse(
+      env.SMTP_SOCKET_TIMEOUT_MS ?? "10000",
+    );
+    smtp = {
+      host,
+      port,
+      secure,
+      user: env.SMTP_USER ?? "",
+      password: env.SMTP_PASSWORD ?? "",
+      requireTls,
+      tlsRejectUnauthorized,
+      tlsServername: servernameRaw.length > 0 ? servernameRaw : null,
+      connectionTimeoutMs,
+      greetingTimeoutMs,
+      socketTimeoutMs,
+    };
+  }
+
+  return {
+    enabled,
+    transport: transportRaw,
+    from: (env.EMAIL_FROM ?? "no-reply@example.local").trim(),
+    fromName: (env.EMAIL_FROM_NAME ?? "Exam Platform").trim(),
+    fakeMode: fakeModeRaw,
+    maxAttempts,
+    retryBaseSeconds,
+    smtp,
+  };
+}
+
+/**
  * Pure function: build config from an explicit env object.
  * All validation and fail-fast logic lives here.
  */
@@ -432,6 +573,7 @@ export function loadRuntimeConfig(
       cspEnabled: true,
     },
     timezone: { timezone: resolveTimezone(env) },
+    email: resolveEmailConfig(env),
   };
 }
 

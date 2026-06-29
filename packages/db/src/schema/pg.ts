@@ -2,6 +2,8 @@ import type {
   AnswerRecord,
   Attachment,
   ControlFlags,
+  EmailOutboxStatus,
+  EmailType,
   GradingRule,
   GradingStatus,
   MisconductFlag,
@@ -507,6 +509,62 @@ export const clientEvents = pgTable(
   ],
 );
 
+/**
+ * Email outbox table — persistent queue of emails to be sent by the email
+ * worker (M3 — Email Outbox + SMTP Backend Foundation).
+ *
+ * The outbox pattern: business transactions only INSERT rows here; a separate
+ * worker (`EmailOutboxService.processDueEmails`) reads due `pending` rows and
+ * sends them via an `EmailSender`. Email failure is therefore asynchronous to
+ * the business transaction and can never roll it back.
+ *
+ * Status lifecycle: `pending` -> `sent` | `pending`(retry) | `failed`.
+ * `nextRetryAt` is null for first-attempt rows and for terminal (`sent`/
+ * `failed`) rows; it is set on retry-scheduled rows using exponential backoff.
+ */
+export const emailOutbox = pgTable(
+  "email_outbox",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    type: text("type").$type<EmailType>().notNull(),
+    recipientEmail: text("recipient_email").notNull(),
+    subject: text("subject").notNull(),
+    bodyText: text("body_text").notNull(),
+    bodyHtml: text("body_html"),
+    status: text("status").$type<EmailOutboxStatus>().notNull(),
+    attempts: integer("attempts").notNull(),
+    maxAttempts: integer("max_attempts").notNull(),
+    lastError: text("last_error"),
+    nextRetryAt: timestamp("next_retry_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    sentAt: timestamp("sent_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    // Worker's primary query: due pending rows, oldest first, within an org.
+    // Covers the `status = 'pending' AND (next_retry_at IS NULL OR ...)`
+    // access path. The org prefix keeps the single-tenant data boundary.
+    index("email_outbox_org_status_retry_idx").on(
+      table.organizationId,
+      table.status,
+      table.nextRetryAt,
+    ),
+    index("email_outbox_org_created_at_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    check("email_outbox_attempts_check", sql`${table.attempts} >= 0`),
+    check("email_outbox_max_attempts_check", sql`${table.maxAttempts} >= 1`),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -523,4 +581,5 @@ export const schema = {
   auditLogs,
   clientEvents,
   importJobLogs,
+  emailOutbox,
 };

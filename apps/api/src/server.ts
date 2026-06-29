@@ -14,6 +14,7 @@ import tenantPlugin from "./plugins/tenant.js";
 import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
 import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
+import emailPlugin from "./plugins/email.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import authRoutes from "./routes/auth.js";
@@ -32,6 +33,7 @@ import auditRoutes from "./routes/audit.js";
 import importLogRoutes from "./routes/importLogs.js";
 import clientEventRoutes from "./routes/clientEvents.js";
 import proctorMonitoringRoutes from "./routes/proctorMonitoring.js";
+import { emailRoutes } from "./routes/email.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
@@ -62,6 +64,7 @@ async function main() {
   await app.register(rateLimitPlugin);
   await app.register(heartbeatPlugin);
   await app.register(deadlineScannerPlugin);
+  await app.register(emailPlugin);
 
   await registerOpenApiDocs(app);
 
@@ -91,6 +94,7 @@ async function main() {
   await app.register(importLogRoutes, { prefix: "/api" });
   await app.register(clientEventRoutes, { prefix: "/api" });
   await app.register(proctorMonitoringRoutes, { prefix: "/api" });
+  await app.register(emailRoutes, { prefix: "/api" });
 
   const publicDir = resolve(
     fileURLToPath(new URL("../public", import.meta.url)),
