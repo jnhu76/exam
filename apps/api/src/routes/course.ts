@@ -54,7 +54,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** List courses with pagination. Returns paginated course items. */
     async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCourseRepo(fastify.db);
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
@@ -90,7 +90,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Get a single course by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createCourseRepo(fastify.db);
       const course = await repo.findById(ctx, id);
@@ -124,7 +124,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Create a new course. Returns 409 if the course code already exists. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const data = CreateCourseRequestSchema.parse(request.body);
       const repo = createCourseRepo(fastify.db);
 
@@ -175,7 +175,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Update an existing course by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const data = UpdateCourseRequestSchema.parse(request.body);
       const repo = createCourseRepo(fastify.db);
@@ -219,7 +219,7 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Delete a course by ID. Returns 409 if the course still contains questions, 404 if not found. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createCourseRepo(fastify.db);
       const questionCount = await createQuestionRepo(

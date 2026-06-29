@@ -5,7 +5,6 @@ import {
   sanitizeClientEvent,
   type ClientEventBatchResponse,
 } from "@exam/contracts";
-import type { RequestContext } from "@exam/domain";
 import { createClientEventRepo } from "@exam/db/src/repository/clientEventRepo.js";
 
 /**
@@ -55,7 +54,7 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request): Promise<ClientEventBatchResponse> => {
-      const ctx = request.ctx as RequestContext;
+      const ctx = request.ctx!;
       // Re-parse defensively so handler logic gets a typed value regardless
       // of the provider's runtime inference; matches the course/exam route
       // convention. The provider already rejected invalid bodies with 400.

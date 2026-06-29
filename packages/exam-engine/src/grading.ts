@@ -176,7 +176,15 @@ export async function finalizeGrading(
     throw new ValidationError("Failed to persist graded results");
   }
 
-  const enrollment = await enrollmentRepo.findByExamAndCandidate(
+  // Lock the enrollment row (`FOR UPDATE`) in the SAME transaction the caller
+  // wrapped us in (submitAndGradeAttempt, autoSubmitAndGrade, admin
+  // force-submit, gradingQueue all pass tx-scoped repos). This serializes
+  // concurrent finalization of different attempts on the same enrollment: a
+  // second transaction cannot read the enrollment's finalScore/finalAttemptId
+  // until the first commits. Recomputing `shouldSelectAttempt` against the
+  // locked enrollment therefore defeats the last-writer-wins race where two
+  // attempts otherwise each see the pre-existing finalScore and both overwrite.
+  const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
     attempt.examId,
     attempt.candidateId,
   );

@@ -50,14 +50,15 @@ archive/
 
 当前活跃文档位于 `docs/` 根目录或对应活跃子目录：
 
+- `docs/CURRENT.md` — 当前活跃文档索引
 - `docs/SPEC.md` — 产品规范（权威）
 - `docs/phase-roadmap.md` — Phase 1/2/3/4 路线权威
 - `docs/code-quality.md` — 代码质量指南
 - `docs/api/reference.md` — API 参考
+- `docs/api/contract.md` — API 契约
 - `docs/import-export-format.md` — CSV 导入导出格式
 - `docs/mock-data.md` — Mock 数据
-- `docs/operation-manual.md` — Phase 1 操作手册
-- `docs/phase2/` — Phase 2 Exam Operation 规划文档
+- `docs/dev/i18n-copy-policy.md` — i18n 文案策略
 
 ## 归档时间
 

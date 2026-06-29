@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { ErrorResponseSchema } from "@exam/contracts";
-import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
@@ -48,7 +47,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const { id: examId } = request.params as { id: string };
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
 
       const examRepo = createExamRepo(fastify.db);
       const exam = await examRepo.findById(ctx, examId);

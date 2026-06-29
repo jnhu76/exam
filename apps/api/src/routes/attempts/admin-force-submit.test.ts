@@ -366,11 +366,15 @@ describe("attempt routes", () => {
       expect(forceSubmitCount).toBe(1);
     });
 
-    it("is idempotent for an already-submitted attempt (200, no re-grade)", async () => {
+    it("recovers a submitted-but-not-graded attempt to graded in one tx (no submitted-only state)", async () => {
+      // Crash-recovery contract (single-tx submit+grade): an attempt left
+      // `submitted` by a crashed earlier operation is recovered to `graded`
+      // by a force-submit, with no audit row (no state *transition* off the
+      // in_progress/disrupted baseline — only grading completes).
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
-        "Force Submit Idempotent Submitted Exam",
+        "Force Submit Recovery Submitted Exam",
       );
       await ctx.db
         .update(schema.examAttempts)
@@ -385,12 +389,24 @@ describe("attempt routes", () => {
       });
 
       expect(res.statusCode).toBe(200);
+      expect(res.json().status).toBe("graded");
       const after = await createAttemptRepo(ctx.db).findById(
         makeAdminCtx(t),
         attemptId,
       );
-      expect(after?.status).toBe("submitted");
-      expect(after?.gradedAt).toBeNull();
+      expect(after?.status).toBe("graded");
+      expect(after?.gradedAt).not.toBeNull();
+
+      // No real submit transition occurred (the row was already submitted), so
+      // no forceSubmit audit row is emitted.
+      const auditRows = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      const forceSubmitCount = auditRows.filter(
+        (r) => r.action === "attempt.forceSubmit",
+      ).length;
+      expect(forceSubmitCount).toBe(0);
     });
 
     it("is idempotent for a grading attempt (200, no re-grade)", async () => {

@@ -32,7 +32,7 @@ Phase 1 代码质量目标：
 | Vitest                     | Unit/integration test      |
 | Vitest coverage v8         | Coverage                   |
 | Playwright                 | E2E/smoke test             |
-| Lefthook                   | Git hooks                  |
+| Husky                     | Git hooks                  |
 | turbo                      | Monorepo runner            |
 | dependency-cruiser         | Architecture boundary lint |
 | pnpm                       | Package manager            |
@@ -506,21 +506,26 @@ pnpm --filter @exam/db test   # DB repository tests (in-memory)
 
 ## 14. Pre-commit / Pre-push Hooks
 
-使用 Lefthook：
+使用 Husky（`.husky/` 目录，`package.json` 的 `prepare` 脚本自动安装）。实际钩子内容以 `.husky/` 为准；下表是当前配置：
 
-### pre-commit
+### pre-commit (`.husky/pre-commit`)
 
 ```bash
-pnpm format:check
-pnpm lint
+pnpm exec lint-staged   # Prettier --write on staged files
+pnpm lint:copy          # hardcoded copy guard
+pnpm lint:arch          # architecture boundary lint
+```
+
+### pre-push (`.husky/pre-push`)
+
+```bash
 pnpm typecheck
 ```
 
-### pre-push
+### commit-msg (`.husky/commit-msg`)
 
 ```bash
-pnpm test
-pnpm coverage
+pnpm exec commitlint --edit "$1"   # Conventional Commits 校验
 ```
 
 ---
