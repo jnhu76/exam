@@ -7,7 +7,7 @@ import {
 } from "@exam/contracts";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
@@ -59,7 +59,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
      * Returns candidate fields ordered by their stored sort order.
      */
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const repo = createCandidateFieldRepo(fastify.db);
       const fields = await repo.list(ctx);
       return fields.map((f) => ({
@@ -87,7 +87,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
      * the new field is also marked unique.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateCandidateFieldRequestSchema.parse(request.body);
       const repo = createCandidateFieldRepo(fastify.db);
       if (data.unique && (await repo.list(ctx)).some((field) => field.unique)) {
@@ -136,7 +136,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
      * unique would conflict with another existing identity field.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateCandidateFieldRequestSchema.parse(request.body);
       const repo = createCandidateFieldRepo(fastify.db);
@@ -197,7 +197,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
      * candidates without an identity. Returns 404 if not found.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const repo = createCandidateFieldRepo(fastify.db);
       const field = await repo.findById(ctx, id);
@@ -244,7 +244,7 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
      * username, password, name, followed by configured custom field names.
      */
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const fields = (
         await createCandidateFieldRepo(fastify.db).list(ctx)
       ).sort((a, b) => a.sortOrder - b.sortOrder);

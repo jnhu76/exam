@@ -6,6 +6,7 @@ import {
   type ClientEventBatchResponse,
 } from "@exam/contracts";
 import { createClientEventRepo } from "@exam/db/src/repository/clientEventRepo.js";
+import { getRequestContext } from "./helpers.js";
 
 /**
  * Maximum length of the persisted `user_agent` column. Browsers can send
@@ -54,7 +55,7 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request): Promise<ClientEventBatchResponse> => {
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       // Re-parse defensively so handler logic gets a typed value regardless
       // of the provider's runtime inference; matches the course/exam route
       // convention. The provider already rejected invalid bodies with 400.

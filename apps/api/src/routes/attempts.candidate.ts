@@ -51,7 +51,7 @@ import {
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { recordAudit } from "./audit.js";
-import { formatZodError } from "./helpers.js";
+import { formatZodError, getRequestContext } from "./helpers.js";
 import { reconcileExamForRead } from "./reconciliation.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
 
@@ -364,7 +364,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       },
     },
     async (request) => {
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const candidateRepo = createCandidateRepo(fastify.db);
       const candidateProfile = await candidateRepo.findByUserId(
         ctx,
@@ -502,7 +502,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       // ADR-006: one operation now, threaded through the whole request.
       const now = fastify.now();
@@ -583,7 +583,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const exam = (await createExamRepo(fastify.db).findById(
         ctx,
@@ -621,7 +621,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const { examId } = parsed.data;
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
@@ -732,7 +732,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const attempt = await getOwnedAttempt(fastify, ctx, parsed.data.id);
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt, fastify.now()),
@@ -773,7 +773,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           .code(400)
           .send(formatZodError(request.id, parsedBody.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const { attemptId, questionId } = parsedParams.data;
       // ADR-006: one operation now for the whole save-answer request, reused
       // by the answer protocol and the heartbeat lastActivityAt stamp.
@@ -927,7 +927,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const { attemptId } = parsed.data;
 
       const candidateProfile = await createCandidateRepo(
@@ -983,7 +983,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const { attemptId } = parsed.data;
       // ADR-006: one operation now for the heartbeat — used for both the
       // lastActivityAt stamp and the returned serverNow so they cannot drift.
@@ -1028,7 +1028,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const { attemptId } = parsed.data;
       await getOwnedAttempt(fastify, ctx, attemptId);
 

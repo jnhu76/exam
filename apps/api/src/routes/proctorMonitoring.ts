@@ -5,7 +5,7 @@ import {
   ProctorAttemptEventListResponseSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import {
   buildProctorAttemptStatuses,
@@ -64,7 +64,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { examId } = examIdParamsSchema.parse(request.params);
       const items = await buildProctorAttemptStatuses(
         fastify.db,
@@ -103,7 +103,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = attemptEventsParamsSchema.parse(request.params);
       const { limit, page } = attemptEventsQuerySchema.parse(request.query);
 

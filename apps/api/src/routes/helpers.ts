@@ -1,8 +1,24 @@
 import type { RequestContext } from "@exam/domain";
+import type { FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { ZodError } from "zod";
 import { ImportJobLogStatusEnum } from "@exam/contracts";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+
+/**
+ * Extracts the typed `RequestContext` from an authenticated Fastify request.
+ * Throws if `ctx` is absent (i.e. the route was reached without authentication).
+ * Use this instead of `request.ctx!` to get a runtime guard plus type narrowing.
+ */
+export function getRequestContext(request: FastifyRequest): RequestContext {
+  const ctx = request.ctx;
+  if (!ctx) {
+    throw new Error(
+      "Request context not available — authenticate preHandler missing?",
+    );
+  }
+  return ctx;
+}
 
 /**
  * Import job status values persisted to `import_job_logs`, derived from the

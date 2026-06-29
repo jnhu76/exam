@@ -135,10 +135,15 @@ jobs:
         run: pnpm build
 
   e2e:
-    name: E2E (Playwright Chromium)
+    name: E2E (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: static
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2]
+        shardTotal: [2]
 
     services:
       postgres:
@@ -222,9 +227,21 @@ jobs:
           curl -fsS http://localhost:3000/login | grep -q '<!doctype html\|<!DOCTYPE html\|<html' || (echo "SPA fallback not working: /login did not return HTML" && cat server.log && exit 1)
           echo "SPA fallback verified: /login returns HTML"
 
-      - name: Run E2E tests
-        run: pnpm --filter @exam/e2e test:e2e
-        continue-on-error: false
+      - name: Run E2E tests (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
+        run: pnpm --filter @exam/e2e test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        env:
+          # Triggers blob reporter in playwright.config.ts (→ merge-reports).
+          E2E_SHARD_TOTAL: ${{ matrix.shardTotal }}
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: blob-report-${{ matrix.shardIndex }}
+          path: apps/e2e/blob-report/
+          retention-days: 1
+          if-no-files-found: ignore
 
       - name: Stop servers
         if: always()
@@ -235,7 +252,7 @@ jobs:
         if: failure()
         run: |
           {
-            echo "## E2E Failure Summary"
+            echo "## E2E Failure Summary (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})"
             echo ""
             echo "### Server log tail"
             echo '```text'
@@ -291,7 +308,55 @@ jobs:
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
-          name: e2e-failure-diagnostics
+          name: e2e-failure-diagnostics-${{ matrix.shardIndex }}
           path: e2e-diagnostics/
           retention-days: 1
+          if-no-files-found: ignore
+
+  e2e-merge:
+    name: Merge E2E reports
+    if: ${{ !cancelled() }}
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: "11"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports from all shards
+        uses: actions/download-artifact@v4
+        with:
+          path: apps/e2e/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into HTML report
+        working-directory: apps/e2e
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+
+      - name: Upload merged HTML report
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: playwright-html-report
+          path: apps/e2e/playwright-report/
+          retention-days: 14
           if-no-files-found: ignore

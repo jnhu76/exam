@@ -18,7 +18,7 @@
 | `phase2-baseline.md` | Phase 2 implementation baseline |
 | `phase2-closeout-report.md` | Phase 2 closeout report with i18n status |
 | `i18n-copy-policy.md` | i18n copy rules and gate documentation |
-| `observability-convention.md` | Logging, audit, trace conventions |
+| `observability-contract.md` | Logging, audit, trace conventions |
 | `redis-baseline.md` | Redis optional infrastructure baseline |
 
 ## Do NOT read

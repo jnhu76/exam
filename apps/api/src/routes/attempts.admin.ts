@@ -32,7 +32,11 @@ import {
   createAttemptRepoAdapter,
   createExamEngineRepos,
 } from "../adapters/repoAdapters.js";
-import { ensureTargetOrg, formatZodError } from "./helpers.js";
+import {
+  ensureTargetOrg,
+  formatZodError,
+  getRequestContext,
+} from "./helpers.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
 
 /**
@@ -72,7 +76,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
       const { severity, notes } = body.data;
 
@@ -146,12 +150,12 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
       const reason = body.data.reason;
       // ADR-006: capture ONE operation `now` and thread it through submit +
       // grading so the two timestamps agree within this request. (fastify.now()
-      // defaults to `new Date()`, so calling it twice could otherwise yield
+      // defaults to the wall clock, so calling it twice could otherwise yield
       // slightly different submit/grade instants.)
       const now = fastify.now();
 
@@ -290,7 +294,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
       const { additionalMinutes } = body.data;
 
@@ -371,7 +375,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
 
       const attemptRepo = createAttemptRepo(fastify.db);
@@ -428,7 +432,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
 
       const exportData = await buildAttemptExport(fastify, ctx, attemptId);
@@ -468,7 +472,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
 
       const exportData = await buildAttemptExport(fastify, ctx, attemptId);
