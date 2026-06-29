@@ -149,6 +149,11 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = parsed.data;
       const reason = body.data.reason;
+      // ADR-006: capture ONE operation `now` and thread it through submit +
+      // grading so the two timestamps agree within this request. (fastify.now()
+      // defaults to `new Date()`, so calling it twice could otherwise yield
+      // slightly different submit/grade instants.)
+      const now = fastify.now();
 
       // Submit + grade in ONE transaction so there is no submitted-but-not-graded
       // crash window. Matches `autoSubmitAndGrade` / `submitAndGradeAttempt`:
@@ -189,7 +194,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
             // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
             // guard (source = "proctor" — the SubmitSource for admin/proctor
             // intervention; "admin" is not a valid SubmitSource value).
-            await submitAttempt(attempts, attemptId, fastify.now(), {
+            await submitAttempt(attempts, attemptId, now, {
               source: "proctor",
             });
           }
@@ -206,7 +211,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
               enrollments,
               attempts,
               attemptId,
-              fastify.now(),
+              now,
             );
           }
 
