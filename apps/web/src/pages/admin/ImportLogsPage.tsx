@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -28,26 +29,36 @@ import type { ImportJobLog, ImportLogListResponse } from "@exam/contracts";
 type ImportLogResponse = ImportLogListResponse;
 
 const TYPE_FILTERS = [
-  { value: "all", label: "全部类型" },
-  { value: "candidate", label: "考生导入" },
-  { value: "question", label: "题目导入" },
+  { value: "all", labelKey: "admin.importLogs.typeFilters.all" },
+  { value: "candidate", labelKey: "admin.importLogs.typeFilters.candidate" },
+  { value: "question", labelKey: "admin.importLogs.typeFilters.question" },
 ];
 
 const TYPE_LABELS: Record<string, string> = {
-  candidate: "考生导入",
-  question: "题目导入",
+  candidate: "admin.importLogs.typeLabels.candidate",
+  question: "admin.importLogs.typeLabels.question",
 };
 
 const STATUS_CONFIG: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" }
+  { labelKey: string; variant: "default" | "secondary" | "destructive" }
 > = {
-  completed: { label: "完成", variant: "default" },
-  partial: { label: "部分成功", variant: "secondary" },
-  failed: { label: "失败", variant: "destructive" },
+  completed: {
+    labelKey: "admin.importLogs.statusConfig.completed",
+    variant: "default",
+  },
+  partial: {
+    labelKey: "admin.importLogs.statusConfig.partial",
+    variant: "secondary",
+  },
+  failed: {
+    labelKey: "admin.importLogs.statusConfig.failed",
+    variant: "destructive",
+  },
 };
 
 export function ImportLogsPage() {
+  const { t } = useTranslation();
   const [data, setData] = useState<ImportLogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +88,7 @@ export function ImportLogsPage() {
       );
       setData(result);
     } catch {
-      setError("加载导入日志失败");
+      setError(t("admin.importLogs.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -95,13 +106,13 @@ export function ImportLogsPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          title="导入日志"
-          description="查看考生和题目导入的历史记录"
+          title={t("admin.importLogs.title")}
+          description={t("admin.importLogs.description")}
         />
         <EmptyState
           icon={<Upload className="size-8" />}
-          title="暂无导入日志"
-          description="导入操作后将自动记录在此"
+          title={t("admin.importLogs.empty")}
+          description={t("admin.importLogs.emptyDescription")}
         />
       </div>
     );
@@ -109,7 +120,10 @@ export function ImportLogsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="导入日志" description="查看考生和题目导入的历史记录" />
+      <PageHeader
+        title={t("admin.importLogs.title")}
+        description={t("admin.importLogs.description")}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <Select
           value={typeFilter}
@@ -118,13 +132,16 @@ export function ImportLogsPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[160px]" aria-label="全部类型">
+          <SelectTrigger
+            className="w-[160px]"
+            aria-label={t("admin.importLogs.typeFilter")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {TYPE_FILTERS.map((f) => (
               <SelectItem key={f.value} value={f.value}>
-                {f.label}
+                {t(f.labelKey as "admin.importLogs.typeFilters.all")}
               </SelectItem>
             ))}
           </SelectContent>
@@ -137,7 +154,7 @@ export function ImportLogsPage() {
             className="text-muted-foreground"
           >
             <X className="mr-1 size-4" />
-            清空筛选
+            {t("admin.importLogs.clearFilter")}
           </Button>
         )}
       </div>
@@ -145,13 +162,13 @@ export function ImportLogsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>时间</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>总数</TableHead>
-              <TableHead>新增</TableHead>
-              <TableHead>更新</TableHead>
-              <TableHead>错误</TableHead>
+              <TableHead>{t("admin.importLogs.columns.time")}</TableHead>
+              <TableHead>{t("admin.importLogs.columns.type")}</TableHead>
+              <TableHead>{t("admin.importLogs.columns.status")}</TableHead>
+              <TableHead>{t("admin.importLogs.columns.total")}</TableHead>
+              <TableHead>{t("admin.importLogs.columns.created")}</TableHead>
+              <TableHead>{t("admin.importLogs.columns.updated")}</TableHead>
+              <TableHead>{t("admin.importLogs.columns.errors")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -166,10 +183,18 @@ export function ImportLogsPage() {
                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                   {new Date(item.createdAt).toLocaleString("zh-CN")}
                 </TableCell>
-                <TableCell>{TYPE_LABELS[item.type] ?? item.type}</TableCell>
+                <TableCell>
+                  {t(
+                    (TYPE_LABELS[item.type] ??
+                      "admin.importLogs.typeFilters.all") as "admin.importLogs.typeLabels.candidate",
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant={STATUS_CONFIG[item.status]?.variant}>
-                    {STATUS_CONFIG[item.status]?.label ?? item.status}
+                    {t(
+                      (STATUS_CONFIG[item.status]?.labelKey ??
+                        "admin.importLogs.statusConfig.completed") as "admin.importLogs.statusConfig.completed",
+                    )}
                   </Badge>
                 </TableCell>
                 <TableCell>{item.total}</TableCell>
@@ -189,7 +214,9 @@ export function ImportLogsPage() {
             <div className="rounded-md border p-4">
               {item.errorsDetail && item.errorsDetail.length > 0 && (
                 <>
-                  <h3 className="mb-2 text-sm font-medium">错误详情</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("admin.importLogs.details.errorDetail")}
+                  </h3>
                   <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
                     {JSON.stringify(item.errorsDetail, null, 2)}
                   </pre>
@@ -197,7 +224,9 @@ export function ImportLogsPage() {
               )}
               {Object.keys(item.metadata).length > 0 && (
                 <>
-                  <h3 className="mb-2 mt-3 text-sm font-medium">元数据</h3>
+                  <h3 className="mb-2 mt-3 text-sm font-medium">
+                    {t("admin.importLogs.details.metadata")}
+                  </h3>
                   <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
                     {JSON.stringify(item.metadata, null, 2)}
                   </pre>

@@ -187,7 +187,7 @@ export function ExamConfigForm({
             </div>
             {timeError && (
               <p role="alert" className="text-xs text-destructive">
-                结束时间必须晚于开始时间
+                {t("admin.forms.exam.timeInvalid")}
               </p>
             )}
             <Field>
@@ -305,7 +305,9 @@ export function ExamConfigForm({
                 )}
                 {showWarning && (
                   <p className="text-xs text-destructive">
-                    总分与题目分值之和不匹配（应为 {computedTotal}）
+                    {t("admin.forms.exam.scoreMismatch", {
+                      score: computedTotal,
+                    })}
                   </p>
                 )}
               </Field>
@@ -323,7 +325,10 @@ export function ExamConfigForm({
             </div>
             {scoreError && (
               <p role="alert" className="text-xs text-destructive">
-                及格分不能超过总分（{data.passingScore} &gt; {data.totalScore}）
+                {t("admin.forms.exam.passingScoreExceeds", {
+                  passing: data.passingScore,
+                  total: data.totalScore,
+                })}
               </p>
             )}
           </FieldGroup>

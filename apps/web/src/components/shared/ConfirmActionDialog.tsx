@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "./ConfirmDialog";
 
 /** Props for the ConfirmActionDialog component. */
@@ -23,21 +24,24 @@ export function ConfirmActionDialog({
   trigger,
   title,
   description,
-  confirmLabel = "确认",
-  cancelLabel = "取消",
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   disabled = false,
   confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmActionDialogProps) {
+  const { t } = useTranslation();
+  const resolvedConfirmLabel = confirmLabel ?? t("common.confirm");
+  const resolvedCancelLabel = cancelLabel ?? t("common.cancel");
   return (
     <ConfirmDialog
       trigger={trigger}
       title={title}
       description={description}
-      confirmLabel={confirmLabel}
-      cancelLabel={cancelLabel}
+      confirmLabel={resolvedConfirmLabel}
+      cancelLabel={resolvedCancelLabel}
       destructive={destructive}
       confirmDisabled={disabled || confirmDisabled}
       onConfirm={onConfirm}

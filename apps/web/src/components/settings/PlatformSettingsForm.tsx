@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import type { UpdateBrandingRequest } from "@exam/contracts";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export function PlatformSettingsForm({
   onSave: (data: SettingsFormValues) => void;
   isLoading?: boolean;
 }) {
+  const { t } = useTranslation();
   const { register, handleSubmit, setValue, watch, reset } =
     useForm<SettingsFormValues>({
       defaultValues: {},
@@ -61,45 +63,55 @@ export function PlatformSettingsForm({
     <form onSubmit={handleSubmit(onSave)} className="max-w-xl">
       <FieldGroup>
         <Field>
-          <Label htmlFor="productName">产品标题</Label>
+          <Label htmlFor="productName">
+            {t("admin.platformSettings.productName")}
+          </Label>
           <Input
             id="productName"
-            placeholder="输入产品标题"
+            placeholder={t("admin.platformSettings.productNamePlaceholder")}
             {...register("productName")}
           />
         </Field>
         <Field>
-          <Label htmlFor="productSubtitle">产品副标题</Label>
+          <Label htmlFor="productSubtitle">
+            {t("admin.platformSettings.productSubtitle")}
+          </Label>
           <Input
             id="productSubtitle"
-            placeholder="输入产品副标题"
+            placeholder={t("admin.platformSettings.productSubtitlePlaceholder")}
             {...register("productSubtitle")}
           />
         </Field>
         <Field>
-          <Label htmlFor="footerText">页脚说明</Label>
+          <Label htmlFor="footerText">
+            {t("admin.platformSettings.footerText")}
+          </Label>
           <Input
             id="footerText"
-            placeholder="输入页脚说明"
+            placeholder={t("admin.platformSettings.footerTextPlaceholder")}
             {...register("footerText")}
           />
         </Field>
         <Field>
-          <Label htmlFor="organizationDisplayName">机构显示名</Label>
+          <Label htmlFor="organizationDisplayName">
+            {t("admin.platformSettings.orgDisplayName")}
+          </Label>
           <Input
             id="organizationDisplayName"
-            placeholder="输入机构显示名"
+            placeholder={t("admin.platformSettings.orgDisplayNamePlaceholder")}
             {...register("organizationDisplayName")}
           />
         </Field>
         <Field>
-          <Label>默认时区</Label>
+          <Label>{t("admin.platformSettings.defaultTimezone")}</Label>
           <Select
             value={timezoneValue ?? ""}
             onValueChange={(val) => setValue("timezone", val)}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="选择时区" />
+              <SelectValue
+                placeholder={t("admin.platformSettings.timezonePlaceholder")}
+              />
             </SelectTrigger>
             <SelectContent>
               {TIMEZONE_OPTIONS.map((tz) => (
@@ -111,7 +123,9 @@ export function PlatformSettingsForm({
           </Select>
         </Field>
         <Button type="submit" disabled={isLoading}>
-          {isLoading ? "保存中..." : "保存设置"}
+          {isLoading
+            ? t("admin.platformSettings.actions.saving")
+            : t("admin.platformSettings.actions.save")}
         </Button>
       </FieldGroup>
     </form>

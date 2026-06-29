@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /** Props for the RowActions component, extending div attributes. */
@@ -14,13 +15,15 @@ export function RowActions({
   leading,
   trailing,
   className,
-  "aria-label": ariaLabel = "行操作",
+  "aria-label": ariaLabel,
   ...props
 }: RowActionsProps) {
+  const { t } = useTranslation();
+  const resolvedAriaLabel = ariaLabel ?? t("common.rowActions");
   return (
     <div
       role="group"
-      aria-label={ariaLabel}
+      aria-label={resolvedAriaLabel}
       className={cn("flex items-center justify-end gap-1.5", className)}
       {...props}
     >

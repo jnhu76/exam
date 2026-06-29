@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,8 +20,8 @@ export function ConfirmDialog({
   trigger,
   title,
   description,
-  confirmLabel = "确认",
-  cancelLabel = "取消",
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   confirmDisabled = false,
   onConfirm,
@@ -36,6 +37,9 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel?: () => void;
 }) {
+  const { t } = useTranslation();
+  const resolvedConfirmLabel = confirmLabel ?? t("common.confirm");
+  const resolvedCancelLabel = cancelLabel ?? t("common.cancel");
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
@@ -46,7 +50,7 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onCancel}>
-            {cancelLabel}
+            {resolvedCancelLabel}
           </AlertDialogCancel>
           <AlertDialogAction asChild>
             <Button
@@ -56,7 +60,7 @@ export function ConfirmDialog({
               disabled={confirmDisabled}
               onClick={onConfirm}
             >
-              {confirmLabel}
+              {resolvedConfirmLabel}
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>

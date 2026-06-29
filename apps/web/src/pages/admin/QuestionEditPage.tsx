@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -28,6 +29,7 @@ interface CourseRow {
  * form and live preview panel.
  */
 export function QuestionEditPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEdit = id !== undefined && id !== "new";
@@ -93,7 +95,7 @@ export function QuestionEditPage() {
         });
       }
     } catch {
-      setError("加载数据失败");
+      setError(t("admin.questionEdit.loadDataFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -116,7 +118,7 @@ export function QuestionEditPage() {
       }
       void navigate("/admin/questions");
     } catch (err) {
-      setSaveError(getApiErrorMessage(err, "保存失败，请稍后重试"));
+      setSaveError(getApiErrorMessage(err, t("admin.questionEdit.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -128,7 +130,13 @@ export function QuestionEditPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title={isEdit ? "编辑题目" : "新增题目"} />
+      <PageHeader
+        title={
+          isEdit
+            ? t("admin.questionEdit.editTitle")
+            : t("admin.questionEdit.newTitle")
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
@@ -156,10 +164,12 @@ export function QuestionEditPage() {
           onClick={() => void navigate("/admin/questions")}
           disabled={saving}
         >
-          取消
+          {t("admin.questionEdit.actions.cancel")}
         </Button>
         <Button onClick={() => void handleSave()} disabled={saving}>
-          {saving ? "保存中..." : "保存"}
+          {saving
+            ? t("admin.questionEdit.actions.saving")
+            : t("admin.questionEdit.actions.save")}
         </Button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
@@ -122,6 +123,7 @@ function examToConfig(exam: ExamDetailResponse): ExamConfigData {
  * from the create page. Saves via PATCH /api/exams/:id.
  */
 export function ExamEditPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -150,7 +152,7 @@ export function ExamEditPage() {
       setCourses(cData.items);
       setQuestions(qData.items);
     } catch {
-      setError("加载考试数据失败");
+      setError(t("admin.examEdit.feedback.loadDataFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -179,21 +181,23 @@ export function ExamEditPage() {
   async function handleSave() {
     if (!id || !config || saving) return;
     const errors: Record<string, string> = {};
-    if (!config.title.trim()) errors.title = "请输入考试名称";
-    if (!config.courseId) errors.courseId = "请选择课程";
+    if (!config.title.trim())
+      errors.title = t("admin.examEdit.validation.titleRequired");
+    if (!config.courseId)
+      errors.courseId = t("admin.examEdit.validation.courseRequired");
     if (
       config.openAt &&
       config.closeAt &&
       new Date(config.closeAt) <= new Date(config.openAt)
     ) {
-      errors.time = "结束时间必须晚于开始时间";
+      errors.time = t("admin.examEdit.validation.timeInvalid");
     }
     if (config.passingScore > config.totalScore) {
-      errors.score = "及格分不能超过总分";
+      errors.score = t("admin.examEdit.validation.scoreInvalid");
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
-      toast.error("请修正表单中的错误");
+      toast.error(t("admin.examEdit.feedback.fixErrors"));
       return;
     }
     setSaving(true);
@@ -221,10 +225,13 @@ export function ExamEditPage() {
               : undefined,
           };
       await api.patch(`/api/exams/${id}`, payload);
-      toast.success("考试已更新");
+      toast.success(t("admin.examEdit.feedback.updateSuccess"));
       void navigate(`/admin/exams/${id}`);
     } catch (err) {
-      const message = getApiErrorMessage(err, "保存失败，请稍后重试");
+      const message = getApiErrorMessage(
+        err,
+        t("admin.examEdit.feedback.saveFailed"),
+      );
       setSaveError(message);
       toast.error(message);
     } finally {
@@ -235,7 +242,12 @@ export function ExamEditPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadData} />;
   if (!config)
-    return <ErrorState message="考试数据加载异常，请重试" onRetry={loadData} />;
+    return (
+      <ErrorState
+        message={t("admin.examEdit.feedback.loadConfigFailed")}
+        onRetry={loadData}
+      />
+    );
 
   const selectedQuestions = questions.filter((q) =>
     config.questionIds.includes(q.id),
@@ -247,12 +259,12 @@ export function ExamEditPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="编辑考试" />
+      <PageHeader title={t("admin.examEdit.pageTitle")} />
 
       {scheduleOnly && (
         <Alert>
           <AlertDescription>
-            该考试已发布，仅可修改开考/结束时间，其他字段不可更改。
+            {t("admin.examEdit.publishedAlert")}
           </AlertDescription>
         </Alert>
       )}
@@ -270,27 +282,37 @@ export function ExamEditPage() {
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">
-              已选题目 ({config.questionIds.length})
+              {t("admin.examEdit.selectedQuestions", {
+                count: config.questionIds.length,
+              })}
             </h3>
             <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
-              手动选题
+              {t("admin.examEdit.selectQuestions")}
             </Button>
           </div>
 
           {selectedQuestions.length === 0 ? (
             <EmptyState
               icon={<BookOpen className="size-8" />}
-              title="尚未选择题目"
-              description="请点击「手动选题」按钮选择题目。"
+              title={t("admin.examEdit.noQuestionsTitle")}
+              description={t("admin.examEdit.noQuestionsDescription")}
             />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-16">题型</TableHead>
-                  <TableHead>题目内容</TableHead>
-                  <TableHead className="w-16">分值</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.examEdit.tableHeaders.type")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.examEdit.tableHeaders.content")}
+                  </TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.examEdit.tableHeaders.score")}
+                  </TableHead>
+                  <TableHead className="w-12">
+                    {t("admin.examEdit.tableHeaders.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -310,7 +332,7 @@ export function ExamEditPage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => removeQuestion(q.id)}
-                        aria-label="删除题目"
+                        aria-label={t("admin.examEdit.ariaDeleteQuestion")}
                       >
                         <Trash2 />
                       </Button>
@@ -330,10 +352,12 @@ export function ExamEditPage() {
           variant="outline"
           onClick={() => void navigate(`/admin/exams/${id}`)}
         >
-          取消
+          {t("admin.examEdit.actions.cancel")}
         </Button>
         <Button onClick={() => void handleSave()} disabled={saving}>
-          {saving ? "保存中..." : "保存"}
+          {saving
+            ? t("admin.examEdit.actions.saving")
+            : t("admin.examEdit.actions.save")}
         </Button>
       </div>
 
@@ -343,15 +367,23 @@ export function ExamEditPage() {
           className="max-w-2xl max-h-[80vh] overflow-y-auto"
         >
           <DialogHeader>
-            <DialogTitle>选择题目</DialogTitle>
+            <DialogTitle>{t("admin.examEdit.dialogTitle")}</DialogTitle>
           </DialogHeader>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">题型</TableHead>
-                <TableHead>题目内容</TableHead>
-                <TableHead className="w-16">分值</TableHead>
-                <TableHead className="w-16">操作</TableHead>
+                <TableHead className="w-16">
+                  {t("admin.examEdit.tableHeaders.type")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.examEdit.tableHeaders.content")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.examEdit.tableHeaders.score")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.examEdit.dialogActions.add")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -372,7 +404,7 @@ export function ExamEditPage() {
                       variant="outline"
                       onClick={() => addQuestion(q.id)}
                     >
-                      添加
+                      {t("admin.examEdit.dialogActions.add")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -384,7 +416,7 @@ export function ExamEditPage() {
               variant="outline"
               onClick={() => setQuestionDialogOpen(false)}
             >
-              关闭
+              {t("admin.examEdit.dialogActions.close")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -570,7 +570,9 @@ export function CandidatesPage() {
                       if (fieldErrors.password)
                         setFieldErrors((prev) => ({ ...prev, password: "" }));
                     }}
-                    placeholder={`至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`}
+                    placeholder={t("validation.passwordMinChars", {
+                      min: DEFAULT_PASSWORD_POLICY.minLength,
+                    })}
                   />
                   <FieldError>{fieldErrors.password}</FieldError>
                 </Field>
