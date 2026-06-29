@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
@@ -25,6 +26,7 @@ interface AttemptResponse {
 
 /** Pre-exam page that displays exam details and initiates or resumes an attempt. */
 export function StartExamPage() {
+  const { t } = useTranslation();
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
   const [exam, setExam] = useState<CandidateExamDetailResponse | null>(null);
@@ -43,11 +45,11 @@ export function StartExamPage() {
       );
       setExam(data);
     } catch {
-      setError("加载考试信息失败");
+      setError(t("startExam.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [examId]);
+  }, [examId, t]);
 
   useEffect(() => {
     loadExam();
@@ -70,17 +72,17 @@ export function StartExamPage() {
         { errorCode: err instanceof ApiError ? err.code : "UNKNOWN" },
         { examId, level: "warn" },
       );
-      let message = "无法开始考试，请稍后重试";
+      let message: string = t("startExam.errors.startFailed");
       if (err instanceof ApiError) {
         switch (err.code) {
           case "MAX_ATTEMPTS_REACHED":
-            message = "已达到最大考试次数，无法再次开始考试。";
+            message = t("startExam.errors.maxAttemptsReached");
             break;
           case "EXAM_ALREADY_PASSED":
-            message = "本场考试已通过，无需再次参加。";
+            message = t("startExam.errors.alreadyPassed");
             break;
           case "EXAM_NOT_OPEN":
-            message = "考试当前不在开放时间内。";
+            message = t("startExam.errors.notOpen");
             break;
           default:
             if (err.message) message = err.message;
@@ -91,7 +93,7 @@ export function StartExamPage() {
       toast.error(message);
       setIsStarting(false);
     }
-  }, [examId, navigate]);
+  }, [examId, navigate, t]);
 
   /** Handles the primary action: start a new attempt, resume an active one, or view results. */
   async function handleStart() {
@@ -125,29 +127,36 @@ export function StartExamPage() {
 
   if (isLoading) return <LoadingState />;
   if (!exam) {
-    return <ErrorState message={error ?? "考试不存在"} onRetry={loadExam} />;
+    return (
+      <ErrorState
+        message={error ?? t("startExam.errors.notFound")}
+        onRetry={loadExam}
+      />
+    );
   }
 
   const hasActiveAttempt = Boolean(exam.activeAttemptId);
   const actionLabel = (() => {
     switch (exam.primaryAction) {
       case "resume":
-        return "继续考试";
+        return t("startExam.actions.resume");
       case "start":
-        return exam.currentAttempts > 0 ? "再次考试" : "开始考试";
+        return exam.currentAttempts > 0
+          ? t("startExam.actions.retake")
+          : t("startExam.actions.start");
       case "view_result":
-        return "查看成绩";
+        return t("startExam.actions.viewResult");
       default:
-        return "开始考试";
+        return t("startExam.actions.start");
     }
   })();
 
   const inlineMessage = hasActiveAttempt
-    ? "检测到未完成的考试记录，将继续上次进度。"
+    ? t("startExam.inline.activeAttempt")
     : exam.availabilityStatus === "max_attempts_exhausted"
-      ? "已达到最大考试次数，无法再次开始考试。"
+      ? t("startExam.inline.maxAttemptsExhausted")
       : exam.availabilityStatus === "graded" && exam.primaryAction === "start"
-        ? "可重考，当前最高成绩将保留。"
+        ? t("startExam.inline.retakeAvailable")
         : error;
 
   return (
@@ -156,25 +165,35 @@ export function StartExamPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">考试信息</CardTitle>
+          <CardTitle className="text-base">
+            {t("startExam.info.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Clock className="size-4" />
-              <span>考试时长</span>
+              <span>{t("startExam.info.duration")}</span>
             </div>
-            <span className="font-medium">{exam.durationMinutes}分钟</span>
+            <span className="font-medium">
+              {t("startExam.info.durationValue", {
+                minutes: exam.durationMinutes,
+              })}
+            </span>
 
             <div className="flex items-center gap-2 text-muted-foreground">
               <FileText className="size-4" />
-              <span>题目数量</span>
+              <span>{t("startExam.info.questionCount")}</span>
             </div>
-            <span className="font-medium">{exam.questionCount}题</span>
+            <span className="font-medium">
+              {t("startExam.info.questionCountValue", {
+                count: exam.questionCount,
+              })}
+            </span>
 
             <div className="flex items-center gap-2 text-muted-foreground">
               <Shield className="size-4" />
-              <span>及格分数</span>
+              <span>{t("startExam.info.passingScore")}</span>
             </div>
             <span className="font-medium">
               {exam.passingScore}/{exam.totalScore}
@@ -184,14 +203,14 @@ export function StartExamPage() {
           {exam.controlFlags.detectTabSwitch && (
             <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
               <AlertTriangle className="size-4 shrink-0" />
-              <span>考试期间将检测切屏行为</span>
+              <span>{t("startExam.info.tabSwitchWarning")}</span>
             </div>
           )}
 
           {exam.controlFlags.disableCopyPaste && (
             <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
               <AlertTriangle className="size-4 shrink-0" />
-              <span>考试期间禁止复制粘贴</span>
+              <span>{t("startExam.info.copyPasteWarning")}</span>
             </div>
           )}
         </CardContent>
@@ -199,18 +218,28 @@ export function StartExamPage() {
 
       <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
         <AlertTriangle className="mr-2 inline size-4" />
-        开始后倒计时立即启动，中途不可暂停
+        {t("startExam.notice")}
       </div>
 
       <div className="flex flex-col gap-1 text-sm text-muted-foreground">
         <span>
-          已考 {exam.currentAttempts}/{exam.maxAttempts} 次
+          {t("startExam.attempts", {
+            used: exam.currentAttempts,
+            max: exam.maxAttempts,
+          })}
         </span>
         {exam.bestScore != null && (
           <span>
-            最高成绩: {exam.bestScore}/{exam.totalScore}
+            {t("startExam.bestScore", {
+              score: exam.bestScore,
+              total: exam.totalScore,
+            })}
             {exam.bestScorePercent != null && (
-              <span className="ml-1">({exam.bestScorePercent}%)</span>
+              <span className="ml-1">
+                {t("startExam.bestScorePercent", {
+                  percent: exam.bestScorePercent,
+                })}
+              </span>
             )}
           </span>
         )}
@@ -250,7 +279,7 @@ export function StartExamPage() {
               aria-hidden="true"
             />
           )}
-          {isStarting ? "正在进入..." : actionLabel}
+          {isStarting ? t("startExam.actions.entering") : actionLabel}
         </Button>
       </div>
     </div>

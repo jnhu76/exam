@@ -21,6 +21,21 @@ export interface ExistingCandidate {
   fields: Record<string, unknown>;
 }
 
+/**
+ * CSV header compatibility aliases for the core identity columns.
+ *
+ * These Chinese header names are NOT user-interface copy — they are legacy
+ * CSV column aliases accepted alongside the canonical English headers
+ * (`username` / `password` / `name`) so existing candidate import templates
+ * keep parsing. They must stay in sync with the import template generator.
+ * Excluded from the hardcoded-copy lint via the CSV-compatibility allowlist.
+ */
+export const CSV_HEADER_ALIASES = {
+  username: ["username", "用户名"],
+  password: ["password", "密码"],
+  name: ["name", "姓名"],
+} as const;
+
 /** Parses a single CSV line into an array of field values, handling quoted fields. */
 export function parseCsvLine(line: string): string[] {
   const values: string[] = [];
@@ -48,21 +63,26 @@ export function parseCsvLine(line: string): string[] {
 
 /**
  * Maps raw CSV header names to internal field names,
- * resolving both English and Chinese column headers.
+ * resolving both English and legacy Chinese column headers
+ * (see {@link CSV_HEADER_ALIASES}).
  */
 export function resolveHeaders(
   rawHeaders: string[],
   fieldConfigs: CandidateFieldConfig[],
 ): Record<string, string> {
   const labelToName = new Map(fieldConfigs.map((f) => [f.label, f.name]));
+  const aliasToInternal: Record<string, string> = {
+    [CSV_HEADER_ALIASES.username[0]]: "username",
+    [CSV_HEADER_ALIASES.username[1]]: "username",
+    [CSV_HEADER_ALIASES.password[0]]: "password",
+    [CSV_HEADER_ALIASES.password[1]]: "password",
+    [CSV_HEADER_ALIASES.name[0]]: "name",
+    [CSV_HEADER_ALIASES.name[1]]: "name",
+  };
   const headerMap: Record<string, string> = {};
   for (const raw of rawHeaders) {
-    if (raw === "username" || raw === "用户名") {
-      headerMap[raw] = "username";
-    } else if (raw === "password" || raw === "密码") {
-      headerMap[raw] = "password";
-    } else if (raw === "name" || raw === "姓名") {
-      headerMap[raw] = "name";
+    if (raw in aliasToInternal) {
+      headerMap[raw] = aliasToInternal[raw]!;
     } else if (labelToName.has(raw)) {
       headerMap[raw] = labelToName.get(raw)!;
     } else {

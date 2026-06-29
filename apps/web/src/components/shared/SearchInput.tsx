@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ type SearchInputProps = Omit<
   value?: string | null;
   onChange: (value: string) => void;
   onClear?: () => void;
+  placeholder?: string;
   clearLabel?: string;
   containerClassName?: string;
 };
@@ -18,20 +20,24 @@ type SearchInputProps = Omit<
 /**
  * Search input with a leading search icon and an optional clear button.
  * Accepts controlled value/onChange and supports placeholder customization.
+ * Defaults resolve from `common.search.*` i18n keys; explicit props win.
  */
 export function SearchInput({
   value,
   onChange,
   onClear,
-  placeholder = "搜索",
+  placeholder,
   disabled = false,
-  clearLabel = "清除搜索",
+  clearLabel,
   className,
   containerClassName,
   ...props
 }: SearchInputProps) {
+  const { t } = useTranslation();
   const safeValue = value ?? "";
   const canClear = safeValue.length > 0 && !disabled;
+  const resolvedPlaceholder = placeholder ?? t("common.search.placeholder");
+  const resolvedClearLabel = clearLabel ?? t("common.search.clearLabel");
 
   return (
     <div className={cn("relative min-w-0", containerClassName)}>
@@ -44,7 +50,7 @@ export function SearchInput({
         type="search"
         value={safeValue}
         disabled={disabled}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         onChange={(event) => onChange(event.target.value)}
         className={cn("pr-9 pl-9", className)}
         {...props}
@@ -54,7 +60,7 @@ export function SearchInput({
           type="button"
           variant="ghost"
           size="icon-xs"
-          aria-label={clearLabel}
+          aria-label={resolvedClearLabel}
           className="absolute top-1/2 right-2 -translate-y-1/2"
           onClick={onClear ?? (() => onChange(""))}
         >

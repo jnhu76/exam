@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
@@ -54,7 +55,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TYPE_LABELS } from "@/lib/constants";
+import { getTypeLabelKey } from "@/lib/constants";
 import type {
   AttemptTimelineEvent,
   AttemptTimelineResponse,
@@ -77,48 +78,76 @@ type EventTone =
   | "secondary"
   | "muted";
 
-/** Display metadata for a known audit action: Chinese label, tone, and icon. */
+/**
+ * Display metadata for a known audit action: i18n label key, tone, and icon.
+ * Mirrors the statusMeta pattern — no display copy here; labels resolve via
+ * `t(meta.labelKey)` (see {@link TimelineSection}).
+ */
 interface EventMeta {
-  label: string;
+  labelKey: string;
   tone: EventTone;
   icon: LucideIcon;
 }
 
 /**
- * Maps attempt-lifecycle audit actions to human-readable labels. Audit
- * *actions* are a distinct vocabulary from lifecycle *statuses*, so this lives
- * here rather than in statusMeta.ts. Unknown actions fall back to a muted
- * generic entry using the raw action string.
+ * Maps attempt-lifecycle audit actions to their i18n label key under
+ * `admin.attemptDetail.events.*`. Audit *actions* are a distinct vocabulary
+ * from lifecycle *statuses*, so this lives here rather than in statusMeta.ts.
+ * Unknown actions fall back to a muted generic entry using the raw action.
  */
 const EVENT_META: Record<string, EventMeta> = {
-  "attempt.start": { label: "开始答题", tone: "primary", icon: Play },
-  "attempt.saveAnswer": { label: "保存答案", tone: "secondary", icon: Save },
-  "attempt.disrupted": { label: "连接中断", tone: "warning", icon: WifiOff },
-  "attempt.restore": { label: "重新连接", tone: "info", icon: RefreshCw },
-  "attempt.submit": { label: "提交答卷", tone: "primary", icon: Send },
-  "attempt.autoSubmit": { label: "自动交卷", tone: "secondary", icon: Send },
+  "attempt.start": {
+    labelKey: "admin.attemptDetail.events.start",
+    tone: "primary",
+    icon: Play,
+  },
+  "attempt.saveAnswer": {
+    labelKey: "admin.attemptDetail.events.saveAnswer",
+    tone: "secondary",
+    icon: Save,
+  },
+  "attempt.disrupted": {
+    labelKey: "admin.attemptDetail.events.disrupted",
+    tone: "warning",
+    icon: WifiOff,
+  },
+  "attempt.restore": {
+    labelKey: "admin.attemptDetail.events.restore",
+    tone: "info",
+    icon: RefreshCw,
+  },
+  "attempt.submit": {
+    labelKey: "admin.attemptDetail.events.submit",
+    tone: "primary",
+    icon: Send,
+  },
+  "attempt.autoSubmit": {
+    labelKey: "admin.attemptDetail.events.autoSubmit",
+    tone: "secondary",
+    icon: Send,
+  },
   "attempt.forceSubmit": {
-    label: "管理员强制交卷",
+    labelKey: "admin.attemptDetail.events.forceSubmit",
     tone: "destructive",
     icon: Send,
   },
   "attempt.extendTime": {
-    label: "管理员延长时长",
+    labelKey: "admin.attemptDetail.events.extendTime",
     tone: "warning",
     icon: Timer,
   },
   "attempt.misconductFlagged": {
-    label: "标记违规",
+    labelKey: "admin.attemptDetail.events.misconductFlagged",
     tone: "destructive",
     icon: Flag,
   },
   "grading.score_entered": {
-    label: "录入评分",
+    labelKey: "admin.attemptDetail.events.scoreEntered",
     tone: "secondary",
     icon: FileCheck2,
   },
   "grading.finalized": {
-    label: "评分完成",
+    labelKey: "admin.attemptDetail.events.finalized",
     tone: "success",
     icon: CheckCircle2,
   },
@@ -138,11 +167,7 @@ const eventToneClass: Record<EventTone, string> = {
 /** Resolves an audit action to its display metadata, falling back to muted. */
 function getEventMeta(action: string): EventMeta {
   return (
-    EVENT_META[action] ?? {
-      label: action,
-      tone: "muted",
-      icon: HelpCircle,
-    }
+    EVENT_META[action] ?? { labelKey: "", tone: "muted", icon: HelpCircle }
   );
 }
 
@@ -208,6 +233,7 @@ function formatAnswer(value: unknown): string {
 async function exportAttempt(
   attemptId: string,
   format: "csv" | "json",
+  exportFailedMsg: string,
 ): Promise<void> {
   try {
     if (format === "csv") {
@@ -222,8 +248,7 @@ async function exportAttempt(
       );
     }
   } catch (err) {
-    const message =
-      err instanceof ApiError ? err.message : "导出失败，请稍后重试";
+    const message = err instanceof ApiError ? err.message : exportFailedMsg;
     toast.error(message);
   }
 }
@@ -236,24 +261,38 @@ interface ExportButtonsProps {
 /**
  * Two outline buttons — 导出CSV and 导出JSON — that download the attempt via
  * the shared {@link downloadFile} helper (cookie-authenticated, cross-origin
- * safe). Reused by both the live and graded attempt views.
+ * safe). Reused by both the live and graded attempt views. Labels resolve from
+ * `admin.attemptDetail.actions.*` i18n keys.
  */
 function ExportButtons({ attemptId }: ExportButtonsProps) {
+  const { t } = useTranslation();
   return (
     <>
       <Button
         variant="outline"
-        onClick={() => void exportAttempt(attemptId, "csv")}
+        onClick={() =>
+          void exportAttempt(
+            attemptId,
+            "csv",
+            t("admin.attemptDetail.errors.exportFailed"),
+          )
+        }
       >
         <Download className="size-4" aria-hidden="true" />
-        导出CSV
+        {t("admin.attemptDetail.actions.exportCsv")}
       </Button>
       <Button
         variant="outline"
-        onClick={() => void exportAttempt(attemptId, "json")}
+        onClick={() =>
+          void exportAttempt(
+            attemptId,
+            "json",
+            t("admin.attemptDetail.errors.exportFailed"),
+          )
+        }
       >
         <FileJson className="size-4" aria-hidden="true" />
-        导出JSON
+        {t("admin.attemptDetail.actions.exportJson")}
       </Button>
     </>
   );
@@ -281,21 +320,27 @@ function TimelineSection({
   expandedEventId,
   onToggleEvent,
 }: TimelineSectionProps) {
+  const { t } = useTranslation();
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">答卷时间线</CardTitle>
+        <CardTitle className="text-base">
+          {t("admin.attemptDetail.timeline.title")}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <LoadingState />
         ) : hasError ? (
-          <ErrorState message="加载时间线失败" onRetry={onRetry} />
+          <ErrorState
+            message={t("admin.attemptDetail.timeline.loadFailed")}
+            onRetry={onRetry}
+          />
         ) : !events || events.length === 0 ? (
           <EmptyState
             icon={<Clock className="size-8" />}
-            title="暂无时间线事件"
-            description="该尝试的操作记录将显示在此"
+            title={t("admin.attemptDetail.timeline.emptyTitle")}
+            description={t("admin.attemptDetail.timeline.emptyDescription")}
           />
         ) : (
           <div className="flex flex-col gap-1">
@@ -303,6 +348,10 @@ function TimelineSection({
               const meta = getEventMeta(event.action);
               const Icon = meta.icon;
               const isExpanded = expandedEventId === event.id;
+              // Unknown actions have no labelKey; fall back to the raw action.
+              const label = meta.labelKey
+                ? t(meta.labelKey as never)
+                : event.action;
               return (
                 <div key={event.id}>
                   {index > 0 && <Separator className="my-1" />}
@@ -321,14 +370,15 @@ function TimelineSection({
                           variant="secondary"
                           className={eventToneClass[meta.tone]}
                         >
-                          {meta.label}
+                          {label}
                         </Badge>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
                           {new Date(event.createdAt).toLocaleString("zh-CN")}
                         </span>
                       </span>
                       <span className="mt-0.5 block text-xs text-muted-foreground truncate">
-                        操作者 {event.actorId}
+                        {t("admin.attemptDetail.timeline.actorPrefix")}{" "}
+                        {event.actorId}
                       </span>
                     </span>
                   </button>
@@ -360,6 +410,7 @@ function TimelineSection({
  * the candidate's answer, standard answer, and points awarded.
  */
 export function AttemptDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [result, setResult] = useState<VisibleAttemptResult | null>(null);
@@ -410,20 +461,20 @@ export function AttemptDetailPage() {
       } else {
         setError(
           data.status === "submitted"
-            ? "该尝试已提交，等待评分"
+            ? t("admin.attemptDetail.errors.statusSubmitted")
             : data.status === "grading"
-              ? "该尝试正在评分中"
+              ? t("admin.attemptDetail.errors.statusGrading")
               : data.status === "graded"
-                ? "该尝试已评分，但成绩尚未公布"
-                : "该尝试尚未完成评分或结果不可见",
+                ? t("admin.attemptDetail.errors.statusGradedHidden")
+                : t("admin.attemptDetail.errors.resultHidden"),
         );
       }
     } catch {
-      setError("加载尝试详情失败");
+      setError(t("admin.attemptDetail.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     loadResult();
@@ -458,7 +509,7 @@ export function AttemptDetailPage() {
     if (!liveAttempt) return;
     const notes = flagNotes.trim();
     if (!notes) {
-      toast.error("请填写违规说明");
+      toast.error(t("admin.attemptDetail.flag.notesRequired"));
       return;
     }
     setFlagging(true);
@@ -467,7 +518,7 @@ export function AttemptDetailPage() {
         `/api/admin/attempts/${liveAttempt.attemptId}/misconduct`,
         { severity: flagSeverity, notes },
       );
-      toast.success("已标记违规");
+      toast.success(t("admin.attemptDetail.flag.flagged"));
       setFlagDialogOpen(false);
       setFlagNotes("");
       setLiveMisconduct({
@@ -477,17 +528,20 @@ export function AttemptDetailPage() {
         severity: flagSeverity,
       });
     } catch {
-      toast.error("标记违规失败，请稍后重试");
+      toast.error(t("admin.attemptDetail.flag.flagFailed"));
     } finally {
       setFlagging(false);
     }
-  }, [liveAttempt, flagSeverity, flagNotes]);
+  }, [liveAttempt, flagSeverity, flagNotes, t]);
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadResult} />;
   if (!result && !liveAttempt)
     return (
-      <ErrorState message="答题数据加载异常，请重试" onRetry={loadResult} />
+      <ErrorState
+        message={t("admin.attemptDetail.errors.dataLoadFailed")}
+        onRetry={loadResult}
+      />
     );
 
   // Live (in_progress/disrupted) attempt: admin misconduct-flag action view.
@@ -495,19 +549,23 @@ export function AttemptDetailPage() {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
-          title={`${liveAttempt.examTitle} - 答卷详情`}
+          title={`${liveAttempt.examTitle} - ${t(
+            "admin.attemptDetail.live.titleSuffix",
+          )}`}
           actions={
             <div className="flex gap-2">
               <ExportButtons attemptId={id!} />
               <Button variant="outline" onClick={() => void navigate(-1)}>
-                返回
+                {t("admin.attemptDetail.actions.back")}
               </Button>
             </div>
           }
         />
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">尝试状态</CardTitle>
+            <CardTitle className="text-base">
+              {t("admin.attemptDetail.live.statusTitle")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-4">
@@ -529,7 +587,7 @@ export function AttemptDetailPage() {
                 className="w-fit"
                 onClick={() => setFlagDialogOpen(true)}
               >
-                标记违规
+                {t("admin.attemptDetail.actions.flagMisconduct")}
               </Button>
             </div>
           </CardContent>
@@ -547,14 +605,18 @@ export function AttemptDetailPage() {
         <Dialog open={flagDialogOpen} onOpenChange={setFlagDialogOpen}>
           <DialogContent aria-describedby={undefined} className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>标记违规</DialogTitle>
+              <DialogTitle>
+                {t("admin.attemptDetail.live.flagDialog.title")}
+              </DialogTitle>
               <DialogDescription>
-                标记违规用于记录考生异常行为，不会改变尝试状态。
+                {t("admin.attemptDetail.live.flagDialog.description")}
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 py-2">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="flag-severity">严重程度</Label>
+                <Label htmlFor="flag-severity">
+                  {t("admin.attemptDetail.live.flagDialog.severityLabel")}
+                </Label>
                 <Select
                   value={flagSeverity}
                   onValueChange={(v) =>
@@ -565,18 +627,26 @@ export function AttemptDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="warning">警告</SelectItem>
-                    <SelectItem value="serious">严重</SelectItem>
+                    <SelectItem value="warning">
+                      {t("admin.attemptDetail.live.flagDialog.severityWarning")}
+                    </SelectItem>
+                    <SelectItem value="serious">
+                      {t("admin.attemptDetail.live.flagDialog.severitySerious")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="flag-notes">违规说明</Label>
+                <Label htmlFor="flag-notes">
+                  {t("admin.attemptDetail.live.flagDialog.notesLabel")}
+                </Label>
                 <Textarea
                   id="flag-notes"
                   value={flagNotes}
                   onChange={(e) => setFlagNotes(e.target.value)}
-                  placeholder="例如：考生查看手机"
+                  placeholder={t(
+                    "admin.attemptDetail.live.flagDialog.notesPlaceholder",
+                  )}
                   rows={3}
                   maxLength={1000}
                 />
@@ -588,14 +658,16 @@ export function AttemptDetailPage() {
                 onClick={() => setFlagDialogOpen(false)}
                 disabled={flagging}
               >
-                取消
+                {t("admin.attemptDetail.live.flagDialog.cancel")}
               </Button>
               <Button
                 variant="destructive"
                 disabled={flagging}
                 onClick={() => void handleFlag()}
               >
-                {flagging ? "提交中…" : "确认标记"}
+                {flagging
+                  ? t("admin.attemptDetail.live.flagDialog.submitting")
+                  : t("admin.attemptDetail.live.flagDialog.confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -607,7 +679,10 @@ export function AttemptDetailPage() {
   // Past this point the attempt is graded with a visible result.
   if (!result)
     return (
-      <ErrorState message="成绩数据加载异常，请重试" onRetry={loadResult} />
+      <ErrorState
+        message={t("admin.attemptDetail.errors.scoreDataLoadFailed")}
+        onRetry={loadResult}
+      />
     );
 
   const sortedQuestions = [...result.questionResults].sort(
@@ -618,12 +693,14 @@ export function AttemptDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={`${result.examTitle} - 答卷详情`}
+        title={`${result.examTitle} - ${t(
+          "admin.attemptDetail.result.titleSuffix",
+        )}`}
         actions={
           <div className="flex gap-2">
             <ExportButtons attemptId={id!} />
             <Button variant="outline" onClick={() => void navigate(-1)}>
-              返回
+              {t("admin.attemptDetail.actions.back")}
             </Button>
           </div>
         }
@@ -631,18 +708,24 @@ export function AttemptDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">成绩概览</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.attemptDetail.result.summaryTitle")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div>
-              <p className="text-sm text-muted-foreground">总分</p>
+              <p className="text-sm text-muted-foreground">
+                {t("admin.attemptDetail.result.totalScore")}
+              </p>
               <p className="text-3xl font-bold tabular-nums">
                 {result.totalScore}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">得分</p>
+              <p className="text-sm text-muted-foreground">
+                {t("admin.attemptDetail.result.earnedScore")}
+              </p>
               <p
                 data-testid="earned-score"
                 className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
@@ -651,13 +734,17 @@ export function AttemptDetailPage() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">及格线</p>
+              <p className="text-sm text-muted-foreground">
+                {t("admin.attemptDetail.result.passingLine")}
+              </p>
               <p className="text-3xl font-bold tabular-nums">
                 {result.passingScore}
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">状态</p>
+              <p className="text-sm text-muted-foreground">
+                {t("admin.attemptDetail.result.status")}
+              </p>
               <StatusBadge
                 status={result.passed ? "passed" : "not_passed"}
                 className="mt-1"
@@ -669,19 +756,35 @@ export function AttemptDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">答题详情</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.attemptDetail.result.detailTitle")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">题号</TableHead>
-                <TableHead>题目</TableHead>
-                <TableHead>题型</TableHead>
-                <TableHead>考生答案</TableHead>
-                <TableHead>标准答案</TableHead>
-                <TableHead className="text-right">得分</TableHead>
-                <TableHead className="text-right">满分</TableHead>
+                <TableHead className="w-16">
+                  {t("admin.attemptDetail.result.columns.number")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.attemptDetail.result.columns.content")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.attemptDetail.result.columns.type")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.attemptDetail.result.columns.candidateAnswer")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.attemptDetail.result.columns.standardAnswer")}
+                </TableHead>
+                <TableHead className="text-right">
+                  {t("admin.attemptDetail.result.columns.score")}
+                </TableHead>
+                <TableHead className="text-right">
+                  {t("admin.attemptDetail.result.columns.maxScore")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -693,7 +796,9 @@ export function AttemptDetailPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {TYPE_LABELS[q.type] ?? q.type}
+                      {(getTypeLabelKey(q.type)
+                        ? t(getTypeLabelKey(q.type) as never)
+                        : undefined) ?? q.type}
                     </Badge>
                   </TableCell>
                   <TableCell>

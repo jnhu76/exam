@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
 import { toast } from "sonner";
@@ -63,6 +64,7 @@ interface ScoreListResponse {
 
 /** Admin page for viewing per-candidate scores, stats, and pass/fail filters for a specific exam. */
 export function ScoreListPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -91,12 +93,15 @@ export function ScoreListPage() {
       );
       setScores(data);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "加载成绩列表失败";
+      const message =
+        err instanceof Error
+          ? err.message
+          : t("admin.scoreList.errors.loadFailed");
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, [id, page, passFilter]);
+  }, [id, page, passFilter, t]);
 
   /** Downloads the scores CSV via the authenticated blob helper (cookie auth). */
   const exportScores = useCallback(async () => {
@@ -110,13 +115,15 @@ export function ScoreListPage() {
     } catch (err) {
       toast.error(
         err instanceof Error && err.message
-          ? `导出失败：${err.message}`
-          : "导出失败，请稍后重试",
+          ? t("admin.scoreList.errors.exportFailedWithMsg", {
+              message: err.message,
+            })
+          : t("admin.scoreList.errors.exportFailed"),
       );
     } finally {
       setExporting(false);
     }
-  }, [id, exporting]);
+  }, [id, exporting, t]);
 
   useEffect(() => {
     loadScores();
@@ -135,20 +142,23 @@ export function ScoreListPage() {
             size="sm"
             onClick={() => void navigate("/admin/results")}
           >
-            返回成绩查询
+            {t("admin.scoreList.backToResults")}
           </Button>
         }
       />
     );
   if (!scores)
     return (
-      <ErrorState message="成绩数据加载异常，请重试" onRetry={loadScores} />
+      <ErrorState
+        message={t("admin.scoreList.errors.dataLoadFailed")}
+        onRetry={loadScores}
+      />
     );
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={`${scores.items[0]?.examTitle || "考试"} - 成绩管理`}
+        title={`${scores.items[0]?.examTitle || t("admin.scoreList.fallbackExamTitle")} - ${t("admin.scoreList.titleSuffix")}`}
         actions={
           <div className="flex gap-2">
             <Button
@@ -156,13 +166,15 @@ export function ScoreListPage() {
               onClick={() => void exportScores()}
               disabled={exporting}
             >
-              {exporting ? "导出中..." : "导出CSV"}
+              {exporting
+                ? t("admin.scoreList.actions.exporting")
+                : t("admin.scoreList.actions.export")}
             </Button>
             <Button
               variant="outline"
               onClick={() => void navigate(`/admin/exams/${id}`)}
             >
-              返回考试详情
+              {t("admin.scoreList.actions.backToDetail")}
             </Button>
           </div>
         }
@@ -173,7 +185,7 @@ export function ScoreListPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              平均分
+              {t("admin.scoreList.stats.average")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -185,7 +197,7 @@ export function ScoreListPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              最高分
+              {t("admin.scoreList.stats.max")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -195,7 +207,7 @@ export function ScoreListPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              最低分
+              {t("admin.scoreList.stats.min")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -205,7 +217,7 @@ export function ScoreListPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              及格率
+              {t("admin.scoreList.stats.passRate")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -217,7 +229,7 @@ export function ScoreListPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              已评分
+              {t("admin.scoreList.stats.totalGraded")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -240,9 +252,15 @@ export function ScoreListPage() {
               }}
             >
               <TabsList>
-                <TabsTrigger value="all">全部</TabsTrigger>
-                <TabsTrigger value="passed">及格</TabsTrigger>
-                <TabsTrigger value="failed">不及格</TabsTrigger>
+                <TabsTrigger value="all">
+                  {t("admin.scoreList.filters.all")}
+                </TabsTrigger>
+                <TabsTrigger value="passed">
+                  {t("admin.scoreList.filters.passed")}
+                </TabsTrigger>
+                <TabsTrigger value="failed">
+                  {t("admin.scoreList.filters.failed")}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -252,26 +270,36 @@ export function ScoreListPage() {
       {/* Scores Table */}
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">成绩列表</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.scoreList.listTitle")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {scores.items.length === 0 ? (
             <EmptyState
               icon={<FileText className="size-12" />}
-              title="暂无成绩"
-              description="该考试暂未有已评分的答卷"
+              title={t("admin.scoreList.empty.title")}
+              description={t("admin.scoreList.empty.description")}
             />
           ) : (
             <div className="flex flex-col gap-4">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>考生姓名</TableHead>
-                    <TableHead>考生信息</TableHead>
-                    <TableHead>成绩</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>提交时间</TableHead>
-                    <TableHead>操作</TableHead>
+                    <TableHead>
+                      {t("admin.scoreList.columns.candidateName")}
+                    </TableHead>
+                    <TableHead>
+                      {t("admin.scoreList.columns.candidateInfo")}
+                    </TableHead>
+                    <TableHead>{t("admin.scoreList.columns.score")}</TableHead>
+                    <TableHead>{t("admin.scoreList.columns.status")}</TableHead>
+                    <TableHead>
+                      {t("admin.scoreList.columns.submittedAt")}
+                    </TableHead>
+                    <TableHead>
+                      {t("admin.scoreList.columns.actions")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -304,7 +332,7 @@ export function ScoreListPage() {
                             void navigate(`/admin/attempts/${item.attemptId}`)
                           }
                         >
-                          查看详情
+                          {t("admin.scoreList.actions.viewDetail")}
                         </Button>
                       </TableCell>
                     </TableRow>

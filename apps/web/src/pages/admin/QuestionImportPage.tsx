@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
-import { TYPE_LABELS } from "@/lib/constants";
+import { getTypeLabelKey } from "@/lib/constants";
 
 /** Minimal course representation used to populate the course selector. */
 interface CourseRow {
@@ -62,6 +63,7 @@ interface ImportResult {
 
 /** Admin page for bulk-importing questions from a CSV file into a selected course. */
 export function QuestionImportPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [selectedCourse, setSelectedCourse] = useState("");
@@ -83,11 +85,11 @@ export function QuestionImportPage() {
         if (first) setSelectedCourse(first.id);
       }
     } catch {
-      setError("加载课程列表失败");
+      setError(t("admin.questionImport.errors.loadCoursesFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadCourses();
@@ -163,6 +165,9 @@ export function QuestionImportPage() {
   /**
    * Converts a raw answer string into the appropriate typed value based on
    * the question type (boolean for true/false, array for multiple-choice).
+   * NOTE: `"是"` here is a CSV answer-parsing alias for boolean true, NOT UI
+   * copy — it is part of the import compatibility contract and must not be
+   * moved to i18n.
    */
   function parseStandardAnswer(answer: string, type: string): unknown {
     if (type === "true_false") {
@@ -190,16 +195,24 @@ export function QuestionImportPage() {
       setImportResult(result);
       setConfirmed(confirm);
     } catch {
-      setError("导入失败");
+      setError(t("admin.questionImport.errors.importFailed"));
     } finally {
       setImporting(false);
     }
   }
 
-  /** Downloads a sample CSV template file with example question rows. */
+  /**
+   * Downloads a sample CSV template file with example question rows.
+   * NOTE: the template header and example cells are CSV import content, NOT
+   * UI copy — they define the import column contract the parser understands
+   * (see parseCSV/parseStandardAnswer). They must stay in sync with the
+   * import parser and are excluded from the hardcoded-copy lint.
+   */
   function downloadTemplate() {
+    // CSV template header — import column contract (not UI copy).
     const header =
       "题型,题目内容,选项A,选项B,选项C,选项D,标准答案,分值,难度,标签";
+    // CSV template example rows (fixture content, not UI copy).
     const example1 = "single_choice,1+1=?,1,2,3,4,B,10,1,基础";
     const example2 = "true_false,地球是圆的,,,,,true,5,1,常识";
     const example3 = "fill_blank,法国首都____,,,,,巴黎,10,2,地理";
@@ -210,7 +223,7 @@ export function QuestionImportPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "题目导入模板.csv";
+    a.download = t("admin.questionImport.templateFilename");
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -220,14 +233,16 @@ export function QuestionImportPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="导入题目" />
+      <PageHeader title={t("admin.questionImport.title")} />
 
       <div className="flex items-end gap-4">
         <div className="flex flex-col gap-2">
-          <Label>目标课程</Label>
+          <Label>{t("admin.questionImport.courseLabel")}</Label>
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="选择课程" />
+              <SelectValue
+                placeholder={t("admin.questionImport.coursePlaceholder")}
+              />
             </SelectTrigger>
             <SelectContent>
               {courses.map((c) => (
@@ -240,7 +255,7 @@ export function QuestionImportPage() {
         </div>
 
         <Button variant="outline" onClick={downloadTemplate}>
-          下载模板
+          {t("admin.questionImport.downloadTemplate")}
         </Button>
 
         <FileUpload onText={loadCsv} />
@@ -249,15 +264,23 @@ export function QuestionImportPage() {
       {parsedRows.length > 0 && !importResult && (
         <>
           <div className="text-sm text-muted-foreground">
-            已解析 {parsedRows.length} 条数据
+            {t("admin.questionImport.parsed", { count: parsedRows.length })}
           </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">行号</TableHead>
-                <TableHead className="w-16">题型</TableHead>
-                <TableHead>题目内容</TableHead>
-                <TableHead className="w-16">分值</TableHead>
+                <TableHead className="w-12">
+                  {t("admin.questionImport.previewColumns.row")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.questionImport.previewColumns.type")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.questionImport.previewColumns.content")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.questionImport.previewColumns.score")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -266,7 +289,9 @@ export function QuestionImportPage() {
                   <TableCell>{i + 1}</TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {TYPE_LABELS[row.type] ?? row.type}
+                      {(getTypeLabelKey(row.type)
+                        ? t(getTypeLabelKey(row.type) as never)
+                        : undefined) ?? row.type}
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-[400px] truncate">
@@ -279,11 +304,15 @@ export function QuestionImportPage() {
           </Table>
           {parsedRows.length > 20 && (
             <p className="text-sm text-muted-foreground">
-              ...还有 {parsedRows.length - 20} 条数据
+              {t("admin.questionImport.moreRows", {
+                count: parsedRows.length - 20,
+              })}
             </p>
           )}
           <Button onClick={() => void handleImport(false)} disabled={importing}>
-            {importing ? "校验中..." : "校验导入数据"}
+            {importing
+              ? t("admin.questionImport.validating")
+              : t("admin.questionImport.validate")}
           </Button>
         </>
       )}
@@ -293,24 +322,31 @@ export function QuestionImportPage() {
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="size-4 text-success" />
-              有效：{importResult.valid}
+              {t("admin.questionImport.result.valid")}：{importResult.valid}
             </span>
             <span className="flex items-center gap-1">
               <AlertCircle className="size-4 text-warning" />
-              警告：{importResult.warnings}
+              {t("admin.questionImport.result.warnings")}：
+              {importResult.warnings}
             </span>
             <span className="flex items-center gap-1">
               <XCircle className="size-4 text-destructive" />
-              错误：{importResult.errors}
+              {t("admin.questionImport.result.errors")}：{importResult.errors}
             </span>
           </div>
 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">行号</TableHead>
-                <TableHead className="w-16">状态</TableHead>
-                <TableHead>详情</TableHead>
+                <TableHead className="w-12">
+                  {t("admin.questionImport.previewColumns.row")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.questionImport.previewColumns.status")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.questionImport.previewColumns.detail")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -342,14 +378,16 @@ export function QuestionImportPage() {
                 onClick={() => void handleImport(true)}
                 disabled={importing}
               >
-                {importing ? "导入中..." : "确认导入"}
+                {importing
+                  ? t("admin.questionImport.importing")
+                  : t("admin.questionImport.confirm")}
               </Button>
             )}
             <Button
               variant="outline"
               onClick={() => void navigate("/admin/questions")}
             >
-              返回题目列表
+              {t("admin.questionImport.backToList")}
             </Button>
             <Button
               variant="outline"
@@ -359,7 +397,7 @@ export function QuestionImportPage() {
                 setConfirmed(false);
               }}
             >
-              继续导入
+              {t("admin.questionImport.continueImport")}
             </Button>
           </div>
         </div>

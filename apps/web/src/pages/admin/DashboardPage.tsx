@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import type { DashboardResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -35,6 +36,7 @@ import {
  * candidate count, today's exams), quick-action buttons, and a table of recent exams.
  */
 export function DashboardPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,11 +50,11 @@ export function DashboardPage() {
       const result = await api.get<DashboardResponse>("/api/system/dashboard");
       setData(result);
     } catch {
-      setError("加载仪表盘数据失败");
+      setError(t("admin.dashboard.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadDashboard();
@@ -65,7 +67,7 @@ export function DashboardPage() {
   if (error) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="仪表盘" />
+        <PageHeader title={t("admin.dashboard.title")} />
         <ErrorState message={error} onRetry={loadDashboard} />
       </div>
     );
@@ -73,26 +75,26 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="仪表盘" />
+      <PageHeader title={t("admin.dashboard.title")} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          label="题目总数"
+          label={t("admin.dashboard.stats.totalQuestions")}
           value={data?.totalQuestions ?? 0}
           icon={<BookOpen className="size-5" />}
         />
         <StatsCard
-          label="考试进行中"
+          label={t("admin.dashboard.stats.activeExams")}
           value={data?.activeExams ?? 0}
           icon={<Activity className="size-5" />}
         />
         <StatsCard
-          label="考生总数"
+          label={t("admin.dashboard.stats.totalCandidates")}
           value={data?.totalCandidates ?? 0}
           icon={<Users className="size-5" />}
         />
         <StatsCard
-          label="今日考试"
+          label={t("admin.dashboard.stats.todayExams")}
           value={data?.todayExams ?? 0}
           icon={<CalendarCheck className="size-5" />}
         />
@@ -101,30 +103,32 @@ export function DashboardPage() {
       <div className="flex gap-3">
         <Button onClick={() => navigate("/admin/exams/new")}>
           <PlusCircle data-icon="inline-start" />
-          创建考试
+          {t("admin.dashboard.actions.createExam")}
         </Button>
         <Button
           variant="outline"
           onClick={() => navigate("/admin/questions/import")}
         >
           <Upload data-icon="inline-start" />
-          导入题目
+          {t("admin.dashboard.actions.importQuestions")}
         </Button>
       </div>
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold">近期考试</CardTitle>
+          <CardTitle className="text-lg font-semibold">
+            {t("admin.dashboard.recent.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {!data?.recentExams || data.recentExams.length === 0 ? (
             <EmptyState
               icon={<ClipboardList className="size-10" />}
-              title="暂无考试"
-              description="还没有创建任何考试"
+              title={t("admin.dashboard.recent.emptyTitle")}
+              description={t("admin.dashboard.recent.emptyDescription")}
               action={
                 <Button onClick={() => navigate("/admin/exams/new")}>
-                  创建考试
+                  {t("admin.dashboard.actions.createExam")}
                 </Button>
               }
             />
@@ -132,10 +136,18 @@ export function DashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>考试名称</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>参加人数</TableHead>
-                  <TableHead className="w-16">操作</TableHead>
+                  <TableHead>
+                    {t("admin.dashboard.recent.columns.title")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.dashboard.recent.columns.status")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.dashboard.recent.columns.participantCount")}
+                  </TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.dashboard.recent.columns.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -150,7 +162,9 @@ export function DashboardPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label={`查看考试 ${exam.title}`}
+                        aria-label={t("admin.dashboard.recent.viewExamLabel", {
+                          title: exam.title,
+                        })}
                         onClick={() => navigate(`/admin/exams/${exam.id}`)}
                       >
                         <Eye />

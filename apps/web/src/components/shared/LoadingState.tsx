@@ -1,14 +1,17 @@
+import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Centered loading indicator with a spinning icon and customizable label text. */
 export function LoadingState({
-  label = "加载中...",
+  label,
   className,
 }: {
   label?: string;
   className?: string;
 }) {
+  const { t } = useTranslation();
+  const text = label ?? t("common.loadingState");
   return (
     <div
       role="status"
@@ -19,7 +22,7 @@ export function LoadingState({
       )}
     >
       <LoaderCircle className="size-8 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-sm text-muted-foreground">{text}</p>
     </div>
   );
 }
