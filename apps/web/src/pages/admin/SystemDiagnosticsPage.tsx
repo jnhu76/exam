@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   SystemHealthResponse,
   DiagnosticsResponse,
@@ -13,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatDuration } from "@/lib/utils";
 import { getStatusMeta, getToneTextColor } from "@/lib/statusMeta";
+import { statusLabelKey } from "@/lib/statusMetaUtils";
 import {
   Activity,
   CircleAlert,
@@ -54,6 +56,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function SystemDiagnosticsPage() {
+  const { t } = useTranslation();
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -204,7 +207,7 @@ export function SystemDiagnosticsPage() {
             )}
           >
             <StatusIcon className="size-3.5" aria-hidden="true" />
-            {statusView.label}
+            {t(statusLabelKey(statusView.labelKey))}
           </span>
           <Button
             variant="outline"
@@ -374,6 +377,7 @@ function MetricCard({
   status: HealthStatus;
   icon: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const meta = getStatusMeta(status);
   const MetricIcon = meta.icon;
   return (
@@ -396,7 +400,7 @@ function MetricCard({
           )}
         >
           <MetricIcon className="size-3" aria-hidden="true" />
-          {meta.label}
+          {t(statusLabelKey(meta.labelKey))}
         </p>
       </CardContent>
     </Card>

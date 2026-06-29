@@ -1,6 +1,10 @@
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 import "@testing-library/jest-dom/vitest";
+// Initialize i18next + react-i18next once for all tests so components using
+// useTranslation()/t() resolve keys against the zh-CN catalog (mirrors the
+// production bootstrap in src/main.tsx).
+import "@/i18n";
 
 if (typeof window !== "undefined") {
   if (!window.HTMLElement.prototype.hasPointerCapture) {

@@ -32,60 +32,155 @@ export type StatusTone =
   | "info"
   | "muted";
 
-/** Display metadata for a single status: label, tone, and icon. */
+/** Display metadata for a single status: i18n label key, tone, and icon.
+ * The Chinese label text is resolved at render time via `t(meta.labelKey)`
+ * (see StatusBadge); `statusMeta` itself stores NO hardcoded copy. */
 export interface StatusMeta {
-  label: string;
+  /** i18n key (under the `translation` namespace) for this status's label. */
+  labelKey: string;
   tone: StatusTone;
   icon: LucideIcon;
 }
 
-/** Lookup table mapping status keys to their display label, tone, and icon. */
+/** Lookup table mapping status keys to their display label key, tone, and icon. */
 export const statusMeta = {
-  draft: { label: "草稿", tone: "muted", icon: FilePenLine },
-  published: { label: "已发布", tone: "primary", icon: Send },
-  open: { label: "开放中", tone: "success", icon: LockOpen },
-  closed: { label: "已关闭", tone: "secondary", icon: Lock },
-  archived: { label: "已归档", tone: "muted", icon: Archive },
-  assigned: { label: "已分配", tone: "primary", icon: ShieldCheck },
-  started: { label: "已开始", tone: "success", icon: Play },
-  completed: { label: "已完成", tone: "secondary", icon: CheckCircle2 },
-  blocked: { label: "已阻止", tone: "destructive", icon: Ban },
-  not_started: { label: "未开始", tone: "muted", icon: Circle },
-  queued: { label: "排队中", tone: "warning", icon: Clock },
-  in_progress: { label: "答题中", tone: "primary", icon: Radio },
-  disrupted: { label: "断线", tone: "warning", icon: WifiOff },
-  submitted: { label: "已交卷", tone: "secondary", icon: Send },
-  grading: { label: "批改中", tone: "primary", icon: LoaderCircle },
-  graded: { label: "已出分", tone: "success", icon: Trophy },
-  voided: { label: "已作废", tone: "destructive", icon: Ban },
-  saving: { label: "保存中", tone: "warning", icon: LoaderCircle },
-  saved: { label: "已保存", tone: "success", icon: CheckCircle2 },
-  failed: { label: "保存失败", tone: "destructive", icon: CircleAlert },
-  canceled: { label: "已取消", tone: "muted", icon: XCircle },
-  expired: { label: "已过期", tone: "destructive", icon: Clock },
-  stale: { label: "过期数据", tone: "warning", icon: CircleAlert },
-  connected: { label: "连接正常", tone: "success", icon: Wifi },
-  degraded: { label: "连接不稳定", tone: "warning", icon: CircleAlert },
-  offline: { label: "连接已断开", tone: "destructive", icon: WifiOff },
-  ok: { label: "正常", tone: "success", icon: CheckCircle2 },
-  critical: { label: "严重", tone: "destructive", icon: CircleAlert },
-  unknown: { label: "未知", tone: "muted", icon: HelpCircle },
-  passed: { label: "及格", tone: "success", icon: Trophy },
-  not_passed: { label: "不及格", tone: "destructive", icon: XCircle },
-  auto_graded: { label: "自动评分", tone: "secondary", icon: CheckCircle2 },
-  pending_manual: {
-    label: "待手动评分",
+  draft: { labelKey: "status.exam.draft", tone: "muted", icon: FilePenLine },
+  published: { labelKey: "status.exam.published", tone: "primary", icon: Send },
+  open: { labelKey: "status.exam.open", tone: "success", icon: LockOpen },
+  closed: { labelKey: "status.exam.closed", tone: "secondary", icon: Lock },
+  archived: { labelKey: "status.exam.archived", tone: "muted", icon: Archive },
+  assigned: {
+    labelKey: "status.enrollment.assigned",
+    tone: "primary",
+    icon: ShieldCheck,
+  },
+  started: {
+    labelKey: "status.enrollment.started",
+    tone: "success",
+    icon: Play,
+  },
+  completed: {
+    labelKey: "status.enrollment.completed",
+    tone: "secondary",
+    icon: CheckCircle2,
+  },
+  blocked: {
+    labelKey: "status.enrollment.blocked",
+    tone: "destructive",
+    icon: Ban,
+  },
+  not_started: {
+    labelKey: "status.enrollment.not_started",
+    tone: "muted",
+    icon: Circle,
+  },
+  queued: {
+    labelKey: "status.attempt.queued",
     tone: "warning",
     icon: Clock,
   },
-  fully_graded: { label: "已完成评分", tone: "success", icon: Trophy },
+  in_progress: {
+    labelKey: "status.attempt.in_progress",
+    tone: "primary",
+    icon: Radio,
+  },
+  disrupted: {
+    labelKey: "status.attempt.disrupted",
+    tone: "warning",
+    icon: WifiOff,
+  },
+  submitted: {
+    labelKey: "status.attempt.submitted",
+    tone: "secondary",
+    icon: Send,
+  },
+  grading: {
+    labelKey: "status.attempt.grading",
+    tone: "primary",
+    icon: LoaderCircle,
+  },
+  graded: { labelKey: "status.attempt.graded", tone: "success", icon: Trophy },
+  voided: { labelKey: "status.attempt.voided", tone: "destructive", icon: Ban },
+  saving: {
+    labelKey: "status.save.saving",
+    tone: "warning",
+    icon: LoaderCircle,
+  },
+  saved: { labelKey: "status.save.saved", tone: "success", icon: CheckCircle2 },
+  failed: {
+    labelKey: "status.save.failed",
+    tone: "destructive",
+    icon: CircleAlert,
+  },
+  canceled: {
+    labelKey: "status.lifecycle.canceled",
+    tone: "muted",
+    icon: XCircle,
+  },
+  expired: {
+    labelKey: "status.lifecycle.expired",
+    tone: "destructive",
+    icon: Clock,
+  },
+  stale: {
+    labelKey: "status.lifecycle.stale",
+    tone: "warning",
+    icon: CircleAlert,
+  },
+  connected: {
+    labelKey: "status.connection.connected",
+    tone: "success",
+    icon: Wifi,
+  },
+  degraded: {
+    labelKey: "status.connection.degraded",
+    tone: "warning",
+    icon: CircleAlert,
+  },
+  offline: {
+    labelKey: "status.connection.offline",
+    tone: "destructive",
+    icon: WifiOff,
+  },
+  ok: { labelKey: "status.health.ok", tone: "success", icon: CheckCircle2 },
+  critical: {
+    labelKey: "status.health.critical",
+    tone: "destructive",
+    icon: CircleAlert,
+  },
+  unknown: {
+    labelKey: "status.fallback.unknown",
+    tone: "muted",
+    icon: HelpCircle,
+  },
+  passed: { labelKey: "status.result.passed", tone: "success", icon: Trophy },
+  not_passed: {
+    labelKey: "status.result.not_passed",
+    tone: "destructive",
+    icon: XCircle,
+  },
+  auto_graded: {
+    labelKey: "status.grading.auto_graded",
+    tone: "secondary",
+    icon: CheckCircle2,
+  },
+  pending_manual: {
+    labelKey: "status.grading.pending_manual",
+    tone: "warning",
+    icon: Clock,
+  },
+  fully_graded: {
+    labelKey: "status.grading.fully_graded",
+    tone: "success",
+    icon: Trophy,
+  },
   misconduct_warning: {
-    label: "违规-警告",
+    labelKey: "status.misconduct.misconduct_warning",
     tone: "warning",
     icon: Flag,
   },
   misconduct_serious: {
-    label: "违规-严重",
+    labelKey: "status.misconduct.misconduct_serious",
     tone: "destructive",
     icon: Flag,
   },
@@ -117,4 +212,23 @@ export function getToneTextColor(tone: StatusTone): string {
 /** Returns the display metadata for a status key, falling back to "unknown". */
 export function getStatusMeta(status: string): StatusMeta {
   return isStatusKey(status) ? statusMeta[status] : statusMeta.unknown;
+}
+
+/**
+ * Minimal translation function shape accepted by {@link getStatusLabel}.
+ * Matches the `t` returned by react-i18next's `useTranslation()` and the
+ * standalone i18n instance's `t`. Kept structural so this module does not
+ * import react-i18next (avoids pulling React into non-component callers).
+ */
+export type StatusTranslateFn = (key: string) => string;
+
+/**
+ * Resolves the localized label for a status via the provided `t` function.
+ * Use inside components: `getStatusLabel(status, t)` where `t` comes from
+ * `useTranslation()`. Falls back to the raw key if `t` is not provided
+ * (e.g. non-i18n contexts / unit tests that only assert tone/icon).
+ */
+export function getStatusLabel(status: string, t?: StatusTranslateFn): string {
+  const meta = getStatusMeta(status);
+  return t ? t(meta.labelKey) : meta.labelKey;
 }

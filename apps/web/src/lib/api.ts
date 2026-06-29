@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import i18n from "@/i18n";
 import {
   getMessageForLocale,
   isErrorCode,
@@ -88,7 +89,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (error instanceof ApiError) {
       throw error;
     }
-    toast.error("网络连接失败，请稍后重试");
+    toast.error(i18n.t("errors.network"));
     throw new ApiError(0, "Network request failed");
   }
 }
