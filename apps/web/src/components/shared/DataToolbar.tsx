@@ -1,15 +1,17 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /**
  * Horizontal toolbar for data table pages, providing slots for filter children,
- * action buttons, and a summary line with responsive layout.
+ * action buttons, and a summary line with responsive layout. Default accessible
+ * label resolves from `common.toolbar.dataLabel`; explicit prop wins.
  */
 export function DataToolbar({
   children,
   actions,
   summary,
-  "aria-label": ariaLabel = "数据工具栏",
+  "aria-label": ariaLabel,
   className,
 }: {
   children?: ReactNode;
@@ -18,10 +20,12 @@ export function DataToolbar({
   "aria-label"?: string;
   className?: string;
 }) {
+  const { t } = useTranslation();
+  const label = ariaLabel ?? t("common.toolbar.dataLabel");
   return (
     <div
       role="toolbar"
-      aria-label={ariaLabel}
+      aria-label={label}
       className={cn(
         "flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between",
         className,

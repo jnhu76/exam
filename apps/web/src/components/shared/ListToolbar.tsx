@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /** Props for the ListToolbar component. */
@@ -14,6 +15,7 @@ type ListToolbarProps = {
 /**
  * Toolbar for list pages with slots for search input, filter controls,
  * action buttons, and a summary line. Responsive layout adapts to screen size.
+ * Default accessible label resolves from `common.toolbar.listLabel`.
  */
 export function ListToolbar({
   search,
@@ -21,12 +23,14 @@ export function ListToolbar({
   actions,
   summary,
   className,
-  "aria-label": ariaLabel = "列表工具栏",
+  "aria-label": ariaLabel,
 }: ListToolbarProps) {
+  const { t } = useTranslation();
+  const label = ariaLabel ?? t("common.toolbar.listLabel");
   return (
     <div
       role="toolbar"
-      aria-label={ariaLabel}
+      aria-label={label}
       className={cn(
         "flex flex-col gap-3 rounded-lg border bg-card p-3 lg:flex-row lg:items-center lg:justify-between",
         className,

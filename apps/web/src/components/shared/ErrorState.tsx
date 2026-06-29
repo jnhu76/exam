@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -7,14 +8,18 @@ import { cn } from "@/lib/utils";
 export function ErrorState({
   message,
   onRetry,
+  retryLabel,
   extraAction,
   className,
 }: {
   message: string;
   onRetry?: () => void;
+  /** Overrides the default retry button label. */
+  retryLabel?: string;
   extraAction?: ReactNode;
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       role="alert"
@@ -28,7 +33,7 @@ export function ErrorState({
       <div className="flex gap-2">
         {onRetry && (
           <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-            重试
+            {retryLabel ?? t("common.retry")}
           </Button>
         )}
         {extraAction}

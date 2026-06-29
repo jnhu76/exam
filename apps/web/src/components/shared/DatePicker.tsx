@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
@@ -18,7 +19,7 @@ export interface DatePickerProps {
   onChange: (date: Date | undefined) => void;
   /** Accessible label for the trigger button. */
   "aria-label"?: string;
-  /** Placeholder shown when no date is selected. */
+  /** Placeholder shown when no date is selected. Defaults to `common.date.placeholder`. */
   placeholder?: string;
   className?: string;
 }
@@ -33,11 +34,13 @@ export interface DatePickerProps {
 export function DatePicker({
   value,
   onChange,
-  placeholder = "选择日期",
+  placeholder,
   className,
   ...aria
 }: DatePickerProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
+  const resolvedPlaceholder = placeholder ?? t("common.date.placeholder");
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -51,7 +54,7 @@ export function DatePicker({
           {...aria}
         >
           <CalendarIcon className="mr-2 size-4" />
-          {value ? format(value, "yyyy-MM-dd") : placeholder}
+          {value ? format(value, "yyyy-MM-dd") : resolvedPlaceholder}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

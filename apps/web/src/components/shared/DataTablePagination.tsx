@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +28,9 @@ function buildVisiblePages(page: number, pageCount: number) {
 
 /**
  * Pagination controls for data tables, showing item count summary,
- * page numbers, and previous/next navigation buttons.
+ * page numbers, and previous/next navigation buttons. All copy resolves from
+ * `common.table.*` with interpolation; explicit `aria-label` wins over the
+ * default `common.table.paginationLabel`.
  */
 export function DataTablePagination({
   page,
@@ -35,14 +38,16 @@ export function DataTablePagination({
   total,
   onPageChange,
   className,
-  "aria-label": ariaLabel = "表格分页",
+  "aria-label": ariaLabel,
 }: DataTablePaginationProps) {
+  const { t } = useTranslation();
   const safePageSize = pageSize > 0 ? pageSize : 1;
   const pageCount = Math.max(1, Math.ceil(total / safePageSize));
   const currentPage = Math.min(Math.max(page, 1), pageCount);
   const startItem = total === 0 ? 0 : (currentPage - 1) * safePageSize + 1;
   const endItem = Math.min(total, currentPage * safePageSize);
   const visiblePages = buildVisiblePages(currentPage, pageCount);
+  const label = ariaLabel ?? t("common.table.paginationLabel");
 
   return (
     <div
@@ -52,9 +57,13 @@ export function DataTablePagination({
       )}
     >
       <div aria-live="polite">
-        共 {total} 条，显示 {startItem}-{endItem} 条
+        {t("common.table.summary", {
+          total,
+          start: startItem,
+          end: endItem,
+        })}
       </div>
-      <Pagination aria-label={ariaLabel} className="mx-0 w-auto justify-end">
+      <Pagination aria-label={label} className="mx-0 w-auto justify-end">
         <PaginationContent>
           <PaginationItem>
             <Button
@@ -65,7 +74,7 @@ export function DataTablePagination({
               onClick={() => onPageChange(currentPage - 1)}
             >
               <ChevronLeftIcon data-icon="inline-start" aria-hidden="true" />
-              上一页
+              {t("common.table.prev")}
             </Button>
           </PaginationItem>
           {visiblePages.map((pageNumber) => (
@@ -73,7 +82,7 @@ export function DataTablePagination({
               <PaginationLink
                 href="#"
                 isActive={pageNumber === currentPage}
-                aria-label={`第 ${pageNumber} 页`}
+                aria-label={t("common.table.pageLabel", { page: pageNumber })}
                 onClick={(event) => {
                   event.preventDefault();
                   onPageChange(pageNumber);
@@ -91,7 +100,7 @@ export function DataTablePagination({
               disabled={currentPage >= pageCount}
               onClick={() => onPageChange(currentPage + 1)}
             >
-              下一页
+              {t("common.table.next")}
               <ChevronRightIcon data-icon="inline-end" aria-hidden="true" />
             </Button>
           </PaginationItem>

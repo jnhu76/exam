@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
+import i18n from "i18next";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +26,8 @@ interface State {
 /**
  * React error boundary that catches rendering errors and displays a
  * user-friendly error card with a reload button. Shows component stack
- * in development mode.
+ * in development mode. All copy is resolved from `common.errorBoundary.*`
+ * via the default i18n instance (class component, no hooks).
  */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -53,18 +55,23 @@ export class ErrorBoundary extends Component<Props, State> {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-6 text-destructive" />
-                <CardTitle>系统错误</CardTitle>
+                <CardTitle>{i18n.t("common.errorBoundary.title")}</CardTitle>
               </div>
-              <CardDescription>应用程序遇到了一个意外错误</CardDescription>
+              <CardDescription>
+                {i18n.t("common.errorBoundary.description")}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-2">
                 <p className="text-sm text-muted-foreground">
-                  {this.state.error?.message || "未知错误"}
+                  {this.state.error?.message ||
+                    i18n.t("common.errorBoundary.unknown")}
                 </p>
                 {import.meta.env.DEV && this.state.errorInfo && (
                   <details className="text-xs text-muted-foreground">
-                    <summary className="cursor-pointer">查看详细信息</summary>
+                    <summary className="cursor-pointer">
+                      {i18n.t("common.errorBoundary.details")}
+                    </summary>
                     <pre className="mt-2 overflow-auto rounded bg-muted p-2">
                       {this.state.errorInfo.componentStack}
                     </pre>
@@ -75,7 +82,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <CardFooter>
               <Button onClick={this.handleReset} className="w-full">
                 <RefreshCw data-icon="inline-start" />
-                重新加载
+                {i18n.t("common.errorBoundary.reload")}
               </Button>
             </CardFooter>
           </Card>
