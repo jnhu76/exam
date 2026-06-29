@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BrandHeader } from "@/components/layout/BrandHeader";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useBranding } from "@/components/layout/BrandProvider";
@@ -14,6 +15,7 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
  * and branding header. Redirects to the appropriate dashboard on success.
  */
 export function LoginPage() {
+  const { t } = useTranslation();
   const branding = useBranding();
   const { login, isSubmittingLogin, error } = useAuth();
   const [username, setUsername] = useState("");
@@ -22,8 +24,8 @@ export function LoginPage() {
 
   const validate = () => {
     const errors: Record<string, string> = {};
-    if (!username.trim()) errors.username = "请输入用户名";
-    if (!password.trim()) errors.password = "请输入密码";
+    if (!username.trim()) errors.username = t("auth.login.usernameRequired");
+    if (!password.trim()) errors.password = t("auth.login.passwordRequired");
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -52,11 +54,13 @@ export function LoginPage() {
           <form onSubmit={handleSubmit}>
             <FieldGroup data-testid="login-field-group" className="gap-4">
               <Field>
-                <Label htmlFor="username">用户名</Label>
+                <Label htmlFor="username">
+                  {t("auth.login.usernameLabel")}
+                </Label>
                 <Input
                   id="username"
                   type="text"
-                  placeholder="请输入用户名"
+                  placeholder={t("auth.login.usernamePlaceholder")}
                   value={username}
                   onChange={(e) => {
                     setUsername(e.target.value);
@@ -68,11 +72,13 @@ export function LoginPage() {
                 <FieldError>{fieldErrors.username}</FieldError>
               </Field>
               <Field>
-                <Label htmlFor="password">密码</Label>
+                <Label htmlFor="password">
+                  {t("auth.login.passwordLabel")}
+                </Label>
                 <Input
                   id="password"
                   type="password"
-                  placeholder="请输入密码"
+                  placeholder={t("auth.login.passwordPlaceholder")}
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
@@ -96,7 +102,9 @@ export function LoginPage() {
                 className="w-full"
                 disabled={isSubmittingLogin}
               >
-                {isSubmittingLogin ? "登录中..." : "登录"}
+                {isSubmittingLogin
+                  ? t("auth.login.submitting")
+                  : t("auth.login.submit")}
               </Button>
             </FieldGroup>
           </form>

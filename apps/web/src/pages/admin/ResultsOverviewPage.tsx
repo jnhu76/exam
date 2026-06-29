@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -41,6 +42,7 @@ interface ExamRow {
 
 /** Admin page for browsing published/closed exams and navigating to their score lists. */
 export function ResultsOverviewPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,11 +63,11 @@ export function ResultsOverviewPage() {
       );
       setExams(visible);
     } catch {
-      setError("加载考试列表失败");
+      setError(t("admin.resultsOverview.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadExams();
@@ -87,28 +89,40 @@ export function ResultsOverviewPage() {
   return (
     <TooltipProvider>
       <div className="flex flex-col gap-6">
-        <PageHeader title="成绩查询" />
+        <PageHeader title={t("admin.resultsOverview.title")} />
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">成绩管理</CardTitle>
+            <CardTitle className="text-base">
+              {t("admin.resultsOverview.cardTitle")}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {exams.length === 0 ? (
               <EmptyState
                 icon={<Gauge className="size-12" />}
-                title="暂无相关考试"
-                description="已结束、已归档或进行中的考试将显示在此处"
+                title={t("admin.resultsOverview.empty.title")}
+                description={t("admin.resultsOverview.empty.description")}
               />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>考试名称</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>考试时间</TableHead>
-                    <TableHead>已评分</TableHead>
-                    <TableHead>操作</TableHead>
+                    <TableHead>
+                      {t("admin.resultsOverview.columns.title")}
+                    </TableHead>
+                    <TableHead>
+                      {t("admin.resultsOverview.columns.status")}
+                    </TableHead>
+                    <TableHead>
+                      {t("admin.resultsOverview.columns.time")}
+                    </TableHead>
+                    <TableHead>
+                      {t("admin.resultsOverview.columns.gradedCount")}
+                    </TableHead>
+                    <TableHead>
+                      {t("admin.resultsOverview.columns.actions")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -125,7 +139,7 @@ export function ResultsOverviewPage() {
                         }
                       >
                         <Eye data-icon="inline-start" />
-                        查看成绩
+                        {t("admin.resultsOverview.actions.viewScores")}
                       </Button>
                     );
                     return (

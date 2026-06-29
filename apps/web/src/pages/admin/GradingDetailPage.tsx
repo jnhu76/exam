@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
+import i18n from "i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -13,16 +15,30 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 
+/**
+ * Validates a manual grading score against the question's max score.
+ * Error messages resolve from `admin.gradingDetail.validation.*` via the
+ * default i18n instance so the exported helper stays usable outside React.
+ * Returns null when the score is valid.
+ */
 export function validateScore(score: number, maxScore: number): string | null {
-  if (score < 0) return "分数不能为负数";
-  if (score > maxScore) return `分数不能超过满分 (${maxScore})`;
+  if (score < 0)
+    return i18n.t("admin.gradingDetail.validation.scoreNegative" as never);
+  if (score > maxScore)
+    return i18n.t("admin.gradingDetail.validation.scoreExceedsMax", {
+      max: maxScore,
+    });
   return null;
 }
 
 function formatAnswer(answer: unknown): string {
-  if (answer === undefined || answer === null || answer === "") return "未作答";
+  if (answer === undefined || answer === null || answer === "")
+    return i18n.t("admin.gradingDetail.format.unanswered" as never);
   if (typeof answer === "string") return answer;
-  if (typeof answer === "boolean") return answer ? "正确" : "错误";
+  if (typeof answer === "boolean")
+    return answer
+      ? i18n.t("admin.gradingDetail.format.correct" as never)
+      : i18n.t("admin.gradingDetail.format.incorrect" as never);
   if (Array.isArray(answer)) return answer.join("、");
   if (typeof answer === "object") {
     return Object.values(answer as Record<string, unknown>)
@@ -67,6 +83,7 @@ interface GradeQuestionResponse {
 }
 
 export function GradingDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<GradingDetailData | null>(null);
@@ -97,11 +114,11 @@ export function GradingDetailPage() {
       setScores(initialScores);
       setComments(initialComments);
     } catch {
-      setError("加载评分详情失败");
+      setError(t("admin.gradingDetail.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     loadDetail();
@@ -134,30 +151,33 @@ export function GradingDetailPage() {
           prev ? { ...prev, gradingStatus: result.gradingStatus } : prev,
         );
         if (result.fullyGraded) {
-          toast.success("评分已完成");
+          toast.success(t("admin.gradingDetail.toast.fullyGraded"));
         } else {
-          toast.success("评分已保存");
+          toast.success(t("admin.gradingDetail.toast.saved"));
         }
       } catch {
-        toast.error("保存失败，请重试");
+        toast.error(t("admin.gradingDetail.errors.saveFailed"));
       } finally {
         setSaving((prev) => ({ ...prev, [questionId]: false }));
       }
     },
-    [id, scores, comments],
+    [id, scores, comments, t],
   );
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadDetail} />;
   if (!data)
     return (
-      <ErrorState message="评分数据加载异常，请重试" onRetry={loadDetail} />
+      <ErrorState
+        message={t("admin.gradingDetail.errors.dataLoadFailed")}
+        onRetry={loadDetail}
+      />
     );
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="手动评分"
+        title={t("admin.gradingDetail.title")}
         description={`${data.examTitle} — ${data.candidateName}`}
         actions={
           <Button
@@ -165,7 +185,7 @@ export function GradingDetailPage() {
             onClick={() => navigate("/admin/grading-queue")}
           >
             <ArrowLeft className="mr-2 size-4" />
-            返回队列
+            {t("admin.gradingDetail.actions.backToQueue")}
           </Button>
         }
         status={<StatusBadge status={data.gradingStatus} />}
@@ -175,14 +195,18 @@ export function GradingDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">{q.content}</CardTitle>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>满分: {q.maxScore}</span>
+              <span>
+                {t("admin.gradingDetail.question.maxScore", {
+                  score: q.maxScore,
+                })}
+              </span>
               <span>·</span>
-              <span>主观题</span>
+              <span>{t("admin.gradingDetail.question.subjective")}</span>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>考生作答</Label>
+              <Label>{t("admin.gradingDetail.question.candidateAnswer")}</Label>
               <div
                 data-testid={`grading-candidate-answer-${q.questionId}`}
                 className="min-h-16 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
@@ -191,7 +215,9 @@ export function GradingDetailPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={`score-${q.questionId}`}>分数</Label>
+              <Label htmlFor={`score-${q.questionId}`}>
+                {t("admin.gradingDetail.question.scoreLabel")}
+              </Label>
               <Input
                 id={`score-${q.questionId}`}
                 data-testid={`grading-score-input-${q.questionId}`}
@@ -213,7 +239,9 @@ export function GradingDetailPage() {
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor={`comment-${q.questionId}`}>评语（可选）</Label>
+              <Label htmlFor={`comment-${q.questionId}`}>
+                {t("admin.gradingDetail.question.commentLabel")}
+              </Label>
               <Textarea
                 id={`comment-${q.questionId}`}
                 data-testid={`grading-comment-input-${q.questionId}`}
@@ -224,7 +252,9 @@ export function GradingDetailPage() {
                     [q.questionId]: e.target.value,
                   }))
                 }
-                placeholder="输入评语..."
+                placeholder={t(
+                  "admin.gradingDetail.question.commentPlaceholder",
+                )}
                 rows={3}
               />
             </div>
@@ -234,11 +264,15 @@ export function GradingDetailPage() {
                 onClick={() => handleSave(q.questionId, q.maxScore)}
                 disabled={saving[q.questionId]}
               >
-                {saving[q.questionId] ? "保存中..." : "保存"}
+                {saving[q.questionId]
+                  ? t("admin.gradingDetail.question.saving")
+                  : t("admin.gradingDetail.question.save")}
               </Button>
               {q.entry && (
                 <span className="text-sm text-muted-foreground">
-                  已评分: {q.entry.score} 分
+                  {t("admin.gradingDetail.question.gradedLabel", {
+                    score: q.entry.score,
+                  })}
                 </span>
               )}
             </div>
