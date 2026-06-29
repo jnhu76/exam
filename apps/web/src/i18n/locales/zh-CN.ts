@@ -243,6 +243,174 @@ const zhCN = {
       lastScanNever: "无",
     },
   },
+
+  /** Candidate exam runtime shell copy. */
+  candidateRuntime: {
+    status: {
+      inProgress: "答题中",
+      ended: "考试已结束",
+    },
+    loading: {
+      attempt: "正在加载答题记录...",
+    },
+    errors: {
+      loadFailed: "无法加载答题记录，请检查连接后重试",
+      loadUnavailable: "答题记录不可用",
+      submitFailed: "提交失败，请重试",
+      saveError: "保存答案时出错，系统将尝试提交",
+      autoSubmitFailed: "自动提交失败，请点击重试",
+    },
+    actions: {
+      previous: "上一题",
+      next: "下一题",
+      flag: "标记本题",
+      unflag: "取消标记",
+      submit: "交卷",
+      submitExam: "提交考试",
+      retrySubmit: "重试提交",
+      retry: "重试",
+    },
+    timer: {
+      remaining: "剩余时间",
+    },
+    save: {
+      idle: "等待保存",
+      saving: "保存中...",
+      saved: "已保存",
+      error: "保存失败",
+    },
+    navigator: {
+      ariaLabel: "题目导航",
+      unanswered: "未作答",
+      answered: "已作答",
+      flagged: "已标记",
+      questionOf: "第 {{current}} 题 / 共 {{total}} 题",
+      questionLabel: "第 {{number}} 题，{{state}}",
+      questionLabelCurrent: "第 {{number}} 题，{{state}}，当前题",
+      questionId: "题号",
+      progress: "已答 {{answered}} / 未答 {{unanswered}}",
+      progressFull:
+        "已答 {{answered}} / 未答 {{unanswered}} / 标记 {{flagged}} / 共 {{total}}",
+    },
+    header: {
+      currentExam: "当前考试",
+      remaining: "剩余",
+    },
+    question: {
+      number: "第 {{number}} 题",
+      score: "{{score}} 分",
+    },
+    connection: {
+      abnormal: "连接异常",
+      restoreHint: "系统会在连接恢复后继续保存，请不要关闭页面",
+    },
+    deadline: {
+      passed: "已到截止时间",
+      passedDescription: "已到截止时间，不能继续修改答案",
+      endedSubmitted: "答案已提交，考试已结束",
+      closed: "该考试已被关闭，无法继续作答",
+      autoSubmitTitle: "自动提交失败",
+      timeUp: "考试时间已到，答题已结束",
+      autoSubmitting: "系统正在自动提交您的答案...",
+      retryHint: "请点击下方按钮重试提交",
+    },
+    saveRejection: {
+      title: "答案保存被拒",
+      defaultDescription: "服务器拒绝了本次保存",
+    },
+    answer: {
+      panelTitle: "作答区",
+      unsupportedType: "不支持的题目类型: {{type}}",
+      subjective: {
+        label: "主观题答案",
+        placeholder: "请输入答案",
+        charCount: "{{count}} 字",
+        charCountWithMax: "{{count}} / {{max}}",
+      },
+      fillBlank: {
+        blankLabel: "第{{number}}空",
+        blankInputLabel: "第{{number}}空答案",
+        placeholder: "请输入答案",
+      },
+      trueFalse: {
+        true: "正确",
+        false: "错误",
+      },
+    },
+    submitDialog: {
+      title: "确认交卷",
+      description: "请确认以下答题与保存状态。",
+      totalCount: "题目总数",
+      flushing: "保存中...",
+      unansweredLabel: "未答题：{{count}} 题未作答",
+      unsavedLabel: "未保存：{{count}} 题",
+      saveFailedLabel: "保存失败：{{count}} 题",
+      saveFailedWarning:
+        "部分答案保存失败，请继续答题后重新保存或确认仍然提交。",
+      saveTimeoutWarning:
+        "保存超时，仍有答案未确认保存。请重试或选择仍然提交。",
+      flaggedWarning: "有 {{count}} 题已标记待检查",
+      noModify: "交卷后不可修改",
+      continueAnswering: "继续答题",
+      confirmSubmit: "确认交卷",
+      submitting: "提交中...",
+      submitAnyway: "仍然提交",
+    },
+  },
+
+  /** Candidate result / attempt detail page copy. */
+  candidateResult: {
+    title: "考试成绩",
+    loading: "正在加载成绩...",
+    error: {
+      loadFailed: "加载成绩失败",
+    },
+    summary: {
+      passingScore: "及格线：{{score}}",
+      passed: "已通过",
+      failed: "未通过",
+    },
+    detail: {
+      title: "答题明细",
+    },
+    table: {
+      questionNumber: "题号",
+      questionContent: "题目",
+      questionType: "题型",
+      yourAnswer: "你的答案",
+      correctAnswer: "正确答案",
+      score: "得分",
+    },
+    questionTypes: {
+      single_choice: "单选题",
+      multiple_choice: "多选题",
+      true_false: "判断题",
+      fill_blank: "填空题",
+    },
+    answer: {
+      unanswered: "未作答",
+      correct: "正确",
+      incorrect: "错误",
+      manual: "主观题",
+    },
+    aria: {
+      correct: "回答正确",
+      incorrect: "回答错误",
+    },
+    status: {
+      pending_publish: "成绩正在审核中，将在公布后可见",
+      not_graded: "考试尚未完成评分，请等待",
+      not_started: "考试尚未开始，暂无成绩",
+      submitted: "已提交，等待评分",
+      grading: "正在评分",
+      graded: "成绩尚未公布",
+      disrupted: "答题中断，请联系管理员或重新进入",
+      default: "已交卷，等待成绩公布",
+    },
+    actions: {
+      backToList: "返回考试列表",
+    },
+  },
 } as const;
 
 export default zhCN;

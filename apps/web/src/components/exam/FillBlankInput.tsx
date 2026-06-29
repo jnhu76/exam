@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 /**
  * Input component for fill-in-the-blank questions. Supports single-blank
  * (string value) and multi-blank (record value) modes, with auto-detection
@@ -16,6 +18,7 @@ export function FillBlankInput({
   onChange: (answer: unknown) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation();
   const normalizedBlanks =
     blanks.length > 0
       ? blanks
@@ -23,7 +26,9 @@ export function FillBlankInput({
           length: Math.max(1, content.split("____").length - 1),
         }).map((_, index) => ({
           id: `blank-${index + 1}`,
-          content: `第${index + 1}空`,
+          content: t("candidateRuntime.answer.fillBlank.blankLabel", {
+            number: index + 1,
+          }),
         }));
 
   const recordValue: Record<string, string> =
@@ -50,7 +55,10 @@ export function FillBlankInput({
       {normalizedBlanks.map((blank, i) => (
         <div key={blank.id} className="flex items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">
-            第{i + 1}空:
+            {t("candidateRuntime.answer.fillBlank.blankLabel", {
+              number: i + 1,
+            })}
+            :
           </span>
           <input
             type="text"
@@ -58,8 +66,10 @@ export function FillBlankInput({
             onChange={(e) => handleChange(blank.id, e.target.value)}
             disabled={disabled}
             className={`flex-1 rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
-            placeholder="请输入答案"
-            aria-label={`第${i + 1}空答案`}
+            placeholder={t("candidateRuntime.answer.fillBlank.placeholder")}
+            aria-label={t("candidateRuntime.answer.fillBlank.blankInputLabel", {
+              number: i + 1,
+            })}
           />
         </div>
       ))}

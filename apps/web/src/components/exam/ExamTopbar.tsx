@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ export function ExamTopbar({
   networkStatus,
   className,
 }: ExamTopbarProps) {
+  const { t } = useTranslation();
   return (
     <header
       className={cn(
@@ -31,7 +33,7 @@ export function ExamTopbar({
     >
       <div className="min-w-0">
         <div className="text-xs font-medium text-muted-foreground">
-          当前考试
+          {t("candidateRuntime.header.currentExam")}
         </div>
         <h1 className="truncate text-lg font-semibold text-foreground">
           {title}
@@ -39,7 +41,9 @@ export function ExamTopbar({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline" className="gap-1.5">
-          <span className="text-muted-foreground">剩余</span>
+          <span className="text-muted-foreground">
+            {t("candidateRuntime.header.remaining")}
+          </span>
           <span className="font-mono tabular-nums">{remainingTime}</span>
         </Badge>
         <div>{saveStatus}</div>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,39 +34,52 @@ export function SubmitConfirmDialog({
   flaggedCount = 0,
   confirmDisabled = false,
 }: SubmitConfirmDialogProps) {
+  const { t } = useTranslation();
   const unansweredCount = Math.max(totalCount - answeredCount, 0);
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>确认交卷</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("candidateRuntime.submitDialog.title")}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            交卷后将不能继续修改答案，请确认当前作答情况。
+            {t("candidateRuntime.submitDialog.description")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="grid gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
           <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">题目总数</span>
+            <span className="text-muted-foreground">
+              {t("candidateRuntime.submitDialog.totalCount")}
+            </span>
             <span className="font-medium">{totalCount}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">已作答</span>
+            <span className="text-muted-foreground">
+              {t("candidateRuntime.navigator.answered")}
+            </span>
             <span className="font-medium">{answeredCount}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">未作答</span>
+            <span className="text-muted-foreground">
+              {t("candidateRuntime.navigator.unanswered")}
+            </span>
             <span className="font-medium">{unansweredCount}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">已标记</span>
+            <span className="text-muted-foreground">
+              {t("candidateRuntime.navigator.flagged")}
+            </span>
             <span className="font-medium">{flaggedCount}</span>
           </div>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>继续作答</AlertDialogCancel>
+          <AlertDialogCancel>
+            {t("candidateRuntime.submitDialog.continueAnswering")}
+          </AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} disabled={confirmDisabled}>
-            确认交卷
+            {t("candidateRuntime.submitDialog.confirmSubmit")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

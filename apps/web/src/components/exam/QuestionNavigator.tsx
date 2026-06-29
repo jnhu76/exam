@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { FlagIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,26 +20,21 @@ type QuestionNavigatorProps = {
   className?: string;
 };
 
-/** Display metadata (label and CSS classes) for each navigator state. */
-const stateMeta = {
-  unanswered: {
-    label: "未作答",
-    className:
-      "border-border bg-background text-muted-foreground hover:bg-muted",
-  },
-  answered: {
-    label: "已作答",
-    className:
-      "border-success bg-success text-success-foreground hover:bg-success/90",
-  },
-  flagged: {
-    label: "已标记",
-    className: "border-warning bg-warning/10 text-warning hover:bg-warning/20",
-  },
-} satisfies Record<
-  QuestionNavigatorState,
-  { label: string; className: string }
->;
+/** i18n key mapping for each navigator state label. */
+const stateKeyMap: Record<QuestionNavigatorState, string> = {
+  unanswered: "candidateRuntime.navigator.unanswered",
+  answered: "candidateRuntime.navigator.answered",
+  flagged: "candidateRuntime.navigator.flagged",
+};
+
+/** CSS class mapping for each navigator state. */
+const stateClassMap: Record<QuestionNavigatorState, string> = {
+  unanswered:
+    "border-border bg-background text-muted-foreground hover:bg-muted",
+  answered:
+    "border-success bg-success text-success-foreground hover:bg-success/90",
+  flagged: "border-warning bg-warning/10 text-warning hover:bg-warning/20",
+};
 
 /**
  * Grid-based question navigator showing numbered buttons with
@@ -50,25 +46,36 @@ export function QuestionNavigator({
   onSelect,
   className,
 }: QuestionNavigatorProps) {
+  const { t } = useTranslation();
   return (
-    <nav aria-label="题目导航" className={cn("flex flex-col gap-3", className)}>
+    <nav
+      aria-label={t("candidateRuntime.navigator.ariaLabel")}
+      className={cn("flex flex-col gap-3", className)}
+    >
       <div className="flex flex-wrap gap-1.5">
         {items.map((item) => {
-          const meta = stateMeta[item.state];
+          const stateKey = stateKeyMap[item.state];
+          const stateLabel = t(stateKey as never);
           const isCurrent = item.id === currentId;
-          const label = isCurrent
-            ? `第 ${item.number} 题，${meta.label}，当前题`
-            : `第 ${item.number} 题，${meta.label}`;
+          const ariaLabel = isCurrent
+            ? t("candidateRuntime.navigator.questionLabelCurrent" as never, {
+                number: item.number,
+                state: stateLabel,
+              })
+            : t("candidateRuntime.navigator.questionLabel" as never, {
+                number: item.number,
+                state: stateLabel,
+              });
 
           return (
             <button
               key={item.id}
               type="button"
-              aria-label={label}
+              aria-label={ariaLabel}
               aria-current={isCurrent ? "true" : undefined}
               className={cn(
                 "relative flex size-9 items-center justify-center rounded-md border text-sm font-medium transition-colors",
-                meta.className,
+                stateClassMap[item.state],
                 isCurrent &&
                   "ring-2 ring-primary ring-offset-2 ring-offset-background",
               )}
@@ -89,15 +96,15 @@ export function QuestionNavigator({
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-3 rounded-sm border border-border bg-background" />
-          未作答
+          {t("candidateRuntime.navigator.unanswered")}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-3 rounded-sm border border-success bg-success" />
-          已作答
+          {t("candidateRuntime.navigator.answered")}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block size-3 rounded-sm border border-warning bg-warning/10" />
-          已标记
+          {t("candidateRuntime.navigator.flagged")}
         </span>
       </div>
     </nav>

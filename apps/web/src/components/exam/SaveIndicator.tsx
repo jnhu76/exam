@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   CircleCheck,
   CircleDashed,
@@ -8,36 +9,29 @@ import {
 /** Visual save-status states for the answer save indicator. */
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
-/** Configuration mapping each save state to its icon, label, and CSS classes. */
-const statusConfig = {
-  idle: {
-    icon: CircleDashed,
-    text: "等待保存",
-    className: "border-border bg-card text-muted-foreground",
-  },
-  saving: {
-    icon: LoaderCircle,
-    text: "保存中...",
-    className: "border-primary/30 bg-primary/10 text-primary",
-  },
-  saved: {
-    icon: CircleCheck,
-    text: "已保存",
-    className: "border-success/30 bg-success/10 text-success",
-  },
-  error: {
-    icon: TriangleAlert,
-    text: "保存失败",
-    className: "border-destructive/30 bg-destructive/10 text-destructive",
-  },
-} satisfies Record<
-  SaveState,
-  {
-    icon: typeof CircleCheck;
-    text: string;
-    className: string;
-  }
->;
+/** i18n key mapping for each save state's label. */
+const stateKeyMap: Record<SaveState, string> = {
+  idle: "candidateRuntime.save.idle",
+  saving: "candidateRuntime.save.saving",
+  saved: "candidateRuntime.save.saved",
+  error: "candidateRuntime.save.error",
+};
+
+/** CSS class mapping for each save state. */
+const stateClassMap: Record<SaveState, string> = {
+  idle: "border-border bg-card text-muted-foreground",
+  saving: "border-primary/30 bg-primary/10 text-primary",
+  saved: "border-success/30 bg-success/10 text-success",
+  error: "border-destructive/30 bg-destructive/10 text-destructive",
+};
+
+/** Icon mapping for each save state. */
+const stateIconMap: Record<SaveState, typeof CircleCheck> = {
+  idle: CircleDashed,
+  saving: LoaderCircle,
+  saved: CircleCheck,
+  error: TriangleAlert,
+};
 
 /**
  * Inline indicator showing the current answer save status
@@ -50,20 +44,20 @@ export function SaveIndicator({
   state?: SaveState;
   status?: "saving" | "saved" | "error";
 }) {
+  const { t } = useTranslation();
   const effectiveStatus = state ? state : status;
-
-  const config = statusConfig[effectiveStatus ?? "idle"];
-  const Icon = config.icon;
+  const resolved = effectiveStatus ?? "idle";
+  const Icon = stateIconMap[resolved];
 
   return (
     <span
-      className={`inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${config.className}`}
+      className={`inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${stateClassMap[resolved]}`}
     >
       <Icon
-        className={`size-4 ${effectiveStatus === "saving" ? "animate-spin" : ""}`}
+        className={`size-4 ${resolved === "saving" ? "animate-spin" : ""}`}
         aria-hidden="true"
       />
-      {config.text}
+      {t(stateKeyMap[resolved] as never)}
     </span>
   );
 }

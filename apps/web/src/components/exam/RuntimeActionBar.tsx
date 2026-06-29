@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { FlagIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export function RuntimeActionBar({
   flagged = false,
   className,
 }: RuntimeActionBarProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -43,19 +45,21 @@ export function RuntimeActionBar({
           onClick={onPrevious}
           disabled={previousDisabled}
         >
-          上一题
+          {t("candidateRuntime.actions.previous")}
         </Button>
         <Button variant="outline" onClick={onNext} disabled={nextDisabled}>
-          下一题
+          {t("candidateRuntime.actions.next")}
         </Button>
       </div>
       <div className="flex gap-2">
         <Button variant="secondary" onClick={onToggleFlag}>
           <FlagIcon data-icon="inline-start" aria-hidden="true" />
-          {flagged ? "取消标记" : "标记本题"}
+          {flagged
+            ? t("candidateRuntime.actions.unflag")
+            : t("candidateRuntime.actions.flag")}
         </Button>
         <Button onClick={onSubmit} disabled={submitDisabled}>
-          交卷
+          {t("candidateRuntime.actions.submit")}
         </Button>
       </div>
     </div>
