@@ -1,3 +1,12 @@
+import i18n from "@/i18n";
+
+/**
+ * i18n key for the generic "operation failed" fallback used across the API
+ * error layer. Kept as a shared constant so callers (api.ts, toast helpers)
+ * reference the same key instead of hardcoding the Chinese string.
+ */
+export const API_ERROR_FALLBACK_KEY = "errors.unknown";
+
 /** Shape of a single field-level validation error detail from the API. */
 interface ValidationFieldDetail {
   field: string;
@@ -18,16 +27,22 @@ function isValidationFieldDetail(
   return typeof value.field === "string" && typeof value.message === "string";
 }
 
-/** Extracts a human-readable error message from an unknown error value. */
-export function getApiErrorMessage(
-  error: unknown,
-  fallback = "操作失败，请稍后重试",
-): string {
+/**
+ * Resolves the localized fallback message for the API error layer via the
+ * shared i18n instance (works outside React — no useTranslation needed).
+ */
+function resolveFallback(): string {
+  return i18n.t(API_ERROR_FALLBACK_KEY);
+}
+
+/** Extracts a human-readable error message from an unknown error value.
+ * The fallback is i18n-resolved (errors.unknown); callers may override it. */
+export function getApiErrorMessage(error: unknown, fallback?: string): string {
   if (error instanceof Error && error.message) return error.message;
   if (isRecord(error) && typeof error.message === "string" && error.message) {
     return error.message;
   }
-  return fallback;
+  return fallback ?? resolveFallback();
 }
 
 /** Extracts per-field validation errors from an API error's details object. */

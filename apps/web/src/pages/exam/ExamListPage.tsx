@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -28,30 +29,12 @@ function formatTime(iso: string): string {
   });
 }
 
-/** Maps an exam availability status to its Chinese display label. */
-function statusLabel(
+/** Maps an exam availability status to its i18n key (under `availability.`).
+ * The Chinese text is resolved at render via `t()`; no hardcoded copy here. */
+function availabilityLabelKey(
   status: CandidateExamSummary["availabilityStatus"],
 ): string {
-  switch (status) {
-    case "available":
-      return "可参加";
-    case "in_progress":
-      return "进行中";
-    case "resumable":
-      return "可恢复";
-    case "submitted_pending_grade":
-      return "待评分";
-    case "graded":
-      return "已评分";
-    case "max_attempts_exhausted":
-      return "次数已用完";
-    case "not_started_yet":
-      return "未开放";
-    case "expired":
-      return "已过期";
-    case "unavailable":
-      return "不可用";
-  }
+  return `availability.${status}`;
 }
 
 /** Returns the shadcn Badge variant for a given exam availability status. */
@@ -84,6 +67,7 @@ function ExamCard({
   onStart: (examId: string) => void;
   onResult: (attemptId: string) => void;
 }) {
+  const { t } = useTranslation();
   const actionLabel = (() => {
     switch (exam.primaryAction) {
       case "start":
@@ -139,7 +123,11 @@ function ExamCard({
               </Badge>
             )}
             <Badge variant={statusBadgeVariant(exam.availabilityStatus)}>
-              {statusLabel(exam.availabilityStatus)}
+              {/* Key is built from a closed availability enum; all 9 values
+               * exist in the catalog. `as never` bridges the runtime-built
+               * string to i18next's literal-key type (dynamic keys can't be
+               * statically narrowed). */}
+              {t(availabilityLabelKey(exam.availabilityStatus) as never)}
             </Badge>
           </div>
         </div>
