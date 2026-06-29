@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
@@ -53,12 +54,6 @@ interface Page<T> {
   items: T[];
 }
 
-/** Display labels for user roles. */
-const roleLabels: Record<string, string> = {
-  Admin: "管理员",
-  Candidate: "候选人",
-};
-
 /** The subset of roles that admins can create or edit via the dialog. */
 type EditableRole = "Admin";
 
@@ -67,6 +62,7 @@ const EDITABLE_ROLES: EditableRole[] = ["Admin"];
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +87,7 @@ export function UsersPage() {
         ),
       );
     } catch {
-      setError("加载用户列表失败");
+      setError(t("admin.users.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -116,11 +112,14 @@ export function UsersPage() {
   /** Validates the form fields and returns true if valid. */
   function validate() {
     const errors: Record<string, string> = {};
-    if (!name.trim()) errors.name = "请输入姓名";
+    if (!name.trim()) errors.name = t("admin.users.validation.nameRequired");
     if (!editing) {
-      if (!username.trim()) errors.username = "请输入用户名";
+      if (!username.trim())
+        errors.username = t("admin.users.validation.usernameRequired");
       if (password.length < DEFAULT_PASSWORD_POLICY.minLength)
-        errors.password = `密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`;
+        errors.password = t("admin.users.validation.passwordMin", {
+          min: DEFAULT_PASSWORD_POLICY.minLength,
+        });
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -141,7 +140,7 @@ export function UsersPage() {
       setDialogOpen(false);
       await loadUsers();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, "保存失败，请稍后重试"));
+      toast.error(getApiErrorMessage(err, t("admin.common.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -155,7 +154,7 @@ export function UsersPage() {
       await api.patch(`/api/users/${user.id}`, { isActive: !user.isActive });
       await loadUsers();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, "操作失败，请稍后重试"));
+      toast.error(getApiErrorMessage(err, t("admin.common.operationFailed")));
     } finally {
       setTogglingId(null);
     }
@@ -166,29 +165,29 @@ export function UsersPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="用户管理"
+        title={t("admin.users.title")}
         actions={
           <Button onClick={() => open()}>
             <Plus data-icon="inline-start" />
-            新增用户
+            {t("admin.users.createBtn")}
           </Button>
         }
       />
       {users.length === 0 ? (
         <EmptyState
           icon={<Users className="size-8" />}
-          title="暂无用户"
-          description="还没有创建任何管理用户。"
+          title={t("admin.users.empty")}
+          description={t("admin.users.emptyDescription")}
         />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>用户名</TableHead>
-              <TableHead>姓名</TableHead>
-              <TableHead>角色</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>操作</TableHead>
+              <TableHead>{t("admin.users.columns.username")}</TableHead>
+              <TableHead>{t("admin.users.columns.name")}</TableHead>
+              <TableHead>{t("admin.users.columns.role")}</TableHead>
+              <TableHead>{t("admin.users.columns.status")}</TableHead>
+              <TableHead>{t("admin.users.columns.actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -198,17 +197,22 @@ export function UsersPage() {
                 <TableCell>{user.name}</TableCell>
                 <TableCell>
                   <Badge variant="outline">
-                    {roleLabels[user.role] ?? user.role}
+                    {t(`admin.users.roleLabels.${user.role}` as any) ??
+                      user.role}
                   </Badge>
                 </TableCell>
-                <TableCell>{user.isActive ? "启用" : "禁用"}</TableCell>
+                <TableCell>
+                  {user.isActive
+                    ? t("admin.common.enable")
+                    : t("admin.common.disable")}
+                </TableCell>
                 <TableCell>
                   <RowActions>
                     <Button
                       size="icon"
                       variant="ghost"
                       onClick={() => open(user)}
-                      aria-label="编辑用户"
+                      aria-label={t("admin.users.editLabel")}
                     >
                       <Pencil />
                     </Button>
@@ -220,14 +224,23 @@ export function UsersPage() {
                           disabled={togglingId !== null}
                         >
                           {togglingId === user.id
-                            ? "处理中..."
+                            ? t("admin.common.processing")
                             : user.isActive
-                              ? "禁用"
-                              : "启用"}
+                              ? t("admin.common.disable")
+                              : t("admin.common.enable")}
                         </Button>
                       }
-                      title={user.isActive ? "确认禁用" : "确认启用"}
-                      description={`确定要${user.isActive ? "禁用" : "启用"}用户「${user.name}」吗？`}
+                      title={
+                        user.isActive
+                          ? t("admin.common.confirmDisable")
+                          : t("admin.common.confirmEnable")
+                      }
+                      description={t("admin.users.enableDisable", {
+                        action: user.isActive
+                          ? t("admin.common.disable")
+                          : t("admin.common.enable"),
+                        name: user.name,
+                      })}
                       destructive={user.isActive}
                       onConfirm={() => void toggle(user)}
                     />
@@ -241,13 +254,17 @@ export function UsersPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{editing ? "编辑用户" : "新增用户"}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? t("admin.users.dialog.edit")
+                : t("admin.users.dialog.create")}
+            </DialogTitle>
           </DialogHeader>
           <FieldGroup className="py-4">
             {!editing && (
               <>
                 <Field>
-                  <Label>用户名</Label>
+                  <Label>{t("admin.users.dialog.username")}</Label>
                   <Input
                     value={username}
                     onChange={(e) => {
@@ -259,7 +276,7 @@ export function UsersPage() {
                   <FieldError>{fieldErrors.username}</FieldError>
                 </Field>
                 <Field>
-                  <Label>初始密码</Label>
+                  <Label>{t("admin.users.dialog.password")}</Label>
                   <Input
                     type="password"
                     value={password}
@@ -274,7 +291,7 @@ export function UsersPage() {
               </>
             )}
             <Field>
-              <Label>姓名</Label>
+              <Label>{t("admin.users.dialog.name")}</Label>
               <Input
                 value={name}
                 onChange={(e) => {
@@ -286,7 +303,7 @@ export function UsersPage() {
               <FieldError>{fieldErrors.name}</FieldError>
             </Field>
             <Field>
-              <Label>角色</Label>
+              <Label>{t("admin.users.dialog.role")}</Label>
               <Select
                 value={role}
                 onValueChange={(value) => setRole(value as EditableRole)}
@@ -295,7 +312,9 @@ export function UsersPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Admin">管理员</SelectItem>
+                  <SelectItem value="Admin">
+                    {t("admin.users.dialog.admin")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -306,10 +325,10 @@ export function UsersPage() {
               onClick={() => setDialogOpen(false)}
               disabled={saving}
             >
-              取消
+              {t("admin.common.cancel")}
             </Button>
             <Button onClick={() => void save()} disabled={saving}>
-              {saving ? "保存中..." : "保存"}
+              {saving ? t("admin.common.saving") : t("admin.common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

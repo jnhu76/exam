@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -65,6 +66,7 @@ interface PaginatedResponse<T> {
  * with inline form validation and toast feedback.
  */
 export function CoursePage() {
+  const { t } = useTranslation();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export function CoursePage() {
       const data = await api.get<PaginatedResponse<CourseRow>>("/api/courses");
       setCourses(data.items);
     } catch {
-      setError("加载课程列表失败");
+      setError(t("admin.courses.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -118,8 +120,10 @@ export function CoursePage() {
   /** Validates the course form fields and returns true if valid. */
   function validate() {
     const errors: Record<string, string> = {};
-    if (!formName.trim()) errors.name = "请输入课程名称";
-    if (!formCode.trim()) errors.code = "请输入课程代码";
+    if (!formName.trim())
+      errors.name = t("admin.courses.validation.nameRequired");
+    if (!formCode.trim())
+      errors.code = t("admin.courses.validation.codeRequired");
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
@@ -143,10 +147,14 @@ export function CoursePage() {
         });
       }
       setDialogOpen(false);
-      toast.success(editingCourse ? "课程已更新" : "课程已创建");
+      toast.success(
+        editingCourse
+          ? t("admin.courses.toast.updated")
+          : t("admin.courses.toast.created"),
+      );
       await loadCourses({ showLoading: false });
     } catch {
-      toast.error("保存失败，请稍后重试");
+      toast.error(t("admin.common.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -156,10 +164,12 @@ export function CoursePage() {
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/courses/${id}`);
-      toast.success("课程已删除");
+      toast.success(t("admin.courses.toast.deleted"));
       await loadCourses({ showLoading: false });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "删除失败，请稍后重试");
+      toast.error(
+        err instanceof Error ? err.message : t("admin.common.deleteFailed"),
+      );
     }
   }
 
@@ -180,23 +190,23 @@ export function CoursePage() {
     <TooltipProvider>
       <div className="flex flex-col gap-6">
         <PageHeader
-          title="课程管理"
+          title={t("admin.courses.title")}
           actions={
             <Button onClick={openCreate}>
               <Plus data-icon="inline-start" />
-              新增课程
+              {t("admin.courses.createBtn")}
             </Button>
           }
         />
 
         {courses.length > 0 && (
           <SearchInput
-            aria-label="搜索课程"
-            placeholder="搜索课程名称、代码或描述..."
+            aria-label={t("admin.courses.searchLabel")}
+            placeholder={t("admin.courses.searchPlaceholder")}
             value={search}
             onChange={setSearch}
             onClear={() => setSearch("")}
-            clearLabel="清除课程搜索"
+            clearLabel={t("admin.courses.clearSearchLabel")}
             containerClassName="max-w-md"
           />
         )}
@@ -204,17 +214,17 @@ export function CoursePage() {
         {courses.length === 0 ? (
           <EmptyState
             icon={<BookOpen className="size-8" />}
-            title="暂无课程"
-            description="还没有创建任何课程，点击上方按钮创建。"
+            title={t("admin.courses.empty")}
+            description={t("admin.courses.emptyDescription")}
           />
         ) : filteredCourses.length === 0 ? (
           <EmptyState
             icon={<Search className="size-8" />}
-            title="未找到匹配的课程"
-            description={`没有符合「${search}」的课程。`}
+            title={t("admin.courses.noMatch")}
+            description={t("admin.courses.noMatchDescription", { q: search })}
             action={
               <Button variant="outline" onClick={() => setSearch("")}>
-                清除搜索
+                {t("admin.common.clearSearch")}
               </Button>
             }
           />
@@ -222,10 +232,12 @@ export function CoursePage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>课程名称</TableHead>
-                <TableHead>课程代码</TableHead>
-                <TableHead>描述</TableHead>
-                <TableHead className="w-24">操作</TableHead>
+                <TableHead>{t("admin.courses.columns.name")}</TableHead>
+                <TableHead>{t("admin.courses.columns.code")}</TableHead>
+                <TableHead>{t("admin.courses.columns.description")}</TableHead>
+                <TableHead className="w-24">
+                  {t("admin.courses.columns.actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -246,7 +258,7 @@ export function CoursePage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => openEdit(course)}
-                        aria-label="编辑课程"
+                        aria-label={t("admin.courses.editLabel")}
                       >
                         <Pencil />
                       </Button>
@@ -255,13 +267,16 @@ export function CoursePage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="删除课程"
+                            aria-label={t("admin.courses.deleteLabel")}
                           >
                             <Trash2 className="text-destructive" />
                           </Button>
                         }
-                        title="确认删除"
-                        description={`确定要删除课程「${course.name}」吗？`}
+                        title={t("admin.common.confirm")}
+                        description={t("admin.courses.enableDisable", {
+                          action: t("admin.common.delete"),
+                          name: course.name,
+                        })}
                         destructive
                         onConfirm={() => void handleDelete(course.id)}
                       />
@@ -277,12 +292,16 @@ export function CoursePage() {
           <DialogContent aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>
-                {editingCourse ? "编辑课程" : "新增课程"}
+                {editingCourse
+                  ? t("admin.courses.dialog.edit")
+                  : t("admin.courses.dialog.create")}
               </DialogTitle>
             </DialogHeader>
             <FieldGroup className="py-4">
               <Field>
-                <Label htmlFor="course-name">课程名称</Label>
+                <Label htmlFor="course-name">
+                  {t("admin.courses.dialog.name")}
+                </Label>
                 <Input
                   id="course-name"
                   value={formName}
@@ -291,12 +310,14 @@ export function CoursePage() {
                     if (fieldErrors.name)
                       setFieldErrors((prev) => ({ ...prev, name: "" }));
                   }}
-                  placeholder="请输入课程名称"
+                  placeholder={t("admin.courses.dialog.namePlaceholder")}
                 />
                 <FieldError>{fieldErrors.name}</FieldError>
               </Field>
               <Field>
-                <Label htmlFor="course-code">课程代码</Label>
+                <Label htmlFor="course-code">
+                  {t("admin.courses.dialog.code")}
+                </Label>
                 <Input
                   id="course-code"
                   value={formCode}
@@ -305,27 +326,29 @@ export function CoursePage() {
                     if (fieldErrors.code)
                       setFieldErrors((prev) => ({ ...prev, code: "" }));
                   }}
-                  placeholder="请输入课程代码"
+                  placeholder={t("admin.courses.dialog.codePlaceholder")}
                 />
                 <FieldError>{fieldErrors.code}</FieldError>
               </Field>
               <Field>
-                <Label htmlFor="course-desc">描述</Label>
+                <Label htmlFor="course-desc">
+                  {t("admin.courses.columns.description")}
+                </Label>
                 <Textarea
                   id="course-desc"
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder="请输入课程描述"
+                  placeholder={t("admin.courses.columns.description")}
                   rows={4}
                 />
               </Field>
             </FieldGroup>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                取消
+                {t("admin.common.cancel")}
               </Button>
               <Button onClick={() => void handleSave()} disabled={saving}>
-                {saving ? "保存中..." : "保存"}
+                {saving ? t("admin.common.saving") : t("admin.common.save")}
               </Button>
             </DialogFooter>
           </DialogContent>

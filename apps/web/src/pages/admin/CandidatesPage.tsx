@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage, getApiFieldErrors } from "@/lib/apiErrors";
 import { toast } from "sonner";
@@ -75,6 +76,7 @@ interface Page<T> {
  * and bulk-importing via CSV with a preview wizard.
  */
 export function CandidatesPage() {
+  const { t } = useTranslation();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -111,7 +113,7 @@ export function CandidatesPage() {
       setCandidates(candidateData.items);
       setFields(fieldData.sort((a, b) => a.sortOrder - b.sortOrder));
     } catch {
-      setError("加载考生列表失败");
+      setError(t("admin.candidates.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -161,15 +163,21 @@ export function CandidatesPage() {
   /** Validates the candidate form fields and sets field-level error messages. Returns true if valid. */
   function validate() {
     const errors: Record<string, string> = {};
-    if (!name.trim()) errors.name = "请输入姓名";
+    if (!name.trim())
+      errors.name = t("admin.candidates.validation.nameRequired");
     if (!editing) {
-      if (!username.trim()) errors.username = "请输入用户名";
+      if (!username.trim())
+        errors.username = t("admin.candidates.validation.usernameRequired");
       if (password.length < DEFAULT_PASSWORD_POLICY.minLength)
-        errors.password = `密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`;
+        errors.password = t("admin.candidates.validation.passwordMin", {
+          min: DEFAULT_PASSWORD_POLICY.minLength,
+        });
     }
     for (const field of fields) {
       if (field.required && !(values[field.name] ?? "").toString().trim()) {
-        errors[`field:${field.name}`] = "此字段为必填项";
+        errors[`field:${field.name}`] = t(
+          "admin.candidates.validation.fieldRequired",
+        );
       }
     }
     setFieldErrors(errors);
@@ -186,7 +194,7 @@ export function CandidatesPage() {
           name,
           fields: payloadFields(),
         });
-        toast.success("考生已更新");
+        toast.success(t("admin.candidates.toast.updated"));
       } else {
         await api.post("/api/candidates", {
           username,
@@ -194,14 +202,14 @@ export function CandidatesPage() {
           name,
           fields: payloadFields(),
         });
-        toast.success("考生已创建");
+        toast.success(t("admin.candidates.toast.created"));
       }
       setDialogOpen(false);
       await load();
     } catch (err) {
       const serverFieldErrors = getApiFieldErrors(err);
       setFieldErrors((current) => ({ ...current, ...serverFieldErrors }));
-      setSaveError(getApiErrorMessage(err, "保存失败，请稍后重试"));
+      setSaveError(getApiErrorMessage(err, t("admin.common.saveFailed")));
     } finally {
       setSaving(false);
     }
@@ -216,7 +224,7 @@ export function CandidatesPage() {
       });
       await load();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, "操作失败，请稍后重试"));
+      toast.error(getApiErrorMessage(err, t("admin.common.operationFailed")));
     } finally {
       setTogglingId(null);
     }
@@ -238,12 +246,15 @@ export function CandidatesPage() {
       len > DEFAULT_PASSWORD_POLICY.maxLength
     ) {
       setResetFieldError(
-        `密码长度必须在 ${DEFAULT_PASSWORD_POLICY.minLength} 到 ${DEFAULT_PASSWORD_POLICY.maxLength} 位之间`,
+        t("admin.candidates.validation.passwordRange", {
+          min: DEFAULT_PASSWORD_POLICY.minLength,
+          max: DEFAULT_PASSWORD_POLICY.maxLength,
+        }),
       );
       return;
     }
     if (resetPassword !== resetConfirmPassword) {
-      setResetFieldError("两次输入的密码不一致");
+      setResetFieldError(t("admin.candidates.validation.passwordMismatch"));
       return;
     }
     setResetting(true);
@@ -251,14 +262,16 @@ export function CandidatesPage() {
       await api.post(`/api/users/${resetTarget.id}/reset-password`, {
         newPassword: resetPassword,
       });
-      toast.success("密码已重置");
+      toast.success(t("admin.candidates.toast.passwordReset"));
       setResetOpen(false);
       setResetTarget(null);
       setResetPassword("");
       setResetConfirmPassword("");
       setResetFieldError("");
     } catch (err) {
-      toast.error(getApiErrorMessage(err, "重置密码失败，请稍后重试"));
+      toast.error(
+        getApiErrorMessage(err, t("admin.candidates.toast.resetFailed")),
+      );
     } finally {
       setResetting(false);
     }
@@ -293,7 +306,11 @@ export function CandidatesPage() {
         return {
           row: index + 2,
           status: "error",
-          message: missing ? `${missing.label}不能为空` : "缺少用户名或姓名",
+          message: missing
+            ? t("admin.candidates.importDialog.missingField", {
+                label: missing.label,
+              })
+            : t("admin.candidates.importDialog.missingUsername"),
         };
       }
       const inBatch = seenUsernames.has(row.username);
@@ -304,7 +321,7 @@ export function CandidatesPage() {
         return {
           row: index + 2,
           status: "error",
-          message: "新增候选人需要初始密码",
+          message: t("admin.candidates.importDialog.needPassword"),
         };
       }
       if (
@@ -315,14 +332,16 @@ export function CandidatesPage() {
         return {
           row: index + 2,
           status: "error",
-          message: `初始密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`,
+          message: t("admin.candidates.importDialog.passwordMin", {
+            min: DEFAULT_PASSWORD_POLICY.minLength,
+          }),
         };
       }
       const message = existsInDb
-        ? "已存在，重复导入将覆盖现有资料"
+        ? t("admin.candidates.importDialog.exists")
         : inBatch
-          ? "本批次内重复用户名，将覆盖前一行"
-          : "将新增候选人";
+          ? t("admin.candidates.importDialog.duplicateInBatch")
+          : t("admin.candidates.importDialog.willCreate");
       return {
         row: index + 2,
         status: exists ? "update" : "create",
@@ -339,12 +358,16 @@ export function CandidatesPage() {
         errors: unknown[];
       }>("/api/candidates/import", { rows: importRows() });
       setImportSummary(
-        `导入完成：新增 ${result.created} 条，更新 ${result.updated} 条，错误 ${result.errors.length} 条`,
+        t("admin.candidates.importDialog.result", {
+          created: result.created,
+          updated: result.updated,
+          errors: result.errors.length,
+        }),
       );
       setCsv("");
       await load();
     } catch {
-      toast.error("导入失败，请重试");
+      toast.error(t("admin.candidates.importDialog.failed"));
       return;
     }
     setTimeout(() => {
@@ -357,12 +380,12 @@ export function CandidatesPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="考生管理"
+        title={t("admin.candidates.title")}
         actions={
           <div className="flex gap-2">
             <Button onClick={() => open()}>
               <Plus data-icon="inline-start" />
-              新增考生
+              {t("admin.candidates.createBtn")}
             </Button>
             <Button
               variant="outline"
@@ -373,39 +396,41 @@ export function CandidatesPage() {
               }}
             >
               <Upload data-icon="inline-start" />
-              导入
+              {t("admin.candidates.importBtn")}
             </Button>
           </div>
         }
       />
       <SearchInput
-        aria-label="搜索考生"
-        placeholder="搜索考生姓名或用户名..."
+        aria-label={t("admin.candidates.searchLabel")}
+        placeholder={t("admin.candidates.searchPlaceholder")}
         value={search}
         onChange={setSearch}
         onClear={() => setSearch("")}
-        clearLabel="清除考生搜索"
+        clearLabel={t("admin.candidates.clearSearchLabel")}
         containerClassName="max-w-md flex-1"
       />
       {filteredCandidates.length === 0 && search ? (
         <EmptyState
           icon={<Search className="size-8" />}
-          title="未找到匹配的考生"
-          description={`没有符合「${search}」的考生。`}
+          title={t("admin.candidates.noMatch")}
+          description={t("admin.candidates.noMatchDescription", { q: search })}
           action={
             <Button variant="outline" onClick={() => setSearch("")}>
-              清除搜索
+              {t("admin.common.clearSearch")}
             </Button>
           }
         />
       ) : filteredCandidates.length === 0 ? (
         <EmptyState
           icon={<Users className="size-8" />}
-          title="暂无考生"
-          description="可以通过「新增考生」或「导入」创建考生。"
+          title={t("admin.candidates.empty")}
+          description={t("admin.candidates.emptyDescription")}
           action={
             <div className="flex gap-2">
-              <Button onClick={() => open()}>新增考生</Button>
+              <Button onClick={() => open()}>
+                {t("admin.candidates.createBtn")}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => {
@@ -414,7 +439,7 @@ export function CandidatesPage() {
                   setCsv("");
                 }}
               >
-                导入
+                {t("admin.candidates.importBtn")}
               </Button>
             </div>
           }
@@ -424,13 +449,13 @@ export function CandidatesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>用户名</TableHead>
-                <TableHead>姓名</TableHead>
+                <TableHead>{t("admin.candidates.columns.username")}</TableHead>
+                <TableHead>{t("admin.candidates.columns.name")}</TableHead>
                 {fields.map((field) => (
                   <TableHead key={field.id}>{field.label}</TableHead>
                 ))}
-                <TableHead>状态</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead>{t("admin.candidates.columns.status")}</TableHead>
+                <TableHead>{t("admin.candidates.columns.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -443,14 +468,18 @@ export function CandidatesPage() {
                       {String(candidate.fields[field.name] ?? "-")}
                     </TableCell>
                   ))}
-                  <TableCell>{candidate.isActive ? "启用" : "禁用"}</TableCell>
+                  <TableCell>
+                    {candidate.isActive
+                      ? t("admin.common.enable")
+                      : t("admin.common.disable")}
+                  </TableCell>
                   <TableCell>
                     <RowActions>
                       <Button
                         size="icon"
                         variant="ghost"
                         onClick={() => open(candidate)}
-                        aria-label="编辑考生"
+                        aria-label={t("admin.candidates.editLabel")}
                       >
                         <Pencil />
                       </Button>
@@ -458,7 +487,7 @@ export function CandidatesPage() {
                         size="icon"
                         variant="ghost"
                         onClick={() => openReset(candidate)}
-                        aria-label="重置密码"
+                        aria-label={t("admin.candidates.resetPassword")}
                         data-testid={`candidate-reset-password-${candidate.id}`}
                       >
                         <KeyRound />
@@ -471,14 +500,23 @@ export function CandidatesPage() {
                             disabled={togglingId !== null}
                           >
                             {togglingId === candidate.id
-                              ? "处理中..."
+                              ? t("admin.common.processing")
                               : candidate.isActive
-                                ? "禁用"
-                                : "启用"}
+                                ? t("admin.common.disable")
+                                : t("admin.common.enable")}
                           </Button>
                         }
-                        title={candidate.isActive ? "确认禁用" : "确认启用"}
-                        description={`确定要${candidate.isActive ? "禁用" : "启用"}考生「${candidate.name}」吗？`}
+                        title={
+                          candidate.isActive
+                            ? t("admin.common.confirmDisable")
+                            : t("admin.common.confirmEnable")
+                        }
+                        description={t("admin.candidates.enableDisable", {
+                          action: candidate.isActive
+                            ? t("admin.common.disable")
+                            : t("admin.common.enable"),
+                          name: candidate.name,
+                        })}
                         destructive={candidate.isActive}
                         onConfirm={() => void toggle(candidate)}
                       />
@@ -493,14 +531,19 @@ export function CandidatesPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{editing ? "编辑考生" : "新增考生"}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? t("admin.candidates.dialog.edit")
+                : t("admin.candidates.dialog.create")}
+            </DialogTitle>
           </DialogHeader>
           <FieldGroup className="py-4">
             {!editing && (
               <>
                 <Field>
                   <Label htmlFor="candidate-username">
-                    用户名 <span className="text-destructive">*</span>
+                    {t("admin.candidates.dialog.username")}{" "}
+                    <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="candidate-username"
@@ -515,7 +558,8 @@ export function CandidatesPage() {
                 </Field>
                 <Field>
                   <Label htmlFor="candidate-password">
-                    初始密码 <span className="text-destructive">*</span>
+                    {t("admin.candidates.dialog.password")}{" "}
+                    <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id="candidate-password"
@@ -534,7 +578,8 @@ export function CandidatesPage() {
             )}
             <Field>
               <Label htmlFor="candidate-name">
-                姓名 <span className="text-destructive">*</span>
+                {t("admin.candidates.dialog.name")}{" "}
+                <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="candidate-name"
@@ -583,10 +628,10 @@ export function CandidatesPage() {
               onClick={() => setDialogOpen(false)}
               disabled={saving}
             >
-              取消
+              {t("admin.common.cancel")}
             </Button>
             <Button onClick={() => void save()} disabled={saving}>
-              {saving ? "保存中..." : "保存"}
+              {saving ? t("admin.common.saving") : t("admin.common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -594,12 +639,13 @@ export function CandidatesPage() {
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>重置密码</DialogTitle>
+            <DialogTitle>{t("admin.candidates.dialog.resetTitle")}</DialogTitle>
           </DialogHeader>
           <FieldGroup className="py-4">
             <Field>
               <Label htmlFor="candidate-reset-password">
-                新密码 <span className="text-destructive">*</span>
+                {t("admin.candidates.dialog.newPassword")}{" "}
+                <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="candidate-reset-password"
@@ -609,12 +655,13 @@ export function CandidatesPage() {
                   setResetPassword(e.target.value);
                   if (resetFieldError) setResetFieldError("");
                 }}
-                placeholder={`${DEFAULT_PASSWORD_POLICY.minLength}-${DEFAULT_PASSWORD_POLICY.maxLength} 位`}
+                placeholder={`至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`}
               />
             </Field>
             <Field>
               <Label htmlFor="candidate-reset-password-confirm">
-                确认新密码 <span className="text-destructive">*</span>
+                {t("admin.candidates.dialog.confirmNewPassword")}{" "}
+                <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="candidate-reset-password-confirm"
@@ -624,13 +671,15 @@ export function CandidatesPage() {
                   setResetConfirmPassword(e.target.value);
                   if (resetFieldError) setResetFieldError("");
                 }}
-                placeholder="请再次输入新密码"
+                placeholder={t("admin.candidates.dialog.confirmNewPassword")}
               />
               <FieldError>{resetFieldError}</FieldError>
             </Field>
             {resetTarget && (
               <p className="text-xs text-muted-foreground">
-                将重置考生「{resetTarget.name}」的登录密码。
+                {t("admin.candidates.dialog.resetDescription", {
+                  name: resetTarget.name,
+                })}
               </p>
             )}
           </FieldGroup>
@@ -640,14 +689,16 @@ export function CandidatesPage() {
               onClick={() => setResetOpen(false)}
               disabled={resetting}
             >
-              取消
+              {t("admin.common.cancel")}
             </Button>
             <Button
               data-testid="reset-password-confirm-btn"
               onClick={() => void confirmResetPassword()}
               disabled={resetting}
             >
-              {resetting ? "重置中..." : "确认重置"}
+              {resetting
+                ? t("admin.candidates.dialog.resetting")
+                : t("admin.candidates.dialog.confirmReset")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -655,11 +706,13 @@ export function CandidatesPage() {
       <ImportWizard
         open={importOpen}
         onOpenChange={setImportOpen}
-        title="导入考生"
-        instructions="粘贴 CSV 内容。表头需包含 username、password、name 以及配置的身份字段。"
+        title={t("admin.candidates.importDialog.title")}
+        instructions={t("admin.candidates.importDialog.instructions")}
         warning={
           importTruncated()
-            ? `数据已截断为前 ${MAX_IMPORT_ROWS} 行，超出部分已忽略。`
+            ? t("admin.candidates.importDialog.truncated", {
+                max: MAX_IMPORT_ROWS,
+              })
             : undefined
         }
         csv={csv}

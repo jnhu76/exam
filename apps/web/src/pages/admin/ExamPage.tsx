@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -54,6 +55,7 @@ interface PaginatedResponse<T> {
 
 /** Admin page for listing, viewing, and deleting exams. */
 export function ExamPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -67,7 +69,7 @@ export function ExamPage() {
       const data = await api.get<PaginatedResponse<ExamRow>>("/api/exams");
       setExams(data.items);
     } catch {
-      setError("加载考试列表失败");
+      setError(t("admin.exams.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -81,10 +83,14 @@ export function ExamPage() {
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/exams/${id}`);
-      toast.success("考试已删除");
+      toast.success(t("admin.exams.toast.deleted"));
       await loadExams();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "删除失败，请稍后重试");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.exams.toast.deleteFailed"),
+      );
     }
   }
 
@@ -95,11 +101,11 @@ export function ExamPage() {
     <TooltipProvider>
       <div className="flex flex-col gap-6">
         <PageHeader
-          title="考试管理"
+          title={t("admin.exams.title")}
           actions={
             <Button onClick={() => void navigate("/admin/exams/new")}>
               <Plus data-icon="inline-start" />
-              创建考试
+              {t("admin.exams.createBtn")}
             </Button>
           }
         />
@@ -107,30 +113,42 @@ export function ExamPage() {
         {exams.length === 0 ? (
           <EmptyState
             icon={<ClipboardList className="size-8" />}
-            title="暂无考试"
-            description="还没有创建任何考试，点击上方按钮创建。"
+            title={t("admin.exams.empty")}
+            description={t("admin.exams.emptyDescription")}
           />
         ) : (
           <>
             <DataToolbar
-              aria-label="考试列表工具栏"
-              summary={`共 ${exams.length} 场考试`}
+              aria-label={t("admin.exams.toolbarLabel")}
+              summary={t("admin.exams.summary", { count: exams.length })}
             />
             <DataTableShell
-              title="考试列表"
-              description="查看当前考试状态、时间窗口与基础配置。"
+              title={t("admin.exams.listTitle")}
+              description={t("admin.exams.listDescription")}
             >
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>考试名称</TableHead>
-                    <TableHead className="w-20">状态</TableHead>
-                    <TableHead>时间窗口</TableHead>
-                    <TableHead className="w-16">时长</TableHead>
-                    <TableHead className="w-16">题目数</TableHead>
-                    <TableHead className="w-16">参与人数</TableHead>
-                    <TableHead className="w-16">及格分</TableHead>
-                    <TableHead className="w-32">操作</TableHead>
+                    <TableHead>{t("admin.exams.columns.title")}</TableHead>
+                    <TableHead className="w-20">
+                      {t("admin.exams.columns.status")}
+                    </TableHead>
+                    <TableHead>{t("admin.exams.columns.timeWindow")}</TableHead>
+                    <TableHead className="w-16">
+                      {t("admin.exams.columns.duration")}
+                    </TableHead>
+                    <TableHead className="w-16">
+                      {t("admin.exams.columns.questionCount")}
+                    </TableHead>
+                    <TableHead className="w-16">
+                      {t("admin.exams.columns.participants")}
+                    </TableHead>
+                    <TableHead className="w-16">
+                      {t("admin.exams.columns.passingScore")}
+                    </TableHead>
+                    <TableHead className="w-32">
+                      {t("admin.exams.columns.actions")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -139,7 +157,7 @@ export function ExamPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="删除考试"
+                        aria-label={t("admin.exams.deleteLabel")}
                         disabled={!exam.canDelete}
                       >
                         <Trash2 className="text-destructive" />
@@ -158,7 +176,11 @@ export function ExamPage() {
                           {new Date(exam.openAt).toLocaleDateString()} -{" "}
                           {new Date(exam.closeAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>{exam.durationMinutes}分钟</TableCell>
+                        <TableCell>
+                          {t("admin.exams.duration", {
+                            min: exam.durationMinutes,
+                          })}
+                        </TableCell>
                         <TableCell>{exam.questionIds.length}</TableCell>
                         <TableCell>{exam.participantCount}</TableCell>
                         <TableCell>
@@ -172,27 +194,34 @@ export function ExamPage() {
                               onClick={() =>
                                 void navigate(`/admin/exams/${exam.id}`)
                               }
-                              aria-label="查看详情"
+                              aria-label={t("admin.exams.viewDetail")}
                             >
                               <Eye />
                             </Button>
                             {exam.canDelete ? (
                               <ConfirmDialog
                                 trigger={deleteButton}
-                                title="确认删除"
-                                description={`确定要删除考试「${exam.title}」吗？`}
+                                title={t("admin.exams.confirmDelete")}
+                                description={t(
+                                  "admin.exams.confirmDeleteDescription",
+                                  { title: exam.title },
+                                )}
                                 destructive
                                 onConfirm={() => void handleDelete(exam.id)}
                               />
                             ) : (
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span tabIndex={0} aria-label="删除考试">
+                                  <span
+                                    tabIndex={0}
+                                    aria-label={t("admin.exams.deleteLabel")}
+                                  >
                                     {deleteButton}
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  {exam.deleteDisabledReason ?? "当前不可删除"}
+                                  {exam.deleteDisabledReason ??
+                                    t("admin.exams.deleteDisabled")}
                                 </TooltipContent>
                               </Tooltip>
                             )}

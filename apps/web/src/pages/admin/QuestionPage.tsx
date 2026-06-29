@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -77,6 +78,7 @@ interface PaginatedResponse<T> {
  * difficulty, and tags, plus client-side search and pagination.
  */
 export function QuestionPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -121,7 +123,7 @@ export function QuestionPage() {
       setQuestions(qData.items);
       setTotal(qData.total);
     } catch {
-      setError("加载题目列表失败");
+      setError(t("admin.common.loadFailed"));
     } finally {
       setIsTableLoading(false);
     }
@@ -152,7 +154,7 @@ export function QuestionPage() {
       await api.delete(`/api/questions/${id}`);
       await loadQuestions();
     } catch {
-      toast.error("删除题目失败，请重试");
+      toast.error(t("admin.questions.toast.deleteFailed"));
     }
   }
 
@@ -190,7 +192,7 @@ export function QuestionPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="题目管理"
+        title={t("admin.questions.title")}
         actions={
           <div className="flex gap-2">
             <Button
@@ -198,18 +200,18 @@ export function QuestionPage() {
               onClick={() => void navigate("/admin/questions/import")}
             >
               <FileUp data-icon="inline-start" />
-              导入题目
+              {t("admin.questions.importBtn")}
             </Button>
             <Button onClick={() => void navigate("/admin/questions/new")}>
               <Plus data-icon="inline-start" />
-              新增题目
+              {t("admin.questions.createBtn")}
             </Button>
           </div>
         }
       />
 
       <ListToolbar
-        aria-label="题目筛选工具栏"
+        aria-label={t("admin.questions.filterToolbar")}
         filters={
           <>
             <Select
@@ -220,10 +222,12 @@ export function QuestionPage() {
               }}
             >
               <SelectTrigger className="w-auto lg:w-[180px]">
-                <SelectValue placeholder="按课程筛选" />
+                <SelectValue placeholder={t("admin.questions.filterCourse")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部课程</SelectItem>
+                <SelectItem value="all">
+                  {t("admin.questions.filterAllCourses")}
+                </SelectItem>
                 {courses.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
@@ -240,14 +244,24 @@ export function QuestionPage() {
               }}
             >
               <SelectTrigger className="w-auto lg:w-[150px]">
-                <SelectValue placeholder="按题型筛选" />
+                <SelectValue placeholder={t("admin.questions.filterType")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部题型</SelectItem>
-                <SelectItem value="single_choice">单选题</SelectItem>
-                <SelectItem value="multiple_choice">多选题</SelectItem>
-                <SelectItem value="fill_blank">填空题</SelectItem>
-                <SelectItem value="true_false">判断题</SelectItem>
+                <SelectItem value="all">
+                  {t("admin.questions.filterAllTypes")}
+                </SelectItem>
+                <SelectItem value="single_choice">
+                  {t("admin.questions.questionTypes.single_choice")}
+                </SelectItem>
+                <SelectItem value="multiple_choice">
+                  {t("admin.questions.questionTypes.multiple_choice")}
+                </SelectItem>
+                <SelectItem value="fill_blank">
+                  {t("admin.questions.questionTypes.fill_blank")}
+                </SelectItem>
+                <SelectItem value="true_false">
+                  {t("admin.questions.questionTypes.true_false")}
+                </SelectItem>
               </SelectContent>
             </Select>
 
@@ -259,13 +273,17 @@ export function QuestionPage() {
               }}
             >
               <SelectTrigger className="w-auto lg:w-[140px]">
-                <SelectValue placeholder="按难度筛选" />
+                <SelectValue
+                  placeholder={t("admin.questions.filterDifficulty")}
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部难度</SelectItem>
+                <SelectItem value="all">
+                  {t("admin.questions.filterAllDifficulties")}
+                </SelectItem>
                 {[1, 2, 3, 4, 5].map((value) => (
                   <SelectItem key={value} value={String(value)}>
-                    难度 {value}
+                    {t("admin.questions.difficultyLabel", { value })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -273,7 +291,7 @@ export function QuestionPage() {
 
             <Input
               className="w-auto lg:w-[180px]"
-              placeholder="标签，逗号分隔"
+              placeholder={t("admin.questions.tagPlaceholder")}
               value={filterTags}
               onChange={(e) => {
                 setFilterTags(e.target.value);
@@ -284,12 +302,12 @@ export function QuestionPage() {
         }
         search={
           <SearchInput
-            aria-label="搜索当前页题目"
-            placeholder="搜索当前页题目内容..."
+            aria-label={t("admin.questions.searchLabel")}
+            placeholder={t("admin.questions.searchPlaceholder")}
             value={search}
             onChange={setSearch}
             onClear={() => setSearch("")}
-            clearLabel="清除题目搜索"
+            clearLabel={t("admin.common.clearSearch")}
           />
         }
         actions={
@@ -300,7 +318,7 @@ export function QuestionPage() {
                 aria-live="polite"
               >
                 <LoaderCircle className="size-4 animate-spin" />
-                加载中…
+                {t("admin.common.loading")}
               </span>
             )}
             {hasActiveFilter && (
@@ -308,10 +326,10 @@ export function QuestionPage() {
                 variant="ghost"
                 size="sm"
                 onClick={clearFilters}
-                aria-label="清空筛选"
+                aria-label={t("admin.common.clearFilter")}
               >
                 <RotateCcw data-icon="inline-start" />
-                清空筛选
+                {t("admin.questions.clearFilter")}
               </Button>
             )}
           </>
@@ -321,16 +339,20 @@ export function QuestionPage() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<BookOpen className="size-8" />}
-          title={hasActiveFilter ? "未找到匹配的题目" : "暂无题目"}
+          title={
+            hasActiveFilter
+              ? t("admin.questions.noMatch")
+              : t("admin.questions.empty")
+          }
           description={
             hasActiveFilter
-              ? "当前筛选或当前页搜索没有匹配题目。"
-              : "还没有创建任何题目，点击上方按钮创建。"
+              ? t("admin.questions.noMatchDescription")
+              : t("admin.questions.emptyDescription")
           }
           action={
             hasActiveFilter ? (
               <Button variant="outline" onClick={clearFilters}>
-                清空筛选
+                {t("admin.questions.clearFilter")}
               </Button>
             ) : undefined
           }
@@ -340,13 +362,21 @@ export function QuestionPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">题型</TableHead>
-                <TableHead>题目内容</TableHead>
-                <TableHead>所属课程</TableHead>
-                <TableHead className="w-16">分值</TableHead>
-                <TableHead className="w-16">难度</TableHead>
-                <TableHead>标签</TableHead>
-                <TableHead className="w-24">操作</TableHead>
+                <TableHead className="w-16">
+                  {t("admin.questions.columns.type")}
+                </TableHead>
+                <TableHead>{t("admin.questions.columns.content")}</TableHead>
+                <TableHead>{t("admin.questions.columns.course")}</TableHead>
+                <TableHead className="w-16">
+                  {t("admin.questions.columns.score")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.questions.columns.difficulty")}
+                </TableHead>
+                <TableHead>{t("admin.questions.columns.tags")}</TableHead>
+                <TableHead className="w-24">
+                  {t("admin.questions.columns.actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -380,7 +410,7 @@ export function QuestionPage() {
                         onClick={() =>
                           void navigate(`/admin/questions/${q.id}/edit`)
                         }
-                        aria-label="编辑题目"
+                        aria-label={t("admin.questions.editLabel")}
                       >
                         <Pencil />
                       </Button>
@@ -389,13 +419,15 @@ export function QuestionPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="删除题目"
+                            aria-label={t("admin.questions.deleteLabel")}
                           >
                             <Trash2 className="text-destructive" />
                           </Button>
                         }
-                        title="确认删除"
-                        description="确定要删除这道题目吗？"
+                        title={t("admin.questions.confirmDelete")}
+                        description={t(
+                          "admin.questions.confirmDeleteDescription",
+                        )}
                         destructive
                         onConfirm={() => void handleDelete(q.id)}
                       />
