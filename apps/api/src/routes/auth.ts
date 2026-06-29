@@ -348,7 +348,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const { currentPassword, newPassword } = parsed.data;
-      const ctx = request.ctx as RequestContext;
+      const ctx = request.ctx!;
       const targetCtx = {
         ...ctx,
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
@@ -412,7 +412,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const { name } = parsed.data;
-      const ctx = request.ctx as RequestContext;
+      const ctx = request.ctx!;
       const targetCtx = {
         ...ctx,
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,

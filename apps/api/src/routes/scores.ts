@@ -251,7 +251,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
           .code(400)
           .send(formatZodError(request.id, parsedQuery.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       // ADR-006: capture the operation now once from the time authority and
       // thread it through every time-sensitive decision in this request.
       const now = fastify.now();
@@ -391,7 +391,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request["ctx"] as RequestContext;
+      const ctx = request.ctx!;
       const attempt = await findVisibleAttempt(
         fastify,
         ctx,

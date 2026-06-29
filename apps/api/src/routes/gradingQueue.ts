@@ -54,7 +54,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const parsed = GradingQueueListQuerySchema.safeParse(request.query ?? {});
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
@@ -124,7 +124,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       if (!params.success) {
         return reply.code(400).send(formatZodError(request.id, params.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = params.data;
 
       const attemptRepo = createAttemptRepo(fastify.db);
@@ -216,7 +216,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       if (!body.success) {
         return reply.code(400).send(formatZodError(request.id, body.error));
       }
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { attemptId } = params.data;
       const { questionId, score, comment } = body.data;
       const now = fastify.now();

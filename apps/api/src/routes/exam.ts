@@ -160,6 +160,9 @@ function getScoreViewMeta(exam: Exam, gradedAttemptCount: number, now: Date) {
   if (exam.status === "canceled") {
     return {
       canViewScores: false,
+      // API-provided status-reason string rendered verbatim by the web client.
+      // Allowlisted in the backend copy guard (see i18n-copy-policy.md); a
+      // code-based enum + web i18n mapping is a tracked follow-up.
       scoreViewDisabledReason: "已取消的考试不提供成绩",
     };
   }
@@ -336,7 +339,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** List exams with pagination. Each item includes participant count, graded attempt count, and UI action metadata. */
     async (request: any) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createExamRepo(fastify.db);
       const { items, total } = await repo.listPaginated(ctx, page, pageSize);
@@ -391,7 +394,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Get exam detail by ID, including aggregated stats and participant list. Returns 404 if not found. */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
       const exam = (await repo.findById(ctx, id)) as Exam | null;
@@ -433,7 +436,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Create a new exam in draft status. Validates courseId and question ownership. Returns 400 on validation error. */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const parsed = CreateExamRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
@@ -535,7 +538,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
      * stale persisted status cannot be acted on.
      */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const parsed = UpdateExamRequestSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -643,7 +646,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Publish a draft exam, transitioning it to published status and snapshotting questions. Throws ExamAlreadyPublishedError if not in draft state. */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const examRepo = createExamRepo(fastify.db);
       const questionRepo = createQuestionRepo(fastify.db);
@@ -711,7 +714,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
      * (review decision #3), so scores/export stay semantically valid after.
      */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const reason = ((request.body as Record<string, unknown>)?.reason ??
         undefined) as string | undefined;
@@ -814,7 +817,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
 
       const result = await executeAdminExamTransition(
@@ -869,7 +872,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const { extendMinutes, reason } = request.body as {
         extendMinutes: number;
@@ -945,7 +948,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const reason = ((request.body as Record<string, unknown>)?.reason ??
         undefined) as string | undefined;
@@ -1036,7 +1039,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
      * follow-up, #4).
      */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const now = fastify.now();
 
@@ -1123,7 +1126,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const examRepo = createExamRepo(fastify.db);
 
@@ -1176,7 +1179,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Delete a draft exam by ID. Only draft exams can be deleted; returns 404 if not found. */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { id } = request.params as { id: string };
       const repo = createExamRepo(fastify.db);
 
@@ -1213,7 +1216,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** List all enrollments for a given exam, including candidate display names and identity fields. Returns 404 if exam not found. */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { examId } = request.params as { examId: string };
       const examRepo = createExamRepo(fastify.db);
       const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
@@ -1274,7 +1277,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Batch enroll candidates into an exam. Skips already-enrolled or non-existent candidates. Returns counts of added and skipped. */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { examId } = request.params as { examId: string };
       const parsedBody = EnrollCandidatesRequestSchema.safeParse(request.body);
       if (!parsedBody.success) {
@@ -1372,7 +1375,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Remove an enrollment from an exam. Only enrollments with status "assigned" can be removed. Returns 404 if not found, 409 if already started. */
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { examId, enrollmentId } = request.params as {
         examId: string;
         enrollmentId: string;
@@ -1427,7 +1430,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request["ctx"] as RequestContext);
+      const ctx = ensureTargetOrg(request.ctx!);
       const { examId } = request.params as { examId: string };
       const examRepo = createExamRepo(fastify.db);
       const exam = (await examRepo.findById(ctx, examId)) as Exam | null;
