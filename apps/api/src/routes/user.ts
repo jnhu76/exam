@@ -10,7 +10,7 @@ import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { ValidationError } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
@@ -72,7 +72,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
      * are included, filtered by PHASE1_SUPPORTED_ROLES.
      */
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createUserRepo(fastify.db);
       const { items, total } = await repo.listPaginatedByRoles(
@@ -119,7 +119,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
      * The username must be unique within the organization.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
       const passwordHash = await hashPassword(data.password);
@@ -167,7 +167,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
      * from being disabled or downgraded.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateUserRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
@@ -247,7 +247,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
      * resets are not allowed through this endpoint.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = ResetPasswordRequestSchema.parse(request.body);
       const repo = createUserRepo(fastify.db);
@@ -309,7 +309,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
      * Returns 404 if the user does not exist.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const repo = createUserRepo(fastify.db);
       const deleted = await repo.delete(ctx, id);

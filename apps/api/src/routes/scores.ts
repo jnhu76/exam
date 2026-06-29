@@ -18,7 +18,11 @@ import { NotFoundError } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
-import { formatZodError, ensureTargetOrg } from "./helpers.js";
+import {
+  formatZodError,
+  ensureTargetOrg,
+  getRequestContext,
+} from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** Zod schema for route params containing a UUID `id` field. */
@@ -251,7 +255,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
           .code(400)
           .send(formatZodError(request.id, parsedQuery.error));
       }
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       // ADR-006: capture the operation now once from the time authority and
       // thread it through every time-sensitive decision in this request.
       const now = fastify.now();
@@ -391,7 +395,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const attempt = await findVisibleAttempt(
         fastify,
         ctx,

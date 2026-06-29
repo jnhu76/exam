@@ -8,7 +8,7 @@ import { AuditLogQuerySchema } from "@exam/contracts";
 import type { RequestContext } from "@exam/domain";
 import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 
 /**
  * Records an audit log entry asynchronously. Failures are logged but do
@@ -116,7 +116,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize, action, targetType, from, to } =
         AuditLogQuerySchema.parse(request.query);
       const repo = createAuditLogRepo(fastify.db);

@@ -3,7 +3,7 @@ import {
   ImportLogListQuerySchema,
   ImportLogListResponseSchema,
 } from "@exam/contracts";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
 
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -21,7 +21,7 @@ const importLogRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize, type } = ImportLogListQuerySchema.parse(
         request.query,
       );

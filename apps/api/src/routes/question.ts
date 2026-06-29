@@ -13,7 +13,11 @@ import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
 import type { RequestContext } from "@exam/domain";
-import { ensureTargetOrg, resolveImportStatus } from "./helpers.js";
+import {
+  ensureTargetOrg,
+  getRequestContext,
+  resolveImportStatus,
+} from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import {
   buildErrorResponse,
@@ -62,7 +66,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** List questions with pagination and optional filters (courseId, type, difficulty, tags). */
     async (request: any) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const query = request.query as Record<string, string | undefined>;
       const repo = createQuestionRepo(fastify.db);
@@ -129,7 +133,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Get a single question by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const repo = createQuestionRepo(fastify.db);
       const question = await repo.findById(ctx, id);
@@ -173,7 +177,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Create a new question. Validates that the referenced courseId exists. Returns 400 on validation error. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const parsed = CreateQuestionRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
@@ -258,7 +262,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Update an existing question by ID. Validates courseId and question existence. Returns 404 if not found, 400 on validation error. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateQuestionRequestSchema.parse(request.body);
       const repo = createQuestionRepo(fastify.db);
@@ -338,7 +342,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Delete a question by ID. Returns 404 if not found. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const repo = createQuestionRepo(fastify.db);
       const deleted = await repo.delete(ctx, id);
@@ -369,7 +373,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     },
     /** Import questions in bulk from CSV-like rows. Validates each row; creates questions only when confirm=true. Rate-limited to 5 requests per minute. */
     async (request: any, reply: any) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const parsed = QuestionImportRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply
