@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -95,6 +96,7 @@ interface EnrollmentItem {
  * and provides publish, close, and archive lifecycle actions.
  */
 export function ExamDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [exam, setExam] = useState<ExamDetail | null>(null);
@@ -130,11 +132,11 @@ export function ExamDetailPage() {
       const data = await api.get<ExamDetail>(`/api/exams/${id}`);
       setExam(data);
     } catch {
-      setError("加载考试详情失败");
+      setError(t("admin.examDetail.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     loadExam();
@@ -149,9 +151,9 @@ export function ExamDetailPage() {
       );
       setEnrollments(data);
     } catch {
-      toast.error("加载考生列表失败");
+      toast.error(t("admin.examDetail.errors.loadEnrollmentsFailed"));
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     loadEnrollments();
@@ -170,7 +172,7 @@ export function ExamDetailPage() {
       setCandidateTotal(data.total);
       setSelectedCandidateIds(new Set());
     } catch {
-      toast.error("加载候选人列表失败");
+      toast.error(t("admin.examDetail.errors.loadCandidatesFailed"));
     }
   }
 
@@ -187,7 +189,7 @@ export function ExamDetailPage() {
       setCandidateTotal(data.total);
       setCandidatePage(nextPage);
     } catch {
-      toast.error("加载更多候选人失败");
+      toast.error(t("admin.examDetail.errors.loadMoreFailed"));
     } finally {
       setLoadingMoreCandidates(false);
     }
@@ -201,12 +203,16 @@ export function ExamDetailPage() {
       await api.post(`/api/exams/${id}/enrollments`, {
         candidateIds: Array.from(selectedCandidateIds),
       });
-      toast.success("已添加考生");
+      toast.success(t("admin.examDetail.toast.added"));
       setAddDialogOpen(false);
       await loadEnrollments();
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "添加考生失败");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.examDetail.errors.addFailed"),
+      );
     } finally {
       setAddingEnrollment(false);
     }
@@ -217,11 +223,15 @@ export function ExamDetailPage() {
     if (!id) return;
     try {
       await api.delete(`/api/exams/${id}/enrollments/${enrollmentId}`);
-      toast.success("已移除考生");
+      toast.success(t("admin.examDetail.toast.removed"));
       await loadEnrollments();
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "移除考生失败");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.examDetail.errors.removeFailed"),
+      );
     }
   }
 
@@ -232,10 +242,13 @@ export function ExamDetailPage() {
     setPublishing(true);
     try {
       await api.post(`/api/exams/${id}/publish`);
-      toast.success("考试发布成功");
+      toast.success(t("admin.examDetail.toast.published"));
       await loadExam();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "发布失败，请稍后重试";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : t("admin.examDetail.errors.publishFailed");
       setPublishError(msg);
       toast.error(msg);
     } finally {
@@ -249,10 +262,10 @@ export function ExamDetailPage() {
     setClosing(true);
     try {
       await api.post(`/api/exams/${id}/close`, {});
-      toast.success("考试已关闭");
+      toast.success(t("admin.examDetail.toast.closed"));
       await loadExam();
-    } catch (err) {
-      toast.error("关闭失败，请稍后重试");
+    } catch {
+      toast.error(t("admin.examDetail.errors.closeFailed"));
     } finally {
       setClosing(false);
     }
@@ -264,10 +277,10 @@ export function ExamDetailPage() {
     setUnpublishing(true);
     try {
       await api.post(`/api/exams/${id}/unpublish`);
-      toast.success("已撤回发布");
+      toast.success(t("admin.examDetail.toast.unpublished"));
       await loadExam();
-    } catch (err) {
-      toast.error("撤回发布失败，请稍后重试");
+    } catch {
+      toast.error(t("admin.examDetail.errors.unpublishFailed"));
     } finally {
       setUnpublishing(false);
     }
@@ -279,11 +292,13 @@ export function ExamDetailPage() {
     setReleasing(true);
     try {
       await api.post(`/api/exams/${id}/publish-results`);
-      toast.success("成绩已发布");
+      toast.success(t("admin.examDetail.toast.resultsPublished"));
       await loadExam();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "发布成绩失败，请稍后重试",
+        err instanceof Error
+          ? err.message
+          : t("admin.examDetail.errors.publishResultsFailed"),
       );
     } finally {
       setReleasing(false);
@@ -296,11 +311,13 @@ export function ExamDetailPage() {
     setExtending(true);
     try {
       await api.post(`/api/exams/${id}/extend`, { extendMinutes });
-      toast.success(`已延长 ${extendMinutes} 分钟`);
+      toast.success(
+        t("admin.examDetail.toast.extended", { minutes: extendMinutes }),
+      );
       setExtendDialogOpen(false);
       await loadExam();
-    } catch (err) {
-      toast.error("延长失败，请稍后重试");
+    } catch {
+      toast.error(t("admin.examDetail.errors.extendFailed"));
     } finally {
       setExtending(false);
     }
@@ -312,10 +329,14 @@ export function ExamDetailPage() {
     setArchiving(true);
     try {
       await api.post(`/api/exams/${id}/archive`);
-      toast.success("考试已归档");
+      toast.success(t("admin.examDetail.toast.archived"));
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "归档失败，请稍后重试");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.examDetail.errors.archiveFailed"),
+      );
     } finally {
       setArchiving(false);
     }
@@ -327,10 +348,14 @@ export function ExamDetailPage() {
     setCanceling(true);
     try {
       await api.post(`/api/exams/${id}/cancel`);
-      toast.success("考试已取消");
+      toast.success(t("admin.examDetail.toast.canceled"));
       await loadExam();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "取消失败，请稍后重试");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("admin.examDetail.errors.cancelFailed"),
+      );
     } finally {
       setCanceling(false);
     }
@@ -339,7 +364,12 @@ export function ExamDetailPage() {
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadExam} />;
   if (!exam)
-    return <ErrorState message="考试数据加载异常，请重试" onRetry={loadExam} />;
+    return (
+      <ErrorState
+        message={t("admin.examDetail.errors.dataLoadFailed")}
+        onRetry={loadExam}
+      />
+    );
 
   return (
     <div className="flex flex-col gap-6">
@@ -352,7 +382,7 @@ export function ExamDetailPage() {
                 variant="outline"
                 onClick={() => void navigate(routes.admin.examEdit(id!))}
               >
-                编辑
+                {t("admin.examDetail.actions.edit")}
               </Button>
             )}
             {exam.status === "draft" && (
@@ -360,7 +390,9 @@ export function ExamDetailPage() {
                 onClick={() => void handlePublish()}
                 disabled={publishing}
               >
-                {publishing ? "发布中..." : "发布考试"}
+                {publishing
+                  ? t("admin.examDetail.actions.publishing")
+                  : t("admin.examDetail.actions.publish")}
               </Button>
             )}
             {exam.status === "open" && (
@@ -370,11 +402,15 @@ export function ExamDetailPage() {
                     data-testid="exam-detail-close-btn"
                     disabled={closing}
                   >
-                    {closing ? "关闭中..." : "关闭考试"}
+                    {closing
+                      ? t("admin.examDetail.actions.closing")
+                      : t("admin.examDetail.actions.close")}
                   </Button>
                 }
-                title="确认关闭"
-                description={`确定要关闭考试「${exam.title}」吗？关闭后将结束考试，考生无法再开始新的作答。`}
+                title={t("admin.examDetail.confirm.closeTitle")}
+                description={t("admin.examDetail.confirm.closeDescription", {
+                  title: exam.title,
+                })}
                 destructive
                 onConfirm={() => void handleClose()}
               />
@@ -385,7 +421,7 @@ export function ExamDetailPage() {
                 variant="outline"
                 onClick={() => setExtendDialogOpen(true)}
               >
-                延长时间
+                {t("admin.examDetail.actions.extend")}
               </Button>
             )}
             {exam.status === "open" && (
@@ -393,7 +429,7 @@ export function ExamDetailPage() {
                 variant="outline"
                 onClick={() => void navigate(`/admin/exams/${id}/proctor`)}
               >
-                监考
+                {t("admin.examDetail.actions.proctor")}
               </Button>
             )}
             {exam.status === "published" && (
@@ -404,11 +440,16 @@ export function ExamDetailPage() {
                     variant="outline"
                     disabled={unpublishing}
                   >
-                    {unpublishing ? "撤回中..." : "撤回发布"}
+                    {unpublishing
+                      ? t("admin.examDetail.actions.unpublishing")
+                      : t("admin.examDetail.actions.unpublish")}
                   </Button>
                 }
-                title="确认撤回发布"
-                description={`确定要撤回考试「${exam.title}」的发布吗？撤回后将回到草稿状态，可以重新编辑。`}
+                title={t("admin.examDetail.confirm.unpublishTitle")}
+                description={t(
+                  "admin.examDetail.confirm.unpublishDescription",
+                  { title: exam.title },
+                )}
                 destructive
                 onConfirm={() => void handleUnpublish()}
               />
@@ -417,11 +458,15 @@ export function ExamDetailPage() {
               <ConfirmDialog
                 trigger={
                   <Button variant="outline" disabled={archiving}>
-                    {archiving ? "归档中..." : "归档"}
+                    {archiving
+                      ? t("admin.examDetail.actions.archiving")
+                      : t("admin.examDetail.actions.archive")}
                   </Button>
                 }
-                title="确认归档"
-                description={`确定要归档考试「${exam.title}」吗？归档后将从当前考试列表中移出。`}
+                title={t("admin.examDetail.confirm.archiveTitle")}
+                description={t("admin.examDetail.confirm.archiveDescription", {
+                  title: exam.title,
+                })}
                 destructive
                 onConfirm={() => void handleArchive()}
               />
@@ -430,11 +475,15 @@ export function ExamDetailPage() {
               <ConfirmDialog
                 trigger={
                   <Button variant="outline" disabled={canceling}>
-                    {canceling ? "取消中..." : "取消考试"}
+                    {canceling
+                      ? t("admin.examDetail.actions.canceling")
+                      : t("admin.examDetail.actions.cancel")}
                   </Button>
                 }
-                title="确认取消"
-                description={`确定要取消考试「${exam.title}」吗？取消后已发布的考试将作废，此操作不可撤销。`}
+                title={t("admin.examDetail.confirm.cancelTitle")}
+                description={t("admin.examDetail.confirm.cancelDescription", {
+                  title: exam.title,
+                })}
                 destructive
                 onConfirm={() => void handleCancel()}
               />
@@ -450,11 +499,16 @@ export function ExamDetailPage() {
                       data-testid="exam-detail-publish-results-btn"
                       disabled={releasing}
                     >
-                      {releasing ? "发布中..." : "发布成绩"}
+                      {releasing
+                        ? t("admin.examDetail.actions.publishResultsLoading")
+                        : t("admin.examDetail.actions.publishResults")}
                     </Button>
                   }
-                  title="确认发布成绩"
-                  description={`确定要发布考试「${exam.title}」的成绩吗？发布后考生将可以查看成绩。`}
+                  title={t("admin.examDetail.confirm.publishResultsTitle")}
+                  description={t(
+                    "admin.examDetail.confirm.publishResultsDescription",
+                    { title: exam.title },
+                  )}
                   onConfirm={() => void handlePublishResults()}
                 />
               )}
@@ -462,7 +516,7 @@ export function ExamDetailPage() {
               variant="outline"
               onClick={() => void navigate("/admin/exams")}
             >
-              返回列表
+              {t("admin.examDetail.actions.backToList")}
             </Button>
           </div>
         }
@@ -481,7 +535,7 @@ export function ExamDetailPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              状态
+              {t("admin.examDetail.stats.status")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -491,17 +545,21 @@ export function ExamDetailPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              考试时长
+              {t("admin.examDetail.stats.duration")}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{exam.durationMinutes}分钟</p>
+            <p className="text-2xl font-bold">
+              {t("admin.examDetail.stats.durationValue", {
+                minutes: exam.durationMinutes,
+              })}
+            </p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              及格分
+              {t("admin.examDetail.stats.passingScore")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -513,7 +571,7 @@ export function ExamDetailPage() {
         <Card className="shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
-              题目数量
+              {t("admin.examDetail.stats.questionCount")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -524,21 +582,35 @@ export function ExamDetailPage() {
 
       <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">考试配置</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.examDetail.config.title")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm">
           <div className="grid grid-cols-2 gap-2">
-            <span className="text-muted-foreground">时间模式：</span>
+            <span className="text-muted-foreground">
+              {t("admin.examDetail.config.timingMode")}
+            </span>
             <span>{exam.timingMode}</span>
-            <span className="text-muted-foreground">重考策略：</span>
+            <span className="text-muted-foreground">
+              {t("admin.examDetail.config.retakePolicy")}
+            </span>
             <span>{exam.retakePolicy}</span>
-            <span className="text-muted-foreground">分数策略：</span>
+            <span className="text-muted-foreground">
+              {t("admin.examDetail.config.scoreStrategy")}
+            </span>
             <span>{exam.scoreStrategy}</span>
-            <span className="text-muted-foreground">最大尝试次数：</span>
+            <span className="text-muted-foreground">
+              {t("admin.examDetail.config.maxAttempts")}
+            </span>
             <span>{exam.maxAttempts}</span>
-            <span className="text-muted-foreground">开始时间：</span>
+            <span className="text-muted-foreground">
+              {t("admin.examDetail.config.startTime")}
+            </span>
             <span>{new Date(exam.openAt).toLocaleString()}</span>
-            <span className="text-muted-foreground">结束时间：</span>
+            <span className="text-muted-foreground">
+              {t("admin.examDetail.config.endTime")}
+            </span>
             <span>{new Date(exam.closeAt).toLocaleString()}</span>
           </div>
         </CardContent>
@@ -546,8 +618,12 @@ export function ExamDetailPage() {
 
       <Tabs defaultValue="enrollment">
         <TabsList>
-          <TabsTrigger value="enrollment">报考</TabsTrigger>
-          <TabsTrigger value="scores">成绩</TabsTrigger>
+          <TabsTrigger value="enrollment">
+            {t("admin.examDetail.tabs.enrollment")}
+          </TabsTrigger>
+          <TabsTrigger value="scores">
+            {t("admin.examDetail.tabs.scores")}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="enrollment" className="flex flex-col gap-4">
@@ -555,7 +631,7 @@ export function ExamDetailPage() {
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
-                  参与人数
+                  {t("admin.examDetail.stats.participantCount")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -567,7 +643,7 @@ export function ExamDetailPage() {
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
-                  已完成
+                  {t("admin.examDetail.stats.completedCount")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -579,7 +655,7 @@ export function ExamDetailPage() {
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
-                  已通过
+                  {t("admin.examDetail.stats.passedCount")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -590,29 +666,45 @@ export function ExamDetailPage() {
 
           <Card className="shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">考生资格</CardTitle>
+              <CardTitle className="text-base">
+                {t("admin.examDetail.enrollment.title")}
+              </CardTitle>
               <Button size="sm" onClick={handleOpenAddDialog}>
                 <Plus data-icon="inline-start" />
-                添加考生
+                {t("admin.examDetail.enrollment.addCandidate")}
               </Button>
             </CardHeader>
             <CardContent>
               {enrollments.length === 0 ? (
                 <EmptyState
                   icon={<Users className="size-8" />}
-                  title="暂无考生"
-                  description="还没有为此考试分配考生。"
+                  title={t("admin.examDetail.enrollment.emptyTitle")}
+                  description={t(
+                    "admin.examDetail.enrollment.emptyDescription",
+                  )}
                 />
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>身份信息</TableHead>
-                      <TableHead>姓名</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead>尝试次数</TableHead>
-                      <TableHead>成绩</TableHead>
-                      <TableHead className="w-16">操作</TableHead>
+                      <TableHead>
+                        {t("admin.examDetail.enrollment.columns.identity")}
+                      </TableHead>
+                      <TableHead>
+                        {t("admin.examDetail.enrollment.columns.name")}
+                      </TableHead>
+                      <TableHead>
+                        {t("admin.examDetail.enrollment.columns.status")}
+                      </TableHead>
+                      <TableHead>
+                        {t("admin.examDetail.enrollment.columns.attemptCount")}
+                      </TableHead>
+                      <TableHead>
+                        {t("admin.examDetail.enrollment.columns.score")}
+                      </TableHead>
+                      <TableHead className="w-16">
+                        {t("admin.examDetail.enrollment.columns.actions")}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -635,13 +727,18 @@ export function ExamDetailPage() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label="移除考生"
+                                  aria-label={t(
+                                    "admin.examDetail.confirm.removeCandidate",
+                                  )}
                                 >
                                   <Trash2 className="text-destructive" />
                                 </Button>
                               }
-                              title="确认移除"
-                              description={`确定要移除「${enrollment.candidateDisplayName}」吗？`}
+                              title={t("admin.examDetail.confirm.removeTitle")}
+                              description={t(
+                                "admin.examDetail.confirm.removeDescription",
+                                { name: enrollment.candidateDisplayName },
+                              )}
                               destructive
                               onConfirm={() =>
                                 void handleRemoveEnrollment(enrollment.id)
@@ -661,17 +758,19 @@ export function ExamDetailPage() {
         <TabsContent value="scores">
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-base">成绩管理</CardTitle>
+              <CardTitle className="text-base">
+                {t("admin.examDetail.scoresTab.title")}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                查看和导出考试成绩数据。
+                {t("admin.examDetail.scoresTab.description")}
               </p>
               <Button
                 variant="outline"
                 onClick={() => void navigate(`/admin/exams/${id}/scores`)}
               >
-                前往成绩管理
+                {t("admin.examDetail.scoresTab.goToScores")}
               </Button>
             </CardContent>
           </Card>
@@ -681,11 +780,11 @@ export function ExamDetailPage() {
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>添加考生</DialogTitle>
+            <DialogTitle>{t("admin.examDetail.addDialog.title")}</DialogTitle>
           </DialogHeader>
           {candidates.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              暂无可用候选人，请先在候选人管理中创建。
+              {t("admin.examDetail.addDialog.emptyCandidates")}
             </p>
           ) : (
             <EnrollmentPicker
@@ -702,15 +801,17 @@ export function ExamDetailPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
-              取消
+              {t("admin.examDetail.addDialog.cancel")}
             </Button>
             <Button
               onClick={() => void handleAddEnrollments()}
               disabled={addingEnrollment || selectedCandidateIds.size === 0}
             >
               {addingEnrollment
-                ? "添加中..."
-                : `添加 (${selectedCandidateIds.size})`}
+                ? t("admin.examDetail.addDialog.adding")
+                : t("admin.examDetail.addDialog.add", {
+                    count: selectedCandidateIds.size,
+                  })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -719,10 +820,14 @@ export function ExamDetailPage() {
       <Dialog open={extendDialogOpen} onOpenChange={setExtendDialogOpen}>
         <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>延长考试时间</DialogTitle>
+            <DialogTitle>
+              {t("admin.examDetail.extendDialog.title")}
+            </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
-            <Label htmlFor="extend-minutes">延长分钟数</Label>
+            <Label htmlFor="extend-minutes">
+              {t("admin.examDetail.extendDialog.minutesLabel")}
+            </Label>
             <Input
               id="extend-minutes"
               type="number"
@@ -738,14 +843,18 @@ export function ExamDetailPage() {
               variant="outline"
               onClick={() => setExtendDialogOpen(false)}
             >
-              取消
+              {t("admin.examDetail.extendDialog.cancel")}
             </Button>
             <Button
               data-testid="extend-confirm-btn"
               disabled={extending || extendMinutes <= 0}
               onClick={() => void handleExtend()}
             >
-              {extending ? "延长中..." : `延长 ${extendMinutes} 分钟`}
+              {extending
+                ? t("admin.examDetail.extendDialog.confirming")
+                : t("admin.examDetail.extendDialog.confirm", {
+                    minutes: extendMinutes,
+                  })}
             </Button>
           </DialogFooter>
         </DialogContent>
