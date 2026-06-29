@@ -21,10 +21,12 @@ const answerByQuestion = new Map(
 );
 ```
 
-The `candidateAnswer` field is populated per question (line 181):
+The `candidateAnswer` field is populated per question (lines 166-168):
 
 ```ts
-candidateAnswer: answerByQuestion.get(q.originalQuestionId) ?? null,
+candidateAnswer: answerByQuestion.has(q.originalQuestionId)
+  ? (answerByQuestion.get(q.originalQuestionId) ?? null)
+  : null,
 ```
 
 ### 1.2 Response Shape
@@ -140,7 +142,7 @@ manualGradingEntries = pgTable("manual_grading_entries", {
 
 ### 4.1 `GET /api/admin/grading-queue`
 
-**File:** `apps/api/src/routes/gradingQueue.ts:45-103`
+**File:** `apps/api/src/routes/gradingQueue.ts:45-104`
 **Guard:** `[authenticate, requireRole(["Admin"])]`
 **Query:** `page`, `pageSize`, `examId?`
 
@@ -161,14 +163,14 @@ manualGradingEntries = pgTable("manual_grading_entries", {
 
 ### 4.2 `GET /api/admin/attempts/:attemptId/grading-details`
 
-**File:** `apps/api/src/routes/gradingQueue.ts:110-189`
+**File:** `apps/api/src/routes/gradingQueue.ts:110-190`
 **Guard:** `[authenticate, requireRole(["Admin"])]`
 
 **Response fields:** See §1.2 above. Key: includes `candidateAnswer` (nullable unknown) per question.
 
 ### 4.3 `POST /api/admin/attempts/:attemptId/grade-question`
 
-**File:** `apps/api/src/routes/gradingQueue.ts:197-340`
+**File:** `apps/api/src/routes/gradingQueue.ts:197-341`
 **Guard:** `[authenticate, requireRole(["Admin"])]`
 
 **Request body** (`score.ts:165-169`):
@@ -248,7 +250,7 @@ Rows are clickable → navigates to `/admin/grading-queue/${item.attemptId}`.
 |-------|-------|-------|
 | Question content | 196 | `q.content` |
 | Max score label | 199 | "X 分" |
-| Type label | 204 | Hardcoded "主观题" |
+| Type label | 204 | `t("admin.gradingDetail.question.subjective")` (i18n, resolves to "主观题") |
 | **Candidate answer** | 208-215 | `q.candidateAnswer` rendered via `formatAnswer()` in a bordered box |
 | Score input | 221-233 | Number input |
 | Comment textarea | 245-258 | Pre-filled from `q.entry.comment` |
@@ -259,14 +261,24 @@ Rows are clickable → navigates to `/admin/grading-queue/${item.attemptId}`.
 
 ```ts
 function formatAnswer(answer: unknown): string {
-  if (answer === undefined || answer === null || answer === "") return "未作答";
+  if (answer === undefined || answer === null || answer === "")
+    return i18n.t("admin.gradingDetail.format.unanswered" as never);
   if (typeof answer === "string") return answer;
-  if (typeof answer === "boolean") return answer ? "是" : "否";
+  if (typeof answer === "boolean")
+    return answer
+      ? i18n.t("admin.gradingDetail.format.correct" as never)
+      : i18n.t("admin.gradingDetail.format.incorrect" as never);
   if (Array.isArray(answer)) return answer.join("、");
-  if (typeof answer === "object") return Object.values(answer).map(formatAnswer).join("、");
+  if (typeof answer === "object") {
+    return Object.values(answer as Record<string, unknown>)
+      .map(formatAnswer)
+      .join("、");
+  }
   return String(answer);
 }
 ```
+
+> All display strings use `i18n.t()` translation keys, not hardcoded literals.
 
 **Frontend types (lines 51-83):**
 
@@ -322,8 +334,8 @@ function validateScore(score: number, maxScore: number): string | null {
 **`apps/web/src/pages/admin/GradingQueuePage.test.tsx`** (137 lines, 7 tests)
 - Renders queue items, pending counts, empty state, loading, error, row click navigation, retry.
 
-**`apps/web/src/pages/admin/GradingDetailPage.test.tsx`** (304 lines, 10 tests + 5 validateScore tests)
-- Renders attempt info, existing entry, empty score input, score validation, submits score, toast messages, loading/error states, comment submission, save-in-progress disable.
+**`apps/web/src/pages/admin/GradingDetailPage.test.tsx`** (304 lines, 11 page tests + 6 validateScore tests)
+- Renders attempt info, existing entry, empty score input, score validation, submits score, toast messages, loading/error states, comment submission, save-in-progress disable, null-response error handling.
 
 > **Test gap:** Mock data does NOT include `candidateAnswer` on any question. No test asserts on `data-testid="grading-candidate-answer-*"` or `formatAnswer()` rendering.
 
@@ -380,23 +392,46 @@ export const GradingStatus = {
 
 ## 10. Key Findings for M1
 
-### 10.1 Candidate Answer IS Already Returned
+> ⚠️ **M1 JOB CARD PREMISE MISMATCH — READ BEFORE STARTING M1**
+>
+> The M1 job card states:
+>
+> > "修复真实评分缺口：授权评分员在评分详情页必须能看到考生答案"
+>
+> > "当前 manual grading 如果只展示题目、标准答案、最高分，而不展示 candidate answer，则评分功能不完整"
+>
+> **This premise is factually wrong.** Candidate answers are already returned by the API, rendered by the frontend, and tested in integration tests. The audit proves this across all three layers:
+>
+> | Layer | Evidence |
+> |-------|----------|
+> | API contract | `GradingDetailQuestionSchema` includes `candidateAnswer: z.unknown().nullable()` (`packages/contracts/src/score.ts:31`) |
+> | API route | `gradingQueue.ts:166-168` maps `entry.candidateAnswer` from the repo into the response |
+> | Repository | `gradingQueueRepo.ts` joins `exam_attempts.answers` to extract per-question candidate answers |
+> | Frontend | `GradingDetailPage.tsx` renders candidate answers via `formatAnswer()` with i18n labels |
+> | Integration test | `gradingQueue.test.ts` slice 12 asserts `candidateAnswer` equals expected value |
+>
+> **Do NOT build candidate-answer display as a new feature.** M1's actual scope is test-coverage and E2E-enablement only — see §10.2 below.
 
-The grading detail API **already includes** `candidateAnswer` (nullable `unknown`) in the response. The frontend **already renders** it via `formatAnswer()`. The backend integration test **already asserts** on it.
+### 10.1 What Already Works (Do Not Reimplement)
 
-**However**, the frontend test does NOT cover this — mock data lacks `candidateAnswer` and no test verifies the rendering.
+The candidate-answer display feature is fully implemented end-to-end:
+
+1. **API returns candidateAnswer** — `gradingQueue.ts:166-168` maps `entry.candidateAnswer` into the response payload for every question in the grading detail view.
+2. **Contract schema includes it** — `GradingDetailQuestionSchema` in `score.ts:31` declares `candidateAnswer: z.unknown().nullable()` before the audit was written.
+3. **Frontend renders it** — `GradingDetailPage.tsx` calls `formatAnswer()` (with `i18n.t()` labels) to display the candidate's answer alongside the standard answer and max score.
+4. **Integration test asserts it** — `gradingQueue.test.ts` slice 12 verifies `candidateAnswer` equals the expected submitted answer for a subjective question.
 
 ### 10.2 What M1 Actually Needs to Add
 
-Based on the Phase 3 job card scope ("subjective / rich-text answer runtime + manual-grading candidate-answer detail and full grading workflow"), the actual gaps for M1 are:
+Since the candidate-answer display already exists, M1's real scope is **test coverage and E2E enablement only**:
 
-1. **Fill-blank answering runtime** — `fill-blank` question type E2E is Phase 3 (currently skipped).
-2. **Rich-text / subjective answering runtime** — No WYSIWYG answer input exists yet.
-3. **Frontend test gap** — `GradingDetailPage.test.tsx` needs `candidateAnswer` in mock data and assertions.
-4. **E2E unskip** — `manual-grading.spec.ts` needs to be enabled and passing.
-5. **Demo seed** — No subjective questions in demo data; adding them would improve manual grading testing.
+1. **Frontend test gap** — `GradingDetailPage.test.tsx` mock data lacks `candidateAnswer`; no test asserts rendering of candidate answers. Add mock data with `candidateAnswer` and verify `formatAnswer()` output.
+2. **E2E unskip** — `manual-grading.spec.ts` is skipped (`described.skip`); needs to be enabled and passing.
+3. **Fill-blank E2E** — `fill-blank-e2e.spec.ts` is skipped; needs enabling if in M1 scope.
+4. **Demo seed** — No subjective questions exist in demo seed data; adding them improves manual grading testing visibility.
+5. **Rich-text / subjective answering runtime** — No WYSIWYG answer input exists for candidates. This is the only genuinely new feature in M1's stated scope — it concerns the *candidate* side (answering), not the *grader* side (which already works).
 
-### 10.3 Files M1 Needs to Modify
+### 10.3 Files M1 Needs to Modify (Test / E2E / Seed Only)
 
 | File | Change |
 |------|--------|
@@ -419,7 +454,7 @@ Based on the Phase 3 job card scope ("subjective / rich-text answer runtime + ma
 |------|----------|----------|
 | `formatAnswer()` renders string answer | `GradingDetailPage.test.tsx` | High |
 | `formatAnswer()` renders array answer (fill_blank) | `GradingDetailPage.test.tsx` | High |
-| `formatAnswer()` renders null as "未作答" | `GradingDetailPage.test.tsx` | High |
+| `formatAnswer()` renders null as i18n "未作答" label | `GradingDetailPage.test.tsx` | High |
 | `formatAnswer()` renders object answer | `GradingDetailPage.test.tsx` | Medium |
 | `candidateAnswer` visible in grading detail for unanswered question | `GradingDetailPage.test.tsx` | High |
 | Manual grading E2E full flow | `manual-grading.spec.ts` | High |

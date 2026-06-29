@@ -18,7 +18,7 @@
 | Client type | `RedisClient extends Redis { prefix: string }` |
 | Fastify decoration | `fastify.redis: RedisClient \| null` |
 | Connection mode | `lazyConnect: true`, explicit `await client.connect()` |
-| Retry strategy | max 3 retries, 200ms–2000ms backoff, then `null` (give up) |
+| Retry strategy | max 3 retries with `Math.min(times * 200, 2000)` → 200ms, 400ms, 600ms, then `null` (give up; 2000ms cap never reached) |
 | Graceful close | `onClose` hook calls `client.quit()` |
 | Disabled behavior | If `REDIS_URL` unset/empty → decorates `null`, no connection attempted |
 
@@ -38,7 +38,7 @@ Redis registers after DB, before auth. If Redis connection fails (after retries 
 |-------|:---:|-------|
 | Rate limiting | ❌ | `@fastify/rate-limit` with **in-memory** store (`apps/api/src/plugins/rateLimit.ts`) |
 | Heartbeat / presence | ❌ | DB-backed `setInterval` scanner (`apps/api/src/plugins/heartbeat.ts`) |
-| Admission queue | ❌ | In-memory `Map<string, QueueEntry[]>` (`apps/api/src/routes/attempts.candidate.ts:106`) |
+| Admission queue | ❌ | In-memory `Map<string, QueueEntry[]>` (`apps/api/src/routes/attempts.candidate.ts:109`) |
 | Diagnostics ping | ✅ | `fastify.redis.ping()` in `/system/diagnostics` (`apps/api/src/routes/system.ts:205`) |
 | Test isolation | ✅ | `testRedis.ts` — prefix-scoped SCAN+DEL cleanup |
 | Caching / pub-sub | ❌ | None |
@@ -55,7 +55,7 @@ Redis registers after DB, before auth. If Redis connection fails (after retries 
 When `REDIS_URL` is set and Redis is unreachable:
 
 1. `redisPlugin` calls `await client.connect()` (line 40)
-2. ioredis retries 3 times with 200ms–2000ms backoff
+2. ioredis retries 3 times with 200ms, 400ms, 600ms backoff (`Math.min(times * 200, 2000)` — 2000ms cap never reached)
 3. After 3 failed retries → throws connection error
 4. Server **crashes** (uncaught in `server.ts`)
 
@@ -74,8 +74,8 @@ When `REDIS_URL` is unset or empty:
 
 If Redis disconnects after successful startup:
 
-- ioredis auto-reconnects per retry strategy (3 retries)
-- After exhaustion, ioredis emits `"error"` event (unhandled by the plugin — would be caught by Fastify's error handler)
+- ioredis auto-reconnects per retry strategy (3 retries: 200ms, 400ms, 600ms)
+- After exhaustion, ioredis emits `"error"` event on the client EventEmitter — **the plugin has no `"error"` listener**, so Node.js treats it as an unhandled EventEmitter error and **crashes the process** (uncaughtException). Fastify's error handler only catches HTTP request-lifecycle errors, not arbitrary EventEmitter errors.
 - No explicit disconnect handling in the plugin
 - `/system/diagnostics` catch block would report `connected: false`
 - No business logic uses Redis, so no functional impact
@@ -265,8 +265,8 @@ All triggers remain unmet in Phase 3 single-instance deployment.
 ### R1 — Startup crash on Redis failure
 `await client.connect()` in `redisPlugin` is not wrapped in try/catch. If `REDIS_URL` is set but Redis is unreachable, the server crashes. This contradicts the "optional infrastructure" design intent from ADR-001.
 
-### R2 — No disconnect event handler
-The Redis plugin does not listen for `"error"` or `"close"` events on the ioredis client. A mid-session disconnect would emit an unhandled error event.
+### R2 — No disconnect event handler (process crash risk)
+The Redis plugin does not listen for `"error"` or `"close"` events on the ioredis client. A mid-session disconnect after retry exhaustion would emit an `"error"` event with no listener. Node.js EventEmitter semantics dictate that an unhandled `"error"` event throws an `uncaughtException` — **crashing the entire process**. Fastify's error handler does NOT intercept EventEmitter errors from non-request-scoped objects. This is a latent crash bug, not merely a missing log.
 
 ### R3 — Rate limit not shared across instances
 `@fastify/rate-limit` uses in-memory store. In a multi-instance deployment, each instance has its own counter. A determined attacker could send `N × max` requests per window across instances.
@@ -275,7 +275,7 @@ The Redis plugin does not listen for `"error"` or `"close"` events on the ioredi
 The heartbeat scanner runs `SELECT ... WHERE last_activity_at < now() - timeout` every 30s. Under high concurrency, this query may become expensive. Redis sorted sets could offload presence tracking.
 
 ### R5 — In-memory queue lost on restart
-`examQueues = new Map()` in `attempts.candidate.ts:106` is process-local. Queue state is lost on server restart. However, queue admission is Phase 2+ deferred and not operationally wired.
+`examQueues = new Map()` in `attempts.candidate.ts:109` is process-local. Queue state is lost on server restart. However, queue admission is Phase 2+ deferred and not operationally wired.
 
 ### R6 — No `redis.recovered` monitoring event
 Phase 3 job cards plan `redis.unavailable` / `redis.recovered` events, but the plugin does not emit these today.
@@ -334,7 +334,7 @@ If heartbeat scanner becomes expensive under load, add Redis sorted sets for `ex
 | `apps/api/src/plugins/rateLimit.ts` | In-memory rate limit (no Redis) |
 | `apps/api/src/plugins/heartbeat.ts` | DB-backed heartbeat scanner (no Redis) |
 | `apps/api/src/routes/system.ts:196-213` | Diagnostics `redis.ping()` |
-| `apps/api/src/routes/attempts.candidate.ts:106` | In-memory queue (no Redis) |
+| `apps/api/src/routes/attempts.candidate.ts:109` | In-memory queue (no Redis) |
 | `apps/api/src/config/runtimeConfig.ts:349-395` | Redis config resolution |
 | `apps/api/src/server.ts:58` | Redis plugin registration |
 

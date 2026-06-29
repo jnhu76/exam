@@ -47,14 +47,15 @@
 
 | Line | Behavior |
 |------|----------|
-| 42-55 | `onRoute` hook detects `_isAuthenticate` marker, auto-injects tenantGuardHook |
-| 57-58 | Calls `validateTenantAccess` from `tenantGuard.ts` |
+| 42-55 | `onRoute` hook detects `_isAuthenticate` marker, auto-injects tenantGuardHook after authenticate |
+| 57-58 | Creates `tenantHandler` wrapper around `tenantGuardHook` |
+| 16 | `tenantGuardHook` calls `validateTenantAccess` from `tenantGuard.ts` |
 
 ### 2.3 Tenant Guard — `packages/auth/src/tenantGuard.ts`
 
 | Line | Behavior |
 |------|----------|
-| 10-14 | `DEFAULT_PLATFORM_APIS`: `/api/auth/me`, `/api/system/health` |
+| 10-14 | `DEFAULT_PLATFORM_APIS`: `GET /api/auth/me`, `PATCH /api/auth/me`, `GET /api/system/health` (3 entries) |
 | 32-38 | `isPublicEndpoint`: `/api/health`, `/api/settings/branding`, `/api/system/public-config`, `/api/system/info` |
 | 45-52 | `validateTenantAccess` — **Phase 1 no-op**: only checks public endpoints |
 
@@ -192,12 +193,13 @@ role: z.enum(["Admin", "Candidate"]) // Inline schema, duplicates RoleSchema
 const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate"] as const;
 ```
 
-**`apps/api/src/routes/user.ts:189-200`**
+**`apps/api/src/routes/user.ts:189-201`**
 
 ```ts
 const willDisableAdmin =
   target.role === "Admin" && target.isActive &&
-  ((data.isActive === false) || (data.role !== "Admin"));
+  ((data.isActive !== undefined && data.isActive === false) ||
+   (data.role !== undefined && data.role !== "Admin"));
 if (willDisableAdmin) {
   const activeAdminCount = await repo.countActiveByRole(ctx, "Admin");
   if (activeAdminCount <= 1) {
@@ -304,7 +306,9 @@ Every occurrence of `"Admin"`, `"Candidate"`, or inline `z.enum(["Admin", "Candi
 | `apps/api/src/routes/scores.ts:80` | 80 | `ctx.role !== "Candidate"` | `Role.Candidate` |
 | `apps/api/src/routes/scores.ts:209` | 209 | `role !== "Candidate"` | `Role.Candidate` |
 | `apps/api/src/routes/candidate.ts:269` | 269 | `role: "Candidate" as const` | `Role.Candidate` |
-| `apps/api/src/scripts/bootstrap-admin.ts:56,67,78` | 56, 67, 78 | `role: "Admin"` | `Role.Admin` |
+| `apps/api/src/routes/candidate.ts:502` | 502 | `role: "Candidate" as const` | `Role.Candidate` (import flow) |
+| `apps/api/src/scripts/bootstrap-admin.ts:56,66,78` | 56, 66, 78 | `role: "Admin"`, `"Admin"` (countActiveByRole) | `Role.Admin` |
+| `apps/api/src/scripts/reset-admin-password.ts:49` | 49 | `role: "Admin" as const` | `Role.Admin` |
 | `apps/web/src/contexts/AuthContext.tsx:37` | 37 | `user.role === "Candidate"` | `Role.Candidate` |
 | `apps/web/src/components/layout/AdminLayout.tsx:39` | 39 | `user.role === "Candidate"` | `Role.Candidate` |
 | `apps/web/src/components/layout/ExamLayout.tsx:45` | 45 | `user.role !== "Candidate"` | `Role.Candidate` |
@@ -312,40 +316,102 @@ Every occurrence of `"Admin"`, `"Candidate"`, or inline `z.enum(["Admin", "Candi
 | `packages/db/src/seed.ts:29,33,38` | 29, 33, 38 | `"Admin"`, `"Candidate"` | `Role.Admin`, `Role.Candidate` |
 | `packages/db/src/demo-seed.ts:195-199` | 195-199 | `"Admin"`, `"Candidate"` | `Role.Admin`, `Role.Candidate` |
 
-**Count:** ~20 sites with hardcoded role strings outside the canonical definition.
+**Count:** ~22 sites with hardcoded role strings outside the canonical definition.
 
 ---
 
-## 9. Permission System — Defined but Unused
+## 9. Permission System — Defined, Partially Wired, Mostly Dead
 
 ### 9.1 Permission Enum
 
-`packages/domain/src/enums.ts:8-48` defines **18 permissions**:
+`packages/domain/src/enums.ts:15-47` defines **22 permissions** across 8 groups:
 
 ```
-MANAGE_ORGANIZATION, MANAGE_CANDIDATE_FIELDS, MANAGE_USERS,
-CREATE_QUESTION, EDIT_QUESTION, DELETE_QUESTION, IMPORT_QUESTIONS,
-MANAGE_COURSES, CREATE_EXAM, EDIT_EXAM, PUBLISH_EXAM,
-ARCHIVE_EXAM, DELETE_EXAM, VIEW_EXAM_ROOM, EXTEND_TIME,
-MARK_MISCONDUCT, FORCE_SUBMIT,
-TAKE_EXAM, VIEW_OWN_SCORE, VIEW_ALL_SCORES, EXPORT_SCORES,
-VIEW_SYSTEM_HEALTH
+Organization:  MANAGE_ORGANIZATION, MANAGE_CANDIDATE_FIELDS
+Users:         MANAGE_USERS
+Question Bank: CREATE_QUESTION, EDIT_QUESTION, DELETE_QUESTION, IMPORT_QUESTIONS
+Course:        MANAGE_COURSES
+Exam:          CREATE_EXAM, EDIT_EXAM, PUBLISH_EXAM, ARCHIVE_EXAM, DELETE_EXAM
+Proctor:       VIEW_EXAM_ROOM, EXTEND_TIME, MARK_MISCONDUCT, FORCE_SUBMIT
+Candidate:     TAKE_EXAM, VIEW_OWN_SCORE
+Scores:        VIEW_ALL_SCORES, EXPORT_SCORES
+System:        VIEW_SYSTEM_HEALTH
 ```
 
-> Note: 21 values in the enum (line count says 18 in comments but there are 21 values). Verify actual count in source.
+### 9.2 RBAC Mapping (`packages/auth/src/rbac.ts:4-22`)
 
-### 9.2 RBAC Mapping
+| Role | Granted (count) | Granted permissions |
+|------|-----------------|---------------------|
+| **Admin** | **15** | MANAGE_USERS, MANAGE_CANDIDATE_FIELDS, MANAGE_COURSES, CREATE_QUESTION, EDIT_QUESTION, DELETE_QUESTION, IMPORT_QUESTIONS, CREATE_EXAM, EDIT_EXAM, PUBLISH_EXAM, ARCHIVE_EXAM, DELETE_EXAM, VIEW_ALL_SCORES, EXPORT_SCORES, VIEW_SYSTEM_HEALTH |
+| **Candidate** | **2** | TAKE_EXAM, VIEW_OWN_SCORE |
 
-`packages/auth/src/rbac.ts` maps:
+**Not granted to Admin (7 permissions):**
 
-- **Admin** → 15 permissions (all except `TAKE_EXAM`, `VIEW_OWN_SCORE`, `VIEW_EXAM_ROOM`)
-- **Candidate** → 2 permissions (`TAKE_EXAM`, `VIEW_OWN_SCORE`)
+| Permission | Group | Why notable |
+|-----------|-------|-------------|
+| `MANAGE_ORGANIZATION` | Organization | Defined but **granted to no role** and **used by no route** — fully dead |
+| `VIEW_EXAM_ROOM` | Proctor | Route exists (`proctorMonitoring.ts`) but gated by `requireRole(["Admin"])`, not by this permission |
+| `EXTEND_TIME` | Proctor | Route exists (`attempts.admin.ts` extend-time) but gated by `requireRole(["Admin"])` |
+| `MARK_MISCONDUCT` | Proctor | Route exists (`attempts.admin.ts` misconduct) but gated by `requireRole(["Admin"])` |
+| `FORCE_SUBMIT` | Proctor | Route exists (`attempts.admin.ts` force-submit) but gated by `requireRole(["Admin"])` |
+| `TAKE_EXAM` | Candidate | Candidate-only — correctly excluded from Admin |
+| `VIEW_OWN_SCORE` | Scores | Candidate-only — correctly excluded from Admin |
 
-### 9.3 Usage
+> **Critical:** The 4 "Proctor" permissions + `MANAGE_ORGANIZATION` are defined in the enum but **not wired into the RBAC mapping**. If Phase 3 migrates any proctor route from `requireRole(["Admin"])` to `requirePermission(Permission.EXTEND_TIME)`, **Admin would be denied** because Admin does not hold that permission. See R11 below.
 
-- `getPermissionsForRole()` is called during authentication to populate `ctx.permissions` (auth.ts:81-87).
-- `requirePermission` is decorated on Fastify (auth.ts:104-119).
-- **Zero routes call `requirePermission()`.** All routes use `requireRole()`.
+### 9.3 Complete Permission Inventory — Definition, RBAC, and Route Mapping
+
+| # | Permission | Group | Admin | Cand. | Route that SHOULD map to it | Actual route gate | Gap? |
+|---|-----------|-------|:-----:|:-----:|-----------------------------|-------------------|------|
+| 1 | `MANAGE_ORGANIZATION` | Org | — | — | *(no route exists)* | N/A | **Dead**: defined, unassigned, unused |
+| 2 | `MANAGE_CANDIDATE_FIELDS` | Org | ✅ | — | `candidateField.ts` CRUD | `requireRole(["Admin"])` | Wired via role, not permission |
+| 3 | `MANAGE_USERS` | Users | ✅ | — | `user.ts` CRUD | `requireRole(["Admin"])` | Wired via role, not permission |
+| 4 | `CREATE_QUESTION` | Q-Bank | ✅ | — | `question.ts` create | `requireRole(["Admin"])` | Wired via role, not permission |
+| 5 | `EDIT_QUESTION` | Q-Bank | ✅ | — | `question.ts` update | `requireRole(["Admin"])` | Wired via role, not permission |
+| 6 | `DELETE_QUESTION` | Q-Bank | ✅ | — | `question.ts` delete | `requireRole(["Admin"])` | Wired via role, not permission |
+| 7 | `IMPORT_QUESTIONS` | Q-Bank | ✅ | — | `question.ts` import | `requireRole(["Admin"])` | Wired via role, not permission |
+| 8 | `MANAGE_COURSES` | Course | ✅ | — | `course.ts` CRUD | `requireRole(["Admin"])` | Wired via role, not permission |
+| 9 | `CREATE_EXAM` | Exam | ✅ | — | `exam.ts` create | `requireRole(["Admin"])` | Wired via role, not permission |
+| 10 | `EDIT_EXAM` | Exam | ✅ | — | `exam.ts` update | `requireRole(["Admin"])` | Wired via role, not permission |
+| 11 | `PUBLISH_EXAM` | Exam | ✅ | — | `exam.ts` publish/unpublish | `requireRole(["Admin"])` | Wired via role, not permission |
+| 12 | `ARCHIVE_EXAM` | Exam | ✅ | — | `exam.ts` archive | `requireRole(["Admin"])` | Wired via role, not permission |
+| 13 | `DELETE_EXAM` | Exam | ✅ | — | `exam.ts` delete | `requireRole(["Admin"])` | Wired via role, not permission |
+| 14 | `VIEW_EXAM_ROOM` | Proctor | — | — | `proctorMonitoring.ts` attempts | `requireRole(["Admin"])` | **Trap**: perm not granted to Admin |
+| 15 | `EXTEND_TIME` | Proctor | — | — | `attempts.admin.ts` extend-time | `requireRole(["Admin"])` | **Trap**: perm not granted to Admin |
+| 16 | `MARK_MISCONDUCT` | Proctor | — | — | `attempts.admin.ts` misconduct | `requireRole(["Admin"])` | **Trap**: perm not granted to Admin |
+| 17 | `FORCE_SUBMIT` | Proctor | — | — | `attempts.admin.ts` force-submit | `requireRole(["Admin"])` | **Trap**: perm not granted to Admin |
+| 18 | `TAKE_EXAM` | Candidate | — | ✅ | `attempts.candidate.ts` start/submit | `requireRole(["Candidate"])` | Wired via role, not permission |
+| 19 | `VIEW_OWN_SCORE` | Scores | — | ✅ | `scores.ts` own attempt detail | `requireRole(["Candidate","Admin"])` + handler | Wired via role, not permission |
+| 20 | `VIEW_ALL_SCORES` | Scores | ✅ | — | `scores.ts` exam scores list | `requireRole(["Admin"])` | Wired via role, not permission |
+| 21 | `EXPORT_SCORES` | Scores | ✅ | — | `export.ts`, `attempts.admin.ts` export | `requireRole(["Admin"])` | Wired via role, not permission |
+| 22 | `VIEW_SYSTEM_HEALTH` | System | ✅ | — | `system.ts` health/dashboard | `requireRole(["Admin"])` | Wired via role, not permission |
+
+**Summary:** 22 permissions defined → 17 assigned to at least one role → **5 unassigned** (MANAGE_ORGANIZATION + 4 Proctor). Zero routes use `requirePermission()`. All 22 are enforced exclusively through coarse `requireRole()`.
+
+### 9.4 Permission Lifecycle — Where Permissions Appear in Code
+
+| Stage | File | Line(s) | What happens |
+|-------|------|---------|--------------|
+| **Definition** | `packages/domain/src/enums.ts` | 15-48 | `Permission` const + type — 22 values |
+| **RBAC mapping** | `packages/auth/src/rbac.ts` | 4-22 | `ROLE_PERMISSIONS: Record<Role, Permission[]>` — Admin=15, Candidate=2 |
+| **RBAC lookup** | `packages/auth/src/rbac.ts` | 26-28 | `getPermissionsForRole(role)` → returns `Permission[]` |
+| **JWT payload** | `packages/auth/src/session.ts` | 6-9 | `JwtPayload = Omit<RequestContext, "permissions" \| ...>` — **permissions NOT in JWT** |
+| **Context type (domain)** | `packages/domain/src/types.ts` | 460 | `RequestContext.permissions: Permission[]` |
+| **Context type (db)** | `packages/db/src/types.ts` | 13, 21 | `TenantContext.permissions`, `PlatformContext.permissions` |
+| **Population at auth** | `apps/api/src/plugins/auth.ts` | 85 | `permissions: getPermissionsForRole(user.role)` — computed per-request from DB role |
+| **Enforcement decorator** | `apps/api/src/plugins/auth.ts` | 104-119 | `requirePermission(perm)` → checks `ctx.permissions.includes(perm)` |
+| **Actual enforcement** | *(none)* | — | **Zero routes call `requirePermission()`** — all use `requireRole()` |
+| **Tests** | `packages/auth/src/rbac.test.ts` | 1-35 | Tests Admin/Candidate/future-role permission sets |
+| **Tests (context)** | `packages/db/src/__tests__/context-types.test.ts` | 22, 44 | Uses permission strings in test contexts |
+
+### 9.5 Key Observation
+
+The permission system is a **parallel authorization model that shadows the real one**:
+
+- The **real** authorization is `requireRole()` — coarse, 2 roles, all-or-nothing.
+- The **shadow** authorization is `requirePermission()` — fine-grained, 22 permissions, RBAC-mapped — but **never invoked**.
+- `ctx.permissions` is populated on every authenticated request (auth.ts:85) but **never read** except inside the dead `requirePermission` decorator.
+- Migrating from role-gate to permission-gate is not a flip — 5 permissions have no role assignment, so those routes would break.
 
 ---
 
@@ -408,13 +474,13 @@ VIEW_SYSTEM_HEALTH
 `role` column is `text` with no CHECK/ENUM. A direct SQL insert of `"Teacher"` would succeed silently and be accepted by the application only at login time (rejected with `unsupported_phase1_role`).
 
 ### R2 — Hardcoded role strings everywhere
-~20 sites use string literals `"Admin"` / `"Candidate"` instead of `Role.Admin` / `Role.Candidate`. Adding a new role requires finding and updating all these sites manually.
+~22 sites use string literals `"Admin"` / `"Candidate"` instead of `Role.Admin` / `Role.Candidate`. Adding a new role requires finding and updating all these sites manually.
 
 ### R3 — Permission system is dead code
-`requirePermission` exists but is never called. All routes use `requireRole`. If Phase 3 introduces scoped permissions, the current `requireRole`-only approach must be augmented or replaced.
+`requirePermission` exists but is never called. All routes use `requireRole`. `ctx.permissions` is populated on every request (auth.ts:85) but never read. If Phase 3 introduces scoped permissions, the current `requireRole`-only approach must be augmented or replaced.
 
 ### R4 — Handler-level role logic is scattered
-`scores.ts:80`, `scores.ts:209`, `user.ts:190-200`, `user.ts:262`, `auth.ts:155` each contain ad-hoc `role === "X"` checks. These are invisible to static analysis tools and easy to miss when adding new roles.
+`scores.ts:80`, `scores.ts:209`, `user.ts:189-201`, `user.ts:262`, `auth.ts:155` each contain ad-hoc `role === "X"` checks. These are invisible to static analysis tools and easy to miss when adding new roles.
 
 ### R5 — System contexts claim `role: "Admin"`
 `deadlineScanner.ts` and `heartbeat.ts` create system contexts with `role: "Admin"`. When Phase 3 adds scoped roles, system actors should have their own role or a distinct `SYSTEM` role.
@@ -433,6 +499,12 @@ VIEW_SYSTEM_HEALTH
 
 ### R10 — No role audit on mutation
 No audit log is recorded when a user's role is changed via `PATCH /users/:id`. Adding audit trail for role changes is a Phase 3 requirement.
+
+### R11 — Proctor permissions are a migration trap
+Four "Proctor" group permissions (`VIEW_EXAM_ROOM`, `EXTEND_TIME`, `MARK_MISCONDUCT`, `FORCE_SUBMIT`) are defined in `enums.ts` but **not granted to Admin** in `rbac.ts`. Their routes (`proctorMonitoring.ts`, `attempts.admin.ts` misconduct/force-submit/extend-time) are currently gated by `requireRole(["Admin"])`. If Phase 3 migrates any of these routes to `requirePermission(Permission.EXTEND_TIME)`, **Admin would be denied** because Admin's permission set does not include these values. The RBAC mapping must be reconciled before any permission-gate migration.
+
+### R12 — `MANAGE_ORGANIZATION` is fully dead
+`MANAGE_ORGANIZATION` is defined in `enums.ts:17` but granted to no role and used by no route. It is the only permission with zero consumers in both the RBAC mapping and the route layer. Phase 3 must decide whether to wire it to Admin or remove it.
 
 ---
 
@@ -460,6 +532,7 @@ No audit log is recorded when a user's role is changed via `PATCH /users/:id`. A
 | `apps/api/src/plugins/deadlineScanner.ts` | System context |
 | `apps/api/src/plugins/heartbeat.ts` | System context |
 | `apps/api/src/scripts/bootstrap-admin.ts` | Admin bootstrap |
+| `apps/api/src/scripts/reset-admin-password.ts` | Admin password reset (hardcoded role) |
 | `apps/api/src/routes/auth.ts` | Login role rejection |
 | `apps/api/src/routes/user.ts` | Inline schema, last-admin guard, reset guard |
 | `apps/api/src/routes/scores.ts` | Role-conditional visibility |
@@ -491,6 +564,7 @@ No audit log is recorded when a user's role is changed via `PATCH /users/:id`. A
 |------|------|
 | `apps/api/src/routes/permissionBoundary.test.ts` | Systematic 401/403 matrix |
 | `apps/api/src/routes/testHelpers.ts` | TestContext, role tokens, LEGACY_ROLES |
+| `packages/auth/src/rbac.test.ts` | RBAC mapping assertions (Admin/Candidate/future roles) |
 | `apps/api/tests/security/rbac-matrix.test.ts` | RBAC assertions |
 | `apps/api/tests/security/unauthorized-access.test.ts` | Unauthorized access |
 | `apps/api/tests/security/tenant-isolation.test.ts` | Cross-org rejection |
@@ -513,7 +587,7 @@ Questions the Large permission-model job must answer:
 4. **System actor:** Should system actors (deadline scanner, heartbeat) get a distinct `SYSTEM` role instead of `Admin`?
 5. **Role change audit:** What audit events are required when a user's role or permissions change?
 6. **DB constraint:** Should `role` column get a PostgreSQL ENUM or CHECK constraint?
-7. **Hardcoded strings migration:** Is consolidating ~20 hardcoded `"Admin"`/`"Candidate"` strings to use `Role` const values a prerequisite for the permission model?
+7. **Hardcoded strings migration:** Is consolidating ~22 hardcoded `"Admin"`/`"Candidate"` strings to use `Role` const values a prerequisite for the permission model?
 8. **LEGACY_ROLES alignment:** Do the test-helper `LEGACY_ROLES` names match the Phase 3 role naming decision?
 9. **Login behavior for future roles:** Should unsupported roles get `403` instead of `401 AUTH_INVALID_CREDENTIALS`?
 10. **TenantGuard evolution:** Does Phase 3 enhance `tenantGuard.ts` for scope enforcement, or is scope a separate layer?
@@ -521,3 +595,6 @@ Questions the Large permission-model job must answer:
 12. **Contract changes:** How do `RoleSchema`, `CreateUserRequestSchema`, and response DTOs change when new roles are added?
 13. **Permission audit:** Phase 3 requires "Permission audit explains who granted which capability and why" — what data model supports this?
 14. **Scoping + `requireRole` coexistence:** During migration, can `requireRole(["Admin"])` coexist with `requirePermission(MANAGE_EXAMS, { scope: "course:xyz" })`?
+15. **Proctor permission gap (R11):** The 4 Proctor permissions (`VIEW_EXAM_ROOM`, `EXTEND_TIME`, `MARK_MISCONDUCT`, `FORCE_SUBMIT`) are defined but not granted to Admin. Before migrating these routes from `requireRole` to `requirePermission`, the RBAC mapping must be reconciled — otherwise Admin loses access. Should these be granted to Admin as a superset, or should a Proctor role be introduced with these permissions?
+16. **Dead permission cleanup (R12):** `MANAGE_ORGANIZATION` is defined but unassigned and unused. Wire it to Admin (for org-settings routes), or remove it from the enum?
+17. **Permission-to-route traceability:** 22 permissions are defined but none have a documented 1:1 mapping to their route(s). Should Phase 3 introduce a declarative permission registry (route → required permission(s)) that replaces ad-hoc `requireRole` calls?
