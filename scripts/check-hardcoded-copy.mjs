@@ -136,6 +136,19 @@ function isCommentLine(line) {
   );
 }
 
+/**
+ * Strips line comments (// ...) from a line, preserving URLs (https://).
+ * Returns the code portion only, so CJK in comments is not flagged.
+ */
+function stripComments(line) {
+  // Match // not preceded by : (preserves https://, http://, ftp://)
+  const match = line.match(/(?<!:)\/\//);
+  if (match && match.index !== undefined) {
+    return line.slice(0, match.index);
+  }
+  return line;
+}
+
 // ─── Tier 1: Deployment-specific violations ─────────────────────────
 
 const tier1Violations = [];
@@ -156,7 +169,7 @@ for (const dir of SCAN_DIRS) {
     if (!isTextFile(filePath)) return;
     if (isExcluded(filePath)) return;
 
-    const relPath = relative(process.cwd(), filePath);
+    const relPath = relative(process.cwd(), filePath).replace(/\\/g, "/");
 
     let content;
     try {
@@ -192,23 +205,20 @@ for (const dir of SCAN_DIRS) {
     // Skip test files (caught by EXCLUDE_PATTERNS, but double-check)
     if (relPath.includes(".test.") || relPath.includes("__tests__/")) return;
 
-    // Check if file is in allowlist
-    const isAllowed = ALLOWED_PATH_SET.has(relPath);
+    // Allowlisted files: skip entirely (CSV/template compatibility)
+    if (ALLOWED_PATH_SET.has(relPath)) return;
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!CJK_REGEX.test(line)) continue;
+      const code = stripComments(lines[i]);
+      if (!CJK_REGEX.test(code)) continue;
 
-      // Skip comment lines
-      if (isCommentLine(line)) continue;
-
-      // If file is in allowlist, skip silently
-      if (isAllowed) continue;
+      // Skip full-line comments
+      if (isCommentLine(lines[i])) continue;
 
       tier2Violations.push({
         file: relPath,
         line: i + 1,
-        content: line.trim(),
+        content: lines[i].trim(),
       });
     }
   });
