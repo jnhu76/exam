@@ -45,8 +45,25 @@ const CJK_REGEX = /[\u4e00-\u9fff]/;
 /**
  * Files exempted from CJK detection. Each entry documents WHY the
  * Chinese is acceptable and when the exemption should be removed.
+ *
+ * Web entries: UI copy that lives here for CSV/template compatibility or is a
+ * temporary placeholder.
+ *
+ * Backend entries (apps/api/src): the API contract is code-driven — the error
+ * handler (plugins/errors.ts) serializes an error CODE, never the thrown
+ * message, so Chinese strings in thrown `ValidationError`/`NotFoundError` calls
+ * are server-side log/debug copy that never reaches the client. The remaining
+ * categories are API-provided data strings:
+ *  - CSV/export column headers + row values (a data-format contract, not UI
+ *    copy — the same as the web CSV import allowlist).
+ *  - status-reason strings (`scoreViewDisabledReason`/`deleteDisabledReason`)
+ *    returned in the response body and rendered verbatim by the web client
+ *    today. Migrating these to machine-readable codes + web i18n mapping is a
+ *    tracked follow-up (see docs/dev/i18n-copy-policy.md); until then they are
+ *    allowlisted as an explicit documented exception.
  */
 const CJK_ALLOWLIST = [
+  // ── Web ──────────────────────────────────────────────────────────────
   {
     path: "apps/web/src/lib/candidateImport.ts",
     reason:
@@ -63,6 +80,67 @@ const CJK_ALLOWLIST = [
     path: "apps/web/src/pages/PlaceholderPage.tsx",
     reason: "Temporary placeholder page awaiting implementation.",
     removal: "When the page is implemented or removed.",
+  },
+  // ── Backend: CSV/export data-format contract ─────────────────────────
+  {
+    path: "apps/api/src/routes/export.ts",
+    reason:
+      "Scores CSV column headers + row values (考生姓名/成绩/及格状态/...). Data-format contract, not UI copy.",
+    removal: "Never — CSV export header/row format is a data contract.",
+  },
+  {
+    path: "apps/api/src/routes/attempts.admin.ts",
+    reason:
+      "Attempt-detail CSV column headers + row values (题号/题型/题目内容/...). Data-format contract, not UI copy.",
+    removal: "Never — CSV export header/row format is a data contract.",
+  },
+  // ── Backend: API-provided status-reason strings (rendered verbatim by
+  //    the web client today; code+web-i18n mapping is a tracked follow-up). ──
+  {
+    path: "apps/api/src/routes/exam.ts",
+    reason:
+      "scoreViewDisabledReason / deleteDisabledReason status-reason strings returned in the response body and rendered verbatim by the web client.",
+    removal:
+      "When migrated to machine-readable reason codes with a web i18n mapping (follow-up).",
+  },
+  // ── Backend: validation/error messages. The error handler serializes a
+  //    code (never the thrown message), so these are server-side log/debug
+  //    copy that never reaches the client. English would be cleaner but
+  //    changing them is non-blocking and out of closeout scope. ──
+  {
+    path: "apps/api/src/routes/course.ts",
+    reason:
+      "Thrown/inline validation messages (课程代码已存在/课程下仍有题目...). Server-side only — the error handler returns an error code, not this message.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
+  },
+  {
+    path: "apps/api/src/routes/user.ts",
+    reason:
+      "Thrown validation messages (不能停用...). Server-side only — error handler returns a code, not this message.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
+  },
+  {
+    path: "apps/api/src/routes/question.ts",
+    reason:
+      "Thrown validation messages (课程不存在). Server-side only — error handler returns a code, not this message.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
+  },
+  {
+    path: "apps/api/src/routes/candidate.ts",
+    reason:
+      "Inline field validation messages (缺少用户名或姓名/新增考生需要初始密码). Server-side only.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
+  },
+  {
+    path: "apps/api/src/routes/attempts.candidate.ts",
+    reason:
+      "Thrown NotFound/ValidationError messages (候选人资料不存在/尝试不存在/问题不在此尝试中). Server-side only — error handler returns a code.",
+    removal:
+      "When server-side messages are standardized to English (follow-up); not user-facing.",
   },
 ];
 
@@ -196,16 +274,27 @@ for (const dir of SCAN_DIRS) {
     }
 
     // ── Tier 2 check: CJK in production source ──
-    // Only scan apps/web/src for CJK gate
-    if (!relPath.startsWith("apps/web/src/")) return;
+    // Scan apps/web/src AND apps/api/src for the CJK gate.
+    if (
+      !relPath.startsWith("apps/web/src/") &&
+      !relPath.startsWith("apps/api/src/")
+    )
+      return;
 
     // Skip locale catalog
     if (relPath.includes("i18n/locales/")) return;
 
     // Skip test files (caught by EXCLUDE_PATTERNS, but double-check)
-    if (relPath.includes(".test.") || relPath.includes("__tests__/")) return;
+    if (
+      relPath.includes(".test.") ||
+      relPath.includes("__tests__/") ||
+      relPath.includes("testHelpers") ||
+      relPath.includes("e2e-seed") ||
+      relPath.includes("demo-seed")
+    )
+      return;
 
-    // Allowlisted files: skip entirely (CSV/template compatibility)
+    // Allowlisted files: skip entirely (CSV/template/status-reason/log copy)
     if (ALLOWED_PATH_SET.has(relPath)) return;
 
     for (let i = 0; i < lines.length; i++) {
