@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +45,7 @@ export function ImportWizard({
   warning?: string;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   const hasErrors = preview.some((row) => row.status === "error");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,12 +75,12 @@ export function ImportWizard({
                         : "text-success"
                   }
                 >
-                  第 {row.row} 行：
+                  {t("admin.importWizard.rowPrefix", { row: row.row })}
                   {row.status === "create"
-                    ? "新增"
+                    ? t("admin.importWizard.statusCreate")
                     : row.status === "update"
-                      ? "更新"
-                      : "错误"}{" "}
+                      ? t("admin.importWizard.statusUpdate")
+                      : t("admin.importWizard.statusError")}{" "}
                   - {row.message}
                 </p>
               ))}
@@ -88,13 +90,13 @@ export function ImportWizard({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            关闭
+            {t("admin.importWizard.close")}
           </Button>
           <Button
             disabled={preview.length === 0 || hasErrors}
             onClick={onConfirm}
           >
-            确认导入
+            {t("admin.importWizard.confirmImport")}
           </Button>
         </DialogFooter>
       </DialogContent>

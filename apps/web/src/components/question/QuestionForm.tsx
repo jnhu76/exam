@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,7 @@ export function QuestionForm({
   initial,
   onChange,
 }: QuestionFormProps) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<QuestionFormData>({
     ...defaultForm,
     ...initial,
@@ -125,13 +127,15 @@ export function QuestionForm({
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 gap-4">
         <Field>
-          <Label>所属课程</Label>
+          <Label>{t("admin.forms.question.course")}</Label>
           <Select
             value={form.courseId}
             onValueChange={(v) => update({ courseId: v })}
           >
             <SelectTrigger>
-              <SelectValue placeholder="选择课程" />
+              <SelectValue
+                placeholder={t("admin.forms.question.coursePlaceholder")}
+              />
             </SelectTrigger>
             <SelectContent>
               {courses.map((c) => (
@@ -144,7 +148,7 @@ export function QuestionForm({
         </Field>
 
         <Field>
-          <Label>题目类型</Label>
+          <Label>{t("admin.forms.question.type")}</Label>
           <Select
             value={form.type}
             onValueChange={(v) => {
@@ -161,8 +165,11 @@ export function QuestionForm({
                 defaults.standardAnswer = "";
               } else if (type === "true_false") {
                 defaults.options = [
-                  { id: "true", content: "是" },
-                  { id: "false", content: "否" },
+                  { id: "true", content: t("admin.forms.question.optionTrue") },
+                  {
+                    id: "false",
+                    content: t("admin.forms.question.optionFalse"),
+                  },
                 ];
                 defaults.standardAnswer = true;
               }
@@ -173,29 +180,37 @@ export function QuestionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="single_choice">单选题</SelectItem>
-              <SelectItem value="multiple_choice">多选题</SelectItem>
-              <SelectItem value="fill_blank">填空题</SelectItem>
-              <SelectItem value="true_false">判断题</SelectItem>
+              <SelectItem value="single_choice">
+                {t("admin.forms.question.typeSingleChoice")}
+              </SelectItem>
+              <SelectItem value="multiple_choice">
+                {t("admin.forms.question.typeMultipleChoice")}
+              </SelectItem>
+              <SelectItem value="fill_blank">
+                {t("admin.forms.question.typeFillBlank")}
+              </SelectItem>
+              <SelectItem value="true_false">
+                {t("admin.forms.question.typeTrueFalse")}
+              </SelectItem>
             </SelectContent>
           </Select>
         </Field>
       </div>
 
       <Field>
-        <Label>题目内容</Label>
+        <Label>{t("admin.forms.question.content")}</Label>
         {form.type === "fill_blank" ? (
           <Textarea
             value={form.content}
             onChange={(e) => update({ content: e.target.value })}
-            placeholder="输入题目内容，用 ____ 标记空格位置"
+            placeholder={t("admin.forms.question.contentFillBlankPlaceholder")}
             rows={3}
           />
         ) : (
           <Textarea
             value={form.content}
             onChange={(e) => update({ content: e.target.value })}
-            placeholder="输入题目内容"
+            placeholder={t("admin.forms.question.contentPlaceholder")}
             rows={3}
           />
         )}
@@ -206,7 +221,7 @@ export function QuestionForm({
         form.type === "true_false") && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <Label>选项</Label>
+            <Label>{t("admin.forms.question.options")}</Label>
             {form.type !== "true_false" && (
               <Button
                 type="button"
@@ -215,7 +230,7 @@ export function QuestionForm({
                 onClick={addOption}
               >
                 <Plus className="size-3" />
-                添加选项
+                {t("admin.forms.question.addOption")}
               </Button>
             )}
           </div>
@@ -249,7 +264,9 @@ export function QuestionForm({
                 <Input
                   value={opt.content}
                   onChange={(e) => updateOption(i, e.target.value)}
-                  placeholder={`选项 ${opt.id}`}
+                  placeholder={t("admin.forms.question.optionPlaceholder", {
+                    id: opt.id,
+                  })}
                   disabled={form.type === "true_false"}
                 />
                 {form.type !== "true_false" && form.options.length > 2 && (
@@ -270,23 +287,23 @@ export function QuestionForm({
 
       {form.type === "fill_blank" && (
         <Field>
-          <Label>标准答案</Label>
+          <Label>{t("admin.forms.question.standardAnswer")}</Label>
           <Input
             value={
               typeof form.standardAnswer === "string" ? form.standardAnswer : ""
             }
             onChange={(e) => update({ standardAnswer: e.target.value })}
-            placeholder="输入标准答案，多个答案用 | 分隔"
+            placeholder={t("admin.forms.question.standardAnswerPlaceholder")}
           />
           <p className="text-xs text-muted-foreground">
-            多个可接受答案用 | 分隔，如：原子|atom
+            {t("admin.forms.question.standardAnswerHint")}
           </p>
         </Field>
       )}
 
       <div className="grid grid-cols-3 gap-4">
         <Field>
-          <Label>分值</Label>
+          <Label>{t("admin.forms.question.score")}</Label>
           <Input
             type="number"
             value={form.score}
@@ -295,7 +312,7 @@ export function QuestionForm({
           />
         </Field>
         <Field>
-          <Label>难度 (1-5)</Label>
+          <Label>{t("admin.forms.question.difficulty")}</Label>
           <Select
             value={String(form.difficulty)}
             onValueChange={(v) => update({ difficulty: Number(v) })}
@@ -313,25 +330,25 @@ export function QuestionForm({
           </Select>
         </Field>
         <Field>
-          <Label>标签</Label>
+          <Label>{t("admin.forms.question.tags")}</Label>
           <Input
             value={form.tags.join(",")}
             onChange={(e) =>
               update({
                 tags: e.target.value
                   .split(",")
-                  .map((t) => t.trim())
+                  .map((tag) => tag.trim())
                   .filter(Boolean),
               })
             }
-            placeholder="用逗号分隔"
+            placeholder={t("admin.forms.question.tagsPlaceholder")}
           />
         </Field>
       </div>
 
       {form.type === "multiple_choice" && (
         <Field>
-          <Label>多选评分策略</Label>
+          <Label>{t("admin.forms.question.multiSelectScoring")}</Label>
           <Select
             value={form.gradingRule.multiSelectScoring}
             onValueChange={(v) =>
@@ -347,8 +364,12 @@ export function QuestionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all_correct_full">全对满分</SelectItem>
-              <SelectItem value="partial_half">部分正确半分</SelectItem>
+              <SelectItem value="all_correct_full">
+                {t("admin.forms.question.allCorrectFull")}
+              </SelectItem>
+              <SelectItem value="partial_half">
+                {t("admin.forms.question.partialHalf")}
+              </SelectItem>
             </SelectContent>
           </Select>
         </Field>
@@ -356,7 +377,7 @@ export function QuestionForm({
 
       {form.type === "fill_blank" && (
         <div className="flex flex-col gap-4">
-          <Label>填空匹配模式</Label>
+          <Label>{t("admin.forms.question.fillBlankMatchMode")}</Label>
           <Select
             value={form.gradingRule.fillBlankMatchMode}
             onValueChange={(v) =>
@@ -372,8 +393,12 @@ export function QuestionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="exact">精确匹配</SelectItem>
-              <SelectItem value="keyword">关键词匹配</SelectItem>
+              <SelectItem value="exact">
+                {t("admin.forms.question.exactMatch")}
+              </SelectItem>
+              <SelectItem value="keyword">
+                {t("admin.forms.question.keywordMatch")}
+              </SelectItem>
             </SelectContent>
           </Select>
           <label className="flex items-center gap-2 text-sm">
@@ -388,7 +413,7 @@ export function QuestionForm({
                 })
               }
             />
-            区分大小写
+            {t("admin.forms.question.caseSensitive")}
           </label>
         </div>
       )}

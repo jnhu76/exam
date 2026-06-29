@@ -1,9 +1,11 @@
 import { useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 
 /** Hidden file input that reads a CSV file and passes its text content to onText. */
 export function FileUpload({ onText }: { onText: (text: string) => void }) {
+  const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
@@ -23,7 +25,7 @@ export function FileUpload({ onText }: { onText: (text: string) => void }) {
         onClick={() => input.current?.click()}
       >
         <Upload data-icon="inline-start" />
-        选择 CSV
+        {t("admin.importWizard.selectCsv")}
       </Button>
     </>
   );
