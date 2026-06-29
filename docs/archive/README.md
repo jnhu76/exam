@@ -16,65 +16,22 @@
 
 ```txt
 archive/
-├── phase-1.0/
-│   ├── jobs/                    # Phase 1 任务文档 (J0–J10)
-│   ├── phase1-plan.md           # Phase 1 实施计划
-│   └── phase1-ui-design.md      # Phase 1 UI 设计规范
-├── phase-1.1/
-│   ├── jobs/                    # Phase 1.1 任务文档 (J01–J06)
-│   ├── phase1.1-api-contracts.md
-│   ├── phase1.1-boundary.md
-│   ├── phase1.1-smoke-test.md
-│   ├── phase1.1-stabilization-plan.md
-│   ├── prompts/
-│   └── scripts/
-├── phase-1.2/
-│   ├── docs/
-│   │   ├── branch-comparison.md
-│   │   ├── conflict-report.md
-│   │   └── prompts/
-│   ├── enhancement.md
-│   ├── manual-test-plan.md
-│   ├── phase1.2-flow-test.md
-│   ├── phase1.2-plan.md
-│   ├── plan.md
-│   └── todo.md
-├── phase-1.3/
-│   └── phase1.3-security-plan.md
-├── phase-1.4/
-│   ├── 01-overall-assessment.md
-│   ├── 02-architecture-jobs.md
-│   ├── 03-security-jobs.md
-│   ├── 04-ui-jobs.md
-│   ├── 05-dependency-graph.md
-│   ├── adr/
-│   ├── reviews/
-│   └── README.md
-├── phase-1.5/
-│   ├── 01-overview.md
-│   ├── jobs.md
-│   ├── phase1.5-bridge-plan.md
-│   └── postgresql-only-convergence.md
-├── phase-1.6/
-│   ├── 01-overview.md
-│   ├── jobs.md
-│   ├── known-limitations.md
-│   ├── phase1.6-bridge-plan.md
-│   ├── postgresql-correctness-hardening.md
-│   └── s03a-status-adjustment.md
-├── phase-1.7/
-│   ├── api-contract/
-│   ├── exam-lifecycle-global-consistency-scan.md
-│   ├── exam-lifecycle-non-e2e-closeout.md
-│   ├── password-policy.md
-│   ├── security-baseline-validation.md
-│   └── security-completion-plan.md
-└── ui-20260610/
-    ├── archive/
-    │   └── phase1-ui-design-archived.md
-    ├── jobs/                    # UI 任务文档 (J00–J06)
-    ├── 00–08 design docs
-    └── README.md
+├── dev/                          # 开发文档归档（测试基线、配置、种子数据等）
+├── phase1-archive/               # Phase 1.0–1.8 实施文档
+│   ├── phase-1.0/
+│   ├── phase-1.1/
+│   ├── phase-1.2/
+│   ├── phase-1.3/
+│   ├── phase-1.4/
+│   ├── phase-1.5/
+│   ├── phase-1.6/
+│   ├── phase-1.7/
+│   ├── phase1.8/
+│   └── ui-20260610/
+├── phase2-archive/               # Phase 2 实施文档
+│   └── phase2/
+├── frontend/                     # UI 交互规范
+└── known-test-isolation-issues.md
 ```
 
 ## 参考指南

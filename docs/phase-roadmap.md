@@ -91,6 +91,8 @@ Add real exam operation capabilities around the core exam loop without turning t
 
 **Phase 2 gate items are implemented.** All core exam loop items have been verified via code audit (see `docs/dev/AUDIT-PHASE2-REALITY.md`). The remaining items below (timed_sync / untimed timing modes, queue admission) are deferred to Phase 2+ hardening or Phase 3.
 
+**i18n foundation complete (J1–J10).** All user-visible Chinese in production source goes through `t()` via `apps/web/src/i18n/locales/zh-CN.ts`. Full production source hardcoded copy gate enforced via `pnpm lint:copy`. See `docs/dev/i18n-copy-policy.md`.
+
 ### In scope — Implemented
 
 - ✅ Richer exam lifecycle: open / closed / archived.
@@ -193,6 +195,7 @@ Add multi-user collaboration, scoped authorization, and account lifecycle manage
 - Fill-blank answer protocol and auto-grading (deferred from Phase 2 — see `apps/e2e/e2e/fill-blank-e2e.spec.ts`).
 - Subjective / rich-text answer runtime + manual-grading candidate-answer detail and full grading workflow (deferred from Phase 2 — see `apps/e2e/e2e/manual-grading.spec.ts`).
 - WYSIWYG submit final-answer barrier (Option D, ADR-008 — `/submit` carries a final-answer payload / version barrier so the UI answer at submit-click time is the grading authority).
+- Remaining i18n page-level copy migration (CandidateFieldsPage, ExamConfigForm, QuestionForm, etc. — admin form/modal content deferred from J7).
 
 ### Out of scope
 

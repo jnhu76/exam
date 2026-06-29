@@ -55,8 +55,12 @@ New docs: 7 under `docs/dev/`. No production business-logic file changed except
 | Command | Result | Duration | Notes |
 |---|---:|---:|---|
 | `pnpm verify:static` | PASS | <1s (cached) | format/lint/copy/arch/typecheck |
+| `pnpm lint:copy` | PASS | <1s | CJK gate + deployment-specific terms |
 | `pnpm test:db` | PASS | ~7s | 163 tests, parallel |
 | `pnpm test:api` (REDIS_URL set) | PASS | 113.8s | **63 files / 651 pass / 0 fail / 0 skip** |
+| `pnpm test:api` (REDIS_URL unset) | PASS | ~112s | 646 pass / 5 skip / 0 fail |
+| `pnpm test` (full) | PASS | ~50s | 62 files / 641 pass / 0 fail |
+| `pnpm test:e2e` (WSL + Docker) | PASS | ~2.5m | 39 pass / 2 skip (Phase 3 deferred) |
 | `pnpm test:api` (REDIS_URL unset) | PASS | ~112s | 646 pass / 5 skip / 0 fail |
 | `redis.test.ts` (REDIS_URL set) | PASS | 0.5s | 7/7 |
 | `redis.test.ts` (REDIS_URL unset) | PASS | 0.4s | 2 pass / 5 skip (no 10s storm) |
@@ -64,6 +68,42 @@ New docs: 7 under `docs/dev/`. No production business-logic file changed except
 
 Baseline before 收口: `test:api` had **4 failures** (time-authority guardrail +
 redis.test retry storm). After Phase C: **0 failures**.
+
+## i18n status (J1–J10)
+
+Full i18n foundation and page-level copy migration completed. All user-visible
+Chinese in production source now goes through `t()` via the zh-CN catalog.
+
+### Coverage
+
+| Layer | Status | Key count |
+|-------|--------|-----------|
+| i18n foundation (i18next + zh-CN catalog) | ✅ Complete | ~400 |
+| Status labels (statusMeta) | ✅ Complete | 35 |
+| Global errors / toast / confirm | ✅ Complete | ~30 |
+| AppSidebar + ExamListPage | ✅ Complete | ~30 |
+| SystemDiagnosticsPage | ✅ Complete | 30 |
+| Candidate runtime shell (TakeExamPage + components) | ✅ Complete | ~80 |
+| Answer interaction (QuestionRenderer, inputs) | ✅ Complete | 12 |
+| Result page | ✅ Complete | 30 |
+| Admin list/table pages (8 pages) | ✅ Complete | ~120 |
+| Admin forms/modals/import wizard | ✅ Complete | ~87 |
+| Validation / destructive confirm / toast | ✅ Complete | ~272 |
+| Shared components + lib layer | ✅ Complete | ~27 |
+| Remaining blocker cleanup (J9) | ✅ Complete | 25 |
+| **Full production source gate (J10)** | ✅ Active | — |
+
+### Gate enforcement
+
+- `pnpm lint:copy` runs in `pnpm verify` and `pnpm verify:static`
+- CJK detection scans `apps/web/src/` excluding locale catalog, tests, fixtures, comments
+- Allowlist: `candidateImport.ts` (CSV parsing), `QuestionImportPage.tsx` (CSV template), `PlaceholderPage.tsx` (temporary)
+- Policy documented in `docs/dev/i18n-copy-policy.md`
+
+### Remaining
+
+- 12 allowlisted hits (CSV/template/comment/placeholder)
+- 0 user-visible blockers in production source
 
 ## Phase 2 implemented scope
 
