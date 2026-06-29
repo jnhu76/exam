@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { UpdateBrandingRequest } from "@exam/contracts";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,6 +23,7 @@ type SettingsData = UpdateBrandingRequest;
 
 /** Admin page for managing platform branding and the current admin's password. */
 export function SettingsPage() {
+  const { t } = useTranslation();
   const { user, updateProfile } = useAuth();
   const [settings, setSettings] = useState<SettingsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +42,7 @@ export function SettingsPage() {
       const data = await api.get<SettingsData>("/api/admin/settings");
       setSettings(data);
     } catch {
-      setError("加载设置失败");
+      setError(t("admin.settings.loadDataFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +71,9 @@ export function SettingsPage() {
       setSettings(updated);
       window.dispatchEvent(new Event("branding:refresh"));
     } catch (err) {
-      setSaveError(getApiErrorMessage(err, "保存设置失败，请稍后重试"));
+      setSaveError(
+        getApiErrorMessage(err, t("admin.settings.brandSection.saveFailed")),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -80,16 +84,23 @@ export function SettingsPage() {
     e.preventDefault();
     const trimmed = profileName.trim();
     if (!trimmed) {
-      setProfileError("请输入姓名");
+      setProfileError(
+        t("admin.settings.profileSection.validation.nameRequired"),
+      );
       return;
     }
     setSavingProfile(true);
     setProfileError("");
     try {
       await updateProfile(trimmed);
-      toast.success("个人信息已更新");
+      toast.success(t("admin.settings.profileSection.feedback.updateSuccess"));
     } catch (err) {
-      setProfileError(getApiErrorMessage(err, "保存失败，请稍后重试"));
+      setProfileError(
+        getApiErrorMessage(
+          err,
+          t("admin.settings.profileSection.feedback.saveFailed"),
+        ),
+      );
     } finally {
       setSavingProfile(false);
     }
@@ -97,17 +108,28 @@ export function SettingsPage() {
 
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={loadSettings} />;
-  if (!user) return <ErrorState message="请先登录" onRetry={loadSettings} />;
+  if (!user)
+    return (
+      <ErrorState
+        message={t("admin.settings.loginRequired")}
+        onRetry={loadSettings}
+      />
+    );
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="平台与机构设置" />
-      <FormSection title="个人信息" description="编辑当前账号的显示姓名。">
+      <PageHeader title={t("admin.settings.pageTitle")} />
+      <FormSection
+        title={t("admin.settings.profileSection.title")}
+        description={t("admin.settings.profileSection.description")}
+      >
         {profileError && <InlineErrorBanner>{profileError}</InlineErrorBanner>}
         <form className="max-w-sm" onSubmit={handleSaveProfile}>
           <FieldGroup>
             <Field>
-              <Label htmlFor="profile-name">姓名</Label>
+              <Label htmlFor="profile-name">
+                {t("admin.settings.profileSection.nameLabel")}
+              </Label>
               <Input
                 id="profile-name"
                 value={profileName}
@@ -124,14 +146,16 @@ export function SettingsPage() {
               disabled={savingProfile}
               data-testid="profile-save-btn"
             >
-              {savingProfile ? "保存中..." : "保存"}
+              {savingProfile
+                ? t("admin.settings.actions.saving")
+                : t("admin.settings.actions.save")}
             </Button>
           </FieldGroup>
         </form>
       </FormSection>
       <FormSection
-        title="品牌设置"
-        description="配置当前部署显示给用户的名称与页脚。"
+        title={t("admin.settings.brandSection.title")}
+        description={t("admin.settings.brandSection.description")}
       >
         {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
         <PlatformSettingsForm
@@ -140,7 +164,10 @@ export function SettingsPage() {
           isLoading={isSaving}
         />
       </FormSection>
-      <FormSection title="账号安全" description="修改当前账号的登录密码。">
+      <FormSection
+        title={t("admin.settings.securitySection.title")}
+        description={t("admin.settings.securitySection.description")}
+      >
         <PasswordChangeForm cardWrapper={false} />
       </FormSection>
     </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -57,16 +58,7 @@ interface Field {
   sortOrder: number;
 }
 
-/** Available field type options for the candidate field form. */
-/** Available field type choices for the candidate field form. */
-const FIELD_TYPE_OPTIONS: Array<{
-  value: Field["fieldType"];
-  label: string;
-}> = [
-  { value: "text", label: "文本" },
-  { value: "number", label: "数字" },
-  { value: "select", label: "选项" },
-];
+const FIELD_TYPE_KEYS = ["text", "number", "select"] as const;
 
 /**
  * Admin page for managing candidate identity and metadata fields.
@@ -78,6 +70,7 @@ const FIELD_TYPE_OPTIONS: Array<{
  * Supports create, edit, reorder via drag-and-drop, and CSV template download.
  */
 export function CandidateFieldsPage() {
+  const { t } = useTranslation();
   const [fields, setFields] = useState<Field[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +95,7 @@ export function CandidateFieldsPage() {
       );
       setError(null);
     } catch {
-      setError("加载字段配置失败");
+      setError(t("admin.candidateFields.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -150,7 +143,9 @@ export function CandidateFieldsPage() {
       setDialogOpen(false);
       await load();
     } catch (err) {
-      setMutationError(getApiErrorMessage(err, "保存字段失败，请稍后重试"));
+      setMutationError(
+        getApiErrorMessage(err, t("admin.candidateFields.toast.saveFailed")),
+      );
     } finally {
       setSaving(false);
     }
@@ -162,7 +157,9 @@ export function CandidateFieldsPage() {
       await api.delete(`/api/candidate-fields/${id}`);
       await load();
     } catch (err) {
-      setMutationError(getApiErrorMessage(err, "删除字段失败，请稍后重试"));
+      setMutationError(
+        getApiErrorMessage(err, t("admin.candidateFields.toast.deleteFailed")),
+      );
     }
   }
   /** Swaps the sort order of a field with its neighbor at the given offset (-1 or +1). */
@@ -182,7 +179,9 @@ export function CandidateFieldsPage() {
       ]);
       await load();
     } catch (err) {
-      setMutationError(getApiErrorMessage(err, "调整排序失败，请稍后重试"));
+      setMutationError(
+        getApiErrorMessage(err, t("admin.candidateFields.toast.sortFailed")),
+      );
     }
   }
   /** Handles drag-and-drop reorder by swapping sort orders between source and target fields. */
@@ -202,7 +201,9 @@ export function CandidateFieldsPage() {
       ]);
       await load();
     } catch (err) {
-      setMutationError(getApiErrorMessage(err, "调整排序失败，请稍后重试"));
+      setMutationError(
+        getApiErrorMessage(err, t("admin.candidateFields.toast.sortFailed")),
+      );
     }
   }
   /** Downloads a CSV import template whose headers match the current field configuration. */
@@ -216,7 +217,7 @@ export function CandidateFieldsPage() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "候选人导入模板.csv";
+    anchor.download = t("admin.candidateFields.templateFilename");
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -225,16 +226,16 @@ export function CandidateFieldsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="考生字段配置"
+        title={t("admin.candidateFields.title")}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => void download()}>
               <Download data-icon="inline-start" />
-              下载模板
+              {t("admin.candidateFields.downloadTemplate")}
             </Button>
             <Button onClick={() => dialog()}>
               <Plus data-icon="inline-start" />
-              添加字段
+              {t("admin.candidateFields.addField")}
             </Button>
           </div>
         }
@@ -243,20 +244,28 @@ export function CandidateFieldsPage() {
       {fields.length === 0 ? (
         <EmptyState
           icon={<Tags className="size-8" />}
-          title="暂无候选人字段"
-          description="请先配置唯一身份字段和需要采集的信息。"
+          title={t("admin.candidateFields.empty")}
+          description={t("admin.candidateFields.emptyDescription")}
         />
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>字段名</TableHead>
-              <TableHead>标签</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>必填</TableHead>
-              <TableHead>唯一</TableHead>
-              <TableHead>排序</TableHead>
-              <TableHead>操作</TableHead>
+              <TableHead>
+                {t("admin.candidateFields.columns.fieldName")}
+              </TableHead>
+              <TableHead>{t("admin.candidateFields.columns.label")}</TableHead>
+              <TableHead>{t("admin.candidateFields.columns.type")}</TableHead>
+              <TableHead>
+                {t("admin.candidateFields.columns.required")}
+              </TableHead>
+              <TableHead>{t("admin.candidateFields.columns.unique")}</TableHead>
+              <TableHead>
+                {t("admin.candidateFields.columns.sortOrder")}
+              </TableHead>
+              <TableHead>
+                {t("admin.candidateFields.columns.actions")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -272,14 +281,20 @@ export function CandidateFieldsPage() {
                 <TableCell>{field.name}</TableCell>
                 <TableCell>{field.label}</TableCell>
                 <TableCell>
-                  {field.fieldType === "text"
-                    ? "文本"
-                    : field.fieldType === "number"
-                      ? "数字"
-                      : "选项"}
+                  {t(
+                    `admin.candidateFields.typeLabels.${field.fieldType}` as any,
+                  )}
                 </TableCell>
-                <TableCell>{field.required ? "是" : "否"}</TableCell>
-                <TableCell>{field.unique ? "是" : "否"}</TableCell>
+                <TableCell>
+                  {t(
+                    `admin.candidateFields.requiredLabels.${field.required}` as any,
+                  )}
+                </TableCell>
+                <TableCell>
+                  {t(
+                    `admin.candidateFields.requiredLabels.${field.unique}` as any,
+                  )}
+                </TableCell>
                 <TableCell>{field.sortOrder}</TableCell>
                 <TableCell>
                   <RowActions>
@@ -288,7 +303,7 @@ export function CandidateFieldsPage() {
                       variant="ghost"
                       disabled={index === 0}
                       onClick={() => void move(field, -1)}
-                      aria-label="上移"
+                      aria-label={t("admin.candidateFields.moveUp")}
                     >
                       <ArrowUp />
                     </Button>
@@ -297,7 +312,7 @@ export function CandidateFieldsPage() {
                       variant="ghost"
                       disabled={index === fields.length - 1}
                       onClick={() => void move(field, 1)}
-                      aria-label="下移"
+                      aria-label={t("admin.candidateFields.moveDown")}
                     >
                       <ArrowDown />
                     </Button>
@@ -305,7 +320,7 @@ export function CandidateFieldsPage() {
                       size="icon"
                       variant="ghost"
                       onClick={() => dialog(field)}
-                      aria-label="编辑字段"
+                      aria-label={t("admin.candidateFields.editLabel")}
                     >
                       <Pencil />
                     </Button>
@@ -314,13 +329,16 @@ export function CandidateFieldsPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          aria-label="删除字段"
+                          aria-label={t("admin.candidateFields.deleteLabel")}
                         >
                           <Trash2 className="text-destructive" />
                         </Button>
                       }
-                      title="确认删除"
-                      description={`确定删除字段「${field.label}」吗？`}
+                      title={t("admin.candidateFields.confirmDelete")}
+                      description={t(
+                        "admin.candidateFields.confirmDeleteDescription",
+                        { label: field.label },
+                      )}
                       destructive
                       onConfirm={() => void remove(field.id)}
                     />
@@ -334,27 +352,31 @@ export function CandidateFieldsPage() {
       <Dialog open={open} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>{editing ? "编辑字段" : "添加字段"}</DialogTitle>
+            <DialogTitle>
+              {editing
+                ? t("admin.candidateFields.dialog.edit")
+                : t("admin.candidateFields.dialog.create")}
+            </DialogTitle>
           </DialogHeader>
           <FieldGroup className="py-4">
             {!editing && (
               <Field>
-                <Label>字段名</Label>
+                <Label>{t("admin.candidateFields.dialog.fieldName")}</Label>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />
               </Field>
             )}
             <Field>
-              <Label>标签</Label>
+              <Label>{t("admin.candidateFields.dialog.label")}</Label>
               <Input value={label} onChange={(e) => setLabel(e.target.value)} />
             </Field>
             <Field>
-              <Label>类型</Label>
+              <Label>{t("admin.candidateFields.dialog.type")}</Label>
               {editing ? (
                 <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                  {FIELD_TYPE_OPTIONS.find(
-                    (option) => option.value === fieldType,
-                  )?.label ?? fieldType}
-                  <span className="ml-2 text-xs">（创建后不可修改）</span>
+                  {t(`admin.candidateFields.typeLabels.${fieldType}` as any)}
+                  <span className="ml-2 text-xs">
+                    {t("admin.candidateFields.dialog.typeNote")}
+                  </span>
                 </div>
               ) : (
                 <Select
@@ -363,13 +385,17 @@ export function CandidateFieldsPage() {
                     setFieldType(value as Field["fieldType"])
                   }
                 >
-                  <SelectTrigger aria-label="字段类型">
+                  <SelectTrigger
+                    aria-label={t(
+                      "admin.candidateFields.dialog.fieldTypeLabel",
+                    )}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {FIELD_TYPE_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                    {FIELD_TYPE_KEYS.map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {t(`admin.candidateFields.typeLabels.${key}` as any)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -381,14 +407,14 @@ export function CandidateFieldsPage() {
                 checked={required}
                 onCheckedChange={(value) => setRequired(value === true)}
               />
-              必填
+              {t("admin.candidateFields.dialog.required")}
             </label>
             <label className="flex gap-2">
               <Checkbox
                 checked={unique}
                 onCheckedChange={(value) => setUnique(value === true)}
               />
-              唯一身份标识
+              {t("admin.candidateFields.dialog.uniqueIdentity")}
             </label>
           </FieldGroup>
           {mutationError && (
@@ -402,10 +428,10 @@ export function CandidateFieldsPage() {
               onClick={() => setDialogOpen(false)}
               disabled={saving}
             >
-              取消
+              {t("admin.common.cancel")}
             </Button>
             <Button onClick={() => void save()} disabled={saving}>
-              {saving ? "保存中..." : "保存"}
+              {saving ? t("admin.common.saving") : t("admin.common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

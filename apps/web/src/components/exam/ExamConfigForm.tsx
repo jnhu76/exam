@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -71,6 +72,7 @@ export function ExamConfigForm({
   data,
   onChange,
 }: ExamConfigFormProps) {
+  const { t } = useTranslation();
   const [manualTotalScore, setManualTotalScore] = useState(false);
 
   const computedTotal = questions
@@ -111,26 +113,30 @@ export function ExamConfigForm({
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">基本信息</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.forms.exam.sectionBasic")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <Field>
-              <Label>考试名称</Label>
+              <Label>{t("admin.forms.exam.title")}</Label>
               <Input
                 value={data.title}
                 onChange={(e) => update({ title: e.target.value })}
-                placeholder="请输入考试名称"
+                placeholder={t("admin.forms.exam.titlePlaceholder")}
               />
             </Field>
             <Field>
-              <Label>所属课程</Label>
+              <Label>{t("admin.forms.exam.course")}</Label>
               <Select
                 value={data.courseId}
                 onValueChange={(v) => update({ courseId: v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="选择课程" />
+                  <SelectValue
+                    placeholder={t("admin.forms.exam.coursePlaceholder")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {courses.map((c) => (
@@ -142,11 +148,11 @@ export function ExamConfigForm({
               </Select>
             </Field>
             <Field>
-              <Label>考试说明</Label>
+              <Label>{t("admin.forms.exam.description")}</Label>
               <Input
                 value={data.description}
                 onChange={(e) => update({ description: e.target.value })}
-                placeholder="可选"
+                placeholder={t("admin.forms.exam.descriptionPlaceholder")}
               />
             </Field>
           </FieldGroup>
@@ -155,13 +161,15 @@ export function ExamConfigForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">时间设置</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.forms.exam.sectionTime")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <div className="grid grid-cols-2 gap-4">
               <Field>
-                <Label>开始时间</Label>
+                <Label>{t("admin.forms.exam.startTime")}</Label>
                 <Input
                   type="datetime-local"
                   value={data.openAt}
@@ -169,7 +177,7 @@ export function ExamConfigForm({
                 />
               </Field>
               <Field>
-                <Label>结束时间</Label>
+                <Label>{t("admin.forms.exam.endTime")}</Label>
                 <Input
                   type="datetime-local"
                   value={data.closeAt}
@@ -179,11 +187,11 @@ export function ExamConfigForm({
             </div>
             {timeError && (
               <p role="alert" className="text-xs text-destructive">
-                结束时间必须晚于开始时间
+                {t("admin.forms.exam.timeInvalid")}
               </p>
             )}
             <Field>
-              <Label>考试时长（分钟）</Label>
+              <Label>{t("admin.forms.exam.duration")}</Label>
               <Input
                 type="number"
                 value={data.durationMinutes}
@@ -195,7 +203,7 @@ export function ExamConfigForm({
             </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field>
-                <Label>最晚进入（开考后分钟）</Label>
+                <Label>{t("admin.forms.exam.latestStart")}</Label>
                 <Input
                   type="number"
                   value={data.latestStartOffsetMinutes ?? ""}
@@ -210,11 +218,11 @@ export function ExamConfigForm({
                     })
                   }
                   min={0}
-                  placeholder="留空=不限"
+                  placeholder={t("admin.forms.exam.noLimit")}
                 />
               </Field>
               <Field>
-                <Label>最短交卷（开考后分钟）</Label>
+                <Label>{t("admin.forms.exam.minSubmit")}</Label>
                 <Input
                   type="number"
                   value={data.minSubmitAfterStartMinutes ?? ""}
@@ -229,12 +237,12 @@ export function ExamConfigForm({
                     })
                   }
                   min={0}
-                  placeholder="留空=不限"
+                  placeholder={t("admin.forms.exam.noLimit")}
                 />
               </Field>
             </div>
             <p className="text-xs text-muted-foreground">
-              时间模式：限时窗口（当前版本仅支持此模式）。留空表示不限制。
+              {t("admin.forms.exam.timingMode")}
             </p>
           </FieldGroup>
         </CardContent>
@@ -242,14 +250,18 @@ export function ExamConfigForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">分数设置</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.forms.exam.sectionScore")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <div className="grid grid-cols-2 gap-4">
               <Field>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="totalScore">总分</Label>
+                  <Label htmlFor="totalScore">
+                    {t("admin.forms.exam.totalScore")}
+                  </Label>
                   {hasQuestions && (
                     <Button
                       type="button"
@@ -267,7 +279,9 @@ export function ExamConfigForm({
                         }
                       }}
                     >
-                      {manualTotalScore ? "自动计算" : "手动输入"}
+                      {manualTotalScore
+                        ? t("admin.forms.exam.autoCalc")
+                        : t("admin.forms.exam.manualInput")}
                     </Button>
                   )}
                 </div>
@@ -280,21 +294,25 @@ export function ExamConfigForm({
                   }
                   min={1}
                   readOnly={hasQuestions && !manualTotalScore}
-                  aria-label="总分"
+                  aria-label={t("admin.forms.exam.totalScore")}
                 />
                 {hasQuestions && !manualTotalScore && (
                   <p className="text-xs text-muted-foreground">
-                    自动计算：{computedTotal} 分
+                    {t("admin.forms.exam.autoCalcLabel", {
+                      score: computedTotal,
+                    })}
                   </p>
                 )}
                 {showWarning && (
                   <p className="text-xs text-destructive">
-                    总分与题目分值之和不匹配（应为 {computedTotal}）
+                    {t("admin.forms.exam.scoreMismatch", {
+                      score: computedTotal,
+                    })}
                   </p>
                 )}
               </Field>
               <Field>
-                <Label>及格分</Label>
+                <Label>{t("admin.forms.exam.passingScore")}</Label>
                 <Input
                   type="number"
                   value={data.passingScore}
@@ -307,7 +325,10 @@ export function ExamConfigForm({
             </div>
             {scoreError && (
               <p role="alert" className="text-xs text-destructive">
-                及格分不能超过总分（{data.passingScore} &gt; {data.totalScore}）
+                {t("admin.forms.exam.passingScoreExceeds", {
+                  passing: data.passingScore,
+                  total: data.totalScore,
+                })}
               </p>
             )}
           </FieldGroup>
@@ -316,13 +337,15 @@ export function ExamConfigForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">重考策略</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.forms.exam.sectionRetake")}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <FieldGroup>
             <div className="grid grid-cols-2 gap-4">
               <Field>
-                <Label>重考策略</Label>
+                <Label>{t("admin.forms.exam.retakePolicy")}</Label>
                 <Select
                   value={data.retakePolicy}
                   onValueChange={(v) =>
@@ -335,14 +358,20 @@ export function ExamConfigForm({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unlimited">不限次数</SelectItem>
-                    <SelectItem value="max_attempts">限制次数</SelectItem>
-                    <SelectItem value="pass_then_stop">通过后停止</SelectItem>
+                    <SelectItem value="unlimited">
+                      {t("admin.forms.exam.unlimited")}
+                    </SelectItem>
+                    <SelectItem value="max_attempts">
+                      {t("admin.forms.exam.maxAttempts")}
+                    </SelectItem>
+                    <SelectItem value="pass_then_stop">
+                      {t("admin.forms.exam.passThenStop")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
               <Field>
-                <Label>最大尝试次数</Label>
+                <Label>{t("admin.forms.exam.maxAttemptsLabel")}</Label>
                 <Input
                   type="number"
                   value={data.maxAttempts}
@@ -355,7 +384,7 @@ export function ExamConfigForm({
               </Field>
             </div>
             <Field>
-              <Label>分数策略</Label>
+              <Label>{t("admin.forms.exam.scoreStrategy")}</Label>
               <Select
                 value={data.scoreStrategy}
                 onValueChange={(v) =>
@@ -368,9 +397,15 @@ export function ExamConfigForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="highest">取最高分</SelectItem>
-                  <SelectItem value="latest">取最新分</SelectItem>
-                  <SelectItem value="first">取首次分</SelectItem>
+                  <SelectItem value="highest">
+                    {t("admin.forms.exam.highest")}
+                  </SelectItem>
+                  <SelectItem value="latest">
+                    {t("admin.forms.exam.latest")}
+                  </SelectItem>
+                  <SelectItem value="first">
+                    {t("admin.forms.exam.first")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -380,7 +415,9 @@ export function ExamConfigForm({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">控制设置</CardTitle>
+          <CardTitle className="text-base">
+            {t("admin.forms.exam.sectionControl")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -390,7 +427,9 @@ export function ExamConfigForm({
                 updateFlags({ shuffleQuestions: v === true })
               }
             />
-            <Label className="font-normal">打乱题目顺序</Label>
+            <Label className="font-normal">
+              {t("admin.forms.exam.shuffleQuestions")}
+            </Label>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -399,7 +438,9 @@ export function ExamConfigForm({
                 updateFlags({ shuffleOptions: v === true })
               }
             />
-            <Label className="font-normal">打乱选项顺序</Label>
+            <Label className="font-normal">
+              {t("admin.forms.exam.shuffleOptions")}
+            </Label>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -408,7 +449,9 @@ export function ExamConfigForm({
                 updateFlags({ detectTabSwitch: v === true })
               }
             />
-            <Label className="font-normal">检测切屏</Label>
+            <Label className="font-normal">
+              {t("admin.forms.exam.detectTabSwitch")}
+            </Label>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox
@@ -417,10 +460,12 @@ export function ExamConfigForm({
                 updateFlags({ disableCopyPaste: v === true })
               }
             />
-            <Label className="font-normal">禁止复制粘贴</Label>
+            <Label className="font-normal">
+              {t("admin.forms.exam.disableCopyPaste")}
+            </Label>
           </div>
           <div className="space-y-2">
-            <Label>成绩公布方式</Label>
+            <Label>{t("admin.forms.exam.resultPublication")}</Label>
             <Select
               value={data.resultPublicationMode}
               onValueChange={(v) => {
@@ -439,9 +484,15 @@ export function ExamConfigForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="immediate">交卷后立即公布</SelectItem>
-                <SelectItem value="after_grading">评分完成后公布</SelectItem>
-                <SelectItem value="manual">管理员手动公布</SelectItem>
+                <SelectItem value="immediate">
+                  {t("admin.forms.exam.immediate")}
+                </SelectItem>
+                <SelectItem value="after_grading">
+                  {t("admin.forms.exam.afterGrading")}
+                </SelectItem>
+                <SelectItem value="manual">
+                  {t("admin.forms.exam.manualPublication")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

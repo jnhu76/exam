@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  fallbackPageTitle,
-  fallbackProductName,
+  getFallbackPageTitle,
+  getFallbackProductName,
   getDocumentTitle,
   getPageTitle,
 } from "@/lib/pageMeta";
@@ -27,7 +27,7 @@ describe("page metadata", () => {
   });
 
   it("returns a stable fallback page title", () => {
-    expect(getPageTitle("/admin/unknown")).toBe(fallbackPageTitle);
+    expect(getPageTitle("/admin/unknown")).toBe(getFallbackPageTitle());
   });
 
   it("builds document titles with product fallback", () => {
@@ -35,7 +35,7 @@ describe("page metadata", () => {
       "仪表盘 - 测评平台",
     );
     expect(getDocumentTitle("/admin/dashboard", "  ")).toBe(
-      `仪表盘 - ${fallbackProductName}`,
+      `仪表盘 - ${getFallbackProductName()}`,
     );
   });
 });

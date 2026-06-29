@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -43,6 +44,7 @@ interface GradingQueueResponse {
 }
 
 export function GradingQueuePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [data, setData] = useState<GradingQueueResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,7 +65,7 @@ export function GradingQueuePage() {
       );
       setData(result);
     } catch {
-      setError("加载评分队列失败");
+      setError(t("admin.grading.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -78,11 +80,14 @@ export function GradingQueuePage() {
   if (!data || data.items.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="待评分" description="管理需要手动评分的试卷" />
+        <PageHeader
+          title={t("admin.grading.title")}
+          description={t("admin.grading.description")}
+        />
         <EmptyState
           icon={<ClipboardCheck className="size-8" />}
-          title="暂无待评分的试卷"
-          description="当前没有需要手动评分的试卷"
+          title={t("admin.grading.empty")}
+          description={t("admin.grading.emptyDescription")}
         />
       </div>
     );
@@ -92,16 +97,19 @@ export function GradingQueuePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="待评分" description="管理需要手动评分的试卷" />
+      <PageHeader
+        title={t("admin.grading.title")}
+        description={t("admin.grading.description")}
+      />
       <div className="overflow-hidden rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>考生</TableHead>
-              <TableHead>考试</TableHead>
-              <TableHead>提交时间</TableHead>
-              <TableHead>待评题数</TableHead>
-              <TableHead>状态</TableHead>
+              <TableHead>{t("admin.grading.columns.candidate")}</TableHead>
+              <TableHead>{t("admin.grading.columns.exam")}</TableHead>
+              <TableHead>{t("admin.grading.columns.submittedAt")}</TableHead>
+              <TableHead>{t("admin.grading.columns.pendingCount")}</TableHead>
+              <TableHead>{t("admin.grading.columns.status")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

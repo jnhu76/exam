@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ export function PasswordChangeForm({
 }: {
   cardWrapper?: boolean;
 }) {
+  const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,11 +27,13 @@ export function PasswordChangeForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      toast.error("两次输入的新密码不一致");
+      toast.error(t("validation.passwordMismatch"));
       return;
     }
     if (newPassword.length < DEFAULT_PASSWORD_POLICY.minLength) {
-      toast.error(`新密码至少 ${DEFAULT_PASSWORD_POLICY.minLength} 位`);
+      toast.error(
+        t("validation.passwordMin", { min: DEFAULT_PASSWORD_POLICY.minLength }),
+      );
       return;
     }
     setChanging(true);
@@ -38,12 +42,16 @@ export function PasswordChangeForm({
         currentPassword,
         newPassword,
       });
-      toast.success("密码修改成功");
+      toast.success(t("validation.passwordChangeSuccess"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "密码修改失败");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("validation.passwordChangeFailed"),
+      );
     } finally {
       setChanging(false);
     }
@@ -53,7 +61,9 @@ export function PasswordChangeForm({
     <form className="max-w-sm" onSubmit={handleSubmit}>
       <FieldGroup>
         <Field>
-          <Label htmlFor="current-password">当前密码</Label>
+          <Label htmlFor="current-password">
+            {t("passwordChange.currentLabel")}
+          </Label>
           <Input
             id="current-password"
             type="password"
@@ -63,7 +73,7 @@ export function PasswordChangeForm({
           />
         </Field>
         <Field>
-          <Label htmlFor="new-password">新密码</Label>
+          <Label htmlFor="new-password">{t("passwordChange.newLabel")}</Label>
           <Input
             id="new-password"
             type="password"
@@ -73,11 +83,15 @@ export function PasswordChangeForm({
             minLength={DEFAULT_PASSWORD_POLICY.minLength}
           />
           <p className="text-xs text-muted-foreground">
-            至少 {DEFAULT_PASSWORD_POLICY.minLength} 位
+            {t("validation.passwordMinChars", {
+              min: DEFAULT_PASSWORD_POLICY.minLength,
+            })}
           </p>
         </Field>
         <Field>
-          <Label htmlFor="confirm-password">确认新密码</Label>
+          <Label htmlFor="confirm-password">
+            {t("passwordChange.confirmLabel")}
+          </Label>
           <Input
             id="confirm-password"
             type="password"
@@ -88,7 +102,7 @@ export function PasswordChangeForm({
           />
         </Field>
         <Button type="submit" disabled={changing}>
-          {changing ? "修改中..." : "修改密码"}
+          {changing ? t("passwordChange.saving") : t("passwordChange.button")}
         </Button>
       </FieldGroup>
     </form>
@@ -99,7 +113,7 @@ export function PasswordChangeForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">修改密码</CardTitle>
+        <CardTitle className="text-base">{t("passwordChange.title")}</CardTitle>
       </CardHeader>
       <CardContent>{form}</CardContent>
     </Card>

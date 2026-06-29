@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import type {
   ProctorAttemptListResponse,
   ProctorAttemptStatus,
@@ -37,10 +38,10 @@ import {
 
 const POLL_INTERVAL_MS = 15_000;
 
-const ONLINE_LABEL: Record<string, string> = {
-  online: "在线",
-  stale: "离线中",
-  offline: "离线",
+const ONLINE_LABEL_KEY: Record<string, string> = {
+  online: "admin.examMonitoring.onlineLabels.online",
+  stale: "admin.examMonitoring.onlineLabels.stale",
+  offline: "admin.examMonitoring.onlineLabels.offline",
 };
 
 const ONLINE_COLOR: Record<string, string> = {
@@ -49,10 +50,10 @@ const ONLINE_COLOR: Record<string, string> = {
   offline: "bg-destructive text-destructive-foreground",
 };
 
-const WARNING_LABEL: Record<string, string> = {
-  normal: "正常",
-  warning: "需关注",
-  critical: "需立即关注",
+const WARNING_LABEL_KEY: Record<string, string> = {
+  normal: "admin.examMonitoring.warningLabels.normal",
+  warning: "admin.examMonitoring.warningLabels.warning",
+  critical: "admin.examMonitoring.warningLabels.critical",
 };
 
 const WARNING_ICON: Record<
@@ -70,16 +71,17 @@ const WARNING_COLOR: Record<string, string> = {
   critical: "bg-destructive/10 text-destructive",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  in_progress: "考试中",
-  disrupted: "已中断",
-  submitted: "已提交",
-  grading: "评分中",
-  graded: "已评分",
-  voided: "已作废",
+const STATUS_LABEL_KEY: Record<string, string> = {
+  in_progress: "admin.examMonitoring.statusLabels.in_progress",
+  disrupted: "admin.examMonitoring.statusLabels.disrupted",
+  submitted: "admin.examMonitoring.statusLabels.submitted",
+  grading: "admin.examMonitoring.statusLabels.grading",
+  graded: "admin.examMonitoring.statusLabels.graded",
+  voided: "admin.examMonitoring.statusLabels.voided",
 };
 
 export function ExamMonitoringPage() {
+  const { t } = useTranslation();
   const { id: examId } = useParams<{ id: string }>();
   const [attempts, setAttempts] = useState<ProctorAttemptStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -108,9 +110,9 @@ export function ExamMonitoringPage() {
       setLastRefreshedAt(Date.now());
     } catch {
       if (attemptsRef.current.length === 0) {
-        setLoadError("加载监控数据失败");
+        setLoadError(t("admin.examMonitoring.loadDataFailed"));
       } else {
-        setStaleWarning("监控数据刷新失败，当前为上次成功数据");
+        setStaleWarning(t("admin.examMonitoring.pollFailed"));
         logger.warn("monitoring.poll_failed", { examId });
       }
     } finally {
@@ -128,7 +130,7 @@ export function ExamMonitoringPage() {
       );
       setTimeline(data);
     } catch {
-      setTimelineError("加载事件时间线失败");
+      setTimelineError(t("admin.examMonitoring.timelineLoadFailed"));
       logger.warn("monitoring.timeline_load_failed", { attemptId });
     } finally {
       setTimelineLoading(false);
@@ -165,8 +167,8 @@ export function ExamMonitoringPage() {
   if (isLoading && attempts.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="考试监控" />
-        <LoadingState label="正在加载监控数据..." />
+        <PageHeader title={t("admin.examMonitoring.pageTitle")} />
+        <LoadingState label={t("admin.examMonitoring.loadingLabel")} />
       </div>
     );
   }
@@ -174,7 +176,7 @@ export function ExamMonitoringPage() {
   if (loadError && attempts.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="考试监控" />
+        <PageHeader title={t("admin.examMonitoring.pageTitle")} />
         <ErrorState message={loadError} onRetry={loadAttempts} />
       </div>
     );
@@ -193,17 +195,19 @@ export function ExamMonitoringPage() {
         </Alert>
       )}
       <div className="flex items-center justify-between">
-        <PageHeader title="考试监控" />
+        <PageHeader title={t("admin.examMonitoring.pageTitle")} />
         <div className="flex items-center gap-3">
           {lastRefreshedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
+              {t("admin.examMonitoring.lastRefreshed", {
+                time: new Date(lastRefreshedAt).toLocaleTimeString(),
+              })}
             </span>
           )}
           <Button
             variant="outline"
             size="sm"
-            aria-label="刷新监控数据"
+            aria-label={t("admin.examMonitoring.ariaRefresh")}
             onClick={() => {
               setIsLoading(true);
               loadAttempts();
@@ -217,25 +221,25 @@ export function ExamMonitoringPage() {
       {attempts.length === 0 ? (
         <EmptyState
           icon={<Monitor className="size-8" />}
-          title="暂无活跃考生"
-          description="当前没有正在考试的候选人"
+          title={t("admin.examMonitoring.emptyTitle")}
+          description={t("admin.examMonitoring.emptyDescription")}
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-left text-sm">
             <thead className="bg-muted/50">
               <tr className="border-b">
-                <Th>候选人</Th>
-                <Th>考试状态</Th>
-                <Th>在线状态</Th>
-                <Th>最近心跳</Th>
-                <Th>最近保存</Th>
-                <Th>页面不可见</Th>
-                <Th>网络离线</Th>
-                <Th>保存失败</Th>
-                <Th>提交失败</Th>
-                <Th>关注级别</Th>
-                <Th>操作</Th>
+                <Th>{t("admin.examMonitoring.columns.candidate")}</Th>
+                <Th>{t("admin.examMonitoring.columns.status")}</Th>
+                <Th>{t("admin.examMonitoring.columns.online")}</Th>
+                <Th>{t("admin.examMonitoring.columns.lastHeartbeat")}</Th>
+                <Th>{t("admin.examMonitoring.columns.lastSave")}</Th>
+                <Th>{t("admin.examMonitoring.columns.visibilityLost")}</Th>
+                <Th>{t("admin.examMonitoring.columns.browserOffline")}</Th>
+                <Th>{t("admin.examMonitoring.columns.saveFailed")}</Th>
+                <Th>{t("admin.examMonitoring.columns.submitFailed")}</Th>
+                <Th>{t("admin.examMonitoring.columns.warningLevel")}</Th>
+                <Th>{t("admin.examMonitoring.columns.actions")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -252,13 +256,25 @@ export function ExamMonitoringPage() {
                       </span>
                     </div>
                   </Td>
-                  <Td>{STATUS_LABEL[a.status] ?? a.status}</Td>
+                  <Td>
+                    {STATUS_LABEL_KEY[a.status]
+                      ? t(
+                          STATUS_LABEL_KEY[
+                            a.status
+                          ] as "admin.examMonitoring.statusLabels.in_progress",
+                        )
+                      : a.status}
+                  </Td>
                   <Td>
                     <Badge
                       variant="secondary"
                       className={ONLINE_COLOR[a.onlineState]}
                     >
-                      {ONLINE_LABEL[a.onlineState]}
+                      {t(
+                        ONLINE_LABEL_KEY[
+                          a.onlineState
+                        ] as "admin.examMonitoring.onlineLabels.online",
+                      )}
                     </Badge>
                   </Td>
                   <Td className="tabular-nums">
@@ -289,7 +305,11 @@ export function ExamMonitoringPage() {
                           const Icon = WARNING_ICON[a.warningLevel];
                           return Icon ? <Icon className="size-3" /> : null;
                         })()}
-                        {WARNING_LABEL[a.warningLevel]}
+                        {t(
+                          WARNING_LABEL_KEY[
+                            a.warningLevel
+                          ] as "admin.examMonitoring.warningLabels.normal",
+                        )}
                       </span>
                     </Badge>
                   </Td>
@@ -299,7 +319,7 @@ export function ExamMonitoringPage() {
                       size="sm"
                       onClick={() => setSelectedAttemptId(a.attemptId)}
                     >
-                      时间线
+                      {t("admin.examMonitoring.timeline.button")}
                     </Button>
                   </Td>
                 </tr>
@@ -318,7 +338,9 @@ export function ExamMonitoringPage() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              事件时间线 — {selectedAttempt?.candidateName ?? ""}
+              {t("admin.examMonitoring.timeline.title", {
+                name: selectedAttempt?.candidateName ?? "",
+              })}
             </DialogTitle>
           </DialogHeader>
           {timelineLoading ? (
@@ -358,7 +380,9 @@ export function ExamMonitoringPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">暂无事件</p>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.examMonitoring.timeline.noEvents")}
+            </p>
           )}
         </DialogContent>
       </Dialog>
@@ -387,6 +411,7 @@ function Td({
 }
 
 function EventBadge({ level, kind }: { level: string; kind: string }) {
+  const { t } = useTranslation();
   let color: string;
   if (level === "error") {
     color = "bg-destructive/10 text-destructive";
@@ -397,7 +422,9 @@ function EventBadge({ level, kind }: { level: string; kind: string }) {
   }
   return (
     <Badge variant="secondary" className={`shrink-0 ${color}`}>
-      {kind === "audit_log" ? "操作" : "前端"}
+      {kind === "audit_log"
+        ? t("admin.examMonitoring.timeline.auditLog")
+        : t("admin.examMonitoring.timeline.frontend")}
     </Badge>
   );
 }

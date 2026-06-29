@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -46,79 +47,68 @@ interface AuditLogResponse {
   totalPages: number;
 }
 
-const ACTION_FILTERS = [
-  { value: "all", label: "全部操作" },
-  // 考试
-  { value: "exam.create", label: "创建考试" },
-  { value: "exam.update", label: "更新考试" },
-  { value: "exam.publish", label: "发布考试" },
-  { value: "exam.open", label: "开放考试" },
-  { value: "exam.close", label: "关闭考试" },
-  { value: "exam.closed", label: "关闭考试（自动）" },
-  { value: "exam.unpublish", label: "撤销发布" },
-  { value: "exam.extend", label: "延长时间" },
-  { value: "exam.cancel", label: "取消考试" },
-  { value: "exam.archive", label: "归档考试" },
-  { value: "exam.publish_results", label: "公布成绩" },
-  { value: "exam.delete", label: "删除考试" },
-  // 答题
-  { value: "attempt.start", label: "开始答题" },
-  { value: "attempt.restore", label: "恢复答题" },
-  { value: "attempt.saveAnswer", label: "保存答案" },
-  { value: "attempt.submit", label: "提交答卷" },
-  { value: "attempt.autoSubmit", label: "自动提交" },
-  { value: "attempt.disrupted", label: "答题中断" },
-  { value: "attempt.misconductFlagged", label: "标记违纪" },
-  { value: "attempt.forceSubmit", label: "强制提交" },
-  { value: "attempt.extendTime", label: "延时" },
-  { value: "attempt.exported", label: "导出答卷" },
-  // 评分
-  { value: "grading.score_entered", label: "评分录入" },
-  { value: "grading.finalized", label: "评分完成" },
-  // 考生
-  { value: "candidate.create", label: "创建考生" },
-  { value: "candidate.update", label: "更新考生" },
-  { value: "candidate.import", label: "导入考生" },
-  { value: "candidate.password_reset", label: "考生重置密码" },
-  // 考生字段
-  { value: "candidate_field.create", label: "创建考生字段" },
-  { value: "candidate_field.update", label: "更新考生字段" },
-  { value: "candidate_field.delete", label: "删除考生字段" },
-  // 题目
-  { value: "question.create", label: "创建题目" },
-  { value: "question.update", label: "更新题目" },
-  { value: "question.delete", label: "删除题目" },
-  { value: "question.import", label: "导入题目" },
-  // 课程
-  { value: "course.create", label: "创建课程" },
-  { value: "course.update", label: "更新课程" },
-  { value: "course.delete", label: "删除课程" },
-  // 报名
-  { value: "enrollment.add", label: "添加报名" },
-  { value: "enrollment.remove", label: "移除报名" },
-  // 用户
-  { value: "user.create", label: "创建用户" },
-  { value: "user.update", label: "更新用户" },
-  { value: "user.delete", label: "删除用户" },
-  // 认证
-  { value: "login.success", label: "登录成功" },
-  { value: "login.failure", label: "登录失败" },
-  { value: "logout", label: "登出" },
-  // 其他
-  { value: "export_scores", label: "导出成绩" },
-  { value: "branding.update", label: "更新品牌" },
-  { value: "admin.bootstrap", label: "管理员引导" },
-  { value: "admin.password_reset.local", label: "本地重置密码" },
-];
+const ACTION_FILTER_KEYS = [
+  "all",
+  "exam.create",
+  "exam.update",
+  "exam.publish",
+  "exam.open",
+  "exam.close",
+  "exam.closed",
+  "exam.unpublish",
+  "exam.extend",
+  "exam.cancel",
+  "exam.archive",
+  "exam.publish_results",
+  "exam.delete",
+  "attempt.start",
+  "attempt.restore",
+  "attempt.saveAnswer",
+  "attempt.submit",
+  "attempt.autoSubmit",
+  "attempt.disrupted",
+  "attempt.misconductFlagged",
+  "attempt.forceSubmit",
+  "attempt.extendTime",
+  "attempt.exported",
+  "grading.score_entered",
+  "grading.finalized",
+  "candidate.create",
+  "candidate.update",
+  "candidate.import",
+  "candidate.password_reset",
+  "candidate_field.create",
+  "candidate_field.update",
+  "candidate_field.delete",
+  "question.create",
+  "question.update",
+  "question.delete",
+  "question.import",
+  "course.create",
+  "course.update",
+  "course.delete",
+  "enrollment.add",
+  "enrollment.remove",
+  "user.create",
+  "user.update",
+  "user.delete",
+  "login.success",
+  "login.failure",
+  "logout",
+  "export_scores",
+  "branding.update",
+  "admin.bootstrap",
+  "admin.password_reset.local",
+] as const;
 
-const TARGET_FILTERS = [
-  { value: "all", label: "全部目标" },
-  { value: "attempt", label: "答卷" },
-  { value: "exam", label: "考试" },
-  { value: "user", label: "用户" },
-  { value: "enrollment", label: "报名" },
-  { value: "organization", label: "组织" },
-];
+const TARGET_FILTER_KEYS = [
+  "all",
+  "attempt",
+  "exam",
+  "user",
+  "enrollment",
+  "organization",
+] as const;
 
 /** ISO datetime for the start (00:00:00.000) of the given date, local time. */
 function startOfDayISO(date: Date): string {
@@ -135,6 +125,7 @@ function endOfDayISO(date: Date): string {
 }
 
 export function AuditLogPage() {
+  const { t } = useTranslation();
   const [data, setData] = useState<AuditLogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -197,7 +188,7 @@ export function AuditLogPage() {
       );
       setData(result);
     } catch {
-      setError("加载审计日志失败");
+      setError(t("admin.audit.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -214,7 +205,10 @@ export function AuditLogPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="审计日志" description="查看系统操作审计记录" />
+      <PageHeader
+        title={t("admin.audit.title")}
+        description={t("admin.audit.description")}
+      />
       <div className="flex flex-wrap items-center gap-3">
         <Select
           value={actionFilter}
@@ -223,13 +217,16 @@ export function AuditLogPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[180px]" aria-label="全部操作">
+          <SelectTrigger
+            className="w-[180px]"
+            aria-label={t("admin.audit.filterActions.all")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ACTION_FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
+            {ACTION_FILTER_KEYS.map((key) => (
+              <SelectItem key={key} value={key}>
+                {t(`admin.audit.filterActions.${key}` as any)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -241,26 +238,29 @@ export function AuditLogPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[150px]" aria-label="全部目标">
+          <SelectTrigger
+            className="w-[150px]"
+            aria-label={t("admin.audit.filterTargets.all")}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {TARGET_FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
+            {TARGET_FILTER_KEYS.map((key) => (
+              <SelectItem key={key} value={key}>
+                {t(`admin.audit.filterTargets.${key}` as any)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <DatePicker
-          aria-label="开始日期"
-          placeholder="开始日期"
+          aria-label={t("admin.audit.startDate")}
+          placeholder={t("admin.audit.startDate")}
           value={fromDate}
           onChange={(d) => handleDateChange(d, true)}
         />
         <DatePicker
-          aria-label="结束日期"
-          placeholder="结束日期"
+          aria-label={t("admin.audit.endDate")}
+          placeholder={t("admin.audit.endDate")}
           value={toDate}
           onChange={(d) => handleDateChange(d, false)}
         />
@@ -272,15 +272,15 @@ export function AuditLogPage() {
             className="text-muted-foreground"
           >
             <X className="mr-1 size-4" />
-            清空筛选
+            {t("admin.audit.clearFilter")}
           </Button>
         )}
       </div>
       {items.length === 0 ? (
         <EmptyState
           icon={<ScrollText className="size-8" />}
-          title="暂无审计日志"
-          description="系统操作将自动记录在此"
+          title={t("admin.audit.empty")}
+          description={t("admin.audit.emptyDescription")}
         />
       ) : (
         <>
@@ -288,11 +288,11 @@ export function AuditLogPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>时间</TableHead>
-                  <TableHead>操作者</TableHead>
-                  <TableHead>操作</TableHead>
-                  <TableHead>目标类型</TableHead>
-                  <TableHead>目标 ID</TableHead>
+                  <TableHead>{t("admin.audit.columns.time")}</TableHead>
+                  <TableHead>{t("admin.audit.columns.actor")}</TableHead>
+                  <TableHead>{t("admin.audit.columns.action")}</TableHead>
+                  <TableHead>{t("admin.audit.columns.target")}</TableHead>
+                  <TableHead>{t("admin.audit.columns.detail")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -330,7 +330,9 @@ export function AuditLogPage() {
               if (!item) return null;
               return (
                 <div className="rounded-md border p-4">
-                  <h3 className="mb-2 text-sm font-medium">元数据</h3>
+                  <h3 className="mb-2 text-sm font-medium">
+                    {t("admin.audit.columns.detail")}
+                  </h3>
                   <pre className="overflow-x-auto rounded bg-muted p-3 text-xs">
                     {JSON.stringify(item.metadata, null, 2)}
                   </pre>

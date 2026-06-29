@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ interface PaginatedResponse<T> {
  * and a question picker for manual question selection, plus draft/publish actions.
  */
 export function ExamCreatePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
@@ -123,7 +125,7 @@ export function ExamCreatePage() {
         }
       }
     } catch {
-      setError("加载数据失败");
+      setError(t("admin.examCreate.feedback.loadDataFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -154,21 +156,23 @@ export function ExamCreatePage() {
   /** Validates the form, creates the exam, and optionally publishes it. */
   async function handleSave(asDraft: boolean) {
     const errors: Record<string, string> = {};
-    if (!config.title.trim()) errors.title = "请输入考试名称";
-    if (!config.courseId) errors.courseId = "请选择课程";
+    if (!config.title.trim())
+      errors.title = t("admin.examCreate.validation.titleRequired");
+    if (!config.courseId)
+      errors.courseId = t("admin.examCreate.validation.courseRequired");
     if (
       config.openAt &&
       config.closeAt &&
       new Date(config.closeAt) <= new Date(config.openAt)
     ) {
-      errors.time = "结束时间必须晚于开始时间";
+      errors.time = t("admin.examCreate.validation.timeInvalid");
     }
     if (config.passingScore > config.totalScore) {
-      errors.score = "及格分不能超过总分";
+      errors.score = t("admin.examCreate.validation.scoreInvalid");
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
-      toast.error("请修正表单中的错误");
+      toast.error(t("admin.examCreate.feedback.fixErrors"));
       return;
     }
     setSaving(true);
@@ -190,13 +194,16 @@ export function ExamCreatePage() {
       }
 
       if (!asDraft) {
-        toast.success("考试创建并发布成功");
+        toast.success(t("admin.examCreate.feedback.publishSuccess"));
       } else {
-        toast.success("考试已保存为草稿");
+        toast.success(t("admin.examCreate.feedback.draftSuccess"));
       }
       void navigate("/admin/exams");
     } catch (err) {
-      const message = getApiErrorMessage(err, "保存失败，请稍后重试");
+      const message = getApiErrorMessage(
+        err,
+        t("admin.examCreate.feedback.saveFailed"),
+      );
       setSaveError(message);
       toast.error(message);
     } finally {
@@ -216,7 +223,7 @@ export function ExamCreatePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="创建考试" />
+      <PageHeader title={t("admin.examCreate.pageTitle")} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
@@ -231,27 +238,37 @@ export function ExamCreatePage() {
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">
-              已选题目 ({config.questionIds.length})
+              {t("admin.examCreate.selectedQuestions", {
+                count: config.questionIds.length,
+              })}
             </h3>
             <Button size="sm" onClick={() => setQuestionDialogOpen(true)}>
-              手动选题
+              {t("admin.examCreate.selectQuestions")}
             </Button>
           </div>
 
           {selectedQuestions.length === 0 ? (
             <EmptyState
               icon={<BookOpen className="size-8" />}
-              title="尚未选择题目"
-              description="请点击「手动选题」按钮选择题目。"
+              title={t("admin.examCreate.noQuestionsTitle")}
+              description={t("admin.examCreate.noQuestionsDescription")}
             />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-16">题型</TableHead>
-                  <TableHead>题目内容</TableHead>
-                  <TableHead className="w-16">分值</TableHead>
-                  <TableHead className="w-12"></TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.examCreate.tableHeaders.type")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.examCreate.tableHeaders.content")}
+                  </TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.examCreate.tableHeaders.score")}
+                  </TableHead>
+                  <TableHead className="w-12">
+                    {t("admin.examCreate.tableHeaders.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -271,7 +288,7 @@ export function ExamCreatePage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => removeQuestion(q.id)}
-                        aria-label="删除题目"
+                        aria-label={t("admin.examCreate.ariaDeleteQuestion")}
                       >
                         <Trash2 />
                       </Button>
@@ -288,17 +305,21 @@ export function ExamCreatePage() {
       {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
       <div className="flex justify-end gap-3 pt-4">
         <Button variant="outline" onClick={() => void navigate("/admin/exams")}>
-          取消
+          {t("admin.examCreate.actions.cancel")}
         </Button>
         <Button
           variant="outline"
           onClick={() => void handleSave(true)}
           disabled={saving}
         >
-          {saving ? "保存中..." : "保存草稿"}
+          {saving
+            ? t("admin.examCreate.actions.saving")
+            : t("admin.examCreate.actions.saveDraft")}
         </Button>
         <Button onClick={() => void handleSave(false)} disabled={saving}>
-          {saving ? "发布中..." : "发布考试"}
+          {saving
+            ? t("admin.examCreate.actions.publishing")
+            : t("admin.examCreate.actions.publish")}
         </Button>
       </div>
 
@@ -308,15 +329,23 @@ export function ExamCreatePage() {
           className="max-w-2xl max-h-[80vh] overflow-y-auto"
         >
           <DialogHeader>
-            <DialogTitle>选择题目</DialogTitle>
+            <DialogTitle>{t("admin.examCreate.dialogTitle")}</DialogTitle>
           </DialogHeader>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">题型</TableHead>
-                <TableHead>题目内容</TableHead>
-                <TableHead className="w-16">分值</TableHead>
-                <TableHead className="w-16">操作</TableHead>
+                <TableHead className="w-16">
+                  {t("admin.examCreate.tableHeaders.type")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.examCreate.tableHeaders.content")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.examCreate.tableHeaders.score")}
+                </TableHead>
+                <TableHead className="w-16">
+                  {t("admin.examCreate.dialogActions.add")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -337,7 +366,7 @@ export function ExamCreatePage() {
                       variant="outline"
                       onClick={() => addQuestion(q.id)}
                     >
-                      添加
+                      {t("admin.examCreate.dialogActions.add")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -349,7 +378,7 @@ export function ExamCreatePage() {
               variant="outline"
               onClick={() => setQuestionDialogOpen(false)}
             >
-              关闭
+              {t("admin.examCreate.dialogActions.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
