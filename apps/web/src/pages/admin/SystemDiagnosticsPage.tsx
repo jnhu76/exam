@@ -42,8 +42,8 @@ function getDbStatusLevel(ms: number): HealthStatus {
   return "ok";
 }
 
-function formatLastScan(lastScanAt: string | null): string {
-  return lastScanAt ? new Date(lastScanAt).toLocaleString() : "无";
+function formatLastScan(lastScanAt: string | null, fallback: string): string {
+  return lastScanAt ? new Date(lastScanAt).toLocaleString() : fallback;
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -100,9 +100,9 @@ export function SystemDiagnosticsPage() {
       logger.debug("system_diagnostics.refreshed", { source: "health" });
     } catch (err) {
       if (!initialLoadDone.current) {
-        setError("加载系统健康数据失败");
+        setError(t("diagnostics.errors.healthLoadFailed"));
       } else {
-        setStaleWarning("health", "系统状态刷新失败，当前显示上次成功数据");
+        setStaleWarning("health", t("diagnostics.staleWarnings.health"));
         logger.warn("system_diagnostics.poll_failed", {
           source: "health",
           error: err instanceof Error ? err.message : String(err),
@@ -127,11 +127,11 @@ export function SystemDiagnosticsPage() {
       logger.debug("system_diagnostics.refreshed", { source: "diagnostics" });
     } catch (err) {
       if (!initialLoadDone.current) {
-        setError("加载诊断数据失败");
+        setError(t("diagnostics.errors.diagnosticsLoadFailed"));
       } else {
         setStaleWarning(
           "diagnostics",
-          "诊断数据刷新失败，当前显示上次成功数据",
+          t("diagnostics.staleWarnings.diagnostics"),
         );
         logger.warn("system_diagnostics.poll_failed", {
           source: "diagnostics",
@@ -174,7 +174,7 @@ export function SystemDiagnosticsPage() {
   if (error && !health && !diag) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader title="系统监控" />
+        <PageHeader title={t("diagnostics.title")} />
         <ErrorState message={error} onRetry={handleRefresh} />
       </div>
     );
@@ -193,11 +193,13 @@ export function SystemDiagnosticsPage() {
         </Alert>
       ))}
       <div className="flex items-center justify-between">
-        <PageHeader title="系统监控" />
+        <PageHeader title={t("diagnostics.title")} />
         <div className="flex items-center gap-3">
           {lastRefreshedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              上次刷新：{new Date(lastRefreshedAt).toLocaleTimeString()}
+              {t("diagnostics.header.lastRefreshed", {
+                time: new Date(lastRefreshedAt).toLocaleTimeString(),
+              })}
             </span>
           )}
           <span
@@ -212,7 +214,7 @@ export function SystemDiagnosticsPage() {
           <Button
             variant="outline"
             size="sm"
-            aria-label="刷新系统数据"
+            aria-label={t("diagnostics.actions.refresh")}
             onClick={handleRefresh}
           >
             <RefreshCw />
@@ -222,21 +224,21 @@ export function SystemDiagnosticsPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard
-          title="CPU 使用率"
+          title={t("diagnostics.metrics.cpuUsage")}
           value={health?.cpu ?? 0}
           unit="%"
           status={getStatusLevel(health?.cpu ?? 0)}
           icon={<Activity className="size-5" />}
         />
         <MetricCard
-          title="内存使用率"
+          title={t("diagnostics.metrics.memoryUsage")}
           value={health?.memory ?? 0}
           unit="%"
           status={getStatusLevel(health?.memory ?? 0)}
           icon={<HardDrive className="size-5" />}
         />
         <MetricCard
-          title="数据库响应时间"
+          title={t("diagnostics.metrics.dbResponseTime")}
           value={health?.dbResponseMs ?? 0}
           unit="ms"
           status={getDbStatusLevel(health?.dbResponseMs ?? 0)}
@@ -251,13 +253,16 @@ export function SystemDiagnosticsPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Server className="size-4" aria-hidden="true" />
-                  服务器信息
+                  {t("diagnostics.cards.serverInfo")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <InfoRow label="版本" value={diag.version} />
                 <InfoRow
-                  label="运行时间"
+                  label={t("diagnostics.labels.version")}
+                  value={diag.version}
+                />
+                <InfoRow
+                  label={t("diagnostics.labels.uptime")}
                   value={formatDuration(liveUptime * 1000)}
                 />
               </CardContent>
@@ -267,17 +272,22 @@ export function SystemDiagnosticsPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Database className="size-4" aria-hidden="true" />
-                  数据库状态
+                  {t("diagnostics.cards.databaseStatus")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <InfoRow label="延迟" value={`${diag.dbLatency}ms`} />
                 <InfoRow
-                  label="Redis"
+                  label={t("diagnostics.labels.latency")}
+                  value={`${diag.dbLatency}ms`}
+                />
+                <InfoRow
+                  label={t("diagnostics.labels.redis")}
                   value={
                     diag.redisStatus.connected
-                      ? `已连接 (${diag.redisStatus.latencyMs}ms)`
-                      : "未连接"
+                      ? t("diagnostics.labels.redisConnected", {
+                          latencyMs: diag.redisStatus.latencyMs ?? 0,
+                        })
+                      : t("diagnostics.labels.redisDisconnected")
                   }
                 />
               </CardContent>
@@ -287,20 +297,20 @@ export function SystemDiagnosticsPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Activity className="size-4" aria-hidden="true" />
-                  运行时配置
+                  {t("diagnostics.cards.runtimeConfig")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <InfoRow
-                  label="心跳间隔"
+                  label={t("diagnostics.labels.heartbeatInterval")}
                   value={formatDuration(diag.config.heartbeatInterval)}
                 />
                 <InfoRow
-                  label="心跳超时"
+                  label={t("diagnostics.labels.heartbeatTimeout")}
                   value={formatDuration(diag.config.heartbeatTimeout)}
                 />
                 <InfoRow
-                  label="截止扫描间隔"
+                  label={t("diagnostics.labels.deadlineScanInterval")}
                   value={formatDuration(diag.config.deadlineScanInterval)}
                 />
               </CardContent>
@@ -312,24 +322,27 @@ export function SystemDiagnosticsPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Timer className="size-4" aria-hidden="true" />
-                  心跳扫描器
+                  {t("diagnostics.cards.heartbeatScanner")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <InfoRow
-                  label="扫描间隔"
+                  label={t("diagnostics.labels.scanInterval")}
                   value={formatDuration(diag.heartbeatStatus.interval)}
                 />
                 <InfoRow
-                  label="超时"
+                  label={t("diagnostics.labels.timeout")}
                   value={formatDuration(diag.heartbeatStatus.timeout)}
                 />
                 <InfoRow
-                  label="上次扫描"
-                  value={formatLastScan(diag.heartbeatStatus.lastScanAt)}
+                  label={t("diagnostics.labels.lastScan")}
+                  value={formatLastScan(
+                    diag.heartbeatStatus.lastScanAt,
+                    t("diagnostics.labels.lastScanNever"),
+                  )}
                 />
                 <InfoRow
-                  label="已中断"
+                  label={t("diagnostics.labels.disruptedCount")}
                   value={`${diag.heartbeatStatus.disruptedCount}`}
                 />
               </CardContent>
@@ -339,20 +352,23 @@ export function SystemDiagnosticsPage() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Timer className="size-4" aria-hidden="true" />
-                  截止扫描器
+                  {t("diagnostics.cards.deadlineScanner")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <InfoRow
-                  label="扫描间隔"
+                  label={t("diagnostics.labels.scanInterval")}
                   value={formatDuration(diag.deadlineScannerStatus.interval)}
                 />
                 <InfoRow
-                  label="上次扫描"
-                  value={formatLastScan(diag.deadlineScannerStatus.lastScanAt)}
+                  label={t("diagnostics.labels.lastScan")}
+                  value={formatLastScan(
+                    diag.deadlineScannerStatus.lastScanAt,
+                    t("diagnostics.labels.lastScanNever"),
+                  )}
                 />
                 <InfoRow
-                  label="自动提交"
+                  label={t("diagnostics.labels.autoSubmitCount")}
                   value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
                 />
               </CardContent>

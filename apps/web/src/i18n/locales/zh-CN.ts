@@ -195,6 +195,54 @@ const zhCN = {
       loadFailed: "加载考试列表失败",
     },
   },
+
+  /** SystemDiagnosticsPage (admin diagnostics) copy. */
+  diagnostics: {
+    title: "系统监控",
+    actions: {
+      refresh: "刷新系统数据",
+    },
+    header: {
+      lastRefreshed: "上次刷新：{{time}}",
+    },
+    errors: {
+      healthLoadFailed: "加载系统健康数据失败",
+      diagnosticsLoadFailed: "加载诊断数据失败",
+    },
+    staleWarnings: {
+      health: "系统状态刷新失败，当前显示上次成功数据",
+      diagnostics: "诊断数据刷新失败，当前显示上次成功数据",
+    },
+    metrics: {
+      cpuUsage: "CPU 使用率",
+      memoryUsage: "内存使用率",
+      dbResponseTime: "数据库响应时间",
+    },
+    cards: {
+      serverInfo: "服务器信息",
+      databaseStatus: "数据库状态",
+      runtimeConfig: "运行时配置",
+      heartbeatScanner: "心跳扫描器",
+      deadlineScanner: "截止扫描器",
+    },
+    labels: {
+      version: "版本",
+      uptime: "运行时间",
+      latency: "延迟",
+      redis: "Redis",
+      redisConnected: "已连接 ({{latencyMs}}ms)",
+      redisDisconnected: "未连接",
+      heartbeatInterval: "心跳间隔",
+      heartbeatTimeout: "心跳超时",
+      deadlineScanInterval: "截止扫描间隔",
+      scanInterval: "扫描间隔",
+      timeout: "超时",
+      lastScan: "上次扫描",
+      disruptedCount: "已中断",
+      autoSubmitCount: "自动提交",
+      lastScanNever: "无",
+    },
+  },
 } as const;
 
 export default zhCN;
