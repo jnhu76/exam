@@ -47,7 +47,7 @@ Supporting:
 
 Entry decision is **derived from server `primaryAction`**, not local state. The only local runtime flag is `isStarting`.
 
-### 2.2 `TakeExamPage` — React state (17)
+### 2.2 `TakeExamPage` — React state (15)
 
 | # | Variable | Type | Init | Drives |
 |---|----------|------|------|-------|

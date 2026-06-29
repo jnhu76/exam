@@ -355,7 +355,7 @@ There's no frozen answer snapshot at submit — the freeze is status+lock. Shoul
 | File | Role |
 |------|------|
 | `packages/exam-engine/src/answerProtocol.ts` | `processSaveAnswer` + `answersEqual` (the entire save protocol) |
-| `packages/exam-engine/src/grading.ts:88-130` | `readGradingSnapshot` + `computeGradingResult` (answer read path) |
+| `packages/exam-engine/src/grading.ts:88-113` | `readGradingSnapshot` (answer read path); `computeGradingResult` at `:119-131` calls into `gradeAnswers` |
 | `packages/exam-engine/src/attemptCommands.ts` | `submitAttempt` (status flip command) |
 
 ### API

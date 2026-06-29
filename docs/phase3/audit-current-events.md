@@ -41,7 +41,7 @@ auditLogs = pgTable("audit_logs", {
 
 ### 1.2 `client_events` (observability — browser-reported)
 
-**Schema:** `packages/db/src/schema/pg.ts:452-502`
+**Schema:** `packages/db/src/schema/pg.ts:452-508`
 
 ```ts
 clientEvents = pgTable("client_events", {
@@ -60,7 +60,7 @@ clientEvents = pgTable("client_events", {
 
 - `kind` IS constrained: `ClientEventKindEnum = z.enum(["log", "exam_telemetry", "proctor"])` (`packages/contracts/src/clientEvent.ts:9`).
 - `name` is NOT an enum — only a regex (`/^[a-z0-9][a-z0-9._-]{0,119}$/i`) and length cap (1–120) at ingest.
-- 4 indexes (org+receivedAt; org+kind+receivedAt; org+attempt+receivedAt; org+exam+receivedAt).
+- 5 indexes (org+receivedAt; org+kind+receivedAt; org+attempt+receivedAt; org+exam+receivedAt; org+name+receivedAt).
 
 ### 1.3 Are they distinguished?
 
@@ -248,7 +248,7 @@ Both push into one shared `ClientEventBuffer` (`apps/web/src/lib/clientEventBuff
 
 ### 3.4 Whitelist vs reality — the `paste_detected` ghost
 
-The proctor timeline metadata allowlist (`apps/api/src/lib/proctorMonitoringService.ts:111-138`) lists **`paste_detected`** and **`answer_manual_save_failed`** as projected event names. Neither is **emitted** anywhere in `apps/web/src` today (grep confirms zero `trackExamEvent("paste_detected")` / `"answer_manual_save_failed"` sources). They are forward-looking allowlist entries, not live events. M4 / M9 should decide whether to wire them or prune the allowlist.
+The proctor timeline metadata allowlist (`SAFE_METADATA_ALLOWLIST`, `apps/api/src/lib/proctorMonitoringService.ts:126-139`) lists **`paste_detected`** and **`answer_manual_save_failed`** as projected event names. Neither is **emitted** anywhere in `apps/web/src` today (grep confirms zero `trackExamEvent("paste_detected")` / `"answer_manual_save_failed"` sources). They are forward-looking allowlist entries, not live events. M4 / M9 should decide whether to wire them or prune the allowlist.
 
 ---
 

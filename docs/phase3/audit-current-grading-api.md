@@ -404,9 +404,9 @@ export const GradingStatus = {
 >
 > | Layer | Evidence |
 > |-------|----------|
-> | API contract | `GradingDetailQuestionSchema` includes `candidateAnswer: z.unknown().nullable()` (`packages/contracts/src/score.ts:31`) |
-> | API route | `gradingQueue.ts:166-168` maps `entry.candidateAnswer` from the repo into the response |
-> | Repository | `gradingQueueRepo.ts` joins `exam_attempts.answers` to extract per-question candidate answers |
+> | API contract | `GradingDetailsQuestionSchema` includes `candidateAnswer: z.unknown().nullable()` (`packages/contracts/src/score.ts:113-133`, the field itself at `:124`) |
+> | API route | `gradingQueue.ts:154-156` builds `answerByQuestion` from `attempt.answers` (loaded via `attemptRepo.findById`), and `:166-168` maps it into `candidateAnswer` per question |
+> | Repository | `attemptRepo.findById(ctx, attemptId)` returns the full `exam_attempts` row including the `answers` JSONB; `gradingQueueRepo` only fetches exam + candidate identity (`findExamById`, `findCandidateWithUser`) — it does **not** join answers |
 > | Frontend | `GradingDetailPage.tsx` renders candidate answers via `formatAnswer()` with i18n labels |
 > | Integration test | `gradingQueue.test.ts` slice 12 asserts `candidateAnswer` equals expected value |
 >
@@ -416,8 +416,8 @@ export const GradingStatus = {
 
 The candidate-answer display feature is fully implemented end-to-end:
 
-1. **API returns candidateAnswer** — `gradingQueue.ts:166-168` maps `entry.candidateAnswer` into the response payload for every question in the grading detail view.
-2. **Contract schema includes it** — `GradingDetailQuestionSchema` in `score.ts:31` declares `candidateAnswer: z.unknown().nullable()` before the audit was written.
+1. **API returns candidateAnswer** — `gradingQueue.ts:154-156` builds an `answerByQuestion` map from `attempt.answers` (loaded via `attemptRepo.findById`), and `:166-168` maps that into `candidateAnswer` for every subjective question in the grading detail view. The value comes from `attempt.answers`, not from the manual-grading `entry`.
+2. **Contract schema includes it** — `GradingDetailsQuestionSchema` in `score.ts:113-133` (field at `:124`) declared `candidateAnswer: z.unknown().nullable()` before the audit was written.
 3. **Frontend renders it** — `GradingDetailPage.tsx` calls `formatAnswer()` (with `i18n.t()` labels) to display the candidate's answer alongside the standard answer and max score.
 4. **Integration test asserts it** — `gradingQueue.test.ts` slice 12 verifies `candidateAnswer` equals the expected submitted answer for a subjective question.
 
@@ -426,7 +426,7 @@ The candidate-answer display feature is fully implemented end-to-end:
 Since the candidate-answer display already exists, M1's real scope is **test coverage and E2E enablement only**:
 
 1. **Frontend test gap** — `GradingDetailPage.test.tsx` mock data lacks `candidateAnswer`; no test asserts rendering of candidate answers. Add mock data with `candidateAnswer` and verify `formatAnswer()` output.
-2. **E2E unskip** — `manual-grading.spec.ts` is skipped (`described.skip`); needs to be enabled and passing.
+2. **E2E unskip** — `manual-grading.spec.ts` is skipped via `test.skip(true, "Phase 3 pending…")`; needs to be enabled and passing.
 3. **Fill-blank E2E** — `fill-blank-e2e.spec.ts` is skipped; needs enabling if in M1 scope.
 4. **Demo seed** — No subjective questions exist in demo seed data; adding them improves manual grading testing visibility.
 5. **Rich-text / subjective answering runtime** — No WYSIWYG answer input exists for candidates. This is the only genuinely new feature in M1's stated scope — it concerns the *candidate* side (answering), not the *grader* side (which already works).

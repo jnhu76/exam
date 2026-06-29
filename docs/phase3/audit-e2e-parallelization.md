@@ -66,7 +66,7 @@ strategy:
     shardIndex: [1, 2]
     shardTotal: [2]
 services:
-  postgres: { image: postgres:18.4, env: { POSTGRES_DB: exam_e2e, ... }, ports: ["5432:5432"] }
+  postgres: { image: postgres:18.4-bookworm, env: { POSTGRES_DB: exam_e2e, ... }, ports: ["5432:5432"] }
 env:
   DATABASE_URL: ...exam_e2e
   E2E_SHARD_TOTAL: ${{ matrix.shardTotal }}
@@ -159,7 +159,7 @@ const code = `E2E-${unique}-${Date.now()}`;        // globally unique course cod
 
 ### 5.1 `audit-log.spec.ts` — global audit table + admin account (SOFT, originally misread as HARD)
 
-The spec logs in as the shared `admin`, and seeds an `exam.create` audit row (lines 25-33, wrapped in `.catch(() => {})` so a 4xx is tolerated). It then filters the global `audit_logs` table by action/targetType/date.
+The spec logs in as the shared `admin`, and seeds an `exam.create` audit row (lines 29-34, wrapped in `.catch(() => {})` so a 4xx is tolerated). It then filters the global `audit_logs` table by action/targetType/date.
 
 **On closer reading, the assertions are count-tolerant, not exact-count:**
 - "views table" / "filters by action" / "filters by targetType": assert `count > 0` and "every visible row matches the filter" — both survive extra rows from a concurrent worker.
@@ -176,13 +176,24 @@ Logs in as shared `admin`, creates courses/exams/candidates via `seedExam` (time
 
 ### 5.3 `demo-seed-accounts.spec.ts` — fixed demo-seed state (SOFT, originally misread as HARD)
 
-Pure read-only, and asserts the **fixed** `availabilityStatus` / `primaryAction` / `bestScore` of `candidate1..4` (lines 341-489). Crucially, it locates each card by `getByTestId('exam-card-${examId}')` — i.e. it targets the *specific* demo exam card, not a list row-count. So extra exams/candidates created by a concurrent worker on the list page do **not** break these assertions.
+Pure read-only (for the candidate1..4 card-state assertions), and asserts the **fixed** `availabilityStatus` / `primaryAction` / `bestScore` of `candidate1..4`. The expected states live in `SEED_STATES` (lines 56-86); the helper `findExpectedSummary` / `expectUiSummary` is at lines 339-383; the loop that asserts them is at lines 415-441. Crucially, it locates each card by `getByTestId('exam-card-${examId}')` (line 371) — i.e. it targets the *specific* demo exam card, not a list row-count. So extra exams/candidates created by a concurrent worker on the list page do **not** break these assertions.
+
+> Note: the file also contains a separate "exhausted 2/2" test (lines 443+) that creates its own candidate + exam and starts/submits attempts — so the *file* is not purely read-only, but the candidate1..4 fixed-state assertions it is characterized by are read-only and target the demo seed.
 
 The only real risk is a *future* spec that mutates a demo candidate (`candidate1..4`) — none do today. So this spec is parallel-safe today; flagged SOFT because it encodes an implicit "no spec touches the demo seed" contract that isn't enforced anywhere.
 
-### 5.4 Global uniqueness columns (already mitigated)
+### 5.4 Uniqueness columns (partially mitigated, partially convention-only)
 
-`users.username`, `candidates.candidateNo`, `exams.title`, `courses.code` are globally unique. Specs already suffix with `${Date.now()}`, so collisions are improbable (same-millisecond seed in two workers is the only risk). Not a real blocker, but worth noting that the timestamp convention is load-bearing.
+The DB uniqueness story is **mixed**, not uniformly "globally unique":
+
+| Column | DB constraint | Scope |
+|--------|---------------|-------|
+| `users.username` | `users_org_username_unique` on `(organizationId, username)` | **org-scoped** unique |
+| `courses.code` | `courses_org_code_unique` on `(organizationId, code)` | **org-scoped** unique |
+| `exams.title` | **none** — only two CHECK constraints (`latestStartOffsetMinutes >= 0`, `minSubmitAfterStartMinutes >= 0`) | **not unique at all** |
+| `candidates.candidateNo` | **none at DB level** — `candidateNo` lives inside `candidateProfiles.fields` JSONB; the only uniqueness is an app-level `unique: true` flag on the `candidateFields` metadata row | app-level only |
+
+So `username` and `courses.code` collisions are genuinely DB-prevented within one org, and specs timestamp-suffix them anyway (so same-ms seeds in two workers are the only residual risk). But `exams.title` has **no DB uniqueness** — two specs could create exams with the same title and the DB would accept it; the timestamp suffix is pure convention, not collision-avoidance. `candidateNo` uniqueness is enforced only at the candidate-import/validation layer, not by a DB index. The timestamp convention is load-bearing for `username`/`code` (DB would 409 on a same-ms collision) and for `candidateNo` (app layer would reject a duplicate); it is hygiene-only for `examTitle`.
 
 ---
 
@@ -242,7 +253,7 @@ Playwright's `--shard=i/N` distributes **test files** round-robin, not by data a
 - **R2 — `audit-log` reads the global audit table.** Originally read as a HARD blocker; on inspection its assertions are count-tolerant (`>0`, all-match-filter, future-date=0), so it is **SOFT** — effectively parallel-safe today. Would only block if a future test adds an exact-count assertion.
 - **R3 — `demo-seed-accounts` asserts fixed demo-seed state.** Read-only, per-card (not list-count), and no spec mutates demo candidates today → **SOFT**, parallel-safe. Encodes an unenforced "no spec touches the demo seed" contract.
 - **R4 — No per-spec DB cleanup.** State accumulates within a shard; safe today because of self-seeding + count-tolerant assertions + fresh reseed per shard.
-- **R5 — Timestamp uniqueness is load-bearing.** If a spec ever drops the `${Date.now()}` suffix, concurrent runs (or same-ms seeds) 409. Worth a lint guard.
+- **R5 — Timestamp uniqueness is load-bearing for some columns, hygiene for others.** `users.username` and `courses.code` are org-scoped DB-unique, so a same-ms seed across workers would 409. `exams.title` has **no DB uniqueness** (timestamp suffix is convention only). `candidates.candidateNo` has no DB unique index — uniqueness is app-level only. Worth a lint guard so specs keep the `${Date.now()}` suffix on the DB-unique / app-unique columns.
 - **R6 — Shard startup overhead.** Each shard pays migrate+seed+server-start; this caps the useful shard count (Option B diminishing returns).
 
 ---

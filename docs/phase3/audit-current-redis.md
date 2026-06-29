@@ -229,7 +229,7 @@ Examples: `exam:test:local:w1:`, `exam:test:s1:w1:`, `exam:test:e2e:`
 
 ### 5.4 `buildTestApp` Redis Behavior
 
-**`apps/api/src/routes/testHelpers.ts:229`** — `buildTestApp` does **NOT** register the Redis plugin. Redis is only registered in production `server.ts`.
+**`apps/api/src/routes/testHelpers.ts`** — `buildTestApp` / `finishBuildTestApp` does **NOT** register the Redis plugin (the plugin-registration block at lines ~220-232 registers zodProviderPlugin, fastifyCookie, createDbPlugin, nowPlugin, authPlugin, tenantPlugin, conditionally rateLimitPlugin, and routePlugin — no `redisPlugin`). Redis is only registered in production `server.ts`.
 
 ---
 
@@ -248,13 +248,15 @@ Examples: `exam:test:local:w1:`, `exam:test:s1:w1:`, `exam:test:e2e:`
 
 ## 7. ADR-001 Adoption Triggers
 
-ADR-001 defines 5 triggers for Redis adoption beyond baseline:
+ADR-001 (`docs/adr/ADR-001-redis.md` §Triggers for Adoption) defines 5 triggers for full Redis adoption beyond the baseline. Each must be evidenced by a measured limit, not a forecast. The 5 triggers, verbatim from the ADR:
 
-1. **Multi-instance deployment** — shared rate limiting, session presence across instances
-2. **Shared rate limit** — in-memory rate limit is per-process; multi-instance needs shared store
-3. **1000+ concurrent examinees** — heartbeat scanner may not scale
-4. **Real-time proctor presence** — pub/sub for live candidate status
-5. **Background job queue** — BullMQ for import/export/grading tasks
+1. **Multi-instance app deployment** — queue, rate limit, and presence state must be shared across processes; a per-process Map or timer no longer works.
+2. **Shared rate limit required across instances** — login/answer-save throttling must be global, not per-process.
+3. **Distributed presence / 1000+ concurrent candidates per exam** — heartbeat + presence state must be coordinated across instances; a single scanner is no longer sufficient.
+4. **Cross-process scanner coordination required** — multiple app instances need a single owner for the deadline auto-submit scanner to avoid duplicate submits.
+5. **Persistent admission queue required** — `requireQueue` needs to survive restart and be shared across instances; DB-backed queue is the alternative.
+
+> Note: BullMQ / generic background-job-queue and real-time proctor pub/sub are **not** ADR-001 triggers. The ADR's Non-Goals explicitly list "No queue/BullMQ integration" — full Redis adoption is scoped to queue ownership, rate-limit counters, and presence, with PostgreSQL remaining the sole source of truth.
 
 All triggers remain unmet in Phase 3 single-instance deployment.
 
@@ -346,7 +348,7 @@ If heartbeat scanner becomes expensive under load, add Redis sorted sets for `ex
 | `apps/api/src/routes/testRedis.ts` | Test Redis handle (connect, prefix, cleanup) |
 | `apps/api/src/plugins/rateLimit.test.ts` | Rate limit tests (in-memory) |
 | `apps/api/src/plugins/rateLimit.abuse.test.ts` | Brute-force login test |
-| `apps/api/src/routes/testHelpers.ts` | `buildTestApp` (does NOT register Redis) |
+| `apps/api/src/routes/testHelpers.ts` | `buildTestApp` / `finishBuildTestApp` (does NOT register Redis) |
 | `packages/db/src/testScope.ts` | Redis prefix derivation |
 
 ### Config / Infra
