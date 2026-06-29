@@ -33,6 +33,7 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+ORIG_CWD=$(pwd)
 
 DEV_COMPOSE="${ROOT_DIR}/docker-compose.dev.yml"
 APP_PORT="${APP_PORT:-3000}"
@@ -182,9 +183,13 @@ command -v docker >/dev/null 2>&1 || { err "未找到 docker"; exit 127; }
 
 # 记录 dev compose 在 run-wsl 启动前的状态，cleanup 时恢复原状：
 # 跑前已运行的，不关；由本脚本启动的，跑完关掉（含数据卷）。
+# 注意：不能用 `docker compose ps -q db` 的退出码判断——它在「无容器运行」时
+# 仍返回 exit 0（stdout 为空），会导致本变量恒为 1，cleanup 永不关 compose。
+# 必须以 stdout 非空作为「确实有容器在跑」的判据。
 DEV_COMPOSE_WAS_UP=0
-docker compose -f "$DEV_COMPOSE" ps -q db >/dev/null 2>&1 && DEV_COMPOSE_WAS_UP=1
-
+if [[ -n "$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)" ]]; then
+  DEV_COMPOSE_WAS_UP=1
+fi
 API_PID=""
 cleanup() {
   local code=$?
@@ -220,7 +225,11 @@ cleanup() {
     done
   fi
   # 由本脚本启动的 dev compose，跑完关掉；进来前已运行的，不动。
-  if [[ "$DEV_COMPOSE_WAS_UP" == "0" ]] && docker compose -f "$DEV_COMPOSE" ps -q db >/dev/null 2>&1; then
+  # 同样以 ps -q db 的 stdout 非空判断（见上方 DEV_COMPOSE_WAS_UP 注释）。
+  cd "$ROOT_DIR"
+  local _still_up
+  _still_up="$(docker compose -f "$DEV_COMPOSE" ps -q db 2>/dev/null || true)"
+  if [[ "$DEV_COMPOSE_WAS_UP" == "0" && -n "$_still_up" ]]; then
     log "关 dev compose（由 run-wsl.sh 启动）..."
     docker compose -f "$DEV_COMPOSE" down -v >/dev/null 2>&1 || true
   fi
@@ -384,7 +393,10 @@ if ls blob-report/shard-*/report-*.zip >/dev/null 2>&1; then
   log "HTML report: apps/e2e/playwright-report/index.html"
 fi
 
-# 8. 清理 worker 库 + 临时日志（成功路径）。cleanup() 会停 server。
+# 8. 切回 root dir（cleanup 中 docker compose down 需要正确 project context）。
+cd "$ORIG_CWD"
+
+# 9. 清理 worker 库 + 临时日志（成功路径）。cleanup() 会停 server。
 for (( i=0; i<E2E_WORKERS; i++ )); do
   drop_db_if_allowed "${WORKER_DB_PREFIX}${i}"
 done
