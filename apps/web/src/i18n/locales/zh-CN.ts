@@ -134,6 +134,67 @@ const zhCN = {
     loading: "加载中…",
     empty: "暂无数据",
   },
+
+  /** AppSidebar / navigation labels. Mirrors the sidebar structure 1:1. */
+  nav: {
+    groups: {
+      overview: "概览",
+      questionBank: "题库",
+      exams: "考试",
+      management: "管理",
+    },
+    items: {
+      dashboard: "仪表盘",
+      courses: "课程管理",
+      questions: "题目管理",
+      questionsImport: "题目导入",
+      exams: "考试管理",
+      gradingQueue: "待评分",
+      results: "成绩查询",
+      users: "用户管理",
+      candidates: "考生管理",
+      importLogs: "导入日志",
+      auditLogs: "审计日志",
+      settings: "平台设置",
+      candidateFields: "考生字段",
+      system: "系统监控",
+    },
+    actions: {
+      collapse: "折叠侧栏",
+      expand: "展开侧栏",
+      logout: "退出登录",
+      logoutShort: "退出",
+    },
+  },
+
+  /** ExamListPage (candidate-facing exam list) copy. */
+  examList: {
+    actions: {
+      start: "开始考试",
+      resume: "继续考试",
+      viewResult: "查看成绩",
+      viewHistory: "查看记录",
+    },
+    /** Card metadata with interpolation. i18next interpolation: {{value}}. */
+    meta: {
+      duration: "{{minutes}}分钟",
+      passingScore: "及格分: {{score}}/{{total}}",
+      questionCount: "题目数: {{count}}",
+      attempts: "已考: {{used}}/{{max}}次",
+    },
+    sections: {
+      canTake: "可参加的考试",
+      history: "历史考试",
+      upcoming: "即将开始",
+    },
+    empty: {
+      title: "暂无可参加的考试",
+      description: "当前没有可用的考试。",
+    },
+    errors: {
+      loadFailed: "加载考试列表失败",
+    },
+  },
 } as const;
 
 export default zhCN;
