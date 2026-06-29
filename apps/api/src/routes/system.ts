@@ -8,6 +8,7 @@ import {
   DiagnosticsResponseSchema,
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
+import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
   getRuntimeConfig,
@@ -158,7 +159,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       response: { 200: DashboardResponseSchema },
     },
     handler: async (request) => {
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const statsRepo = createSystemStatsRepo(anyDb);
       const stats = await statsRepo.getDashboardStats(ctx);
       const recentExams = await statsRepo.getRecentExams(ctx);

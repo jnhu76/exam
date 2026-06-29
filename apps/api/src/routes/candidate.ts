@@ -20,7 +20,11 @@ import {
   UserAlreadyExistsError,
   ValidationError,
 } from "@exam/domain";
-import { ensureTargetOrg, resolveImportStatus } from "./helpers.js";
+import {
+  ensureTargetOrg,
+  getRequestContext,
+  resolveImportStatus,
+} from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import {
   buildErrorResponse,
@@ -187,7 +191,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
      * name, username, and isActive status. Requires Admin role.
      */
     async (request) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
       const repo = createCandidateRepo(fastify.db);
       const userRepo = createUserRepo(fastify.db);
@@ -235,7 +239,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
      * transaction. Returns 409 on username or identity conflict.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateCandidateRequestSchema.parse(request.body);
       const candidateRepo = createCandidateRepo(fastify.db);
       const configuredFields = await createCandidateFieldRepo(fastify.db).list(
@@ -340,7 +344,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
      * and checks identity uniqueness against other candidates.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateCandidateRequestSchema.parse(request.body);
       const candidateRepo = createCandidateRepo(fastify.db);
@@ -421,7 +425,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
      * Rate-limited to 10 requests per minute.
      */
     async (request, reply) => {
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
       const parsed = CandidateImportRequestSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply

@@ -29,6 +29,7 @@ import {
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
 import { recordAudit } from "./audit.js";
+import { getRequestContext } from "./helpers.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 /**
@@ -299,7 +300,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
      */
     async (request, reply) => {
       const userRepo = createUserRepo(fastify.db);
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const user = await userRepo.findByOrganizationAndId(ctx, ctx.actorId);
 
       if (!user) {
@@ -348,7 +349,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const { currentPassword, newPassword } = parsed.data;
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const targetCtx = {
         ...ctx,
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
@@ -412,7 +413,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const { name } = parsed.data;
-      const ctx = request.ctx!;
+      const ctx = getRequestContext(request);
       const targetCtx = {
         ...ctx,
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,

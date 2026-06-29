@@ -35,6 +35,7 @@ Phase 1 代码质量目标：
 | Husky                     | Git hooks                  |
 | turbo                      | Monorepo runner            |
 | dependency-cruiser         | Architecture boundary lint |
+| check-db-config.mjs        | DB config consistency lint |
 | pnpm                       | Package manager            |
 
 ---
@@ -532,22 +533,31 @@ pnpm exec commitlint --edit "$1"   # Conventional Commits 校验
 
 ## 15. CI Quality Gate
 
-CI 必须包含：
+CI 运行三个并行 job，由 `static` job 门控：
+
+### static job (必须先通过)
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm format:check
-pnpm lint
-pnpm lint:copy
-pnpm lint:arch
-pnpm typecheck
-pnpm test
-pnpm coverage
-pnpm build
-pnpm test:integration
+pnpm verify:static
+# 展开为：
+# pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck
 ```
 
-J9 最终增加：
+### verify job (全量测试)
+
+```bash
+pnpm verify
+# 展开为 static + coverage + build：
+# ... && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build
+```
+
+### e2e job
+
+```bash
+pnpm test:e2e
+```
+
+J9 最终增加 smoke：
 
 ```bash
 pnpm smoke
@@ -612,17 +622,19 @@ PR 不通过 CI，不允许合并。
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "turbo run lint",
+    "lint": "node scripts/check-code-quality.mjs",
     "lint:copy": "node scripts/check-hardcoded-copy.mjs",
-    "lint:arch": "dependency-cruiser .",
-    "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
-    "coverage": "turbo run coverage",
-    "test:integration": "turbo run test:integration",
-    "test:e2e": "turbo run test:e2e",
-    "smoke": "turbo run smoke",
-    "build": "turbo run build",
-    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm typecheck && pnpm test && pnpm coverage && pnpm build"
+    "lint:arch": "node scripts/check-architecture.mjs",
+    "lint:db-config": "node scripts/check-db-config.mjs",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "coverage": "turbo coverage",
+    "test:integration": "turbo test:integration",
+    "test:e2e": "turbo test:e2e",
+    "smoke": "turbo smoke",
+    "build": "turbo build",
+    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck",
+    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm typecheck && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build"
   }
 }
 ```

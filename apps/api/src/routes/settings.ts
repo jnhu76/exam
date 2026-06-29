@@ -11,7 +11,7 @@ import { createSettingsRepo } from "@exam/db/src/repository/settingsRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import type { Database } from "@exam/db/src/types.js";
 import type { PublicBrandingContext } from "@exam/domain";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
@@ -126,7 +126,10 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request) => {
-      return readAdminSettings(fastify.db, ensureTargetOrg(request.ctx!));
+      return readAdminSettings(
+        fastify.db,
+        ensureTargetOrg(getRequestContext(request)),
+      );
     },
   );
 
@@ -149,7 +152,10 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request) => {
-      return readAdminSettings(fastify.db, ensureTargetOrg(request.ctx!));
+      return readAdminSettings(
+        fastify.db,
+        ensureTargetOrg(getRequestContext(request)),
+      );
     },
   );
 
@@ -174,7 +180,7 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const rawCtx = request.ctx!;
+      const rawCtx = getRequestContext(request);
       const ctx = ensureTargetOrg(rawCtx);
       const data = UpdateBrandingRequestSchema.parse(request.body);
       const settingsRepo = createSettingsRepo(fastify.db);

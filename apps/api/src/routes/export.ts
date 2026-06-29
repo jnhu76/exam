@@ -5,7 +5,7 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import { ensureTargetOrg } from "./helpers.js";
+import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
@@ -47,7 +47,7 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const { id: examId } = request.params as { id: string };
-      const ctx = ensureTargetOrg(request.ctx!);
+      const ctx = ensureTargetOrg(getRequestContext(request));
 
       const examRepo = createExamRepo(fastify.db);
       const exam = await examRepo.findById(ctx, examId);
