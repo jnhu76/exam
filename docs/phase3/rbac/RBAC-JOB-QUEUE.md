@@ -33,7 +33,7 @@
 | 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [x] | _commit 4_ |
 | 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [x] | _commit 5_ |
 | 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [x] | _commit 6_ |
-| 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [ ] | — |
+| 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [x] | _commit 7_ |
 | 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [ ] | — |
 | 9 | **STOP** confirm before enforcing: RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1 | flips real gates | ⏸️ | high | [ ] | — |
 | 10 | RBAC-M7 schema / RBAC-M8 assignment API / RBAC-M9 frontend nav | schema + UI | ❌ separate PR | high | [ ] | — |
@@ -85,9 +85,12 @@
 - Tests: 6 authz + 2 api. Total authz: 58/58; api authz suite: 13/13.
 - Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm --filter @exam/api exec vitest run src/authz/` ✅ · `pnpm verify:static` ✅.
 
-### RBAC-M5 — _pending_
-- Delivered: `apps/api/src/authz/shadow.ts`, legacy stays authoritative, logs only.
-- Tests: mismatch recorded not blocking.
+### RBAC-M5 — ✅ done
+- Delivered: `apps/api/src/authz/shadow.ts` — `shadowRequireCapability(input, logger)`. Evaluates legacy (`requireRole`) + capability (preset/flat-perm check) side-by-side; **legacy stays authoritative** (decision always mirrors `legacyAllowed`); mismatches logged as structured warnings (`event: authz.shadow.mismatch`), never thrown (ADR §10.3). Resource id logged as opaque sha256 hash (ADR §10.6/§3.8 — no candidateAnswer/PII). Logger is injectable (`ShadowLogger`) for testability.
+- **Not wired to any route** — wiring is RBAC-M10's job. Shadow helper + tests only.
+- Capability side = Phase 1 flat preset/permission check; RBAC-M10 swaps in resolver-backed capability without changing shadow's contract.
+- Tests: 5 (legacy authoritative allow/deny, mismatch recorded but not blocking, never throws, sensitive-resource log hygiene). API authz suite total: 18/18.
+- Commands: `pnpm --filter @exam/api exec vitest run src/authz/` ✅ · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
 ### AUDIT-M2 — _pending_
 - Delivered: `grading.detail_viewed` / `user.role_changed` wired; metadata PII-free (ADR §3.8).
