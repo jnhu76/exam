@@ -21,6 +21,7 @@ import authRoutes from "./routes/auth.js";
 import settingsRoutes from "./routes/settings.js";
 import candidateFieldRoutes from "./routes/candidateField.js";
 import userRoutes from "./routes/user.js";
+import roleAssignmentRoutes from "./routes/roleAssignments.js";
 import candidateRoutes from "./routes/candidate.js";
 import courseRoutes from "./routes/course.js";
 import questionRoutes from "./routes/question.js";
@@ -82,6 +83,7 @@ async function main() {
   await app.register(settingsRoutes, { prefix: "/api" });
   await app.register(candidateFieldRoutes, { prefix: "/api" });
   await app.register(userRoutes, { prefix: "/api" });
+  await app.register(roleAssignmentRoutes, { prefix: "/api" });
   await app.register(candidateRoutes, { prefix: "/api" });
   await app.register(courseRoutes, { prefix: "/api" });
   await app.register(questionRoutes, { prefix: "/api" });
