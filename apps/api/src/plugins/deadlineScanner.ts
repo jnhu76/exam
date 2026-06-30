@@ -1,11 +1,6 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
-import type {
-  Exam,
-  ExamAttempt,
-  Permission,
-  RequestContext,
-} from "@exam/domain";
+import type { Exam, ExamAttempt, RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
@@ -14,11 +9,12 @@ import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
+import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import { createExamEngineRepos } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
-const SYSTEM_ACTOR_ID = "system:deadline-scanner";
+const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
 
 export interface ExpiredAttemptCandidate {
   id: string;
@@ -90,15 +86,11 @@ export async function scanExpiredAttempts(
   return { submittedCount, failedCount };
 }
 
+// SYSTEM-M1: system actor context built by the shared @exam/authz factory
+// (role=System, actorId=system:deadline-scanner). Replaces the prior
+// role:"Admin" synthetic context. Scanner code never reads ctx.permissions.
 function createSystemContext(organizationId: string): RequestContext {
-  return {
-    actorId: SYSTEM_ACTOR_ID,
-    organizationId,
-    role: "Admin",
-    permissions: [] as Permission[],
-    sessionId: SYSTEM_ACTOR_ID,
-    targetOrganizationId: organizationId,
-  };
+  return createSystemRequestContext(organizationId, SYSTEM_ACTOR_ID);
 }
 
 export async function autoSubmitAndGrade(

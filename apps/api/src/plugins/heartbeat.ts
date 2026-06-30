@@ -1,18 +1,19 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import type { Permission, RequestContext } from "@exam/domain";
+import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { markDisrupted } from "@exam/exam-engine";
+import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import { createAttemptRepoAdapter } from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
 const DEFAULT_HEARTBEAT_TIMEOUT_MS = 60_000;
-const SYSTEM_ACTOR_ID = "system:heartbeat";
+const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.Heartbeat;
 
 /**
  * Minimal representation of an active exam attempt used by the heartbeat
@@ -96,15 +97,11 @@ export async function scanForDisruptedAttempts(
  * actor, used when the background scanner needs to interact with
  * repositories that require a context.
  */
+// SYSTEM-M1: system actor context built by the shared @exam/authz factory
+// (role=System, actorId=system:heartbeat). Replaces the prior role:"Admin"
+// synthetic context. Scanner code never reads ctx.permissions.
 function createSystemContext(organizationId: string): RequestContext {
-  return {
-    actorId: SYSTEM_ACTOR_ID,
-    organizationId,
-    role: "Admin",
-    permissions: [] as Permission[],
-    sessionId: SYSTEM_ACTOR_ID,
-    targetOrganizationId: organizationId,
-  };
+  return createSystemRequestContext(organizationId, SYSTEM_ACTOR_ID);
 }
 
 /**
