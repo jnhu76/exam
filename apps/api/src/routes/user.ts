@@ -211,6 +211,14 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
       recordAudit(fastify, request, ctx, "user.update", "user", id);
+      // AUDIT-M2: privilege change gets its own sensitive audit (ADR sec.11.5).
+      // Metadata is opaque scalar state only (old/new role) — no PII.
+      if (data.role !== undefined && data.role !== target.role) {
+        recordAudit(fastify, request, ctx, "user.role_changed", "user", id, {
+          oldRole: target.role,
+          newRole: data.role,
+        });
+      }
       return {
         id: updated.id,
         organizationId: updated.organizationId,

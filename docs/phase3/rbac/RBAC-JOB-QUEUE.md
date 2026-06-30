@@ -34,7 +34,7 @@
 | 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [x] | _commit 5_ |
 | 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [x] | _commit 6_ |
 | 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [x] | _commit 7_ |
-| 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [ ] | — |
+| 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [x] | _commit 8_ |
 | 9 | **STOP** confirm before enforcing: RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1 | flips real gates | ⏸️ | high | [ ] | — |
 | 10 | RBAC-M7 schema / RBAC-M8 assignment API / RBAC-M9 frontend nav | schema + UI | ❌ separate PR | high | [ ] | — |
 
@@ -92,8 +92,13 @@
 - Tests: 5 (legacy authoritative allow/deny, mismatch recorded but not blocking, never throws, sensitive-resource log hygiene). API authz suite total: 18/18.
 - Commands: `pnpm --filter @exam/api exec vitest run src/authz/` ✅ · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
-### AUDIT-M2 — _pending_
-- Delivered: `grading.detail_viewed` / `user.role_changed` wired; metadata PII-free (ADR §3.8).
+### AUDIT-M2 — ✅ done
+- Delivered: wired the two ADR-mandated sensitive-read/privilege-change audits:
+  - `apps/api/src/routes/gradingQueue.ts`: `GET /admin/attempts/:attemptId/grading-details` now emits `grading.detail_viewed` (was unaudited — ADR §7.2 gap). Metadata = opaque ids only (`examId`, `candidateId`); **never** the `candidateAnswer` payload (ADR §3.8).
+  - `apps/api/src/routes/user.ts`: `PATCH /users/:id` now additionally emits `user.role_changed` (with `oldRole`/`newRole`) when the role actually changes — privilege change gets its own sensitive audit (ADR §11.5), alongside the existing `user.update`.
+- **Catalog completion (fixes AUDIT-M1 oversight):** the original AUDIT-M1 `rg` was single-line and missed ~16 multi-line `recordAudit(...)` actions (`candidate.password_reset`, `branding.update`, `enrollment.add/remove`, `login.success/failure`, etc.). This silently dropped those audit rows via the closed-set gate. Re-scanned with multiline `rg` and completed `AuditAction` + `KNOWN_PRODUCTION_AUDIT_ACTIONS` to cover **all 52** real actions. This restored the previously-failing `user.test.ts` (candidate.password_reset) and reduced `audit.test.ts` failures from 6 → 1.
+- Tests: authz 58/58; api authz suite 18/18; `user.test.ts` 18/18 ✅; `gradingQueue.test.ts` 18/19 (1 pre-existing, fails identically on clean baseline — `lists an attempt in the grading queue`, worker-DB data ordering, unrelated to RBAC); `audit.test.ts` 14/15 (1 pre-existing date-range flake).
+- Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
 ## Stop point (job 9)
 
@@ -109,3 +114,5 @@ After jobs 1–8 + AUDIT-M1/M2 + M5 shadow are green, **pause** and surface to t
 - **RBAC-M1 arch lint**: added `packages/authz/src` forbid block (no fastify/React/Drizzle; only `@exam/domain`) to enforce the ADR "leaf" contract structurally.
 - **AUDIT-M1 ownership**: `AuditAction`/`AuditActionKey` moved from `catalog.ts` to `auditActions.ts` (single owner of the audit union); `catalog.ts` keeps Permission/Scope/Role only.
 - **AUDIT-M1 fail mode**: `recordAudit` is fire-and-forget, so unknown actions are logged + skipped (not thrown), preserving caller semantics while failing loud in observability.
+- **AUDIT-M1→AUDIT-M2 catalog completion**: original single-line `rg` missed ~16 multi-line `recordAudit(...)` actions; the closed-set gate silently dropped those rows. AUDIT-M2 re-scanned multiline and completed the catalog to all 52 real actions. Lesson: audit-action inventories must be multiline-scanned.
+- **Pre-existing test failures (NOT caused by RBAC work)**: `audit.test.ts > filters by inclusive date range` (date-boundary flake) and `gradingQueue.test.ts > lists an attempt in the grading queue` (worker-DB data ordering) both fail identically on the clean baseline (commit b4a0c13, all RBAC work reverted). Recorded for the reviewer; out of scope for this PR.

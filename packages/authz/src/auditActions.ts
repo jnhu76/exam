@@ -3,15 +3,18 @@
  *
  * Closed, type-safe union of every audit action written by the platform.
  * Source of truth: `apps/api/src` — every string passed to `recordAudit(...)`
- * or `createAuditLogRepo().create({ action })`. AUDIT-M1 validates at the
- * `recordAudit` boundary (apps/api), so an unknown action fails loud instead
- * of silently producing a free-form `audit_logs.action` row.
+ * or `createAuditLogRepo().create({ action })`, captured via multiline `rg`
+ * (single-line AND multi-line call sites). AUDIT-M1 validates at the
+ * `recordAudit` boundary (apps/api), so an unknown action is logged as an
+ * error and the write is skipped (fail-loud, ADR §3.9) instead of silently
+ * producing a free-form `audit_logs.action` row.
  *
- * **ADR Audit Boundary — NO rename.** The legacy camelCase names
- * (`attempt.forceSubmit`, `grading.score_entered`, …) are kept verbatim. The
- * jobcard-proposed `attempt.force_submitted` / `grading.score_submitted` are
- * NOT introduced (ADR "Naming collision guard"). The only new actions are the
- * ADR-mandated sensitive-read ones: `grading.detail_viewed`, `user.role_changed`.
+ * **ADR Audit Boundary — NO rename.** The legacy names (`attempt.forceSubmit`,
+ * `grading.score_entered`, `export_scores`, `branding.update`, …) are kept
+ * verbatim. The jobcard-proposed `attempt.force_submitted` /
+ * `grading.score_submitted` are NOT introduced (ADR "Naming collision guard").
+ * The only new actions are the ADR-mandated sensitive-read ones:
+ * `grading.detail_viewed`, `user.role_changed`.
  */
 
 export const AuditAction = {
@@ -19,9 +22,17 @@ export const AuditAction = {
   AdminBootstrap: "admin.bootstrap",
   AdminPasswordResetLocal: "admin.password_reset.local",
 
+  // ── Auth ──
+  LoginSuccess: "login.success",
+  LoginFailure: "login.failure",
+  Logout: "logout",
+  AuthProfileUpdate: "auth.profile_update",
+
   // ── Attempt lifecycle (candidate runtime) ──
   AttemptStart: "attempt.start",
+  AttemptSaveAnswer: "attempt.saveAnswer",
   AttemptSubmit: "attempt.submit",
+  AttemptRestore: "attempt.restore",
 
   // ── Attempt admin / proctor operations ──
   AttemptForceSubmit: "attempt.forceSubmit",
@@ -33,13 +44,28 @@ export const AuditAction = {
   AttemptAutoSubmit: "attempt.autoSubmit",
   AttemptDisrupted: "attempt.disrupted",
 
+  // ── Branding / settings ──
+  BrandingUpdate: "branding.update",
+
   // ── Candidate ──
+  CandidateCreate: "candidate.create",
   CandidateUpdate: "candidate.update",
+  CandidateImport: "candidate.import",
+  CandidatePasswordReset: "candidate.password_reset",
+
+  // ── Candidate fields ──
+  CandidateFieldCreate: "candidate_field.create",
+  CandidateFieldUpdate: "candidate_field.update",
+  CandidateFieldDelete: "candidate_field.delete",
 
   // ── Course ──
   CourseCreate: "course.create",
   CourseUpdate: "course.update",
   CourseDelete: "course.delete",
+
+  // ── Enrollment ──
+  EnrollmentAdd: "enrollment.add",
+  EnrollmentRemove: "enrollment.remove",
 
   // ── Exam lifecycle ──
   ExamCreate: "exam.create",
@@ -54,16 +80,15 @@ export const AuditAction = {
   ExamPublishResults: "exam.publish_results",
 
   // ── Question ──
+  QuestionCreate: "question.create",
   QuestionUpdate: "question.update",
   QuestionDelete: "question.delete",
+  QuestionImport: "question.import",
 
   // ── User ──
   UserCreate: "user.create",
   UserUpdate: "user.update",
   UserDelete: "user.delete",
-
-  // ── Auth ──
-  Logout: "logout",
 
   // ── Exports ──
   ExportScores: "export_scores",
@@ -81,7 +106,7 @@ export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
 
 /**
  * The complete set of action strings actually emitted by `apps/api/src`
- * (non-test) today — captured via `rg` over `recordAudit(...)` and
+ * (non-test) today — captured via multiline `rg` over `recordAudit(...)` and
  * `createAuditLogRepo().create({ action })` callers, plus the two ADR-mandated
  * new actions. AUDIT-M1's `recordAudit` validation must accept all of these.
  * This constant doubles as the regression test fixture.
@@ -89,18 +114,30 @@ export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
 export const KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[] = [
   "admin.bootstrap",
   "admin.password_reset.local",
+  "auth.profile_update",
   "attempt.autoSubmit",
   "attempt.disrupted",
   "attempt.exported",
   "attempt.extendTime",
   "attempt.forceSubmit",
   "attempt.misconductFlagged",
+  "attempt.restore",
+  "attempt.saveAnswer",
   "attempt.start",
   "attempt.submit",
+  "branding.update",
+  "candidate.create",
+  "candidate.import",
+  "candidate.password_reset",
   "candidate.update",
+  "candidate_field.create",
+  "candidate_field.delete",
+  "candidate_field.update",
   "course.create",
   "course.delete",
   "course.update",
+  "enrollment.add",
+  "enrollment.remove",
   "exam.archive",
   "exam.cancel",
   "exam.close",
@@ -112,17 +149,20 @@ export const KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[] = [
   "exam.unpublish",
   "exam.update",
   "export_scores",
+  "grading.detail_viewed",
   "grading.finalized",
   "grading.score_entered",
+  "login.failure",
+  "login.success",
   "logout",
+  "question.create",
   "question.delete",
+  "question.import",
   "question.update",
   "user.create",
   "user.delete",
-  "user.update",
-  // ADR-mandated new actions
-  "grading.detail_viewed",
   "user.role_changed",
+  "user.update",
 ];
 
 const AUDIT_ACTION_VALUES: ReadonlySet<string> = new Set(

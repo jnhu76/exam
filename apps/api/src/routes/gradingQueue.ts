@@ -27,6 +27,7 @@ import {
   getRequestContext,
 } from "./helpers.js";
 import { cookieAuth } from "./attempts.shared.js";
+import { recordAudit } from "./audit.js";
 
 /**
  * Registers the admin manual-grading queue routes (P2D-J3):
@@ -176,6 +177,22 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
               : null,
           };
         });
+
+      // AUDIT-M2: sensitive read of candidate answers / grading detail. Audit
+      // the FACT of access only — metadata carries opaque ids, never the
+      // candidateAnswer payload (ADR sec.3.8).
+      recordAudit(
+        fastify,
+        request,
+        ctx,
+        "grading.detail_viewed",
+        "attempt",
+        attemptId,
+        {
+          examId: attempt.examId,
+          candidateId: attempt.candidateId,
+        },
+      );
 
       return reply.send({
         attemptId: attempt.id,
