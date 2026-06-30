@@ -32,7 +32,7 @@
 | 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [x] | _commit 3_ |
 | 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [x] | _commit 4_ |
 | 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [x] | _commit 5_ |
-| 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [ ] | — |
+| 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [x] | _commit 6_ |
 | 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [ ] | — |
 | 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [ ] | — |
 | 9 | **STOP** confirm before enforcing: RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1 | flips real gates | ⏸️ | high | [ ] | — |
@@ -77,9 +77,13 @@
 - Tests: 11 (shape/invariants, all perms/scopes are known catalog values, unique keys, all 6 ADR §8 special mappings, **full coverage of all ~70 protected routes**). Coverage test is the RBAC-M4 acceptance gate.
 - Commands: `pnpm --filter @exam/api exec vitest run src/authz/routeRegistry.test.ts` ✅ 11/11 · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
-### RBAC-M6 — _pending_
-- Delivered: Admin preset = compatibility superset (4 proctor + grading + diagnostics).
-- Tests: ADR §9 ten compatibility checks.
+### RBAC-M6 — ✅ done
+- Delivered: hardened the Admin preset (already a superset from RBAC-M2) with two formal guarantees:
+  - **authz**: `packages/authz/src/adminCompatibility.test.ts` — Admin holds every Admin-route permission (incl. the 4 formerly-missing proctor trap perms + grading); Admin holds NO Candidate-own and NO System-only perms; Admin default scope = organization; last-admin guard contract (Admin assignable+login; System does not count).
+  - **api**: `apps/api/src/authz/adminSuperset.test.ts` — cross-checks the route registry: **every Admin-gated route's permission is granted to Admin** (the migration-trap guard, ADR Problem #3 / §9), and no Candidate-own perm is mis-gated as Admin. This catches future registry↔preset drift.
+- No preset code change needed (M2 already encoded the superset); M6 = the formal proof + drift guard.
+- Tests: 6 authz + 2 api. Total authz: 58/58; api authz suite: 13/13.
+- Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm --filter @exam/api exec vitest run src/authz/` ✅ · `pnpm verify:static` ✅.
 
 ### RBAC-M5 — _pending_
 - Delivered: `apps/api/src/authz/shadow.ts`, legacy stays authoritative, logs only.
