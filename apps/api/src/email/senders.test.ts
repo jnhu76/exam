@@ -90,7 +90,7 @@ describe("SmtpEmailSender", () => {
     });
   });
 
-  it("uses the fromName in the From header when set", async () => {
+  it("passes fromName as an object From (safe header formatting) when set", async () => {
     const captured: Record<string, unknown>[] = [];
     const sender = new SmtpEmailSender({
       from: "no-reply@example.local",
@@ -98,7 +98,13 @@ describe("SmtpEmailSender", () => {
       transporter: recordingTransporter(captured),
     });
     await sender.send({ to: "to@example.com", subject: "s", text: "t" });
-    expect(captured[0]?.from).toBe('"Exam Platform" <no-reply@example.local>');
+    // nodemailer accepts `{ name, address }` for `from`; it handles the
+    // RFC 5322 formatting / escaping itself, which avoids header injection
+    // when fromName contains quotes or commas.
+    expect(captured[0]?.from).toEqual({
+      name: "Exam Platform",
+      address: "no-reply@example.local",
+    });
   });
 
   it("falls back to a bare from address when fromName is unset", async () => {

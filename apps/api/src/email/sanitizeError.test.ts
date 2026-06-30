@@ -52,4 +52,35 @@ describe("sanitizeEmailError", () => {
     expect(out).not.toContain(SECRET);
     expect(out).not.toContain("smtp.x");
   });
+
+  it("redacts password=... and pass=... shapes while keeping the key intact", () => {
+    // Regression: the old regex captured `(word)?` as group 1 and turned
+    // `password=secret` into `word=[redacted]` (corrupting the prefix) and
+    // `pass=secret` into `=[redacted]` (dropping the key). The fixed regex
+    // captures the full `key=` prefix so the key survives redaction.
+    const err = new Error(
+      "login failed for password=hunter2 and also pass=hunter3",
+    );
+    const out = sanitizeEmailError(err);
+    expect(out).not.toContain("hunter2");
+    expect(out).not.toContain("hunter3");
+    expect(out).toContain("password=[redacted]");
+    expect(out).toContain("pass=[redacted]");
+  });
+
+  it("redacts password: secret (space-separated colon) shapes", () => {
+    const err = new Error("config dump password: supersecret here");
+    const out = sanitizeEmailError(err);
+    expect(out).not.toContain("supersecret");
+    expect(out).toContain("password: [redacted]");
+  });
+
+  it("redacts bearer=... / authorization=... shapes while keeping the key", () => {
+    const err = new Error("retry with bearer=abcdef.tok and authorization=xyz");
+    const out = sanitizeEmailError(err);
+    expect(out).not.toContain("abcdef.tok");
+    expect(out).not.toContain("xyz");
+    expect(out).toContain("bearer=[redacted]");
+    expect(out).toContain("authorization=[redacted]");
+  });
 });

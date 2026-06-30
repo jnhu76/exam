@@ -68,8 +68,7 @@ export function createEmailOutboxRepo(db: Database) {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    await db.insert(emailOutbox).values(row);
-    const created = await findById(ctx, id);
+    const [created] = await db.insert(emailOutbox).values(row).returning();
     if (!created) {
       throw new NotFoundError("Failed to read back created email outbox row");
     }
@@ -135,7 +134,7 @@ export function createEmailOutboxRepo(db: Database) {
     id: string,
     sentAt: Date,
   ): Promise<EmailOutboxRow | null> {
-    await db
+    const [updated] = await db
       .update(emailOutbox)
       .set({
         status: "sent",
@@ -148,8 +147,9 @@ export function createEmailOutboxRepo(db: Database) {
           eq(emailOutbox.organizationId, resolveOrganizationId(ctx)),
           eq(emailOutbox.id, id),
         ),
-      );
-    return findById(ctx, id);
+      )
+      .returning();
+    return (updated as EmailOutboxRow | undefined) ?? null;
   }
 
   /**
@@ -165,7 +165,7 @@ export function createEmailOutboxRepo(db: Database) {
     lastError: string,
     nextRetryAt: Date,
   ): Promise<EmailOutboxRow | null> {
-    await db
+    const [updated] = await db
       .update(emailOutbox)
       .set({
         status: "pending",
@@ -179,8 +179,9 @@ export function createEmailOutboxRepo(db: Database) {
           eq(emailOutbox.organizationId, resolveOrganizationId(ctx)),
           eq(emailOutbox.id, id),
         ),
-      );
-    return findById(ctx, id);
+      )
+      .returning();
+    return (updated as EmailOutboxRow | undefined) ?? null;
   }
 
   /**
@@ -194,7 +195,7 @@ export function createEmailOutboxRepo(db: Database) {
     attempts: number,
     lastError: string,
   ): Promise<EmailOutboxRow | null> {
-    await db
+    const [updated] = await db
       .update(emailOutbox)
       .set({
         status: "failed",
@@ -208,8 +209,9 @@ export function createEmailOutboxRepo(db: Database) {
           eq(emailOutbox.organizationId, resolveOrganizationId(ctx)),
           eq(emailOutbox.id, id),
         ),
-      );
-    return findById(ctx, id);
+      )
+      .returning();
+    return (updated as EmailOutboxRow | undefined) ?? null;
   }
 
   return {

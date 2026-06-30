@@ -78,8 +78,15 @@ function scrubSecrets(
       out = out.split(secret).join("[redacted]");
     }
   }
+  // Capture the full key + separator (prefix) so the redacted output keeps a
+  // recognizable, intact key like `password=[redacted]` instead of corrupting
+  // it. Non-capturing groups for the optional `word` avoid swallowing it into
+  // the prefix capture. Redacts common `password=...` / `bearer=...` shapes.
   return out
-    .replace(/pass(word)?=\S+/gi, "$1=[redacted]")
-    .replace(/\bpass(word)?\b\s*[:=]\s*\S+/gi, "$1=[redacted]")
-    .replace(/(authorization|auth-token|bearer)\s*=\S+/gi, "$1=[redacted]");
+    .replace(/(pass(?:word)?=)\S+/gi, "$1[redacted]")
+    .replace(/(\bpass(?:word)?\b\s*[:=]\s*)\S+/gi, "$1[redacted]")
+    .replace(
+      /((?:authorization|auth-token|bearer)\s*=\s*)\S+/gi,
+      "$1[redacted]",
+    );
 }

@@ -87,9 +87,13 @@ export class SmtpEmailSender implements EmailSender {
   }
 
   async send(message: EmailMessage): Promise<void> {
+    // Pass `from` as an object when a display name is set: nodemailer then
+    // handles the address/name formatting (and any necessary escaping) itself,
+    // which is safer than interpolating fromName into an RFC 5322 string and
+    // avoids header-format issues if fromName contains quotes/commas.
     const fromAddress =
       this.opts.fromName && this.opts.fromName.length > 0
-        ? `"${this.opts.fromName}" <${this.opts.from}>`
+        ? { name: this.opts.fromName, address: this.opts.from }
         : this.opts.from;
     try {
       await this.opts.transporter.sendMail({
