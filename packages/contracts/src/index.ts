@@ -17,3 +17,4 @@ export * from "./importLog.js";
 export * from "./clientEvent.js";
 export * from "./sanitizeClientEvent.js";
 export * from "./proctorMonitoring.js";
+export * from "./email.js";

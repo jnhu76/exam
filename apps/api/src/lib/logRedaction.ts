@@ -9,6 +9,7 @@ export const SENSITIVE_LOG_PATHS = [
   "newPassword",
   "currentPassword",
   "passwordHash",
+  "smtpPassword",
   "token",
   "accessToken",
   "refreshToken",
@@ -20,6 +21,7 @@ export const SENSITIVE_LOG_PATHS = [
   "req.body.password",
   "req.body.newPassword",
   "req.body.currentPassword",
+  "req.body.smtpPassword",
 ] as const;
 
 /**
