@@ -423,7 +423,7 @@ type CandidateExamMachineState = {
   submit: ExamSubmitState;
   /** Frontend interaction error message (not backend business state). */
   error?: string;
-  /** Question IDs whose saves failed —承接 useSubmitFlush 的失败题目集合. */
+  /** Question IDs whose saves failed - corresponds to useSubmitFlush's failed question IDs set. */
   failedQuestionIds: string[];
 };
 ```
