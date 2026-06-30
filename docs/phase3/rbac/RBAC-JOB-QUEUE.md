@@ -31,7 +31,7 @@
 | 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [x] | _commit 2_ |
 | 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [x] | _commit 3_ |
 | 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [x] | _commit 4_ |
-| 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [ ] | — |
+| 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [x] | _commit 5_ |
 | 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [ ] | — |
 | 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [ ] | — |
 | 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [ ] | — |
@@ -71,9 +71,11 @@
 - Tests: 5 resolver tests (system/org pure resolution, deny identification, success-vs-deny, deny-reason vocabulary). Total authz: 52/52.
 - Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm verify:static` ✅.
 
-### RBAC-M4 — _pending_
-- Delivered: `apps/api/src/authz/routeRegistry.ts` + coverage test.
-- Acceptance: every protected route has an entry (existence only, no gate flip).
+### RBAC-M4 — ✅ done
+- Delivered: `apps/api/src/authz/routeRegistry.ts` — `RoutePermissionRegistryEntry` type (with ADR §3.3 `SingleResourceSpec | ListResourceSpec` extension reserved), `registryKeyFor`, and `ROUTE_PERMISSION_REGISTRY` covering **every** `requireRole(["Admin"|"Candidate"])` route in `apps/api/src/routes` (re-verified via rg). Encodes the ADR §8 special mappings: force-submit→`attempt.force_submit`@attempt+state-guard, extend-time, misconduct, grading-details→`grading.detail.view`+`grading.detail_viewed` audit, grade-question→`grading.score.write`, candidate own-score→`score.own.view`@own_score.
+- **No enforcement** — registry is metadata only. RBAC-M5/M10/PROCTOR-M1/GRADING-M1 consume it.
+- Tests: 11 (shape/invariants, all perms/scopes are known catalog values, unique keys, all 6 ADR §8 special mappings, **full coverage of all ~70 protected routes**). Coverage test is the RBAC-M4 acceptance gate.
+- Commands: `pnpm --filter @exam/api exec vitest run src/authz/routeRegistry.test.ts` ✅ 11/11 · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
 ### RBAC-M6 — _pending_
 - Delivered: Admin preset = compatibility superset (4 proctor + grading + diagnostics).
