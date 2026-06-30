@@ -38,6 +38,14 @@
 | 9 | **STOP** confirm before enforcing: RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1 | flips real gates | ⏸️ | high | [ ] | — |
 | 10 | RBAC-M7 schema / RBAC-M8 assignment API / RBAC-M9 frontend nav | schema + UI | ❌ separate PR | high | [ ] | — |
 
+## Final review — APPROVED (3 non-blocking suggestions, deferred)
+
+Independent reviewer verdict: **APPROVE** — 58/58 tests, typecheck/lint clean, no security/logic issues. Three non-blocking suggestions; all three are deferred to the relevant follow-up jobs (not this foundation PR) to avoid scope creep / regression risk on an already-approved additive PR:
+
+- **#1 `gradingQueue.ts` direct `createAuditLogRepo().create()` bypasses `recordAudit`** → real consistency gap (bypasses `ipAddress`/`userAgent` enrichment). **Deferred to GRADING-M1.** Note: these call sites intentionally `await` the audit (deterministic test contract); the correct fix is an awaitable `recordAudit` variant, not a swap — that's design work belonging to the grading enforcement job, not this foundation. (The bypassed `isTestLike` gate is a non-issue here: `grading.score_entered` / `grading.finalized` are in the catalog, so they pass even in prod.)
+- **#2 `legacyMap` undefined guards** → defense-in-depth nit; TS already enforces completeness. Deferred.
+- **#3 `KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[]` → `readonly AuditActionKey[]`** → reasonable drift-detection tightening; deferred (low value — the test already asserts every entry ∈ `AuditAction`).
+
 ## Acceptance per job (filled in as each lands)
 
 ### Commit 0 — Tracking doc
