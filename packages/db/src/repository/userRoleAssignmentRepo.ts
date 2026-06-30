@@ -4,6 +4,7 @@ import { userRoleAssignments, type AssignableRole } from "../schema/pg.js";
 import {
   resolveOrganizationId,
   createAsyncTenantCrudRepo,
+  now,
 } from "./baseRepo.js";
 import { and, eq } from "drizzle-orm";
 import { executeInTransaction } from "../types.js";
@@ -108,7 +109,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
         // Demote any existing primary active assignment(s) for this user.
         await tx
           .update(userRoleAssignments)
-          .set({ isPrimary: false, updatedAt: new Date() })
+          .set({ isPrimary: false, updatedAt: now() })
           .where(
             and(
               eq(userRoleAssignments.organizationId, orgId),
@@ -126,8 +127,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
           role: params.role,
           isPrimary,
           isActive,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: now(),
+          updatedAt: now(),
         })
         .returning();
       return row(inserted[0]!);
@@ -157,7 +158,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
       // Demote other primaries for the same user.
       await tx
         .update(userRoleAssignments)
-        .set({ isPrimary: false, updatedAt: new Date() })
+        .set({ isPrimary: false, updatedAt: now() })
         .where(
           and(
             eq(userRoleAssignments.organizationId, orgId),
@@ -168,7 +169,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
       // Promote + activate the target.
       const updated = await tx
         .update(userRoleAssignments)
-        .set({ isPrimary: true, isActive: true, updatedAt: new Date() })
+        .set({ isPrimary: true, isActive: true, updatedAt: now() })
         .where(eq(userRoleAssignments.id, assignmentId))
         .returning();
       return updated[0] ? row(updated[0]) : null;
@@ -183,7 +184,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
     const orgId = resolveOrganizationId(ctx);
     const updated = await db
       .update(userRoleAssignments)
-      .set({ isActive: false, updatedAt: new Date() })
+      .set({ isActive: false, updatedAt: now() })
       .where(
         and(
           eq(userRoleAssignments.organizationId, orgId),

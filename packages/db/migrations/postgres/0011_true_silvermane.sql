@@ -10,8 +10,8 @@ CREATE TABLE "user_role_assignments" (
 	CONSTRAINT "user_role_assignments_role_check" CHECK ("user_role_assignments"."role" IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate'))
 );
 --> statement-breakpoint
-ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_role_assignments" ADD CONSTRAINT "user_role_assignments_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "user_role_assignments_org_user_role_unique" ON "user_role_assignments" USING btree ("organization_id","user_id","role");--> statement-breakpoint
 -- RBAC-M7 backfill: mirror every existing user into a primary active
 -- assignment so users.role and the new table agree after migration. Runs once

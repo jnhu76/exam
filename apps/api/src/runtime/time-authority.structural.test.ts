@@ -116,6 +116,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
     reason:
       "The single state.now ?? new Date() fallback; the API layer always supplies state.now so production never reaches the fallback.",
   },
+  {
+    path: "packages/db/src/repository/userRoleAssignmentRepo.ts",
+    reason:
+      "Uses baseRepo now() for role-assignment createdAt/updatedAt storage stamps only (non-business — role assignment is not an exam-lifecycle time authority decision). Mirrors organizationRepo/settingsRepo convention.",
+  },
 ];
 
 /** Directories scanned for raw-time regressions in business paths. */
