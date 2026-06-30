@@ -16,5 +16,6 @@ export * from "./repository/organizationRepo.js";
 export * from "./repository/questionRepo.js";
 export * from "./repository/settingsRepo.js";
 export * from "./repository/userRepo.js";
+export * from "./repository/userRoleAssignmentRepo.js";
 export * from "./repository/gradingQueueRepo.js";
 export * from "./repository/emailOutboxRepo.js";

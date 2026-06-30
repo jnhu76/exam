@@ -232,6 +232,34 @@ export async function seedDemo(
     }
   }
 
+  // RBAC-M7: mirror each seeded user into a primary active role assignment so
+  // users.role and user_role_assignments agree after demo seed. Idempotent
+  // upsert on the (org, user, role) unique index — safe on re-seed.
+  for (const ud of userDefs) {
+    const userId = ids.users[ud.username];
+    if (!userId) continue;
+    await db
+      .insert(schema.userRoleAssignments)
+      .values({
+        id: uuid("roleassign"),
+        organizationId: ids.orgId,
+        userId,
+        role: ud.role as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: ts(),
+        updatedAt: ts(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.userRoleAssignments.organizationId,
+          schema.userRoleAssignments.userId,
+          schema.userRoleAssignments.role,
+        ],
+        set: { isPrimary: true, isActive: true, updatedAt: ts() },
+      });
+  }
+
   // ── CandidateProfiles ─────────────────────────────────────────
   const candidateFieldValues: Record<string, Record<string, unknown>> = {
     candidate1: {

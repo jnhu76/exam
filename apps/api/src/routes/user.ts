@@ -5,13 +5,16 @@ import {
   UpdateUserRequestSchema,
   ResetPasswordRequestSchema,
   ErrorResponseSchema,
+  AssignableRoleSchema,
 } from "@exam/contracts";
 import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { ValidationError } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
+import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** Zod schema for route params containing a UUID `id`. */
@@ -26,7 +29,7 @@ const userItemSchema = z.object({
   organizationId: z.string().uuid(),
   username: z.string(),
   name: z.string(),
-  role: z.enum(["Admin", "Candidate"]),
+  role: AssignableRoleSchema,
   isActive: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -130,6 +133,15 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         role: data.role,
         isActive: true,
       });
+      // RBAC-M8 sync: seed a primary active assignment mirroring the created
+      // role so both stores agree (users.role cache + assignment source).
+      const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
+      await assignmentRepo.assign(ctx, {
+        userId: user.id,
+        role: data.role,
+        isPrimary: true,
+        isActive: true,
+      });
       recordAudit(fastify, request, ctx, "user.create", "user", user.id);
       return reply.code(201).send({
         id: user.id,
@@ -202,7 +214,6 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
 
       const updated = await repo.update(ctx, id, {
         ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.role !== undefined ? { role: data.role } : {}),
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
       });
       if (!updated) {
@@ -210,6 +221,24 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+      // RBAC-M8 sync: when the role changes, mutate the primary active
+      // assignment (the source of truth) and re-sync users.role from it so
+      // both stores agree. isActive=false deactivates the assignment too.
+      if (data.role !== undefined && data.role !== target.role) {
+        const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
+        await assignmentRepo.assign(ctx, {
+          userId: id,
+          role: data.role,
+          isPrimary: true,
+          // Preserve the user's existing active status when only the role
+          // changes; only an explicit isActive=false deactivates. (Review #1:
+          // the prior `data.isActive !== false` wrongly re-activated.)
+          isActive:
+            data.isActive !== undefined ? data.isActive : target.isActive,
+        });
+        await syncUsersRoleFromPrimary(fastify.db, ctx, id);
+      }
+      const refreshed = await repo.findByOrganizationAndId(ctx, id);
       recordAudit(fastify, request, ctx, "user.update", "user", id);
       // AUDIT-M2: privilege change gets its own sensitive audit (ADR sec.11.5).
       // Metadata is opaque scalar state only (old/new role) — no PII.
@@ -219,15 +248,16 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           newRole: data.role,
         });
       }
+      const finalUser = refreshed ?? updated;
       return {
-        id: updated.id,
-        organizationId: updated.organizationId,
-        username: updated.username,
-        name: updated.name,
-        role: updated.role,
-        isActive: updated.isActive,
-        createdAt: updated.createdAt.toISOString(),
-        updatedAt: updated.updatedAt.toISOString(),
+        id: finalUser.id,
+        organizationId: finalUser.organizationId,
+        username: finalUser.username,
+        name: finalUser.name,
+        role: finalUser.role,
+        isActive: finalUser.isActive,
+        createdAt: finalUser.createdAt.toISOString(),
+        updatedAt: finalUser.updatedAt.toISOString(),
       };
     },
   );

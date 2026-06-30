@@ -104,6 +104,7 @@ export async function seed(
   const orgId = orgRows[0]!.id;
 
   const userIds: string[] = [];
+  const seededUsers: { id: string; role: string }[] = [];
 
   for (const def of USER_DEFS) {
     const username = process.env[def.envUsername] || def.defaults.username;
@@ -131,6 +132,33 @@ export async function seed(
       .returning({ id: schema.users.id });
 
     userIds.push(userRows[0]!.id);
+    seededUsers.push({ id: userRows[0]!.id, role: def.defaults.role });
+  }
+
+  // RBAC-M7: mirror each seeded user into a primary active role assignment so
+  // users.role and user_role_assignments agree after seed. Idempotent upsert
+  // (re-seed safe) on the (org, user, role) unique index.
+  for (const u of seededUsers) {
+    await db
+      .insert(schema.userRoleAssignments)
+      .values({
+        id: randomUUID(),
+        organizationId: orgId,
+        userId: u.id,
+        role: u.role as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      .onConflictDoUpdate({
+        target: [
+          schema.userRoleAssignments.organizationId,
+          schema.userRoleAssignments.userId,
+          schema.userRoleAssignments.role,
+        ],
+        set: { isPrimary: true, isActive: true, updatedAt: timestamp },
+      });
   }
 
   return {

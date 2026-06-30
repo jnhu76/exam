@@ -38,14 +38,15 @@ import {
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
-import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
+import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
 
 /** User row shape as returned by the users list API. */
 interface UserRow {
   id: string;
   username: string;
   name: string;
-  role: "Admin" | "Candidate";
+  /** Primary role; the API returns the full assignable set (RBAC-M8). */
+  role: AssignableRole;
   isActive: boolean;
 }
 
@@ -54,11 +55,22 @@ interface Page<T> {
   items: T[];
 }
 
-/** The subset of roles that admins can create or edit via the dialog. */
-type EditableRole = "Admin";
+/**
+ * Staff roles an admin can create/assign via this dialog (RBAC-M8/M9).
+ * Candidate is excluded here — candidates are managed via the candidate
+ * routes (the user list also filters them out). The backend still gates
+ * creation on requireRole(["Admin"]) until enforcement (PR #3); the role
+ * chosen here is the primary assignment, which syncs users.role.
+ */
+type EditableRole = "Admin" | "Teacher" | "Proctor" | "Grader";
 
 /** Roles available for selection in the user create/edit form. */
-const EDITABLE_ROLES: EditableRole[] = ["Admin"];
+const EDITABLE_ROLES: EditableRole[] = [
+  "Admin",
+  "Teacher",
+  "Proctor",
+  "Grader",
+];
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
@@ -312,9 +324,11 @@ export function UsersPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Admin">
-                    {t("admin.users.dialog.admin")}
-                  </SelectItem>
+                  {EDITABLE_ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {t(`admin.users.roleLabels.${r}` as never) ?? r}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>

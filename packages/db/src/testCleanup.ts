@@ -42,6 +42,11 @@ async function deleteOrganizationTreeOnce(
     await tx
       .delete(schema.organizationSettings)
       .where(eq(schema.organizationSettings.organizationId, organizationId));
+    // RBAC-M7: assignments deleted before users (no FK reliance on CASCADE
+    // for explicit org-tree cleanup; users CASCADE would also catch this).
+    await tx
+      .delete(schema.userRoleAssignments)
+      .where(eq(schema.userRoleAssignments.organizationId, organizationId));
     await tx
       .delete(schema.users)
       .where(eq(schema.users.organizationId, organizationId));

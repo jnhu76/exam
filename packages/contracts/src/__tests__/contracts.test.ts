@@ -4,7 +4,11 @@ import {
   RegisterRequestSchema,
   ChangePasswordRequestSchema,
 } from "../auth.js";
-import { CreateUserRequestSchema, RoleSchema } from "../user.js";
+import {
+  CreateUserRequestSchema,
+  RoleSchema,
+  AssignableRoleSchema,
+} from "../user.js";
 import { CreateCandidateRequestSchema } from "../candidate.js";
 import {
   CreateCourseRequestSchema,
@@ -724,7 +728,7 @@ describe("password policy enforcement at boundary", () => {
   });
 });
 
-describe("Phase 1 role model (Admin + Candidate only)", () => {
+describe("Phase 3 assignable role model (RBAC-M8)", () => {
   it("RoleSchema accepts Admin", () => {
     expect(RoleSchema.safeParse("Admin").success).toBe(true);
   });
@@ -733,16 +737,18 @@ describe("Phase 1 role model (Admin + Candidate only)", () => {
     expect(RoleSchema.safeParse("Candidate").success).toBe(true);
   });
 
-  it("RoleSchema rejects Teacher", () => {
-    expect(RoleSchema.safeParse("Teacher").success).toBe(false);
+  it("RoleSchema accepts Teacher/Proctor/Grader (widened in RBAC-M8)", () => {
+    expect(RoleSchema.safeParse("Teacher").success).toBe(true);
+    expect(RoleSchema.safeParse("Proctor").success).toBe(true);
+    expect(RoleSchema.safeParse("Grader").success).toBe(true);
   });
 
-  it("RoleSchema rejects SuperAdmin", () => {
+  it("RoleSchema rejects SuperAdmin (no ADR; not assignable)", () => {
     expect(RoleSchema.safeParse("SuperAdmin").success).toBe(false);
   });
 
-  it("RoleSchema rejects Proctor", () => {
-    expect(RoleSchema.safeParse("Proctor").success).toBe(false);
+  it("AssignableRoleSchema rejects System (synthetic, non-assignable)", () => {
+    expect(AssignableRoleSchema.safeParse("System").success).toBe(false);
   });
 
   it("CreateUserRequestSchema accepts Admin", () => {
@@ -755,14 +761,14 @@ describe("Phase 1 role model (Admin + Candidate only)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("CreateUserRequestSchema rejects Teacher", () => {
+  it("CreateUserRequestSchema accepts Teacher (widened in RBAC-M8)", () => {
     const result = CreateUserRequestSchema.safeParse({
       username: "newuser",
       password: "password123",
       name: "New User",
       role: "Teacher",
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("CreateUserRequestSchema rejects SuperAdmin", () => {
@@ -775,14 +781,14 @@ describe("Phase 1 role model (Admin + Candidate only)", () => {
     expect(result.success).toBe(false);
   });
 
-  it("CreateUserRequestSchema rejects Candidate (candidates are managed via candidate routes)", () => {
+  it("CreateUserRequestSchema accepts Candidate (role is assignable; candidate-detail is managed via candidate routes)", () => {
     const result = CreateUserRequestSchema.safeParse({
       username: "newuser",
       password: "password123",
       name: "New User",
       role: "Candidate",
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });
 
