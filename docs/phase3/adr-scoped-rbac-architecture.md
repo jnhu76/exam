@@ -51,7 +51,7 @@ All load-bearing claims in this ADR cite a file path + line number, an audit sec
 
 8. **System work masquerades as Admin.** Background scanners synthesize a `RequestContext` with hardcoded `role: "Admin"` (`apps/api/src/plugins/deadlineScanner.ts:97`, `apps/api/src/plugins/heartbeat.ts:103`). This conflates a non-human actor with the human-admin role.
 
-9. **Sensitive reads with no audit.** `GET /admin/attempts/:id/grading-details` returns the candidate's answer payload (`candidateAnswer`) but writes no audit event (`audit-authz-framework-readiness.md` §7.2).
+9. **Sensitive reads with no audit.** `GET /admin/attempts/:attemptId/grading-details` returns the candidate's answer payload (`candidateAnswer`) but writes no audit event (`audit-authz-framework-readiness.md` §7.2).
 
 ---
 
@@ -430,7 +430,7 @@ Audit Action (constant)
 | `question` | a single question | (future) question-level edit lock | yes (question→course) | **resource only** | treated as a resource, not an enforced scope, in Phase 3 |
 | `candidate` | a candidate's data | candidate profile | yes (candidate→org) | yes | |
 | `own_attempt` | the actor's own attempt | start/save/submit/heartbeat | yes (attempt.candidateId === actor.candidateProfile.id) | yes | today enforced ad-hoc in handler (`scores.ts:80`) |
-| `own_score` | the actor's own result | `GET /scores/attempts/:id` (candidate branch) | yes (same as own_attempt) | yes | today `ctx.role !== "Candidate"` + ownership |
+| `own_score` | the actor's own result | `GET /scores/attempts/:attemptId` (candidate branch) | yes (same as own_attempt) | yes | today `ctx.role !== "Candidate"` + ownership |
 | `grading_task` | a grading assignment unit | (future) per-grader task | yes | **no (deferred)** | not needed until double-blind / per-task assignment |
 
 **Required decisions (job §5.1–5.10):**
@@ -593,20 +593,20 @@ type RoutePermissionRegistryEntry = {
 | exams | `POST /admin/exams/:id/publish` `requireRole(["Admin"])` | `exam.publish` | exam(params.id) | exam | `exam.publish` | no |
 | exams | `POST /admin/exams/:id/publish-results` `requireRole(["Admin"])` | `exam.result.publish` | exam(params.id) | exam | `exam.publish_results` | **yes** |
 | exams | enrollments `requireRole(["Admin"])` | `exam.enrollment.manage` | exam(params.id) | exam | `enrollment.add/remove` | no |
-| attempt (candidate) | `POST /attempts/:id/start` `requireRole(["Candidate"])` | `attempt.start` | attempt(params.id) | own_attempt | `attempt.start` | no |
-| attempt (candidate) | `POST /attempts/:id/answers/:qid` `requireRole(["Candidate"])` | `attempt.answer.save` | attempt(params.id) | own_attempt | `attempt.saveAnswer` | no |
-| attempt (candidate) | `POST /attempts/:id/submit` `requireRole(["Candidate"])` | `attempt.submit` | attempt(params.id) | own_attempt | `attempt.submit` | no |
+| attempt (candidate) | `POST /attempts/:attemptId/start` `requireRole(["Candidate"])` | `attempt.start` | attempt(params.id) | own_attempt | `attempt.start` | no |
+| attempt (candidate) | `POST /attempts/:attemptId/answers/:qid` `requireRole(["Candidate"])` | `attempt.answer.save` | attempt(params.id) | own_attempt | `attempt.saveAnswer` | no |
+| attempt (candidate) | `POST /attempts/:attemptId/submit` `requireRole(["Candidate"])` | `attempt.submit` | attempt(params.id) | own_attempt | `attempt.submit` | no |
 | attempt (candidate) | heartbeat `requireRole(["Candidate"])` | `attempt.heartbeat.send` | attempt(params.id) | own_attempt | *(none)* | no |
-| attempt (admin/proctor) | `POST /admin/attempts/:id/misconduct` `requireRole(["Admin"])` | `attempt.misconduct.mark` ⚠️ | attempt(params.id) | attempt | `attempt.misconductFlagged` | **yes** |
-| attempt (admin/proctor) | `POST /admin/attempts/:id/force-submit` `requireRole(["Admin"])` | `attempt.force_submit` ⚠️ | attempt(params.id) | attempt | `attempt.forceSubmit` | **yes** |
-| attempt (admin/proctor) | `POST /admin/attempts/:id/extend-time` `requireRole(["Admin"])` | `attempt.time.extend` ⚠️ | attempt(params.id) | attempt | `attempt.extendTime` | **yes** |
+| attempt (admin/proctor) | `POST /admin/attempts/:attemptId/misconduct` `requireRole(["Admin"])` | `attempt.misconduct.mark` ⚠️ | attempt(params.id) | attempt | `attempt.misconductFlagged` | **yes** |
+| attempt (admin/proctor) | `POST /admin/attempts/:attemptId/force-submit` `requireRole(["Admin"])` | `attempt.force_submit` ⚠️ | attempt(params.id) | attempt | `attempt.forceSubmit` | **yes** |
+| attempt (admin/proctor) | `POST /admin/attempts/:attemptId/extend-time` `requireRole(["Admin"])` | `attempt.time.extend` ⚠️ | attempt(params.id) | attempt | `attempt.extendTime` | **yes** |
 | attempt (admin/proctor) | timeline `requireRole(["Admin"])` | `attempt.timeline.view` ⚠️ | attempt(params.id) | attempt | read-opt | yes |
 | attempt (admin/proctor) | single-attempt export `requireRole(["Admin"])` | `attempt.export` | attempt(params.id) | attempt | `attempt.exported` | yes |
 | grading | `GET /admin/grading-queue` `requireRole(["Admin"])` | `grading.queue.view` | exam(query) | exam | read-opt | yes |
-| grading | `GET /admin/attempts/:id/grading-details` `requireRole(["Admin"])` | `grading.detail.view` **+** `grading.answer.view` | attempt(params.id) | attempt | **`grading.detail_viewed` (missing)** | **yes** |
-| grading | `POST /admin/attempts/:id/grade-question` `requireRole(["Admin"])` | `grading.score.write` | attempt(params.id) | attempt | `grading.score_entered` | yes |
+| grading | `GET /admin/attempts/:attemptId/grading-details` `requireRole(["Admin"])` | `grading.detail.view` **+** `grading.answer.view` | attempt(params.id) | attempt | **`grading.detail_viewed` (missing)** | **yes** |
+| grading | `POST /admin/attempts/:attemptId/grade-question` `requireRole(["Admin"])` | `grading.score.write` | attempt(params.id) | attempt | `grading.score_entered` | yes |
 | scores | `GET /admin/exams/:examId/scores` `requireRole(["Admin"])` | `score.all.view` | exam(params.examId) | exam | read-opt | yes |
-| scores | `GET /scores/attempts/:id` `requireRole(["Candidate","Admin"])` | `score.own.view` **OR** `score.all.view` | attempt(params.id) | own_score/attempt | *(none today)* | no |
+| scores | `GET /scores/attempts/:attemptId` `requireRole(["Candidate","Admin"])` | `score.own.view` **OR** `score.all.view` | attempt(params.id) | own_score/attempt | *(none today)* | no |
 | exports | `GET /admin/exports/scores` `requireRole(["Admin"])` | `score.export` | exam(query) | organization/exam | `export_scores` | yes |
 | audit logs | `GET /admin/audit-logs` `requireRole(["Admin"])` | `audit_log.view` | none | organization | read-opt (`audit_log.viewed` opt) | yes |
 | settings | `PATCH /admin/settings/branding` `requireRole(["Admin"])` | `settings.update`/`organization.update` | none | organization | `branding.update` | yes |
@@ -614,37 +614,37 @@ type RoutePermissionRegistryEntry = {
 | import logs | `GET /admin/import-logs` `requireRole(["Admin"])` | `audit_log.view`*(extend)* | none | organization | read-opt | no |
 | client events | `POST /client-events` *(auth)* | *(authenticated)* | none | candidate | n/a (telemetry) | no |
 | proctor monitoring | `GET /admin/exams/:id/proctor/attempts` `requireRole(["Admin"])` | `exam_room.view` ⚠️ | exam(params.id) | exam | read-opt | yes |
-| proctor monitoring | `GET /admin/attempts/:id/proctor-events` `requireRole(["Admin"])` | `attempt.timeline.view` ⚠️ | attempt(params.id) | attempt | read-opt | yes |
+| proctor monitoring | `GET /admin/attempts/:attemptId/proctor-events` `requireRole(["Admin"])` | `attempt.timeline.view` ⚠️ | attempt(params.id) | attempt | read-opt | yes |
 
 ### Special required mappings (job §8)
 
 ```
-POST /admin/attempts/:id/force-submit
+POST /admin/attempts/:attemptId/force-submit
   -> attempt.force_submit
   -> attempt scope (resolveAttemptScope)
   -> attempt.forceSubmit   [state guard: attempt not terminal]
 
-POST /admin/attempts/:id/extend-time
+POST /admin/attempts/:attemptId/extend-time
   -> attempt.time.extend
   -> attempt scope (resolveAttemptScope)
   -> attempt.extendTime    [state guard: exam/attempt still open]
 
-POST /admin/attempts/:id/misconduct
+POST /admin/attempts/:attemptId/misconduct
   -> attempt.misconduct.mark
   -> attempt scope (resolveAttemptScope)
   -> attempt.misconductFlagged
 
-GET /admin/attempts/:id/grading-details
+GET /admin/attempts/:attemptId/grading-details
   -> grading.detail.view + grading.answer.view
   -> attempt scope (resolveAttemptScope)
   -> grading.detail_viewed   [currently MISSING — §7.2]
 
-POST /admin/attempts/:id/grade-question
+POST /admin/attempts/:attemptId/grade-question
   -> grading.score.write
   -> attempt/question scope (resolveAttemptScope)
   -> grading.score_entered   [state guard: pending_manual]
 
-GET /scores/attempts/:id
+GET /scores/attempts/:attemptId
   -> score.own.view OR score.all.view
   -> own_score / attempt scope
 ```
