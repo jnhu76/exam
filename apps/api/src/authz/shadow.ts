@@ -16,7 +16,7 @@
  * of the id, never the candidate-answer payload or PII.
  */
 import { createHash } from "node:crypto";
-import { Permission, type PermissionKey, type RoleKey } from "@exam/authz";
+import { type PermissionKey, type RoleKey } from "@exam/authz";
 import { permissionsForRole } from "@exam/authz";
 
 /** Minimal actor context shadow needs. */
@@ -57,7 +57,7 @@ export interface ShadowResult {
   route: string;
   /** Opaque hash of the actor id (ADR sec.10.6 - never log raw PII). */
   actorIdHash: string;
-  role: string;
+  role: RoleKey;
   permission: PermissionKey;
   resourceType: string;
   resourceIdHash: string;
@@ -73,7 +73,19 @@ function hashResourceId(id: string): string {
 }
 
 function legacyAllows(ctx: ShadowContext, gate: RoleKey[]): boolean {
-  return gate.includes(ctx.role as RoleKey);
+  return gate.includes(ctx.role);
+}
+
+// Memoized role-preset sets (presets are static; avoid per-call allocation on
+// the shadow hot path).
+const ROLE_PERMISSION_SETS = new Map<RoleKey, ReadonlySet<PermissionKey>>();
+function rolePresetSet(role: RoleKey): ReadonlySet<PermissionKey> {
+  let set = ROLE_PERMISSION_SETS.get(role);
+  if (!set) {
+    set = new Set<PermissionKey>(permissionsForRole(role));
+    ROLE_PERMISSION_SETS.set(role, set);
+  }
+  return set;
 }
 
 function capabilityAllows(
@@ -82,10 +94,7 @@ function capabilityAllows(
 ): boolean {
   // Phase 1 flat source: the actor's role preset. (RBAC-M10 will swap in the
   // resolver-backed capability check; shadow's contract is unchanged.)
-  const preset = new Set<PermissionKey>(
-    permissionsForRole(ctx.role as RoleKey),
-  );
-  if (preset.has(permission)) return true;
+  if (rolePresetSet(ctx.role).has(permission)) return true;
   // Fall back to the request's flat permission cache (compat with ctx.permissions).
   return ctx.permissions.includes(permission);
 }
@@ -130,6 +139,3 @@ export function shadowRequireCapability(
 
   return result;
 }
-
-// Re-export for callers that construct inputs from the catalog.
-export { Permission };
