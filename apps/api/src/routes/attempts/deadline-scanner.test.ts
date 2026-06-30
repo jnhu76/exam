@@ -351,7 +351,7 @@ describe("attempt routes", () => {
       const scannerCtx = {
         actorId: "system:deadline-scanner",
         organizationId: t.orgId,
-        role: "Admin" as const,
+        role: "System" as const,
         permissions: [] as import("@exam/domain").Permission[],
         sessionId: "system:deadline-scanner",
         targetOrganizationId: t.orgId,

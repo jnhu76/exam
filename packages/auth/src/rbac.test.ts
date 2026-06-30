@@ -3,8 +3,21 @@ import { getPermissionsForRole } from "./rbac.js";
 import { Permission, Role } from "@exam/domain";
 
 describe("RBAC Phase 1 role model", () => {
-  it("exports only Admin and Candidate as Role values", () => {
-    expect(Object.values(Role).sort()).toEqual(["Admin", "Candidate"]);
+  it("exports Admin and Candidate as the human roles, plus System (synthetic)", () => {
+    // System is a non-login, non-assignable synthetic actor (ADR §System Actor
+    // Policy); it is never a `users.role` value. Admin/Candidate remain the
+    // only human, login-capable roles.
+    expect(Object.values(Role).sort()).toEqual([
+      "Admin",
+      "Candidate",
+      "System",
+    ]);
+  });
+
+  it("does not grant System any legacy flat permissions (system perms live in @exam/authz)", () => {
+    // The legacy Phase-1 flat map intentionally knows nothing about System;
+    // system-only perms (system.auto_submit etc.) are owned by @exam/authz.
+    expect(getPermissionsForRole("System" as never)).toEqual([]);
   });
 
   it("Admin has admin management permissions", () => {

@@ -1,7 +1,17 @@
-/** Product roles within the platform. */
+/**
+ * Product roles within the platform.
+ *
+ * `Admin` and `Candidate` are the only human, login-capable, assignable roles
+ * (so the login path and `@exam/contracts` `RoleSchema` intentionally stay
+ * `Admin | Candidate`). `System` is a **synthetic, non-login, non-assignable**
+ * actor identity used only by background scanners (deadline auto-submit,
+ * heartbeat disrupted-scan) — it never originates from a `users.role` row and
+ * never appears in user-management UI. See ADR §System Actor Policy.
+ */
 export const Role = {
   Admin: "Admin",
   Candidate: "Candidate",
+  System: "System",
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
