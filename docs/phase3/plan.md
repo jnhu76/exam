@@ -1,354 +1,379 @@
-# Exam Phase 3 Plan — S / M / L Job Queue
+# Exam Phase 3 Plan
 
-> Phase 3 目标：从 Phase 2 的“功能闭环”推进到“可授权、可审计、可监考、可评分、可证明提交”的真实考试运行时。
-
-Phase 3 不按模块一次性大改，而按 Job 大小拆分：
-
-* **Small Job**：低风险、文档/审计/清单/窄修，可随时做。
-* **Middle Job**：边界清楚、可独立施工、可测试，可合入 master。
-* **Large Job**：涉及角色、权限、协议、状态机、UI 体系等核心设计，必须先 grillme 拷问，再拆成 Middle Job 落地。
+> Phase 3 目标：从 Phase 2 的"功能闭环"推进到真实考试运行时：
+> 可授权、可审计、可监考、可评分、可证明提交、可运维诊断。
 
 ---
 
-# 1. Phase 3 总任务池
-
-## Small Jobs
-
-Small Job 主要用于铺地基、做审计、写清单、准备后续施工。
-
-| ID  | Job                                   | 目标                                  | 产物                                               |
-| --- | ------------------------------------- | ----------------------------------- | ------------------------------------------------ |
-| S1  | Phase 3 README scaffold               | 建立 Phase 3 入口                       | `docs/phase3/README.md`                          |
-| S2  | Phase 3 plan                          | 建立 S/M/L 计划表                        | `docs/phase3/plan.md`                            |
-| S3  | Current role check audit              | 梳理当前后端角色/权限检查位置                     | `docs/phase3/audit/audit-current-role-checks.md`       |
-| S4  | Current grading API audit             | 梳理评分详情 API 当前返回内容                   | `docs/phase3/audit/audit-current-grading-api.md`       |
-| S5  | Current Redis usage audit             | 梳理 Redis 当前接入点和 fallback 行为         | `docs/phase3/audit/audit-current-redis.md`             |
-| S6  | Current audit event map               | 梳理现有 audit event / monitoring event | `docs/phase3/audit/audit-current-events.md`            |
-| S7  | Current candidate runtime audit       | 梳理前端考试页面散状态                         | `docs/phase3/audit/audit-current-candidate-runtime.md` |
-| S8  | Current answer payload audit          | 梳理当前 answer save / submit payload   | `docs/phase3/audit/audit-current-answer-payload.md`    |
-| S9  | E2E parallelization constraints audit | 梳理当前 E2E 不能并行的原因                    | `docs/phase3/audit/audit-e2e-parallelization.md`       |
-| S10 | Grillme question list                 | 为 Large Job 准备问题清单                  | `docs/phase3/grillme-question-list.md`           |
-
----
-
-## Middle Jobs
-
-Middle Job 是 Phase 3 的主要施工单位。它们边界清楚，可以独立分支施工，做完测试后合入 master。
-
-| ID  | Job                                        | 目标                              | 注意                 |
-| --- | ------------------------------------------ | ------------------------------- | ------------------ |
-| M1  | Manual grading candidate-answer visibility | 评分详情页展示考生答案                     | 不扩大到完整权限模型         |
-| M2  | Redis health / fallback / diagnostics      | Redis 联通、健康检查、不可达 fallback      | Redis 不作为权威状态源     |
-| M3  | Email outbox skeleton                      | 邮箱 outbox 基础设施                  | migration 单独合      |
-| M4  | Audit / monitoring event expansion v0      | 补 Phase 3 第一批事件                 | 不做完整事件治理体系         |
-| M5  | Diagnostics infra status                   | 诊断页展示 Redis / worker / email 状态 | 不做复杂监控平台           |
-| M6  | Grading answer rendering tests             | 补评分页答案展示测试                      | 不改 answer protocol |
-| M7  | Redis unavailable fallback tests           | Redis 不可用时不破坏考试状态               | 以 PG 为权威           |
-| M8  | Email send failure retry tests             | 邮件失败可重试，不 rollback 主业务          | outbox 模式          |
-| M9  | Proctor incident event logging v0          | 监考异常事件记录第一版                     | 不定义完整 proctor 权限边界 |
-| M10 | CI / E2E parallelization readiness report  | 给 E2E 并行化做准备                    | 先报告，后施工            |
-| M11 | Phase 3 readiness closeout report          | 汇总已完成的 S/M 任务                   | 进入 Large 前的基线      |
-
----
-
-## Large Jobs
-
-Large Job 不能直接开写。需要先 grillme 拷问清楚边界，再形成 ADR / matrix / spec / state diagram，最后拆成 Middle Job。
-
-| ID  | Job                                                  | 为什么是 Large                                          | 预期前置产物                    |
-| --- | ---------------------------------------------------- | --------------------------------------------------- | ------------------------- |
-| L1  | Teacher / Proctor / Grader Account Model             | 需要决定账号、身份、角色、scope 的关系                              | account model ADR         |
-| L2  | Backend Permission Model                             | 影响所有敏感 API，不能用简单 role string 糊过去                    | permission matrix         |
-| L3  | Custom Role / Custom RBAC                            | 极容易过度设计，需要决定 Phase 3 是否只预留                          | custom role ADR           |
-| L4  | Answer Protocol v2                                   | 影响保存、提交、评分、审计、前端状态                                  | answer protocol spec      |
-| L5  | WYSIWYG Submit / Final Answer Barrier                | 需要证明学生看到的最终答案等于后端冻结答案                               | final submit barrier ADR  |
-| L6  | Frontend Exam State Machine                          | 涉及保存、提交、断线、恢复、deadline、force submit                 | state diagram             |
-| L7  | Proctor Runtime Authority Boundary                   | 需要决定监考员能看什么、能操作什么、不能做什么                             | proctor permission matrix |
-| L8  | UI Design / Workbench UI Contract                    | 影响整站视觉、组件语义、表格/表单/状态表达                              | UI contract               |
-| L9  | Audit / Monitoring Full Event Taxonomy               | 涉及追责、观测、隐私、事件分层                                     | event taxonomy ADR        |
-| L10 | E2E Full Parallelization Implementation              | 涉及 DB 隔离、seed 隔离、worker 隔离                          | E2E isolation ADR         |
-| L11 | Subjective / Rich Text / Drawing Answer Architecture | 涉及主观题、富文本、画图、附件答案结构                                 | subjective answer ADR     |
-| L12 | Tenant / Organization / School Scope Model           | 影响账号、权限、考试归属、数据隔离                                   | tenant scope ADR          |
-| L13 | Exam Lifecycle State Model                           | 影响 draft / published / open / closed / archived 等状态 | lifecycle state diagram   |
-| L14 | Result Visibility / Release Policy                   | 影响学生何时看成绩、老师何时发布结果、复核流程                             | result release policy ADR |
-
----
-
-# 2. 推荐执行顺序
-
-## Batch 0 — Phase 3 Ground Setup
-
-目标：先建立 Phase 3 工作台，不改核心代码。
-
-| 顺序 | Job                          | 类型    |
-| -- | ---------------------------- | ----- |
-| 1  | S1 Phase 3 README scaffold   | Small |
-| 2  | S2 Phase 3 plan              | Small |
-| 3  | S3 Current role check audit  | Small |
-| 4  | S4 Current grading API audit | Small |
-| 5  | S5 Current Redis usage audit | Small |
-| 6  | S6 Current audit event map   | Small |
-
-完成后，Phase 3 有清楚入口和当前代码基线。
-
----
-
-## Batch 1 — First Mergeable Middle Jobs
-
-目标：先做确定性高、不会牵扯 Large 设计的功能。
-
-| 顺序 | Job                                           | 类型     | 说明             |
-| -- | --------------------------------------------- | ------ | -------------- |
-| 1  | M1 Manual grading candidate-answer visibility | Middle | 真实评分缺口，优先修     |
-| 2  | M2 Redis health / fallback / diagnostics      | Middle | 打通 Redis 运行态基础 |
-| 3  | M4 Audit / monitoring event expansion v0      | Middle | 补第一批事件         |
-| 4  | M5 Diagnostics infra status                   | Middle | 诊断页展示基础设施状态    |
-
----
-
-## Batch 2 — Email / Worker / Outbox
-
-目标：接入邮箱基础设施，但不做复杂模板系统。
-
-| 顺序 | Job                               | 类型     | 说明                 |
-| -- | --------------------------------- | ------ | ------------------ |
-| 1  | S5 Current Redis usage audit      | Small  | 如已完成可跳过            |
-| 2  | M3 Email outbox skeleton          | Middle | migration 单独合      |
-| 3  | M8 Email send failure retry tests | Middle | 确认失败不影响主业务         |
-| 4  | M5 Diagnostics infra status       | Middle | 展示 email worker 状态 |
-
----
-
-## Batch 3 — Large Grillme Round 1
-
-目标：先拷问角色和权限，不直接施工。
-
-| 顺序 | Job                                            | 类型    | 输出                       |
-| -- | ---------------------------------------------- | ----- | ------------------------ |
-| 1  | L1 Teacher / Proctor / Grader Account Model    | Large | account model ADR        |
-| 2  | L2 Backend Permission Model                    | Large | permission matrix        |
-| 3  | L7 Proctor Runtime Authority Boundary          | Large | proctor authority matrix |
-| 4  | L12 Tenant / Organization / School Scope Model | Large | tenant scope ADR         |
-
-完成后，再拆出 Middle Job，例如：
-
-| Derived Middle Job                        | 来源  |
-| ----------------------------------------- | --- |
-| account table / role assignment migration | L1  |
-| permission helper / authorize API         | L2  |
-| route-level permission tests              | L2  |
-| proctor scope assignment                  | L7  |
-| cross-scope denial tests                  | L12 |
-
----
-
-## Batch 4 — Large Grillme Round 2
-
-目标：拷问答案协议和最终提交屏障。
-
-| 顺序 | Job                                                      | 类型    | 输出                       |
-| -- | -------------------------------------------------------- | ----- | ------------------------ |
-| 1  | L4 Answer Protocol v2                                    | Large | answer protocol spec     |
-| 2  | L5 WYSIWYG Submit / Final Answer Barrier                 | Large | final submit barrier ADR |
-| 3  | L11 Subjective / Rich Text / Drawing Answer Architecture | Large | subjective answer spec   |
-| 4  | L13 Exam Lifecycle State Model                           | Large | lifecycle state diagram  |
-
-完成后，再拆出 Middle Job，例如：
-
-| Derived Middle Job             | 来源  |
-| ------------------------------ | --- |
-| AnswerPayloadV2 schema         | L4  |
-| answer canonicalization helper | L4  |
-| final answer snapshot          | L5  |
-| submit hash / audit hash       | L5  |
-| rich text answer renderer      | L11 |
-| lifecycle status contract      | L13 |
-
----
-
-## Batch 5 — Large Grillme Round 3
-
-目标：拷问前端状态机和 UI 体系。
-
-| 顺序 | Job                                       | 类型    | 输出                        |
-| -- | ----------------------------------------- | ----- | ------------------------- |
-| 1  | L6 Frontend Exam State Machine            | Large | state machine diagram     |
-| 2  | L8 UI Design / Workbench UI Contract      | Large | UI contract               |
-| 3  | L9 Audit / Monitoring Full Event Taxonomy | Large | event taxonomy ADR        |
-| 4  | L14 Result Visibility / Release Policy    | Large | result release policy ADR |
-
-完成后，再拆出 Middle Job，例如：
-
-| Derived Middle Job                    | 来源  |
-| ------------------------------------- | --- |
-| candidate runtime state machine core  | L6  |
-| save / submit / deadline state tests  | L6  |
-| disconnected / restoring UI states    | L6  |
-| UI tokens / status badge contract     | L8  |
-| table / form / action layout contract | L8  |
-| audit event schema expansion          | L9  |
-| result release API policy             | L14 |
-
----
-
-# 3. 推荐日程
-
-## Cycle 1
-
-| 窗口         | 做什么                                           |
-| ---------- | --------------------------------------------- |
-| 第一个 2 小时窗口 | Batch 0：S1 / S2 / S4                          |
-| 第二个 5 小时窗口 | M1：manual grading candidate-answer visibility |
-
----
-
-## Cycle 2
-
-| 窗口         | 做什么                                      |
-| ---------- | ---------------------------------------- |
-| 第一个 2 小时窗口 | S5 / S6：Redis + event 当前审计               |
-| 第二个 5 小时窗口 | M2：Redis health / fallback / diagnostics |
-
----
-
-## Cycle 3
-
-| 窗口         | 做什么                                      |
-| ---------- | ---------------------------------------- |
-| 第一个 2 小时窗口 | M4 prompt / event map review             |
-| 第二个 5 小时窗口 | M4：audit / monitoring event expansion v0 |
-
----
-
-## Cycle 4
-
-| 窗口         | 做什么                      |
-| ---------- | ------------------------ |
-| 第一个 2 小时窗口 | Email/outbox 当前状态审计      |
-| 第二个 5 小时窗口 | M3：Email outbox skeleton |
-
----
-
-## Cycle 5
-
-| 窗口         | 做什么                      |
-| ---------- | ------------------------ |
-| 第一个 2 小时窗口 | L1 / L2 grillme 问题准备     |
-| 第二个 5 小时窗口 | L1：account model grillme |
-
----
-
-## Cycle 6
-
-| 窗口         | 做什么                                 |
-| ---------- | ----------------------------------- |
-| 第一个 2 小时窗口 | L2 permission matrix draft          |
-| 第二个 5 小时窗口 | L2：backend permission model grillme |
-
----
-
-## Cycle 7
-
-| 窗口         | 做什么                           |
-| ---------- | ----------------------------- |
-| 第一个 2 小时窗口 | L4 answer protocol 问题准备       |
-| 第二个 5 小时窗口 | L4：answer protocol v2 grillme |
-
----
-
-## Cycle 8
-
-| 窗口         | 做什么                                              |
-| ---------- | ------------------------------------------------ |
-| 第一个 2 小时窗口 | L5 final barrier 问题准备                            |
-| 第二个 5 小时窗口 | L5：WYSIWYG submit / final answer barrier grillme |
-
----
-
-# 4. Phase 3 第一优先级
-
-建议第一阶段先做这三个：
-
-| 优先级 | Job                                           | 原因              |
-| --- | --------------------------------------------- | --------------- |
-| 1   | M1 manual grading candidate-answer visibility | 真实功能缺口，确定性最高    |
-| 2   | M2 Redis health / fallback / diagnostics      | Phase 3 后续运行态依赖 |
-| 3   | M4 audit / monitoring event expansion v0      | 先补证据链，不做大平台     |
-
-然后再做：
-
-| 优先级 | Job                                 | 原因            |
-| --- | ----------------------------------- | ------------- |
-| 4   | M3 Email outbox skeleton            | 标准基础设施，适合独立合  |
-| 5   | L1 account model grillme            | 权限模型前置        |
-| 6   | L2 backend permission model grillme | Phase 3 核心地基  |
-| 7   | L4 answer protocol v2 grillme       | 提交、评分、状态机前置   |
-| 8   | L5 WYSIWYG submit barrier grillme   | 最终答案证明核心      |
-| 9   | L6 frontend state machine grillme   | 依赖协议和提交屏障     |
-| 10  | L8 UI design grillme                | 统一考试端和后台工作台体验 |
-
----
-
-# 5. 当前 Large Job 补充清单
-
-用户已明确 Large：
-
-* 后端权限模型
-* 前端状态机
-* 提交答案的所见即所得问题
-* UI 设计
-
-建议补充为完整 Large 队列：
-
-| Large Job                                            | 是否必须      |
-| ---------------------------------------------------- | --------- |
-| Teacher / Proctor / Grader Account Model             | 必须        |
-| Backend Permission Model                             | 必须        |
-| Custom Role / Custom RBAC                            | 可预留，不急着实现 |
-| Answer Protocol v2                                   | 必须        |
-| WYSIWYG Submit / Final Answer Barrier                | 必须        |
-| Frontend Exam State Machine                          | 必须        |
-| Proctor Runtime Authority Boundary                   | 必须        |
-| UI Design / Workbench UI Contract                    | 必须        |
-| Audit / Monitoring Full Event Taxonomy               | 建议        |
-| E2E Full Parallelization Implementation              | 建议        |
-| Subjective / Rich Text / Drawing Answer Architecture | 建议        |
-| Tenant / Organization / School Scope Model           | 建议        |
-| Exam Lifecycle State Model                           | 建议        |
-| Result Visibility / Release Policy                   | 建议        |
-
----
-
-# 6. 当前结论
-
-Phase 3 先按这个顺序推进：
-
-```txt
-Small 文档 / 审计铺地基
-  ↓
-Middle 确定性功能持续合 master
-  ↓
-Large 只做 grillme / ADR / matrix
-  ↓
-Large 拆成 Middle 后再施工
+## 0. Current Status
+
+| Area | Status |
+| ---- | ------ |
+| Small Jobs (S1–S10) | **Completed.** 基线审计、文档 scaffold、grillme 问题清单已就位。 |
+| Email Outbox Backend (M3) | **Completed.** outbox 表、repo、worker skeleton、fake sender、disabled-by-default 均已实现。 |
+| RBAC / Backend Permission Model | **Active Large Track.** L1/L2 正在通过 ADR / permission matrix 设计推进；Derived Middle Jobs 仅从 ADR 拆出后进入 Small/Middle 文档。 |
+| Frontend State Machine | **Deferred to Large Job.** ADR-009 已提出 (Proposed)，runtime integration 待 L4/L5/L13 结论。 |
+| Exam Lifecycle State Model | **Not started.** 作为独立 Large Job 保留，不应被 ADR-009 覆盖。 |
+| Answer Protocol v2 | **Not started.** 作为独立 Large Job 保留。 |
+| 当前策略 | Middle Job 持续合 master；Large Job 只做设计和拆分；补齐 Large Job 全景图。 |
+
+**核心原则：**
+
+```text
+Large Job 不直接施工。
+Large Job 必须先 grillme / ADR / matrix / spec。
+Large Job 完成设计后，再拆成 Middle Job 落地。
 ```
 
-近期不碰大重构。
-
-第一批直接做：
-
-```txt
-S1 Phase 3 README scaffold
-S2 Phase 3 plan
-S4 current grading API audit
-M1 manual grading candidate-answer visibility
+```text
+RBAC 和 Frontend State Machine 都重要，但不应该独占 Phase 3 计划。
+Answer Protocol、Final Barrier、Question Versioning、Exam Lifecycle 是更底层的考试正确性基础。
 ```
 
-然后接：
+---
 
-```txt
-S5 current Redis usage audit
-S6 current audit event map
-M2 Redis health / fallback / diagnostics
-M4 audit / monitoring event expansion v0
+## 1. Phase 3 Strategy
+
+| Job Size | Current Status | Usage |
+| -------- | -------------- | ----- |
+| **Small** | Completed baseline | 新 Large 需要事实审计时再新增 |
+| **Middle** | Active implementation unit | 可以独立施工、测试、合并 |
+| **Large** | Design backlog | 先 grillme / ADR / spec，再拆 Middle |
+
+### Job size rules
+
+- **Small Jobs** are low-risk documentation, audit, checklist, or narrow-scope fix tasks. They can be done at any time and merged quickly.
+- **Middle Jobs** are bounded implementation units with clear scope, tests, and non-goals. They can be developed in a feature branch and merged to master independently.
+- **Large Jobs** are architecture-heavy design units. They must NOT be directly implemented. Each Large Job must first produce an ADR, spec, permission matrix, or state diagram. Only after the design is accepted can it be拆成 Middle Jobs for implementation.
+
+---
+
+## 2. Completed Small Jobs
+
+All Small Jobs from the initial Phase 3 batch are completed.
+
+| ID | Job | Output | Status |
+| -- | --- | ------ | ------ |
+| S1 | Phase 3 README scaffold | `docs/phase3/README.md` (note: file not yet created; verify during closeout) | Completed |
+| S2 | Phase 3 plan | `docs/phase3/plan.md` | Completed |
+| S3 | Current role check audit | `docs/phase3/audit/audit-current-role-checks.md` | Completed |
+| S4 | Current grading API audit | `docs/phase3/audit/audit-current-grading-api.md` | Completed |
+| S5 | Current Redis usage audit | `docs/phase3/audit/audit-current-redis.md` | Completed |
+| S6 | Current audit event map | `docs/phase3/audit/audit-current-events.md` | Completed |
+| S7 | Current candidate runtime audit | `docs/phase3/audit/audit-current-candidate-runtime.md` | Completed |
+| S8 | Current answer payload audit | `docs/phase3/audit/audit-current-answer-payload.md` | Completed |
+| S9 | E2E parallelization constraints audit | `docs/phase3/audit/audit-e2e-parallelization.md` | Completed |
+| S10 | Large grillme question list | `docs/phase3/grillme-question-list.md` | Completed |
+
+Small Jobs are removed from the active execution queue. They will only be re-opened if a new Large Job requires a fresh fact-finding audit that the existing documents do not cover.
+
+---
+
+## 3. Completed / Mostly Completed Middle Jobs
+
+| ID | Job | Status | Notes |
+| -- | --- | ------ | ----- |
+| M1 | Manual grading candidate-answer visibility | **Needs verification** | Grading detail page already shows candidate answer (`GradingDetailPage.tsx:209`). Verify if full scope (API contract + frontend rendering + tests) is complete. |
+| M3 | Email outbox backend | **Completed** | Outbox table, repo, worker skeleton, fake sender all implemented. Remaining: M8 retry tests, M5 diagnostics display. |
+| M8 | Email send failure retry tests | **Needs verification** | If email retry tests exist and pass, mark completed; otherwise keep in active backlog. |
+
+Do not claim completion for items that have not been verified against the codebase. Use "Needs verification" for uncertain status.
+
+---
+
+## 4. Active Middle Job Backlog
+
+These Middle Jobs remain actionable and can be developed independently.
+
+| ID | Job | Current Recommendation |
+| -- | --- | ---------------------- |
+| M2 | Redis health / fallback / diagnostics | **Active.** Redis integration exists; verify health check and fallback coverage. |
+| M4 | Audit / monitoring event expansion v0 | **Active.** First batch of Phase 3 events (grading, force-submit, email, Redis). |
+| M5 | Diagnostics infrastructure status | **Active.** System diagnostics page should show Redis / email / worker status. Depends on M3 completion. |
+| M6 | Grading answer rendering tests | **Active.** Tests for candidate answer display in grading page. Depends on M1 verification. |
+| M7 | Redis unavailable fallback tests | **Active.** Tests ensuring Redis failure does not corrupt PG authoritative state. |
+| M9 | Proctor incident event logging v0 | **Active but scoped.** Lightweight incident recording only. Do NOT expand to full proctor authority. |
+| M10 | CI / E2E parallelization readiness report | **Active.** Documentation task; no code changes. |
+| M11 | Phase 3 readiness closeout report | **Deferred to batch closeout.** Generate after first Middle batch completes. |
+
+### Middle Job principles
+
+- Each Middle Job must have clear scope, non-goals, required tests, and review standards.
+- Middle Jobs should be merged to master independently; do not batch multiple Middle Jobs in one PR.
+- Migration-only Middle Jobs (e.g., M3) must be merged on a separate branch to avoid migration conflicts.
+
+---
+
+## 5. Complete Large Job Queue
+
+Large Jobs are architecture-heavy design units. They must NOT be directly implemented.
+
+```text
+Large Job 不直接施工。
+Large Job 必须先 grillme / ADR / matrix / spec / state diagram。
+Large Job 完成设计后，再拆成 Middle Job 落地。
 ```
+
+| ID | Large Job | Status | Why Large | Expected Output |
+| -- | --------- | ------ | --------- | --------------- |
+| L1 | Teacher / Proctor / Grader Account Model | **Active / In Progress** | 账号、身份、角色、scope 关系复杂 | account model ADR |
+| L2 | Backend Permission Model | **Active / In Progress** | 影响所有敏感 API，不能用简单 role string | permission matrix / RBAC ADR |
+| L3 | Custom Role / Custom RBAC | Later | 极容易过度设计，Phase 3 只预留 | custom role ADR |
+| L4 | Answer Protocol v2 | **Priority** | 影响保存、提交、评分、审计、前端状态机 | answer protocol spec |
+| L5 | WYSIWYG Submit / Final Answer Barrier | **Priority** | 需要证明学生看到的最终答案等于后端冻结答案 | final barrier ADR |
+| L6 | Frontend Exam State Machine | Deferred (ADR-009 started) | 涉及保存、提交、断线、恢复、deadline、force submit | state machine spec |
+| L7 | Proctor Runtime Authority Boundary | **Priority** | 决定监考员能看什么、能操作什么、不能做什么 | proctor authority matrix |
+| L8 | UI Design / Workbench UI Contract | Deferred | 影响整站视觉、组件语义、表格/表单/状态表达 | UI contract |
+| L9 | Audit / Monitoring Full Event Taxonomy | **Priority** | 涉及追责、观测、隐私、事件分层 | event taxonomy ADR |
+| L10 | E2E Full Parallelization Implementation | Later | 涉及 DB 隔离、seed 隔离、worker 隔离 | E2E isolation ADR |
+| L11 | Subjective / Rich Text / Drawing Answer Architecture | **Priority** | 涉及主观题、富文本、画图、附件答案结构 | subjective answer ADR |
+| L12 | Tenant / Organization / School Scope Model | **Priority** | 影响账号、权限、考试归属、数据隔离 | tenant scope ADR |
+| L13 | Exam Lifecycle State Model | **Priority** | 定义 draft/published/open/closed/canceled/archived 合法流转 | lifecycle state ADR / diagram |
+| L14 | Result Visibility / Release Policy | **Priority** | 影响成绩发布、复核、学生可见性 | result release policy ADR |
+| L15 | Notification / Email Policy | New / Later | 邮箱后端完成后，需要决定触发规则、模板、隐私、重试策略 | notification policy ADR |
+| L16 | Question Bank / Paper Versioning Model | **New / High Priority** | 决定发布后题目修改、试卷快照、评分版本依据 | paper versioning ADR |
+| L17 | Import / Export / Bulk Operation Contract | New / Later | 涉及批量导入导出、错误报告、权限、审计 | import/export contract |
+| L18 | Deployment / On-Prem Ops Contract | New / Later | LAN/on-premise 部署需要配置、备份、诊断、升级策略 | ops contract |
+| L19 | Data Retention / Privacy / Audit Redaction | New / Later | 涉及答案、日志、邮件、审计记录保存和脱敏 | retention/privacy ADR |
+| L20 | Reporting / Analytics / Score Statistics Model | New / Later | 成绩统计、报表、导出、排名策略 | reporting model ADR |
+
+### Why L16 is high priority
+
+Question Bank / Paper Versioning must be designed before Answer Protocol v2, because answer payloads must reference stable question and paper versions. Without versioning, answer snapshots and grading comparisons become ambiguous when questions are edited after exam publication.
+
+### Why L13 is high priority
+
+Exam Lifecycle State Model defines the legal state transitions for exams (draft → published → open → closed → canceled → archived). This is a prerequisite for Admin Exam Operation Machine (ADR-009 PR 5) and for Proctor authority boundary (L7). It must not be conflated with the frontend interaction state machine (L6).
+
+### Why L15 is not current priority
+
+Email backend / outbox infrastructure is already completed. L15 (Notification / Email Policy) becomes relevant only when the project is ready to define which events trigger emails, what templates are used, and what privacy constraints apply. This is a product policy decision, not a technical foundation.
+
+---
+
+## 6. Large Job Priority Groups
+
+### Group A — Exam Correctness Foundation
+
+These jobs define "what is the exam content, how answers are saved, what is frozen at final submission, how exam states flow, and when results become visible." They are the foundation for state machines, proctoring, grading, and auditing.
+
+| ID | Large Job | Priority |
+| -- | --------- | -------- |
+| L16 | Question Bank / Paper Versioning Model | **1st** |
+| L4 | Answer Protocol v2 | **2nd** |
+| L5 | WYSIWYG Submit / Final Answer Barrier | **3rd** |
+| L13 | Exam Lifecycle State Model | **4th** |
+| L14 | Result Visibility / Release Policy | **5th** |
+
+### Group B — Authority / Scope / Security Foundation
+
+These jobs define "who can do what, in what scope." Custom RBAC is deferred; first stabilize built-in roles.
+
+| ID | Large Job | Priority |
+| -- | --------- | -------- |
+| L12 | Tenant / Organization / School Scope Model | 6th |
+| L1 | Teacher / Proctor / Grader Account Model | 7th |
+| L2 | Backend Permission Model | 8th |
+| L7 | Proctor Runtime Authority Boundary | 9th |
+| L3 | Custom Role / Custom RBAC | Deferred |
+
+### Group C — Runtime / Frontend / UI
+
+Frontend State Machine depends on Answer Protocol, Final Barrier, and Exam Lifecycle conclusions. UI Contract can be designed in parallel but must not block exam correctness foundation.
+
+| ID | Large Job | Priority |
+| -- | --------- | -------- |
+| L9 | Audit / Monitoring Full Event Taxonomy | 10th |
+| L6 | Frontend Exam State Machine | 11th |
+| L11 | Subjective / Rich Text / Drawing Answer Architecture | 12th |
+| L8 | UI Design / Workbench UI Contract | Parallel |
+
+### Group D — Ops / Scale / Productization
+
+These jobs become relevant after the core exam correctness and authority foundations are stable.
+
+| ID | Large Job | Priority |
+| -- | --------- | -------- |
+| L10 | E2E Full Parallelization Implementation | Later |
+| L15 | Notification / Email Policy | Later |
+| L17 | Import / Export / Bulk Operation Contract | Later |
+| L18 | Deployment / On-Prem Ops Contract | Later |
+| L19 | Data Retention / Privacy / Audit Redaction | Later |
+| L20 | Reporting / Analytics / Score Statistics Model | Later |
+
+---
+
+## 7. Dependency Notes
+
+```text
+L16 Question Bank / Paper Versioning Model
+  should be done BEFORE L4 Answer Protocol v2,
+  because answer payloads must reference stable question/paper versions.
+```
+
+```text
+L4 Answer Protocol v2
+  is a prerequisite for L5 Final Barrier,
+  because the final answer freeze mechanism depends on the answer payload contract.
+```
+
+```text
+L6 Frontend Exam State Machine
+  depends on L4 Answer Protocol v2,
+  L5 Final Barrier,
+  and L13 Exam Lifecycle State Model.
+  ADR-009 is the adoption strategy; runtime integration waits for these conclusions.
+```
+
+```text
+L7 Proctor Runtime Authority Boundary
+  depends on L1 Account Model,
+  L2 Backend Permission Model,
+  and L13 Exam Lifecycle State Model.
+```
+
+```text
+L14 Result Visibility / Release Policy
+  depends on L13 Exam Lifecycle
+  and interacts with L2 Permission Model.
+```
+
+```text
+L11 Subjective / Rich Text / Drawing Answer Architecture
+  depends on L4 Answer Protocol v2
+  and L16 Paper Versioning.
+```
+
+```text
+L15 Notification / Email Policy
+  depends on completed Email Outbox backend (M3),
+  L9 Event Taxonomy,
+  and L14 Result Release Policy.
+```
+
+```text
+L12 Tenant / Organization / School Scope Model
+  is independent of Group A but must be designed before L1 Account Model
+  and L2 Permission Model, because scope determines role boundaries.
+```
+
+---
+
+## 8. Recommended Next Large Design Order
+
+```text
+ 1. L16 Question Bank / Paper Versioning Model
+ 2. L4  Answer Protocol v2
+ 3. L5  WYSIWYG Submit / Final Answer Barrier
+ 4. L13 Exam Lifecycle State Model
+ 5. L14 Result Visibility / Release Policy
+ 6. L12 Tenant / Organization / School Scope Model
+ 7. L1  Teacher / Proctor / Grader Account Model
+ 8. L2  Backend Permission Model
+ 9. L7  Proctor Runtime Authority Boundary
+10. L9  Audit / Monitoring Full Event Taxonomy
+11. L6  Frontend Exam State Machine
+12. L8  UI Design / Workbench UI Contract
+```
+
+**Rationale:**
+
+- RBAC is important but does not need to be designed first. Exam correctness foundation (answer protocol, final barrier, lifecycle) must be solid before layering permission complexity on top.
+- Frontend State Machine has ADR-009 (Proposed) but runtime integration depends on L4/L5/L13 conclusions. The adoption strategy is settled; the design inputs are not.
+- Email backend is completed, so L15 is not a current Large priority unless notification policy becomes a product requirement.
+
+---
+
+## 9. Near-Term Execution Plan
+
+### Track 1 — Middle Closeout
+
+Continue merging determined Middle Jobs to master:
+
+- M2 Redis health / fallback / diagnostics
+- M4 Audit / monitoring event expansion v0
+- M5 Diagnostics infrastructure status
+- M6 Grading answer rendering tests
+- M7 Redis unavailable fallback tests
+- M8 Email send failure retry tests (if not yet verified)
+- M9 Proctor incident event logging v0
+- M10 CI / E2E parallelization readiness report
+- M11 Phase 3 readiness closeout report (after first batch)
+
+### Track 2 — Large Design (first wave)
+
+Begin design for the Exam Correctness Foundation group:
+
+1. L16 grillme / ADR — Question Bank / Paper Versioning
+2. L4 + L5 grillme — Answer Protocol v2 + Final Barrier
+3. L13 lifecycle state ADR — Exam Lifecycle State Model
+
+### Track 3 — Large Design (second wave)
+
+After Group A design stabilizes:
+
+4. L12 grillme — Tenant / Scope Model
+5. L1 grillme — Account Model
+6. L2 permission matrix — Backend Permission Model
+7. L7 proctor authority matrix — Proctor Runtime Authority
+
+### Track 4 — Deferred Heavy Work
+
+These are explicitly deferred and should not be started until the foundations above are designed:
+
+- RBAC runtime implementation
+- Frontend state machine runtime integration (ADR-009 PR 4)
+- UI full redesign
+- E2E full parallelization implementation
+- Custom RBAC (L3)
+- Notification / email policy (L15)
+- Import/export contract (L17)
+- Deployment ops contract (L18)
+- Data retention / privacy (L19)
+- Reporting / analytics (L20)
+
+---
+
+## 10. What Not To Do Next
+
+- Do NOT directly implement RBAC runtime.
+- Do NOT directly rewrite TakeExamPage or other exam pages.
+- Do NOT introduce XState or other state machine libraries.
+- Do NOT directly change the answer protocol without L4 design.
+- Do NOT directly implement rich text / drawing answers without L11 design.
+- Do NOT expand email backend into a complex notification system.
+- Do NOT混入 Large Job 设计到 Middle PR 中. Each Middle Job must be independently scoped.
+- Do NOT combine migration + frontend + state machine + permission in a single PR.
+- Do NOT claim Exam Lifecycle State Model is covered by ADR-009. ADR-009 covers frontend interaction state machines only.
+
+---
+
+## 11. Plan Maintenance Rules
+
+- **Large Job addition**: Any new Large Job must enter the L queue with a clear explanation of why it is Large (architecture-heavy, cross-cutting, or high-risk). Do not inflate Middle Jobs into Large Jobs.
+- **Large Job implementation**: Large Jobs must NEVER be directly implemented. They must first produce an ADR, spec, matrix, or state diagram. Only after design acceptance can they be拆成 Middle Jobs.
+- **Middle Job拆分**: When a Large Job design is accepted, it must be decomposed into Middle Jobs with clear scope, non-goals, and test requirements. Each derived Middle Job gets its own ID (e.g., M12, M13, ...).
+- **Small Job re-open**: Small Jobs are only re-opened when a Large Job design phase reveals that a new fact-finding audit is needed and the existing audit documents are insufficient.
+- **Completed job tracking**: Completed Middle Jobs must be moved to the "Completed / Mostly Completed" section. Do not leave them in the active backlog.
+- **plan.md is the master plan**: Specific executable job cards belong in `docs/phase3/job-cards.md`. This document is the strategic overview, not the implementation spec.
+- **Status updates**: When a Middle Job is merged, update this document's status tables within the same PR or the next PR.
+
+---
+
+## 12. ADR-009 Relationship
+
+ADR-009 (`docs/adr/ADR-009-frontend-state-machine-adoption.md`) covers the **frontend interaction state machine adoption strategy**:
+
+- Phase A-C: reducer + transition table + tests, no XState.
+- Candidate Exam Machine is the first machine.
+- Admin Exam Operation Machine is the second machine.
+- Backend business state remains source of truth.
+
+ADR-009 does **NOT** cover:
+
+- Backend Exam Lifecycle State Model (this is L13).
+- Backend Answer Protocol (this is L4).
+- Backend Permission Model (this is L2).
+- Frontend RBAC / route guards (this is L6 dependency on L1/L2).
+
+L13 (Exam Lifecycle State Model) is a separate Large Job that defines the backend-side legal state transitions for exams. It must be designed independently from the frontend interaction state machine, though the frontend machine will consume the lifecycle states as read-only business state.

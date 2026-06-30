@@ -1,596 +1,97 @@
 # Exam Phase 3 — Small / Middle Job Cards
 
-> 本文档只包含可直接推进的 Small / Middle Job。
-> Large Job 暂不施工，等后续 grillme 拷问清楚后再拆成 Middle Job。
+> 本文档只包含可直接施工或可验证收口的 Small / Middle Job。
+> Small Job baseline 已完成。
+> Large Job 不在本文档展开，详见 `docs/phase3/plan.md` 和 `docs/phase3/job-cards-large.md`。
 
 ---
 
-# 0. 当前边界
+## Current Status
 
-## 本批允许做
-
-* 文档 scaffold
-* 当前实现审计
-* 局部真实缺口修复
-* Redis / Email / Audit / Diagnostics 基础设施
-* 测试补齐
-* 不改变核心产品模型的安全小改
-
-## 本批禁止做
-
-* 不实现完整后端权限模型
-* 不实现 teacher / proctor / grader account model
-* 不实现 custom RBAC
-* 不实现 answer protocol v2
-* 不实现 WYSIWYG final answer barrier
-* 不重写前端考试状态机
-* 不重做 UI 体系
-* 不定义完整 proctor runtime authority boundary
+| Area | Status | Notes |
+| ---- | ------ | ----- |
+| Small Jobs (S1–S10) | **Completed baseline** | S1–S10 已作为 Phase 3 事实审计和 scaffold 基线完成 |
+| Email backend / outbox | **Backend done** | M3 outbox skeleton 已实现；后续只保留 retry tests / diagnostics / notification policy |
+| RBAC | **Active Large Track** | 正在通过 ADR / permission matrix 设计推进；Small/Middle 文档不重复定义 RBAC，Derived Middle Jobs 仅从 ADR 拆出后进入本文档 |
+| Frontend State Machine | **Deferred Large / ADR started** | ADR-009 Proposed；runtime integration 待 L4/L5/L13 结论 |
+| Large Jobs | **Design backlog** | 单独维护；详见 `docs/phase3/plan.md` §5 |
 
 ---
 
-# 1. Small Job Cards
+# 0. Current Boundary
+
+## What this batch allows
+
+* Documentation scaffold and audit (completed)
+* Localized real-gap fixes (e.g., M1 grading answer visibility)
+* Infrastructure closeout (Redis diagnostics, email retry tests, audit events)
+* Test补齐
+* No changes to core product models
+
+## What this batch forbids
+
+* Do NOT implement full backend permission model
+* Do NOT implement teacher / proctor / grader account model
+* Do NOT implement custom RBAC
+* Do NOT implement answer protocol v2
+* Do NOT implement WYSIWYG final answer barrier
+* Do NOT rewrite frontend exam state machine
+* Do NOT redo UI system
+* Do NOT define complete proctor runtime authority boundary
+* Do NOT silently implement any Large Job decision
+* Do NOT redefine RBAC in Small/Middle scope — RBAC enters this document ONLY as Derived Middle Jobs拆自 ADR / permission matrix design
 
 ---
 
-## S1 — Phase 3 README Scaffold
+# 1. Completed Small Job Cards
 
-### Type
+All Small Jobs from the initial Phase 3 batch are completed. They are retained here as a record and for closeout verification.
 
-Small
+| ID | Job | Status | Output |
+| -- | --- | ------ | ------ |
+| S1 | Phase 3 README Scaffold | Completed baseline | `docs/phase3/README.md` (verify path during closeout) |
+| S2 | Phase 3 Plan Document | Completed baseline | `docs/phase3/plan.md` |
+| S3 | Current Role Check Audit | Completed baseline | `docs/phase3/audit/audit-current-role-checks.md` |
+| S4 | Current Grading API Audit | Completed baseline | `docs/phase3/audit/audit-current-grading-api.md` |
+| S5 | Current Redis Usage Audit | Completed baseline | `docs/phase3/audit/audit-current-redis.md` |
+| S6 | Current Audit / Monitoring Event Map | Completed baseline | `docs/phase3/audit/audit-current-events.md` |
+| S7 | Current Candidate Runtime Audit | Completed baseline | `docs/phase3/audit/audit-current-candidate-runtime.md` |
+| S8 | Current Answer Payload Audit | Completed baseline | `docs/phase3/audit/audit-current-answer-payload.md` |
+| S9 | E2E Parallelization Constraints Audit | Completed baseline | `docs/phase3/audit/audit-e2e-parallelization.md` |
+| S10 | Large Grillme Question List | Completed baseline | `docs/phase3/grillme-question-list.md` |
 
-### Goal
-
-建立 Phase 3 文档入口，让后续任务有统一落点。
-
-### Scope
-
-创建或更新：
-
-```txt
-docs/phase3/README.md
-```
-
-内容包括：
-
-* Phase 3 目标
-* S / M / L job 分类入口
-* 当前推荐推进顺序
-* 已知 Large deferred topics
-* 当前第一批可施工任务链接
-
-### Non-goals
-
-* 不写完整规则手册
-* 不做代码修改
-* 不做权限/协议设计
-
-### Acceptance Criteria
-
-* `docs/phase3/README.md` 存在
-* 能看到 Small / Middle / Large 三类任务入口
-* 明确说明 Large 暂不施工，需要 grillme 后再拆分
-* 不影响任何测试
-
-### Validation
-
-```bash
-git diff -- docs/phase3/README.md
-```
+Small Jobs are removed from the active execution queue. They will only be re-opened if a new Large Job design phase reveals a fact-finding audit need that existing documents do not cover.
 
 ---
 
-## S2 — Phase 3 Plan Document
+# 2. Middle Job Status Overview
 
-### Type
+| ID | Job | Status | Recommendation |
+| -- | --- | ------ | -------------- |
+| M1 | Manual grading candidate-answer visibility | **Verify needed** | GradingDetailPage already renders candidate answer; verify if full scope (API + frontend + tests) is complete |
+| M2 | Redis health / fallback / diagnostics | **Active** | Redis integration exists; verify health check and fallback test coverage |
+| M3 | Email outbox backend | **Backend done** | Outbox table, repo, worker, fake sender implemented. Closeout: retry tests, diagnostics, worker status |
+| M4 | Audit / monitoring event expansion v0 | **Active** | First batch of Phase 3 events |
+| M5 | Diagnostics infrastructure status | **Active** | System diagnostics page should show Redis / email / worker status |
+| M6 | Grading answer rendering tests | **Active** | Tests for candidate answer display in grading page |
+| M7 | Redis unavailable fallback tests | **Active** | Tests ensuring Redis failure does not corrupt PG state |
+| M8 | Email send failure retry tests | **Verify needed** | If retry tests exist and pass, mark completed; otherwise active |
+| M9 | Proctor incident event logging v0 | **Active** | Lightweight incident recording only; scoped to not expand into full proctor authority |
+| M10 | CI / E2E parallelization readiness report | **Active** | Documentation task only |
+| M11 | Phase 3 readiness closeout report | **Closeout only** | Generate after first Middle batch completes |
 
-Small
+### Status definitions
 
-### Goal
-
-把 Phase 3 当前计划固化成可追踪文档。
-
-### Scope
-
-创建：
-
-```txt
-docs/phase3/plan.md
-```
-
-内容包括：
-
-* Small Job 表
-* Middle Job 表
-* Large Job 表
-* 推荐执行批次
-* 当前第一优先级
-
-### Non-goals
-
-* 不新增 job-size-policy 规则文档
-* 不做代码修改
-* 不承诺 Phase 3 已实现
-
-### Acceptance Criteria
-
-* `plan.md` 能直接指导后续施工
-* Large Job 明确标记为 deferred / grillme required
-* Small / Middle Job 能直接进入 worktree 施工
-
-### Validation
-
-```bash
-git diff -- docs/phase3/plan.md
-```
+- **Completed**: Work is done and merged.
+- **Backend done**: Backend infrastructure is implemented; remaining work is tests / diagnostics / verification only.
+- **Active**: Can be developed in a feature branch and merged independently.
+- **Verify needed**: Work may already be complete; verify against codebase before starting new implementation.
+- **Deferred**: Blocked on Large Job design or other dependency.
+- **Closeout only**: Report-generation task; run after other items complete.
 
 ---
 
-## S3 — Current Role Check Audit
-
-### Type
-
-Small
-
-### Goal
-
-梳理当前代码里所有角色 / 权限判断位置，为后续 Large 权限模型 grillme 准备事实基础。
-
-### Scope
-
-审计以下内容：
-
-* route handler 中的 role check
-* auth middleware
-* admin / teacher / candidate 判断
-* proctor / grader 相关判断
-* error code / forbidden response
-* 是否存在 hard-coded role string
-
-输出：
-
-```txt
-docs/phase3/audit/audit-current-role-checks.md
-```
-
-### Non-goals
-
-* 不重构权限
-* 不新增 permission helper
-* 不改 API 行为
-* 不设计完整 RBAC
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* 发现的 role check 文件列表
-* 当前角色类型
-* 当前授权模式总结
-* 明显风险点
-* 后续 Large Job 输入问题
-
-### Suggested Commands
-
-```bash
-rg "role|admin|teacher|proctor|grader|candidate|forbidden|unauthorized|authorize|auth" apps packages
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-current-role-checks.md
-```
-
----
-
-## S4 — Current Grading API Audit
-
-### Type
-
-Small
-
-### Goal
-
-梳理当前评分详情 API 是否返回 candidate answer，为 M1 施工准备事实基础。
-
-### Scope
-
-审计：
-
-* grading detail route
-* grading service / repo
-* contracts schema
-* grading detail frontend page
-* existing tests
-* manual grading seed / fixtures
-
-输出：
-
-```txt
-docs/phase3/audit/audit-current-grading-api.md
-```
-
-### Non-goals
-
-* 不修 bug
-* 不改 schema
-* 不改 UI
-* 不做完整 grader 权限模型
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* 当前 grading detail response 字段
-* 是否包含 candidate answer
-* candidate answer 当前存储位置
-* grading page 当前展示字段
-* M1 需要修改的文件清单
-* M1 需要新增的测试清单
-
-### Suggested Commands
-
-```bash
-rg "GradingDetails|grading detail|candidateAnswer|answer" apps packages docs
-rg "manual grading|grading queue|score" apps packages
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-current-grading-api.md
-```
-
----
-
-## S5 — Current Redis Usage Audit
-
-### Type
-
-Small
-
-### Goal
-
-梳理当前 Redis 接入点、fallback 行为、诊断状态，为 M2 施工准备事实基础。
-
-### Scope
-
-审计：
-
-* Redis client / config
-* presence
-* heartbeat
-* rate limit
-* job queue
-* diagnostics
-* tests with Redis unavailable
-
-输出：
-
-```txt
-docs/phase3/audit/audit-current-redis.md
-```
-
-### Non-goals
-
-* 不新增 Redis 功能
-* 不改变 Redis 语义
-* 不把 Redis 变成权威状态源
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* Redis 当前用途
-* Redis 不可用时当前行为
-* 哪些路径必须 fallback
-* 哪些路径可以 skip
-* 哪些状态必须仍以 PG 为准
-* M2 修改建议
-
-### Suggested Commands
-
-```bash
-rg "redis|ioredis|rateLimit|presence|heartbeat|queue" apps packages docs
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-current-redis.md
-```
-
----
-
-## S6 — Current Audit / Monitoring Event Map
-
-### Type
-
-Small
-
-### Goal
-
-梳理当前 audit event / monitoring event，为 M4 事件扩展准备基础。
-
-### Scope
-
-审计：
-
-* audit log schema
-* audit event enum / string literals
-* monitoring / diagnostics event
-* proctor event
-* grading event
-* candidate submit event
-* Redis / worker / email 相关事件
-
-输出：
-
-```txt
-docs/phase3/audit/audit-current-events.md
-```
-
-### Non-goals
-
-* 不新增事件
-* 不改 audit schema
-* 不做完整 event taxonomy
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* 当前事件列表
-* 事件来源文件
-* audit event 与 monitoring event 是否区分
-* 缺失事件列表
-* M4 第一批建议新增事件
-
-### Suggested Commands
-
-```bash
-rg "audit|Audit|event|Event|monitor|diagnostic|log" apps packages docs
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-current-events.md
-```
-
----
-
-## S7 — Current Candidate Runtime Audit
-
-### Type
-
-Small
-
-### Goal
-
-梳理当前前端考试运行时页面的状态变量，为后续 Large 前端状态机 grillme 准备事实基础。
-
-### Scope
-
-审计：
-
-* candidate exam page
-* save / submit 状态
-* loading / error 状态
-* deadline 状态
-* reconnect / restore 状态
-* button disabled 逻辑
-* E2E 对这些状态的断言
-
-输出：
-
-```txt
-docs/phase3/audit/audit-current-candidate-runtime.md
-```
-
-### Non-goals
-
-* 不引入状态机
-* 不重构页面
-* 不改变 UI 行为
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* 当前状态变量列表
-* 状态之间的隐含关系
-* 容易冲突的状态组合
-* E2E 已覆盖路径
-* 状态机 Large Job 输入问题
-
-### Suggested Commands
-
-```bash
-rg "isLoading|isSaving|isSubmitting|submitted|deadline|disconnect|restore|resume|disabled" apps/web
-rg "candidate|submit|deadline|resume|disconnect" apps/web tests
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-current-candidate-runtime.md
-```
-
----
-
-## S8 — Current Answer Payload Audit
-
-### Type
-
-Small
-
-### Goal
-
-梳理当前答案保存 / 提交 payload，为 answer protocol v2 grillme 做准备。
-
-### Scope
-
-审计：
-
-* answer schema
-* save answer API
-* submit API
-* frontend answer state
-* grading answer read path
-* deadline / force submit 是否复用同一路径
-
-输出：
-
-```txt
-docs/phase3/audit/audit-current-answer-payload.md
-```
-
-### Non-goals
-
-* 不实现 Answer Protocol v2
-* 不改 submit 行为
-* 不改 grading schema
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* 当前 answer payload 结构
-* 当前 save / submit 差异
-* 当前 final answer 存储位置
-* 是否存在 answer snapshot
-* 是否存在 hash / revision / canonicalization
-* L4 / L5 grillme 输入问题
-
-### Suggested Commands
-
-```bash
-rg "answer|answers|save|submit|snapshot|revision|hash|canonical" apps packages docs
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-current-answer-payload.md
-```
-
----
-
-## S9 — E2E Parallelization Constraints Audit
-
-### Type
-
-Small
-
-### Goal
-
-固化当前 E2E 不能并行的真实原因，为后续 L10 / Middle 拆分准备依据。
-
-### Scope
-
-审计：
-
-* Playwright config
-* workers 配置
-* seed 数据
-* shared candidates
-* shared attempts
-* write-heavy specs
-* beforeAll / afterAll
-* database reset 策略
-
-输出：
-
-```txt
-docs/phase3/audit/audit-e2e-parallelization.md
-```
-
-### Non-goals
-
-* 不改 E2E 并行策略
-* 不重构 seed
-* 不创建 worker database
-
-### Acceptance Criteria
-
-文档至少包含：
-
-* 当前 workers 配置
-* 共享 seed 冲突点
-* 哪些 spec 写同一个 candidate / attempt
-* 可并行化选项
-* 推荐后续拆分方案
-
-### Suggested Commands
-
-```bash
-rg "workers|playwright|seed|candidate1|attempt|beforeAll|afterAll" apps tests playwright.config.* docker-compose*
-```
-
-### Validation
-
-```bash
-git diff -- docs/phase3/audit/audit-e2e-parallelization.md
-```
-
----
-
-## S10 — Large Grillme Question List
-
-### Type
-
-Small
-
-### Goal
-
-提前准备 Large Job 的拷问问题，明天额度够时直接进入 grillme。
-
-### Scope
-
-创建：
-
-```txt
-docs/phase3/grillme-question-list.md
-```
-
-覆盖：
-
-* account model
-* backend permission model
-* custom roles
-* answer protocol v2
-* WYSIWYG submit barrier
-* frontend state machine
-* proctor authority boundary
-* UI design
-* audit / monitoring taxonomy
-* tenant / school / organization scope
-* exam lifecycle
-* result release policy
-
-### Non-goals
-
-* 不回答这些问题
-* 不做 ADR
-* 不做代码实现
-
-### Acceptance Criteria
-
-* 每个 Large Job 至少 8 个问题
-* 问题要能暴露产品边界和技术边界
-* 能直接作为 grillme 输入
-
-### Validation
-
-```bash
-git diff -- docs/phase3/grillme-question-list.md
-```
-
----
-
-# 2. Middle Job Cards
+# 3. Middle Job Cards
 
 ---
 
@@ -600,17 +101,15 @@ git diff -- docs/phase3/grillme-question-list.md
 
 Middle
 
+### Current Status
+
+**Verify needed.** `GradingDetailPage.tsx` already renders `candidateAnswer` (line 209). Verify that the full scope — API contract, frontend rendering, empty-state handling, and tests — is complete. If complete, move to completed status.
+
 ### Goal
 
 修复真实评分缺口：授权评分员在评分详情页必须能看到考生答案。
 
-### Background
-
-当前 manual grading 如果只展示题目、标准答案、最高分，而不展示 candidate answer，则评分功能不完整。
-
 ### Scope
-
-实现：
 
 * contract response 增加 candidate answer 字段
 * API route / service 查询 candidate answer
@@ -618,16 +117,6 @@ Middle
 * 对空答案 / 未作答有明确 UI
 * tests 覆盖 authorized grading detail access
 * 不记录敏感 answer 内容到日志
-
-可能涉及：
-
-```txt
-packages/contracts
-apps/api
-packages/db
-apps/web
-e2e / component tests
-```
 
 ### Non-goals
 
@@ -637,34 +126,12 @@ e2e / component tests
 * 不改变评分流程
 * 不改变 proctor 权限
 
-### Suggested Implementation Notes
-
-* 先从当前 grading task / attempt / answer 存储关系出发。
-* 如果当前 DB 中 answer 是按 questionId 存储，则只返回当前待评分题目的 candidate answer。
-* 如果当前 API 是按 grading task 取详情，则 candidate answer 应跟随 grading detail response 返回。
-* 如果答案内容可能是 JSON，应以安全方式渲染，不直接 dangerouslySetInnerHTML。
-* 不要在 audit log 中写入完整答案内容。
-
 ### Required Tests
 
-至少补：
-
-* contract/schema test：`candidateAnswer` 字段存在
-* API test：authorized grader/detail reader 能拿到 candidate answer
-* API test：未作答时返回空态而不是 500
-* frontend test：评分页展示考生答案
-* 如已有 E2E 主观题 seed，则补 E2E；没有则记录 deferred
-
-### Review Standard
-
-必须满足：
-
-* 评分员能看到答案
-* 未作答显示明确空态
-* 不泄露答案到日志
-* 不扩大权限模型
-* 现有 grading tests 仍通过
-* Phase 2 行为不回退
+* contract/schema test: `candidateAnswer` field exists
+* API test: authorized grader can access candidate answer
+* API test: empty answer returns empty state, not 500
+* frontend test: grading page displays candidate answer
 
 ### Suggested Validation
 
@@ -672,10 +139,8 @@ e2e / component tests
 pnpm --filter @exam/contracts test
 pnpm --filter @exam/api test -- grading
 pnpm --filter @exam/web test -- grading
-pnpm verify:fast
+pnpm verify
 ```
-
-如命令名称不同，以项目实际脚本为准，并在结果中说明。
 
 ---
 
@@ -685,17 +150,15 @@ pnpm verify:fast
 
 Middle
 
+### Current Status
+
+**Active.** Redis integration exists in the codebase. Verify health check endpoint and fallback behavior coverage.
+
 ### Goal
 
 打通 Redis 运行态基础设施：健康检查、不可用 fallback、诊断页展示。
 
-### Background
-
-Phase 3 会逐步使用 Redis 做 presence、heartbeat、rate limit、runtime fanout、worker dedupe 等运行态能力。但 Redis 不能成为考试一致性的权威状态源。
-
 ### Scope
-
-实现或完善：
 
 * Redis health check
 * Redis unavailable fallback
@@ -703,15 +166,6 @@ Phase 3 会逐步使用 Redis 做 presence、heartbeat、rate limit、runtime fa
 * Redis connection error 不导致核心考试状态损坏
 * 文档说明 Redis 只做 runtime cache
 * tests 覆盖 Redis unavailable
-
-可能涉及：
-
-```txt
-apps/api
-packages/db
-apps/web diagnostics page
-docs/phase3
-```
 
 ### Non-goals
 
@@ -733,105 +187,68 @@ Redis 不可用时：
 
 ### Required Tests
 
-至少补：
-
 * Redis health check success / unavailable
 * Redis unavailable 不影响 PG authoritative flow
 * diagnostics response 包含 Redis 状态
-* 如前端 diagnostics 页已存在，则补 UI test
-
-### Review Standard
-
-必须满足：
-
-* Redis 不可用不会破坏考试状态
-* PG 仍是权威状态源
-* diagnostics 能看到 Redis 状态
-* 没有新增 flake
-* 文档明确 Redis 边界
 
 ### Suggested Validation
 
 ```bash
 pnpm --filter @exam/api test -- redis
 pnpm --filter @exam/api test -- diagnostics
-pnpm --filter @exam/web test -- diagnostics
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
 
-## M3 — Email Outbox Skeleton
+## M3 — Email Outbox Backend Closeout
 
 ### Type
 
 Middle
 
+### Current Status
+
+**Backend done.** Email outbox skeleton (M3 original scope) has been implemented: `email_outbox` table, `EmailOutboxRepo`, `EmailOutboxService`, fake email sender, worker skeleton, pending/sent/failed states, retry count, disabled-by-default config. This card is now a closeout / verification task only.
+
 ### Goal
 
-建立邮箱 outbox 基础设施，为后续考试通知、成绩通知、异常提醒做准备。
-
-### Background
-
-邮箱不能在 API 请求里直接发送。应该通过 outbox 模式：业务事务写入 outbox，worker 异步发送，失败可重试。
+Close out the email outbox backend: verify retry behavior, diagnostics visibility, and worker status. Do NOT re-implement the outbox backend.
 
 ### Scope
 
-实现：
+Verification and closeout only:
 
-* `email_outbox` 表或等价结构
-* EmailOutboxRepo
-* EmailOutboxService
-* fake email sender
-* worker skeleton
-* pending / sent / failed 状态
-* retry count / last error / next retry time
-* disabled-by-default email config
-* tests 验证 email 失败不 rollback 主业务
-
-可能涉及：
-
-```txt
-packages/db
-apps/api
-packages/contracts
-docs/phase3
-```
+* Verify M8 email retry tests exist and pass
+* Verify diagnostics page shows email worker status
+* Verify email outbox events are captured in audit/monitoring
+* Document email outbox behavior for future L15 Notification Policy
 
 ### Non-goals
 
-* 不做复杂邮件模板系统
-* 不做多租户发件人配置
-* 不做邮件 UI
-* 不接真实 SMTP 强依赖
-* 不做投递追踪 analytics
-* 不改变核心考试事务
+* Do NOT re-create email_outbox table (already exists)
+* Do NOT re-implement EmailOutboxRepo / EmailOutboxService (already exists)
+* Do NOT re-implement worker skeleton (already exists)
+* Do NOT do complex mail template system
+* Do NOT do multi-tenant sender config
+* Do NOT do email UI
+* Do NOT接真实 SMTP 强依赖
+* Do NOT do delivery analytics
+* Do NOT change core exam transactions
 
 ### Migration Note
 
-该 job 涉及 DB migration 时，必须单独分支、单独合并。不要和其他 migration job 并行合并。
+Original M3 migration was merged separately. No new migration needed for closeout.
 
 ### Required Tests
 
-至少补：
+Closeout verification — confirm these exist:
 
-* repo insert pending outbox
 * worker sends pending email via fake sender
-* success 后标记 sent
-* failure 后标记 failed 或 retry scheduled
-* email failure 不 rollback 已提交业务事务
-* config disabled 时 worker 安全 no-op
-
-### Review Standard
-
-必须满足：
-
-* outbox 表结构清楚
-* worker 可测试
-* 默认安全关闭真实发送
-* 失败不影响业务事务
-* 没有真实 SMTP secret 写入代码
-* migration 可重复应用
+* success marks sent
+* failure marks failed or retry scheduled
+* email failure does not rollback business transaction
+* config disabled → worker safe no-op
 
 ### Suggested Validation
 
@@ -839,7 +256,7 @@ docs/phase3
 pnpm --filter @exam/db test -- email
 pnpm --filter @exam/api test -- email
 pnpm --filter @exam/api test -- outbox
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -849,6 +266,10 @@ pnpm verify:fast
 ### Type
 
 Middle
+
+### Current Status
+
+**Active.** Can be developed in a feature branch.
 
 ### Goal
 
@@ -875,11 +296,9 @@ Monitoring events:
 * `email.worker_unavailable`
 * `diagnostics.health_checked`
 
-根据现有代码结构决定使用 enum、string union、schema 或常量文件。
-
 ### Non-goals
 
-* 不设计完整 event taxonomy
+* 不设计完整 event taxonomy (this is L9)
 * 不改 audit log 表大结构
 * 不记录答案正文
 * 不做监控平台
@@ -887,43 +306,16 @@ Monitoring events:
 
 ### Required Privacy Rule
 
-事件中不得写入：
+事件中不得写入：candidate answer content, password, token, secret, raw email content, sensitive headers.
 
-* candidate answer content
-* password / token / secret
-* raw email content
-* sensitive headers
-
-允许记录：
-
-* actorId
-* candidateId
-* attemptId
-* examId
-* gradingTaskId
-* event type
-* timestamp
-* traceId / requestId
-* status / reason code
+允许记录：actorId, candidateId, attemptId, examId, event type, timestamp, traceId, status/reason code.
 
 ### Required Tests
 
-至少补：
-
 * grading score submit 产生 audit event
 * email outbox created 产生 audit event
-* Redis unavailable 产生 monitoring event 或 diagnostics degraded record
+* Redis unavailable 产生 monitoring event
 * sensitive content 不进入 audit payload
-
-### Review Standard
-
-必须满足：
-
-* audit / monitoring 语义尽量分开
-* 关键事件可追踪
-* 不记录敏感正文
-* 不引入大平台
-* 不破坏现有 audit tests
 
 ### Suggested Validation
 
@@ -931,7 +323,7 @@ Monitoring events:
 pnpm --filter @exam/api test -- audit
 pnpm --filter @exam/api test -- diagnostics
 pnpm --filter @exam/api test -- grading
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -942,27 +334,21 @@ pnpm verify:fast
 
 Middle
 
+### Current Status
+
+**Active.** System diagnostics page exists. Verify it shows Redis / email / worker status.
+
 ### Goal
 
 让系统诊断页能看到 Phase 3 基础设施状态：Redis、worker、email outbox。
 
 ### Scope
 
-实现或完善：
-
 * diagnostics API 返回 Redis 状态
 * diagnostics API 返回 email outbox / worker 状态
 * 前端 diagnostics 页面展示基础设施状态
 * degraded / unavailable 有明确文案
 * tests 覆盖 response 和 UI
-
-可能涉及：
-
-```txt
-apps/api diagnostics route
-apps/web SystemDiagnosticsPage
-packages/contracts diagnostics schema
-```
 
 ### Non-goals
 
@@ -973,21 +359,10 @@ packages/contracts diagnostics schema
 
 ### Required Tests
 
-至少补：
-
 * diagnostics response schema test
-* API test：Redis unavailable 显示 degraded
-* API test：email disabled 显示 disabled
-* UI test：基础设施状态可见
-
-### Review Standard
-
-必须满足：
-
-* 用户能知道 Redis / email / worker 是否可用
-* 状态不会误导为业务失败
-* disabled 和 unavailable 区分
-* 现有 diagnostics tests 仍通过
+* API test: Redis unavailable 显示 degraded
+* API test: email disabled 显示 disabled
+* UI test: 基础设施状态可见
 
 ### Suggested Validation
 
@@ -995,7 +370,7 @@ packages/contracts diagnostics schema
 pnpm --filter @exam/contracts test -- diagnostics
 pnpm --filter @exam/api test -- diagnostics
 pnpm --filter @exam/web test -- diagnostics
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -1005,6 +380,10 @@ pnpm verify:fast
 ### Type
 
 Middle
+
+### Current Status
+
+**Active.** Tests for candidate answer display in grading page. **Note:** L4 (Answer Protocol v2) will change the answer schema. M6 tests current answer rendering and may need a revisit pass after L4 is designed. This does not block M6 — proceed now, revisit after L4.
 
 ### Goal
 
@@ -1020,13 +399,6 @@ Middle
 * JSON answer 安全展示
 * 不使用 unsafe HTML 渲染
 
-可能涉及：
-
-```txt
-apps/web grading page tests
-apps/web test fixtures
-```
-
 ### Non-goals
 
 * 不改后端 API
@@ -1036,26 +408,16 @@ apps/web test fixtures
 
 ### Required Tests
 
-至少补：
-
 * candidate answer visible
 * empty answer state visible
 * answer content does not execute HTML/script
-* page still shows score input / rubric
-
-### Review Standard
-
-必须满足：
-
-* 测试能防止 UI 漏展示 candidate answer
-* 测试不依赖脆弱中文硬编码，除非项目当前策略允许
-* 不引入 snapshot 大噪音
+* page still shows score input
 
 ### Suggested Validation
 
 ```bash
 pnpm --filter @exam/web test -- grading
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -1065,6 +427,10 @@ pnpm verify:fast
 ### Type
 
 Middle
+
+### Current Status
+
+**Active.** Tests ensuring Redis failure does not corrupt PG authoritative state.
 
 ### Goal
 
@@ -1089,27 +455,16 @@ Middle
 
 ### Required Tests
 
-至少补：
-
 * Redis unavailable 不导致 start/resume/save/submit 权威状态损坏
 * Redis unavailable 时 diagnostics 可见
-* fallback 有日志或 monitoring event，但不泄露敏感信息
-
-### Review Standard
-
-必须满足：
-
-* Redis 失败路径被真实模拟
-* 测试不是 fake zero
-* PG authoritative assertions 存在
-* 不引入环境依赖 flake
+* fallback 有日志或 monitoring event
 
 ### Suggested Validation
 
 ```bash
 pnpm --filter @exam/api test -- redis
 pnpm --filter @exam/api test -- candidate
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -1120,9 +475,13 @@ pnpm verify:fast
 
 Middle
 
+### Current Status
+
+**Verify needed / Active if tests missing.** If email retry tests exist and pass, mark completed. Otherwise, develop these tests.
+
 ### Goal
 
-专门补 email outbox 的失败和重试测试，保证邮箱基础设施不会影响主业务。
+验证 email outbox 的失败和重试行为，保证邮箱基础设施不会影响主业务。
 
 ### Scope
 
@@ -1142,31 +501,21 @@ Middle
 * 不做邮件模板
 * 不做 UI
 * 不做 delivery analytics
+* 不重新实现 outbox backend (already done)
 
 ### Required Tests
 
-至少补：
-
-* pending -> sent
-* pending -> failed / retry scheduled
+* pending → sent
+* pending → failed / retry scheduled
 * failure does not rollback business transaction
 * disabled email worker does not throw
-
-### Review Standard
-
-必须满足：
-
-* 失败路径可重复测试
-* 无真实外部服务依赖
-* 不需要 secret
-* retry 行为明确
 
 ### Suggested Validation
 
 ```bash
 pnpm --filter @exam/api test -- email
 pnpm --filter @exam/db test -- email
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -1177,13 +526,15 @@ pnpm verify:fast
 
 Middle
 
+### Current Status
+
+**Active.** Lightweight incident recording only.
+
 ### Goal
 
 先实现轻量级监考异常事件记录，为后续完整 proctor authority boundary 做准备。
 
 ### Scope
-
-实现：
 
 * proctor incident event 类型
 * API 或 service 层记录 incident
@@ -1193,14 +544,14 @@ Middle
 
 可能事件：
 
-* suspicious_behavior_marked
-* network_issue_marked
-* identity_check_failed
-* manual_note_added
+* `suspicious_behavior_marked`
+* `network_issue_marked`
+* `identity_check_failed`
+* `manual_note_added`
 
 ### Non-goals
 
-* 不定义完整 proctor 权限模型
+* 不定义完整 proctor 权限模型 (this is L7)
 * 不实现 force submit 权限边界
 * 不实现 proctor dashboard 重构
 * 不影响成绩判定
@@ -1208,28 +559,17 @@ Middle
 
 ### Required Tests
 
-至少补：
-
-* authorized existing proctor/admin path can create incident, if current auth supports it
+* authorized existing proctor/admin path can create incident
 * incident 写入 audit
 * incident 不包含答案正文
 * invalid incident type rejected
-
-### Review Standard
-
-必须满足：
-
-* incident 是记录，不是裁决
-* 不改变 attempt final state
-* 不扩大 proctor 权限
-* 可被后续 L7 接管
 
 ### Suggested Validation
 
 ```bash
 pnpm --filter @exam/api test -- proctor
 pnpm --filter @exam/api test -- audit
-pnpm verify:fast
+pnpm verify
 ```
 
 ---
@@ -1240,28 +580,24 @@ pnpm verify:fast
 
 Middle
 
+### Current Status
+
+**Active.** Documentation task only; no code changes.
+
 ### Goal
 
 生成可执行的 E2E 并行化准备报告，为后续 Large E2E implementation 决策提供依据。
 
 ### Scope
 
-输出：
-
-```txt
-docs/phase3/e2e-parallelization-readiness-report.md
-```
-
-内容包括：
+输出 `docs/phase3/e2e-parallelization-readiness-report.md`，内容包括：
 
 * 当前 workers=1 的原因
 * spec 文件共享数据矩阵
 * candidate / attempt 冲突矩阵
 * 可并行 spec 候选
 * 必须串行 spec 列表
-* 方案 A：worker 独立 DB
-* 方案 B：唯一 seed
-* 方案 C：只读测试并行
+* 方案 A / B / C
 * 推荐路线
 * 风险和测试成本
 
@@ -1279,14 +615,7 @@ docs/phase3/e2e-parallelization-readiness-report.md
 * 明确推荐路线
 * 不改变代码行为
 
-### Suggested Commands
-
-```bash
-rg "candidate1|candidate2|attempt|start|submit|resume|force|deadline|seed" apps tests e2e
-rg "workers|fullyParallel|playwright" .
-```
-
-### Validation
+### Suggested Validation
 
 ```bash
 git diff -- docs/phase3/e2e-parallelization-readiness-report.md
@@ -1300,19 +629,17 @@ git diff -- docs/phase3/e2e-parallelization-readiness-report.md
 
 Middle
 
+### Current Status
+
+**Closeout only.** Generate after first Middle batch completes.
+
 ### Goal
 
 在完成第一批 Small / Middle 后，生成 Phase 3 进入 Large grillme 的基线报告。
 
 ### Scope
 
-输出：
-
-```txt
-docs/phase3/readiness-closeout-report.md
-```
-
-内容包括：
+输出 `docs/phase3/readiness-closeout-report.md`，内容包括：
 
 * 已完成 Small Job
 * 已完成 Middle Job
@@ -1330,8 +657,6 @@ docs/phase3/readiness-closeout-report.md
 
 ### Acceptance Criteria
 
-报告包含：
-
 * grading candidate answer visibility 状态
 * Redis diagnostics 状态
 * email outbox 状态
@@ -1339,7 +664,7 @@ docs/phase3/readiness-closeout-report.md
 * E2E parallelization 状态
 * Large grillme 准备度
 
-### Validation
+### Suggested Validation
 
 ```bash
 git diff -- docs/phase3/readiness-closeout-report.md
@@ -1347,127 +672,76 @@ git diff -- docs/phase3/readiness-closeout-report.md
 
 ---
 
-# 3. Recommended First Execution Order
+# 4. Current Recommended Middle Execution
 
-## Cycle 1
+## Track A — Middle Closeout
 
-### 2-hour window
+Items that are verification / closeout oriented:
 
-```txt
-S1 Phase 3 README Scaffold
-S2 Phase 3 Plan Document
-S4 Current Grading API Audit
-```
+1. **M8** Email Send Failure Retry Tests — if not completed, verify and complete
+2. **M5** Diagnostics Infrastructure Status — especially email / worker / Redis visibility
+3. **M7** Redis Unavailable Fallback Tests
+4. **M6** Grading Answer Rendering Tests
+5. **M11** Phase 3 Readiness Closeout Report — generate after Track A items complete
 
-### 5-hour window
+## Track B — Still Active Functional Middle
 
-```txt
-M1 Manual Grading Candidate-Answer Visibility
-```
+Items that are new implementation or active development:
 
----
+1. **M1** Manual Grading Candidate-Answer Visibility — verify first; if complete, skip
+2. **M2** Redis Health / Fallback / Diagnostics — verify first; if complete, skip
+3. **M4** Audit / Monitoring Event Expansion v0
+4. **M9** Proctor Incident Event Logging v0 — scoped to lightweight only
+5. **M10** CI / E2E Parallelization Readiness Report
 
-## Cycle 2
+### Notes
 
-### 2-hour window
-
-```txt
-S5 Current Redis Usage Audit
-S6 Current Audit / Monitoring Event Map
-```
-
-### 5-hour window
-
-```txt
-M2 Redis Health / Fallback / Diagnostics
-```
+- Track A items are lower risk and can be merged quickly.
+- Track B items require more implementation but are still bounded Middle Jobs.
+- Do not start any Track B item before verifying whether it is already complete.
+- M11 should be the last item in this batch, after all other Middle Jobs are merged or verified.
 
 ---
 
-## Cycle 3
+# 5. Relationship to Large Jobs
 
-### 2-hour window
-
-```txt
-M4 scope review
-M5 diagnostics scope review
+```text
+This document does not define Large Job architecture.
+Large Jobs are tracked in `docs/phase3/plan.md` and `docs/phase3/job-cards-large.md`.
+No Middle Job may silently implement a Large Job decision.
 ```
 
-### 5-hour window
+### Forbidden scope creep
 
-```txt
-M4 Audit / Monitoring Event Expansion v0
-M5 Diagnostics Infrastructure Status
-```
+The following boundaries must not be crossed in any Middle Job:
 
-If M4 grows too large, split M5 into the next cycle.
+* **M1 / M6**: Do NOT implement answer protocol v2 (that is L4)
+* **M2 / M7**: Do NOT make Redis an authoritative state source (Redis is runtime cache only)
+* **M3 / M8**: Do NOT implement full notification policy (that is L15)
+* **M4 / M9**: Do NOT implement full audit event taxonomy or proctor authority (those are L9 / L7)
+* **M10**: Do NOT directly start E2E parallelization implementation (that is L10)
+* **Any Middle**: Do NOT directly implement RBAC runtime (that is L2)
+* **Any Middle**: Do NOT directly rewrite TakeExamPage state machine (that is L6)
 
----
+### RBAC entry rule
 
-## Cycle 4
+RBAC is an Active Large Track being designed via ADR / permission matrix. This Small / Middle document does NOT redefine RBAC. RBAC-derived Middle Jobs (e.g., permission helper, route-level permission tests, role assignment migration) may enter this document ONLY after they are explicitly拆出 from the accepted RBAC ADR. Until then, no Middle Job may add role checks, permission guards, or RBAC-related migrations.
 
-### 2-hour window
+### What Middle Jobs CAN do
 
-```txt
-Email/outbox current state review
-M3 migration impact review
-```
+* Close out已完成 backend infrastructure (e.g., M3 email outbox)
+* Add targeted tests for existing functionality (e.g., M6, M7, M8)
+* Expand event coverage within the existing audit schema (e.g., M4)
+* Generate readiness / status reports (e.g., M10, M11)
+* Fix localized real gaps (e.g., M1 grading answer visibility)
+* Record lightweight incidents without authority changes (e.g., M9)
 
-### 5-hour window
+### Middle Job → Large Job Dependency Analysis
 
-```txt
-M3 Email Outbox Skeleton
-```
+**No Middle Job is blocked by L16/L4/L5/L13/L14.** All 11 Middle Jobs can proceed immediately. One caveat:
 
----
+| Middle Job | Related Large | Risk | Action |
+| ---------- | ------------- | ---- | ------ |
+| M6 Grading rendering tests | L4 Answer Protocol | L4 changes answer schema; M6 tests may need update | Do now; revisit after L4 |
 
-## Cycle 5
-
-### 2-hour window
-
-```txt
-S7 Current Candidate Runtime Audit
-S8 Current Answer Payload Audit
-```
-
-### 5-hour window
-
-```txt
-S10 Large Grillme Question List
-L1/L2 grillme prep only
-```
-
-Large implementation remains deferred.
-
----
-
-# 4. First Batch Recommended Branches
-
-```txt
-p3/s-readme-plan
-p3/s-grading-api-audit
-p3/m-grading-answer-visibility
-p3/s-redis-event-audit
-p3/m-redis-diagnostics
-p3/m-audit-events-v0
-p3/m-email-outbox
-p3/s-large-grillme-prep
-```
-
----
-
-# 5. Immediate Priority
-
-Start with:
-
-```txt
-S1 + S2 + S4
-```
-
-Then implement:
-
-```txt
-M1 manual grading candidate-answer visibility
-```
-
-This gives Phase 3 an immediate real improvement without entering unresolved Large design.
+All other Middle Jobs (M1–M5, M7–M11) have no dependency on the Top 5 Large design tasks.
