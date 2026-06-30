@@ -578,6 +578,9 @@ export const ASSIGNABLE_ROLES = [
   "Grader",
   "Candidate",
 ] as const;
+// NOTE: AssignableRole is also defined in @exam/contracts (AssignableRoleSchema).
+// The two are structurally identical by design — db cannot depend on contracts
+// (dependency layering), so both stay. Keep them in sync when editing.
 export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
 
 /**

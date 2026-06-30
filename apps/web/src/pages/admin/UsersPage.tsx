@@ -38,14 +38,15 @@ import {
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
-import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
+import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
 
 /** User row shape as returned by the users list API. */
 interface UserRow {
   id: string;
   username: string;
   name: string;
-  role: "Admin" | "Candidate";
+  /** Primary role; the API returns the full assignable set (RBAC-M8). */
+  role: AssignableRole;
   isActive: boolean;
 }
 

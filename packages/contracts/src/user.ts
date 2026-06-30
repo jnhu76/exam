@@ -21,6 +21,9 @@ export const AssignableRoleSchema = z.enum([
   "Grader",
   "Candidate",
 ]);
+// NOTE: AssignableRole is also defined in @exam/db (schema/pg.ts ASSIGNABLE_ROLES).
+// The two are structurally identical by design — db cannot depend on contracts
+// (dependency layering), so both stay. Keep them in sync when editing.
 export type AssignableRole = z.infer<typeof AssignableRoleSchema>;
 
 /** Zod enum for user roles (= the assignable set, see {@link AssignableRoleSchema}). */
