@@ -3,14 +3,14 @@
 > **Date:** 2026-06-30
 > **Branch:** `role-permission`
 > **Type:** Audit / Design Fact Base (documentation only)
-> **Job card:** `docs/phase3/jobs/phase3_job_p3-authz-audit.md`
+> **Job card:** `docs/phase3/rbac/phase3_job_p3-authz-audit.md`
 > **Predecessor audits (evidence sources):**
-> - `docs/phase3/audit-current-role-checks.md` (S3)
-> - `docs/phase3/audit-current-events.md` (S6)
-> - `docs/phase3/audit-current-grading-api.md` (S3b)
-> - `docs/phase3/audit-current-redis.md` (S5)
-> - `docs/phase3/audit-current-candidate-runtime.md` (S7)
-> - `docs/phase3/audit-current-answer-payload.md` (S8)
+> - `docs/phase3/audit/audit-current-role-checks.md` (S3)
+> - `docs/phase3/audit/audit-current-events.md` (S6)
+> - `docs/phase3/audit/audit-current-grading-api.md` (S3b)
+> - `docs/phase3/audit/audit-current-redis.md` (S5)
+> - `docs/phase3/audit/audit-current-candidate-runtime.md` (S7)
+> - `docs/phase3/audit/audit-current-answer-payload.md` (S8)
 
 ---
 
@@ -763,7 +763,7 @@ The static-literal enumeration yields ~43 distinct actions, but the dynamic
 
 ### 14.6 Self-review checklist (passed)
 
-- No production code modified (only `docs/phase3/jobs/phase3_job_p3-authz-audit.md` + this file created).
+- No production code modified (only `docs/phase3/rbac/phase3_job_p3-authz-audit.md` + this file created).
 - No permission framework introduced; `requireRole` untouched; `requirePermission` still unused.
 - No audit action renamed (§7.1 marks collisions as "do NOT add", not "rename").
 - Redis explicitly ruled out as AuthZ authority (§9).

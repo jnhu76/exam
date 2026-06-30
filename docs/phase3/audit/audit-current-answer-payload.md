@@ -402,7 +402,7 @@ There's no frozen answer snapshot at submit — the freeze is status+lock. Shoul
 |-----|---------|
 | `docs/SPEC.md` §3.5 | Answer Save Protocol (versioned, idempotent) — the spec this implements |
 | `docs/phase3/job-cards.md` §S8 | This job card |
-| `docs/phase3/audit-current-candidate-runtime.md` | Frontend answer state + save/submit UI flow (S7) |
-| `docs/phase3/audit-current-events.md` | Save/submit telemetry + audit events (S6) |
+| `docs/phase3/audit/audit-current-candidate-runtime.md` | Frontend answer state + save/submit UI flow (S7) |
+| `docs/phase3/audit/audit-current-events.md` | Save/submit telemetry + audit events (S6) |
 | `apps/api/src/orchestrators/submitAndGradeAttempt.ts:22-42` | ADR-008 freeze barrier docstring |
 | `apps/e2e/e2e/save-submit-race.spec.ts:29-34` | Explicit non-guarantee of WYSIWYG submit |

@@ -2,7 +2,7 @@
 
 > **Type:** Large Design Job / Grillme / ADR (documentation only)
 > **Phase:** Phase 3 Pre-Implementation
-> **Job card:** `docs/phase3/jobs/P3-L2 Scoped RBAC Architecture + Permission Matrix.md`
+> **Job card:** `docs/phase3/rbac/P3-L2 Scoped RBAC Architecture + Permission Matrix.md`
 > **Status:** Proposed
 > **Date:** 2026-06-30
 > **Branch:** `role-permission`
@@ -19,13 +19,13 @@ The platform is a **LAN / on-premise exam system** (`docs/SPEC.md`, `AGENTS.md`)
 
 This ADR is the formal authorization design that **must** exist before any Phase 3 role/permission implementation job begins (job card §1). It is built directly on top of the fact base produced by the Phase 3 audits:
 
-- `docs/phase3/audit-authz-framework-readiness.md` (P3-AUTHZ-AUDIT) — primary evidence source
-- `docs/phase3/audit-current-role-checks.md` (S3)
-- `docs/phase3/audit-current-events.md` (S6)
-- `docs/phase3/audit-current-grading-api.md` (S3b)
-- `docs/phase3/audit-current-redis.md` (S5)
-- `docs/phase3/audit-current-candidate-runtime.md` (S7)
-- `docs/phase3/audit-current-answer-payload.md` (S8)
+- `docs/phase3/rbac/audit-authz-framework-readiness.md` (P3-AUTHZ-AUDIT) — primary evidence source
+- `docs/phase3/audit/audit-current-role-checks.md` (S3)
+- `docs/phase3/audit/audit-current-events.md` (S6)
+- `docs/phase3/audit/audit-current-grading-api.md` (S3b)
+- `docs/phase3/audit/audit-current-redis.md` (S5)
+- `docs/phase3/audit/audit-current-candidate-runtime.md` (S7)
+- `docs/phase3/audit/audit-current-answer-payload.md` (S8)
 
 All load-bearing claims in this ADR cite a file path + line number, an audit section, or a live `rg` result (job card §17). Where evidence is ambiguous, this ADR says so explicitly.
 
@@ -1144,7 +1144,7 @@ await authz.can(ctx, {
 
 ## Acceptance Criteria (job §19)
 
-- ✅ `docs/phase3/adr-scoped-rbac-architecture.md` exists.
+- ✅ `docs/phase3/rbac/adr-scoped-rbac-architecture.md` exists.
 - ✅ The ADR clearly states Phase 3 will use formal Scoped RBAC (Formal Model).
 - ✅ Distinguishes RBAC core from custom role UI (Data Model Option C vs D; Non-Goals).
 - ✅ Permission catalog v0 exists (§Permission Catalog, 9 groups).

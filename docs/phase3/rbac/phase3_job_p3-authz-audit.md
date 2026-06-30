@@ -319,7 +319,7 @@ apps/e2e/e2e/disconnect-restore.spec.ts
 Create the following document:
 
 ```txt
-docs/phase3/audit-authz-framework-readiness.md
+docs/phase3/rbac/audit-authz-framework-readiness.md
 ```
 
 The document must contain these sections.
@@ -530,7 +530,7 @@ Run at least `pnpm lint`, `pnpm typecheck`, `pnpm test -- --runInBand` (or repo 
 
 This job is complete only if:
 
-* `docs/phase3/audit-authz-framework-readiness.md` exists.
+* `docs/phase3/rbac/audit-authz-framework-readiness.md` exists.
 * The document includes all sections from §4.
 * The current role/permission model is fully inventoried.
 * The current audit/client-event/monitoring boundary is explained.
@@ -556,7 +556,7 @@ Verify no implementation slipped in: no permission library, no DB migration, no 
 
 ```txt
 Done:
-- Created docs/phase3/audit-authz-framework-readiness.md
+- Created docs/phase3/rbac/audit-authz-framework-readiness.md
 - Inventoried N route gates
 - Inventoried N handler-level role checks
 - Inventoried N frontend role checks
