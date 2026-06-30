@@ -78,6 +78,8 @@ export const AuditAction = {
   ExamDelete: "exam.delete",
   ExamExtend: "exam.extend",
   ExamPublishResults: "exam.publish_results",
+  ExamOpen: "exam.open", // status-transition audit (reconciliation)
+  ExamClosed: "exam.closed", // status-transition audit (reconciliation)
 
   // ── Question ──
   QuestionCreate: "question.create",
@@ -146,6 +148,8 @@ export const KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[] = [
   "exam.extend",
   "exam.publish",
   "exam.publish_results",
+  "exam.open",
+  "exam.closed",
   "exam.unpublish",
   "exam.update",
   "export_scores",

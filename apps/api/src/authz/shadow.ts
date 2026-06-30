@@ -55,7 +55,8 @@ export interface ShadowInput {
 /** A shadow decision record. */
 export interface ShadowResult {
   route: string;
-  actorId: string;
+  /** Opaque hash of the actor id (ADR sec.10.6 - never log raw PII). */
+  actorIdHash: string;
   role: string;
   permission: PermissionKey;
   resourceType: string;
@@ -102,8 +103,8 @@ export function shadowRequireCapability(
 
   const result: ShadowResult = {
     route: input.route,
-    actorId: input.ctx.actorId,
-    role: String(input.ctx.role),
+    actorIdHash: hashResourceId(input.ctx.actorId),
+    role: input.ctx.role,
     permission: input.permission,
     resourceType: input.resource.type,
     resourceIdHash: hashResourceId(input.resource.id),

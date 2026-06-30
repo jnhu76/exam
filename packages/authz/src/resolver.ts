@@ -75,7 +75,8 @@ export type ResolverKey =
   | "grading_entry"
   | "score"
   | "audit_log"
-  | "client_event";
+  | "client_event"
+  | "system_diagnostics";
 
 /** A successfully resolved scope: the scope type + the owning organization anchor. */
 export interface ResolvedScope {
