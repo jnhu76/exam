@@ -1,5 +1,4 @@
-import type { User } from "@exam/domain";
-import { Role } from "@exam/domain";
+import type { MeResponse } from "@exam/contracts";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -12,24 +11,20 @@ import { LoginPage } from "@/pages/LoginPage";
 import { PlaceholderPage } from "@/pages/PlaceholderPage";
 import { AuthProvider } from "@/contexts/AuthContext";
 
-const admin: User = {
-  id: "admin",
-  organizationId: "org",
+const admin: MeResponse = {
+  id: "00000000-0000-4000-8000-000000000001",
+  organizationId: "00000000-0000-4000-8000-000000000010",
   username: "admin",
-  passwordHash: "",
   name: "管理员",
-  role: Role.Admin,
-  isActive: true,
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  role: "Admin",
 };
 
-const candidate: User = {
+const candidate: MeResponse = {
   ...admin,
-  id: "candidate-1",
+  id: "00000000-0000-4000-8000-000000000002",
   username: "candidate",
   name: "考生",
-  role: Role.Candidate,
+  role: "Candidate",
 };
 
 function BrandingProbe() {

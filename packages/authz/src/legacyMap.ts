@@ -68,6 +68,9 @@ export const LEGACY_PERMISSION_MAP: Record<LegacyPermission, PermissionKey> = {
 export const LEGACY_ROLE_MAP: Record<LegacyRole, RoleKey> = {
   Admin: Role.Admin,
   Candidate: Role.Candidate,
+  // System is a synthetic actor identity, not a legacy human role; it maps to
+  // itself for completeness now that domain.Role includes it (SYSTEM-M1).
+  System: Role.System,
 };
 
 /** Maps a legacy permission string to its new {@link PermissionKey}. */

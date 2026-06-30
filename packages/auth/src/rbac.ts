@@ -20,6 +20,10 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.VIEW_SYSTEM_HEALTH,
   ],
   Candidate: [Permission.TAKE_EXAM, Permission.VIEW_OWN_SCORE],
+  // System is a synthetic actor; it holds NO legacy flat permissions. Its
+  // system-only perms (system.auto_submit etc.) live in @exam/authz presets,
+  // not in this Phase-1 flat map.
+  System: [],
 };
 
 /** Returns the list of permissions granted to the given role. */
