@@ -1192,3 +1192,271 @@ await authz.can(ctx, {
 [x] Introduces/proposes resource-aware requireCapability() (§22.4).
 [x] Forbids flat permission checks for scoped sensitive resources (§22.4).
 ```
+
+---
+
+## Cross-Cutting Architectural Invariants
+
+> The ADR already satisfies P3-L2. This section adds implementation invariants to prevent ambiguity in later Middle Jobs. Every rule below is a **must-implement constraint** for the implementation jobs that follow; none changes the design decisions above.
+
+---
+
+### 3.1 `users.role` Compatibility Cache Consistency
+
+After `user_role_assignments` exists and is backfilled, it becomes the authoritative source of role grants. `users.role` is a denormalized compatibility cache only. Any write that changes effective role assignments must update `user_role_assignments` and `users.role` in the same transaction until `users.role` is removed. New authorization reads from `user_role_assignments`; legacy code may temporarily read `users.role`.
+
+**Concretely:**
+
+1. Stage 0–5 before backfill: `users.role` is the only source. No behavioral change.
+2. Stage 7+ after `user_role_assignments` exists and backfill completes: `user_role_assignments` is authoritative; `users.role` is a read-only compatibility cache.
+3. Any role-change operation (`user.role.assign`, `candidate.create` implicit Candidate assignment, disable-user demotion) must update **both** `user_role_assignments` and `users.role` in the **same database transaction** until `users.role` is removed entirely.
+4. New AuthZ code reads `user_role_assignments`. Legacy code (pre-migration routes, handlers not yet flipped) may temporarily read `users.role`.
+5. A **consistency check** (CI test + startup assertion) must detect:
+   - `users.role = 'Admin'` but no active Admin-scope assignment in `user_role_assignments`.
+   - Active Admin-scope assignment exists but `users.role ≠ 'Admin'`.
+6. Consistency-check failure:
+   - CI / test environments: **fail** (hard break).
+   - Production startup: log a **critical warning** and enter **degraded mode** (exact degraded-mode behavior is decided by RBAC-M7).
+
+---
+
+### 3.2 Last-Admin Guard Migration Contract
+
+After `user_role_assignments` is introduced, the last-admin guard means:
+
+> Within the current organization, there must remain at least one actor whose user account is active, login is not disabled, and who holds an **active organization-scope Admin assignment** in `user_role_assignments`.
+
+**Constraints:**
+
+1. This check must execute **before** any operation that could reduce the Admin count:
+   - disable user
+   - delete user
+   - remove Admin assignment
+   - deactivate Admin assignment
+   - change Admin role to non-Admin
+2. The check must execute **within the same transaction** as the mutation.
+3. This check **replaces** the current `countActiveByRole(ctx, "Admin")` (`user.ts:189-201`) once `user_role_assignments` is live.
+4. **System actor does not count** toward the last-admin guard.
+5. Candidate / Teacher / Proctor / Grader do **not** count toward the last-admin guard unless they also hold an active organization-scope Admin assignment.
+
+---
+
+### 3.3 List Route Filter Registry Extension
+
+The single-resource route registry (`§Route → Permission → Scope → Audit Registry`) is insufficient for list pages. List APIs must filter rows to the actor's authorized scope — a scoped Grader must see only attempts in their assigned exams, a scoped Teacher must see only courses they teach.
+
+**Extension point:**
+
+```ts
+type RoutePermissionRegistryEntry = {
+  method: "GET" | "POST" | "PATCH" | "DELETE";
+  path: string;
+  requirement: PermissionRequirement;
+  resource: SingleResourceSpec | ListResourceSpec;
+  scope: ScopeType;
+  resolver: ResolverKey;
+  auditAction?: AuditActionKey;
+  sensitive: boolean;
+  migrationStage: number;
+};
+
+type ListResourceSpec = {
+  type: "list";
+  listOf: ResourceType;
+  filterSpec: FilterSpecKey;
+};
+```
+
+**List routes requiring `filterSpec`:**
+
+| Route | filterSpec Purpose |
+| --- | --- |
+| `GET /admin/grading-queue` | filter attempts to Grader's assigned exams |
+| `GET /admin/exams/:examId/scores` | filter scores to exam scope |
+| `GET /admin/candidates` | filter candidates to org/course scope |
+| `GET /admin/exams/:id/proctor/attempts` | filter attempts to Proctor's assigned exam |
+| `GET /admin/questions` | filter questions to Teacher's assigned courses |
+| `GET /admin/exams` | filter exams to Teacher's assigned courses |
+| `GET /admin/audit-logs` | filter to org scope (always full for Admin) |
+
+RBAC-M4 must reserve this extension point. RBAC-M4 does not need to implement all filters. Business-specific list filtering may be implemented in later route enforcement jobs (GRADING-M1 for grading queue is the first consumer).
+
+---
+
+### 3.4 Organization Anchor Invariant
+
+Every sensitive resource resolver must explicitly validate `resource.organizationId === ctx.organizationId`.
+
+**Rules:**
+
+1. Even though Phase 3 is single-tenant, every sensitive resolver must **explicitly** verify the organization anchor. Single-tenant deployment is not a reason to omit organization checks; it is the safest time to make them structural.
+2. A resolver must **not** rely only on the parent chain to implicitly infer organization membership. The final check `resource.organizationId === ctx.organizationId` (or equivalent org-consistency check through the parent chain) must be explicit.
+3. For attempt / exam / course / candidate / grading / score / audit-log resources, the resolver must confirm the resolved resource belongs to the current `ctx.organizationId`.
+4. If an inconsistency is detected:
+   - **Deny** the request.
+   - Record a structured warning / monitoring event.
+   - Do **not** silently allow.
+5. This is a **preventive invariant** against future Phase 4 multi-tenant IDOR vulnerabilities. Making the check structural now means Phase 4 multi-tenant cannot accidentally ship without it.
+
+---
+
+### 3.5 Frontend AuthZ Hydration Strategy
+
+The frontend must not independently infer scoped permissions. Backend remains the authority for all authorization decisions.
+
+**Rules:**
+
+1. Backend is the authorization authority. Frontend capability state is only a rendering hint.
+2. For resource detail/list APIs, the backend **may** include a `_capabilities` object in the response DTO.
+3. `_capabilities` must **not** be used as the authorization basis for any server API call. All server APIs call `requireCapability` regardless of frontend state.
+4. UI hiding a button is not a security boundary. A determined user can call the API directly; the server must deny independently.
+5. The frontend must **not** call `/authz/check` per-button to avoid API explosion. Capability state is hydrated from the business DTO.
+6. Recommended: capability-aware DTOs carry scoped capabilities inline.
+
+**Example DTO shape:**
+
+```json
+{
+  "attemptId": "...",
+  "status": "in_progress",
+  "_capabilities": {
+    "canForceSubmit": true,
+    "canExtendTime": false,
+    "canMarkMisconduct": true,
+    "canViewCandidateAnswer": false
+  }
+}
+```
+
+RBAC-M9 should design capability-aware navigation and button rendering using backend-provided hints, but all server APIs still call `requireCapability`.
+
+---
+
+### 3.6 Bulk Operation AuthZ Strategy
+
+Bulk APIs (batch force-submit, batch extend-time, batch enrollment, batch export, batch grading assignment) require set-based authorization, not item-loop authorization.
+
+**Rules:**
+
+1. Bulk API must **not** check only the first resource and assume the rest are equivalent.
+2. Bulk API must **not** loop N times through a single-resource resolver (N+1 performance cliff).
+3. Bulk API must use a **batch resolver / list resolver** that resolves the entire requested set in one query.
+4. Strategy:
+   - Resolve the actor's visible/authorized resource-id whitelist (set-based).
+   - Compare requested IDs against allowed IDs.
+   - If any unauthorized ID exists: **fail-all by default**.
+   - Partial success is allowed **only** if the API explicitly declares partial semantics (returns per-item success/failure).
+5. The unauthorized delta must be **audited** or recorded as a security warning.
+6. Applicable scenarios: batch force-submit, batch extend-time, batch enrollment, batch export, batch grading assignment.
+
+> Bulk authorization is set-based, not item-loop based.
+
+---
+
+### 3.7 AuthZ State Propagation / Revocation Policy
+
+Permission changes must take effect with well-defined timing. Revocation semantics are part of security — if a permission is revoked, the system must define when the revocation becomes effective.
+
+**Rules:**
+
+1. Do **not** store long-lived effective permissions inside JWT. JWT may carry identity and role for routing/teaching, but authorization must resolve from DB-backed role assignments at request time.
+2. Request-time authorization must read from DB-backed role assignments or a cache with a defined invalidation policy.
+3. Request-local cache is allowed (per-request, auto-invalidated).
+4. Cross-request cache is **not** allowed in Phase 3 unless an explicit invalidation policy is implemented.
+5. Permission changes must take effect **no later than the next authenticated request** for request-local resolution. Cross-request caching (if introduced) must respect this bound.
+6. High-risk revocations (e.g., removing Admin from the last-qualified actor) may require session invalidation — this is a later Middle Job decision, not a Phase 3 blocker.
+7. Real-time cross-pod invalidation / Redis pub-sub is a **Phase 4 consideration**, not a Phase 3 blocker.
+8. Redis may broadcast invalidation in the future but must **not** become the AuthZ authority.
+
+---
+
+### 3.8 Audit Sanitization and Tamper-Evidence Boundary
+
+Audit logs must be safe to store and review without leaking sensitive payloads. Tamper-evidence is a Phase 4 hardening concern, not a Phase 3 blocker.
+
+#### Phase 3 hard rules
+
+1. Audit metadata must **not** contain:
+   - Candidate answer payload (`candidateAnswer`, `answerByQuestion`)
+   - Raw rich-text answer
+   - ID number (national ID, student number beyond opaque actor/candidate ID)
+   - Phone number
+   - Email (unless strictly required for the audit action)
+   - Password / token / session secret
+   - Full PII snapshot
+2. Audit metadata **should** contain:
+   - Resource IDs (attempt ID, exam ID, course ID — opaque, not PII)
+   - Action name (constant)
+   - Old/new scalar state when safe (e.g., `oldStatus: "in_progress"`, `newStatus: "submitted"`)
+   - Reason code
+   - Actor ID
+   - Timestamp
+3. Sensitive reads (grading detail view, candidate-answer view) must audit the **fact of access**, not the content accessed.
+4. `grading.detail_viewed` metadata must **not** include `candidateAnswer`.
+
+#### Phase 4 hardening (future consideration, not a Phase 3 blocker)
+
+- Insert-only DB permissions on `audit_logs`
+- Append-only audit storage
+- Hash chain / tamper-evident audit log
+- External compliance log sink
+
+Do **not** make hash chain a Phase 3 blocker.
+
+---
+
+### 3.9 AuthZ Failure Mode Invariant
+
+AuthZ components must never fail open. However, operational failures should not be reported as ordinary 403 permission denial. A resolver or AuthZ infrastructure failure should surface as a distinct service-unavailable error so the UI and operators can distinguish "not allowed" from "authorization service failed."
+
+**Failure categories:**
+
+| Category | Example | Response | HTTP Status |
+| --- | --- | --- | --- |
+| Permission denied | Actor lacks the required permission | Return structured denial | **403** `PERMISSION_DENIED` |
+| AuthZ unavailable | Resolver DB query timeout; resolver throws unexpected error; role assignment lookup unavailable; registry inconsistent | Return service-unavailable | **503** `AUTHZ_UNAVAILABLE` |
+| Scope inconsistency | Resource parent chain inconsistent; org mismatch detected | Return denial or conflict | **403** or **409** (implementation job decides) |
+
+**Rules:**
+
+1. AuthZ components must **never** fail open (deny by default).
+2. Operational failures (DB timeout, resolver crash, registry corruption) must **not** masquerade as 403 — they must surface as 503 so operators can distinguish "unauthorized" from "broken."
+3. Scope inconsistency (org mismatch, broken parent chain) must deny. Whether the response is 403 or 409 is decided by the implementation job; it must **not** allow.
+4. The UI must handle 503 `AUTHZ_UNAVAILABLE` distinctly from 403 `PERMISSION_DENIED` (different user-facing messaging).
+
+---
+
+## Phase 4 Considerations (Non-Blocking)
+
+The following are **not** Phase 3 blockers. They are recorded here for completeness and future hardening only:
+
+- Automatic Admin downscoping based on audit log heuristics
+- Full HATEOAS framework
+- Bulk operation implementation (design above; execution is a later job)
+- Real-time cross-pod revocation
+- Redis pub/sub invalidation
+- Audit hash chain
+- Insert-only DB role hardening
+- External compliance log sink
+- `monitoring_events` table (deferred to EVENT-M1)
+- `school` / `grading_task` scope enforcement
+- Custom-role management UI (Phase 4 platformization)
+- SuperAdmin / multi-tenant cross-tenant management (Phase 4)
+
+---
+
+## Legacy Role Reconciliation Strategy
+
+Phase 3 backfill is **exact and conservative**:
+
+- `users.role = Admin` → organization-scope Admin assignment in `user_role_assignments`
+- `users.role = Candidate` → own-scope Candidate assignment in `user_role_assignments`
+
+The system must **not** automatically demote Admins based on heuristics. An optional future migration report may analyze audit logs to recommend least-privilege role changes, but:
+
+- Audit logs may be incomplete.
+- Historical behavior does not prove future responsibility.
+- Automatic demotion may lock administrators out.
+- Least-privilege migration must be human-reviewed.
+
+This is a safety guarantee: the backfill is a faithful mirror, not an inference engine.
