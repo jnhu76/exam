@@ -273,7 +273,8 @@ L12 Tenant / Organization / School Scope Model
  9. L7  Proctor Runtime Authority Boundary
 10. L9  Audit / Monitoring Full Event Taxonomy
 11. L6  Frontend Exam State Machine
-12. L8  UI Design / Workbench UI Contract
+12. L11 Subjective / Rich Text / Drawing Answer Architecture
+13. L8  UI Design / Workbench UI Contract
 ```
 
 **Rationale:**
