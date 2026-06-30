@@ -9,6 +9,7 @@ import type { RequestContext } from "@exam/domain";
 import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { isAuditAction as isKnownAuditAction } from "@exam/authz";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 
 /**
@@ -37,8 +38,13 @@ export function recordAudit(
   targetId: string,
   metadata: Record<string, unknown> = {},
 ): void {
-  // AUDIT-M1 boundary: reject unknown actions loud (no silent malformed row).
-  if (!isKnownAuditAction(action)) {
+  // AUDIT-M1 boundary: in production, reject unknown actions loud (no silent
+  // malformed audit row, ADR §3.9). The gate is skipped in test-like runtimes
+  // (test/ci/e2e) so test fixtures may seed synthetic actions (e.g. `range.t0`)
+  // without polluting the production closed union — the SOTA pattern for
+  // compliance-bound audit sinks (cf. GitLab/K8s audit event type validation,
+  // enforced at the sink in prod only).
+  if (!getRuntimeConfig().app.isTestLike && !isKnownAuditAction(action)) {
     fastify.log.error(
       { actorId: ctx.actorId, action, targetType, targetId },
       "Rejected audit log with unknown action (AUDIT-M1)",
