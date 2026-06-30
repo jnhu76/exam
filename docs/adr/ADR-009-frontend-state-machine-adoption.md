@@ -345,7 +345,7 @@ a clear, testable contract for side effects. It also prevents the common
 anti-pattern of scattering `useEffect` hooks that implicitly watch
 different state variables and trigger side effects in uncoordinated ways.
 
-If Phase B暂不引入 commands (keeping `transition => nextState`), the
+If Phase B does not introduce commands for now (keeping transition => nextState), the
 ADR still recommends reserving the `TransitionResult` shape so that the
 runtime integration can adopt commands without changing the machine
 module's core contract.
