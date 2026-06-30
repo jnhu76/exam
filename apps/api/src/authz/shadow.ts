@@ -67,9 +67,12 @@ export interface ShadowResult {
   decision: "allow" | "deny";
 }
 
-/** Opaque one-way hash of a resource id, for safe logging (ADR §10.6). */
-function hashResourceId(id: string): string {
-  return createHash("sha256").update(id).digest("hex").slice(0, 12);
+/** Opaque one-way hash of a resource/actor id, for safe logging (ADR §10.6).
+ *  Defensive against missing ids: shadow mode must NEVER crash a request
+ *  (ADR §10.3), so a missing id logs as empty rather than throwing. */
+function hashResourceId(id: string | undefined | null): string {
+  if (!id) return "";
+  return createHash("sha256").update(String(id)).digest("hex").slice(0, 12);
 }
 
 function legacyAllows(ctx: ShadowContext, gate: RoleKey[]): boolean {
@@ -96,7 +99,9 @@ function capabilityAllows(
   // resolver-backed capability check; shadow's contract is unchanged.)
   if (rolePresetSet(ctx.role).has(permission)) return true;
   // Fall back to the request's flat permission cache (compat with ctx.permissions).
-  return ctx.permissions.includes(permission);
+  // Defensive: shadow must never crash (ADR §10.3); a legacy caller that omits
+  // permissions simply yields a deny on this branch instead of throwing.
+  return ctx.permissions?.includes(permission) ?? false;
 }
 
 /**

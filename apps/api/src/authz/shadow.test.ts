@@ -124,3 +124,51 @@ describe("RBAC-M5 shadow mode — sensitive resource logging hygiene (ADR §10.6
     expect(serialized).not.toContain("answerByQuestion");
   });
 });
+
+describe("RBAC-M5 shadow mode — never crashes on missing/loose inputs (ADR §10.3)", () => {
+  // Shadow mode MUST NEVER throw or alter a production request, even when a
+  // legacy caller passes a missing resource id or omits permissions. These are
+  // the Gemini-code-assist regression guards.
+
+  it("does not throw when resource.id is undefined (system-scope / no-id route)", () => {
+    const log = makeLogger();
+    const input: ShadowInput = {
+      route: "GET /system/health",
+      ctx: adminCtx,
+      legacyGate: ["Admin"],
+      permission: Permission.SystemHealthView,
+      resource: { type: "system_diagnostics", id: undefined as never },
+    };
+    expect(() => shadowRequireCapability(input, log)).not.toThrow();
+    expect(log.records.length).toBeGreaterThan(0);
+  });
+
+  it("does not throw when ctx.permissions is missing (legacy caller)", () => {
+    const log = makeLogger();
+    const ctx = {
+      actorId: "admin-1",
+      role: Role.Admin,
+      permissions: undefined as never,
+    };
+    const input: ShadowInput = {
+      route: "POST /admin/attempts/:attemptId/force-submit",
+      ctx,
+      legacyGate: ["Admin"],
+      permission: Permission.AttemptForceSubmit,
+      resource: { type: "attempt", id: "att-1" },
+    };
+    // Admin preset already holds attempt.force_submit, so capability is true
+    // via the preset branch and the missing-permissions fallback is never hit;
+    // but a System-only perm (not in Admin preset) forces the fallback path.
+    const inputFallback: ShadowInput = {
+      ...input,
+      permission: Permission.SystemAutoSubmit,
+    };
+    expect(() => shadowRequireCapability(inputFallback, log)).not.toThrow();
+    const r = shadowRequireCapability(inputFallback, log);
+    // Legacy (Admin gate) allows; capability (System-only perm, no perms array)
+    // denies -> mismatch recorded, but no throw, decision stays legacy-allow.
+    expect(r.decision).toBe("allow");
+    expect(r.capabilityAllowed).toBe(false);
+  });
+});
