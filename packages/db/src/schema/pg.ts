@@ -565,6 +565,59 @@ export const emailOutbox = pgTable(
   ],
 );
 
+/**
+ * Roles assignable to a user via the RBAC-M8 role-assignment surface.
+ * `System` is excluded (synthetic, non-assignable). `SuperAdmin` is not defined
+ * (no ADR). Phase 1 `users.role` still only carries Admin/Candidate; the
+ * assignment table is the path to the broader Phase 3 set.
+ */
+export const ASSIGNABLE_ROLES = [
+  "Admin",
+  "Teacher",
+  "Proctor",
+  "Grader",
+  "Candidate",
+] as const;
+export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+/**
+ * User role assignments (RBAC-M7). Multi-role: a user may hold several role
+ * rows per organization, exactly one of which is the primary active role.
+ * `users.role` is kept in sync with the primary active assignment during the
+ * migration window (ADR § compatibility cache). The primary-uniqueness rule
+ * (≤1 primary active per user/org) is enforced at the application layer
+ * (userRoleAssignmentRepo, transactional) because a partial unique index on
+ * `(organization_id, user_id) WHERE is_primary AND is_active` is awkward to
+ * express declaratively in Drizzle; the table-level check constrains `role`
+ * to the assignable set as a direct-write guard.
+ */
+export const userRoleAssignments = pgTable(
+  "user_role_assignments",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().$type<AssignableRole>(),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("user_role_assignments_org_user_role_unique").on(
+      table.organizationId,
+      table.userId,
+      table.role,
+    ),
+    check(
+      "user_role_assignments_role_check",
+      sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate')`,
+    ),
+  ],
+);
+
 /** Aggregated schema object exporting all tables for Drizzle configuration. */
 export const schema = {
   organizations,
@@ -572,6 +625,7 @@ export const schema = {
   candidateFields,
   users,
   candidateProfiles,
+  userRoleAssignments,
   courses,
   questions,
   exams,

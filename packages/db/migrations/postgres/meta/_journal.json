@@ -78,6 +78,13 @@
       "when": 1782772890120,
       "tag": "0010_calm_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782832589930,
+      "tag": "0011_true_silvermane",
+      "breakpoints": true
     }
   ]
 }
