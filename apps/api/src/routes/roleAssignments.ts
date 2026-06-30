@@ -228,8 +228,13 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { assignmentId } = request.params as { assignmentId: string };
       const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
-      // Deactivate-then-remove keeps the audit trail meaningful; remove is hard.
-      await assignmentRepo.remove(ctx, assignmentId);
+      // remove() returns the deleted row + auto-promotes the next active if the
+      // removed one was primary. Re-sync users.role so the cache matches.
+      const removed = await assignmentRepo.remove(ctx, assignmentId);
+      if (!removed) throw new NotFoundError("role assignment");
+      if (removed.isPrimary) {
+        await syncUsersRoleFromPrimary(fastify.db, ctx, removed.userId);
+      }
       recordAudit(
         fastify,
         request,
@@ -237,7 +242,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         "user.role_changed",
         "role_assignment",
         assignmentId,
-        { removed: true },
+        { removed: true, affectedUserId: removed.userId },
       );
       return reply.code(204).send();
     },

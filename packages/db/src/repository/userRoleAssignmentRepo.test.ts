@@ -150,4 +150,55 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
       repo.assign(ctx, { userId, role: "System" as never }),
     ).rejects.toThrow();
   });
+
+  it("auto-promotes the next active assignment when the primary is deactivated (review #7)", async () => {
+    const { userId, ctx } = await seedOrgAndUser(db, "grace");
+    const repo = createUserRoleAssignmentRepo(db);
+    const primary = await repo.assign(ctx, {
+      userId,
+      role: "Candidate",
+      isPrimary: true,
+    });
+    const secondary = await repo.assign(ctx, {
+      userId,
+      role: "Grader",
+      isPrimary: false,
+    });
+    await repo.deactivate(ctx, primary.id);
+    const newPrimary = await repo.findPrimaryActiveForUser(ctx, userId);
+    expect(newPrimary?.id).toBe(secondary.id);
+    expect(newPrimary?.role).toBe("Grader");
+  });
+
+  it("auto-promotes the next active assignment when the primary is removed (review #7)", async () => {
+    const { userId, ctx } = await seedOrgAndUser(db, "heidi");
+    const repo = createUserRoleAssignmentRepo(db);
+    const primary = await repo.assign(ctx, {
+      userId,
+      role: "Candidate",
+      isPrimary: true,
+    });
+    const secondary = await repo.assign(ctx, {
+      userId,
+      role: "Proctor",
+      isPrimary: false,
+    });
+    const removed = await repo.remove(ctx, primary.id);
+    expect(removed?.isPrimary).toBe(true);
+    const newPrimary = await repo.findPrimaryActiveForUser(ctx, userId);
+    expect(newPrimary?.id).toBe(secondary.id);
+    expect(newPrimary?.role).toBe("Proctor");
+  });
+
+  it("leaves zero primaries when the only primary is removed and no other active exists (review #7 edge)", async () => {
+    const { userId, ctx } = await seedOrgAndUser(db, "ivan");
+    const repo = createUserRoleAssignmentRepo(db);
+    const primary = await repo.assign(ctx, {
+      userId,
+      role: "Candidate",
+      isPrimary: true,
+    });
+    await repo.remove(ctx, primary.id);
+    expect(await repo.findPrimaryActiveForUser(ctx, userId)).toBeNull();
+  });
 });

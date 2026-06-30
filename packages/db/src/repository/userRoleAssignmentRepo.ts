@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Database, TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { userRoleAssignments, type AssignableRole } from "../schema/pg.js";
@@ -121,7 +122,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
       const inserted = await tx
         .insert(userRoleAssignments)
         .values({
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           organizationId: orgId,
           userId: params.userId,
           role: params.role,
@@ -176,39 +177,98 @@ export function createUserRoleAssignmentRepo(db: Database) {
     });
   }
 
-  /** Deactivates an assignment (keeps the row for audit history). */
+  /**
+   * Promotes the user's first remaining active (non-primary) assignment to
+   * primary, if any. Used after the primary is removed/deactivated to keep
+   * the "one primary active role" invariant (RBAC-M7 review #7). No-op if
+   * there is no other active assignment (the user then has zero primaries,
+   * which is allowed — callers re-sync users.role accordingly).
+   */
+  async function promoteNextActiveForUser(
+    tx: Parameters<Parameters<typeof executeInTransaction>[1]>[0],
+    orgId: string,
+    userId: string,
+  ): Promise<void> {
+    const next = await tx
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.userId, userId),
+          eq(userRoleAssignments.isActive, true),
+        ),
+      )
+      .orderBy(userRoleAssignments.createdAt)
+      .limit(1);
+    if (next[0]) {
+      await tx
+        .update(userRoleAssignments)
+        .set({ isPrimary: true, updatedAt: now() })
+        .where(eq(userRoleAssignments.id, next[0]!.id));
+    }
+  }
+
+  /** Deactivates an assignment (keeps the row for audit history). If the
+   *  deactivated assignment was primary, auto-promotes the next active one
+   *  (RBAC-M7 invariant). */
   async function deactivate(
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
     const orgId = resolveOrganizationId(ctx);
-    const updated = await db
-      .update(userRoleAssignments)
-      .set({ isActive: false, updatedAt: now() })
-      .where(
-        and(
-          eq(userRoleAssignments.organizationId, orgId),
-          eq(userRoleAssignments.id, assignmentId),
-        ),
-      )
-      .returning();
-    return updated[0] ? row(updated[0]) : null;
+    return executeInTransaction(db, async (tx) => {
+      const before = await tx
+        .select()
+        .from(userRoleAssignments)
+        .where(
+          and(
+            eq(userRoleAssignments.organizationId, orgId),
+            eq(userRoleAssignments.id, assignmentId),
+          ),
+        )
+        .limit(1);
+      if (!before[0]) return null;
+      const updated = await tx
+        .update(userRoleAssignments)
+        .set({ isActive: false, updatedAt: now() })
+        .where(eq(userRoleAssignments.id, assignmentId))
+        .returning();
+      if (before[0]!.isPrimary) {
+        await promoteNextActiveForUser(tx, orgId, before[0]!.userId);
+      }
+      return updated[0] ? row(updated[0]) : null;
+    });
   }
 
-  /** Hard-removes an assignment row. */
+  /** Hard-removes an assignment row. If it was primary, auto-promotes the
+   *  next active assignment (RBAC-M7 invariant). Returns the removed row (for
+   *  callers that need to re-sync users.role), or null if not found. */
   async function remove(
     ctx: TenantContext | RequestContext,
     assignmentId: string,
-  ): Promise<void> {
+  ): Promise<UserRoleAssignmentRow | null> {
     const orgId = resolveOrganizationId(ctx);
-    await db
-      .delete(userRoleAssignments)
-      .where(
-        and(
-          eq(userRoleAssignments.organizationId, orgId),
-          eq(userRoleAssignments.id, assignmentId),
-        ),
-      );
+    return executeInTransaction(db, async (tx) => {
+      const before = await tx
+        .select()
+        .from(userRoleAssignments)
+        .where(
+          and(
+            eq(userRoleAssignments.organizationId, orgId),
+            eq(userRoleAssignments.id, assignmentId),
+          ),
+        )
+        .limit(1);
+      if (!before[0]) return null;
+      await tx
+        .delete(userRoleAssignments)
+        .where(eq(userRoleAssignments.id, assignmentId));
+      if (before[0]!.isPrimary) {
+        await promoteNextActiveForUser(tx, orgId, before[0]!.userId);
+      }
+      return row(before[0]!);
+    });
   }
 
   return {

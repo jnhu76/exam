@@ -230,7 +230,11 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           userId: id,
           role: data.role,
           isPrimary: true,
-          isActive: data.isActive !== false,
+          // Preserve the user's existing active status when only the role
+          // changes; only an explicit isActive=false deactivates. (Review #1:
+          // the prior `data.isActive !== false` wrongly re-activated.)
+          isActive:
+            data.isActive !== undefined ? data.isActive : target.isActive,
         });
         await syncUsersRoleFromPrimary(fastify.db, ctx, id);
       }

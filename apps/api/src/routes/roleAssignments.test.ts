@@ -164,4 +164,44 @@ describe("RBAC-M8 role-assignment routes", () => {
       .where(eq(schema.users.id, target.id));
     expect(userRow[0]!.role).toBe("Grader");
   });
+
+  it("DELETE a primary assignment promotes the next active + syncs users.role (review #5/#7)", async () => {
+    const target = await createTargetUser(ctx.db, ctx.org.id, "del-primary");
+    await createPrimaryAssignment(ctx.db, ctx.org.id, target.id, "Candidate");
+    // Add a secondary Grader assignment.
+    const addRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+      payload: { role: "Grader", isPrimary: false },
+    });
+    const graderAssignmentId = addRes.json().id;
+
+    // DELETE the primary Candidate assignment.
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/users/${target.id}/role-assignments`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const primaryId = listRes
+      .json()
+      .items.find(
+        (i: { role: string; isPrimary: boolean }) =>
+          i.role === "Candidate" && i.isPrimary,
+      ).id;
+
+    const delRes = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/role-assignments/${primaryId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(delRes.statusCode).toBe(204);
+
+    // users.role cache now reflects the auto-promoted Grader.
+    const userRow = await ctx.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, target.id));
+    expect(userRow[0]!.role).toBe("Grader");
+  });
 });
