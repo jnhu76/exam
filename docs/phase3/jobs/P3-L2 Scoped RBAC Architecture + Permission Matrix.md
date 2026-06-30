@@ -540,10 +540,10 @@ For each resource, define:
 Example:
 
 ```txt
-attempt -> exam -> course -> school -> organization
-answer -> attempt -> exam -> course -> school -> organization
-question -> course -> school -> organization
-candidate -> school / organization
+attempt -> exam -> course -> organization
+answer -> attempt -> exam -> course -> organization
+question -> course -> organization
+candidate -> organization
 score -> attempt -> candidate + exam
 ```
 
@@ -1278,8 +1278,8 @@ The ADR must include a **Resource Parent Integrity Matrix**:
 | attempt   | exam        |       no | attempt creation              |                       yes |                       n/a |
 | answer    | attempt     |       no | answer save                   |                       yes |                       n/a |
 | exam      | course      |    maybe | publish/start                 |                       yes |                       yes |
-| course    | school/org  |    maybe | course creation / migration   |                       yes |                       yes |
-| candidate | school/org  |    maybe | enrollment / attempt creation |                       yes |                       yes |
+| course    | organization|    maybe | course creation / migration   |                       yes |                       yes |
+| candidate | organization|    maybe | enrollment / attempt creation |                       yes |                       yes |
 
 ---
 

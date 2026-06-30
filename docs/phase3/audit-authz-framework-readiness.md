@@ -344,9 +344,9 @@ type RouteRegistryEntry = {
 | attempt (candidate runtime) | `POST /attempts/:id/start` | `TAKE_EXAM` | own_attempt | `attempt.start` | no | Stage 6 |
 | attempt (candidate runtime) | `POST /attempts/:id/answers/:qid` | `SAVE_ANSWER` | own_attempt | `attempt.saveAnswer` | no | Stage 6 |
 | attempt (candidate runtime) | `POST /attempts/:id/submit` | `SUBMIT_ATTEMPT` | own_attempt | `attempt.submit` | no | Stage 6 |
-| attempt (admin/proctor) | `POST /attempts/:id/misconduct` | `MARK_MISCONDUCT` ⚠️ | attempt | `attempt.misconductFlagged` | yes | Stage 6 |
-| attempt (admin/proctor) | `POST /attempts/:id/force-submit` | `FORCE_SUBMIT` ⚠️ | attempt | `attempt.forceSubmit` | yes | Stage 6 |
-| attempt (admin/proctor) | `POST /attempts/:id/extend-time` | `EXTEND_TIME` ⚠️ | attempt | `attempt.extendTime` | yes | Stage 6 |
+| attempt (admin/proctor) | `POST /admin/attempts/:id/misconduct` | `MARK_MISCONDUCT` ⚠️ | attempt | `attempt.misconductFlagged` | yes | Stage 6 |
+| attempt (admin/proctor) | `POST /admin/attempts/:id/force-submit` | `FORCE_SUBMIT` ⚠️ | attempt | `attempt.forceSubmit` | yes | Stage 6 |
+| attempt (admin/proctor) | `POST /admin/attempts/:id/extend-time` | `EXTEND_TIME` ⚠️ | attempt | `attempt.extendTime` | yes | Stage 6 |
 | grading | `GET /admin/grading-queue` | `VIEW_GRADING_DETAIL` | organization/exam | read — recommend audit | yes | Stage 6 |
 | grading | `GET /admin/attempts/:id/grading-details` | `VIEW_GRADING_DETAIL` (+`VIEW_CANDIDATE_ANSWER`) | attempt | **`grading.detail_viewed` (missing)** | **yes** | Stage 6 |
 | grading | `POST /admin/attempts/:id/grade-question` | `GRADE_ANSWER` | attempt | `grading.score_entered` | yes | Stage 6 |

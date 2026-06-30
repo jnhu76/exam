@@ -619,32 +619,32 @@ type RoutePermissionRegistryEntry = {
 ### Special required mappings (job §8)
 
 ```
-POST /admin/attempts/:attemptId/force-submit
+POST /admin/attempts/:id/force-submit
   -> attempt.force_submit
   -> attempt scope (resolveAttemptScope)
   -> attempt.forceSubmit   [state guard: attempt not terminal]
 
-POST /admin/attempts/:attemptId/extend-time
+POST /admin/attempts/:id/extend-time
   -> attempt.time.extend
   -> attempt scope (resolveAttemptScope)
   -> attempt.extendTime    [state guard: exam/attempt still open]
 
-POST /admin/attempts/:attemptId/misconduct
+POST /admin/attempts/:id/misconduct
   -> attempt.misconduct.mark
   -> attempt scope (resolveAttemptScope)
   -> attempt.misconductFlagged
 
-GET /admin/attempts/:attemptId/grading-details
+GET /admin/attempts/:id/grading-details
   -> grading.detail.view + grading.answer.view
   -> attempt scope (resolveAttemptScope)
   -> grading.detail_viewed   [currently MISSING — §7.2]
 
-POST /admin/attempts/:attemptId/grade-question
+POST /admin/attempts/:id/grade-question
   -> grading.score.write
   -> attempt/question scope (resolveAttemptScope)
   -> grading.score_entered   [state guard: pending_manual]
 
-GET /scores/attempts/:attemptId
+GET /scores/attempts/:id
   -> score.own.view OR score.all.view
   -> own_score / attempt scope
 ```
@@ -1160,7 +1160,7 @@ await authz.can(ctx, {
 - ✅ Shadow permission mode design exists (§Shadow Permission Mode).
 - ✅ Data model proposal compares 4 options (§Data Model A/B/C/D).
 - ✅ Migration plan Stage 0–9 exists (§Migration Plan).
-- ✅ Middle Job breakdown exists (16 jobs).
+- ✅ Middle Job breakdown exists (15 jobs).
 - ✅ No code behavior changed. ✅ No DB schema changed. ✅ No API contract changed. ✅ No permission enforcement changed. ✅ No audit action renamed.
 - ✅ Redis explicitly ruled out as authorization authority (§Scope Model invariant, §9 re-verification).
 
