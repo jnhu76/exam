@@ -96,28 +96,27 @@ describe("UsersPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("create dialog shows only Admin role option", async () => {
+  it("create dialog shows the RBAC-M9 staff role options (Admin/Teacher/Proctor/Grader)", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole("button", { name: /新增用户/ }));
     const dialog = await screen.findByRole("dialog");
     const trigger = within(dialog).getByRole("combobox");
     await user.click(trigger);
-    const adminOptions = await screen.findAllByRole("option", {
-      name: "管理员",
-    });
-    expect(adminOptions.length).toBeGreaterThanOrEqual(1);
+    // The 4 staff roles are selectable (widened from Admin-only in RBAC-M9).
     expect(
-      screen.queryByRole("option", { name: "教师" }),
-    ).not.toBeInTheDocument();
+      await screen.findByRole("option", { name: "管理员" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "教师" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "监考员" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "阅卷员" })).toBeInTheDocument();
+    // Candidate is NOT offered (managed via candidate routes); SuperAdmin is
+    // never defined (no ADR).
     expect(
-      screen.queryByRole("option", { name: "监考员" }),
+      screen.queryByRole("option", { name: "候选人" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("option", { name: "超级管理员" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: "阅卷员" }),
     ).not.toBeInTheDocument();
   });
 

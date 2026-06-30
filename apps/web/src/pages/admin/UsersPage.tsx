@@ -54,11 +54,22 @@ interface Page<T> {
   items: T[];
 }
 
-/** The subset of roles that admins can create or edit via the dialog. */
-type EditableRole = "Admin";
+/**
+ * Staff roles an admin can create/assign via this dialog (RBAC-M8/M9).
+ * Candidate is excluded here — candidates are managed via the candidate
+ * routes (the user list also filters them out). The backend still gates
+ * creation on requireRole(["Admin"]) until enforcement (PR #3); the role
+ * chosen here is the primary assignment, which syncs users.role.
+ */
+type EditableRole = "Admin" | "Teacher" | "Proctor" | "Grader";
 
 /** Roles available for selection in the user create/edit form. */
-const EDITABLE_ROLES: EditableRole[] = ["Admin"];
+const EDITABLE_ROLES: EditableRole[] = [
+  "Admin",
+  "Teacher",
+  "Proctor",
+  "Grader",
+];
 
 /** Admin page for managing platform users (create, edit, enable/disable). */
 export function UsersPage() {
@@ -312,9 +323,11 @@ export function UsersPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Admin">
-                    {t("admin.users.dialog.admin")}
-                  </SelectItem>
+                  {EDITABLE_ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {t(`admin.users.roleLabels.${r}` as never) ?? r}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </Field>

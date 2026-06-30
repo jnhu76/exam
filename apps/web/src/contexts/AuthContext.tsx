@@ -32,7 +32,13 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** Returns the default landing path for a given user role. */
+/**
+ * Returns the default landing path for a given user role.
+ *
+ * Candidate → the exam list. Admin (and, once enforcement lands in PR #3,
+ * Teacher/Proctor/Grader) → the admin dashboard. This is a redirect HINT;
+ * AdminLayout/ExamLayout still enforce the real role gate (unchanged in M9).
+ */
 function dashboardFor(user: SessionUser): string {
   return user.role === "Candidate" ? "/exam/list" : "/admin/dashboard";
 }
