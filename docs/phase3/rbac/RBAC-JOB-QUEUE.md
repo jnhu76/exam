@@ -27,7 +27,7 @@
 | # | Job | Type | This PR | Risk | Status | Commit |
 | --- | --- | --- | :---: | :---: | --- | --- |
 | 0 | Tracking doc (this file) | scaffold | ✅ | low | [x] | _commit 0_ |
-| 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [~] | — |
+| 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [x] | _commit 1_ |
 | 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [ ] | — |
 | 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [ ] | — |
 | 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [ ] | — |
@@ -43,10 +43,12 @@
 ### Commit 0 — Tracking doc
 - Created `docs/phase3/rbac/RBAC-JOB-QUEUE.md`.
 
-### RBAC-M1 — _pending_
-- Delivered: `packages/authz` leaf (package.json/tsconfig/vitest), `src/{catalog,legacyMap,index}.ts`; arch lint rule locks authz to leaf.
-- Tests: closed-union; 22 legacy perms 1:1 mapped; dead-perm mapping.
-- Commands: `pnpm --filter @exam/authz test`; `pnpm verify:static`.
+### RBAC-M1 — ✅ done
+- Delivered: `packages/authz` leaf (package.json/tsconfig/vitest.config, `@exam/domain` dep); `src/{catalog,legacyMap,index}.ts`; arch-lint rule added to `scripts/check-architecture.mjs` locking authz to a true leaf (no fastify/React/Drizzle, only `@exam/domain`).
+- Catalog: full dotted `PermissionKey` (9 groups), `ScopeType`, `RoleKey` (6 presets), `AuditAction` (new dotted keys only — legacy union owned by AUDIT-M1).
+- Legacy map: all 22 `SCREAMING_SNAKE` perms 1:1 mapped; dead `MANAGE_ORGANIZATION`→`organization.update`; 4 proctor-trap keys mapped; `Admin`/`Candidate` roles mapped.
+- Tests: 15 passing (shape, closed-union integrity, legacy 1:1 coverage, dead-perm + trap mappings, candidate-own mapping, role map).
+- Commands: `pnpm --filter @exam/authz test` ✅ 15/15 · `pnpm --filter @exam/authz typecheck` ✅ · `pnpm --filter @exam/authz build` ✅ · `pnpm verify:static` ✅.
 
 ### RBAC-M2 — _pending_
 - Delivered: `packages/authz/src/presets.ts` mirroring ADR matrix.
@@ -84,4 +86,6 @@ After jobs 1–8 + AUDIT-M1/M2 + M5 shadow are green, **pause** and surface to t
 
 ## Notes / decisions log
 
-- _none yet_
+- **RBAC-M1 naming depth**: ADR §4 deliberately mixes 2-segment (`user.view`) and 3-segment (`attempt.force_submit`) dotted keys. The closed-union test asserts `>= 2 segments` + lowercase, not a fixed depth — matches ADR.
+- **RBAC-M1 `MANAGE_CANDIDATE_FIELDS`**: legacy coarse grant maps to `candidate_field.create` as the closest single new key; the full 4-way split is expressed by role presets (RBAC-M2), not the 1:1 legacy map.
+- **RBAC-M1 arch lint**: added `packages/authz/src` forbid block (no fastify/React/Drizzle; only `@exam/domain`) to enforce the ADR "leaf" contract structurally.

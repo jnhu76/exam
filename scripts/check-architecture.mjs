@@ -32,6 +32,18 @@ await forbid("packages/domain/src", [
     "domain must remain a leaf package",
   ],
 ]);
+// authz is the Phase 3 RBAC leaf (ADR RBAC-M1): no fastify/React/Drizzle, and
+// it may only reach @exam/domain (not db/contracts/api) so it stays portable.
+await forbid("packages/authz/src", [
+  [
+    /from ["'](?:fastify|react|drizzle-orm)/,
+    "authz must stay a leaf package (no fastify/React/Drizzle)",
+  ],
+  [
+    /from ["']@exam\/(?:db|contracts|auth|exam-engine|import-export)\//,
+    "authz may only depend on @exam/domain",
+  ],
+]);
 await forbid("packages/contracts/src", [
   [/from ["']fastify/, "contracts cannot depend on fastify"],
 ]);
