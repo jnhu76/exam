@@ -6,3 +6,4 @@
  */
 export * from "./catalog.js";
 export * from "./legacyMap.js";
+export * from "./presets.js";

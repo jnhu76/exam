@@ -28,7 +28,7 @@
 | --- | --- | --- | :---: | :---: | --- | --- |
 | 0 | Tracking doc (this file) | scaffold | ✅ | low | [x] | _commit 0_ |
 | 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [x] | _commit 1_ |
-| 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [ ] | — |
+| 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [x] | _commit 2_ |
 | 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [ ] | — |
 | 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [ ] | — |
 | 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [ ] | — |
@@ -50,9 +50,11 @@
 - Tests: 15 passing (shape, closed-union integrity, legacy 1:1 coverage, dead-perm + trap mappings, candidate-own mapping, role map).
 - Commands: `pnpm --filter @exam/authz test` ✅ 15/15 · `pnpm --filter @exam/authz typecheck` ✅ · `pnpm --filter @exam/authz build` ✅ · `pnpm verify:static` ✅.
 
-### RBAC-M2 — _pending_
-- Delivered: `packages/authz/src/presets.ts` mirroring ADR matrix.
-- Tests: ADR §7 eight boundary checks asserted per role.
+### RBAC-M2 — ✅ done
+- Delivered: `packages/authz/src/presets.ts` — `ROLE_PRESETS` + `permissionsForRole(role)` mirroring ADR §Role Presets / §Role→Permission Matrix. Each preset carries key/label/purpose/isSystem/assignable/loginAllowed/defaultScope/permissions/sensitivePermissions.
+- Matrix boundaries encoded (ADR §7 review checklist, all 8): Admin compat superset (4 proctor + grading, no Candidate-own, no SYS-only); Teacher not Grader/Proctor; Proctor cannot grade/answer/publish; Grader grades but cannot publish/finalize/identity; Candidate own-scope; System non-login/non-assignable/SYS-only.
+- Tests: 24 preset tests (shape, all 8 boundaries, integrity: every grant is a known catalog value with no dupes).
+- Commands: `pnpm --filter @exam/authz test` ✅ 39/39 · `pnpm verify:static` ✅.
 
 ### AUDIT-M1 — _pending_
 - Delivered: `packages/authz/src/auditActions.ts` + `recordAudit` assertion (no rename).
