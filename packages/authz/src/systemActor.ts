@@ -25,6 +25,14 @@ export const SYSTEM_ACTOR_IDS = {
   Heartbeat: "system:heartbeat",
 } as const;
 
+/** Closed union of allowed system actor ids (compile-time enforcement). */
+export type SystemActorId =
+  (typeof SYSTEM_ACTOR_IDS)[keyof typeof SYSTEM_ACTOR_IDS];
+
+const ALLOWED_SYSTEM_ACTOR_IDS: ReadonlySet<string> = new Set(
+  Object.values(SYSTEM_ACTOR_IDS),
+);
+
 /**
  * The system-only permissions granted to the System role preset (dotted keys).
  * Exposed for callers/tests that want to reason about System's real grants
@@ -34,12 +42,20 @@ export const SYSTEM_PERMISSIONS = permissionsForRole(AuthzRole.System);
 
 /**
  * Builds a synthetic `System`-role request context for a background scanner.
- * `actorId` MUST be one of {@link SYSTEM_ACTOR_IDS} (stable, audit-traceable).
+ *
+ * `actorId` MUST be one of {@link SYSTEM_ACTOR_IDS} — enforced at both
+ * compile time (typed param) and runtime (throws on an out-of-set id) so a
+ * stray string can never produce an untracked audit actor. ADR §3.9 fail-loud.
  */
 export function createSystemRequestContext(
   organizationId: string,
-  actorId: string,
+  actorId: SystemActorId,
 ): RequestContext {
+  if (!ALLOWED_SYSTEM_ACTOR_IDS.has(actorId)) {
+    throw new Error(
+      `Unknown system actor id: ${actorId}. Use SYSTEM_ACTOR_IDS.* from @exam/authz.`,
+    );
+  }
   return {
     actorId,
     organizationId,

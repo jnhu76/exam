@@ -53,4 +53,15 @@ describe("SYSTEM-M1 system actor — createSystemRequestContext", () => {
     const ctx = createSystemRequestContext("org-1", SYSTEM_ACTOR_IDS.Heartbeat);
     expect(ctx.permissions).toEqual([]);
   });
+
+  it("rejects an arbitrary actor id at runtime (audit traceability, ADR sec.3.9 fail-loud)", () => {
+    // The compile-time type narrows to SystemActorId, but a stray `as`-cast or
+    // untyped input must still fail loud rather than produce an untracked actor.
+    expect(() =>
+      createSystemRequestContext(
+        "org-1",
+        "system:evil-scanner" as unknown as never,
+      ),
+    ).toThrow(/Unknown system actor id/);
+  });
 });
