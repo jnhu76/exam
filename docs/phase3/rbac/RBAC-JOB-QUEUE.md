@@ -30,7 +30,7 @@
 | 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [x] | _commit 1_ |
 | 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [x] | _commit 2_ |
 | 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [x] | _commit 3_ |
-| 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [ ] | — |
+| 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [x] | _commit 4_ |
 | 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [ ] | — |
 | 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [ ] | — |
 | 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [ ] | — |
@@ -64,9 +64,12 @@
 - Tests: 8 audit-action tests (shape, no-rename invariant, ADR new actions, full production coverage, guards). Total authz: 47/47.
 - Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
-### RBAC-M3 — _pending_
-- Delivered: `packages/authz/src/resolver.ts` interfaces + integrity contract.
-- Tests: system/organization resolvers; deny-on-inconsistent-chain contract.
+### RBAC-M3 — ✅ done
+- Delivered: `packages/authz/src/resolver.ts` — `ResolverContext`, `ResourceType`, `ResourceRef`, `ResolverKey`, `ResolvedScope`, `DeniedScope`, `DenyReason`, `DENY_REASONS`, `isScopeDenied`, and the `ScopeResolver` interface. Pure implementations: `resolveSystemScope`, `resolveOrganizationScope` (no DB). Resource-aware resolvers are interfaces only — implemented by RBAC-M10/PROCTOR-M1/GRADING-M1.
+- Integrity contract encoded as code comments + the `DenyReason` vocabulary (`organization_mismatch`, `broken_parent_chain`, `resource_not_found`, `ownership_mismatch`, `resolver_error`) — the surface enforcement jobs build against (ADR §22.1, §3.4, §3.9). Frozen vs mutable parent links documented; org-anchor rule explicit.
+- `isScopeDenied` widened to accept `unknown` so callers passing loosely-typed resolutions still narrow (robust against literal-`true` inference).
+- Tests: 5 resolver tests (system/org pure resolution, deny identification, success-vs-deny, deny-reason vocabulary). Total authz: 52/52.
+- Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm verify:static` ✅.
 
 ### RBAC-M4 — _pending_
 - Delivered: `apps/api/src/authz/routeRegistry.ts` + coverage test.
