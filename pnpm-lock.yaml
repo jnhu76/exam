@@ -35,6 +35,9 @@ importers:
       '@exam/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@exam/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
       '@exam/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

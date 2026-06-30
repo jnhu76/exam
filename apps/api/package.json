@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@exam/auth": "workspace:*",
+    "@exam/authz": "workspace:*",
     "@exam/contracts": "workspace:*",
     "@exam/db": "workspace:*",
     "@exam/domain": "workspace:*",

@@ -29,7 +29,7 @@
 | 0 | Tracking doc (this file) | scaffold | ✅ | low | [x] | _commit 0_ |
 | 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [x] | _commit 1_ |
 | 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [x] | _commit 2_ |
-| 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [ ] | — |
+| 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [x] | _commit 3_ |
 | 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [ ] | — |
 | 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [ ] | — |
 | 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [ ] | — |
@@ -56,9 +56,13 @@
 - Tests: 24 preset tests (shape, all 8 boundaries, integrity: every grant is a known catalog value with no dupes).
 - Commands: `pnpm --filter @exam/authz test` ✅ 39/39 · `pnpm verify:static` ✅.
 
-### AUDIT-M1 — _pending_
-- Delivered: `packages/authz/src/auditActions.ts` + `recordAudit` assertion (no rename).
-- Tests: unknown rejected; all real actions in closed set.
+### AUDIT-M1 — ✅ done
+- Delivered: `packages/authz/src/auditActions.ts` — closed `AuditAction` union (all real `recordAudit`/`createAuditLogRepo` actions captured via rg, **no rename** — keeps `attempt.forceSubmit`/`grading.score_entered` camelCase per ADR "Naming collision guard"; adds the 2 ADR-mandated new actions `grading.detail_viewed`/`user.role_changed`). Helpers: `isAuditAction`, `assertAuditAction`, `KNOWN_PRODUCTION_AUDIT_ACTIONS` (rg-derived regression fixture).
+- Wired: `apps/api/src/routes/audit.ts` `recordAudit` now validates the action via the closed set; unknown actions are error-logged and the write is skipped (fail-loud, ADR §3.9) without breaking fire-and-forget semantics.
+- Moved `AuditAction`/`AuditActionKey` ownership from `catalog.ts` (M1) to `auditActions.ts` (AUDIT-M1) — single source of truth; barrel re-exports both.
+- Added `@exam/authz` dep to `@exam/api`.
+- Tests: 8 audit-action tests (shape, no-rename invariant, ADR new actions, full production coverage, guards). Total authz: 47/47.
+- Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
 ### RBAC-M3 — _pending_
 - Delivered: `packages/authz/src/resolver.ts` interfaces + integrity contract.
@@ -91,3 +95,5 @@ After jobs 1–8 + AUDIT-M1/M2 + M5 shadow are green, **pause** and surface to t
 - **RBAC-M1 naming depth**: ADR §4 deliberately mixes 2-segment (`user.view`) and 3-segment (`attempt.force_submit`) dotted keys. The closed-union test asserts `>= 2 segments` + lowercase, not a fixed depth — matches ADR.
 - **RBAC-M1 `MANAGE_CANDIDATE_FIELDS`**: legacy coarse grant maps to `candidate_field.create` as the closest single new key; the full 4-way split is expressed by role presets (RBAC-M2), not the 1:1 legacy map.
 - **RBAC-M1 arch lint**: added `packages/authz/src` forbid block (no fastify/React/Drizzle; only `@exam/domain`) to enforce the ADR "leaf" contract structurally.
+- **AUDIT-M1 ownership**: `AuditAction`/`AuditActionKey` moved from `catalog.ts` to `auditActions.ts` (single owner of the audit union); `catalog.ts` keeps Permission/Scope/Role only.
+- **AUDIT-M1 fail mode**: `recordAudit` is fire-and-forget, so unknown actions are logged + skipped (not thrown), preserving caller semantics while failing loud in observability.

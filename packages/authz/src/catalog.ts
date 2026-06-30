@@ -151,23 +151,6 @@ export const Role = {
 
 export type RoleKey = (typeof Role)[keyof typeof Role];
 
-// ───────────────────────── Audit actions (ADR Audit Boundary) ─────────────────────────
-
-/**
- * Phase 3 audit-action keys. These are the **dotted** canonical names for the
- * new RBAC-era actions only. Existing camelCase legacy actions
- * (`attempt.forceSubmit`, `grading.score_entered`, …) live unchanged in
- * `auditActions.ts`; AUDIT-M1 wraps them in a closed `AuditAction` set without
- * renaming. New actions mandated by the ADR (`grading.detail_viewed`,
- * `user.role_changed`) are declared here.
- *
- * (RBAC-M1 declares the symbol set; AUDIT-M1 owns the full legacy union +
- * `recordAudit` boundary validation.)
- */
-export const AuditAction = {
-  // ADR-mandated new actions
-  GradingDetailViewed: "grading.detail_viewed",
-  UserRoleChanged: "user.role_changed",
-} as const;
-
-export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
+// Audit actions are owned by auditActions.ts (AUDIT-M1: full legacy union +
+// recordAudit boundary validation). See that module for the closed set; the
+// barrel re-exports `AuditAction` / `AuditActionKey` for convenience.

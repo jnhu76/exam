@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { Permission, Scope, Role, AuditAction } from "./catalog.js";
+import { Permission, Scope, Role } from "./catalog.js";
+import { AuditAction } from "./auditActions.js";
 
 describe("RBAC-M1 catalog — closed-union integrity", () => {
   it("every Permission value is a dotted lowercase string (>= 2 segments), unique", () => {
