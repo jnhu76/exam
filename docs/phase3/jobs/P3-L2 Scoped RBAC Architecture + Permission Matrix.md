@@ -1209,7 +1209,7 @@ Scope resolution depends on resource parent chains.
 Example:
 
 ```txt
-attempt -> exam -> course -> school -> organization
+attempt -> exam -> course -> organization
 ```
 
 If one link in the chain is mutable or corrupted, authorization may be evaluated against the wrong scope.
@@ -1236,7 +1236,7 @@ The ADR must answer:
 6. Which resolver paths must validate organization consistency?
 7. Should resolver results include a consistency proof or version?
 8. Should attempt/exam/course parent references be denormalized for integrity or performance?
-9. Should published exams freeze their course/school/organization ownership?
+9. Should published exams freeze their course/organization ownership?
 10. What happens if resolver detects inconsistent parent chains?
 
 ### Required Invariant
@@ -1257,7 +1257,7 @@ resolveAttemptScope(attemptId)
   -> load exam
   -> load course if applicable
   -> verify attempt.organizationId === exam.organizationId
-  -> verify exam.courseId belongs to same organization/school
+  -> verify exam.courseId belongs to same organization
   -> return scope chain
 ```
 
@@ -1292,7 +1292,7 @@ Scoped RBAC introduces resource resolution cost.
 A single permission check may require multiple DB reads:
 
 ```txt
-attempt -> exam -> course -> school -> organization
+attempt -> exam -> course -> organization
 ```
 
 If every route performs repeated uncached resolver calls, high-traffic paths such as save answer, heartbeat, proctor dashboard, grading queue, and score export may become slower or noisier.
