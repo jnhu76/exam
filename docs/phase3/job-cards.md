@@ -150,7 +150,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-current-role-checks.md
+docs/phase3/audit/audit-current-role-checks.md
 ```
 
 ### Non-goals
@@ -179,7 +179,7 @@ rg "role|admin|teacher|proctor|grader|candidate|forbidden|unauthorized|authorize
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-current-role-checks.md
+git diff -- docs/phase3/audit/audit-current-role-checks.md
 ```
 
 ---
@@ -208,7 +208,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-current-grading-api.md
+docs/phase3/audit/audit-current-grading-api.md
 ```
 
 ### Non-goals
@@ -239,7 +239,7 @@ rg "manual grading|grading queue|score" apps packages
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-current-grading-api.md
+git diff -- docs/phase3/audit/audit-current-grading-api.md
 ```
 
 ---
@@ -269,7 +269,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-current-redis.md
+docs/phase3/audit/audit-current-redis.md
 ```
 
 ### Non-goals
@@ -298,7 +298,7 @@ rg "redis|ioredis|rateLimit|presence|heartbeat|queue" apps packages docs
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-current-redis.md
+git diff -- docs/phase3/audit/audit-current-redis.md
 ```
 
 ---
@@ -328,7 +328,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-current-events.md
+docs/phase3/audit/audit-current-events.md
 ```
 
 ### Non-goals
@@ -356,7 +356,7 @@ rg "audit|Audit|event|Event|monitor|diagnostic|log" apps packages docs
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-current-events.md
+git diff -- docs/phase3/audit/audit-current-events.md
 ```
 
 ---
@@ -386,7 +386,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-current-candidate-runtime.md
+docs/phase3/audit/audit-current-candidate-runtime.md
 ```
 
 ### Non-goals
@@ -415,7 +415,7 @@ rg "candidate|submit|deadline|resume|disconnect" apps/web tests
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-current-candidate-runtime.md
+git diff -- docs/phase3/audit/audit-current-candidate-runtime.md
 ```
 
 ---
@@ -444,7 +444,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-current-answer-payload.md
+docs/phase3/audit/audit-current-answer-payload.md
 ```
 
 ### Non-goals
@@ -473,7 +473,7 @@ rg "answer|answers|save|submit|snapshot|revision|hash|canonical" apps packages d
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-current-answer-payload.md
+git diff -- docs/phase3/audit/audit-current-answer-payload.md
 ```
 
 ---
@@ -504,7 +504,7 @@ Small
 输出：
 
 ```txt
-docs/phase3/audit-e2e-parallelization.md
+docs/phase3/audit/audit-e2e-parallelization.md
 ```
 
 ### Non-goals
@@ -532,7 +532,7 @@ rg "workers|playwright|seed|candidate1|attempt|beforeAll|afterAll" apps tests pl
 ### Validation
 
 ```bash
-git diff -- docs/phase3/audit-e2e-parallelization.md
+git diff -- docs/phase3/audit/audit-e2e-parallelization.md
 ```
 
 ---

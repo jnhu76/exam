@@ -483,6 +483,6 @@ The `proctor` client-event kind is schema-accepted but never emitted. M9 plans p
 |-----|---------|
 | `docs/phase3/job-cards.md` §M4 | The event-expansion job this audit feeds (proposed event list) |
 | `docs/phase3/plan.md` | Lists S6 (this doc) and M4; flags L9 "Audit / Monitoring Full Event Taxonomy" as deferred Large |
-| `docs/phase3/audit-current-redis.md` §R6 | Notes `redis.unavailable` / `redis.recovered` are planned but unemitted (cross-ref for §7.2) |
+| `docs/phase3/audit/audit-current-redis.md` §R6 | Notes `redis.unavailable` / `redis.recovered` are planned but unemitted (cross-ref for §7.2) |
 | `packages/db/src/schema/pg.ts:439-451` | The verbatim design comment separating `audit_logs` from `client_events` |
 | `packages/contracts/src/proctorMonitoring.ts` | "proctor = monitoring DOMAIN, not a role" naming note relevant to §8.2 |

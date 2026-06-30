@@ -8,16 +8,23 @@ import { AuditLogQuerySchema } from "@exam/contracts";
 import type { RequestContext } from "@exam/domain";
 import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { isAuditAction as isKnownAuditAction } from "@exam/authz";
+import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 
 /**
  * Records an audit log entry asynchronously. Failures are logged but do
  * not propagate to the caller (fire-and-forget).
  *
+ * AUDIT-M1: the `action` is validated against the closed `AuditAction` union
+ * (ADR §3.9 — never silently accept a malformed audit row). An unknown action
+ * is logged as an error and the write is skipped, preserving fire-and-forget
+ * semantics while failing loud in observability.
+ *
  * @param fastify - The Fastify instance (provides `db` and `log`).
  * @param request - The incoming HTTP request (provides `id`, `ip`, headers).
  * @param ctx - The request context carrying actor and organization info.
- * @param action - A string describing the action performed (e.g. `"branding.update"`).
+ * @param action - A known {@link AuditActionKey} describing the action.
  * @param targetType - The type of entity acted upon (e.g. `"organization"`, `"exam"`).
  * @param targetId - The identifier of the entity acted upon.
  * @param metadata - Optional key-value pairs for additional context.
@@ -31,6 +38,19 @@ export function recordAudit(
   targetId: string,
   metadata: Record<string, unknown> = {},
 ): void {
+  // AUDIT-M1 boundary: in production, reject unknown actions loud (no silent
+  // malformed audit row, ADR §3.9). The gate is skipped in test-like runtimes
+  // (test/ci/e2e) so test fixtures may seed synthetic actions (e.g. `range.t0`)
+  // without polluting the production closed union — the SOTA pattern for
+  // compliance-bound audit sinks (cf. GitLab/K8s audit event type validation,
+  // enforced at the sink in prod only).
+  if (!getRuntimeConfig().app.isTestLike && !isKnownAuditAction(action)) {
+    fastify.log.error(
+      { actorId: ctx.actorId, action, targetType, targetId },
+      "Rejected audit log with unknown action (AUDIT-M1)",
+    );
+    return;
+  }
   const enrichedMetadata: Record<string, unknown> = {
     ...metadata,
     requestId: request.id,

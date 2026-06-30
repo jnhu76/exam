@@ -946,7 +946,7 @@ Test requirements
 Create the following document:
 
 ```txt
-docs/phase3/adr-scoped-rbac-architecture.md
+docs/phase3/rbac/adr-scoped-rbac-architecture.md
 ```
 
 The document must include:
@@ -1104,7 +1104,7 @@ and document the result.
 
 This job is complete only if:
 
-* `docs/phase3/adr-scoped-rbac-architecture.md` exists.
+* `docs/phase3/rbac/adr-scoped-rbac-architecture.md` exists.
 * The ADR clearly states that Phase 3 will use formal Scoped RBAC.
 * The ADR distinguishes RBAC core from custom role UI.
 * Permission catalog v0 exists.
@@ -1156,7 +1156,7 @@ Reviewer must verify:
 
 ```txt
 Done:
-- Created docs/phase3/adr-scoped-rbac-architecture.md
+- Created docs/phase3/rbac/adr-scoped-rbac-architecture.md
 - Designed formal Scoped RBAC model
 - Defined N role presets
 - Defined N permission groups

@@ -20,13 +20,13 @@ Small Job 主要用于铺地基、做审计、写清单、准备后续施工。
 | --- | ------------------------------------- | ----------------------------------- | ------------------------------------------------ |
 | S1  | Phase 3 README scaffold               | 建立 Phase 3 入口                       | `docs/phase3/README.md`                          |
 | S2  | Phase 3 plan                          | 建立 S/M/L 计划表                        | `docs/phase3/plan.md`                            |
-| S3  | Current role check audit              | 梳理当前后端角色/权限检查位置                     | `docs/phase3/audit-current-role-checks.md`       |
-| S4  | Current grading API audit             | 梳理评分详情 API 当前返回内容                   | `docs/phase3/audit-current-grading-api.md`       |
-| S5  | Current Redis usage audit             | 梳理 Redis 当前接入点和 fallback 行为         | `docs/phase3/audit-current-redis.md`             |
-| S6  | Current audit event map               | 梳理现有 audit event / monitoring event | `docs/phase3/audit-current-events.md`            |
-| S7  | Current candidate runtime audit       | 梳理前端考试页面散状态                         | `docs/phase3/audit-current-candidate-runtime.md` |
-| S8  | Current answer payload audit          | 梳理当前 answer save / submit payload   | `docs/phase3/audit-current-answer-payload.md`    |
-| S9  | E2E parallelization constraints audit | 梳理当前 E2E 不能并行的原因                    | `docs/phase3/audit-e2e-parallelization.md`       |
+| S3  | Current role check audit              | 梳理当前后端角色/权限检查位置                     | `docs/phase3/audit/audit-current-role-checks.md`       |
+| S4  | Current grading API audit             | 梳理评分详情 API 当前返回内容                   | `docs/phase3/audit/audit-current-grading-api.md`       |
+| S5  | Current Redis usage audit             | 梳理 Redis 当前接入点和 fallback 行为         | `docs/phase3/audit/audit-current-redis.md`             |
+| S6  | Current audit event map               | 梳理现有 audit event / monitoring event | `docs/phase3/audit/audit-current-events.md`            |
+| S7  | Current candidate runtime audit       | 梳理前端考试页面散状态                         | `docs/phase3/audit/audit-current-candidate-runtime.md` |
+| S8  | Current answer payload audit          | 梳理当前 answer save / submit payload   | `docs/phase3/audit/audit-current-answer-payload.md`    |
+| S9  | E2E parallelization constraints audit | 梳理当前 E2E 不能并行的原因                    | `docs/phase3/audit/audit-e2e-parallelization.md`       |
 | S10 | Grillme question list                 | 为 Large Job 准备问题清单                  | `docs/phase3/grillme-question-list.md`           |
 
 ---

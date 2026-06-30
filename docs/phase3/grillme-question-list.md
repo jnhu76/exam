@@ -29,7 +29,7 @@
 
 > **Status: DESIGN COMPLETE.** These five Large Jobs are already resolved by the
 > Scoped RBAC ADR on the `role-permission` worktree
-> (`docs/phase3/adr-scoped-rbac-architecture.md`, Status: Proposed). That ADR is
+> (`docs/phase3/rbac/adr-scoped-rbac-architecture.md`, Status: Proposed). That ADR is
 > itself the grillme output: it answers account model (L1), permission model
 > (L2), custom-role deferral (L3), proctor authority boundary (L7), and tenant
 > scope (L12) in one document, with a 16-Middle-Job breakdown
@@ -540,15 +540,15 @@ Round 4 (infra — independent, schedule by need):
 
 | File | Role |
 |------|------|
-| `docs/phase3/audit-current-answer-payload.md` (S8) | L4/L5 evidence |
-| `docs/phase3/audit-current-candidate-runtime.md` (S7) | L6 evidence |
-| `docs/phase3/audit-current-grading-api.md` (S3b) | L11/L14 evidence |
-| `docs/phase3/audit-current-role-checks.md` (S3) | L1/L2/L7/L12 evidence (DEFERRED) |
-| `docs/phase3/audit-current-events.md` (S6) | L9 evidence |
-| `docs/phase3/audit-current-redis.md` (S5) | M2/L9 monitoring evidence |
-| `docs/phase3/audit-e2e-parallelization.md` (S9) | L10 evidence |
+| `docs/phase3/audit/audit-current-answer-payload.md` (S8) | L4/L5 evidence |
+| `docs/phase3/audit/audit-current-candidate-runtime.md` (S7) | L6 evidence |
+| `docs/phase3/audit/audit-current-grading-api.md` (S3b) | L11/L14 evidence |
+| `docs/phase3/audit/audit-current-role-checks.md` (S3) | L1/L2/L7/L12 evidence (DEFERRED) |
+| `docs/phase3/audit/audit-current-events.md` (S6) | L9 evidence |
+| `docs/phase3/audit/audit-current-redis.md` (S5) | M2/L9 monitoring evidence |
+| `docs/phase3/audit/audit-e2e-parallelization.md` (S9) | L10 evidence |
 | `docs/phase3/plan.md` | Phase 3 S/M/L authority + batch order |
 | `docs/phase3/job-cards.md` §S10 | This job card (acceptance: ≥8 Q per Large) |
-| `docs/phase3/adr-scoped-rbac-architecture.md` (`role-permission` worktree) | Resolves L1/L2/L3/L7/L12 |
+| `docs/phase3/rbac/adr-scoped-rbac-architecture.md` (`role-permission` worktree) | Resolves L1/L2/L3/L7/L12 |
 | `docs/ui/*` | L8 evidence (existing UI constitution) |
 | `docs/SPEC.md` §3.5 + `phase-roadmap.md` §173-216 | Phase 3 authority boundaries |

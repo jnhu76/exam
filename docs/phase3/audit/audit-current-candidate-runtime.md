@@ -325,6 +325,6 @@ Given E2E covers outcomes not UI states (§7), what's the regression strategy fo
 | Doc | Content |
 |-----|---------|
 | `docs/phase3/job-cards.md` §S7 | This job card |
-| `docs/phase3/audit-current-events.md` §3.1 | The telemetry events these runtime states emit (`exam_telemetry`) |
+| `docs/phase3/audit/audit-current-events.md` §3.1 | The telemetry events these runtime states emit (`exam_telemetry`) |
 | `docs/SPEC.md` §3.5 | Answer Save Protocol (versioned, idempotent) — the contract this runtime implements |
 | `docs/phase3/plan.md` | Flags the frontend state machine as a deferred Large job |
