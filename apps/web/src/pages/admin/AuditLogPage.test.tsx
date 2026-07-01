@@ -14,6 +14,34 @@ vi.mock("@/lib/api", () => ({
   setNavigate: () => {},
 }));
 
+vi.mock("@/components/shared/DatePicker", () => ({
+  DatePicker: ({
+    value,
+    onChange,
+    placeholder,
+    "aria-label": ariaLabel,
+  }: {
+    value?: Date;
+    onChange: (date: Date | undefined) => void;
+    placeholder?: string;
+    "aria-label"?: string;
+  }) => (
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      onClick={() =>
+        onChange(
+          ariaLabel === "开始日期"
+            ? new Date("2025-01-15T12:00:00Z")
+            : new Date("2025-01-20T12:00:00Z"),
+        )
+      }
+    >
+      {value ? value.toISOString().slice(0, 10) : placeholder}
+    </button>
+  ),
+}));
+
 const getMock = vi.mocked(api.get);
 
 const mockAuditData = {
@@ -190,11 +218,12 @@ describe("AuditLogPage", () => {
     await screen.findByText("grading.score_entered");
 
     fireEvent.click(screen.getByLabelText("开始日期"));
-    fireEvent.click(await screen.findByRole("button", { name: /15日/ }));
-    await screen.findByText("grading.score_entered");
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toMatch(/from=\d{4}-\d{2}-\d{2}T/);
+    });
 
     fireEvent.click(screen.getByLabelText("结束日期"));
-    fireEvent.click(await screen.findByRole("button", { name: /20日/ }));
 
     await waitFor(() => {
       const lastCall = getMock.mock.calls.at(-1)?.[0] as string;

@@ -2,6 +2,8 @@ name: AI Code Review with Google
 
 on:
   pull_request:
+    branches:
+      - master
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:

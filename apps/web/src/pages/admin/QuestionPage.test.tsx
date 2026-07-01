@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -124,8 +124,12 @@ describe("QuestionPage", () => {
         });
       });
 
-      await user.type(screen.getByPlaceholderText("标签，逗号分隔"), "abc");
-      await user.type(screen.getByLabelText("搜索当前页题目"), "题目");
+      fireEvent.change(screen.getByPlaceholderText("标签，逗号分隔"), {
+        target: { value: "abc" },
+      });
+      fireEvent.change(screen.getByLabelText("搜索当前页题目"), {
+        target: { value: "题目" },
+      });
       await user.click(screen.getByRole("button", { name: "清空筛选" }));
 
       await waitFor(() => {

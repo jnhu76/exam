@@ -1,4 +1,11 @@
-import { act, render, screen, within, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { toast } from "sonner";
@@ -173,11 +180,20 @@ describe("CandidatesPage", () => {
     renderPage();
     await user.click(await screen.findByRole("button", { name: "新增考生" }));
     const dialog = await screen.findByRole("dialog");
-    const inputs = dialog.querySelectorAll("input");
-    await user.type(inputs[0]!, "newuser");
-    await user.type(inputs[1]!, "password123");
-    await user.type(inputs[2]!, "New Candidate");
-    await user.type(inputs[3]!, "3");
+
+    fireEvent.change(within(dialog).getByLabelText(/用户名/), {
+      target: { value: "newuser" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/密码/), {
+      target: { value: "password123" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/姓名/), {
+      target: { value: "New Candidate" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/编号/), {
+      target: { value: "3" },
+    });
+
     await user.click(dialogSaveBtn(dialog));
     expect(apiPost).toHaveBeenCalledWith("/api/candidates", {
       username: "newuser",

@@ -33,4 +33,6 @@ if (!URL.revokeObjectURL) {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
+  vi.useRealTimers();
 });
