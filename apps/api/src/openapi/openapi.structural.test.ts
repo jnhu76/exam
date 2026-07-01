@@ -24,17 +24,16 @@ function responseSchema(
     | undefined;
   if (!r) return undefined;
   if (r.schema) return r.schema as Record<string, unknown>;
-  // Check application/json first, then text/csv, then any content type.
-  if (r.content?.["application/json"]?.schema) {
-    return r.content["application/json"].schema as Record<string, unknown>;
+  const content = r.content;
+  if (content?.["application/json"]?.schema) {
+    return content["application/json"].schema as Record<string, unknown>;
   }
-  if (r.content?.["text/csv"]?.schema) {
-    return r.content["text/csv"].schema as Record<string, unknown>;
+  if (content?.["text/csv"]?.schema) {
+    return content["text/csv"].schema as Record<string, unknown>;
   }
-  // Return the first content type's schema if any.
-  const firstKey = Object.keys(r.content ?? {})[0];
-  if (firstKey && r.content?.[firstKey]?.schema) {
-    return r.content[firstKey].schema as Record<string, unknown>;
+  const firstKey = Object.keys(content ?? {})[0];
+  if (firstKey && content?.[firstKey]?.schema) {
+    return content[firstKey].schema as Record<string, unknown>;
   }
   return undefined;
 }
@@ -83,10 +82,12 @@ function hasStandardAnswer(schema: unknown): boolean {
       if (hasStandardAnswer(v)) return true;
     }
   }
-  if (Array.isArray(s.anyOf) || Array.isArray(s.oneOf)) {
-    const variants = (s.anyOf ?? s.oneOf) as unknown[];
-    for (const v of variants) {
-      if (hasStandardAnswer(v)) return true;
+  for (const key of ["anyOf", "oneOf", "allOf"] as const) {
+    const list = s[key];
+    if (Array.isArray(list)) {
+      for (const v of list) {
+        if (hasStandardAnswer(v)) return true;
+      }
     }
   }
   if (s.items && typeof s.items === "object") {
@@ -427,7 +428,7 @@ describe("OpenAPI structural baseline — public routes have no security", () =>
     ] as const;
 
     for (const [path, method] of publicPaths) {
-      const op = (s.paths as Record<string, unknown>)[path] as
+      const op = (s.paths as Record<string, unknown>)?.[path] as
         | { get?: { security?: unknown[] } }
         | undefined;
       const security = op?.get?.security;
@@ -580,7 +581,7 @@ describe("OpenAPI structural baseline — candidate responses hide standardAnswe
   for (const [path, method] of candidatePaths) {
     it(`${method.toUpperCase()} ${path} 200 must not expose standardAnswer`, async () => {
       const s = await spec();
-      const op = (s.paths as Record<string, unknown>)[path] as
+      const op = (s.paths as Record<string, unknown>)?.[path] as
         | Record<string, { responses?: Record<string, unknown> }>
         | undefined;
       const operation = op?.[method];

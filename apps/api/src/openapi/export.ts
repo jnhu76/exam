@@ -28,8 +28,8 @@ async function main() {
       );
       process.exit(1);
     }
-    const existing = readFileSync(OUTPUT_PATH, "utf-8");
-    if (existing !== json) {
+    const existing = readFileSync(OUTPUT_PATH, "utf-8").replace(/\r\n/g, "\n");
+    if (existing !== json.replace(/\r\n/g, "\n")) {
       process.stderr.write(
         "openapi.json is out of date. Run 'pnpm api:openapi' and commit the result.\n",
       );

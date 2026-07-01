@@ -116,6 +116,7 @@ export async function generateOpenAPISpec(): Promise<OpenAPISpecDocument> {
  * `text/csv`. Only the two known CSV endpoints are affected.
  */
 function fixCsvContentTypes(spec: OpenAPISpecDocument): void {
+  if (!spec.paths) return;
   const csvPaths = [
     "/api/exams/{id}/export/scores",
     "/api/admin/attempts/{attemptId}/export/csv",
@@ -138,8 +139,7 @@ function fixCsvContentTypes(spec: OpenAPISpecDocument): void {
         | undefined;
       if (!op?.responses?.["200"]) continue;
       const resp = op.responses["200"];
-      // Replace application/json string schema with text/csv string schema.
-      if (resp.content?.["application/json"]) {
+      if (resp.content && resp.content["application/json"]) {
         resp.content["text/csv"] = resp.content["application/json"];
         delete resp.content["application/json"];
       }
