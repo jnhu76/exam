@@ -1,5 +1,16 @@
 # RBAC Job Queue — Phase 3 Scoped RBAC
 
+> **Currency note (2026-07-01).** This file was originally the execution tracker
+> for the foundation PR on `feat/phase3-scoped-rbac`. The foundation (jobs 0–8),
+> the M7/M8/M9 multi-role work (job 10), and SYSTEM-M1 have all since been
+> **merged to `master`** (PR #149–#153, #157, plus the `phase3-enforcement`
+> series). The original "STOP at job 9" gate was resolved — enforcement
+> proceeded. This file is **retained as the per-job history + current-gap
+> tracker**; the authoritative current status now lives in
+> `docs/phase3/plan.md` §0/§3/§5. The single remaining open item is
+> **RBAC-M10-finish** (wire scope resolvers into the request path; flip the
+> remaining ~50 `requireRole` routes).
+>
 > **Purpose.** Single source of truth for the Phase 3 Scoped RBAC rollout progress.
 > One ADR (`adr-scoped-rbac-architecture.md`) is the design authority; this file
 > is the **execution tracker**. Each Middle Job below is committed individually on
@@ -24,27 +35,78 @@
 
 ## Job queue
 
-| # | Job | Type | This PR | Risk | Status | Commit |
-| --- | --- | --- | :---: | :---: | --- | --- |
-| 0 | Tracking doc (this file) | scaffold | ✅ | low | [x] | _commit 0_ |
-| 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [x] | _commit 1_ |
-| 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [x] | _commit 2_ |
-| 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [x] | _commit 3_ |
-| 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [x] | _commit 4_ |
-| 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [x] | _commit 5_ |
-| 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [x] | _commit 6_ |
-| 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [x] | _commit 7_ |
-| 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [x] | _commit 8_ |
-| 9 | **STOP** confirm before enforcing: RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1 | flips real gates | ⏸️ | high | [ ] | — |
-| 10 | RBAC-M7 schema / RBAC-M8 assignment API / RBAC-M9 frontend nav | schema + UI | ❌ separate PR | high | [ ] | — |
+> Original execution order on `feat/phase3-scoped-rbac`. The `Merged?` column
+> reflects `master` state as of 2026-07-01.
 
-## Final review — APPROVED (3 non-blocking suggestions, deferred)
+| # | Job | Type | This PR | Risk | Status | Merged? |
+| --- | --- | --- | :---: | :---: | --- | :---: |
+| 0 | Tracking doc (this file) | scaffold | ✅ | low | [x] | ✅ #149 |
+| 1 | **RBAC-M1** Permission catalog constants + `packages/authz` leaf + legacy map + arch lint | additive | ✅ | low | [x] | ✅ #150 |
+| 2 | **RBAC-M2** Role preset matrix (mirrors ADR §Role→Permission) | data, no enforce | ✅ | low | [x] | ✅ #150 |
+| 3 | **AUDIT-M1** AuditAction constants + `recordAudit` boundary validation (no rename) | boundary check | ✅ | low | [x] | ✅ #150 |
+| 4 | **RBAC-M3** Scope resolver interfaces + ownership-chain integrity rules | interfaces+contract | ✅ | medium | [x] | ✅ #150 |
+| 5 | **RBAC-M4** Route permission registry + coverage test (no enforcement) | metadata+test | ✅ | medium | [x] | ✅ #150 |
+| 6 | **RBAC-M6** Admin compatibility superset mapping | preset update | ✅ | medium | [x] | ✅ #150 |
+| 7 | **RBAC-M5** Shadow permission mode (non-blocking) | dual-run, no block | ✅ | low | [x] | ✅ #150 |
+| 8 | **AUDIT-M2** Sensitive-read audit events (`grading.detail_viewed`, `user.role_changed`) | add audit | ✅ | low | [x] | ✅ #150 |
+| 9 | **STOP** confirm before enforcing: RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1 | flips real gates | ⏸️ | high | **resolved** — go/no-go happened; enforcement proceeded (see rows 11–16) | ✅ |
+| 10 | RBAC-M7 schema / RBAC-M8 assignment API / RBAC-M9 frontend nav | schema + UI | ❌ separate PR | high | [x] | ✅ #153 |
+| 11 | **SYSTEM-M1** — scanners use `System` role instead of synthetic `Admin` (`createSystemRequestContext`) | additive | — | medium | [x] | ✅ #151 |
+| 12 | **M10-Step1** Runtime `Role` widened to 6 presets (`Admin/Teacher/Proctor/Grader/Candidate/System`) + login path | widening | — | medium | [x] | ✅ enforcement PRs |
+| 13 | **M10-Step2** `requireCapability` decorator (flat role-preset membership; resolvers layered later) | decorator | — | medium | [x] | ✅ enforcement PRs |
+| 14 | **M10-Step3** `createAttemptResolver` + `createExamResolver` (org-anchor + fail-closed) | resolver impl + tests | — | medium | [x] | ✅ enforcement PRs |
+| 15 | **PROCTOR flip** — `proctorMonitoring.ts` (×2) flipped to `requireCapability` | route flip | — | high | [x] | ✅ enforcement PRs |
+| 16 | **GRADING flip** — `gradingQueue.ts` (×3) + `attempts.admin.ts` (×6) flipped to `requireCapability`; permission-matrix test + swagger stub | route flip | — | high | [x] | ✅ enforcement PRs |
+| 17 | **RBAC-M10-finish** — wire scope resolvers into the `requireCapability` request path; flip remaining ~50 `requireRole` routes per-domain | resolver wiring + route flips | ❌ future PRs | high | **[ ] open** — see "Current real gap" below | ❌ |
+
+## Final review — APPROVED (foundation PR only)
+
+> **Scope of this verdict:** the foundation PR on `feat/phase3-scoped-rbac`
+> (jobs 0–8). The enforcement flips (rows 11–16) and SYSTEM-M1 were separate
+> PRs with their own review. The foundation-PR verdict is retained below for
+> history.
 
 Independent reviewer verdict: **APPROVE** — 58/58 tests, typecheck/lint clean, no security/logic issues. Three non-blocking suggestions; all three are deferred to the relevant follow-up jobs (not this foundation PR) to avoid scope creep / regression risk on an already-approved additive PR:
 
 - **#1 `gradingQueue.ts` direct `createAuditLogRepo().create()` bypasses `recordAudit`** → real consistency gap (bypasses `ipAddress`/`userAgent` enrichment). **Deferred to GRADING-M1.** Note: these call sites intentionally `await` the audit (deterministic test contract); the correct fix is an awaitable `recordAudit` variant, not a swap — that's design work belonging to the grading enforcement job, not this foundation. (The bypassed `isTestLike` gate is a non-issue here: `grading.score_entered` / `grading.finalized` are in the catalog, so they pass even in prod.)
 - **#2 `legacyMap` undefined guards** → defense-in-depth nit; TS already enforces completeness. Deferred.
 - **#3 `KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[]` → `readonly AuditActionKey[]`** → reasonable drift-detection tightening; deferred (low value — the test already asserts every entry ∈ `AuditAction`).
+
+## Current real gap (as of 2026-07-01) — RBAC-M10-finish
+
+Everything above rows 0–16 is merged. The **only** remaining RBAC work is row 17
+(RBAC-M10-finish). It has two distinct parts:
+
+1. **Wire scope resolvers into the request lifecycle.** Today `requireCapability`
+   (`apps/api/src/plugins/auth.ts`) checks only flat role-preset membership — it
+   never consults `createAttemptResolver` / `createExamResolver`. Those resolvers
+   exist and are unit-tested (`apps/api/src/authz/resolvers/attemptResolver.ts` +
+   `.test.ts`) but are **not constructed or invoked by any Fastify plugin, hook,
+   decorator, or route** (verified: zero call sites outside `resolvers/` and
+   tests). So on the 11 flipped routes, "Scoped RBAC" is at runtime a flat
+   6-role-preset gate; the scope/ownership/own-attempt boundary is not enforced
+   by the capability check.
+2. **Flip the remaining ~50 legacy `requireRole` routes** to `requireCapability`,
+   per-domain, each behind shadow-parity verification for that domain. Route
+   families still on `requireRole`: `user.ts`, `system.ts`, `settings.ts`,
+   `scores.ts`, `roleAssignments.ts`, `question.ts`, `importLogs.ts`, `export.ts`,
+   `exam.ts` (~16 endpoints), `email.ts`, `course.ts`, `candidateField.ts`,
+   `audit.ts`, `attempts.candidate.ts` (×9), `candidate.ts`.
+
+**Why this is Middle, not Large:** the design (ADR + permission matrix + scope
+model + resolver contract) is accepted and merged. M10-finish is incremental
+wiring + per-domain route flips with shadow parity, not new architecture. It
+should be decomposed into per-domain Middle Jobs (e.g. flip `user.*` routes,
+flip `exam.*` routes, wire attempt-scope into the candidate-runtime routes) and
+merged independently.
+
+**Guardrails for M10-finish:**
+- Every domain flip must first run shadow parity for that domain (legacy vs
+  capability disagreements logged, legacy stays authoritative until the flip).
+- Resolvers must verify the ADR §3.4 organization anchor on every sensitive
+  resource and fail closed (ADR §3.9) on broken parent chains / not-found.
+- `users.role` stays the compatibility cache; keep it synced via
+  `syncUsersRoleFromPrimary` on every primary-active assignment change.
 
 ## Acceptance per job (filled in as each lands)
 
@@ -108,9 +170,17 @@ Independent reviewer verdict: **APPROVE** — 58/58 tests, typecheck/lint clean,
 - Tests: authz 58/58; api authz suite 18/18; `user.test.ts` 18/18 ✅; `gradingQueue.test.ts` 18/19 (1 pre-existing, fails identically on clean baseline — `lists an attempt in the grading queue`, worker-DB data ordering, unrelated to RBAC); `audit.test.ts` 14/15 (1 pre-existing date-range flake).
 - Commands: `pnpm --filter @exam/authz test` ✅ · `pnpm --filter @exam/api typecheck` ✅ · `pnpm verify:static` ✅.
 
-## Stop point (job 9)
+## Stop point (job 9) — RESOLVED
 
-After jobs 1–8 + AUDIT-M1/M2 + M5 shadow are green, **pause** and surface to the user:
+> The original "pause after jobs 1–8 + AUDIT-M1/M2 + M5 shadow, surface shadow
+> parity, get go/no-go" gate is **resolved**: shadow parity was reviewed, the
+> go decision was made, and enforcement proceeded (SYSTEM-M1 #151, M7/M8/M9
+> #153, and the `phase3-enforcement` series flipping proctor + grading +
+> attempts-admin routes — rows 11–16). The current open work is row 17
+> (RBAC-M10-finish), described in "Current real gap" above.
+
+Historical context of the original gate: after jobs 1–8 + AUDIT-M1/M2 + M5
+shadow were green, the plan was to pause and surface to the user:
 - shadow parity results (legacy vs capability disagreements),
 - residual risks for flipping `requireRole → requireCapability`,
 - explicit go/no-go for RBAC-M10 / PROCTOR-M1 / GRADING-M1 / SYSTEM-M1.

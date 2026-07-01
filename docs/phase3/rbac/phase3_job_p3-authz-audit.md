@@ -1,5 +1,15 @@
 # Job Card — P3-AUTHZ-AUDIT
 
+> ✅ **Delivered.** This job card produced
+> `docs/phase3/rbac/audit-authz-framework-readiness.md` (the pre-migration
+> fact base). The design it drove has since been **accepted and merged**:
+> Scoped RBAC foundation + SYSTEM-M1 + multi-role assignments (M7/M8/M9) +
+> partial enforcement landed via PR #149–#153 and the `phase3-enforcement`
+> series. The body below is the original task brief, retained for history. For
+> current status see `docs/phase3/plan.md` §0/§3/§5 and
+> `RBAC-JOB-QUEUE.md` ("Current real gap"). The single remaining open item is
+> RBAC-M10-finish (resolver wiring + remaining route flips).
+
 > **Type:** Audit / Design Fact Base
 > **Phase:** Phase 3 Pre-Implementation
 > **Branch:** `phase3/authz-framework-audit`

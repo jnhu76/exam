@@ -1,5 +1,20 @@
 # P3-AUTHZ-AUDIT — Phase 3 Authorization Framework Readiness Audit
 
+> ⚠️ **HISTORICAL SNAPSHOT (2026-06-30).** This audit describes the
+> **PRE-migration** authorization state: the coarse 2-role (`Admin`/`Candidate`)
+> `requireRole` model, the dead parallel `requirePermission` layer, the 4 proctor
+> "migration traps", and the absence of any scope model. **All of those problems
+> have since been addressed and merged to `master`** — Scoped RBAC foundation
+> (catalog + presets + registry + shadow + scope-resolver contract), SYSTEM-M1,
+> multi-role assignments (M7/M8/M9), and partial enforcement (11 routes flipped
+> to `requireCapability`) landed via PR #149–#153 and the `phase3-enforcement`
+> series. The body below is retained verbatim as the dated fact base that drove
+> the design; it is **not** the current state. For current merged status see
+> `docs/phase3/plan.md` §0/§3/§5 and `docs/phase3/rbac/RBAC-JOB-QUEUE.md`
+> ("Current real gap"). The single remaining open item is RBAC-M10-finish
+> (wire scope resolvers into the request path; flip remaining ~50 `requireRole`
+> routes).
+
 > **Date:** 2026-06-30
 > **Branch:** `role-permission`
 > **Type:** Audit / Design Fact Base (documentation only)

@@ -7,11 +7,16 @@
 
 ## 0. Current Status
 
+> **Currency note (2026-07-01).** This table reflects the merged state on
+> `master`. RBAC and Email foundation work has progressed well past the
+> pre-migration snapshot described in earlier revisions; see §3 / §4 and
+> `docs/phase3/rbac/RBAC-JOB-QUEUE.md` for per-job detail.
+
 | Area | Status |
 | ---- | ------ |
 | Small Jobs (S1–S10) | **Completed.** 基线审计、文档 scaffold、grillme 问题清单已就位。 |
-| Email Outbox Backend (M3) | **Completed.** outbox 表、repo、worker skeleton、fake sender、disabled-by-default 均已实现。 |
-| RBAC / Backend Permission Model | **Active Large Track.** L1/L2 正在通过 ADR / permission matrix 设计推进；Derived Middle Jobs 仅从 ADR 拆出后进入 Small/Middle 文档。 |
+| Email Outbox Backend (M3) | **Completed (incl. M8 retry tests).** outbox 表、repo、3 senders (Disabled/Fake/Smtp)、retry policy、`EmailNotificationService`、`EmailOutboxService.processDueEmails`、`POST /api/email/test`、full test suite 均已合并。**Remaining real gap:** 无业务集成（no route 实例化 `EmailNotificationService`）、无常驻 worker daemon（`processDueEmails` 仅测试调用）、无 `users.email` 列、无密码重置/邀请流程。详见 `docs/phase3/emails/email.md` §Status。 |
+| RBAC / Backend Permission Model | **Foundation merged; enforcement partial.** ADR + permission matrix accepted (PR #149)；M1–M9 + SYSTEM-M1 + AUDIT-M1/M2 + shadow mode 合并 (PR #149–#153)；`requireCapability` decorator + 11 routes flipped (proctor/grading/attempts-admin) + attempt/exam resolvers 实现并测试 (enforcement PRs)。**Remaining real gap:** scope resolvers 尚未接入请求生命周期 — 当前 `requireCapability` 只是 flat 6-role-preset 校验；~50 routes 仍在 legacy `requireRole`。详见 `docs/phase3/rbac/RBAC-JOB-QUEUE.md`。 |
 | Frontend State Machine | **Deferred to Large Job.** ADR-009 已提出 (Proposed)，runtime integration 待 L4/L5/L13 结论。 |
 | Exam Lifecycle State Model | **Not started.** 作为独立 Large Job 保留，不应被 ADR-009 覆盖。 |
 | Answer Protocol v2 | **Not started.** 作为独立 Large Job 保留。 |
@@ -74,8 +79,8 @@ Small Jobs are removed from the active execution queue. They will only be re-ope
 | ID | Job | Status | Notes |
 | -- | --- | ------ | ----- |
 | M1 | Manual grading candidate-answer visibility | **Needs verification** | Grading detail page already shows candidate answer (`GradingDetailPage.tsx:209`). Verify if full scope (API contract + frontend rendering + tests) is complete. |
-| M3 | Email outbox backend | **Completed** | Outbox table, repo, worker skeleton, fake sender all implemented. Remaining: M8 retry tests, M5 diagnostics display. |
-| M8 | Email send failure retry tests | **Needs verification** | If email retry tests exist and pass, mark completed; otherwise keep in active backlog. |
+| M3 | Email outbox backend | **Completed** | Outbox table + migration, repo, 3 senders (Disabled/Fake/Smtp), retry policy, `sanitizeEmailError`, `EmailNotificationService`, `EmailOutboxService.processDueEmails`, `POST /api/email/test`, full test suite. See `docs/phase3/emails/email.md` §Status for remaining gaps (business integration, worker daemon, `users.email` column). |
+| M8 | Email send failure retry tests | **Completed** | `apps/api/src/email/outboxService.test.ts` covers pending→sent / pending→retry / pending→failed at maxAttempts, single-failure-no-block, disabled-sender drains to sent, injected clock, secret-scrub into `lastError`. Also covered by `retryPolicy.test.ts`, `sanitizeError.test.ts`, `notificationService.test.ts`. |
 
 Do not claim completion for items that have not been verified against the codebase. Use "Needs verification" for uncertain status.
 
@@ -89,12 +94,19 @@ These Middle Jobs remain actionable and can be developed independently.
 | -- | --- | ---------------------- |
 | M2 | Redis health / fallback / diagnostics | **Active.** Redis integration exists; verify health check and fallback coverage. |
 | M4 | Audit / monitoring event expansion v0 | **Active.** First batch of Phase 3 events (grading, force-submit, email, Redis). |
-| M5 | Diagnostics infrastructure status | **Active.** System diagnostics page should show Redis / email / worker status. Depends on M3 completion. |
+| M5 | Diagnostics infrastructure status | **Active.** System diagnostics page should show Redis / email / worker status. (Email M3 is complete — this no longer depends on it; depends only on wiring the existing outbox/redis status into the diagnostics surface.) |
 | M6 | Grading answer rendering tests | **Active.** Tests for candidate answer display in grading page. Depends on M1 verification. |
 | M7 | Redis unavailable fallback tests | **Active.** Tests ensuring Redis failure does not corrupt PG authoritative state. |
 | M9 | Proctor incident event logging v0 | **Active but scoped.** Lightweight incident recording only. Do NOT expand to full proctor authority. |
 | M10 | CI / E2E parallelization readiness report | **Active.** Documentation task; no code changes. |
 | M11 | Phase 3 readiness closeout report | **Deferred to batch closeout.** Generate after first Middle batch completes. |
+
+> **Note on M8.** Email send failure retry tests are complete (see §3). M8 is
+> removed from the active backlog. The next email-adjacent work is **not** a
+> Middle Job under the current numbering — it is either (a) L15 Notification /
+> Email Policy (Large, deferred) or (b) targeted business-integration /
+> worker-daemon Middle Jobs to be defined when a real email trigger (password
+> reset, invitation, result release) enters scope.
 
 ### Middle Job principles
 
@@ -116,8 +128,8 @@ Large Job 完成设计后，再拆成 Middle Job 落地。
 
 | ID | Large Job | Status | Why Large | Expected Output |
 | -- | --------- | ------ | --------- | --------------- |
-| L1 | Teacher / Proctor / Grader Account Model | **Active / In Progress** | 账号、身份、角色、scope 关系复杂 | account model ADR |
-| L2 | Backend Permission Model | **Active / In Progress** | 影响所有敏感 API，不能用简单 role string | permission matrix / RBAC ADR |
+| L1 | Teacher / Proctor / Grader Account Model | **Design accepted; foundation merged.** Account/role infrastructure (6-role `RoleKey`, `userRoleAssignments` table + repo + `roleAssignments.ts` API, `users.role` sync, frontend nav, SYSTEM actor) merged via PR #149–#153. Remaining work is enforcement refinement (resolver-wiring), tracked as Middle — not new Large design. | 账号、身份、角色、scope 关系复杂 | account model ADR |
+| L2 | Backend Permission Model | **Design accepted; foundation merged; enforcement partial.** ADR + permission matrix accepted; catalog/presets/registry/shadow/scope-resolver-contract merged (M1–M6, AUDIT-M1/2). `requireCapability` flipped on 11 routes. **Open Middle work (not Large design):** wire scope resolvers into request path + flip remaining ~50 `requireRole` routes per-domain (RBAC-M10-finish, see `RBAC-JOB-QUEUE.md`). | 影响所有敏感 API，不能用简单 role string | permission matrix / RBAC ADR |
 | L3 | Custom Role / Custom RBAC | Later | 极容易过度设计，Phase 3 只预留 | custom role ADR |
 | L4 | Answer Protocol v2 | **Priority** | 影响保存、提交、评分、审计、前端状态机 | answer protocol spec |
 | L5 | WYSIWYG Submit / Final Answer Barrier | **Priority** | 需要证明学生看到的最终答案等于后端冻结答案 | final barrier ADR |
@@ -321,7 +333,7 @@ After Group A design stabilizes:
 
 These are explicitly deferred and should not be started until the foundations above are designed:
 
-- RBAC runtime implementation
+- RBAC scope-resolver wiring (RBAC-M10-finish) — per-domain Middle Jobs; do NOT wire resolvers or flip remaining routes without a per-route plan (see `RBAC-JOB-QUEUE.md`)
 - Frontend state machine runtime integration (ADR-009 PR 4)
 - UI full redesign
 - E2E full parallelization implementation
@@ -336,12 +348,12 @@ These are explicitly deferred and should not be started until the foundations ab
 
 ## 10. What Not To Do Next
 
-- Do NOT directly implement RBAC runtime.
+- Do NOT wire RBAC scope resolvers into the request path or flip remaining `requireRole` routes without a per-domain RBAC-M10-finish plan. (The foundation — catalog, presets, registry, shadow, resolvers, 11 flipped routes — is merged; the remaining work is incremental enforcement, not a fresh start. See `docs/phase3/rbac/RBAC-JOB-QUEUE.md`.)
 - Do NOT directly rewrite TakeExamPage or other exam pages.
 - Do NOT introduce XState or other state machine libraries.
 - Do NOT directly change the answer protocol without L4 design.
 - Do NOT directly implement rich text / drawing answers without L11 design.
-- Do NOT expand email backend into a complex notification system.
+- Do NOT expand email backend into a complex notification system (no business integration / templates / worker daemon until L15 policy or a scoped Middle Job defines the trigger).
 - Do NOT混入 Large Job 设计到 Middle PR 中. Each Middle Job must be independently scoped.
 - Do NOT combine migration + frontend + state machine + permission in a single PR.
 - Do NOT claim Exam Lifecycle State Model is covered by ADR-009. ADR-009 covers frontend interaction state machines only.

@@ -33,6 +33,17 @@ All load-bearing claims in this ADR cite a file path + line number, an audit sec
 
 ## Current Problems
 
+> ⚠️ **Historical snapshot.** This section and the Evidence Appendix below
+> describe the **pre-migration** state that motivated this ADR (the coarse
+> 2-role `requireRole` model, the dead `requirePermission` layer, the 4 proctor
+> migration traps). Those problems have since been **addressed and merged**
+> (Scoped RBAC foundation, SYSTEM-M1, multi-role assignments, 11 flipped routes
+> — PR #149–#153 + enforcement series). The text is retained verbatim because it
+> is the ADR's problem statement; it is **not** the current state. For current
+> status see `docs/phase3/plan.md` §0 and `RBAC-JOB-QUEUE.md` ("Current real
+> gap"). The single remaining open item is RBAC-M10-finish (resolver wiring +
+> remaining route flips).
+
 > Verbatim from the fact base, each re-verified live for this ADR.
 
 1. **Two-role coarse gate, not a permission model.** Authorization is `authenticate → requireRole(["Admin" | "Candidate"]) → handler`. Distribution (live `rg`): **62 Admin-only + 9 Candidate-only + 1 both-roles** call sites across 16 route files (`audit-authz-framework-readiness.md` §2.1; re-verified: see §Evidence Appendix of this ADR).
@@ -1066,6 +1077,13 @@ await authz.can(ctx, {
 ---
 
 ## Evidence Appendix
+
+> ⚠️ **Historical snapshot.** The `rg` results below were captured at ADR
+> authoring time against the pre-migration codebase. Counts like "62 Admin-only"
+> and "zero production `requirePermission` callers" no longer hold —
+> `requireCapability` is live on 11 routes and ~50 routes remain on
+> `requireRole`. Retained verbatim as the ADR's evidence base; for current
+> counts re-run the commands.
 
 > Job §17/§18: every major claim backed by file:line, audit reference, or live `rg`. Commands re-run for this ADR.
 

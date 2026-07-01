@@ -8,11 +8,16 @@
 
 ## Current Status
 
+> **Currency note (2026-07-01).** Status refreshed against merged `master` state.
+> RBAC and Email foundation work has progressed past earlier revisions; see
+> `docs/phase3/plan.md` §0/§3/§4 and `docs/phase3/rbac/RBAC-JOB-QUEUE.md` for
+> per-job detail.
+
 | Area | Status | Notes |
 | ---- | ------ | ----- |
 | Small Jobs (S1–S10) | **Completed baseline** | S1–S10 已作为 Phase 3 事实审计和 scaffold 基线完成 |
-| Email backend / outbox | **Backend done** | M3 outbox skeleton 已实现；后续只保留 retry tests / diagnostics / notification policy |
-| RBAC | **Active Large Track** | 正在通过 ADR / permission matrix 设计推进；Small/Middle 文档不重复定义 RBAC，Derived Middle Jobs 仅从 ADR 拆出后进入本文档 |
+| Email backend / outbox | **Completed (M3 + M8)** | M3 outbox foundation + M8 retry tests both merged. Remaining (not yet scoped as jobs): business integration, worker daemon, `users.email` column — see `docs/phase3/emails/email.md` §Status |
+| RBAC | **Foundation merged; enforcement partial** | ADR + permission matrix accepted; M1–M9 + SYSTEM-M1 + shadow merged (PR #149–#153); 11 routes flipped to `requireCapability`. Open work = RBAC-M10-finish (resolver wiring + ~50 remaining route flips) — tracked in `docs/phase3/rbac/RBAC-JOB-QUEUE.md`, not redefined here |
 | Frontend State Machine | **Deferred Large / ADR started** | ADR-009 Proposed；runtime integration 待 L4/L5/L13 结论 |
 | Large Jobs | **Design backlog** | 单独维护；详见 `docs/phase3/plan.md` §5 |
 
@@ -70,12 +75,12 @@ Small Jobs are removed from the active execution queue. They will only be re-ope
 | -- | --- | ------ | -------------- |
 | M1 | Manual grading candidate-answer visibility | **Verify needed** | GradingDetailPage already renders candidate answer; verify if full scope (API + frontend + tests) is complete |
 | M2 | Redis health / fallback / diagnostics | **Active** | Redis integration exists; verify health check and fallback test coverage |
-| M3 | Email outbox backend | **Backend done** | Outbox table, repo, worker, fake sender implemented. Closeout: retry tests, diagnostics, worker status |
+| M3 | Email outbox backend | **Completed** | Outbox table + migration, repo, 3 senders, retry policy, `sanitizeEmailError`, `EmailNotificationService`, `EmailOutboxService`, `POST /api/email/test`, full test suite. Remaining gaps (not M3 scope): business integration, worker daemon, `users.email`. See `docs/phase3/emails/email.md` §Status |
 | M4 | Audit / monitoring event expansion v0 | **Active** | First batch of Phase 3 events |
 | M5 | Diagnostics infrastructure status | **Active** | System diagnostics page should show Redis / email / worker status |
 | M6 | Grading answer rendering tests | **Active** | Tests for candidate answer display in grading page |
 | M7 | Redis unavailable fallback tests | **Active** | Tests ensuring Redis failure does not corrupt PG state |
-| M8 | Email send failure retry tests | **Verify needed** | If retry tests exist and pass, mark completed; otherwise active |
+| M8 | Email send failure retry tests | **Completed** | `apps/api/src/email/outboxService.test.ts` + `retryPolicy.test.ts` + `sanitizeError.test.ts` + `notificationService.test.ts` cover pending→sent/retry/failed, single-failure-no-block, disabled no-op, injected clock, secret-scrub into `lastError` |
 | M9 | Proctor incident event logging v0 | **Active** | Lightweight incident recording only; scoped to not expand into full proctor authority |
 | M10 | CI / E2E parallelization readiness report | **Active** | Documentation task only |
 | M11 | Phase 3 readiness closeout report | **Closeout only** | Generate after first Middle batch completes |
@@ -209,7 +214,13 @@ Middle
 
 ### Current Status
 
-**Backend done.** Email outbox skeleton (M3 original scope) has been implemented: `email_outbox` table, `EmailOutboxRepo`, `EmailOutboxService`, fake email sender, worker skeleton, pending/sent/failed states, retry count, disabled-by-default config. This card is now a closeout / verification task only.
+**Completed.** The full M3 scope is delivered and merged: `email_outbox` table +
+migration, `EmailOutboxRepo`, 3 senders (Disabled/Fake/Smtp), retry policy,
+`sanitizeEmailError`, `EmailNotificationService`, `EmailOutboxService.processDueEmails`,
+`POST /api/email/test`, and the complete test suite (incl. M8 retry tests). This
+card is retained as a record. **Remaining gaps are NOT M3 scope** — they are
+future work (business integration, worker daemon, `users.email` column); see
+`docs/phase3/emails/email.md` §Status.
 
 ### Goal
 
@@ -477,7 +488,14 @@ Middle
 
 ### Current Status
 
-**Verify needed / Active if tests missing.** If email retry tests exist and pass, mark completed. Otherwise, develop these tests.
+**Completed.** Retry / failure behavior is fully tested in
+`apps/api/src/email/outboxService.test.ts` (pending→sent, pending→retry with
+backoff, pending→failed at maxAttempts, single-failure-no-block, disabled sender
+drains to sent, injected clock, secret-scrub into `lastError`), plus
+`retryPolicy.test.ts` (exponential backoff determinism),
+`sanitizeError.test.ts` (password/pass/bearer scrubbing), and
+`notificationService.test.ts` (`enqueueBestEffort` swallows errors; audit row
+persists when outbox write fails). No further work under M8.
 
 ### Goal
 
@@ -678,7 +696,7 @@ git diff -- docs/phase3/readiness-closeout-report.md
 
 Items that are verification / closeout oriented:
 
-1. **M8** Email Send Failure Retry Tests — if not completed, verify and complete
+1. **M8** Email Send Failure Retry Tests — **completed** (see card)
 2. **M5** Diagnostics Infrastructure Status — especially email / worker / Redis visibility
 3. **M7** Redis Unavailable Fallback Tests
 4. **M6** Grading Answer Rendering Tests
@@ -717,15 +735,24 @@ The following boundaries must not be crossed in any Middle Job:
 
 * **M1 / M6**: Do NOT implement answer protocol v2 (that is L4)
 * **M2 / M7**: Do NOT make Redis an authoritative state source (Redis is runtime cache only)
-* **M3 / M8**: Do NOT implement full notification policy (that is L15)
+* **M3 / M8**: Do NOT implement full notification policy (that is L15). M3 + M8 are complete; business integration / worker daemon are separate future jobs, not M3 closeout.
 * **M4 / M9**: Do NOT implement full audit event taxonomy or proctor authority (those are L9 / L7)
 * **M10**: Do NOT directly start E2E parallelization implementation (that is L10)
-* **Any Middle**: Do NOT directly implement RBAC runtime (that is L2)
+* **Any Middle**: Do NOT wire RBAC scope resolvers or flip remaining `requireRole` routes without a per-domain RBAC-M10-finish plan — the foundation is merged; remaining work is incremental enforcement tracked in `docs/phase3/rbac/RBAC-JOB-QUEUE.md` ("Current real gap")
 * **Any Middle**: Do NOT directly rewrite TakeExamPage state machine (that is L6)
 
 ### RBAC entry rule
 
-RBAC is an Active Large Track being designed via ADR / permission matrix. This Small / Middle document does NOT redefine RBAC. RBAC-derived Middle Jobs (e.g., permission helper, route-level permission tests, role assignment migration) may enter this document ONLY after they are explicitly拆出 from the accepted RBAC ADR. Until then, no Middle Job may add role checks, permission guards, or RBAC-related migrations.
+RBAC design (ADR + permission matrix) is **accepted** and the **foundation is merged**
+(catalog/presets/registry/shadow/resolvers/M7-M9/SYSTEM-M1 + 11 flipped routes,
+PR #149–#153 + enforcement series). This Small / Middle document does NOT redefine
+RBAC. The remaining RBAC work — **RBAC-M10-finish** (wire scope resolvers into the
+`requireCapability` request path; flip the remaining ~50 `requireRole` routes
+per-domain) — is tracked in `docs/phase3/rbac/RBAC-JOB-QUEUE.md` and enters this
+document only as explicitly-scoped per-domain Middle Jobs (e.g. "flip `user.*`
+routes", "wire attempt-scope into candidate-runtime routes"), each behind shadow
+parity for that domain. No Middle Job may silently add role checks, permission
+guards, or RBAC-related migrations outside that tracker.
 
 ### What Middle Jobs CAN do
 
