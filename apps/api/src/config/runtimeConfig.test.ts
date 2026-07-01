@@ -1038,5 +1038,26 @@ describe("runtimeConfig", () => {
       const config = getRuntimeConfig();
       expect(config.email.smtp?.tlsServername).toBe("smtp.real.com");
     });
+
+    // ── Test-mode hard guard ────────────────────────────────────────────
+    // In test/e2e/ci mode, EMAIL_TRANSPORT=smtp MUST be forced to "fake"
+    // even if the env is misconfigured (e.g. a dev .env with real SMTP
+    // credentials leaks into the test runtime). This prevents tests from
+    // building a real nodemailer transport and potentially sending real mail
+    // via POST /api/email/test. See email-config.md §6 / §3.2.
+    it("forces transport=fake in test mode even when env says smtp", () => {
+      process.env.APP_MODE = "test";
+      process.env.TEST_DATABASE_URL = "postgresql://t:t@h:5432/testdb";
+      process.env.EMAIL_ENABLED = "true";
+      process.env.EMAIL_TRANSPORT = "smtp";
+      process.env.SMTP_HOST = "smtp.example.com";
+      process.env.SMTP_USER = "u";
+      process.env.SMTP_PASSWORD = "p";
+      resetRuntimeConfigForTest();
+      const config = getRuntimeConfig();
+      expect(config.email.transport).toBe("fake");
+      // SMTP config is not assembled under fake transport.
+      expect(config.email.smtp).toBeNull();
+    });
   });
 });
