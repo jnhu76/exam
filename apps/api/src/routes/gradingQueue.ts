@@ -27,6 +27,7 @@ import {
   getRequestContext,
 } from "./helpers.js";
 import { cookieAuth } from "./attempts.shared.js";
+import { Permission } from "@exam/authz";
 import { recordAudit } from "./audit.js";
 
 /**
@@ -46,7 +47,10 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/admin/grading-queue",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.GradingQueueView),
+      ],
       schema: {
         querystring: GradingQueueListQuerySchema,
         security: cookieAuth,
@@ -111,7 +115,10 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/admin/attempts/:attemptId/grading-details",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.GradingDetailView),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         security: cookieAuth,
@@ -214,7 +221,10 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/admin/attempts/:attemptId/grade-question",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.GradingScoreWrite),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         body: GradeQuestionRequestSchema,
