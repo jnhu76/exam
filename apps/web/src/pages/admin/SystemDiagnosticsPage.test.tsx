@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { SystemDiagnosticsPage } from "./SystemDiagnosticsPage";
@@ -67,6 +67,13 @@ function renderPage() {
 describe("SystemDiagnosticsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // Safety net: the poll-failure test below switches to fake timers; restore
+  // real timers so sibling tests in this file aren't affected. The global
+  // setup.ts afterEach also calls useRealTimers, but this is explicit.
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("renders normally and logs refresh on successful initial load (debug level)", async () => {
@@ -181,41 +188,67 @@ describe("SystemDiagnosticsPage", () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());
     const refreshBtn = screen.getByRole("button", { name: "刷新系统数据" });
-    refreshBtn.click();
+    // Click inside act: handleRefresh calls setIsLoading(true) synchronously,
+    // which is an out-of-act state update if the native .click() runs bare.
+    await act(async () => {
+      refreshBtn.click();
+    });
     await waitFor(() => {
       expect(debugMock).toHaveBeenCalled();
     });
   });
 
   it("emits logger.warn and renders the stale-warning Alert on a subsequent poll failure", async () => {
+    // Use fake timers so the 10s HEALTH_REFRESH_MS poll fires synchronously
+    // instead of waiting real wall-clock. This removes both the ~10s test
+    // duration and the act() warnings (a real pending poll firing setState
+    // after the test body was the warning source). No userEvent is used in
+    // this test; if one were added, it must be configured with
+    // userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
     // Initial load: both succeed. The page fires Promise.all([health, diag])
     // so the call order matches the array order ([health, diag]).
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());
-    renderPage();
-    expect(await screen.findByText("系统监控")).toBeInTheDocument();
-    await waitFor(() => expect(debugMock).toHaveBeenCalled());
+
+    // Render + flush the initial load's microtasks inside one act so the
+    // resulting setHealth/setDiag/setIsLoading state updates are batched and
+    // observed. The page has an infinite 1s uptime interval, so
+    // runAllTimers would loop; render() mounts and synchronously schedules
+    // the Promise.all microtasks, which the awaited act then drains without
+    // advancing timers. Using findByText/waitFor here would spin on
+    // fake-timer polling, so we flush then assert with a sync query.
+    await act(async () => {
+      renderPage();
+      // Drain the initial Promise.all microtasks; the awaited empty promise
+      // yields to the queue so the mock .then callbacks run inside this act.
+      await Promise.resolve();
+    });
+    expect(screen.getByText("系统监控")).toBeInTheDocument();
+    expect(debugMock).toHaveBeenCalled();
 
     // Subsequent scheduled poll: health fails, diagnostics ok. Order again
     // follows the page's call sequence (health first).
     getMock.mockRejectedValueOnce(new Error("network down"));
     getMock.mockResolvedValueOnce(diag());
 
-    // The health poll runs on a 10s interval; wait for it to fire and log.
-    await vi.waitFor(
-      () => {
-        expect(warnMock).toHaveBeenCalledWith(
-          "system_diagnostics.poll_failed",
-          expect.objectContaining({ source: "health" }),
-        );
-      },
-      { timeout: 15000 },
+    // Advance the fake 10s health poll interval; the rejected poll resolves
+    // and the component sets staleWarning + logs. Wrapped in act because
+    // this drives React state updates from the poll callbacks.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(warnMock).toHaveBeenCalledWith(
+      "system_diagnostics.poll_failed",
+      expect.objectContaining({ source: "health" }),
     );
 
     // S5: the stale warning must actually render in the DOM — the user sees a
     // visible "stale data" Alert, not just a swallowed log.
     expect(
-      await screen.findByText("系统状态刷新失败，当前显示上次成功数据"),
+      screen.getByText("系统状态刷新失败，当前显示上次成功数据"),
     ).toBeInTheDocument();
-  }, 20000);
+  });
 });
