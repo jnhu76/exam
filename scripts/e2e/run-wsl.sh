@@ -44,14 +44,14 @@ SPEC_KEYS=()
 EXTRA_PW_ARGS=()
 
 # ── 并行控制 ──────────────────────────────────────────────────────────
-# E2E_WORKERS：并行 shard 数。默认 1（串行，当前行为）。
+# E2E_WORKERS：并行 shard 数。默认 2（与 CI 对齐）。
 #   >1 时：为每个 shard 启动独立 exam_e2e_w{N} 库 + 独立 API server（端口
 #          E2E_WORKER_BASE_PORT+i），跑 npx playwright test --shard=i/N。
 #          shard 之间完全隔离（DB/server/端口），文件级 serial 仍被尊重。
-#   =1 时：走原有单 server 单 exam_e2e 库路径（行为不变）。
+#   =1 时：走原有单 server 单 exam_e2e 库路径（单 shard 模式）。
 # E2E_WORKER_BASE_PORT：并行 shard 的 API server 起始端口，默认 3100。
 # E2E_KEEP_WORKER_DB_ON_FAILURE：失败时保留 worker 库便于 debug（1/0）。
-E2E_WORKERS="${E2E_WORKERS:-1}"
+E2E_WORKERS="${E2E_WORKERS:-2}"
 if [[ "$E2E_WORKERS" -gt 16 ]]; then
   err "E2E_WORKERS=${E2E_WORKERS} 超过上限 16，拒绝启动（防资源耗尽）"
   exit 2
