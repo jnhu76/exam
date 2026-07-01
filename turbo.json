@@ -16,25 +16,63 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "TEST_DB_ISOLATION",
+        "ALLOW_UNSAFE_TEST_DATABASE_URL"
+      ]
     },
     "@exam/api#test": {
       "dependsOn": ["^build", "@exam/db#test"],
-      "passThroughEnv": ["TEST_DB_ISOLATION", "API_TEST_MAX_WORKERS"]
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "TEST_DB_ISOLATION",
+        "API_TEST_MAX_WORKERS",
+        "ALLOW_UNSAFE_TEST_DATABASE_URL"
+      ]
     },
     "coverage": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "TEST_DB_ISOLATION",
+        "API_TEST_MAX_WORKERS",
+        "ALLOW_UNSAFE_TEST_DATABASE_URL"
+      ]
     },
     "@exam/api#coverage": {
       "dependsOn": ["^build", "@exam/db#coverage"],
-      "passThroughEnv": ["TEST_DB_ISOLATION", "API_TEST_MAX_WORKERS"]
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "TEST_DB_ISOLATION",
+        "API_TEST_MAX_WORKERS",
+        "ALLOW_UNSAFE_TEST_DATABASE_URL"
+      ]
     },
     "test:integration": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "TEST_DB_ISOLATION",
+        "API_TEST_MAX_WORKERS",
+        "ALLOW_UNSAFE_TEST_DATABASE_URL"
+      ]
     },
     "@exam/api#test:integration": {
       "dependsOn": ["^build", "@exam/db#test:integration"],
-      "passThroughEnv": ["TEST_DB_ISOLATION", "API_TEST_MAX_WORKERS"]
+      "passThroughEnv": [
+        "TEST_DATABASE_URL",
+        "TEST_DB_URL",
+        "TEST_DB_ISOLATION",
+        "API_TEST_MAX_WORKERS",
+        "ALLOW_UNSAFE_TEST_DATABASE_URL"
+      ]
     },
     "test:e2e": {},
     "smoke": {}

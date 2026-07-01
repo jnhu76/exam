@@ -206,9 +206,11 @@ describe("TakeExamPage smoke", () => {
   });
 
   it("highlights timer when less than five minutes remain", async () => {
+    const now = Date.now();
     apiGet.mockResolvedValueOnce({
       ...mockAttempt,
-      deadlineAt: new Date(Date.now() + 295000).toISOString(),
+      serverNow: new Date(now).toISOString(),
+      deadlineAt: new Date(now + 295000).toISOString(),
     });
 
     renderPage();

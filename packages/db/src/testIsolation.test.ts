@@ -382,6 +382,11 @@ describe("isTestDbIsolationEnabled", () => {
     expect(isTestDbIsolationEnabled()).toBe(true);
   });
 
+  it("returns true for named isolation strategies", () => {
+    process.env.TEST_DB_ISOLATION = "worker-database";
+    expect(isTestDbIsolationEnabled()).toBe(true);
+  });
+
   it("returns false when env is 0", () => {
     process.env.TEST_DB_ISOLATION = "0";
     expect(isTestDbIsolationEnabled()).toBe(false);

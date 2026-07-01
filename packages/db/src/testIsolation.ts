@@ -285,7 +285,7 @@ export async function withIsolatedTestSchema<T>(
 export function isTestDbIsolationEnabled(): boolean {
   const val = process.env.TEST_DB_ISOLATION;
   if (val === undefined || val === "") return true;
-  return val === "1" || val === "true";
+  return val !== "0" && val !== "false";
 }
 
 /**
