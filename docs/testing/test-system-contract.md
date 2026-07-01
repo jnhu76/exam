@@ -1,0 +1,460 @@
+# Testing & CI Contract
+
+> **Authority**: This document is the single source of truth for test boundaries,
+> environment variables, and CI lane contracts. Implementation may NOT deviate
+> from these rules without updating this document first. If this document
+> conflicts with code, this document wins until the code is updated.
+
+## Table of Contents
+
+1. [CI Lanes](#1-ci-lanes)
+2. [Environment Variable Contract](#2-environment-variable-contract)
+3. [Time / Async Testing Contract](#3-time--async-testing-contract)
+4. [E2E Contract](#4-e2e-contract)
+5. [Local WSL Test Matrix](#5-local-wsl-test-matrix)
+6. [Docker E2E Test Matrix](#6-docker-e2e-test-matrix)
+7. [CI E2E Test Matrix](#7-ci-e2e-test矩阵)
+8. [Verification Checklist](#8-verification-checklist)
+
+---
+
+## 1. CI Lanes
+
+The CI pipeline (`.github/workflows/ci.yml`) runs on every PR to `master`.
+After `static` passes, `verify` and `e2e` run **in parallel**.
+
+### 1.1 Static Checks
+
+| Field | Value |
+|-------|-------|
+| **Job name** | `static` |
+| **Command** | `pnpm verify:static` |
+| **Services** | None |
+| **Env vars** | None (inherits runner defaults) |
+| **Allowed resources** | CPU only (format, lint, typecheck) |
+| **Forbidden** | Database access, network calls, file writes outside repo |
+| **Timeout** | 10 minutes |
+| **Failure attribution** | `format:check` → Prettier issue; `lint` → ESLint issue; `lint:copy` → hardcoded business copy; `lint:arch` → dependency boundary violation; `typecheck` → TypeScript error |
+
+### 1.2 Package Build (workspace packages)
+
+| Field | Value |
+|-------|-------|
+| **Job** | `verify` (step 0) |
+| **Command** | `pnpm --filter "./packages/*" build` |
+| **Why needed** | `@exam/web coverage` runs vitest directly (bypassing Turbo's task graph), so the `^build` dependency in `turbo.json` does NOT apply. Without this step, `@exam/domain/dist` and `@exam/contracts/dist` don't exist, causing Vite import-analysis failures. |
+| **Scope** | All packages in `packages/` (domain, contracts, auth, db, authz, exam-engine, import-export). NOT apps/ (web, api). |
+| **Cache** | Turbo caches each package's `dist/**` |
+
+### 1.3 Web Coverage
+
+| Field | Value |
+|-------|-------|
+| **Job** | `verify` (step 1) |
+| **Command** | `pnpm --filter @exam/web coverage` |
+| **Services** | None (pure jsdom) |
+| **Env vars** | `APP_MODE=test`, `NODE_ENV=test` (from vitest config) |
+| **Allowed resources** | CPU (jsdom + V8 coverage instrumentation) |
+| **Forbidden** | Database access, Redis, network calls |
+| **Timeout** | 10s per test (CI guardrail in `vitest.config.ts`) |
+| **Failure attribution** | Test failure → check `apps/web/src/**/*.test.tsx`; coverage threshold → check `vitest.config.ts` thresholds |
+
+### 1.4 API Coverage
+
+| Field | Value |
+|-------|-------|
+| **Job** | `verify` (step 2) |
+| **Command** | `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage` |
+| **Services** | PostgreSQL (via CI service container on `localhost:5432`) |
+| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_test`, `JWT_SECRET=ci-test-secret`, `APP_MODE=ci`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `REDIS_URL=redis://localhost:6379`, `TEST_DB_ISOLATION=worker-database`, `API_TEST_MAX_WORKERS=4` |
+| **Allowed resources** | PostgreSQL (`exam_test`), Redis, CPU |
+| **Forbidden** | `exam` or `exam_e2e` databases, filesystem writes outside repo |
+| **Failure attribution** | DB errors → check Postgres service; timeout → check `API_TEST_MAX_WORKERS`; auth → check `JWT_SECRET` |
+
+### 1.5 Package Coverage
+
+| Field | Value |
+|-------|-------|
+| **Job** | `verify` (step 3) |
+| **Command** | `pnpm --filter "./packages/*" coverage` |
+| **Services** | PostgreSQL (for `@exam/db` tests only) |
+| **Env vars** | Same as API coverage (inherited from job-level `env:`) |
+| **Allowed resources** | PostgreSQL (`exam_test`), CPU |
+| **Forbidden** | `exam` or `exam_e2e` databases |
+| **Note** | Each package's coverage is independent. `@exam/auth` tests are pure unit tests (no DB). `@exam/db` tests require PostgreSQL. Other packages (domain, contracts, authz, exam-engine, import-export) are pure unit tests. |
+| **Failure attribution** | Check which package failed in the step output |
+
+### 1.6 Full Build
+
+| Field | Value |
+|-------|-------|
+| **Job** | `verify` (step 4) |
+| **Command** | `pnpm build` |
+| **Services** | None |
+| **Allowed resources** | CPU, filesystem |
+| **Forbidden** | Network calls (unless package build requires it) |
+
+### 1.7 E2E (Playwright)
+
+| Field | Value |
+|-------|-------|
+| **Job** | `e2e` (matrix: `shardIndex: [1, 2]`, `shardTotal: [2]`) |
+| **Command** | `pnpm --filter @exam/e2e test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}` |
+| **Services** | PostgreSQL (`exam_e2e` on `localhost:5432`) |
+| **Env vars** | `DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `TEST_DATABASE_URL=postgresql://exam:exam@localhost:5432/exam_e2e`, `JWT_SECRET=e2e-test-secret`, `APP_MODE=e2e`, `NODE_ENV=test`, `DEPLOYMENT_MODE=singleTenant`, `E2E_BASE_URL=http://localhost:3000`, `E2E_SHARD_TOTAL=2`, fast scanner intervals (`HEARTBEAT_TIMEOUT_MS=15000`, etc.), `RATE_LIMIT_MAX=1000`, `RATE_LIMIT_WINDOW_MS=60000` |
+| **Allowed resources** | PostgreSQL (`exam_e2e`), CPU, Chromium |
+| **Forbidden** | `exam` or `exam_test` databases, `localhost:15432` (dev port) |
+| **Failure attribution** | Server startup → check `server.log`; test failure → check `test-results/`; shard-specific → check shard index |
+
+### 1.8 E2E Merge
+
+| Field | Value |
+|-------|-------|
+| **Job** | `e2e-merge` |
+| **Command** | `npx playwright merge-reports --reporter html ./all-blob-reports` |
+| **Services** | None |
+| **Env vars** | None |
+| **Input** | Downloaded blob reports from all E2E shards |
+| **Failure attribution** | Invalid zip → corrupt artifact; empty merge → all shards skipped/cancelled |
+
+---
+
+## 2. Environment Variable Contract
+
+### 2.1 `DATABASE_URL`
+
+| Context | Value | Purpose |
+|---------|-------|---------|
+| Local dev (`.env`) | `postgresql://exam:exam@localhost:15432/exam` | Runtime/dev |
+| CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | Both DATABASE_URL and TEST_DATABASE_URL point to same test DB |
+| CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
+| Docker test | `postgresql://db:5432/exam_test` | Container internal |
+| WSL E2E | `postgresql://exam:exam@localhost:15432/exam_e2e` | E2E seed + runtime |
+
+**Rules:**
+- `DATABASE_URL` is for **runtime/dev** use only.
+- Unit/integration tests MUST NOT silently fall back to `DATABASE_URL`.
+- The DB resolver (`resolveDatabaseUrl`) enforces this: test/ci/e2e modes use `TEST_DATABASE_URL` exclusively.
+
+### 2.2 `TEST_DATABASE_URL`
+
+| Context | Value | Purpose |
+|---------|-------|---------|
+| Local dev (`.env`) | `postgresql://exam:exam@localhost:15432/exam_test` | vitest runtime |
+| CI verify | `postgresql://exam:exam@localhost:5432/exam_test` | vitest runtime |
+| CI E2E | `postgresql://exam:exam@localhost:5432/exam_e2e` | E2E seed + runtime |
+
+**Rules:**
+- Must point to a database whose name contains `test`, `e2e`, or `ci`.
+- The name-safety guard in `resolveTestBranchUrl()` enforces this unless `ALLOW_UNSAFE_TEST_DATABASE_URL=1`.
+- In CI, `DATABASE_URL` and `TEST_DATABASE_URL` often point to the same test database. This is allowed because both are test databases.
+- WSL E2E deliberately unsets `TEST_DATABASE_URL` and uses `DATABASE_URL` with `APP_MODE=development` to avoid the name-safety guard.
+
+### 2.3 `JWT_SECRET`
+
+| Context | Value | Purpose |
+|---------|-------|---------|
+| CI verify | `ci-test-secret` | API + package tests |
+| CI E2E | `e2e-test-secret` | E2E runtime |
+| Local dev | from `.env` or `"development-only-change-me"` fallback | Dev runtime |
+
+**Rules:**
+- CI may set `JWT_SECRET` globally for all test jobs.
+- **Production guard tests** (e.g., `packages/auth/src/session.test.ts`) MUST use `vi.stubEnv` to override `JWT_SECRET` to `""` and `APP_MODE` to `"production"`. They MUST NOT modify the CI global `JWT_SECRET`.
+- `vi.unstubAllEnvs()` MUST be called in `afterEach` to restore the original env.
+
+### 2.4 `NODE_ENV`
+
+| Context | Value |
+|---------|-------|
+| CI (all jobs) | `test` |
+| Local dev | `development` |
+| Production | `production` |
+
+**Rules:**
+- Vitest configs force `NODE_ENV=test` via `TEST_RUNTIME_ENV` from `vitest.shared.ts`.
+- Production behavior tests MUST use `vi.stubEnv("NODE_ENV", "production")`.
+
+### 2.5 `APP_MODE`
+
+| Context | Value | Effect |
+|---------|-------|--------|
+| CI verify | `ci` | Routes to `TEST_DATABASE_URL`; non-production mode |
+| CI E2E | `e2e` | Routes to `TEST_DATABASE_URL`; E2E mode |
+| Local dev | `development` | Routes to `DATABASE_URL` |
+| Production | `production` | Routes to `DATABASE_URL`; production guards active |
+| Vitest (all) | `test` (forced by `TEST_RUNTIME_ENV`) | Routes to `TEST_DATABASE_URL` |
+
+**Rules:**
+- `APP_MODE` is the authoritative runtime mode selector.
+- `NODE_ENV` is a fallback when `APP_MODE` is unset.
+- Valid values: `development`, `test`, `e2e`, `ci`, `production`.
+- `APP_MODE=multiTenant` must fail fast at startup (Phase 4 only).
+
+### 2.6 `REDIS_URL`
+
+| Context | Value | Purpose |
+|---------|-------|---------|
+| CI verify | `redis://localhost:6379` | API tests that use Redis |
+| CI E2E | Not set | E2E doesn't need Redis |
+| Docker | `redis://redis:6379` | Container internal |
+| Local dev | `redis://localhost:6379` | Dev runtime |
+
+**Rules:**
+- Redis is required for API tests that exercise rate limiting, session storage, or pub/sub.
+- If Redis is unreachable, API tests that depend on it will fail. Tests that don't use Redis (pure unit tests) are unaffected.
+- `@exam/db` tests do NOT require Redis.
+- `@exam/auth` tests do NOT require Redis.
+
+### 2.7 `DEPLOYMENT_MODE`
+
+| Context | Value |
+|---------|-------|
+| CI (all) | `singleTenant` |
+| Production | `singleTenant` |
+| Phase 4 | `multiTenant` (not yet allowed) |
+
+**Rules:**
+- Phase 1.x is single-tenant only.
+- `DEPLOYMENT_MODE=multiTenant` must fail fast at startup.
+
+---
+
+## 3. Time / Async Testing Contract
+
+### 3.1 Prohibited Patterns
+
+The following patterns are **forbidden** in all tests (unit, integration, E2E):
+
+| Pattern | Why forbidden |
+|---------|---------------|
+| `await new Promise(r => setTimeout(r, 10000))` | Real sleep wastes CI time and causes flakes |
+| `await new Promise(r => setTimeout(r, 15000))` | Same |
+| `await new Promise(r => setTimeout(r, 30000))` | Same |
+| Real polling interval wait (e.g., `await delay(15000)`) | Polling is a runtime concern, not a test concern |
+| `Date.now()` elapsed assertion with ms tolerance | Clock drift causes flakes across CI runners |
+| Test-level `timeout: 30000` to mask hangs | Hangs should be fixed, not absorbed |
+| Timer advancement without `act()` wrapper | React state updates outside `act()` cause warnings |
+| `userEvent` calls without `await` | Fire-and-forget user events miss async state updates |
+
+### 3.2 Required Patterns
+
+The following patterns are **mandatory** when testing time-dependent behavior:
+
+| Pattern | When to use |
+|---------|-------------|
+| `vi.useFakeTimers()` / `vi.useRealTimers()` | Any test involving timers, intervals, or `setTimeout` |
+| `vi.setSystemTime(date)` | Tests that depend on specific dates |
+| `vi.advanceTimersByTimeAsync(ms)` | Advancing fake timers in async code |
+| `vi.advanceTimersToNextTimerAsync()` | Advancing to the next scheduled timer |
+| `await act(async () => { ... })` | Wrapping React state updates from timer advancement |
+| `vi.stubEnv(key, value)` | Isolating environment variables for production-guard tests |
+| `vi.unstubAllEnvs()` in `afterEach` | Restoring env after stubbing |
+| `vi.resetModules()` + dynamic import | Testing import-time env reads (when function reads env at module load) |
+
+### 3.3 Acceptable Patterns
+
+These are allowed with caution:
+
+| Pattern | When acceptable |
+|---------|-----------------|
+| `waitFor(() => expect(el).toBeInTheDocument())` | Waiting for DOM to appear (small timeout, e.g., 1000ms) |
+| `fireEvent.change(el, { target: { value } })` | Non-critical fields in slow tests where `userEvent.type` would exceed timeout |
+| Backoff/retry pure function tests | Testing algorithmic logic without real time |
+| `Date.now()` for seeding unique data | NOT for elapsed assertions |
+
+---
+
+## 4. E2E Contract
+
+### 4.1 WSL E2E vs Docker E2E
+
+| Aspect | WSL E2E (`scripts/e2e/run-wsl.sh`) | Docker E2E (`scripts/e2e/run.sh`) |
+|--------|--------------------------------------|-----------------------------------|
+| **Execution** | Native on host (no app container) | Full Docker Compose (app + db + e2e containers) |
+| **Database** | `exam_e2e` (or per-shard `exam_e2e_w{N}`) | `exam_test` (inside container) |
+| **APP_MODE** | `development` (deliberately, to avoid name-safety guard) | `e2e` |
+| **TEST_DATABASE_URL** | Explicitly unset | `db:5432/exam_test` |
+| **Sharding** | Supported (`E2E_WORKERS`, default 2) | Not supported (single process) |
+| **Blob reports** | Merged locally after run | Not used (list reporter only) |
+| **Cleanup** | Drops worker DBs, stops servers | `docker compose down -v` |
+| **Use case** | Fast local iteration | CI-like parity, reproducible builds |
+
+### 4.2 CI E2E Shard Rules
+
+| Aspect | Rule |
+|--------|------|
+| **Shard count** | 2 (defined in `matrix.shardTotal: [2]`) |
+| **Shard index** | `${{ matrix.shardIndex }}` (1-based) |
+| **Database per shard** | Single shared `exam_e2e` (CI doesn't create per-shard DBs) |
+| **Playwright workers** | `E2E_WORKERS_PER_SHARD` (default 1) |
+| **fail-fast** | `false` (all shards run even if one fails) |
+| **Blob zip naming** | `report-${{ matrix.shardIndex }}.zip` |
+| **Artifact naming** | `e2e-blob-shard-${{ matrix.shardIndex }}` |
+| **Upload retention** | 1 day |
+
+### 4.3 Playwright Report Merge Contract
+
+**Preconditions:**
+1. Each shard uploads a blob zip with a unique name: `report-{N}.zip`.
+2. Artifact names are unique per shard: `e2e-blob-shard-{N}`.
+3. `download-artifact` with `merge-multiple: true` flattens all zips into `all-blob-reports/`.
+
+**Validation steps (before merge):**
+1. `find all-blob-reports -maxdepth 2 -type f` — list all files.
+2. Reject non-`.zip` files (no `.gitkeep`, no HTML report zips, no stray files).
+3. For each `.zip`: `unzip -t "$z"` — verify zip integrity.
+4. Count blob zips; warn if zero (all shards skipped/cancelled).
+
+**Merge command:**
+```bash
+npx playwright merge-reports --reporter html ./all-blob-reports
+```
+
+**Post-merge:**
+- Merged HTML report uploaded as `playwright-html-report` artifact (14-day retention).
+
+**Forbidden:**
+- Feeding HTML report zips to `merge-reports` (only blob zips are valid input).
+- Artifact name collisions (two shards with the same artifact name → second overwrites first).
+- Sharing data state between shards (each shard must be self-contained).
+
+---
+
+## 5. Local WSL Test Matrix
+
+### 5.1 Unit Tests
+
+```bash
+# All packages
+pnpm test
+
+# Single package
+pnpm --filter @exam/auth test
+pnpm --filter @exam/domain test
+```
+
+- **DB required**: No (except `@exam/db`).
+- **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
+
+### 5.2 API Integration Tests
+
+```bash
+# Serial (default)
+pnpm --filter @exam/api test
+
+# Parallel (requires worker-database isolation)
+TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test
+```
+
+- **DB required**: Yes (`exam_test` on `localhost:15432`).
+- **Env**: `TEST_DATABASE_URL` must point to `exam_test`.
+
+### 5.3 Web Tests
+
+```bash
+pnpm --filter @exam/web test
+```
+
+- **DB required**: No (pure jsdom).
+- **Env**: `APP_MODE=test`, `NODE_ENV=test` (forced by vitest config).
+
+### 5.4 E2E Tests
+
+```bash
+# Default (2 shards, parallel)
+bash scripts/e2e/run-wsl.sh
+
+# Single shard
+E2E_WORKERS=1 bash scripts/e2e/run-wsl.sh
+
+# Custom shard count
+E2E_WORKERS=4 bash scripts/e2e/run-wsl.sh
+```
+
+- **DB required**: Yes (`exam_e2e` on `localhost:15432`).
+- **Env**: `APP_MODE=development`, `DATABASE_URL` pointing to `exam_e2e`, `TEST_DATABASE_URL` unset.
+
+---
+
+## 6. Docker E2E Test Matrix
+
+```bash
+# Standard run
+bash scripts/e2e/run.sh
+
+# With port remapping (if host ports are occupied)
+COMPOSE_FILE=docker-compose.test.yml:docker-compose.test.override.yml bash scripts/e2e/run.sh
+```
+
+### Services
+
+| Service | Image | Port | DB |
+|---------|-------|------|----|
+| `db` | `postgres:18.4-bookworm` | 5432 (or 5433 with override) | `exam_test` |
+| `app` | Built from `Dockerfile` | 3000 (or 3300 with override) | N/A (connects to `db`) |
+| `e2e` | `mcr.microsoft.com/playwright:v1.61.0-noble` | N/A | N/A (connects to `app`) |
+
+### Seed Data
+
+- `RUN_SEED=e2e` in app container → auto-runs `db:seed:e2e` on startup.
+- Produces deterministic demo accounts: admin, candidate, candidate1-4.
+
+### DB Lifecycle
+
+- Created fresh by `docker compose up`.
+- Destroyed by `docker compose down -v` on cleanup.
+- No persistent volumes (data is ephemeral).
+
+### Artifact Output
+
+- Playwright list reporter (stdout).
+- No blob reports, no merge.
+- Screenshots on failure saved to `test-results/`.
+
+---
+
+## 7. CI E2E 测试矩阵
+
+### Services
+
+| Service | Image | Port | DB |
+|---------|-------|------|----|
+| `postgres` | `postgres:18.4-bookworm` | `5432:5432` | `exam_e2e` |
+
+### Shard Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| `matrix.shardIndex` | `[1, 2]` |
+| `matrix.shardTotal` | `[2]` |
+| `fail-fast` | `false` |
+
+### Blob Report Contract
+
+| Step | Detail |
+|------|--------|
+| **Blob zip name** | `report-{shardIndex}.zip` |
+| **Artifact name** | `e2e-blob-shard-{shardIndex}` |
+| **Upload path** | `apps/e2e/blob-report/*.zip` |
+| **Download path** | `apps/e2e/all-blob-reports/` |
+| **Merge input validation** | Reject non-zip files, verify zip integrity |
+| **Merge command** | `npx playwright merge-reports --reporter html ./all-blob-reports` |
+| **Output artifact** | `playwright-html-report` (14-day retention) |
+
+---
+
+## 8. Verification Checklist
+
+After any change to test configuration, CI workflow, or vitest config, verify:
+
+- [ ] `pnpm verify:static` passes (format, lint, typecheck)
+- [ ] `pnpm --filter @exam/auth coverage` passes
+- [ ] `pnpm --filter "./packages/*" coverage` passes
+- [ ] `pnpm --filter @exam/web coverage` passes
+- [ ] `pnpm --filter "@exam/api" coverage` passes (with `TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4`)
+- [ ] `pnpm verify` passes (full pipeline)
+- [ ] E2E blob report merge produces valid HTML report
+- [ ] No `as any` casts in test files
+- [ ] All time-dependent tests use fake timers
+- [ ] No `TEST_DATABASE_URL` fallback to `DATABASE_URL` in test configs

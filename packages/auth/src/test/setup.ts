@@ -1,3 +1,2 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-// 全局测试设置
+// Global test setup — no env overrides needed; TEST_RUNTIME_ENV in
+// vitest.config.ts forces APP_MODE/NODE_ENV for all auth tests.

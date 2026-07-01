@@ -20,12 +20,11 @@ env:
 
 jobs:
   # ADR-007 Phase 6F: a fast, DB-free `static` job gates the heavier jobs.
-  # `verify`, `api-fast`, and `e2e` all now `needs: static` instead of chaining
-  # off `verify`, so they run in parallel once static checks pass. This cuts
-  # wall-clock from (verify + max(api-fast, e2e)) to
-  # (static + max(verify, api-fast, e2e)). Test semantics are unchanged; only
-  # job dependencies changed. `verify` no longer repeats format/lint/typecheck
-  # (static owns those).
+  # `verify` and `e2e` both `needs: static` so they run in parallel once
+  # static checks pass. This cuts wall-clock from
+  # (verify + max(api-fast, e2e)) to (static + max(verify, e2e)).
+  # Test semantics are unchanged; only job dependencies changed. `verify`
+  # no longer repeats format/lint/typecheck (static owns those).
   static:
     name: Static checks
     runs-on: ubuntu-latest
@@ -139,11 +138,15 @@ jobs:
       - name: API coverage
         run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
 
-      # 3. Remaining workspace packages (db, authz, contracts, domain,
+      # 3. Remaining workspace packages (auth, authz, contracts, db, domain,
       #    exam-engine, import-export). Targets `packages/*` explicitly so
       #    @exam/web and @exam/api (both in apps/) cannot be run a second
-      #    time. Each listed package defines a `coverage` script.
-      - name: Package coverage (db + authz + contracts + domain + exam-engine + import-export)
+      #    time. Each package defines a `coverage` script. Packages that
+      #    need DB (@exam/db) use TEST_DATABASE_URL (inherited from job env).
+      #    Pure unit tests (@exam/auth, @exam/domain, etc.) ignore DB vars.
+      #    Production-guard tests (e.g. @exam/auth) must use vi.stubEnv to
+      #    isolate APP_MODE/JWT_SECRET — see docs/testing/test-system-contract.md.
+      - name: Package coverage (auth + authz + contracts + db + domain + exam-engine + import-export)
         run: pnpm --filter "./packages/*" coverage
 
       - name: Build
@@ -259,6 +262,11 @@ jobs:
         run: |
           if [ -f apps/e2e/blob-report/report.zip ]; then
             mv apps/e2e/blob-report/report.zip "apps/e2e/blob-report/report-${{ matrix.shardIndex }}.zip"
+            echo "Renamed report.zip → report-${{ matrix.shardIndex }}.zip"
+            ls -la apps/e2e/blob-report/
+          else
+            echo "WARNING: No report.zip found in blob-report/ — shard may have been skipped or all tests filtered out."
+            ls -la apps/e2e/blob-report/ 2>/dev/null || echo "blob-report/ directory does not exist"
           fi
 
       - name: Upload blob report
@@ -374,19 +382,48 @@ jobs:
           pattern: e2e-blob-shard-*
           merge-multiple: true
 
-      - name: Diagnose blob reports before merge
+      # Blob report contract:
+      #   - Each shard uploads a uniquely-named zip (report-{N}.zip).
+      #   - download-artifact with merge-multiple flattens into all-blob-reports/.
+      #   - We MUST reject non-blob files (e.g. leftover HTML report zips, .gitkeep)
+      #     because merge-reports treats every file in the input dir as a blob report.
+      #   - We MUST verify zip integrity before merge; a corrupt zip causes a cryptic
+      #     "invalid central directory file header signature" error.
+      - name: Validate blob reports
         working-directory: apps/e2e
         run: |
           echo "=== Files in all-blob-reports ==="
           find all-blob-reports -maxdepth 2 -type f -print -exec file {} \;
           echo ""
+
+          # Reject non-zip files.
+          NON_ZIP=$(find all-blob-reports -maxdepth 2 -type f ! -name '*.zip')
+          if [ -n "$NON_ZIP" ]; then
+            echo "ERROR: non-zip files found in blob report directory:"
+            echo "$NON_ZIP"
+            echo "Only report-*.zip files are allowed."
+            exit 1
+          fi
+
+          # Count and validate each blob zip.
+          BLOB_ZIPS=$(find all-blob-reports -maxdepth 1 -name '*.zip' -type f)
+          COUNT=$(echo "$BLOB_ZIPS" | grep -c . || true)
+          echo "Found $COUNT blob zip(s):"
+          echo "$BLOB_ZIPS"
+          echo ""
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No Playwright blob report zips found. E2E merge cannot proceed."
+            echo "Possible causes: all shards failed before producing reports, artifact upload/download failed, or artifact naming mismatch."
+            exit 1
+          fi
+
           echo "=== Validating zip integrity ==="
-          for z in all-blob-reports/*.zip; do
-            if [ -f "$z" ]; then
-              echo "Checking $z ..."
-              unzip -t "$z"
-            fi
+          for z in $BLOB_ZIPS; do
+            echo "Checking $z ..."
+            unzip -t "$z" || { echo "ERROR: $z is corrupt"; exit 1; }
           done
+          echo "All blob zips validated."
 
       - name: Merge into HTML report
         working-directory: apps/e2e

@@ -72,71 +72,67 @@ function renderPage() {
 }
 
 describe("QuestionPage", () => {
-  it(
-    "clears filters and keeps the page shell visible during table reload",
-    { timeout: 10_000 },
-    async () => {
-      const user = userEvent.setup();
-      renderPage();
+  it("clears filters and keeps the page shell visible during table reload", async () => {
+    const user = userEvent.setup();
+    renderPage();
 
-      expect(await screen.findByText("题目管理")).toBeInTheDocument();
-      expect(await screen.findByText("题目一内容")).toBeInTheDocument();
+    expect(await screen.findByText("题目管理")).toBeInTheDocument();
+    expect(await screen.findByText("题目一内容")).toBeInTheDocument();
 
-      const pendingQuestions = new Promise(() => {});
-      apiGet.mockImplementationOnce(() => pendingQuestions);
+    const pendingQuestions = new Promise(() => {});
+    apiGet.mockImplementationOnce(() => pendingQuestions);
 
-      await user.click(screen.getByRole("button", { name: "下一页" }));
+    await user.click(screen.getByRole("button", { name: "下一页" }));
 
-      expect(screen.getByText("题目管理")).toBeInTheDocument();
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
-      expect(screen.getByText("加载中…")).toBeInTheDocument();
+    expect(screen.getByText("题目管理")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText("加载中…")).toBeInTheDocument();
 
-      apiGet.mockImplementation((path: string) => {
-        if (path.startsWith("/api/courses")) {
-          return Promise.resolve({
-            items: [
-              { id: "course-1", name: "课程一", code: "C1" },
-              { id: "course-2", name: "课程二", code: "C2" },
-            ],
-            total: 2,
-            page: 1,
-            pageSize: 20,
-            totalPages: 1,
-          });
-        }
-
+    apiGet.mockImplementation((path: string) => {
+      if (path.startsWith("/api/courses")) {
         return Promise.resolve({
           items: [
-            {
-              id: "q1",
-              courseId: "course-1",
-              type: "single_choice",
-              content: "题目一内容",
-              score: 10,
-              difficulty: 1,
-              tags: ["tag1"],
-            },
+            { id: "course-1", name: "课程一", code: "C1" },
+            { id: "course-2", name: "课程二", code: "C2" },
           ],
-          total: 21,
+          total: 2,
           page: 1,
           pageSize: 20,
-          totalPages: 2,
+          totalPages: 1,
         });
-      });
+      }
 
-      fireEvent.change(screen.getByPlaceholderText("标签，逗号分隔"), {
-        target: { value: "abc" },
+      return Promise.resolve({
+        items: [
+          {
+            id: "q1",
+            courseId: "course-1",
+            type: "single_choice",
+            content: "题目一内容",
+            score: 10,
+            difficulty: 1,
+            tags: ["tag1"],
+          },
+        ],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+        totalPages: 2,
       });
-      fireEvent.change(screen.getByLabelText("搜索当前页题目"), {
-        target: { value: "题目" },
-      });
-      await user.click(screen.getByRole("button", { name: "清空筛选" }));
+    });
 
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText("标签，逗号分隔")).toHaveValue("");
-        expect(screen.getByLabelText("搜索当前页题目")).toHaveValue("");
-        expect(screen.getByText(/共 21 条/)).toBeInTheDocument();
-      });
-    },
-  );
+    fireEvent.change(screen.getByPlaceholderText("标签，逗号分隔"), {
+      target: { value: "abc" },
+    });
+    fireEvent.change(screen.getByLabelText("搜索当前页题目"), {
+      target: { value: "题目" },
+    });
+    await user.click(screen.getByRole("button", { name: "清空筛选" }));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("标签，逗号分隔")).toHaveValue("");
+      expect(screen.getByLabelText("搜索当前页题目")).toHaveValue("");
+      expect(screen.getByText(/共 21 条/)).toBeInTheDocument();
+    });
+  });
 });
