@@ -96,7 +96,7 @@ These Middle Jobs remain actionable and can be developed independently.
 | M4 | Audit / monitoring event expansion v0 | **Active.** First batch of Phase 3 events (grading, force-submit, email, Redis). |
 | M5 | Diagnostics infrastructure status | **Active.** System diagnostics page should show Redis / email / worker status. (Email M3 is complete — this no longer depends on it; depends only on wiring the existing outbox/redis status into the diagnostics surface.) |
 | M6 | Grading answer rendering tests | **Active.** Tests for candidate answer display in grading page. Depends on M1 verification. |
-| M7 | Redis unavailable fallback tests | **Active.** Tests ensuring Redis failure does not corrupt PG authoritative state. |
+| M7 | Redis unavailable fallback tests | **Deferred (N/A for Phase 1).** Audit (`docs/phase3/audit/audit-redis-fallback-guard-m7.md`) found Redis is diagnostics-only (one read-only `ping()`); no exam-state code path touches Redis, so "PG state unaffected by Redis failure" holds by construction. Existing candidate tests already run Redis-absent. Re-open when Redis gains heartbeat/presence/rate-limit-store/exam-state responsibility. |
 | M9 | Proctor incident event logging v0 | **Active but scoped.** Lightweight incident recording only. Do NOT expand to full proctor authority. |
 | M10 | CI / E2E parallelization readiness report | **Active.** Documentation task; no code changes. |
 | M11 | Phase 3 readiness closeout report | **Deferred to batch closeout.** Generate after first Middle batch completes. |
@@ -306,7 +306,7 @@ Continue merging determined Middle Jobs to master:
 - M4 Audit / monitoring event expansion v0
 - M5 Diagnostics infrastructure status
 - M6 Grading answer rendering tests
-- M7 Redis unavailable fallback tests
+- M7 Redis unavailable fallback tests (deferred — N/A, see §4 / audit-redis-fallback-guard-m7.md)
 - M8 Email send failure retry tests (if not yet verified)
 - M9 Proctor incident event logging v0
 - M10 CI / E2E parallelization readiness report

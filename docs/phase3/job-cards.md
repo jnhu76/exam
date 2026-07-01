@@ -79,7 +79,7 @@ Small Jobs are removed from the active execution queue. They will only be re-ope
 | M4 | Audit / monitoring event expansion v0 | **Active** | First batch of Phase 3 events |
 | M5 | Diagnostics infrastructure status | **Active** | System diagnostics page should show Redis / email / worker status |
 | M6 | Grading answer rendering tests | **Active** | Tests for candidate answer display in grading page |
-| M7 | Redis unavailable fallback tests | **Active** | Tests ensuring Redis failure does not corrupt PG state |
+| M7 | Redis unavailable fallback tests | **Deferred (N/A Phase 1)** | Audit found Redis is diagnostics-only; "PG state unaffected by Redis failure" holds by construction. See `docs/phase3/audit/audit-redis-fallback-guard-m7.md`. Re-open when Redis gains exam-state responsibility. |
 | M8 | Email send failure retry tests | **Completed** | `apps/api/src/email/outboxService.test.ts` + `retryPolicy.test.ts` + `sanitizeError.test.ts` + `notificationService.test.ts` cover pending→sent/retry/failed, single-failure-no-block, disabled no-op, injected clock, secret-scrub into `lastError` |
 | M9 | Proctor incident event logging v0 | **Active** | Lightweight incident recording only; scoped to not expand into full proctor authority |
 | M10 | CI / E2E parallelization readiness report | **Active** | Documentation task only |
@@ -441,7 +441,16 @@ Middle
 
 ### Current Status
 
-**Active.** Tests ensuring Redis failure does not corrupt PG authoritative state.
+**Deferred (N/A for Phase 1).** Full audit in
+`docs/phase3/audit/audit-redis-fallback-guard-m7.md` found Redis is
+diagnostics-only (one read-only `ping()`); no exam-state code path reads or
+writes Redis, so "PG state unaffected by Redis failure" holds **by
+construction**, not by test. Existing candidate tests already run Redis-absent.
+Writing vacuous "Redis-disabled candidate flow" tests would satisfy the old card
+textually but prove nothing new.
+
+**Re-open when** Redis gains any heartbeat / presence / rate-limit-store /
+exam-state responsibility (see audit §8 revisit triggers).
 
 ### Goal
 
@@ -698,7 +707,7 @@ Items that are verification / closeout oriented:
 
 1. **M8** Email Send Failure Retry Tests — **completed** (see card)
 2. **M5** Diagnostics Infrastructure Status — especially email / worker / Redis visibility
-3. **M7** Redis Unavailable Fallback Tests
+3. **M7** Redis Unavailable Fallback Tests — **deferred (N/A Phase 1)**; see `audit/audit-redis-fallback-guard-m7.md`
 4. **M6** Grading Answer Rendering Tests
 5. **M11** Phase 3 Readiness Closeout Report — generate after Track A items complete
 
