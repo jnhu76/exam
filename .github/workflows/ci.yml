@@ -119,6 +119,18 @@ jobs:
       # instrumentation, CPU-light but instrumentation-heavy) no longer fights
       # api/db (Postgres-heavy) for the same cores. No package is run twice.
       #
+      # 0. Build workspace packages first. `pnpm --filter @exam/web coverage`
+      #    runs vitest directly (bypassing Turbo's task graph), so the
+      #    `^build` dependency declared in turbo.json does NOT apply. Without
+      #    this step, @exam/domain/dist and @exam/contracts/dist don't exist,
+      #    and Vite's import analysis fails with 21 "Failed to resolve import"
+      #    errors. We use `--filter "./packages/*"` instead of
+      #    `turbo build --filter=@exam/web...` because the latter also builds
+      #    the web app itself (tsc -b && vite build), which is unnecessary for
+      #    coverage and adds ~30s overhead. Package builds are fast (just tsc).
+      - name: Build workspace packages
+        run: pnpm --filter "./packages/*" build
+
       # 1. Web coverage — pure jsdom, no DB env needed.
       - name: Web coverage
         run: pnpm --filter @exam/web coverage
