@@ -34,12 +34,16 @@ import {
  * branch on role/permissions). The values are placeholders required to satisfy
  * the `TenantContext` shape; the actual authorization happens in
  * `requireCapability` + this resolver, not in the repo.
+ *
+ * `role` is cast to `TenantContext["role"]` (not `as never`) to preserve
+ * partial type safety: if `TenantContext.role` narrows, this cast surfaces
+ * the mismatch rather than silently hiding it.
  */
 function repoCtx(c: ResolverContext): TenantContext {
   return {
     actorId: c.actorId,
     organizationId: c.organizationId,
-    role: "Admin" as never,
+    role: "Admin" as TenantContext["role"],
     permissions: [],
   };
 }
