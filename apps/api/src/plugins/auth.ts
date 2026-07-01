@@ -3,9 +3,29 @@ import fp from "fastify-plugin";
 import { verifyJWT, deriveSessionId } from "@exam/auth/src/session.js";
 import type { Role, Permission } from "@exam/domain";
 import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
+import {
+  permissionsForRole,
+  type PermissionKey,
+  type RoleKey,
+} from "@exam/authz";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+
+/**
+ * Memoized role-preset permission sets (Phase 3 dotted keys). Presets are
+ * static, so the cache is safe for the process lifetime. Admin is a documented
+ * superset (RBAC-M6), so it passes every capability check.
+ */
+const PRESET_SETS = new Map<RoleKey, ReadonlySet<PermissionKey>>();
+function presetSet(role: RoleKey): ReadonlySet<PermissionKey> {
+  let set = PRESET_SETS.get(role);
+  if (!set) {
+    set = new Set<PermissionKey>(permissionsForRole(role));
+    PRESET_SETS.set(role, set);
+  }
+  return set;
+}
 
 /**
  * Fastify plugin that registers authentication and authorization decorators
@@ -133,6 +153,37 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       }
 
       if (!roles.includes(ctx.role)) {
+        return reply
+          .code(403)
+          .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
+      }
+    };
+  });
+
+  /**
+   * Returns a pre-handler that checks the authenticated actor's role PRESET
+   * for a Phase 3 {@link PermissionKey} (RBAC runtime activation, PR #3).
+   * This is the capability gate replacing `requireRole` on sensitive routes.
+   *
+   * Decision: consults the `@exam/authz` role preset (Admin is a superset, so
+   * Admin passes every check; Proctor passes proctor perms; Grader passes
+   * grading perms; Candidate/Teacher do not get proctor/grading/admin perms).
+   * Replies 401 if no ctx, 403 if the preset lacks the permission.
+   *
+   * NOTE: this base decorator is permission-only. Resource-aware checks
+   * (org-anchor / ownership via resolvers) are layered on top in the route
+   * preHandler chain (Step 3 resolvers) — not here.
+   */
+  fastify.decorate("requireCapability", (permission: PermissionKey) => {
+    return async (request, reply) => {
+      const ctx = request.ctx;
+      if (!ctx) {
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
+      }
+
+      if (!presetSet(ctx.role as RoleKey).has(permission)) {
         return reply
           .code(403)
           .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));

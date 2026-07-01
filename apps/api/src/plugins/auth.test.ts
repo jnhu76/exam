@@ -2,14 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { signJWT } from "@exam/auth/src/session.js";
+import { Permission } from "@exam/authz";
 import authPlugin from "./auth.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 
+/** The role the mocked userRepo returns; override per-test. */
+let mockRole = "Admin";
 vi.mock("@exam/db/src/repository/userRepo.js", () => ({
   createUserRepo: () => ({
     findByOrganizationAndId: async () => ({
       id: "user-1",
-      role: "Admin",
+      role: mockRole,
       isActive: true,
     }),
   }),
@@ -23,6 +26,7 @@ async function buildAppWithAuth(): Promise<FastifyInstance> {
   await app.register(authPlugin);
   app.get("/protected", { preHandler: app.authenticate }, async (req) => ({
     actorId: req.ctx?.actorId,
+    role: req.ctx?.role,
   }));
   await app.ready();
   return app;
@@ -54,7 +58,7 @@ describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ actorId: "user-1" });
+    expect(res.json()).toEqual({ actorId: "user-1", role: "Admin" });
     await app.close();
   });
 
@@ -98,6 +102,121 @@ describe("auth plugin: P0-3 API JWT path uses runtimeConfig.authSecret.jwtSecret
     });
 
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+});
+
+describe("auth plugin: requireCapability (RBAC runtime activation, PR #3)", () => {
+  beforeEach(() => {
+    vi.stubEnv("APP_MODE", "test");
+    vi.stubEnv("JWT_SECRET", "runtime-secret-A");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    resetRuntimeConfigForTest();
+  });
+
+  async function buildCapabilityApp(permission: string) {
+    const app = Fastify();
+    await app.register(cookie);
+    app.decorate("db", {} as never);
+    await app.register(authPlugin);
+    app.get(
+      "/cap",
+      {
+        preHandler: [
+          app.authenticate,
+          app.requireCapability(permission as never),
+        ],
+      },
+      async (req) => ({ role: req.ctx?.role }),
+    );
+    await app.ready();
+    return app;
+  }
+
+  async function tokenFor(role: string) {
+    return signJWT(
+      { actorId: "user-1", role: role as never, organizationId: "org-1" },
+      "runtime-secret-A",
+    );
+  }
+
+  it("Admin (superset) passes a proctor capability check", async () => {
+    mockRole = "Admin";
+    const app = await buildCapabilityApp(Permission.AttemptForceSubmit);
+    const res = await app.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Admin") },
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("Proctor passes a proctor capability but is denied a grading capability", async () => {
+    mockRole = "Proctor";
+    const proctorApp = await buildCapabilityApp(Permission.AttemptForceSubmit);
+    const ok = await proctorApp.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Proctor") },
+    });
+    expect(ok.statusCode).toBe(200);
+    await proctorApp.close();
+
+    const gradingApp = await buildCapabilityApp(Permission.GradingScoreWrite);
+    const denied = await gradingApp.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Proctor") },
+    });
+    expect(denied.statusCode).toBe(403);
+    await gradingApp.close();
+  });
+
+  it("Grader passes a grading capability but is denied a proctor capability", async () => {
+    mockRole = "Grader";
+    const gradingApp = await buildCapabilityApp(Permission.GradingScoreWrite);
+    const ok = await gradingApp.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Grader") },
+    });
+    expect(ok.statusCode).toBe(200);
+    await gradingApp.close();
+
+    const proctorApp = await buildCapabilityApp(Permission.AttemptForceSubmit);
+    const denied = await proctorApp.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Grader") },
+    });
+    expect(denied.statusCode).toBe(403);
+    await proctorApp.close();
+  });
+
+  it("Candidate is denied proctor/grading/admin capabilities", async () => {
+    mockRole = "Candidate";
+    const app = await buildCapabilityApp(Permission.AttemptForceSubmit);
+    const res = await app.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Candidate") },
+    });
+    expect(res.statusCode).toBe(403);
+    await app.close();
+  });
+
+  it("Teacher is denied proctor/grading capabilities by default", async () => {
+    mockRole = "Teacher";
+    const app = await buildCapabilityApp(Permission.GradingScoreWrite);
+    const res = await app.inject({
+      method: "GET",
+      url: "/cap",
+      cookies: { "auth-token": await tokenFor("Teacher") },
+    });
+    expect(res.statusCode).toBe(403);
     await app.close();
   });
 });
