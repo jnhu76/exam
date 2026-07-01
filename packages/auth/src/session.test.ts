@@ -1,6 +1,14 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { signJWT, verifyJWT, deriveSessionId } from "../src/session.js";
+import {
+  signJWT,
+  verifyJWT,
+  deriveSessionId,
+  type JwtPayload,
+} from "../src/session.js";
 import { Role } from "@exam/domain";
+
+/** JWT decode result includes standard fields (iat, exp) beyond JwtPayload. */
+type DecodedToken = JwtPayload & { iat: number; exp: number };
 
 describe("JWT session management", () => {
   it("should sign and verify a JWT token", async () => {
@@ -14,13 +22,12 @@ describe("JWT session management", () => {
     expect(typeof token).toBe("string");
     expect(token.length).toBeGreaterThan(0);
 
-    const decoded = verifyJWT(token);
+    const decoded = verifyJWT(token) as DecodedToken;
     expect(decoded.actorId).toEqual(payload.actorId);
     expect(decoded.role).toEqual(payload.role);
     expect(decoded.organizationId).toEqual(payload.organizationId);
-    // 检查 JWT 标准字段
-    expect(typeof (decoded as any).iat).toBe("number");
-    expect(typeof (decoded as any).exp).toBe("number");
+    expect(typeof decoded.iat).toBe("number");
+    expect(typeof decoded.exp).toBe("number");
   });
 
   it("should verify token with expiration", async () => {
@@ -31,13 +38,12 @@ describe("JWT session management", () => {
     };
 
     const token = signJWT(payload, undefined, { expiresIn: "1h" });
-    const decoded = verifyJWT(token);
+    const decoded = verifyJWT(token) as DecodedToken;
     expect(decoded.actorId).toEqual(payload.actorId);
     expect(decoded.role).toEqual(payload.role);
     expect(decoded.organizationId).toEqual(payload.organizationId);
-    // 检查 JWT 标准字段
-    expect(typeof (decoded as any).iat).toBe("number");
-    expect(typeof (decoded as any).exp).toBe("number");
+    expect(typeof decoded.iat).toBe("number");
+    expect(typeof decoded.exp).toBe("number");
   });
 });
 
