@@ -112,19 +112,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Coverage runs ALL packages (web/auth/domain/contracts/exam-engine/
-      # import-export via turbo, db/api via vitest run --coverage) in a single
-      # pass. `turbo coverage` internally parallelizes packages. No separate
-      # `test` or `test:integration` pass needed — coverage already executes
-      # every test. (test:integration is a literal alias of `test`/`vitest run`
-      # in db+api, so running it again would duplicate the full DB/API suites.)
-      - name: Coverage (all packages)
-        # API_TEST_MAX_WORKERS + TEST_DB_ISOLATION=worker-database enable
-        # parallel file execution for @exam/api (each worker gets its own DB
-        # schema). Other packages ignore these env vars. ~2.5x faster than the
-        # serial default (fileParallelism:false). Validated stable across
-        # repeated runs (auth.test.ts timeouts resolved by per-worker isolation).
-        run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage
+      # Coverage is split into three independently-named steps so the failing
+      # package is unambiguous in the GitHub UI (a single `turbo coverage` run
+      # attributed web failures to "@exam/api:coverage" in logs, hiding the
+      # real culprit). Splitting also isolates CPU: web (jsdom + V8
+      # instrumentation, CPU-light but instrumentation-heavy) no longer fights
+      # api/db (Postgres-heavy) for the same cores. No package is run twice.
+      #
+      # 1. Web coverage — pure jsdom, no DB env needed.
+      - name: Web coverage
+        run: pnpm --filter @exam/web coverage
+
+      # 2. API coverage — Postgres worker isolation, 4 parallel workers.
+      - name: API coverage
+        run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
+
+      # 3. Remaining workspace packages (db, authz, contracts, domain,
+      #    exam-engine, import-export). Targets `packages/*` explicitly so
+      #    @exam/web and @exam/api (both in apps/) cannot be run a second
+      #    time. Each listed package defines a `coverage` script.
+      - name: Package coverage (db + authz + contracts + domain + exam-engine + import-export)
+        run: pnpm --filter "./packages/*" coverage
 
       - name: Build
         run: pnpm build

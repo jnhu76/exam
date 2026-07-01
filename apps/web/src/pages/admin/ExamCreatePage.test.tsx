@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -80,6 +86,17 @@ function renderPage() {
   );
 }
 
+// Title is a plain text input; fireEvent.change sets it in one synchronous
+// event instead of user.type's per-keystroke delay. The business assertion
+// (apiPost payload carries `title`) is preserved — only the input path
+// changes. userEvent is reserved for genuinely interactive assertions
+// (opening dialogs, clicking buttons).
+function fillTitle(value: string) {
+  fireEvent.change(screen.getByPlaceholderText("请输入考试名称"), {
+    target: { value },
+  });
+}
+
 describe("ExamCreatePage smoke", () => {
   it("renders page title and exam config form without Phase 2 controls", async () => {
     renderPage();
@@ -144,7 +161,7 @@ describe("ExamCreatePage smoke", () => {
 
     expect(await screen.findByText("创建考试")).toBeInTheDocument();
 
-    await user.type(screen.getByPlaceholderText("请输入考试名称"), "Test Exam");
+    fillTitle("Test Exam");
     await user.click(screen.getByRole("button", { name: "保存草稿" }));
 
     await waitFor(() => {
@@ -164,10 +181,7 @@ describe("ExamCreatePage smoke", () => {
 
     expect(await screen.findByText("创建考试")).toBeInTheDocument();
 
-    await user.type(
-      screen.getByPlaceholderText("请输入考试名称"),
-      "Publish Exam",
-    );
+    fillTitle("Publish Exam");
     await user.click(screen.getByRole("button", { name: "发布考试" }));
 
     await waitFor(() => {
@@ -193,7 +207,7 @@ describe("ExamCreatePage smoke", () => {
     renderPage();
 
     expect(await screen.findByText("创建考试")).toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("请输入考试名称"), "Bad Exam");
+    fillTitle("Bad Exam");
     await user.click(screen.getByRole("button", { name: "保存草稿" }));
 
     expect(await screen.findByText("题目不属于所选课程")).toBeInTheDocument();

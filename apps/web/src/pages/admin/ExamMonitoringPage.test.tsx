@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { ExamMonitoringPage } from "./ExamMonitoringPage";
@@ -58,6 +58,13 @@ describe("ExamMonitoringPage", () => {
     vi.clearAllMocks();
   });
 
+  // Safety net: ensure no fake timers leak into sibling tests in this file.
+  // (The global setup.ts afterEach also calls useRealTimers, but the poll
+  // test below switches to fake timers and we want to be explicit.)
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders the monitoring table on successful load", async () => {
     getMock.mockResolvedValueOnce({
       items: [makeAttempt({ candidateName: "李四" })],
@@ -77,26 +84,45 @@ describe("ExamMonitoringPage", () => {
   });
 
   it("shows stale warning and logger.warn on subsequent poll failure", async () => {
+    // Use fake timers so the 15s POLL_INTERVAL_MS fires synchronously instead
+    // of waiting real wall-clock. This removes both the 15s test duration and
+    // the act() warning (a real pending timer firing setState after the test
+    // body was the warning's cause). No userEvent is used in this test; if one
+    // were added, it must be configured with
+    // userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    // First load succeeds → table renders with 张三.
     getMock.mockResolvedValueOnce({
       items: [makeAttempt()],
       total: 1,
     });
-    renderPage();
-    expect(await screen.findByText("张三")).toBeInTheDocument();
-
+    // Second call (the next poll) rejects → should trigger stale warning.
     getMock.mockRejectedValueOnce(new Error("timeout"));
-    await vi.waitFor(
-      () => {
-        expect(warnMock).toHaveBeenCalledWith("monitoring.poll_failed", {
-          examId: "exam-1",
-        });
-      },
-      { timeout: 20000 },
-    );
+
+    renderPage();
+    // Flush the initial load's microtasks + resulting React state update
+    // without running timers (the page has an infinite 60s tick interval for
+    // label refresh, so runAllTimers would loop). An empty act drains the
+    // pending promise chain. Using findByText/waitFor here would spin on
+    // fake-timer polling, so we flush then assert with a sync query.
+    await act(async () => {});
+    expect(screen.getByText("张三")).toBeInTheDocument();
+
+    // Advance the fake poll interval; the rejected poll resolves and the
+    // component sets staleWarning + logs. Wrapped in act because this drives
+    // a React state update.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(warnMock).toHaveBeenCalledWith("monitoring.poll_failed", {
+      examId: "exam-1",
+    });
     expect(
-      await screen.findByText("监控数据刷新失败，当前为上次成功数据"),
+      screen.getByText("监控数据刷新失败，当前为上次成功数据"),
     ).toBeInTheDocument();
-  }, 25000);
+  });
 
   // Empty state and timeline dialog tests are deferred to a follow-up PR
   // to avoid timer-interference from the 15s polling interval across tests.

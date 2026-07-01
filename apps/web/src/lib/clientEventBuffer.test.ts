@@ -131,6 +131,11 @@ describe("ClientEventBuffer", () => {
 
   it("grows backoff exponentially across consecutive failures (M12)", async () => {
     // Exponential backoff: each consecutive failure roughly doubles the wait.
+    // Assert on the COMPUTED backoff (pure function of consecutiveFailures),
+    // not currentBackoffForTest() — that returns a remaining-time value
+    // (flushBlockedUntil - Date.now()) that shrinks as real wall-clock elapses
+    // between flush() and the assertion, flaking as `expected 9 >= 10` under
+    // CI coverage instrumentation.
     const send = vi.fn().mockResolvedValue(false);
     const buf = makeBuffer({
       send,
@@ -141,15 +146,15 @@ describe("ClientEventBuffer", () => {
     });
     buf.push(makeEvent("b1"));
     await buf.flush();
-    const firstBackoff = buf.currentBackoffForTest();
-    expect(firstBackoff).toBeGreaterThanOrEqual(10);
+    // After 1 failure: base * 2^0 = 10.
+    expect(buf.computeBackoffForTest()).toBe(10);
 
-    // Second consecutive failure should produce a larger backoff than the first.
+    // Second consecutive failure should double the backoff.
     buf.clearBackoffForTest();
     buf.push(makeEvent("b2"));
     await buf.flush();
-    const secondBackoff = buf.currentBackoffForTest();
-    expect(secondBackoff).toBeGreaterThan(firstBackoff);
+    // After 2 failures: base * 2^1 = 20 — strictly greater than the first.
+    expect(buf.computeBackoffForTest()).toBe(20);
   });
 
   it("resets backoff to zero after a successful flush", async () => {
@@ -165,9 +170,14 @@ describe("ClientEventBuffer", () => {
     });
     buf.push(makeEvent("r"));
     await buf.flush(); // fail
-    expect(buf.currentBackoffForTest()).toBeGreaterThan(0);
+    // Computed backoff is the base after one failure (deterministic, not
+    // wall-clock dependent).
+    expect(buf.computeBackoffForTest()).toBe(10);
     buf.clearBackoffForTest();
     await buf.flush(); // success
+    // On success, flushBlockedUntil is reset to 0, so the buffer is fully
+    // unblocked. This remaining-time value is deterministic (always 0) because
+    // the window is in the past — unlike the post-failure case.
     expect(buf.currentBackoffForTest()).toBe(0);
   });
 
