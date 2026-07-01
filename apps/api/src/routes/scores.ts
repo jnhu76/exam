@@ -429,6 +429,14 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       // visible). Assert non-null for TS; the runtime invariant holds.
       const gradedAt = attempt.gradedAt as Date;
       const gradingResult = attempt.gradingResult as QuestionScoreResult[];
+      const questionResults = buildQuestionResults(attempt, gradingResult);
+
+      // Candidate-safe: strip standardAnswer so candidates cannot see correct answers.
+      const isCandidate = ctx.role === "Candidate";
+      const safeQuestionResults = isCandidate
+        ? questionResults.map(({ standardAnswer: _, ...rest }) => rest)
+        : questionResults;
+
       return AttemptResultResponseSchema.parse({
         attemptId: attempt.id,
         status: attempt.status,
@@ -438,7 +446,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         totalScore: attempt.score,
         passed: attempt.passed,
         gradedAt: gradedAt.toISOString(),
-        questionResults: buildQuestionResults(attempt, gradingResult),
+        questionResults: safeQuestionResults,
       });
     },
   );

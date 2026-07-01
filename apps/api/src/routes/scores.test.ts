@@ -197,8 +197,11 @@ describe("score routes", () => {
       questionId,
       correct: true,
       score: 10,
-      standardAnswer: "a",
     });
+    // standardAnswer is stripped for candidates — must not be present
+    expect(response.json().questionResults[0]).not.toHaveProperty(
+      "standardAnswer",
+    );
     const requestContext = {
       actorId: ctx.candidate.id,
       organizationId: ctx.org.id,
