@@ -27,8 +27,17 @@ export function resolveTestDatabaseUrl(
   return resolveTestBranchUrl(env);
 }
 
-/** Canonical test database URL — resolved once at module load. */
-export const TEST_DB_URL = resolveTestDatabaseUrl();
+/**
+ * Canonical test database URL — lazily resolved on first call.
+ *
+ * MUST NOT be evaluated at module top-level: vitest injects `config.env`
+ * (including TEST_DATABASE_URL) into `process.env` only inside test worker
+ * processes, not during the main process's module-graph loading phase.
+ */
+let _testDbUrl: string | undefined;
+export function resolveTestDbUrl(): string {
+  return (_testDbUrl ??= resolveTestDatabaseUrl());
+}
 
 /** Shared database instance (lazy-initialized). */
 let _sharedDb: Database | null = null;
@@ -51,7 +60,7 @@ export async function getTestDb(): Promise<{
   cleanup: () => Promise<void>;
 }> {
   if (!_sharedDb) {
-    const conn = await createDatabase(TEST_DB_URL);
+    const conn = await createDatabase(resolveTestDbUrl());
     _sharedSql = conn.sql;
     _sharedDb = conn.db;
   }
@@ -97,7 +106,7 @@ export async function getIsolatedTestDb(namespace: string): Promise<{
 
   const iso = await setupIsolatedTestDb({
     namespace,
-    databaseUrl: TEST_DB_URL,
+    databaseUrl: resolveTestDbUrl(),
   });
   let conn: Awaited<ReturnType<typeof createDatabase>>;
   try {

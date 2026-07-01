@@ -15,7 +15,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
-import { resolveTestDatabaseUrl } from "@exam/db/src/testDb.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -104,7 +104,7 @@ export interface TestContext {
   setNow: (now: Date | null) => void;
 }
 
-const TEST_DB_URL = resolveTestDatabaseUrl();
+const TEST_DB_URL = resolveTestDbUrl();
 
 /**
  * Builds a fully configured Fastify test application with a fresh Postgres

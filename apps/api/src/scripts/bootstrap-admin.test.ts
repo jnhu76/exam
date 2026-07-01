@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDatabase, migratePostgres } from "@exam/db";
-import { TEST_DB_URL } from "@exam/db/src/testDb.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
@@ -33,10 +33,10 @@ describe("bootstrapAdmin service", () => {
   beforeAll(async () => {
     const iso = await setupIsolatedTestDb({
       namespace: "script-bootstrap",
-      databaseUrl: TEST_DB_URL,
+      databaseUrl: resolveTestDbUrl(),
     });
     cleanup = iso.cleanup;
-    conn = await createDatabase(TEST_DB_URL, iso.schemaName);
+    conn = await createDatabase(resolveTestDbUrl(), iso.schemaName);
     db = conn.db;
     await migratePostgres(db, { migrationsSchema: iso.schemaName });
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { createDatabase, migratePostgres, schema } from "@exam/db";
-import { TEST_DB_URL } from "@exam/db/src/testDb.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -43,7 +43,7 @@ interface Fixture {
 }
 
 async function buildFixture(schemaName?: string): Promise<Fixture> {
-  const conn = await createDatabase(TEST_DB_URL, schemaName);
+  const conn = await createDatabase(resolveTestDbUrl(), schemaName);
   const db = conn.db;
   const sql = conn.sql as Fixture["sql"];
 
@@ -225,7 +225,7 @@ describe("PG concurrency — attempt row-level serialization", () => {
   beforeAll(async () => {
     const iso = await setupIsolatedTestDb({
       namespace: "concurrency",
-      databaseUrl: TEST_DB_URL,
+      databaseUrl: resolveTestDbUrl(),
     });
     cleanup = iso.cleanup;
     fx = await buildFixture(iso.schemaName);

@@ -7,6 +7,7 @@ import {
   truncateBusinessTables,
   withDatabaseName,
 } from "./testWorkerDatabase.js";
+import { resolveTestDbUrl } from "./testDb.js";
 
 /**
  * ADR-007 Phase 3A worker-database prototype tests.
@@ -29,14 +30,7 @@ import {
  * lock) instead of a bare `DROP DATABASE IF EXISTS`.
  */
 
-const BASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.TEST_DB_URL ??
-  (() => {
-    throw new Error(
-      "TEST_DATABASE_URL is required for testWorkerDatabase tests.",
-    );
-  })();
+const BASE_URL = resolveTestDbUrl();
 
 /** A real admin URL derived from BASE_URL → maintenance DB `postgres`. */
 const ADMIN_URL = withDatabaseName(BASE_URL, "postgres");

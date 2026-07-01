@@ -18,13 +18,9 @@ import { migratePostgres } from "./postgres.js";
 import { schema } from "./schema/pg.js";
 import { seed } from "./seed.js";
 import { hashPassword } from "@exam/auth/src/password.js";
+import { resolveTestDbUrl } from "./testDb.js";
 
-const TEST_DB_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.TEST_DB_URL ??
-  (() => {
-    throw new Error("TEST_DATABASE_URL is required for testIsolation tests.");
-  })();
+const TEST_DB_URL = resolveTestDbUrl();
 
 describe("sanitizeSchemaName", () => {
   it("lowercases input", () => {

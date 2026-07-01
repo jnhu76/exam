@@ -3,6 +3,7 @@ import {
   isWorkerDatabaseMode,
   setupApiTestDatabaseFromEnv,
 } from "./testDatabase.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 
 /**
  * ADR-007 Phase 3B — API test database adapter tests.
@@ -18,12 +19,7 @@ import {
  * proves the API-side adapter wiring, not the underlying bootstrap.
  */
 
-const BASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.TEST_DB_URL ??
-  (() => {
-    throw new Error("TEST_DATABASE_URL is required for testDatabase tests.");
-  })();
+const BASE_URL = resolveTestDbUrl();
 
 // --- mock the Phase 3A worker helper ----------------------------------------
 

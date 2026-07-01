@@ -5,6 +5,7 @@ import {
   getTestInfraLifecycleLockKey,
   withTestInfraLifecycleLock,
 } from "./testInfraLock.js";
+import { resolveTestDbUrl } from "./testDb.js";
 
 /**
  * ADR-007 Phase 6D — tests for the test-infra advisory lock helper.
@@ -19,12 +20,7 @@ import {
  * via parallel `Promise.all` sessions, not via long loops.
  */
 
-const BASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.TEST_DB_URL ??
-  (() => {
-    throw new Error("TEST_DATABASE_URL is required for testInfraLock tests.");
-  })();
+const BASE_URL = resolveTestDbUrl();
 
 const ADMIN_URL = withDatabaseName(BASE_URL, "postgres");
 

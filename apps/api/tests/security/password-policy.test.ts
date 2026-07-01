@@ -13,7 +13,7 @@ import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupApiTestDatabaseFromEnv } from "../../src/routes/testDatabase.js";
-import { TEST_DB_URL } from "@exam/db/src/testDb.js";
+import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT } from "@exam/auth/src/session.js";
 import { seed } from "@exam/db/src/seed.js";
@@ -38,7 +38,7 @@ describe("Password Policy Baseline (S08-lite)", () => {
   beforeAll(async () => {
     const testDb = await setupApiTestDatabaseFromEnv({
       namespace: "security-password",
-      databaseUrl: TEST_DB_URL,
+      databaseUrl: resolveTestDbUrl(),
     });
     await testDb.resetPostgres();
     cleanup = testDb.close;
