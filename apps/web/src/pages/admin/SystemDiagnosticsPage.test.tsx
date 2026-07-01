@@ -89,6 +89,13 @@ describe("SystemDiagnosticsPage", () => {
     vi.useRealTimers();
   });
 
+  // Safety net: the poll-failure test below switches to fake timers; restore
+  // real timers so sibling tests in this file aren't affected. The global
+  // setup.ts afterEach also calls useRealTimers, but this is explicit.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders normally and logs refresh on successful initial load (debug level)", async () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());
