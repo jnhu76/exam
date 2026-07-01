@@ -460,12 +460,12 @@ exam-state responsibility (see audit §8 revisit triggers).
 
 补测试：
 
-* Redis client connect failed
-* presence write failed
-* heartbeat cache failed
-* rate limit fallback
-* diagnostics degraded
-* core PG state unaffected
+* Redis client connect failed — ✅ covered (`redis.test.ts` lifecycle + `system.test.ts` ping-throws)
+* presence write failed — **N/A** until presence uses Redis (Phase 2+; not implemented)
+* heartbeat cache failed — **N/A** until heartbeat cache uses Redis (heartbeat writes PG `exam_attempts.lastActivityAt`)
+* rate limit fallback — **N/A** until rate limit uses Redis (rate limit is in-memory `@fastify/rate-limit`)
+* diagnostics degraded — ✅ covered (`system.test.ts` ping-throws + explicit redis-absent shape assertion)
+* core PG state unaffected — ✅ covered (`attempts/redis-fallback-guard.test.ts`: start/save/submit with Redis absent → PG authoritative)
 
 ### Non-goals
 
@@ -475,9 +475,15 @@ exam-state responsibility (see audit §8 revisit triggers).
 
 ### Required Tests
 
-* Redis unavailable 不导致 start/resume/save/submit 权威状态损坏
-* Redis unavailable 时 diagnostics 可见
-* fallback 有日志或 monitoring event
+* Redis unavailable 不导致 start/resume/save/submit 权威状态损坏 — ✅ `attempts/redis-fallback-guard.test.ts`
+* Redis unavailable 时 diagnostics 可见 — ✅ `system.test.ts` (ping-throws + redis-absent)
+* fallback 有日志或 monitoring event — **deferred** (no fallback path exists; revisit when Redis gains a state responsibility)
+
+### Delivered guardrail tests (P3-M7)
+
+* `apps/api/src/routes/system.test.ts` — explicit `redisStatus.connected === false / latencyMs === null` in the diagnostics shape test (Redis-absent path), plus the ping-throws test (M5A).
+* `apps/api/src/routes/attempts/redis-fallback-guard.test.ts` — proves candidate start / save / submit succeed with Redis absent and PostgreSQL is the sole source of truth (queried via `createAttemptRepo` directly, bypassing the API).
+* Negative invariant: a structural-guard test names the "no candidate flow reads Redis" invariant explicitly.
 
 ### Suggested Validation
 

@@ -208,6 +208,11 @@ describe("system routes", () => {
       expect(typeof body.dbLatency).toBe("number");
       expect(body.dbLatency).toBeGreaterThanOrEqual(0);
 
+      /* P3-M7: explicit assertion that diagnostics degrades cleanly when Redis is absent. The test app does not register the redis plugin (fastify.redis === undefined), so the route's `if (fastify.redis)` branch is false → connected:false, latencyMs:null. Guardrail: diagnostics never breaks when Redis is down. */
+      expect(body).toHaveProperty("redisStatus");
+      expect(body.redisStatus.connected).toBe(false);
+      expect(body.redisStatus.latencyMs).toBeNull();
+
       expect(body).toHaveProperty("heartbeatStatus");
       expect(body.heartbeatStatus).toHaveProperty("interval");
       expect(body.heartbeatStatus).toHaveProperty("timeout");
