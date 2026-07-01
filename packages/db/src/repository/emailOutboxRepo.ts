@@ -5,7 +5,7 @@ import type {
   EmailType,
 } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, count, eq, isNull, lte, or } from "drizzle-orm";
 import { emailOutbox } from "../schema/pg.js";
 import type { Database, TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
@@ -214,6 +214,33 @@ export function createEmailOutboxRepo(db: Database) {
     return (updated as EmailOutboxRow | undefined) ?? null;
   }
 
+  /**
+   * Counts outbox rows grouped by status, scoped to the caller's
+   * organization. Used by the diagnostics surface to surface pending/sent/
+   * failed totals without exposing row content. Always returns all three
+   * keys (zero when no rows of that status exist).
+   */
+  async function countByStatus(
+    ctx: TenantContext | RequestContext,
+  ): Promise<{ pending: number; sent: number; failed: number }> {
+    const rows = await db
+      .select({ status: emailOutbox.status, n: count() })
+      .from(emailOutbox)
+      .where(eq(emailOutbox.organizationId, resolveOrganizationId(ctx)))
+      .groupBy(emailOutbox.status);
+    const counts = { pending: 0, sent: 0, failed: 0 };
+    for (const row of rows) {
+      if (
+        row.status === "pending" ||
+        row.status === "sent" ||
+        row.status === "failed"
+      ) {
+        counts[row.status] = Number(row.n);
+      }
+    }
+    return counts;
+  }
+
   return {
     create,
     findById,
@@ -221,6 +248,7 @@ export function createEmailOutboxRepo(db: Database) {
     markSent,
     markRetryScheduled,
     markFailed,
+    countByStatus,
   };
 }
 

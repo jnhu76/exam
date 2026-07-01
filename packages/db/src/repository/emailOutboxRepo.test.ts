@@ -214,4 +214,46 @@ describe("emailOutboxRepo", () => {
     const otherCtx = createContext(otherOrg.id);
     expect(await emailRepo.findById(otherCtx, row.id)).toBeNull();
   });
+
+  it("countByStatus returns pending/sent/failed counts scoped to the org", async () => {
+    // Seed a known mix of statuses for THIS org (ctx). Other tests in this
+    // file also seed rows, so we assert on the delta, not absolute totals.
+    const before = await emailRepo.countByStatus(ctx);
+    await seedRow(db, ctx.organizationId, { status: "pending" });
+    await seedRow(db, ctx.organizationId, { status: "pending" });
+    await seedRow(db, ctx.organizationId, { status: "sent" });
+    await seedRow(db, ctx.organizationId, { status: "failed" });
+
+    const after = await emailRepo.countByStatus(ctx);
+    expect(after.pending).toBe(before.pending + 2);
+    expect(after.sent).toBe(before.sent + 1);
+    expect(after.failed).toBe(before.failed + 1);
+  });
+
+  it("countByStatus is scoped to the caller's organization", async () => {
+    // Rows in ctx's org must NOT be counted by a different org's context.
+    const otherOrg = await organizationRepo.create(
+      {
+        actorId: "system",
+        organizationId: "system",
+        role: "Admin",
+        permissions,
+        sessionId: "s",
+      },
+      {
+        name: "iso",
+        displayName: "Iso",
+        slug: `iso-${randomUUID().slice(0, 8)}`,
+      },
+    );
+    const otherCtx = createContext(otherOrg.id);
+
+    await seedRow(db, ctx.organizationId, { status: "pending" });
+    const before = await emailRepo.countByStatus(otherCtx);
+    await seedRow(db, ctx.organizationId, { status: "sent" });
+    const after = await emailRepo.countByStatus(otherCtx);
+
+    // otherCtx's counts are unchanged despite rows added to ctx's org.
+    expect(after).toEqual(before);
+  });
 });
