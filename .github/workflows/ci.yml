@@ -19,12 +19,11 @@ env:
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
 jobs:
-  # ADR-007 Phase 6F: a fast, DB-free `static` job gates the heavier jobs.
-  # `verify` and `e2e` both `needs: static` so they run in parallel once
-  # static checks pass. This cuts wall-clock from
-  # (verify + max(api-fast, e2e)) to (static + max(verify, e2e)).
-  # Test semantics are unchanged; only job dependencies changed. `verify`
-  # no longer repeats format/lint/typecheck (static owns those).
+  # ADR-007 Phase 6F: a fast, DB-free `static` job gates all heavier jobs.
+  # All coverage, build, and e2e jobs run `needs: static` so they start in
+  # parallel once static checks pass. Wall-clock is now
+  # static + max(web-coverage, api-coverage, package-coverage, verify-build, e2e).
+  # No coverage step repeats format/lint/typecheck (static owns those).
   static:
     name: Static checks
     runs-on: ubuntu-latest
@@ -52,8 +51,75 @@ jobs:
       - name: Static checks
         run: pnpm verify:static
 
-  verify:
-    name: Verify (PostgreSQL 18.4)
+  # Full-build gate: validates that `turbo build` succeeds (packages + apps).
+  # Runs in parallel with all coverage jobs — no downstream job depends on it.
+  verify-build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: static
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+  # Web coverage — pure jsdom, no DB required.
+  web-coverage:
+    name: Web coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: static
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Packages must be built first — vitest bypasses Turbo's task graph so
+      # the `^build` dependency in turbo.json does not apply. Without this,
+      # @exam/domain/dist and @exam/contracts/dist don't exist and Vite's
+      # import analysis fails.
+      - name: Build workspace packages
+        run: pnpm --filter "./packages/*" build
+
+      - name: Coverage
+        run: pnpm --filter @exam/web coverage
+
+  # API coverage — Postgres worker isolation, 4 parallel workers.
+  api-coverage:
+    name: API coverage
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: static
@@ -111,46 +177,67 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Coverage is split into three independently-named steps so the failing
-      # package is unambiguous in the GitHub UI (a single `turbo coverage` run
-      # attributed web failures to "@exam/api:coverage" in logs, hiding the
-      # real culprit). Splitting also isolates CPU: web (jsdom + V8
-      # instrumentation, CPU-light but instrumentation-heavy) no longer fights
-      # api/db (Postgres-heavy) for the same cores. No package is run twice.
-      #
-      # 0. Build workspace packages first. `pnpm --filter @exam/web coverage`
-      #    runs vitest directly (bypassing Turbo's task graph), so the
-      #    `^build` dependency declared in turbo.json does NOT apply. Without
-      #    this step, @exam/domain/dist and @exam/contracts/dist don't exist,
-      #    and Vite's import analysis fails with 21 "Failed to resolve import"
-      #    errors. We use `--filter "./packages/*"` instead of
-      #    `turbo build --filter=@exam/web...` because the latter also builds
-      #    the web app itself (tsc -b && vite build), which is unnecessary for
-      #    coverage and adds ~30s overhead. Package builds are fast (just tsc).
       - name: Build workspace packages
         run: pnpm --filter "./packages/*" build
 
-      # 1. Web coverage — pure jsdom, no DB env needed.
-      - name: Web coverage
-        run: pnpm --filter @exam/web coverage
-
-      # 2. API coverage — Postgres worker isolation, 4 parallel workers.
-      - name: API coverage
+      - name: Coverage
         run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
 
-      # 3. Remaining workspace packages (auth, authz, contracts, db, domain,
-      #    exam-engine, import-export). Targets `packages/*` explicitly so
-      #    @exam/web and @exam/api (both in apps/) cannot be run a second
-      #    time. Each package defines a `coverage` script. Packages that
-      #    need DB (@exam/db) use TEST_DATABASE_URL (inherited from job env).
-      #    Pure unit tests (@exam/auth, @exam/domain, etc.) ignore DB vars.
-      #    Production-guard tests (e.g. @exam/auth) must use vi.stubEnv to
-      #    isolate APP_MODE/JWT_SECRET — see docs/testing/test-system-contract.md.
-      - name: Package coverage (auth + authz + contracts + db + domain + exam-engine + import-export)
-        run: pnpm --filter "./packages/*" coverage
+  # Package coverage — all packages except @exam/web and @exam/api.
+  # @exam/db requires Postgres; other packages are pure unit tests.
+  package-coverage:
+    name: Package coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: static
 
-      - name: Build
-        run: pnpm build
+    services:
+      postgres:
+        image: postgres:18.4-bookworm
+        env:
+          POSTGRES_USER: exam
+          POSTGRES_PASSWORD: exam
+          POSTGRES_DB: exam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U exam -d exam_test"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_test
+      TEST_DATABASE_URL: postgresql://exam:exam@localhost:5432/exam_test
+      JWT_SECRET: ci-test-secret
+      NODE_ENV: test
+      APP_MODE: ci
+      DEPLOYMENT_MODE: singleTenant
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24.15.x"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm --filter "./packages/*" build
+
+      - name: Coverage
+        run: pnpm --filter "./packages/*" coverage
 
   e2e:
     name: E2E (shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
