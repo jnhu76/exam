@@ -7,6 +7,12 @@ import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
 
+// Seed process.env from .env files so worker threads inherit them.
+const envVars = loadEnv("test", workspaceRoot, "");
+for (const [key, value] of Object.entries(envVars)) {
+  if (process.env[key] === undefined) process.env[key] = value;
+}
+
 // FIXME(BUG-FLAKE-001): apps/api 跨文件并行 + 共享 PostgreSQL schema + coverage
 // instrumentation 会造成 attempts.test.ts:1070 后台扫描用例在 pnpm verify 路径下
 // 偶发 5s timeout（已升级条目，见 docs/dev/test-flakes.md）。

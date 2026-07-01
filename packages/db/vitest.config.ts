@@ -7,6 +7,14 @@ import { TEST_RUNTIME_ENV } from "../../vitest.shared.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "../..");
 
+// Seed process.env from .env files so worker threads inherit them.
+// vitest's config.env makes vars available on import.meta.env but worker
+// threads may not see them on process.env; pushing here ensures inheritance.
+const envVars = loadEnv("test", workspaceRoot, "");
+for (const [key, value] of Object.entries(envVars)) {
+  if (process.env[key] === undefined) process.env[key] = value;
+}
+
 // File parallelism is RESTORED to the Vitest default here (no fileParallelism
 // override). packages/db is safe to parallelize for several reasons that do
 // NOT apply to apps/api (see apps/api/vitest.config.ts + PR86 diagnostic):
