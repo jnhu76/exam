@@ -70,9 +70,14 @@ describe("JWT secret production guard", () => {
     vi.unstubAllEnvs();
   });
 
-  it("throws when NODE_ENV=production and JWT_SECRET is missing", () => {
-    vi.stubEnv("JWT_SECRET", "");
+  it("throws when production mode and JWT_SECRET is missing", () => {
+    // APP_MODE is the authoritative run-mode checked first by
+    // isProductionMode(). In CI, APP_MODE=ci (truthy, !== "production")
+    // causes the function to return false before NODE_ENV is reached.
+    // We must stub APP_MODE to "production" alongside NODE_ENV.
+    vi.stubEnv("APP_MODE", "production");
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("JWT_SECRET", "");
     expect(() =>
       signJWT({
         actorId: "123e4567-e89b-12d3-a456-426614174000",

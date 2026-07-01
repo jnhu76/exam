@@ -249,13 +249,25 @@ jobs:
           # Triggers blob reporter in playwright.config.ts (→ merge-reports).
           E2E_SHARD_TOTAL: ${{ matrix.shardTotal }}
 
+      # Playwright blob reporter always writes `report.zip`. With merge-multiple,
+      # download-artifact flattens all matching artifacts into one directory —
+      # two `report.zip` files would collide (second overwrites first), producing
+      # the "invalid central directory file header signature" error. Rename each
+      # shard's zip to a unique name before uploading.
+      - name: Rename blob report for uniqueness
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f apps/e2e/blob-report/report.zip ]; then
+            mv apps/e2e/blob-report/report.zip "apps/e2e/blob-report/report-${{ matrix.shardIndex }}.zip"
+          fi
+
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
-          name: blob-report-${{ matrix.shardIndex }}
-          path: apps/e2e/blob-report/
+          name: e2e-blob-shard-${{ matrix.shardIndex }}
+          path: apps/e2e/blob-report/*.zip
           retention-days: 1
           if-no-files-found: ignore
 
@@ -359,8 +371,22 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: apps/e2e/all-blob-reports
-          pattern: blob-report-*
+          pattern: e2e-blob-shard-*
           merge-multiple: true
+
+      - name: Diagnose blob reports before merge
+        working-directory: apps/e2e
+        run: |
+          echo "=== Files in all-blob-reports ==="
+          find all-blob-reports -maxdepth 2 -type f -print -exec file {} \;
+          echo ""
+          echo "=== Validating zip integrity ==="
+          for z in all-blob-reports/*.zip; do
+            if [ -f "$z" ]; then
+              echo "Checking $z ..."
+              unzip -t "$z"
+            fi
+          done
 
       - name: Merge into HTML report
         working-directory: apps/e2e
