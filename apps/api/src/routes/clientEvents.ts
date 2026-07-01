@@ -2,11 +2,15 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
   ClientEventBatchSchema,
+  ErrorResponseSchema,
   sanitizeClientEvent,
   type ClientEventBatchResponse,
 } from "@exam/contracts";
 import { createClientEventRepo } from "@exam/db/src/repository/clientEventRepo.js";
 import { getRequestContext } from "./helpers.js";
+
+/** OpenAPI security scheme requiring cookie-based authentication. */
+const cookieAuth = [{ cookieAuth: [] }] as const;
 
 /**
  * Maximum length of the persisted `user_agent` column. Browsers can send
@@ -51,7 +55,11 @@ const clientEventRoutes: FastifyPluginAsync = async (fastify) => {
       preHandler: [fastify.authenticate],
       schema: {
         body: ClientEventBatchSchema,
-        response: { 200: clientEventBatchResponseSchema },
+        security: cookieAuth,
+        response: {
+          200: clientEventBatchResponseSchema,
+          401: ErrorResponseSchema,
+        },
       },
     },
     async (request): Promise<ClientEventBatchResponse> => {

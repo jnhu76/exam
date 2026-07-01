@@ -16,7 +16,9 @@
     "db:seed:demo:verify": "tsx src/demo-seed-verify.ts",
     "db:seed:e2e": "tsx src/e2e-seed.ts",
     "bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts",
-    "reset:admin-password": "tsx src/scripts/reset-admin-password.ts"
+    "reset:admin-password": "tsx src/scripts/reset-admin-password.ts",
+    "api:openapi": "tsx src/openapi/export.ts",
+    "api:openapi:check": "tsx src/openapi/export.ts --check"
   },
   "dependencies": {
     "@exam/auth": "workspace:*",

@@ -1,29 +1,13 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import swaggerPlugin from "@fastify/swagger";
-import { z } from "zod";
 import {
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
 
 import { openApiConfig } from "./config.js";
-
-import authRoutes from "../routes/auth.js";
-import settingsRoutes from "../routes/settings.js";
-import candidateFieldRoutes from "../routes/candidateField.js";
-import userRoutes from "../routes/user.js";
-import candidateRoutes from "../routes/candidate.js";
-import courseRoutes from "../routes/course.js";
-import questionRoutes from "../routes/question.js";
-import examRoutes from "../routes/exam.js";
-import attemptRoutes from "../routes/attempts.js";
-import scoreRoutes from "../routes/scores.js";
-import { exportRoutes } from "../routes/export.js";
-import systemRoutes from "../routes/system.js";
-import auditRoutes from "../routes/audit.js";
-
-/** Default API route prefix used when registering route plugins. */
-const routePrefix = "/api";
+import { registerApiRoutes } from "../routes/registerApiRoutes.js";
+import { healthResponseSchema } from "../routes/healthSchema.js";
 
 /**
  * Build a throwaway Fastify instance pre-loaded with all route plugins and
@@ -53,32 +37,21 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
 
   await app.register(swaggerPlugin as never, openApiConfig);
 
-  await app.register(authRoutes, { prefix: "/api/auth" });
-  await app.register(settingsRoutes, { prefix: routePrefix });
-  await app.register(candidateFieldRoutes, { prefix: routePrefix });
-  await app.register(userRoutes, { prefix: routePrefix });
-  await app.register(candidateRoutes, { prefix: routePrefix });
-  await app.register(courseRoutes, { prefix: routePrefix });
-  await app.register(questionRoutes, { prefix: routePrefix });
-  await app.register(examRoutes, { prefix: routePrefix });
-  await app.register(attemptRoutes, { prefix: routePrefix });
-  await app.register(scoreRoutes, { prefix: routePrefix });
-  await app.register(exportRoutes, { prefix: routePrefix });
-  await app.register(systemRoutes, { prefix: routePrefix });
-  await app.register(auditRoutes, { prefix: routePrefix });
-
   // Mirror server.ts: GET /api/health (public liveness probe).
   app.get(
     "/api/health",
     {
       schema: {
         response: {
-          200: z.object({ status: z.string() }),
+          200: healthResponseSchema,
         },
       },
     },
     async () => ({ status: "ok" }),
   );
+
+  // Register all API route modules — shared with runtime server.
+  await registerApiRoutes(app);
 
   await app.ready();
   return app;
@@ -128,8 +101,133 @@ export interface OpenAPISpecDocument {
 export async function generateOpenAPISpec(): Promise<OpenAPISpecDocument> {
   const app = await buildSwaggerApp();
   try {
-    return app.swagger() as OpenAPISpecDocument;
+    const spec = app.swagger() as OpenAPISpecDocument;
+    fixCsvContentTypes(spec);
+    injectMissingErrorResponses(spec);
+    return spec;
   } finally {
     await app.close();
+  }
+}
+
+/**
+ * Patches CSV export routes whose 200 response is declared as `z.string()`
+ * (which fastify-swagger renders as `application/json`) to correctly report
+ * `text/csv`. Only the two known CSV endpoints are affected.
+ */
+function fixCsvContentTypes(spec: OpenAPISpecDocument): void {
+  const csvPaths = [
+    "/api/exams/{id}/export/scores",
+    "/api/admin/attempts/{attemptId}/export/csv",
+  ];
+
+  for (const path of csvPaths) {
+    const item = spec.paths[path];
+    if (!item) continue;
+    for (const method of ["get"] as const) {
+      const op = item[method] as
+        | {
+            responses?: Record<
+              string,
+              {
+                description?: string;
+                content?: Record<string, unknown>;
+              }
+            >;
+          }
+        | undefined;
+      if (!op?.responses?.["200"]) continue;
+      const resp = op.responses["200"];
+      // Replace application/json string schema with text/csv string schema.
+      if (resp.content?.["application/json"]) {
+        resp.content["text/csv"] = resp.content["application/json"];
+        delete resp.content["application/json"];
+      }
+    }
+  }
+}
+
+/**
+ * Injects missing error responses into the generated spec:
+ * - 401 for all routes with cookieAuth security (authenticate preHandler)
+ * - 403 for all routes with x-role (requireRole/requireCapability preHandler)
+ */
+function injectMissingErrorResponses(spec: OpenAPISpecDocument): void {
+  const unauthorizedSchema = {
+    description: "Unauthorized — missing or invalid authentication cookie",
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            requestId: { type: "string" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const forbiddenSchema = {
+    description: "Forbidden — insufficient role or capability",
+    content: {
+      "application/json": {
+        schema: {
+          type: "object",
+          properties: {
+            requestId: { type: "string" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  for (const [, pathItem] of Object.entries(spec.paths ?? {})) {
+    if (!pathItem) continue;
+    for (const method of ["get", "post", "put", "patch", "delete"] as const) {
+      const op = (pathItem as Record<string, unknown>)[method] as
+        | {
+            security?: unknown[];
+            "x-role"?: string[];
+            responses?: Record<string, unknown>;
+          }
+        | undefined;
+      if (!op) continue;
+
+      // Inject 401 for routes with cookieAuth security.
+      if (op.security && Array.isArray(op.security)) {
+        const hasCookieAuth = op.security.some(
+          (entry) =>
+            typeof entry === "object" &&
+            entry !== null &&
+            "cookieAuth" in entry,
+        );
+        if (hasCookieAuth && !op.responses?.["401"]) {
+          if (!op.responses) op.responses = {};
+          op.responses["401"] = unauthorizedSchema;
+        }
+      }
+
+      // Inject 403 for routes with x-role.
+      if (op["x-role"] && Array.isArray(op["x-role"])) {
+        if (!op.responses) op.responses = {};
+        if (!op.responses["403"]) {
+          op.responses["403"] = forbiddenSchema;
+        }
+      }
+    }
   }
 }

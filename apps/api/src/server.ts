@@ -17,25 +17,9 @@ import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
 import emailPlugin from "./plugins/email.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
-import authRoutes from "./routes/auth.js";
-import settingsRoutes from "./routes/settings.js";
-import candidateFieldRoutes from "./routes/candidateField.js";
-import userRoutes from "./routes/user.js";
-import roleAssignmentRoutes from "./routes/roleAssignments.js";
-import candidateRoutes from "./routes/candidate.js";
-import courseRoutes from "./routes/course.js";
-import questionRoutes from "./routes/question.js";
-import examRoutes from "./routes/exam.js";
-import attemptRoutes from "./routes/attempts.js";
-import scoreRoutes from "./routes/scores.js";
-import { exportRoutes } from "./routes/export.js";
-import systemRoutes from "./routes/system.js";
-import auditRoutes from "./routes/audit.js";
-import importLogRoutes from "./routes/importLogs.js";
-import clientEventRoutes from "./routes/clientEvents.js";
-import proctorMonitoringRoutes from "./routes/proctorMonitoring.js";
-import { emailRoutes } from "./routes/email.js";
+import { registerApiRoutes } from "./routes/registerApiRoutes.js";
 import { registerOpenApiDocs } from "./openapi/registerDocs.js";
+import { healthResponseSchema } from "./routes/healthSchema.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
 import { getRuntimeConfig } from "./config/runtimeConfig.js";
 import { REDACT_CONFIG } from "./lib/logRedaction.js";
@@ -75,28 +59,19 @@ async function main() {
    * Simple liveness probe. Returns `{ status: "ok" }` when the server
    * is running and can accept requests.
    */
-  app.get("/api/health", async () => {
-    return { status: "ok" };
-  });
+  app.get(
+    "/api/health",
+    {
+      schema: {
+        response: {
+          200: healthResponseSchema,
+        },
+      },
+    },
+    async () => ({ status: "ok" }),
+  );
 
-  await app.register(authRoutes, { prefix: "/api/auth" });
-  await app.register(settingsRoutes, { prefix: "/api" });
-  await app.register(candidateFieldRoutes, { prefix: "/api" });
-  await app.register(userRoutes, { prefix: "/api" });
-  await app.register(roleAssignmentRoutes, { prefix: "/api" });
-  await app.register(candidateRoutes, { prefix: "/api" });
-  await app.register(courseRoutes, { prefix: "/api" });
-  await app.register(questionRoutes, { prefix: "/api" });
-  await app.register(examRoutes, { prefix: "/api" });
-  await app.register(attemptRoutes, { prefix: "/api" });
-  await app.register(scoreRoutes, { prefix: "/api" });
-  await app.register(exportRoutes, { prefix: "/api" });
-  await app.register(systemRoutes, { prefix: "/api" });
-  await app.register(auditRoutes, { prefix: "/api" });
-  await app.register(importLogRoutes, { prefix: "/api" });
-  await app.register(clientEventRoutes, { prefix: "/api" });
-  await app.register(proctorMonitoringRoutes, { prefix: "/api" });
-  await app.register(emailRoutes, { prefix: "/api" });
+  await registerApiRoutes(app);
 
   const publicDir = resolve(
     fileURLToPath(new URL("../public", import.meta.url)),
