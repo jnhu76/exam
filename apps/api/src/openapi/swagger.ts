@@ -44,6 +44,9 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   Object.assign(authenticate, { _isAuthenticate: true });
   app.decorate("authenticate", authenticate);
   app.decorate("requireRole", () => async () => {});
+  // requireCapability (Phase 3 capability gate, RBAC runtime activation) —
+  // no-op stub so OpenAPI generation can register flipped routes.
+  app.decorate("requireCapability", () => async () => {});
   app.decorate("db", null as never);
   app.decorate("now", () => new Date());
   app.decorateRequest("ctx", null as never);
