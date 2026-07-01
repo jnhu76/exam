@@ -3,14 +3,16 @@ import { getPermissionsForRole } from "./rbac.js";
 import { Permission, Role } from "@exam/domain";
 
 describe("RBAC Phase 1 role model", () => {
-  it("exports Admin and Candidate as the human roles, plus System (synthetic)", () => {
+  it("exports the 6 Phase 3 roles (Admin/Teacher/Proctor/Grader/Candidate/System)", () => {
     // System is a non-login, non-assignable synthetic actor (ADR §System Actor
-    // Policy); it is never a `users.role` value. Admin/Candidate remain the
-    // only human, login-capable roles.
+    // Policy); the other 5 are human, login-capable, assignable roles.
     expect(Object.values(Role).sort()).toEqual([
       "Admin",
       "Candidate",
+      "Grader",
+      "Proctor",
       "System",
+      "Teacher",
     ]);
   });
 

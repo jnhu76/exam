@@ -58,6 +58,35 @@ describe("auth routes", () => {
     expect(response.json().organizationId).toBe(ctx.org.id);
   });
 
+  it("POST /api/auth/login authenticates a Teacher-role user (RBAC runtime activation)", async () => {
+    // Phase 3 widening: a user whose primary role is Teacher can log in and
+    // the JWT/login response carries role=Teacher.
+    const username = `teacher-${crypto.randomUUID().slice(0, 8)}`;
+    const userId = crypto.randomUUID();
+    await ctx.db.insert(schema.users).values({
+      id: userId,
+      organizationId: ctx.org.id,
+      username,
+      passwordHash: await hashPassword("teacher123"),
+      name: "Teacher User",
+      role: "Teacher",
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username, password: "teacher123" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.role).toBe("Teacher");
+    expect(body.organizationId).toBe(ctx.org.id);
+  });
+
   it("APP_MODE=e2e does not rate-limit repeated login requests", async () => {
     vi.stubEnv("APP_MODE", "e2e");
     vi.stubEnv("RATE_LIMIT_MAX", "1");
@@ -441,10 +470,15 @@ describe("auth routes", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("POST /api/auth/login rejects legacy future-role rows with generic auth failure", async () => {
+  it("POST /api/auth/login rejects non-login/unknown roles (SuperAdmin/ContentManager/ResultViewer) with generic auth failure", async () => {
     const legacyCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    // RBAC runtime activation: Teacher/Proctor/Grader are now login-capable
+    // assignable roles; only truly unknown / non-login roles are rejected.
+    const nonLoginRoles = LEGACY_ROLES.filter(
+      (r) => r !== "Teacher" && r !== "Proctor" && r !== "Grader",
+    );
     try {
-      for (const role of LEGACY_ROLES) {
+      for (const role of nonLoginRoles) {
         const legacy = await createFutureRoleUserForTest(
           legacyCtx.db,
           legacyCtx.org.id,
@@ -469,7 +503,7 @@ describe("auth routes", () => {
           },
         });
         expect(JSON.stringify(body)).not.toContain(role);
-        expect(JSON.stringify(body)).not.toContain("unsupported");
+        expect(JSON.stringify(body)).not.toContain("non_login_role");
 
         const deadline = Date.now() + 2000;
         let auditRow: typeof schema.auditLogs.$inferSelect | undefined;
@@ -486,8 +520,8 @@ describe("auth routes", () => {
         expect(auditRow!.targetType).toBe("login");
         expect(auditRow!.targetId).toBe(legacy.user.id);
         const metadata = auditRow!.metadata as Record<string, unknown>;
-        expect(metadata.reason).toBe("unsupported_phase1_role");
-        expect(metadata.legacyRole).toBe(role);
+        expect(metadata.reason).toBe("non_login_role");
+        expect(metadata.role).toBe(role);
         expect(metadata.username).toBe(legacy.user.username);
       }
     } finally {

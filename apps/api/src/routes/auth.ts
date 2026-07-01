@@ -152,13 +152,24 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
-      if (user.role !== "Admin" && user.role !== "Candidate") {
-        const legacyRole = user.role;
+      // RBAC runtime activation: only the 5 assignable human roles
+      // (Admin/Teacher/Proctor/Grader/Candidate) may log in. System is the
+      // synthetic non-login actor; any other/unknown role string (SuperAdmin,
+      // legacy future roles, garbage) is rejected. ADR §System Actor Policy.
+      const ASSIGNABLE_LOGIN_ROLES = new Set([
+        "Admin",
+        "Teacher",
+        "Proctor",
+        "Grader",
+        "Candidate",
+      ]);
+      if (!ASSIGNABLE_LOGIN_ROLES.has(user.role)) {
+        const blockedRole = user.role;
         const blockedCtx: RequestContext = {
           actorId: user.id,
           organizationId: user.organizationId,
           targetOrganizationId: user.organizationId,
-          role: legacyRole as unknown as Role,
+          role: blockedRole as unknown as Role,
           permissions: [],
           sessionId: "anonymous",
         };
@@ -170,19 +181,19 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           "login",
           user.id,
           {
-            reason: "unsupported_phase1_role",
+            reason: "non_login_role",
             username: user.username,
-            legacyRole,
+            role: blockedRole,
           },
         );
         fastify.log.warn(
           {
             event: "login.failure",
-            reason: "unsupported_phase1_role",
+            reason: "non_login_role",
             username: user.username,
-            legacyRole,
+            role: blockedRole,
           },
-          "Login failed: role is not a supported Phase 1 role",
+          "Login failed: role is not a login-capable assignable role",
         );
         return reply
           .code(401)

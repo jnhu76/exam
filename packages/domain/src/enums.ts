@@ -1,15 +1,22 @@
 /**
  * Product roles within the platform.
  *
- * `Admin` and `Candidate` are the only human, login-capable, assignable roles
- * (so the login path and `@exam/contracts` `RoleSchema` intentionally stay
- * `Admin | Candidate`). `System` is a **synthetic, non-login, non-assignable**
- * actor identity used only by background scanners (deadline auto-submit,
- * heartbeat disrupted-scan) — it never originates from a `users.role` row and
- * never appears in user-management UI. See ADR §System Actor Policy.
+ * The 6 Phase 3 role presets (matches `@exam/authz` RoleKey): Admin, Teacher,
+ * Proctor, Grader, Candidate are human, login-capable, assignable roles.
+ * `System` is a **synthetic, non-login, non-assignable** actor identity used
+ * only by background scanners (deadline auto-submit, heartbeat disrupted-scan)
+ * — it never originates from a `users.role` row and never appears in
+ * user-management UI. See ADR §System Actor Policy.
+ *
+ * Widening to the full set (RBAC runtime activation) lets Proctor/Grader log
+ * in and be gated by `requireCapability`. The login path does not reject any
+ * human role; `@exam/authz` RoleKey remains the authoritative closed set.
  */
 export const Role = {
   Admin: "Admin",
+  Teacher: "Teacher",
+  Proctor: "Proctor",
+  Grader: "Grader",
   Candidate: "Candidate",
   System: "System",
 } as const;
