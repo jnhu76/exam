@@ -53,6 +53,13 @@ function diag() {
       lastScanAt: null,
       autoSubmitCount: 0,
     },
+    // P3-M5B: email infrastructure status (M5A contract).
+    emailStatus: {
+      status: "available" as const,
+      enabled: true,
+      worker: { status: "available" as const },
+      outbox: { pending: 0, sent: 0, failed: 0 },
+    },
   };
 }
 
@@ -67,6 +74,12 @@ function renderPage() {
 describe("SystemDiagnosticsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // mockReset on the api.get mock (beyond clearAllMocks) ensures the
+    // mockResolvedValueOnce queue is fully drained between tests — otherwise a
+    // prior test's leftover once-resolvers shift the [health, diag] pairing in
+    // later tests, causing the page to receive a health object where it expects
+    // diagnostics (and crash on diag.redisStatus/emailStatus).
+    getMock.mockReset();
   });
 
   // Safety net: the poll-failure test below switches to fake timers; restore
@@ -250,5 +263,75 @@ describe("SystemDiagnosticsPage", () => {
     expect(
       screen.getByText("系统状态刷新失败，当前显示上次成功数据"),
     ).toBeInTheDocument();
+  });
+
+  // ── P3-M5B: email infrastructure status surface ───────────────────
+  it("renders email infrastructure status, worker status, and outbox counts", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      emailStatus: {
+        status: "degraded",
+        enabled: true,
+        worker: { status: "unknown" },
+        outbox: { pending: 2, sent: 10, failed: 1 },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("邮件基础设施")).toBeInTheDocument();
+    // overall email status badge (degraded label) + worker status badge.
+    expect(screen.getByText("降级")).toBeInTheDocument();
+    expect(screen.getByText("邮件状态")).toBeInTheDocument();
+    expect(screen.getByText("工作进程")).toBeInTheDocument();
+    expect(screen.getByText("未知")).toBeInTheDocument();
+    // outbox counts card.
+    expect(screen.getByText("邮件发件箱")).toBeInTheDocument();
+    expect(screen.getByText("待发送")).toBeInTheDocument();
+    expect(screen.getByText("已发送")).toBeInTheDocument();
+    expect(screen.getByText("发送失败")).toBeInTheDocument();
+    // count values render at least once (numbers may repeat elsewhere on the
+    // page; assert presence via getAllByText, not uniqueness).
+    expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("10").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders email disabled label when emailStatus.status is disabled", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      emailStatus: {
+        status: "disabled",
+        enabled: false,
+        worker: { status: "disabled" },
+        outbox: { pending: 0, sent: 0, failed: 0 },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("邮件基础设施")).toBeInTheDocument();
+    // "已禁用" appears on both the email status badge and the worker badge
+    // when everything is disabled — assert presence, not uniqueness.
+    expect(screen.getAllByText("已禁用").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("未启用")).toBeInTheDocument();
+  });
+
+  it("does not expose SMTP secrets, recipients, or raw email body in diagnostics", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      emailStatus: {
+        status: "available",
+        enabled: true,
+        worker: { status: "available" },
+        outbox: { pending: 1, sent: 5, failed: 0 },
+      },
+    });
+    renderPage();
+    await screen.findByText("邮件基础设施");
+    // The diagnostics surface must never leak these — even if they existed in
+    // the response, the UI must not render them.
+    expect(screen.queryByText(/SMTP_/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/@/)).not.toBeInTheDocument(); // no recipient emails
+    expect(screen.queryByText(/password/i)).not.toBeInTheDocument();
   });
 });
