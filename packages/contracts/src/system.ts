@@ -53,12 +53,14 @@ export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
  * diagnostics surface. Same intent as {@link SystemHealthResponseSchema}'s
  * `status` field but scoped to a single dependency (email/redis/worker).
  */
-export const InfrastructureStatusSchema = z.enum([
+export const InfrastructureStatusValues = [
   "available",
   "degraded",
   "unavailable",
   "disabled",
-]);
+] as const;
+
+export const InfrastructureStatusSchema = z.enum(InfrastructureStatusValues);
 
 /** Infrastructure status union (available/degraded/unavailable/disabled). */
 export type InfrastructureStatus = z.infer<typeof InfrastructureStatusSchema>;
@@ -69,13 +71,12 @@ export type InfrastructureStatus = z.infer<typeof InfrastructureStatusSchema>;
  * there is no resident email worker in M3 — `processDueEmails` is
  * manually-triggered, so its running state is unknown).
  */
-export const WorkerStatusSchema = z.enum([
-  "available",
-  "degraded",
-  "unavailable",
-  "disabled",
+export const WorkerStatusValues = [
+  ...InfrastructureStatusValues,
   "unknown",
-]);
+] as const;
+
+export const WorkerStatusSchema = z.enum(WorkerStatusValues);
 
 /** Worker status union (infrastructure statuses + `unknown`). */
 export type WorkerStatus = z.infer<typeof WorkerStatusSchema>;
