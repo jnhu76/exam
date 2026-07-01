@@ -22,6 +22,7 @@ import {
   flagMisconduct,
   extendAttemptTime,
 } from "@exam/exam-engine";
+import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
@@ -53,7 +54,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/admin/attempts/:attemptId/misconduct",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptMisconductMark),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         body: FlagMisconductRequestSchema,
@@ -126,7 +130,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/admin/attempts/:attemptId/force-submit",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptForceSubmit),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         body: ForceSubmitRequestSchema,
@@ -270,7 +277,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/admin/attempts/:attemptId/extend-time",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptTimeExtend),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         body: ExtendTimeRequestSchema,
@@ -357,7 +367,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/admin/attempts/:attemptId/timeline",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptTimelineView),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         security: cookieAuth,
@@ -414,7 +427,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/admin/attempts/:attemptId/export",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptExport),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         security: cookieAuth,
@@ -453,7 +469,10 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/admin/attempts/:attemptId/export/csv",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptExport),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         security: cookieAuth,

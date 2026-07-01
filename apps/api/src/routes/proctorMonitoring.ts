@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Permission } from "@exam/authz";
 import type { FastifyPluginAsync } from "fastify";
 import {
   ProctorAttemptListResponseSchema,
@@ -51,7 +52,10 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/exams/:examId/proctor/attempts",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamRoomView),
+      ],
       schema: {
         params: examIdParamsSchema,
         security: cookieAuth,
@@ -88,7 +92,10 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/attempts/:attemptId/proctor-events",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptTimelineView),
+      ],
       schema: {
         params: attemptEventsParamsSchema,
         querystring: attemptEventsQuerySchema,
