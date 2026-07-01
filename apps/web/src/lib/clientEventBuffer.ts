@@ -160,6 +160,19 @@ export class ClientEventBuffer {
     return remaining > 0 ? remaining : 0;
   }
 
+  /**
+   * The backoff that WOULD apply given the current consecutive-failure count
+   * (testing only). Pure function of {@link consecutiveFailures} — does NOT
+   * depend on {@link Date.now}, so it is stable across wall-clock drift.
+   * Prefer this over {@link currentBackoffForTest} when asserting the backoff
+   * schedule: `currentBackoffForTest` returns a remaining-time value that
+   * shrinks as real time elapses between flush() and the assertion, which
+   * flakes as `expected 9 >= 10` under CI coverage instrumentation.
+   */
+  computeBackoffForTest(): number {
+    return this.computeBackoff();
+  }
+
   /** Forces the backoff window to be in the past (testing only). */
   clearBackoffForTest(): void {
     this.flushBlockedUntil = 0;
