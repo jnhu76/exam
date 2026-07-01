@@ -117,5 +117,12 @@ describe("登录流程集成测试", () => {
     await waitFor(() => {
       expect(loginButton).toBeDisabled();
     });
+
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/登录中.../)).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
   });
 });

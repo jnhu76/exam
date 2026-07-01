@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -186,37 +186,37 @@ describe("AuditLogPage", () => {
   });
 
   it("sends from / to query params when a date range is selected", async () => {
-    const user = userEvent.setup();
     renderPage();
     await screen.findByText("grading.score_entered");
 
-    // RDP v10 labels each day button with a full aria-label like
-    // "2026年6月15日 星期一", so select by a regex matching the day suffix.
-    await user.click(screen.getByLabelText("开始日期"));
-    await user.click(await screen.findByRole("button", { name: /15日/ }));
+    fireEvent.click(screen.getByLabelText("开始日期"));
+    fireEvent.click(await screen.findByRole("button", { name: /15日/ }));
+    await screen.findByText("grading.score_entered");
 
-    await user.click(screen.getByLabelText("结束日期"));
-    await user.click(await screen.findByRole("button", { name: /20日/ }));
+    fireEvent.click(screen.getByLabelText("结束日期"));
+    fireEvent.click(await screen.findByRole("button", { name: /20日/ }));
 
-    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
-    expect(lastCall).toMatch(/from=\d{4}-\d{2}-\d{2}T/);
-    expect(lastCall).toMatch(/to=\d{4}-\d{2}-\d{2}T/);
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).toMatch(/from=\d{4}-\d{2}-\d{2}T/);
+      expect(lastCall).toMatch(/to=\d{4}-\d{2}-\d{2}T/);
+    });
   });
 
   it("has a clear-filters control that resets all filters", async () => {
-    const user = userEvent.setup();
     renderPage();
     await screen.findByText("grading.score_entered");
 
-    // Set an action filter first.
-    await user.click(screen.getByRole("combobox", { name: /全部操作/ }));
-    await user.click(await screen.findByRole("option", { name: "公布成绩" }));
+    fireEvent.click(screen.getByRole("combobox", { name: /全部操作/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "公布成绩" }));
+    await screen.findByText("grading.score_entered");
 
-    expect(screen.getByText("清空筛选")).toBeInTheDocument();
-    await user.click(screen.getByText("清空筛选"));
+    fireEvent.click(screen.getByText("清空筛选"));
 
-    const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
-    expect(lastCall).not.toContain("action=");
+    await waitFor(() => {
+      const lastCall = getMock.mock.calls.at(-1)?.[0] as string;
+      expect(lastCall).not.toContain("action=");
+    });
   });
 
   it("renders resolved actorName instead of raw actorId when present", async () => {
