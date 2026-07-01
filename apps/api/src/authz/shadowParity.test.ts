@@ -14,13 +14,14 @@ import { Permission, Role } from "@exam/authz";
  * get nothing proctor/grading. There must be NO unexpected diff.
  */
 function makeLogger(): ShadowLogger & { mismatches: number } {
-  return {
+  const logger: ShadowLogger & { mismatches: number } = {
     mismatches: 0,
     info: () => {},
     warn: () => {
-      // mismatch logged
+      logger.mismatches += 1;
     },
   };
+  return logger;
 }
 
 const proctorPerms = [
@@ -148,5 +149,28 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       // legacy always denies non-Admin; capability broadens to the preset.
       expect(r.legacyAllowed, `Teacher/${perm}`).toBe(false);
     }
+  });
+
+  it("the matrix logs ZERO unexpected mismatches (ADR sec.10.3 parity)", () => {
+    // Every Admin decision should AGREE (no mismatch logged). Proctor/Grader/
+    // Teacher broadening is expected, so their mismatches ARE logged — this
+    // test asserts the Admin parity specifically (the no-regression guarantee).
+    const log = makeLogger();
+    for (const perm of probePerms) {
+      shadowRequireCapability(
+        {
+          route: `ADMIN ${perm}`,
+          ctx: { actorId: "a", role: Role.Admin, permissions: [] },
+          legacyGate: ["Admin"],
+          permission: perm,
+          resource: { type: "system", id: "x" },
+        },
+        log,
+      );
+    }
+    expect(
+      log.mismatches,
+      "Admin must have zero legacy-vs-capability mismatches",
+    ).toBe(0);
   });
 });

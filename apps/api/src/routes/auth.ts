@@ -38,6 +38,15 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
  * Provides login, logout, current-user retrieval, and password change
  * for the internal default organization. Registration is disabled in Phase 1.
  */
+/** Login-capable assignable roles (RBAC runtime activation). Static. */
+const ASSIGNABLE_LOGIN_ROLES = new Set([
+  "Admin",
+  "Teacher",
+  "Proctor",
+  "Grader",
+  "Candidate",
+]);
+
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/register",
@@ -156,13 +165,6 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       // (Admin/Teacher/Proctor/Grader/Candidate) may log in. System is the
       // synthetic non-login actor; any other/unknown role string (SuperAdmin,
       // legacy future roles, garbage) is rejected. ADR §System Actor Policy.
-      const ASSIGNABLE_LOGIN_ROLES = new Set([
-        "Admin",
-        "Teacher",
-        "Proctor",
-        "Grader",
-        "Candidate",
-      ]);
       if (!ASSIGNABLE_LOGIN_ROLES.has(user.role)) {
         const blockedRole = user.role;
         const blockedCtx: RequestContext = {
