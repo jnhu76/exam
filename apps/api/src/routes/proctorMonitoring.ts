@@ -4,15 +4,23 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   ProctorAttemptListResponseSchema,
   ProctorAttemptEventListResponseSchema,
+  MarkProctorIncidentRequestSchema,
+  MarkProctorIncidentResponseSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
-import { ensureTargetOrg, getRequestContext } from "./helpers.js";
+import {
+  ensureTargetOrg,
+  getRequestContext,
+  formatZodError,
+} from "./helpers.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import {
   buildProctorAttemptStatuses,
   buildProctorAttemptEventTimeline,
 } from "../lib/proctorMonitoringService.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import type { Database } from "@exam/db/src/types.js";
 
 /**
  * OpenAPI security definition for cookie-based authentication.
@@ -136,6 +144,86 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         pageSize: limit,
         totalPages: total === 0 ? 0 : Math.ceil(total / limit),
       };
+    },
+  );
+
+  /**
+   * POST /admin/attempts/:attemptId/proctor-incident — Proctor/Admin records
+   * an incident observation on an attempt. Audit-event-only storage (no
+   * dedicated incident table). Payload must not contain candidate answers.
+   *
+   * M9 v0: lightweight incident recording only. Full proctor authority
+   * boundary (force-submit, extend-time, dashboard) is L7.
+   */
+  fastify.post(
+    "/admin/attempts/:attemptId/proctor-incident",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AttemptMisconductMark),
+      ],
+      schema: {
+        params: attemptEventsParamsSchema,
+        body: MarkProctorIncidentRequestSchema,
+        security: cookieAuth,
+        "x-role": ["Admin"],
+        response: {
+          200: MarkProctorIncidentResponseSchema,
+          400: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = attemptEventsParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const body = MarkProctorIncidentRequestSchema.safeParse(
+        request.body ?? {},
+      );
+      if (!body.success) {
+        return reply.code(400).send(formatZodError(request.id, body.error));
+      }
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const { attemptId } = parsed.data;
+      const { incidentType, examId, candidateId, reasonCode, note } = body.data;
+
+      // Verify the attempt belongs to the caller's org (cross-org → 404).
+      const attemptRepo = createAttemptRepo(fastify.db);
+      const attempt = await attemptRepo.findById(ctx, attemptId);
+      if (!attempt) {
+        return reply
+          .code(404)
+          .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+      }
+
+      // Audit-event-only storage: write to audit_logs, no incident table.
+      try {
+        await createAuditLogRepo(fastify.db as Database).create(ctx, {
+          actorId: ctx.actorId,
+          action: "proctor.incident_marked",
+          targetType: "attempt",
+          targetId: attemptId,
+          metadata: {
+            requestId: request.id,
+            incidentType,
+            examId,
+            candidateId: candidateId ?? null,
+            attemptId,
+            reasonCode: reasonCode ?? null,
+            note: note ?? null,
+          },
+        });
+      } catch (err) {
+        request.log.error(
+          { err, attemptId, action: "proctor.incident_marked" },
+          "Failed to record proctor incident audit",
+        );
+      }
+
+      return reply.send({ ok: true } as const);
     },
   );
 };

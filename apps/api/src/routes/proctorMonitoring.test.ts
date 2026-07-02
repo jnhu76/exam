@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FastifyPluginAsync } from "fastify";
 import { eq } from "drizzle-orm";
 import courseRoutes from "./course.js";
@@ -14,6 +14,7 @@ import {
 } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createClientEventRepo } from "@exam/db/src/repository/clientEventRepo.js";
+import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 
 /**
  * Registers auth + the monitoring routes under test. Auth is needed to mint
@@ -259,6 +260,179 @@ describe("proctor monitoring API", () => {
       });
       expect(res.statusCode).toBe(404);
       expect(res.json().error.code).toBe("RESOURCE_NOT_FOUND");
+    });
+  });
+
+  describe("POST /api/admin/attempts/:attemptId/proctor-incident", () => {
+    it("admin creates a proctor incident and writes audit event", async () => {
+      const examId = await createOpenExam("Incident Exam A");
+      const cand = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `cand-inc-a-${Date.now()}`,
+        ctx.org.id,
+      );
+      const attemptId = await enrollAndStart(examId, {
+        profileId: cand.candidateProfileId,
+        token: cand.token,
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/proctor-incident`,
+        payload: {
+          incidentType: "suspicious_behavior_marked",
+          examId,
+          candidateId: cand.candidateProfileId,
+          attemptId,
+          reasonCode: "TAB_SWITCH",
+          note: "Candidate switched tabs 5 times",
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+
+      // Verify audit event was written.
+      const { items } = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+        {
+          actorId: ctx.admin.id,
+          organizationId: ctx.org.id,
+          targetOrganizationId: ctx.org.id,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        1,
+        50,
+        { action: "proctor.incident_marked" },
+      );
+      const mine = items.find((i) => i.auditLog.targetId === attemptId);
+      expect(mine).toBeDefined();
+      expect(mine!.auditLog.metadata).toMatchObject({
+        incidentType: "suspicious_behavior_marked",
+        examId,
+        reasonCode: "TAB_SWITCH",
+      });
+    });
+
+    it("rejects invalid incident type with 400", async () => {
+      const examId = await createOpenExam("Incident Exam B");
+      const cand = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `cand-inc-b-${Date.now()}`,
+        ctx.org.id,
+      );
+      const attemptId = await enrollAndStart(examId, {
+        profileId: cand.candidateProfileId,
+        token: cand.token,
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/proctor-incident`,
+        payload: {
+          incidentType: "invalid_type",
+          examId,
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("candidate CANNOT create incident (403)", async () => {
+      const examId = await createOpenExam("Incident Exam C");
+      const cand = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `cand-inc-c-${Date.now()}`,
+        ctx.org.id,
+      );
+      const attemptId = await enrollAndStart(examId, {
+        profileId: cand.candidateProfileId,
+        token: cand.token,
+      });
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/proctor-incident`,
+        payload: {
+          incidentType: "manual_note_added",
+          examId,
+        },
+        cookies: { "auth-token": cand.token },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("audit payload excludes candidate answer content", async () => {
+      const examId = await createOpenExam("Incident Exam D");
+      const cand = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `cand-inc-d-${Date.now()}`,
+        ctx.org.id,
+      );
+      const attemptId = await enrollAndStart(examId, {
+        profileId: cand.candidateProfileId,
+        token: cand.token,
+      });
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/proctor-incident`,
+        payload: {
+          incidentType: "identity_check_failed",
+          examId,
+          note: "SECRET_ANSWER_CONTENT",
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      const { items } = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+        {
+          actorId: ctx.admin.id,
+          organizationId: ctx.org.id,
+          targetOrganizationId: ctx.org.id,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        1,
+        50,
+        { action: "proctor.incident_marked" },
+      );
+      const mine = items.find((i) => i.auditLog.targetId === attemptId);
+      expect(mine).toBeDefined();
+      const serialized = JSON.stringify(mine!.auditLog.metadata);
+      expect(serialized).not.toContain("candidateAnswer");
+      expect(serialized).not.toContain("answer");
+    });
+
+    it("unauthenticated → 401", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/00000000-0000-4000-8000-000000000001/proctor-incident`,
+        payload: {
+          incidentType: "manual_note_added",
+          examId: "00000000-0000-4000-8000-000000000002",
+        },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("nonexistent attempt → 404", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/00000000-0000-4000-8000-000000000099/proctor-incident`,
+        payload: {
+          incidentType: "manual_note_added",
+          examId: "00000000-0000-4000-8000-000000000002",
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(404);
     });
   });
 });
