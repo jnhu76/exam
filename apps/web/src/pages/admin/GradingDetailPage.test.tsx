@@ -434,6 +434,7 @@ describe("candidateAnswer rendering", () => {
   });
 
   it("renders HTML/script in answer as plain text, not executed", async () => {
+    delete (window as unknown as Record<string, unknown>).__xss;
     const unsafe = "<script>window.__xss = true</script><b>bold</b>";
     getMock.mockResolvedValue({
       ...baseData,
