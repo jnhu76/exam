@@ -33,6 +33,13 @@ export class EmailNotificationService {
       defaultMaxAttempts: number;
       /** Optional pino-style logger for best-effort failure warnings. */
       logger?: { warn(obj: Record<string, unknown>, msg: string): void };
+      /** Optional audit emitter for P3-M4A email outbox events. */
+      auditEmitter?: (event: {
+        action: string;
+        targetType: string;
+        targetId: string;
+        metadata: Record<string, unknown>;
+      }) => void;
     },
   ) {}
 
@@ -41,7 +48,7 @@ export class EmailNotificationService {
    * not fail on email problems should use {@link enqueueBestEffort} instead.
    */
   async enqueueEmail(input: EnqueueEmailInput): Promise<EmailOutboxRow> {
-    return this.deps.repo.create(input.ctx, {
+    const row = await this.deps.repo.create(input.ctx, {
       type: input.type,
       recipientEmail: input.recipientEmail,
       subject: input.subject,
@@ -49,6 +56,17 @@ export class EmailNotificationService {
       bodyHtml: input.bodyHtml ?? null,
       maxAttempts: this.deps.defaultMaxAttempts,
     });
+    this.deps.auditEmitter?.({
+      action: "email.outbox_created",
+      targetType: "email_outbox",
+      targetId: row.id,
+      metadata: {
+        type: input.type,
+        recipientEmail: input.recipientEmail,
+        subject: input.subject,
+      },
+    });
+    return row;
   }
 
   /**

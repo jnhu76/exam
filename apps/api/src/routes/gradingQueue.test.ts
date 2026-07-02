@@ -635,6 +635,48 @@ describe("grading queue routes (P2D-J3)", () => {
     });
   });
 
+  // ── Privacy: grading audit metadata must not contain candidate answers ──
+  it("grading.score_entered audit metadata excludes candidate answer content", async () => {
+    const { attemptId } = await seedAttempt(ctx, {
+      questions: [subjectiveQuestion("q-priv", 10)],
+      answers: [
+        {
+          questionId: "q-priv",
+          answer: "SECRET_CANDIDATE_ANSWER",
+          version: 1,
+          savedAt: new Date(),
+        },
+      ],
+      title: "Privacy Exam",
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q-priv", score: 5, comment: "ok" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const { items } = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+      requestContext,
+      1,
+      50,
+      { action: "grading.score_entered" },
+    );
+    const mine = items.find((i) => i.auditLog.targetId === attemptId);
+    expect(mine).toBeDefined();
+    const serialized = JSON.stringify(mine!.auditLog.metadata);
+    expect(serialized).not.toContain("SECRET_CANDIDATE_ANSWER");
+    expect(serialized).not.toContain("candidateAnswer");
+    expect(serialized).not.toContain("answer");
+  });
+
   // ── Slice 11: audit row grading.finalized ────────────────────────
   it("records a grading.finalized audit when last question is graded", async () => {
     const { attemptId } = await seedAttempt(ctx, {

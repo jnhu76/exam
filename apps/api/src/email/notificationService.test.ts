@@ -102,6 +102,56 @@ describe("EmailNotificationService", () => {
     expect(failingRepo.create).toHaveBeenCalledOnce();
   });
 
+  it("emits email.outbox_created audit event on successful enqueue", async () => {
+    const auditEmitter = vi.fn();
+    const svc = new EmailNotificationService({
+      repo: realRepo,
+      defaultMaxAttempts: 3,
+      auditEmitter,
+    });
+    const row = await svc.enqueueEmail({
+      ctx,
+      type: "test_email",
+      recipientEmail: "audit@example.com",
+      subject: "Audit Test",
+      bodyText: "Body",
+    });
+    expect(auditEmitter).toHaveBeenCalledOnce();
+    expect(auditEmitter).toHaveBeenCalledWith({
+      action: "email.outbox_created",
+      targetType: "email_outbox",
+      targetId: row.id,
+      metadata: {
+        type: "test_email",
+        recipientEmail: "audit@example.com",
+        subject: "Audit Test",
+      },
+    });
+  });
+
+  it("email.outbox_created audit metadata excludes bodyText and bodyHtml", async () => {
+    const auditEmitter = vi.fn();
+    const svc = new EmailNotificationService({
+      repo: realRepo,
+      defaultMaxAttempts: 3,
+      auditEmitter,
+    });
+    await svc.enqueueEmail({
+      ctx,
+      type: "test_email",
+      recipientEmail: "privacy@example.com",
+      subject: "Secret Subject",
+      bodyText: "SECRET_EMAIL_BODY_CONTENT",
+      bodyHtml: "<p>SECRET_HTML_CONTENT</p>",
+    });
+    const call = auditEmitter.mock.calls[0]![0] as {
+      metadata: Record<string, unknown>;
+    };
+    expect(call.metadata).not.toHaveProperty("bodyText");
+    expect(call.metadata).not.toHaveProperty("bodyHtml");
+    expect(JSON.stringify(call.metadata)).not.toContain("SECRET_EMAIL_BODY");
+  });
+
   it("BUSINESS SAFETY: a committed business row persists even when email enqueue fails", async () => {
     // This is the M3 business-transaction non-rollback invariant (Option C).
     // We use a real audit-log repo to write a real business row, then call the
