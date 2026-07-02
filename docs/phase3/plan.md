@@ -1,391 +1,590 @@
-# Exam Phase 3 Plan
+# 考试平台 Phase 3 计划 — MVP 模块闭环
 
-> Phase 3 目标：从 Phase 2 的"功能闭环"推进到真实考试运行时：
-> 可授权、可审计、可监考、可评分、可证明提交、可运维诊断。
+> **Phase 3 目标：** 停止扩展孤立的基础设施，闭环真正的 MVP 考试流程：
+>
+> **教师创建题目/试卷 → 教师发布考试 → 考生开始考试 → 考生作答 → 考生提交 → 后端冻结最终答案 → 教师/阅卷员评分 → 结果发布 → 考生查看结果 → 可选通知发送。**
+>
+> **计划模式变更：** Phase 3 不再由 RBAC / Email / Redis / Proctor 等能力队列驱动。Phase 3 现在由**模块闭环**驱动。一个模块只有在真实用户流程贯穿前端、API、契约、持久化、审计、权限和测试之后才算完成。
 
 ---
 
-## 0. Current Status
+## 0. 状态快照
 
-> **Currency note (2026-07-01).** This table reflects the merged state on
-> `master`. RBAC and Email foundation work has progressed well past the
-> pre-migration snapshot described in earlier revisions; see §3 / §4 and
-> `docs/phase3/rbac/RBAC-JOB-QUEUE.md` for per-job detail.
+> **时效性说明（2026-07-02）。** 本计划取代早先的能力优先 Phase 3 计划。旧计划正确地跟踪了许多基础设施作业，但在核心产品模块尚未完成时仍在催生更多 Middle Job。新计划把现有基础设施当作构建块，把执行重心放到 MVP 模块闭环上。
 
-| Area | Status |
-| ---- | ------ |
-| Small Jobs (S1–S10) | **Completed.** 基线审计、文档 scaffold、grillme 问题清单已就位。 |
-| Email Outbox Backend (M3) | **Completed (incl. M8 retry tests).** outbox 表、repo、3 senders (Disabled/Fake/Smtp)、retry policy、`EmailNotificationService`、`EmailOutboxService.processDueEmails`、`POST /api/email/test`、full test suite 均已合并。**Remaining real gap:** 无业务集成（no route 实例化 `EmailNotificationService`）、无常驻 worker daemon（`processDueEmails` 仅测试调用）、无 `users.email` 列、无密码重置/邀请流程。详见 `docs/phase3/emails/email.md` §Status。 |
-| RBAC / Backend Permission Model | **Foundation merged; enforcement partial.** ADR + permission matrix accepted (PR #149)；M1–M9 + SYSTEM-M1 + AUDIT-M1/M2 + shadow mode 合并 (PR #149–#153)；`requireCapability` decorator + 11 routes flipped (proctor/grading/attempts-admin) + attempt/exam resolvers 实现并测试 (enforcement PRs)。**Remaining real gap:** scope resolvers 尚未接入请求生命周期 — 当前 `requireCapability` 只是 flat 6-role-preset 校验；~50 routes 仍在 legacy `requireRole`。详见 `docs/phase3/rbac/RBAC-JOB-QUEUE.md`。 |
-| Frontend State Machine | **Deferred to Large Job.** ADR-009 已提出 (Proposed)，runtime integration 待 L4/L5/L13 结论。 |
-| Exam Lifecycle State Model | **Not started.** 作为独立 Large Job 保留，不应被 ADR-009 覆盖。 |
-| Answer Protocol v2 | **Not started.** 作为独立 Large Job 保留。 |
-| 当前策略 | Middle Job 持续合 master；Large Job 只做设计和拆分；补齐 Large Job 全景图。 |
+| 领域 | 修订后状态 | 计划决策 |
+| ---- | -------------- | ------------- |
+| 考生作答运行时 | **未完成。** 客观题作答路径已存在；主观题作答运行时尚未达到 MVP 就绪。 | 最高优先级模块。 |
+| 人工评分 | **后端基本就绪；前端/E2E 闭环待补。** 评分队列/详情和人工打分已存在，但被作答渲染/运行时缺口阻塞。 | 紧随考生作答运行时之后闭环。 |
+| 考试命题 | **部分可用。** 题目 CRUD、考试配置、发布流程已存在；需要产品流程验证。 | 作为 MVP 命题模块闭环。 |
+| 结果发布 | **后端就绪；需 E2E 证明。** 结果发布模式与考生可见性门控已存在。 | 通过完整 MVP 流程验证。 |
+| RBAC | **基础设施已合并；MVP 落地未完成。** `requireCapability` 已存在，但大量路由仍使用 legacy `requireRole`；scoped 角色尚未端到端打通。 | 先收敛到 MVP 角色：Admin / Teacher / Candidate。Proctor 与 scoped 派单延后。 |
+| Email | **基础设施就绪；无业务调用方。** Outbox/retry/test endpoint 已存在，但没有产品触发点调用它。 | 仅在核心流程稳定后接入最小 MVP 触发点。 |
+| Redis | **仅用于诊断。** 任何考生/考试业务路径都不应依赖 Redis。 | 业务逻辑层面保持休眠。 |
+| Proctor | **监控 v0 已存在；产品角色/权限缺失。** | 暂缓，直到 RBAC MVP 切换稳定。 |
+| 审计 / 诊断 | **足以支撑 MVP。** 应当复用既有审计与诊断，而非随机扩张。 | 仅补充模块闭环所必需的事件。 |
+| 大型设计队列 | **范围过广，无法立即执行。** 许多 Large Job 有用，但并非 MVP 闭环前所需。 | 重新分类为：阻塞、模块本地、延后。 |
 
-**核心原则：**
+---
+
+## 1. 核心原则
 
 ```text
-Large Job 不直接施工。
-Large Job 必须先 grillme / ADR / matrix / spec。
-Large Job 完成设计后，再拆成 Middle Job 落地。
+Phase 3 不靠堆砌更多基础设施前进。
+
+Phase 3 只有在一个对用户可见的 MVP 模块可被证明地完成时，才向前推进。
 ```
+
+一个模块只有同时满足以下全部条件才算完成：
+
+1. **存在前端入口** — 真实用户能够触达并使用它。
+2. **存在后端 API** — 动作经由真实 API 路由，而非 mock。
+3. **存在契约/模式** — 请求/响应形状是显式且被测试的。
+4. **存在持久化路径** — 数据按要求在刷新/恢复/重启后留存。
+5. **审计行为已定义** — 重要的状态变化会发出已知 audit action。
+6. **权限边界已定义** — 明确 MVP 角色能否执行该动作。
+7. **存在测试证明** — 单元/集成/Web/E2E 测试证明该流程。
+8. **非目标显式声明** — 富功能不会泄漏进 MVP 闭环。
+
+---
+
+## 2. MVP 模块队列
+
+Phase 3 执行队列现在是模块优先的。
+
+| 优先级 | 模块 | 目标 | 状态 |
+| -------- | ------ | ---- | ------ |
+| P0 | **考生作答运行时闭环** | 考生能作答所有 MVP 题型并安全提交。 | 下一步进行中 |
+| P1 | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | P0 之后 |
+| P2 | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | P1 之后 |
+| P3 | **结果发布闭环** | 结果按策略可见；考生只看到自己的结果。 | P2 之后 |
+| P4 | **RBAC MVP 切换** | Admin / Teacher / Candidate 权限在 MVP 流程中被强制执行。 | MVP 闭环证明启动后 |
+| P5 | **Email 最小接入** | 考试发布和/或结果发布的可选通知。 | P0–P4 之后 |
+| P6 | **MVP 就绪收尾** | 一份报告证明整个流程可用并列举延后能力。 | 最终批次 |
+
+---
+
+## 3. 模块 P0 — 考生作答运行时闭环
+
+### 目标
+
+考生能使用 MVP 支持的题型作答考试：
+
+- 单选
+- 多选
+- 判断
+- 填空
+- 主观长文本
+
+考生能保存、刷新、恢复、提交，并看到已提交答案被冻结。
+
+### 范围
+
+| 领域 | 要求 |
+| ---- | -------- |
+| 渲染 | 所有 MVP 题型在 `TakeExamPage` 或等价运行时组件中渲染。 |
+| 主观作答 v0 | 使用纯长文本/textarea。保留换行。不使用富文本。编码为 `type=fill_blank` + `standardAnswer=null` + `options=[]`（对现有 4 个 MVP `QuestionType` 取值的一种作答模式，不是新枚举）。参见 `job-cards-phase3-modules.md` → "主观文本作答约定 (MVP v0)"。 |
+| 自动保存 | 对每种支持的作答类型都使用既有保存协议。 |
+| 恢复 | 已保存答案在刷新/恢复后重新水合。 |
+| 提交 | 提交冻结最终答案并阻止后续编辑。 |
+| 校验 | 空/畸形的作答载荷被确定性处理。 |
+| 测试 | 组件测试 + API 测试 + 一条考生 E2E happy path。 |
+
+### 非目标
+
+- 富文本编辑器
+- Markdown 编辑器
+- 画图/画布作答
+- 文件上传作答
+- AI 评分
+- 批量答案保存
+- 答案加密/压缩
+
+### 完成标准
 
 ```text
-RBAC 和 Frontend State Machine 都重要，但不应该独占 Phase 3 计划。
-Answer Protocol、Final Barrier、Question Versioning、Exam Lifecycle 是更底层的考试正确性基础。
+考生能打开发布的考试，作答客观题与主观文本题，
+刷新页面，看到答案被恢复，提交一次，且提交后无法修改最终答案。
 ```
 
----
+### 派生 Middle Job
 
-## 1. Phase 3 Strategy
-
-| Job Size | Current Status | Usage |
-| -------- | -------------- | ----- |
-| **Small** | Completed baseline | 新 Large 需要事实审计时再新增 |
-| **Middle** | Active implementation unit | 可以独立施工、测试、合并 |
-| **Large** | Design backlog | 先 grillme / ADR / spec，再拆 Middle |
-
-### Job size rules
-
-- **Small Jobs** are low-risk documentation, audit, checklist, or narrow-scope fix tasks. They can be done at any time and merged quickly.
-- **Middle Jobs** are bounded implementation units with clear scope, tests, and non-goals. They can be developed in a feature branch and merged to master independently.
-- **Large Jobs** are architecture-heavy design units. They must NOT be directly implemented. Each Large Job must first produce an ADR, spec, permission matrix, or state diagram. Only after the design is accepted can it be拆成 Middle Jobs for implementation.
+| ID | 作业 | 产出 |
+| -- | --- | ------ |
+| P3-MOD-P0-1 | 考生作答渲染审计 | 每个题型的精确运行时缺口清单 |
+| P3-MOD-P0-2 | 主观文本作答 v0 | textarea 运行时 + 保存/恢复/提交支持 |
+| P3-MOD-P0-3 | 提交冻结 UI 证明 | UI 禁用态 + 后端冲突证明 |
+| P3-MOD-P0-4 | 考生作答 E2E | 完整考生作答 happy path |
 
 ---
 
-## 2. Completed Small Jobs
+## 4. 模块 P1 — 人工评分闭环
 
-All Small Jobs from the initial Phase 3 batch are completed.
+### 目标
 
-| ID | Job | Output | Status |
-| -- | --- | ------ | ------ |
-| S1 | Phase 3 README scaffold | `docs/phase3/README.md` (note: file not yet created; verify during closeout) | Completed |
-| S2 | Phase 3 plan | `docs/phase3/plan.md` | Completed |
-| S3 | Current role check audit | `docs/phase3/audit/audit-current-role-checks.md` | Completed |
-| S4 | Current grading API audit | `docs/phase3/audit/audit-current-grading-api.md` | Completed |
-| S5 | Current Redis usage audit | `docs/phase3/audit/audit-current-redis.md` | Completed |
-| S6 | Current audit event map | `docs/phase3/audit/audit-current-events.md` | Completed |
-| S7 | Current candidate runtime audit | `docs/phase3/audit/audit-current-candidate-runtime.md` | Completed |
-| S8 | Current answer payload audit | `docs/phase3/audit/audit-current-answer-payload.md` | Completed |
-| S9 | E2E parallelization constraints audit | `docs/phase3/audit/audit-e2e-parallelization.md` | Completed |
-| S10 | Large grillme question list | `docs/phase3/grillme-question-list.md` | Completed |
+教师/阅卷员能为包含主观文本作答的已提交 attempt 评分。
 
-Small Jobs are removed from the active execution queue. They will only be re-opened if a new Large Job requires a fresh fact-finding audit that the existing documents do not cover.
+### 范围
 
----
+| 领域 | 要求 |
+| ---- | -------- |
+| 队列 | 已提交/待人工的 attempt 出现在评分队列。 |
+| 详情 | 评分详情展示题干、考生作答、适用的标准答案、满分、当前分。 |
+| 作答渲染 | 主观文本保留换行，且为安全的纯文本。 |
+| 打分录入 | 阅卷员能保存主观题得分。 |
+| 收尾 | 在所有必需得分齐备后，attempt 可进入 graded/最终状态。 |
+| 审计 | 打分录入与收尾事件被发出。 |
+| 测试 | API + Web 测试 + 从考生提交到阅卷员收尾的 E2E。 |
 
-## 3. Completed / Mostly Completed Middle Jobs
+### 非目标
 
-| ID | Job | Status | Notes |
-| -- | --- | ------ | ----- |
-| M1 | Manual grading candidate-answer visibility | **Needs verification** | Grading detail page already shows candidate answer (`GradingDetailPage.tsx:209`). Verify if full scope (API contract + frontend rendering + tests) is complete. |
-| M3 | Email outbox backend | **Completed** | Outbox table + migration, repo, 3 senders (Disabled/Fake/Smtp), retry policy, `sanitizeEmailError`, `EmailNotificationService`, `EmailOutboxService.processDueEmails`, `POST /api/email/test`, full test suite. See `docs/phase3/emails/email.md` §Status for remaining gaps (business integration, worker daemon, `users.email` column). |
-| M8 | Email send failure retry tests | **Completed** | `apps/api/src/email/outboxService.test.ts` covers pending→sent / pending→retry / pending→failed at maxAttempts, single-failure-no-block, disabled-sender drains to sent, injected clock, secret-scrub into `lastError`. Also covered by `retryPolicy.test.ts`, `sanitizeError.test.ts`, `notificationService.test.ts`. |
+- 匿名评分
+- 多阅卷员仲裁
+- 评分细则构建器
+- 行内标注
+- 耗时跟踪
+- 超出纯文本的富作答渲染
 
-Do not claim completion for items that have not been verified against the codebase. Use "Needs verification" for uncertain status.
-
----
-
-## 4. Active Middle Job Backlog
-
-These Middle Jobs remain actionable and can be developed independently.
-
-| ID | Job | Current Recommendation |
-| -- | --- | ---------------------- |
-| M2 | Redis health / fallback / diagnostics | **Active.** Redis integration exists; verify health check and fallback coverage. |
-| M4 | Audit / monitoring event expansion v0 | **Active.** First batch of Phase 3 events (grading, force-submit, email, Redis). |
-| M5 | Diagnostics infrastructure status | **Active.** System diagnostics page should show Redis / email / worker status. (Email M3 is complete — this no longer depends on it; depends only on wiring the existing outbox/redis status into the diagnostics surface.) |
-| M6 | Grading answer rendering tests | **Active.** Tests for candidate answer display in grading page. Depends on M1 verification. |
-| M7 | Redis unavailable fallback tests | **Deferred (N/A for Phase 1).** Audit (`docs/phase3/audit/audit-redis-fallback-guard-m7.md`) found Redis is diagnostics-only (one read-only `ping()`); no exam-state code path touches Redis, so "PG state unaffected by Redis failure" holds by construction. Existing candidate tests already run Redis-absent. Re-open when Redis gains heartbeat/presence/rate-limit-store/exam-state responsibility. |
-| M9 | Proctor incident event logging v0 | **Active but scoped.** Lightweight incident recording only. Do NOT expand to full proctor authority. |
-| M10 | CI / E2E parallelization readiness report | **Active.** Documentation task; no code changes. |
-| M11 | Phase 3 readiness closeout report | **Deferred to batch closeout.** Generate after first Middle batch completes. |
-
-> **Note on M8.** Email send failure retry tests are complete (see §3). M8 is
-> removed from the active backlog. The next email-adjacent work is **not** a
-> Middle Job under the current numbering — it is either (a) L15 Notification /
-> Email Policy (Large, deferred) or (b) targeted business-integration /
-> worker-daemon Middle Jobs to be defined when a real email trigger (password
-> reset, invitation, result release) enters scope.
-
-### Middle Job principles
-
-- Each Middle Job must have clear scope, non-goals, required tests, and review standards.
-- Middle Jobs should be merged to master independently; do not batch multiple Middle Jobs in one PR.
-- Migration-only Middle Jobs (e.g., M3) must be merged on a separate branch to avoid migration conflicts.
-
----
-
-## 5. Complete Large Job Queue
-
-Large Jobs are architecture-heavy design units. They must NOT be directly implemented.
+### 完成标准
 
 ```text
-Large Job 不直接施工。
-Large Job 必须先 grillme / ADR / matrix / spec / state diagram。
-Large Job 完成设计后，再拆成 Middle Job 落地。
+已提交的主观文本作答出现在评分 UI 中，
+阅卷员能打分、完成评分，结果变得可计算。
 ```
 
-| ID | Large Job | Status | Why Large | Expected Output |
-| -- | --------- | ------ | --------- | --------------- |
-| L1 | Teacher / Proctor / Grader Account Model | **Design accepted; foundation merged.** Account/role infrastructure (6-role `RoleKey`, `userRoleAssignments` table + repo + `roleAssignments.ts` API, `users.role` sync, frontend nav, SYSTEM actor) merged via PR #149–#153. Remaining work is enforcement refinement (resolver-wiring), tracked as Middle — not new Large design. | 账号、身份、角色、scope 关系复杂 | account model ADR |
-| L2 | Backend Permission Model | **Design accepted; foundation merged; enforcement partial.** ADR + permission matrix accepted; catalog/presets/registry/shadow/scope-resolver-contract merged (M1–M6, AUDIT-M1/2). `requireCapability` flipped on 11 routes. **Open Middle work (not Large design):** wire scope resolvers into request path + flip remaining ~50 `requireRole` routes per-domain (RBAC-M10-finish, see `RBAC-JOB-QUEUE.md`). | 影响所有敏感 API，不能用简单 role string | permission matrix / RBAC ADR |
-| L3 | Custom Role / Custom RBAC | Later | 极容易过度设计，Phase 3 只预留 | custom role ADR |
-| L4 | Answer Protocol v2 | **Priority** | 影响保存、提交、评分、审计、前端状态机 | answer protocol spec |
-| L5 | WYSIWYG Submit / Final Answer Barrier | **Priority** | 需要证明学生看到的最终答案等于后端冻结答案 | final barrier ADR |
-| L6 | Frontend Exam State Machine | Deferred (ADR-009 started) | 涉及保存、提交、断线、恢复、deadline、force submit | state machine spec |
-| L7 | Proctor Runtime Authority Boundary | **Priority** | 决定监考员能看什么、能操作什么、不能做什么 | proctor authority matrix |
-| L8 | UI Design / Workbench UI Contract | Deferred | 影响整站视觉、组件语义、表格/表单/状态表达 | UI contract |
-| L9 | Audit / Monitoring Full Event Taxonomy | **Priority** | 涉及追责、观测、隐私、事件分层 | event taxonomy ADR |
-| L10 | E2E Full Parallelization Implementation | Later | 涉及 DB 隔离、seed 隔离、worker 隔离 | E2E isolation ADR |
-| L11 | Subjective / Rich Text / Drawing Answer Architecture | **Priority** | 涉及主观题、富文本、画图、附件答案结构 | subjective answer ADR |
-| L12 | Tenant / Organization / School Scope Model | **Priority** | 影响账号、权限、考试归属、数据隔离 | tenant scope ADR |
-| L13 | Exam Lifecycle State Model | **Priority** | 定义 draft/published/open/closed/canceled/archived 合法流转 | lifecycle state ADR / diagram |
-| L14 | Result Visibility / Release Policy | **Priority** | 影响成绩发布、复核、学生可见性 | result release policy ADR |
-| L15 | Notification / Email Policy | New / Later | 邮箱后端完成后，需要决定触发规则、模板、隐私、重试策略 | notification policy ADR |
-| L16 | Question Bank / Paper Versioning Model | **New / High Priority** | 决定发布后题目修改、试卷快照、评分版本依据 | paper versioning ADR |
-| L17 | Import / Export / Bulk Operation Contract | New / Later | 涉及批量导入导出、错误报告、权限、审计 | import/export contract |
-| L18 | Deployment / On-Prem Ops Contract | New / Later | LAN/on-premise 部署需要配置、备份、诊断、升级策略 | ops contract |
-| L19 | Data Retention / Privacy / Audit Redaction | New / Later | 涉及答案、日志、邮件、审计记录保存和脱敏 | retention/privacy ADR |
-| L20 | Reporting / Analytics / Score Statistics Model | New / Later | 成绩统计、报表、导出、排名策略 | reporting model ADR |
+### 派生 Middle Job
 
-### Why L16 is high priority
-
-Question Bank / Paper Versioning must be designed before Answer Protocol v2, because answer payloads must reference stable question and paper versions. Without versioning, answer snapshots and grading comparisons become ambiguous when questions are edited after exam publication.
-
-### Why L13 is high priority
-
-Exam Lifecycle State Model defines the legal state transitions for exams (draft → published → open → closed → canceled → archived). This is a prerequisite for Admin Exam Operation Machine (ADR-009 PR 5) and for Proctor authority boundary (L7). It must not be conflated with the frontend interaction state machine (L6).
-
-### Why L15 is not current priority
-
-Email backend / outbox infrastructure is already completed. L15 (Notification / Email Policy) becomes relevant only when the project is ready to define which events trigger emails, what templates are used, and what privacy constraints apply. This is a product policy decision, not a technical foundation.
+| ID | 作业 | 产出 |
+| -- | --- | ------ |
+| P3-MOD-P1-1 | 人工评分 API/UI 证明 | 考生作答展示 + 打分保存/收尾测试（合并了早先的渲染验证与打分保存/收尾作业） |
+| P3-MOD-P1-2 | 主观评分 E2E | 考生提交 → 阅卷员打分 → 已评分 attempt |
 
 ---
 
-## 6. Large Job Priority Groups
+## 5. 模块 P2 — 考试命题闭环
 
-### Group A — Exam Correctness Foundation
+### 目标
 
-These jobs define "what is the exam content, how answers are saved, what is frozen at final submission, how exam states flow, and when results become visible." They are the foundation for state machines, proctoring, grading, and auditing.
+教师能从 UI 创建可用考试并发布给考生。
 
-| ID | Large Job | Priority |
-| -- | --------- | -------- |
-| L16 | Question Bank / Paper Versioning Model | **1st** |
-| L4 | Answer Protocol v2 | **2nd** |
-| L5 | WYSIWYG Submit / Final Answer Barrier | **3rd** |
-| L13 | Exam Lifecycle State Model | **4th** |
-| L14 | Result Visibility / Release Policy | **5th** |
+### 范围
 
-### Group B — Authority / Scope / Security Foundation
+| 领域 | 要求 |
+| ---- | -------- |
+| 题目创建 | 教师/Admin 能创建 MVP 题型。 |
+| 试卷组装 | 教师/Admin 能为一份试卷选题。 |
+| 考试设置 | 时间窗口、时长/截止时间、结果发布模式可配置。 |
+| 发布 | 发布的考试对被分配/合格的考生可见。 |
+| 快照 | attempt 创建使用稳定的题目快照。 |
+| 测试 | 命题流程测试 + 一条从命题到考生可见的 E2E。 |
 
-These jobs define "who can do what, in what scope." Custom RBAC is deferred; first stabilize built-in roles.
+### 非目标
 
-| ID | Large Job | Priority |
-| -- | --------- | -------- |
-| L12 | Tenant / Organization / School Scope Model | 6th |
-| L1 | Teacher / Proctor / Grader Account Model | 7th |
-| L2 | Backend Permission Model | 8th |
-| L7 | Proctor Runtime Authority Boundary | 9th |
-| L3 | Custom Role / Custom RBAC | Deferred |
+- 随机出卷
+- 题目标签/分类
+- 题目版本历史 UI
+- 批量导入/导出重设计
+- 考试模板/克隆
 
-### Group C — Runtime / Frontend / UI
+### 完成标准
 
-Frontend State Machine depends on Answer Protocol, Final Barrier, and Exam Lifecycle conclusions. UI Contract can be designed in parallel but must not block exam correctness foundation.
+```text
+教师能创建题目、创建考试、挂载题目、发布，
+而考生能开始由此产生的考试。
+```
 
-| ID | Large Job | Priority |
-| -- | --------- | -------- |
-| L9 | Audit / Monitoring Full Event Taxonomy | 10th |
-| L6 | Frontend Exam State Machine | 11th |
-| L11 | Subjective / Rich Text / Drawing Answer Architecture | 12th |
-| L8 | UI Design / Workbench UI Contract | Parallel |
+### 派生 Middle Job
 
-### Group D — Ops / Scale / Productization
-
-These jobs become relevant after the core exam correctness and authority foundations are stable.
-
-| ID | Large Job | Priority |
-| -- | --------- | -------- |
-| L10 | E2E Full Parallelization Implementation | Later |
-| L15 | Notification / Email Policy | Later |
-| L17 | Import / Export / Bulk Operation Contract | Later |
-| L18 | Deployment / On-Prem Ops Contract | Later |
-| L19 | Data Retention / Privacy / Audit Redaction | Later |
-| L20 | Reporting / Analytics / Score Statistics Model | Later |
+| ID | 作业 | 产出 |
+| -- | --- | ------ |
+| P3-MOD-P2-1 | 命题 UI 流程审计 | 缺失页面/API/契约缺口 |
+| P3-MOD-P2-2 | MVP 题目创建测试 | 客观题 + 主观文本题测试 |
+| P3-MOD-P2-3 | 考试发布到考生 E2E | 教师发布 → 考生看到考试 |
 
 ---
 
-## 7. Dependency Notes
+## 6. 模块 P3 — 结果发布闭环
+
+### 目标
+
+结果按配置的发布策略发布，考生只看到被允许看到的内容。
+
+### 范围
+
+| 领域 | 要求 |
+| ---- | -------- |
+| 立即模式 | 纯客观题考试若如此配置，可立即揭示结果。 |
+| 评分后模式 | 混合/主观题考试在评分完成后揭示结果。 |
+| 手动模式 | 结果在显式发布前保持隐藏。 |
+| 考生视图 | 考生看到自己的分数/通过状态，除非策略允许否则看不到标准答案。 |
+| Admin/Teacher 视图 | Admin/Teacher 能查看可计算的结果。 |
+| 测试 | E2E 至少覆盖评分后或手动模式。 |
+
+### 非目标
+
+- 申诉/争议
+- PDF 成绩单
+- 定时结果发布
+- 排名/统计/报表看板
+- 本模块不做邮件通知
+
+### 完成标准
 
 ```text
-L16 Question Bank / Paper Versioning Model
-  should be done BEFORE L4 Answer Protocol v2,
-  because answer payloads must reference stable question/paper versions.
+评分完成且发布策略允许后，
+考生能查看自己的结果，且看不到被隐藏的标准答案。
 ```
 
-```text
-L4 Answer Protocol v2
-  is a prerequisite for L5 Final Barrier,
-  because the final answer freeze mechanism depends on the answer payload contract.
-```
+### 派生 Middle Job
+
+| ID | 作业 | 产出 |
+| -- | --- | ------ |
+| P3-MOD-P3-1 | 结果可见性 E2E | 手动或评分后的结果发布流程 |
+| P3-MOD-P3-2 | 考生作答/标准答案泄漏测试 | 考生结果剔除受保护字段 |
+| P3-MOD-P3-3 | Admin/Teacher 结果视图验证 | 授权员工视图保持可用 |
+
+---
+
+## 7. 模块 P4 — RBAC MVP 切换
+
+### 目标
+
+RBAC 应服务于 MVP 流程，而非主导它。第一次切换只需三个角色：
+
+| 角色 | MVP 职责 |
+| ---- | ------------------ |
+| Admin | 全系统管理，兼兼容兜底。 |
+| Teacher | 题目/考试命题、评分、结果发布。**Teacher 是单租户/私有化部署内的全局角色。** |
+| Candidate | 开始被分配的考试、作答、提交、查看自己的结果。 |
+
+### 范围
+
+| 领域 | 要求 |
+| ---- | -------- |
+| 路由规划 | 仅针对 MVP 路由的逐域迁移计划。 |
+| 后端落地 | 仅在需要 MVP 角色行为处，用 `requireCapability` 替换 legacy `requireRole`。 |
+| 作用域 | 仅使用 Teacher/Candidate 所需的最小归属/分配校验。 |
+| 前端门控 | 仅隐藏/禁用明显未授权的 MVP 入口。 |
+| Shadow 模式 | 迁移期间继续使用 shadow 比对。 |
+| 测试 | Admin/Teacher/Candidate 的允许/禁止路径权限测试。 |
+
+> **MVP 作用域约束：** Teacher 是全局角色。Candidate 只看到自己的 attempt/结果（`own_attempt` / `own_score`）。**无租户作用域、无课程作用域、无 `teacher_exam_assignments`、无 scoped 角色派单（如 teacher@course、proctor@exam）、无自定义角色、无 Proctor 角色激活。** 后端仍是安全真相源；前端导航门控仅为 UX。
+
+### 非目标
+
+- Proctor 角色激活
+- 独立 Grader 角色激活
+- 自定义角色
+- 完整租户/学校层级
+- 细粒度前端能力框架
+- 在一个 PR 内迁移全部 legacy admin 路由
+
+### 完成标准
 
 ```text
-L6 Frontend Exam State Machine
-  depends on L4 Answer Protocol v2,
-  L5 Final Barrier,
-  and L13 Exam Lifecycle State Model.
-  ADR-009 is the adoption strategy; runtime integration waits for these conclusions.
+Admin、Teacher、Candidate 各自能完成其 MVP 职责，
+且对 MVP 路由的未授权访问被后端落地拒绝。
 ```
 
-```text
-L7 Proctor Runtime Authority Boundary
-  depends on L1 Account Model,
-  L2 Backend Permission Model,
-  and L13 Exam Lifecycle State Model.
-```
+### 派生 Middle Job
+
+| ID | 作业 | 产出 |
+| -- | --- | ------ |
+| P3-MOD-P4-1 | MVP RBAC 路由矩阵 | 路由 → 能力 → 角色 → 作用域的表 |
+| P3-MOD-P4-2A | 评分路由切换 | 评分路由迁移到 `requireCapability` |
+| P3-MOD-P4-2B | 题目 CRUD 路由切换 | 题目路由迁移到 `requireCapability` |
+| P3-MOD-P4-2C | 考试命题/生命周期路由切换 | MVP Teacher 考试路由迁移到 `requireCapability` |
+| P3-MOD-P4-3 | 考生路由保护验证 | 考生专属访问与归属校验测试 |
+| P3-MOD-P4-4 | 前端导航门控最小通过 | 隐藏不可能的入口；后端仍是真相源 |
+
+---
+
+## 8. 模块 P5 — Email 最小接入
+
+### 目标
+
+仅在核心流程稳定后，复用既有 outbox 做最小产品通知。
+
+### 候选 MVP 触发点
+
+| 触发点 | 优先级 | 备注 |
+| ------- | -------- | ----- |
+| 结果发布 | 高 | P3 稳定后有用。 |
+| 考试发布/分配可用 | 中 | 有用但非 LAN/私有化 MVP 必需。 |
+| 密码重置/邀请 | 视情况 | 仅在 auth/账户流程需要时。 |
+
+### 范围
+
+| 领域 | 要求 |
+| ---- | -------- |
+| 触发点规格 | 明确的事件、收件人来源、模板、隐私约束。 |
+| 业务调用方 | 仅一两个显式调用点。 |
+| 模板 v0 | 纯 zh-CN 文本主题/正文。 |
+| Worker 行为 | 决定手动触发 vs 守护进程；不要静默引入后台行为。 |
+| 测试 | 真实业务动作下 outbox 行入队。 |
+
+### 非目标
+
+- 复杂模板引擎
+- 邮件偏好中心
+- 通知历史 UI
+- 诊断告警邮件
+- Proctor/事件通知
+- 超出所需触发点的新邮件 schema 类型
+
+### 完成标准
 
 ```text
-L14 Result Visibility / Release Policy
-  depends on L13 Exam Lifecycle
-  and interacts with L2 Permission Model.
-```
-
-```text
-L11 Subjective / Rich Text / Drawing Answer Architecture
-  depends on L4 Answer Protocol v2
-  and L16 Paper Versioning.
-```
-
-```text
-L15 Notification / Email Policy
-  depends on completed Email Outbox backend (M3),
-  L9 Event Taxonomy,
-  and L14 Result Release Policy.
-```
-
-```text
-L12 Tenant / Organization / School Scope Model
-  is independent of Group A but must be designed before L1 Account Model
-  and L2 Permission Model, because scope determines role boundaries.
+一个真实业务事件能通过既有 outbox 入队最小邮件通知，
+而不使核心考试事务依赖 SMTP 可用性。
 ```
 
 ---
 
-## 8. Recommended Next Large Design Order
+## 9. 模块 P6 — MVP 就绪收尾
+
+### 目标
+
+产出一份收尾报告，证明 Phase 3 MVP 模块闭环。
+
+### 必需证据
+
+| 证据 | 要求 |
+| -------- | -------- |
+| 完整 MVP E2E | 教师创建/发布 → 考生作答/提交 → 教师评分 → 结果发布 → 考生查看结果 |
+| 后端测试 | 保存/提交/冻结/评分/结果权限路径 |
+| 前端测试 | 考生运行时、评分详情、结果视图 |
+| 权限测试 | Admin/Teacher/Candidate 的允许/禁止行为 |
+| 审计证明 | publish、start、save、submit、grade、release 关键事件被发出 |
+| 延后清单 | 显式搁置的能力及原因 |
+| 已知限制 | 仅纯文本主观题；无 proctor 权限；无富文本/上传 |
+
+---
+
+## 10. 已完成/强基础设施
+
+这些能力应被视为可用的构建块。除非模块需要，否则不要再继续扩张。
+
+| 能力 | 状态 | 计划决策 |
+| ---------- | ------ | ------------- |
+| 答案保存协议 | 强 | 在 P0 中使用；除非 E2E 暴露真实缺口，否则不要重设计为 L4 v2。 |
+| 提交冻结屏障 | 强 | 通过 P0/P1 E2E 证明；默认不要发起 L5 新设计。 |
+| 考试生命周期命令 | 足够强 | 在 P2/P3 中使用；除非生命周期歧义阻塞模块闭环，否则不发起 L13。 |
+| 题目快照 | 足够强 | 在 P2 中使用；延后完整题目版本化。 |
+| 结果可见性模式 | 足够强 | 在 P3 中验证；延后申诉/导出/定时发布。 |
+| 人工评分引擎 | 强后端 | 在 P1 中闭环前端/E2E。 |
+| 审计基础设施 | 强 | 仅补充模块所需事件。 |
+| 诊断 | 强 | 保留为运维面；不再随机扩张诊断。 |
+| Email outbox | 强基础设施 | 仅在 P0–P4 之后接入最小触发点。 |
+| Redis 插件 | 仅诊断 | 保持业务逻辑 Redis 无关。 |
+| RBAC catalog/shadow 模式 | 强基础 | 先只切换 MVP 路由。 |
+
+---
+
+## 11. 退役的旧活动 Middle Backlog
+
+旧计划列出了诸如 Redis 诊断、审计事件扩张、诊断基础设施、评分渲染测试、Proctor 事件日志、收尾报告等 Middle Job 作为持续队列。现在这些作为主执行模型退役。
+
+| 旧作业 | 新处理 |
+| ------- | ------------- |
+| M2 Redis 健康/降级/诊断 | 仅诊断；除非故障否则无新工作。 |
+| M4 审计/监控事件扩张 v0 | 仅添加模块闭环所要求的审计事件。 |
+| M5 诊断基础设施状态 | 除非验证发现回归，否则视为完成/强。 |
+| M6 评分作答渲染测试 | 并入 P1 人工评分闭环。 |
+| M7 Redis 不可用降级测试 | Redis 仅诊断时保持 N/A。 |
+| M8 Email 重试测试 | 已完成；不再活跃。 |
+| M9 Proctor 事件日志 v0 | 搁置；除非已合并，否则不属于 MVP 闭环。 |
+| M10 CI/E2E 并行化就绪 | 之后；不阻塞 MVP 模块 E2E。 |
+| M11 Phase 3 就绪收尾 | 被 P6 MVP 就绪收尾取代。 |
+
+---
+
+## 12. 重新分类的 Large Job
+
+Large Job 不再是主执行队列。仅在模块无法安全推进、必须做架构决策时才开启 Large 设计。
+
+### 阻塞/模块本地设计
+
+| 旧 ID | 设计 | 新状态 |
+| --------- | ------ | ---------- |
+| L11 | 主观/富文本/画图作答架构 | 拆分：**纯主观文本 v0 属于 P0 Middle**，富文本/画图/上传延后。 |
+| L2 | 后端权限模型 | 基础已接受；**MVP 路由切换属 P4 Middle**。 |
+| L1 | Teacher/Proctor/Grader 账户模型 | 收敛到 Admin/Teacher/Candidate MVP；Proctor/Grader 专业化延后。 |
+| L14 | 结果可见性/发布策略 | 使用既有模式；在 P3 中验证，先不做新设计。 |
+
+### 延后设计
+
+| 旧 ID | 设计 | 延后至 |
+| --------- | ------ | -------------- |
+| L3 | 自定义角色/自定义 RBAC | 待 MVP 角色在类生产流程中可用后。 |
+| L7 | Proctor 运行时权限边界 | 待 P4 RBAC MVP 切换之后。 |
+| L8 | UI 设计/工作台 UI 契约 | 仅并行；绝不可阻塞 P0–P3。 |
+| L10 | E2E 全量并行化实施 | 待 MVP E2E 存在并稳定后。 |
+| L12 | 租户/组织/学校作用域模型 | 多校部署之前，非 MVP 闭环之前。 |
+| L15 | 通知/邮件策略 | 待 P3/P4 之后；先用 P5 最小接入。 |
+| L16 | 题库/试卷版本化模型 | 待 MVP 命题暴露快照缺口后。 |
+| L17 | 导入/导出/批量操作契约 | 待命题 MVP 之后。 |
+| L18 | 部署/私有化运维契约 | 待 MVP 流程可演示后。 |
+| L19 | 数据留存/隐私/审计脱敏 | 合规阶段。 |
+| L20 | 报表/分析/分数统计模型 | 产品化阶段。 |
+
+### 设计升级规则
 
 ```text
- 1. L16 Question Bank / Paper Versioning Model
- 2. L4  Answer Protocol v2
- 3. L5  WYSIWYG Submit / Final Answer Barrier
- 4. L13 Exam Lifecycle State Model
- 5. L14 Result Visibility / Release Policy
- 6. L12 Tenant / Organization / School Scope Model
- 7. L1  Teacher / Proctor / Grader Account Model
- 8. L2  Backend Permission Model
- 9. L7  Proctor Runtime Authority Boundary
-10. L9  Audit / Monitoring Full Event Taxonomy
-11. L6  Frontend Exam State Machine
-12. L8  UI Design / Workbench UI Contract
+不要因为某个话题重要就开启 Large Job。
+仅当某个具体模块离不开该设计才能继续时，才开启 Large Job。
 ```
 
-**Rationale:**
+---
 
-- RBAC is important but does not need to be designed first. Exam correctness foundation (answer protocol, final barrier, lifecycle) must be solid before layering permission complexity on top.
-- Frontend State Machine has ADR-009 (Proposed) but runtime integration depends on L4/L5/L13 conclusions. The adoption strategy is settled; the design inputs are not.
-- Email backend is completed, so L15 is not a current Large priority unless notification policy becomes a product requirement.
+## 13. 近期执行计划
+
+### Step 0 — 替换计划
+
+- 用本模块闭环计划替换旧 `docs/phase3/plan.md`。
+- 在任意旧 job-card 索引中加一条短注：能力优先队列已退役。
+- 保留旧审计文档作参考；不要删除。
+
+### Step 1 — 启动 P0
+
+从以下开始：
+
+```text
+P3-MOD-P0-1 考生作答渲染审计
+P3-MOD-P0-2 主观文本作答 v0
+```
+
+首个 PR 的验收应狭窄：
+
+- 除非必需，否则不做 schema 重设计
+- 不做富文本
+- 不做文件上传
+- 不引入状态机库
+- 文本作答保存/恢复/提交的测试
+
+### Step 2 — 立即推进 P1
+
+在考生文本作答可用之后：
+
+```text
+P3-MOD-P1-1 人工评分 API/UI 证明
+P3-MOD-P1-2 主观评分 E2E   （在考生主观作答可用之后）
+```
+
+### Step 3 — 闭环命题与结果流程
+
+然后：
+
+```text
+P3-MOD-P2-3 考试发布到考生 E2E
+P3-MOD-P3-1 结果可见性 E2E
+```
+
+### Step 4 — RBAC MVP 切换
+
+仅在流程存在之后：
+
+```text
+P3-MOD-P4-1  MVP RBAC 路由矩阵
+P3-MOD-P4-2A 评分路由切换
+P3-MOD-P4-2B 题目 CRUD 路由切换
+P3-MOD-P4-2C 考试命题/生命周期路由切换
+P3-MOD-P4-3  考生路由保护验证
+```
+
+### Step 5 — 可选 Email 最小接入
+
+在结果发布稳定之后：
+
+```text
+P3-MOD-P5-0 邮件收件人来源 + outbox 入队设计 v0
+P3-MOD-P5-1 结果发布邮件触发 v0   （依赖 P5-0）
+```
 
 ---
 
-## 9. Near-Term Execution Plan
+## 14. 下一步不要做的事
 
-### Track 1 — Middle Closeout
-
-Continue merging determined Middle Jobs to master:
-
-- M2 Redis health / fallback / diagnostics
-- M4 Audit / monitoring event expansion v0
-- M5 Diagnostics infrastructure status
-- M6 Grading answer rendering tests
-- M7 Redis unavailable fallback tests (deferred — N/A, see §4 / audit-redis-fallback-guard-m7.md)
-- M8 Email send failure retry tests (if not yet verified)
-- M9 Proctor incident event logging v0
-- M10 CI / E2E parallelization readiness report
-- M11 Phase 3 readiness closeout report (after first batch)
-
-### Track 2 — Large Design (first wave)
-
-Begin design for the Exam Correctness Foundation group:
-
-1. L16 grillme / ADR — Question Bank / Paper Versioning
-2. L4 + L5 grillme — Answer Protocol v2 + Final Barrier
-3. L13 lifecycle state ADR — Exam Lifecycle State Model
-
-### Track 3 — Large Design (second wave)
-
-After Group A design stabilizes:
-
-4. L12 grillme — Tenant / Scope Model
-5. L1 grillme — Account Model
-6. L2 permission matrix — Backend Permission Model
-7. L7 proctor authority matrix — Proctor Runtime Authority
-
-### Track 4 — Deferred Heavy Work
-
-These are explicitly deferred and should not be started until the foundations above are designed:
-
-- RBAC scope-resolver wiring (RBAC-M10-finish) — per-domain Middle Jobs; do NOT wire resolvers or flip remaining routes without a per-route plan (see `RBAC-JOB-QUEUE.md`)
-- Frontend state machine runtime integration (ADR-009 PR 4)
-- UI full redesign
-- E2E full parallelization implementation
-- Custom RBAC (L3)
-- Notification / email policy (L15)
-- Import/export contract (L17)
-- Deployment ops contract (L18)
-- Data retention / privacy (L19)
-- Reporting / analytics (L20)
+- **不要**仅因为基础设施存在就继续随机 Middle Job。
+- **不要**把 Proctor 扩展为派单、权限动作、WebSocket/SSE 或事件生命周期。
+- **不要**把 Redis 加入考生/考试/评分业务路径。
+- **不要**在 MVP 中为主观作答做富文本、画图或文件上传。
+- **不要**在 P0 暴露具体阻塞前重设计答案协议。
+- **不要**在 P2/P3 暴露具体阻塞前重设计考试生命周期。
+- **不要**在 Admin/Teacher/Candidate MVP 路由矩阵被接受前尝试完整 RBAC 迁移。
+- **不要**在选定最小业务触发点前构建邮件模板/守护进程/偏好中心。
+- **不要**在一个 PR 内同时改前端运行时、后端权限、迁移和状态机。
+- **不要**把前端隐藏当作安全；后端落地仍是真相源。
+- **不要**把诊断/审计/proctor/redis 当作 MVP 阻塞项，除非它们破坏核心流程。
 
 ---
 
-## 10. What Not To Do Next
+## 15. 计划维护规则
 
-- Do NOT wire RBAC scope resolvers into the request path or flip remaining `requireRole` routes without a per-domain RBAC-M10-finish plan. (The foundation — catalog, presets, registry, shadow, resolvers, 11 flipped routes — is merged; the remaining work is incremental enforcement, not a fresh start. See `docs/phase3/rbac/RBAC-JOB-QUEUE.md`.)
-- Do NOT directly rewrite TakeExamPage or other exam pages.
-- Do NOT introduce XState or other state machine libraries.
-- Do NOT directly change the answer protocol without L4 design.
-- Do NOT directly implement rich text / drawing answers without L11 design.
-- Do NOT expand email backend into a complex notification system (no business integration / templates / worker daemon until L15 policy or a scoped Middle Job defines the trigger).
-- Do NOT混入 Large Job 设计到 Middle PR 中. Each Middle Job must be independently scoped.
-- Do NOT combine migration + frontend + state machine + permission in a single PR.
-- Do NOT claim Exam Lifecycle State Model is covered by ADR-009. ADR-009 covers frontend interaction state machines only.
-
----
-
-## 11. Plan Maintenance Rules
-
-- **Large Job addition**: Any new Large Job must enter the L queue with a clear explanation of why it is Large (architecture-heavy, cross-cutting, or high-risk). Do not inflate Middle Jobs into Large Jobs.
-- **Large Job implementation**: Large Jobs must NEVER be directly implemented. They must first produce an ADR, spec, matrix, or state diagram. Only after design acceptance can they be拆成 Middle Jobs.
-- **Middle Job拆分**: When a Large Job design is accepted, it must be decomposed into Middle Jobs with clear scope, non-goals, and test requirements. Each derived Middle Job gets its own ID (e.g., M12, M13, ...).
-- **Small Job re-open**: Small Jobs are only re-opened when a Large Job design phase reveals that a new fact-finding audit is needed and the existing audit documents are insufficient.
-- **Completed job tracking**: Completed Middle Jobs must be moved to the "Completed / Mostly Completed" section. Do not leave them in the active backlog.
-- **plan.md is the master plan**: Specific executable job cards belong in `docs/phase3/job-cards.md`. This document is the strategic overview, not the implementation spec.
-- **Status updates**: When a Middle Job is merged, update this document's status tables within the same PR or the next PR.
+- `docs/phase3/plan.md` 是战略计划。
+- 可执行作业卡位于 `docs/phase3/job-cards-phase3-modules.md`。早先的 `job-cards.md` / `job-cards-large.md` 已退役至 `docs/archive/phase3-archive/`。
+- 每个模块 PR 必须更新模块状态表。
+- 一个模块没有测试证据不得标记完成。
+- 一个 Large Job 未命名阻塞模块与决策不得开启。
+- 已完成基础设施应列为构建块，而非活动 backlog。
+- 延后工作必须保持延后，除非模块完成标准要求。
+- 状态标签：
+  - **Active** — 当前正在执行。
+  - **Next** — 模块队列中的下一个。
+  - **Strong** — 可用构建块。
+  - **Parked** — 有意不纳入 MVP。
+  - **Deferred** — 后续产品化/设计。
+  - **Blocked** — 未命名决策无法推进。
 
 ---
 
-## 12. ADR-009 Relationship
+## 16. ADR-009 关系
 
-ADR-009 (`docs/adr/ADR-009-frontend-state-machine-adoption.md`) covers the **frontend interaction state machine adoption strategy**:
+ADR-009 仍有用，但不应驱动即时运行时重写。
 
-- Phase A-C: reducer + transition table + tests, no XState.
-- Candidate Exam Machine is the first machine.
-- Admin Exam Operation Machine is the second machine.
-- Backend business state remains source of truth.
+ADR-009 涉及前端交互状态机采纳：
 
-ADR-009 does **NOT** cover:
+- reducer + 转换表 + 测试
+- 默认不引入 XState
+- 后端业务状态仍是真相源
 
-- Backend Exam Lifecycle State Model (this is L13).
-- Backend Answer Protocol (this is L4).
-- Backend Permission Model (this is L2).
-- Frontend RBAC / route guards (this is L6 dependency on L1/L2).
+对于新模块优先计划：
 
-L13 (Exam Lifecycle State Model) is a separate Large Job that defines the backend-side legal state transitions for exams. It must be designed independently from the frontend interaction state machine, though the frontend machine will consume the lifecycle states as read-only business state.
+| 话题 | 处理 |
+| ----- | --------- |
+| 考生前端状态机 | 仅当 P0 不引入就难以稳定时才采用。 |
+| Admin 考试运营机 | 延后到 P2 命题流程暴露状态 bug。 |
+| 后端考试生命周期 | 除非 P2/P3 暴露歧义，否则使用既有命令函数。 |
+| 答案协议 | 除非 P0/P1 暴露冻结/恢复/提交 bug，否则使用既有协议。 |
+| RBAC 前端门控 | 属于 P4，在后端路由矩阵之后。 |
+
+---
+
+## 17. 最终方向
+
+```text
+Phase 3 的下一步不是又一个基础设施 PR。
+
+Phase 3 的下一步是让 MVP 考试流程真正跑通：
+教师命题 → 考生作答 → 考生提交 → 教师评分 → 结果发布。
+```
+
+执行从以下开始：
+
+```text
+P3-MOD-P0 考生作答运行时闭环
+```
+
+第一张具体作业卡应为：
+
+```text
+P3-MOD-P0-1 考生作答渲染审计
+```
+
+然后：
+
+```text
+P3-MOD-P0-2 主观文本作答 v0
+```
+
+只有在之后，才应按顺序推进评分、命题、结果发布、RBAC 与邮件。
