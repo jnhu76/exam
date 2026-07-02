@@ -13,13 +13,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatDuration } from "@/lib/utils";
-import { getStatusMeta, getToneTextColor } from "@/lib/statusMeta";
+import {
+  getStatusMeta,
+  getToneTextColor,
+  infraStatusKey,
+} from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Activity,
   CircleAlert,
   Database,
   HardDrive,
+  Mail,
   RefreshCw,
   Server,
   Timer,
@@ -371,6 +377,82 @@ export function SystemDiagnosticsPage() {
                   label={t("diagnostics.labels.autoSubmitCount")}
                   value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
                 />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* P3-M5B: email infrastructure + outbox status. Renders only the
+              stable status/worker/outbox counts from the contract — never
+              SMTP host/user/password, recipient addresses, or email body. */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Mail className="size-4" aria-hidden="true" />
+                  {t("diagnostics.cards.emailInfrastructure")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-2 py-1.5">
+                  <span className="text-sm text-muted-foreground">
+                    {t("diagnostics.labels.emailStatus")}
+                  </span>
+                  <StatusBadge
+                    status={infraStatusKey(diag.emailStatus.status)}
+                  />
+                </div>
+                <InfoRow
+                  label={t("diagnostics.labels.emailEnabled")}
+                  value={
+                    diag.emailStatus.enabled
+                      ? t("diagnostics.labels.emailEnabled")
+                      : t("diagnostics.labels.emailDisabled")
+                  }
+                />
+                <div className="flex items-center justify-between gap-2 py-1.5">
+                  <span className="text-sm text-muted-foreground">
+                    {t("diagnostics.labels.emailWorker")}
+                  </span>
+                  <StatusBadge
+                    status={infraStatusKey(diag.emailStatus.worker.status)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Mail className="size-4" aria-hidden="true" />
+                  {t("diagnostics.cards.emailOutbox")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <InfoRow
+                  label={t("diagnostics.labels.outboxPending")}
+                  value={`${diag.emailStatus.outbox.pending}`}
+                />
+                <InfoRow
+                  label={t("diagnostics.labels.outboxSent")}
+                  value={`${diag.emailStatus.outbox.sent}`}
+                />
+                {/* Failed count is visually emphasized when > 0 (warning tone),
+                    but no new design system is introduced — reuse tone text
+                    color helpers already used elsewhere on this page. */}
+                <div className="flex items-baseline justify-between gap-2 py-1.5">
+                  <span className="text-sm text-muted-foreground">
+                    {t("diagnostics.labels.outboxFailed")}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-sm font-medium tabular-nums",
+                      diag.emailStatus.outbox.failed > 0 &&
+                        getToneTextColor("warning"),
+                    )}
+                  >
+                    {diag.emailStatus.outbox.failed}
+                  </span>
+                </div>
               </CardContent>
             </Card>
           </div>

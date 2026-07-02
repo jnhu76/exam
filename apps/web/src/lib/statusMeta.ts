@@ -148,6 +148,34 @@ export const statusMeta = {
     tone: "destructive",
     icon: CircleAlert,
   },
+  // P3-M5B: diagnostics infrastructure status vocabulary. Used by the
+  // SystemDiagnosticsPage email/worker surfaces via StatusBadge. Map the
+  // API's lower-case enum values to these keys with infraStatusKey() below.
+  infraAvailable: {
+    labelKey: "status.infra.available",
+    tone: "success",
+    icon: CheckCircle2,
+  },
+  infraDegraded: {
+    labelKey: "status.infra.degraded",
+    tone: "warning",
+    icon: CircleAlert,
+  },
+  infraUnavailable: {
+    labelKey: "status.infra.unavailable",
+    tone: "destructive",
+    icon: XCircle,
+  },
+  infraDisabled: {
+    labelKey: "status.infra.disabled",
+    tone: "muted",
+    icon: Ban,
+  },
+  infraUnknown: {
+    labelKey: "status.infra.unknown",
+    tone: "muted",
+    icon: HelpCircle,
+  },
   unknown: {
     labelKey: "status.fallback.unknown",
     tone: "muted",
@@ -192,6 +220,35 @@ export type StatusKey = keyof typeof statusMeta;
 /** Returns true if the given string is a known status key. */
 export function isStatusKey(status: string): status is StatusKey {
   return status in statusMeta;
+}
+
+/**
+ * Maps a diagnostics infrastructure status value (the API's lower-case enum:
+ * available/degraded/unavailable/disabled/unknown) to the matching statusMeta
+ * key. Used by the SystemDiagnosticsPage email/worker surfaces so they can
+ * render via `<StatusBadge status={infraStatusKey(emailStatus.status)} />`.
+ * Unknown values fall back to `infraUnknown` (fail-safe, never throws).
+ */
+export function infraStatusKey(
+  status: string,
+):
+  | "infraAvailable"
+  | "infraDegraded"
+  | "infraUnavailable"
+  | "infraDisabled"
+  | "infraUnknown" {
+  switch (status) {
+    case "available":
+      return "infraAvailable";
+    case "degraded":
+      return "infraDegraded";
+    case "unavailable":
+      return "infraUnavailable";
+    case "disabled":
+      return "infraDisabled";
+    default:
+      return "infraUnknown";
+  }
 }
 
 const toneTextColorMap: Record<StatusTone, string> = {

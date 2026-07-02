@@ -2,6 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TestContext } from "./testHelpers.js";
 import { buildTestApp } from "./testHelpers.js";
 import systemRoutes from "./system.js";
+import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
+import { emailOutbox } from "@exam/db/src/schema/pg.js";
+import { eq } from "drizzle-orm";
 
 describe("system routes", () => {
   let ctx: TestContext;
@@ -205,6 +208,11 @@ describe("system routes", () => {
       expect(typeof body.dbLatency).toBe("number");
       expect(body.dbLatency).toBeGreaterThanOrEqual(0);
 
+      /* P3-M7: explicit assertion that diagnostics degrades cleanly when Redis is absent. The test app does not register the redis plugin (fastify.redis === undefined), so the route's `if (fastify.redis)` branch is false → connected:false, latencyMs:null. Guardrail: diagnostics never breaks when Redis is down. */
+      expect(body).toHaveProperty("redisStatus");
+      expect(body.redisStatus.connected).toBe(false);
+      expect(body.redisStatus.latencyMs).toBeNull();
+
       expect(body).toHaveProperty("heartbeatStatus");
       expect(body.heartbeatStatus).toHaveProperty("interval");
       expect(body.heartbeatStatus).toHaveProperty("timeout");
@@ -246,6 +254,123 @@ describe("system routes", () => {
       expect(bodyText).not.toContain("JWT_SECRET");
       expect(bodyText).not.toContain("DATABASE_URL");
       expect(bodyText).not.toContain("password");
+      // Email surface must not leak SMTP creds or recipient addresses.
+      expect(bodyText).not.toContain("SMTP_");
+      expect(bodyText).not.toContain("recipientEmail");
+      expect(bodyText).not.toContain("bodyText");
+      expect(bodyText).not.toContain("bodyHtml");
+    });
+
+    it("reports redisStatus connected:false when redis ping throws", async () => {
+      // Inject a fake redis client whose ping() rejects, then restore. The
+      // test app does not register the redis plugin, so we decorate first.
+      const fakeThrowingRedis = {
+        ping: async () => Promise.reject(new Error("ECONNREFUSED")),
+      };
+      ctx.app.redis = fakeThrowingRedis as never;
+      try {
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.redisStatus.connected).toBe(false);
+        expect(body.redisStatus.latencyMs).toBeNull();
+      } finally {
+        ctx.app.redis = null;
+      }
+    });
+
+    // ── M5: email diagnostics surface ──────────────────────────────
+    // The test runtime has EMAIL_ENABLED=false (fake/disabled), so the
+    // diagnostics emailStatus must report "disabled" with zeroed counts.
+    it("includes emailStatus reporting disabled when email is disabled", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/system/diagnostics",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(body).toHaveProperty("emailStatus");
+      expect(body.emailStatus).toHaveProperty("status", "disabled");
+      expect(body.emailStatus).toHaveProperty("enabled", false);
+      expect(body.emailStatus).toHaveProperty("worker");
+      expect(body.emailStatus.worker).toHaveProperty("status", "disabled");
+      expect(body.emailStatus).toHaveProperty("outbox");
+      expect(body.emailStatus.outbox).toEqual({
+        pending: 0,
+        sent: 0,
+        failed: 0,
+      });
+    });
+
+    it("reports outbox counts and degraded status when email enabled + failed rows exist", async () => {
+      // Flip email ON for this test and rebuild config. The test-mode guard
+      // forces transport=fake, but `enabled` stays true — enough to exercise
+      // the route's enabled branch (it queries outbox counts regardless of
+      // transport).
+      const prevEnabled = process.env.EMAIL_ENABLED;
+      process.env.EMAIL_ENABLED = "true";
+      resetRuntimeConfigForTest();
+
+      // Seed a failed row + a sent row into the test org's outbox. We use
+      // raw insert (not the repo) so we can set terminal statuses directly.
+      const orgId = ctx.org.id;
+      const seeded: (typeof emailOutbox.$inferInsert)[] = [
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          type: "test_email",
+          recipientEmail: "a@x.com",
+          subject: "s",
+          bodyText: "t",
+          status: "failed",
+          attempts: 3,
+          maxAttempts: 3,
+          lastError: "boom",
+        },
+        {
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          type: "test_email",
+          recipientEmail: "b@x.com",
+          subject: "s",
+          bodyText: "t",
+          status: "sent",
+          attempts: 1,
+          maxAttempts: 3,
+          sentAt: new Date(),
+        },
+      ];
+      await ctx.db.insert(emailOutbox).values(seeded);
+
+      try {
+        const res = await ctx.app.inject({
+          method: "GET",
+          url: "/api/system/diagnostics",
+          cookies: { "auth-token": ctx.adminToken },
+        });
+
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.emailStatus.enabled).toBe(true);
+        // failed > 0 ⇒ degraded per the status rules.
+        expect(body.emailStatus.status).toBe("degraded");
+        expect(body.emailStatus.outbox.failed).toBeGreaterThanOrEqual(1);
+        expect(body.emailStatus.outbox.sent).toBeGreaterThanOrEqual(1);
+      } finally {
+        // Cleanup: remove seeded rows + restore env.
+        await ctx.db
+          .delete(emailOutbox)
+          .where(eq(emailOutbox.organizationId, orgId));
+        process.env.EMAIL_ENABLED = prevEnabled;
+        resetRuntimeConfigForTest();
+      }
     });
   });
 });

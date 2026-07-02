@@ -425,9 +425,27 @@ function parseStrictBool(value: string | undefined, name: string): boolean {
  * @param env - Process environment to read from.
  * @returns The resolved {@link EmailConfig}.
  */
-function resolveEmailConfig(env: NodeJS.ProcessEnv): EmailConfig {
+function resolveEmailConfig(
+  env: NodeJS.ProcessEnv,
+  opts: { isTestLike: boolean } = { isTestLike: false },
+): EmailConfig {
   const enabled = isTruthy(env.EMAIL_ENABLED);
-  const transportRaw = (env.EMAIL_TRANSPORT ?? "fake").trim();
+  let transportRaw = (env.EMAIL_TRANSPORT ?? "fake").trim();
+
+  // Test-mode hard guard: NEVER honor smtp in test/e2e/ci, even if a stale
+  // or misconfigured env says so. This prevents tests from accidentally
+  // constructing a real nodemailer transport (and potentially sending real
+  // mail via POST /api/email/test) when a dev .env with EMAIL_TRANSPORT=smtp
+  // leaks into the test runtime. See docs/phase3/emails/email-config.md §6.
+  if (opts.isTestLike && transportRaw === "smtp") {
+    // TODO: replace with the app logger once one is available at config-load
+    // time. Using stderr directly keeps this side-effect free of fastify.
+    process.stderr.write(
+      "[runtimeConfig] EMAIL_TRANSPORT=smtp ignored in test/e2e/ci mode; forcing 'fake' to prevent real SMTP/network use in tests.\n",
+    );
+    transportRaw = "fake";
+  }
+
   if (transportRaw !== "fake" && transportRaw !== "smtp") {
     throw new RuntimeConfigError(
       `EMAIL_TRANSPORT must be "fake" or "smtp" (got: ${transportRaw})`,
@@ -526,6 +544,8 @@ export function loadRuntimeConfig(
   const redisEnabled = redisUrl !== null;
   const redisKeyPrefix = env.REDIS_KEY_PREFIX ?? "";
 
+  const email = resolveEmailConfig(env, { isTestLike });
+
   return {
     app: { mode, isProduction, isTestLike },
     env: envValue,
@@ -573,7 +593,7 @@ export function loadRuntimeConfig(
       cspEnabled: true,
     },
     timezone: { timezone: resolveTimezone(env) },
-    email: resolveEmailConfig(env),
+    email,
   };
 }
 

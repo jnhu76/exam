@@ -1,5 +1,64 @@
 # M3 — Email Outbox + SMTP Backend Foundation
 
+## Status (as of 2026-07-01)
+
+> This spec body (below `## Type`) is the **design contract** for the job and
+> remains accurate. This status block records what was actually delivered and
+> what remains open, so the next optimization round starts from a true baseline.
+
+**Delivered & merged (M3 foundation + M8 retry tests):**
+
+| Capability | Evidence |
+| --- | --- |
+| Domain abstraction (`EmailMessage` / `EmailSender` / `EmailType` / `EmailOutboxRow`) | `packages/domain/src/email.ts` |
+| `email_outbox` table + migration + repo (create/findDuePending/markSent/markRetryScheduled/markFailed, all `ctx`-scoped) | `packages/db/src/schema/pg.ts` (`emailOutbox`), `packages/db/migrations/postgres/0010_calm_vivisector.sql`, `packages/db/src/repository/emailOutboxRepo.ts` |
+| 3 senders + factory (Disabled / Fake success+failure / Smtp via nodemailer) | `apps/api/src/email/senders.ts` |
+| Sanitized error (`sanitizeEmailError` + `EmailSendError`) — scrubs password/pass/bearer/authorization | `apps/api/src/email/senders.ts`, `apps/api/src/email/sanitizeError.ts` |
+| Exponential retry policy (`EMAIL_RETRY_BASE_SECONDS * 2**(attempts-1)`) | `apps/api/src/email/retryPolicy.ts` |
+| `EmailOutboxService.processDueEmails({ now, limit })` (manually-triggered; pending→sent/retry/failed, single-failure-no-block, disabled drains to sent, injectable clock) | `apps/api/src/email/outboxService.ts` |
+| `EmailNotificationService` (`enqueueEmail` / `enqueueBestEffort` swallows errors / `enqueueTestEmail`) | `apps/api/src/email/notificationService.ts` |
+| Fastify plugin (`fastify.emailSender`, `onClose` closes Smtp transporter) | `apps/api/src/plugins/email.ts` |
+| Config resolution (`EMAIL_*` / `SMTP_*`, fail-fast on bad config) | `apps/api/src/config/runtimeConfig.ts` (`resolveEmailConfig`) |
+| `POST /api/email/test` (Admin-only, cookie auth, email-validated `to`, disabled/sent/failed response) | `apps/api/src/routes/email.ts` |
+| Env docs | `.env.example` (Email block), `.env`, `.env.test.example` |
+| Tests — repo, senders, sanitize, retry, worker, notification, test-email API, config | `packages/db/src/repository/emailOutboxRepo.test.ts`, `apps/api/src/email/{senders,sanitizeError,retryPolicy,outboxService,notificationService}.test.ts`, `apps/api/src/routes/email.test.ts`, `apps/api/src/config/runtimeConfig.test.ts` |
+
+**Open gaps (the next optimization round):**
+
+1. **No business integration.** `EmailNotificationService` is never instantiated
+   by any route or service (verified: zero production call sites). No email is
+   ever enqueued in a real flow. `POST /api/email/test` sends synchronously via
+   `fastify.emailSender.send()` directly, bypassing the outbox (appropriate for a
+   connectivity probe, but it is the *only* production send path).
+2. **No worker daemon.** `processDueEmails` is called only from its own test.
+   Enqueued rows would sit in `pending` forever unless manually invoked. A
+   resident scanner (analogous to `deadlineScanner` / `heartbeat`) is deferred —
+   see the worker-trigger note in the spec body below.
+3. **No `users.email` column.** The `users` table has no email column, so
+   user-facing email features (password reset, invitation, result notification)
+   have no recipient source yet.
+4. **No password-reset / invitation / registration flows** exist anywhere
+   (verified: zero matches for `resetPassword` / `forgotPassword` / `invite` /
+   `invitation`). The `EmailType` union pre-declares `password_reset` /
+   `admin_created_user` / `registration_welcome` / `exam_notification` /
+   `grade_notification` for future use, but none are wired.
+5. **No template engine.** Bodies are inline strings (e.g. the test email's
+   literal text). This is intentional (non-goal: "复杂邮件模板系统"); revisit
+   only when L15 Notification Policy or a real trigger lands.
+
+**Recommended next steps (not yet scoped as jobs):**
+- Add `users.email` (nullable) + a guarded write path, as a prerequisite for any
+  user-facing email.
+- Introduce a resident outbox scanner (reuse the `deadlineScanner` plugin shape)
+  calling `processDueEmails` on an interval, behind `EMAIL_ENABLED`.
+- When a real trigger enters scope (password reset, invitation, result release),
+  wire the corresponding route to `EmailNotificationService.enqueueBestEffort`
+  and add the "enqueue failure does not rollback main transaction" end-to-end
+  assertion in that route's test (the business-safety contract is currently
+  covered only at the `enqueueBestEffort` unit level).
+
+---
+
 ## Type
 
 Middle+

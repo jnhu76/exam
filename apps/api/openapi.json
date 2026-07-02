@@ -17485,6 +17485,61 @@
                       "required": ["interval", "lastScanAt", "autoSubmitCount"],
                       "additionalProperties": false
                     },
+                    "emailStatus": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "available",
+                            "degraded",
+                            "unavailable",
+                            "disabled"
+                          ]
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "worker": {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "available",
+                                "degraded",
+                                "unavailable",
+                                "disabled",
+                                "unknown"
+                              ]
+                            }
+                          },
+                          "required": ["status"],
+                          "additionalProperties": false
+                        },
+                        "outbox": {
+                          "type": "object",
+                          "properties": {
+                            "pending": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "sent": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "failed": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["pending", "sent", "failed"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["status", "enabled", "worker", "outbox"],
+                      "additionalProperties": false
+                    },
                     "config": {
                       "type": "object",
                       "properties": {
@@ -17516,6 +17571,7 @@
                     "redisStatus",
                     "heartbeatStatus",
                     "deadlineScannerStatus",
+                    "emailStatus",
                     "config"
                   ],
                   "additionalProperties": false

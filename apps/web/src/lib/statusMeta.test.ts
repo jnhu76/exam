@@ -24,6 +24,24 @@ describe("statusMeta", () => {
     }
   });
 
+  it("has infrastructure status entries for diagnostics (available/degraded/unavailable/disabled/unknown)", () => {
+    // P3-M5B: the diagnostics email/worker surfaces use a stable vocabulary.
+    // These must exist as statusMeta entries so StatusBadge can render them.
+    expect(statusMeta.infraAvailable.labelKey).toBe("status.infra.available");
+    expect(statusMeta.infraDegraded.labelKey).toBe("status.infra.degraded");
+    expect(statusMeta.infraUnavailable.labelKey).toBe(
+      "status.infra.unavailable",
+    );
+    expect(statusMeta.infraDisabled.labelKey).toBe("status.infra.disabled");
+    expect(statusMeta.infraUnknown.labelKey).toBe("status.infra.unknown");
+    // Tones follow the project convention: success/warning/destructive/muted/muted.
+    expect(statusMeta.infraAvailable.tone).toBe("success");
+    expect(statusMeta.infraDegraded.tone).toBe("warning");
+    expect(statusMeta.infraUnavailable.tone).toBe("destructive");
+    expect(statusMeta.infraDisabled.tone).toBe("muted");
+    expect(statusMeta.infraUnknown.tone).toBe("muted");
+  });
+
   it("preserves tone + icon metadata (semantic/color unchanged by i18n)", () => {
     expect(statusMeta.closed).toMatchObject({ tone: "secondary" });
     expect(statusMeta.started).toMatchObject({ tone: "success" });

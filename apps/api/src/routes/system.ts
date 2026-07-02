@@ -8,6 +8,7 @@ import {
   DiagnosticsResponseSchema,
 } from "@exam/contracts";
 import { createSystemStatsRepo } from "@exam/db/src/repository/systemStatsRepo.js";
+import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { getRequestContext } from "./helpers.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -19,6 +20,72 @@ import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
+
+/**
+ * Builds the email diagnostics status block. Never throws: if the outbox
+ * query fails, the status degrades to `unavailable` rather than failing the
+ * whole diagnostics response. Never exposes SMTP host/user/password,
+ * recipient addresses, or email body content — only booleans, a derived
+ * status, worker state, and row counts.
+ *
+ * Status rules (task P3-M5A):
+ * - disabled: `!config.email.enabled`
+ * - degraded: enabled and (`outbox.failed > 0` or worker status is
+ *   degraded/unknown)
+ * - available: enabled, outbox query succeeded, `failed === 0`
+ * - unavailable: enabled but the outbox query threw
+ *
+ * Worker status is `unknown` in M3 — `processDueEmails` is
+ * manually-triggered (no resident daemon to observe), per
+ * `email/outboxService.ts`.
+ */
+async function buildEmailStatus(
+  config: ReturnType<typeof getRuntimeConfig>,
+  db: Database,
+  ctx: ReturnType<typeof getRequestContext>,
+): Promise<{
+  status: "available" | "degraded" | "unavailable" | "disabled";
+  enabled: boolean;
+  worker: {
+    status: "available" | "degraded" | "unavailable" | "disabled" | "unknown";
+  };
+  outbox: { pending: number; sent: number; failed: number };
+}> {
+  const enabled = config.email.enabled;
+  if (!enabled) {
+    return {
+      status: "disabled",
+      enabled: false,
+      worker: { status: "disabled" },
+      outbox: { pending: 0, sent: 0, failed: 0 },
+    };
+  }
+  // Worker state is unobservable in M3 (no resident daemon) → "unknown".
+  // Per the M5 status rules, an unknown worker counts as "not explicitly
+  // unavailable", so it does NOT by itself force `degraded`; only
+  // `failed > 0` does. When a resident worker arrives, observe its real
+  // state here and let degraded/unavailable worker statuses force the
+  // email status down.
+  const workerStatus = "unknown" as const;
+  try {
+    const counts = await createEmailOutboxRepo(db).countByStatus(ctx);
+    const status: "available" | "degraded" =
+      counts.failed > 0 ? "degraded" : "available";
+    return {
+      status,
+      enabled: true,
+      worker: { status: workerStatus },
+      outbox: counts,
+    };
+  } catch {
+    return {
+      status: "unavailable",
+      enabled: true,
+      worker: { status: workerStatus },
+      outbox: { pending: 0, sent: 0, failed: 0 },
+    };
+  }
+}
 
 /**
  * Zod schema for the `GET /system/info` response.
@@ -188,7 +255,7 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
       "x-role": ["Admin"],
       response: { 200: DiagnosticsResponseSchema },
     },
-    handler: async () => {
+    handler: async (request) => {
       const config = getRuntimeConfig();
       const statsRepo = createSystemStatsRepo(anyDb);
       const dbLatency = await statsRepo.pingDb();
@@ -228,6 +295,11 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           lastScanAt: deadlineScannerMetrics.lastScanAt?.toISOString() ?? null,
           autoSubmitCount: deadlineScannerMetrics.autoSubmitCount,
         },
+        emailStatus: await buildEmailStatus(
+          config,
+          anyDb,
+          getRequestContext(request),
+        ),
         config: {
           heartbeatInterval: config.heartbeat.scanIntervalMs ?? 30_000,
           heartbeatTimeout: config.heartbeat.timeoutMs ?? 60_000,
