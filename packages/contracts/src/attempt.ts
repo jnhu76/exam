@@ -287,6 +287,48 @@ export type FlagMisconductResponse = z.infer<
   typeof FlagMisconductResponseSchema
 >;
 
+// ── Proctor Incident (P3-M9) ────────────────────────────────────
+
+/**
+ * Allowed incident types for proctor incident logging v0.
+ * Each value maps to a specific proctor observation category.
+ */
+export const ProctorIncidentTypeEnum = z.enum([
+  "suspicious_behavior_marked",
+  "network_issue_marked",
+  "identity_check_failed",
+  "manual_note_added",
+]);
+/** Type for proctor incident type enum. */
+export type ProctorIncidentType = z.infer<typeof ProctorIncidentTypeEnum>;
+
+/**
+ * Request body schema for a proctor marking an incident on an attempt.
+ * Audit-event-only storage — no dedicated incident table.
+ * `note` is optional, length-limited, and must not contain candidate answers.
+ */
+export const MarkProctorIncidentRequestSchema = z.object({
+  incidentType: ProctorIncidentTypeEnum,
+  examId: z.string().uuid(),
+  candidateId: z.string().uuid().optional(),
+  attemptId: z.string().uuid().optional(),
+  reasonCode: z.string().max(100).optional(),
+  note: z.string().max(500).optional(),
+});
+/** Type for a proctor incident request body. */
+export type MarkProctorIncidentRequest = z.infer<
+  typeof MarkProctorIncidentRequestSchema
+>;
+
+/** Response schema for a proctor incident action. */
+export const MarkProctorIncidentResponseSchema = z.object({
+  ok: z.literal(true),
+});
+/** Type for a proctor incident response. */
+export type MarkProctorIncidentResponse = z.infer<
+  typeof MarkProctorIncidentResponseSchema
+>;
+
 // ── Force Submit (Admin) ──────────────────────────────────────────
 
 /**

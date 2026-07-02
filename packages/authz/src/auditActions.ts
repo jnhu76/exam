@@ -107,6 +107,9 @@ export const AuditAction = {
   EmailOutboxCreated: "email.outbox_created",
   EmailSendFailed: "email.send_failed",
   EmailSendRetried: "email.send_retried",
+
+  // ── Proctor incidents (P3-M9) ──
+  ProctorIncidentMarked: "proctor.incident_marked",
 } as const;
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
@@ -167,6 +170,7 @@ export const KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[] = [
   "login.failure",
   "login.success",
   "logout",
+  "proctor.incident_marked",
   "question.create",
   "question.delete",
   "question.import",
