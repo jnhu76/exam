@@ -30,6 +30,8 @@ import {
   SaveAnswerRejectReasonEnum,
   GradingStatusEnum,
   ManualGradingEntrySchema,
+  GradingDetailsQuestionSchema,
+  GradingDetailsResponseSchema,
   ErrorResponseSchema,
   getSaveAnswerMessage,
   isErrorCode,
@@ -895,6 +897,107 @@ describe("audit contracts", () => {
   it("AuditLogQuerySchema rejects a non-datetime from value", () => {
     const result = AuditLogQuerySchema.safeParse({
       from: "2026-01-01",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// P3-M1: grading detail candidate-answer visibility contracts.
+describe("grading detail contracts", () => {
+  const validQuestion = {
+    questionId: "q-essay-1",
+    type: "fill_blank" as const,
+    content: "请简述光合作用的过程",
+    maxScore: 10,
+    candidateAnswer: "光合作用是植物利用光能...",
+    entry: null,
+  };
+
+  it("GradingDetailsQuestionSchema accepts a valid question with answer", () => {
+    const result = GradingDetailsQuestionSchema.safeParse(validQuestion);
+    expect(result.success).toBe(true);
+  });
+
+  it("GradingDetailsQuestionSchema accepts null candidateAnswer", () => {
+    const result = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      candidateAnswer: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("GradingDetailsQuestionSchema accepts any candidateAnswer type", () => {
+    for (const answer of [
+      "text",
+      42,
+      true,
+      ["A", "B"],
+      { key: "value" },
+      null,
+    ]) {
+      const result = GradingDetailsQuestionSchema.safeParse({
+        ...validQuestion,
+        candidateAnswer: answer,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("GradingDetailsQuestionSchema accepts a scored entry", () => {
+    const result = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      entry: {
+        score: 8,
+        comment: "回答基本完整",
+        gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedAt: "2026-01-15T12:00:00.000Z",
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("GradingDetailsQuestionSchema rejects missing required fields", () => {
+    const result = GradingDetailsQuestionSchema.safeParse({
+      questionId: "q1",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("GradingDetailsResponseSchema accepts a valid response", () => {
+    const result = GradingDetailsResponseSchema.safeParse({
+      attemptId: "00000000-0000-4000-8000-000000000001",
+      examId: "00000000-0000-4000-8000-000000000002",
+      examTitle: "期末考试",
+      candidateId: "00000000-0000-4000-8000-000000000003",
+      candidateName: "张三",
+      gradingStatus: "pending_manual",
+      questions: [validQuestion],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("GradingDetailsResponseSchema accepts empty questions array", () => {
+    const result = GradingDetailsResponseSchema.safeParse({
+      attemptId: "00000000-0000-4000-8000-000000000001",
+      examId: "00000000-0000-4000-8000-000000000002",
+      examTitle: "期末考试",
+      candidateId: "00000000-0000-4000-8000-000000000003",
+      candidateName: "张三",
+      gradingStatus: "fully_graded",
+      questions: [],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("GradingDetailsResponseSchema rejects invalid gradingStatus", () => {
+    const result = GradingDetailsResponseSchema.safeParse({
+      attemptId: "00000000-0000-4000-8000-000000000001",
+      examId: "00000000-0000-4000-8000-000000000002",
+      examTitle: "期末考试",
+      candidateId: "00000000-0000-4000-8000-000000000003",
+      candidateName: "张三",
+      gradingStatus: "unknown_status",
+      questions: [],
     });
     expect(result.success).toBe(false);
   });
