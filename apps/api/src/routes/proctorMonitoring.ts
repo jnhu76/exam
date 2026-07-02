@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Permission } from "@exam/authz";
+import { AuditAction } from "@exam/authz";
 import type { FastifyPluginAsync } from "fastify";
 import {
   ProctorAttemptListResponseSchema,
@@ -203,7 +204,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         await createAuditLogRepo(fastify.db as Database).create(ctx, {
           actorId: ctx.actorId,
-          action: "proctor.incident_marked",
+          action: AuditAction.ProctorIncidentMarked,
           targetType: "attempt",
           targetId: attemptId,
           metadata: {
@@ -218,7 +219,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         });
       } catch (err) {
         request.log.error(
-          { err, attemptId, action: "proctor.incident_marked" },
+          { err, attemptId, action: AuditAction.ProctorIncidentMarked },
           "Failed to record proctor incident audit",
         );
       }
