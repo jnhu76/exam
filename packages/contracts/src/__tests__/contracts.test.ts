@@ -963,6 +963,19 @@ describe("grading detail contracts", () => {
     expect(result.success).toBe(false);
   });
 
+  it("GradingDetailsQuestionSchema rejects invalid gradedAt datetime", () => {
+    const result = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      entry: {
+        score: 8,
+        comment: "回答基本完整",
+        gradedBy: "00000000-0000-4000-8000-000000000001",
+        gradedAt: "not-a-datetime",
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("GradingDetailsResponseSchema accepts a valid response", () => {
     const result = GradingDetailsResponseSchema.safeParse({
       attemptId: "00000000-0000-4000-8000-000000000001",
@@ -997,6 +1010,19 @@ describe("grading detail contracts", () => {
       candidateId: "00000000-0000-4000-8000-000000000003",
       candidateName: "张三",
       gradingStatus: "unknown_status",
+      questions: [],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("GradingDetailsResponseSchema rejects invalid UUIDs", () => {
+    const result = GradingDetailsResponseSchema.safeParse({
+      attemptId: "invalid-uuid",
+      examId: "00000000-0000-4000-8000-000000000002",
+      examTitle: "期末考试",
+      candidateId: "00000000-0000-4000-8000-000000000003",
+      candidateName: "张三",
+      gradingStatus: "pending_manual",
       questions: [],
     });
     expect(result.success).toBe(false);
