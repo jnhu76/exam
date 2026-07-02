@@ -36,6 +36,7 @@ const mockDetailData = {
       type: "fill_blank",
       content: "请简述光合作用的过程",
       maxScore: 10,
+      candidateAnswer: null,
       entry: null,
     },
     {
@@ -43,6 +44,7 @@ const mockDetailData = {
       type: "single_choice",
       content: "以下哪个是正确的？",
       maxScore: 5,
+      candidateAnswer: "Paris",
       entry: {
         score: 4,
         comment: "基本正确",
@@ -267,6 +269,215 @@ describe("GradingDetailPage", () => {
     await vi.waitFor(() => {
       expect(screen.queryByText("保存中...")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("candidateAnswer rendering", () => {
+  const baseData = {
+    attemptId: "att-1",
+    examId: "exam-1",
+    examTitle: "期末考试",
+    candidateId: "c1",
+    candidateName: "张三",
+    gradingStatus: "pending_manual",
+  };
+
+  it("renders short text answer", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "法国首都是哪里？",
+          maxScore: 10,
+          candidateAnswer: "Paris",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-candidate-answer-q1")).toHaveTextContent(
+      "Paris",
+    );
+  });
+
+  it("shows unanswered label for null candidateAnswer", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "简述光合作用",
+          maxScore: 10,
+          candidateAnswer: null,
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-candidate-answer-q1")).toHaveTextContent(
+      "未作答",
+    );
+  });
+
+  it("shows unanswered label for empty string candidateAnswer", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "简述光合作用",
+          maxScore: 10,
+          candidateAnswer: "",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-candidate-answer-q1")).toHaveTextContent(
+      "未作答",
+    );
+  });
+
+  it("renders long multi-line answer", async () => {
+    const longAnswer =
+      "光合作用是植物利用光能将二氧化碳和水转化为有机物并释放氧气的过程。" +
+      "该过程主要发生在叶绿体中，分为光反应和暗反应两个阶段。" +
+      "光反应在类囊体膜上进行，产生ATP和NADPH；暗反应在叶绿体基质中进行，利用ATP和NADPH固定CO2。" +
+      "光合作用是地球上几乎所有食物链的能量基础。";
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "简述光合作用",
+          maxScore: 10,
+          candidateAnswer: longAnswer,
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    const answerEl = screen.getByTestId("grading-candidate-answer-q1");
+    expect(answerEl).toHaveTextContent(longAnswer);
+    expect(answerEl).toHaveClass("whitespace-pre-wrap");
+  });
+
+  it("renders array answer joined by Chinese comma", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "multiple_choice",
+          content: "以下哪些是正确的？",
+          maxScore: 10,
+          candidateAnswer: ["A", "B", "C"],
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-candidate-answer-q1")).toHaveTextContent(
+      "A、B、C",
+    );
+  });
+
+  it("renders boolean answer as correct/incorrect label", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "true_false",
+          content: "地球是平的",
+          maxScore: 5,
+          candidateAnswer: false,
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-candidate-answer-q1")).toHaveTextContent(
+      "错误",
+    );
+  });
+
+  it("renders JSON object answer as text values", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "描述你的答案",
+          maxScore: 10,
+          candidateAnswer: { value: "A", notes: "some notes" },
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    const answerEl = screen.getByTestId("grading-candidate-answer-q1");
+    expect(answerEl).toHaveTextContent("A、some notes");
+  });
+
+  it("renders HTML/script in answer as plain text, not executed", async () => {
+    delete (window as unknown as Record<string, unknown>).__xss;
+    const unsafe = "<script>window.__xss = true</script><b>bold</b>";
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "输入你的答案",
+          maxScore: 10,
+          candidateAnswer: unsafe,
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    const answerEl = screen.getByTestId("grading-candidate-answer-q1");
+    expect(answerEl).toHaveTextContent(unsafe);
+    expect(answerEl.querySelector("script")).toBeNull();
+    expect(answerEl.querySelector("b")).toBeNull();
+    expect(
+      (window as unknown as Record<string, unknown>).__xss,
+    ).toBeUndefined();
+  });
+
+  it("keeps score input visible when candidateAnswer is present", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "fill_blank",
+          content: "法国首都是哪里？",
+          maxScore: 10,
+          candidateAnswer: "Paris",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-score-input-q1")).toBeInTheDocument();
+    expect(screen.getByTestId("grading-save-btn-q1")).toBeInTheDocument();
   });
 });
 
