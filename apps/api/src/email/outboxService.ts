@@ -45,6 +45,13 @@ export class EmailOutboxService {
       retryBaseSeconds: number;
       /** Literal secrets to scrub from persisted `lastError` (e.g. SMTP password). */
       scrubSecrets?: string[];
+      /** Optional audit emitter for P3-M4A email outbox events. */
+      auditEmitter?: (event: {
+        action: string;
+        targetType: string;
+        targetId: string;
+        metadata: Record<string, unknown>;
+      }) => void;
     },
   ) {}
 
@@ -83,6 +90,16 @@ export class EmailOutboxService {
         if (nextAttempts >= row.maxAttempts) {
           await repo.markFailed(ctx, row.id, nextAttempts, lastError);
           result.failed += 1;
+          this.deps.auditEmitter?.({
+            action: "email.send_failed",
+            targetType: "email_outbox",
+            targetId: row.id,
+            metadata: {
+              outboxId: row.id,
+              attempts: nextAttempts,
+              lastError,
+            },
+          });
         } else {
           const nextRetryAt = computeNextRetryAt(
             opts.now,
@@ -97,6 +114,16 @@ export class EmailOutboxService {
             nextRetryAt,
           );
           result.retryScheduled += 1;
+          this.deps.auditEmitter?.({
+            action: "email.send_retried",
+            targetType: "email_outbox",
+            targetId: row.id,
+            metadata: {
+              outboxId: row.id,
+              attempts: nextAttempts,
+              nextRetryAt: nextRetryAt.toISOString(),
+            },
+          });
         }
       }
     }

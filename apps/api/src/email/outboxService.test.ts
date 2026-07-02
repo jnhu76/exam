@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getIsolatedTestDb } from "@exam/db/src/testDb.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { emailOutbox } from "@exam/db/src/schema/pg.js";
@@ -264,5 +264,83 @@ describe("EmailOutboxService.processDueEmails", () => {
         [SECRET],
       ),
     ).not.toContain(SECRET);
+  });
+
+  it("emits email.send_failed audit event when max attempts reached", async () => {
+    const now = new Date("2026-06-01T00:00:00Z");
+    const auditEmitter = vi.fn();
+    const row = await seedRow(db, ctx.organizationId, {
+      attempts: 2,
+      maxAttempts: 3,
+    });
+    const service = new EmailOutboxService({
+      repo,
+      ctx,
+      sender: new FakeEmailSender("failure"),
+      retryBaseSeconds: 60,
+      auditEmitter,
+    });
+    await service.processDueEmails({ now, limit: 10 });
+    expect(auditEmitter).toHaveBeenCalledOnce();
+    expect(auditEmitter).toHaveBeenCalledWith({
+      action: "email.send_failed",
+      targetType: "email_outbox",
+      targetId: row.id,
+      metadata: {
+        outboxId: row.id,
+        attempts: 3,
+        lastError: expect.any(String),
+      },
+    });
+  });
+
+  it("emits email.send_retried audit event when retry scheduled", async () => {
+    const now = new Date("2026-06-01T00:00:00Z");
+    const auditEmitter = vi.fn();
+    const row = await seedRow(db, ctx.organizationId, {
+      attempts: 0,
+      maxAttempts: 3,
+    });
+    const service = new EmailOutboxService({
+      repo,
+      ctx,
+      sender: new FakeEmailSender("failure"),
+      retryBaseSeconds: 60,
+      auditEmitter,
+    });
+    await service.processDueEmails({ now, limit: 10 });
+    expect(auditEmitter).toHaveBeenCalledOnce();
+    expect(auditEmitter).toHaveBeenCalledWith({
+      action: "email.send_retried",
+      targetType: "email_outbox",
+      targetId: row.id,
+      metadata: {
+        outboxId: row.id,
+        attempts: 1,
+        nextRetryAt: "2026-06-01T00:01:00.000Z",
+      },
+    });
+  });
+
+  it("audit metadata does not contain email body content", async () => {
+    const now = new Date("2026-06-01T00:00:00Z");
+    const auditEmitter = vi.fn();
+    const row = await seedRow(db, ctx.organizationId, {
+      recipientEmail: "secret@example.com",
+    });
+    const service = new EmailOutboxService({
+      repo,
+      ctx,
+      sender: new FakeEmailSender("failure"),
+      retryBaseSeconds: 60,
+      auditEmitter,
+    });
+    await service.processDueEmails({ now, limit: 10 });
+    const call = auditEmitter.mock.calls[0]![0] as {
+      metadata: Record<string, unknown>;
+    };
+    expect(JSON.stringify(call.metadata)).not.toContain("secret@example.com");
+    expect(call.metadata).not.toHaveProperty("bodyText");
+    expect(call.metadata).not.toHaveProperty("bodyHtml");
   });
 });

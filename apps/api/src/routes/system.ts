@@ -276,6 +276,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
           };
         } catch {
           redisStatus = { connected: false, latencyMs: null };
+          request.log.warn(
+            { route: "system.diagnostics" },
+            "redis.unavailable",
+          );
         }
       }
 

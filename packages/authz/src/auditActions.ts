@@ -102,6 +102,11 @@ export const AuditAction = {
   // ── ADR-mandated NEW actions (AUDIT-M2 wires these) ──
   GradingDetailViewed: "grading.detail_viewed",
   UserRoleChanged: "user.role_changed",
+
+  // ── Email outbox (P3-M4A) ──
+  EmailOutboxCreated: "email.outbox_created",
+  EmailSendFailed: "email.send_failed",
+  EmailSendRetried: "email.send_retried",
 } as const;
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
@@ -152,6 +157,9 @@ export const KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[] = [
   "exam.closed",
   "exam.unpublish",
   "exam.update",
+  "email.outbox_created",
+  "email.send_failed",
+  "email.send_retried",
   "export_scores",
   "grading.detail_viewed",
   "grading.finalized",
