@@ -3,6 +3,8 @@
 > **取代：** `job-cards.md` 与 `job-cards-large.md` 中的能力优先作业卡。两者作为主执行队列已退役。本文档是活动执行队列。
 >
 > **计划权威：** `docs/phase3/plan.md` — 模块闭环计划。下方每张作业卡实现该计划中的一个派生 Middle Job。
+>
+> **协议优先（2026-07-03 修订）：** 模块队列在 P0 之前新增 **P-1 考试协议与后端状态模型收敛**（P3-PROTO-0/1/2）。P-1 是 P0 前端运行时的硬前置：协议矩阵与后端一致性测试未完成前，不得推进前端作答状态机（P3-FSM-0）或主观题运行时。后端是业务真相源；前端只消费后端真相字段。
 
 ---
 
@@ -13,7 +15,6 @@
 - 富文本作答
 - 画图/画布作答
 - 文件上传作答
-- 新增 `QuestionType` 枚举值（subjective_text 是一种作答模式，不是新题型）
 - 试卷随机化
 - 题目版本历史
 - Proctor 角色激活
@@ -28,31 +29,476 @@
 - 结果 PDF 导出
 - 审计留存/归档
 - E2E 全量并行化
+- `submitted_answers_hash` 列（MVP 不需要，幂等性靠事务+状态 guard）
+- 后台 deadline scheduler（仅懒触发 reconciliation）
+- InputMode / GradingMode 存储列（派生值，不存 DB）
 
 ---
 
-## 主观文本作答约定 (MVP v0)
+## text_response 题型约定（取代旧 subjective_text 约定）
 
-对 Phase 3 MVP v0，主观文本题表示为：
+**旧约定已废弃**：`type=fill_blank + standardAnswer=null + options=[]` 不再是主观文本题的正式编码。
+
+**新约定**：`text_response` 是独立的 `QuestionType`。
 
 | 字段 | 取值 |
 |-------|-------|
-| `type` | `fill_blank` |
-| `standardAnswer` | `null` |
-| `options` | 空或缺失 |
-| `answer value` | `string` |
-| `前端渲染` | `<textarea>`（纯文本，无富文本） |
-| `评分流水线` | `standardAnswer == null` → 待人工评分 |
+| `type` | `text_response` |
+| `inputMode` | `multi_line`（派生，不存 DB） |
+| `gradingMode` | `manual`（派生，不存 DB） |
+| `standardAnswer` | 可选（null 或有效参考答案） |
+| `rubric` | 发布时必填（评分依据） |
+| `options` | 空 |
+| `前端渲染` | `<textarea>`（纯文本，保留换行，无富文本） |
+| `评分流水线` | `gradingMode=manual` → 进入人工评分队列（`gradingStatus=pending_manual`） |
 
-这**不是**新的 `QuestionType`。它是由既有 `fill_blank` 类型 + `standardAnswer: null` 编码的一种作答模式。4 个 MVP `QuestionType` 取值保持不变：`single_choice`、`multiple_choice`、`true_false`、`fill_blank`。
+**rubric 双层存储**：`questions.rubric`（命题编辑源）→ `QuestionSnapshot.rubric`（冻结评分源）。grading 视图从 snapshot 读取，不 JOIN live questions 表。
+
+---
+
+## 模块 P-1 — 考试协议与后端状态模型收敛（升级为 P3-L0-EXAM-PROTOCOL-FOUNDATION）
+
+> **执行顺序硬约束：** 本模块的全部作业卡必须在 P0（考生作答运行时）的任何作业卡之前完成。
+>
+> **原则：** 后端是业务真相源。P-1/L0 不仅是协议文档化，而是把题型模型、答案冻结、提交屏障、deadline 收口、DTO 边界和前端状态模型一次性做正确。
+
+### 协议覆盖清单（P3-PROTO-0 必须覆盖全部 14 项 + L0 扩展）
+
+原有 14 项：
+1. exam lifecycle
+2. attempt lifecycle
+3. draft answers vs submitted_answers（原 final_answers）
+4. save/restore protocol
+5. submit/freeze protocol
+6. double submit idempotency
+7. save after submit rejection
+8. save vs submit race
+9. refresh/resume after submit
+10. grading input uses submitted_answers only
+11. result visibility
+12. standard answer visibility
+13. candidate own-result boundary
+14. teacher/admin grading visibility
+
+L0 扩展项：
+15. text_response 题型与 rubric 双层存储
+16. CandidateTakeSnapshot 统一端点
+17. Deadline reconciliation（懒触发收口）
+18. GradingStatus 独立维度（人工评分队列查 gradingStatus，不查 attemptStatus）
+19. inputMode / gradingMode 派生（不存储）
+20. submitted_answers 格式（SubmittedAnswersSnapshot，干净快照）
+21. Migration 策略（schema + backfill 脚本）
+
+### 状态分层（协议矩阵的真相源）
+
+```
+Exam:
+  draft -> published/open -> closed
+
+AttemptStatus (8 values):
+  not_started -> in_progress -> submitted -> grading -> graded
+                                   ↑           ↓
+                               disrupted     voided (terminal)
+
+GradingStatus (3 independent values):
+  pending_auto     — auto-grading queued or in progress
+  pending_manual   — manual grading needed (text_response questions exist)
+  fully_graded     — all scoring complete
+
+Completion paths:
+  objective-only exam:  submitted → grading → graded (auto-grade in submit transaction)
+  manual-only exam:     submitted (gradingStatus=pending_manual) → graded (after human scoring)
+  mixed exam:           submitted (gradingStatus=pending_manual) → graded (auto + manual complete)
+
+Answer:
+  answers            draft, mutable before submit
+  submitted_answers  frozen snapshot, immutable after submit
+
+Result:
+  resultVisibility   score/pass visibility (hidden | visible)
+  answerVisibility   standardAnswer/rubric visibility (hidden | visible)
+```
+
+---
+
+### P3-PROTO-0：Exam Protocol Audit（升级为 L0 协议文档）
+
+**目标：** 产出 `docs/phase3/exam-protocol.md`，作为 Exam / Attempt / Answer / Submit / Grading / Result Visibility 的权威协议真相源。**L0 升级后**：不仅记录现有行为，还要记录新增的 text_response 题型、submitted_answers 物理列、CandidateTakeSnapshot 端点、deadline reconciliation、GradingStatus 独立维度。
+
+**类型：** 审计 + 文档（无产品代码改动）
+
+**依赖：** 无（P-1 的起点）
+
+**覆盖协议：** 上述全部 21 项（14 原有 + 7 L0 扩展）
+
+**待检查文件：**
+- `packages/domain/src/enums.ts`（QuestionType 枚举 — 新增 text_response）
+- `packages/domain/src/examStateMachine.ts`（exam lifecycle 命令）
+- `packages/exam-engine/src/answerProtocol.ts`（save/restore/submit/freeze）
+- `packages/exam-engine/src/timer.ts`（server-side time authority）
+- `packages/exam-engine/src/grading.ts`、`packages/exam-engine/src/manualGrading.ts`（grading input）
+- `apps/api/src/routes/attempts.candidate.ts`（candidate attempt API）
+- `apps/api/src/routes/scores.ts`（result/standard-answer visibility）
+- `apps/api/src/routes/exam.ts`（exam publish/close）
+- `packages/contracts/src/attempt.ts`（SaveAnswerRequestSchema 等）
+- `packages/db/src/schema.ts`（attempt status / answers / submitted_answers 形状）
+
+**步骤：**
+
+1. 阅读上述文件，记录现有行为。
+
+2. 产出 `docs/phase3/exam-protocol.md`，覆盖全部 21 项协议，包含：
+   - 题型模型（5 个 QuestionType + InputMode/GradingMode 派生）
+   - submitted_answers 物理列 + SubmittedAnswersSnapshot 格式
+   - CandidateTakeSnapshot 端点规格
+   - Deadline reconciliation 事务伪代码
+   - GradingStatus 独立维度
+   - rubric 双层存储
+   - Migration 策略（schema + backfill）
+
+**输出：** `docs/phase3/exam-protocol.md`
+
+**完成标准：**
+- 文档覆盖全部 21 项协议
+- 明确 text_response 是独立题型，不是 fill_blank 变体
+- 明确 submitted_answers 是物理列，不是逻辑等价
+- 明确 CandidateTakeSnapshot 是统一端点
+- 明确 deadline reconciliation 是懒触发收口
+- 任何人读完后不会误以为可以先做 TakeExam UI 再补协议
+
+**提交：**
+```bash
+git add docs/phase3/exam-protocol.md
+git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_response, submitted_answers, deadline reconciliation"
+```
+
+---
+
+### P3-PROTO-1：Backend State Consistency Tests（L0 扩展）
+
+**目标：** 用后端集成测试证明协议矩阵中的关键边界。**L0 扩展后**：增加 deadline reconciliation、text_response、submitted_answers 冻结、double submit 幂等的测试。
+
+**类型：** 测试（集成测试，针对 `exam_test`）
+
+**依赖：** P3-PROTO-0（协议矩阵被接受）
+
+**必须覆盖的场景（14 项）：**
+
+| # | 场景 | 预期 |
+|---|------|------|
+| 1 | save before submit allowed | in_progress attempt 的 save 成功 |
+| 2 | save after submit rejected | submitted attempt 的 save 返回错误，submitted_answers 不变 |
+| 3 | double submit idempotency | 第二次 submit 返回稳定 submitted attempt，不覆盖 submitted_answers |
+| 4 | save/submit race | 并发 save + submit 冻结一组确定性 submitted_answers |
+| 5 | refresh after submit | GET attempt 返回 locked、answerSource='submitted' |
+| 6 | candidate cannot see score before release | 发布前考生视图不含 score |
+| 7 | candidate cannot see standardAnswer | 考生视图按 answerVisibility 剥离 standardAnswer |
+| 8 | teacher/admin grading view sees submitted answers | 评分视图从 submitted_answers 读取 |
+| 9 | deadline reconciliation via take | in_progress + expired → submitted + submitted_answers 冻结 |
+| 10 | deadline reconciliation idempotent | 重复 take 不覆盖已有 submitted_answers |
+| 11 | save after deadline rejected | 过期后 save 返回错误 |
+| 12 | submit after deadline returns existing | 过期后 submit 返回已有 deadline-submitted snapshot |
+| 13 | text_response grading reads submitted_answers | 人工评分从 submitted_answers 读取，不读 draft answers |
+| 14 | grading queue queries gradingStatus | 人工评分队列查 gradingStatus='pending_manual'，不查 attemptStatus |
+
+**完成标准：**
+- 14 个场景全部有通过的集成测试
+- 测试名清晰对应协议条目
+- 无既有测试被削弱
+
+**提交（若加测试）：**
+```bash
+git add apps/api/src/routes/attempts.candidate.test.ts
+git commit -m "test(P-1/L0): backend state consistency — 14 scenarios including deadline reconciliation and text_response"
+```
+
+---
+
+### P3-PROTO-2：API Contract Alignment（L0 升级为 CandidateTakeSnapshot）
+
+**目标：** 实现 `GET /candidate/attempts/:attemptId/take` 统一端点，返回 attempt 元数据 + 派生能力 + 安全题目 + answerValue + answerSource。**取代旧的 7 个真相字段补丁方案**。
+
+**类型：** 实现（新端点 + 契约 schema + 测试）
+
+**依赖：** P3-PROTO-0（协议矩阵）、P3-PROTO-1（一致性测试）
+
+**CandidateTakeSnapshot 结构：**
+
+```ts
+interface CandidateTakeSnapshot {
+  attemptId: string;
+  examId: string;
+  attemptStatus: AttemptStatus;
+  gradingStatus: GradingStatus;
+  isEditable: boolean;        // attemptStatus==='in_progress' && serverNow < deadline
+  canStart: boolean;
+  canResume: boolean;
+  canSave: boolean;
+  canSubmit: boolean;
+  lockReason?: 'deadline' | 'submitted' | 'voided' | 'disrupted';
+  resultVisibility: 'hidden' | 'visible';
+  answerVisibility: 'hidden' | 'visible';
+  submittedAt: string | null;
+  serverNow: string;           // 服务端当前时间，前端倒计时的唯一真相源
+  effectiveDeadline: string | null;  // 考试有效截止时间（含延期调整）
+  serverRevision: string | number;
+  questions: CandidateQuestion[];
+}
+
+interface CandidateQuestion {
+  id: string;
+  type: QuestionType;
+  prompt: string;
+  options: QuestionOption[];
+  inputMode: InputMode;  // 派生自 type
+  maxScore: number;
+  answerValue: unknown | null;
+  answerSource: 'draft' | 'submitted' | 'none';
+}
+```
+
+**安全投影规则：**
+- 不返回 standardAnswer / rubric / gradingMode / correctOption / teacher notes / 未发布 score
+- `answerSource` 由后端根据 attemptStatus 路由：in_progress → draft；submitted/grading/graded → submitted；其他 → none
+- `Cache-Control: no-store`（GET 可能触发 deadline reconciliation 写副作用）
+
+**待创建/修改文件：**
+- `apps/api/src/routes/attempts.candidate.ts`（新端点）
+- `packages/contracts/src/attempt.ts`（CandidateTakeSnapshot schema）
+- 测试文件
+
+**完成标准：**
+- 端点返回完整 CandidateTakeSnapshot
+- 安全投影不泄漏 standardAnswer/rubric
+- answerSource 正确路由
+- isEditable 考虑 deadline
+- 测试覆盖 all answerSource 分支
+
+**提交：**
+```bash
+git add apps/api/src/routes/attempts.candidate.ts packages/contracts/src/attempt.ts
+git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource routing"
+```
+
+---
+
+### P3-L0-1：Schema Migration + Rubric 双层存储
+
+**目标：** 实现数据库 schema 变更：新增 text_response 枚举值、submitted_answers 列、rubric 双层存储。
+
+**类型：** 实现（migration + schema + contract）
+
+**依赖：** P3-PROTO-0（协议矩阵）
+
+**变更清单：**
+
+| 表 | 变更 |
+|---|---|
+| `questions` | `type` 枚举新增 `'text_response'`；新增 `rubric text` |
+| `question_snapshots` | 新增 `rubric text` |
+| `exam_attempts` | 新增 `submitted_answers jsonb`；新增 `submission_reason text nullable` |
+
+**不新增：** `inputMode`、`gradingMode`、`submitted_answers_hash`
+
+**待修改文件：**
+- `packages/db/src/schema.ts`（Drizzle schema）
+- `packages/db/src/migrations/`（新 migration）
+- `packages/domain/src/enums.ts`（QuestionType 新增 text_response）
+- `packages/contracts/src/`（question/attempt schema 更新）
+
+**完成标准：**
+- migration 在 exam_test 上运行成功
+- text_response 可以创建并保存
+- submitted_answers 列可写入 SubmittedAnswersSnapshot
+- rubric 在 questions 和 question_snapshots 上都存在
+- `pnpm typecheck` 通过
+
+**提交：**
+```bash
+git add packages/db/src/schema.ts packages/db/src/migrations/ packages/domain/src/enums.ts
+git commit -m "feat(L0): schema migration — text_response type, submitted_answers column, rubric dual-layer"
+```
+
+---
+
+### P3-L0-2：Submit Freeze 重写（submitted_answers 冻结）
+
+**目标：** 重写 submit 事务，在提交时生成 `SubmittedAnswersSnapshot` 并写入 `submitted_answers` 列。评分从 `submitted_answers` 读取。
+
+**类型：** 实现
+
+**依赖：** P3-L0-1（schema 就绪）
+
+**核心变更：**
+- `submitAttempt` 事务内：读 draft answers → `buildSubmittedAnswersSnapshot()` → 写 submitted_answers → 设 status/submittedAt/submissionReason
+- `gradeQuestion` / `reconcileScores` 从 submitted_answers 读取，不读 draft answers
+- double submit：返回已有 submitted_answers，不重新生成
+- save after submit：返回确定错误
+
+**待修改文件：**
+- `apps/api/src/orchestrators/submitAndGradeAttempt.ts`
+- `packages/exam-engine/src/manualGrading.ts`（读取路径）
+- `packages/exam-engine/src/grading.ts`（读取路径）
+- 相关测试
+
+**完成标准：**
+- submit 后 submitted_answers 是干净快照（无 clientSeq/baseVersion）
+- 评分从 submitted_answers 读取
+- double submit 幂等
+- save after submit 拒绝
+- 所有既有测试通过
+
+**提交：**
+```bash
+git add apps/api/src/orchestrators/submitAndGradeAttempt.ts packages/exam-engine/src/
+git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading reads from submitted_answers"
+```
+
+---
+
+### P3-L0-3：Deadline Reconciliation（懒触发收口）
+
+**目标：** 实现 `ensureAttemptDeadlineReconciled()`，在 candidate 入口事务性冻结过期 attempt。
+
+**类型：** 实现
+
+**依赖：** P3-L0-2（submitted_answers 冻结就绪）
+
+**入口：**
+- `GET /candidate/attempts/:attemptId/take`（Cache-Control: no-store）
+- `POST /candidate/attempts/:attemptId/answers/save`
+- `POST /candidate/attempts/:attemptId/submit`
+- `POST /candidate/attempts/:attemptId/resume`
+
+**事务行为：** 见 `docs/phase3/exam-protocol.md` §5.3 伪代码。
+
+**待修改文件：**
+- `apps/api/src/routes/attempts.candidate.ts`（4 个入口调用 ensureAttemptDeadlineReconciled）
+- `packages/exam-engine/src/deadlineReconciliation.ts`（新文件，核心逻辑）
+- 测试文件
+
+**完成标准：**
+- 4 个入口都调用 ensureAttemptDeadlineReconciled
+- in_progress + expired → submitted + submitted_answers 冻结
+- submittedAt = effectiveDeadline
+- submissionReason = 'deadline'
+- 幂等：重复调用不覆盖
+- save/submit 过期返回确定错误
+- 测试覆盖 14 个 deadline 场景
+
+**提交：**
+```bash
+git add apps/api/src/routes/attempts.candidate.ts packages/exam-engine/src/deadlineReconciliation.ts
+git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry points"
+```
+
+---
+
+### P3-L0-4：Backfill 脚本（submitted_answers 回填）
+
+**目标：** 实现独立 TypeScript backfill 脚本，为已有 submitted/grading/graded/voided attempt 生成 submitted_answers。
+
+**类型：** 实现（脚本）
+
+**依赖：** P3-L0-1（schema）、P3-L0-2（buildSubmittedAnswersSnapshot 逻辑可复用）
+
+**回填范围：** submitted / grading / graded / voided(with submittedAt)
+
+**异常处理：** fail fast 默认；`--allow-quarantine` 可选
+
+**待创建文件：**
+- `scripts/backfill-submitted-answers.ts`
+
+**完成标准：**
+- dry-run 输出统计（总attempt数、已回填、跳过、异常）
+- 正式运行后所有 submitted/grading/graded attempt 都有 submitted_answers
+- 异常 attempt 有明确记录
+- 可重复运行（幂等）
+
+**提交：**
+```bash
+git add scripts/backfill-submitted-answers.ts
+git commit -m "feat(L0): backfill submitted_answers for existing submitted/graded attempts"
+```
+
+---
+
+### P3-L0-5：Publish Validation（text_response 发布校验）
+
+**目标：** 实现题目发布前校验：text_response 必须有 rubric；auto 题必须有 standardAnswer。
+
+**类型：** 实现 + 测试
+
+**依赖：** P3-L0-1（schema）
+
+**校验规则：**
+- auto 题（非 text_response）：standardAnswer 非空且不是占位符
+- text_response：rubric 非空且不是占位符；standardAnswer 可选
+- 创建草稿时允许空值；发布时强制校验
+
+**待修改文件：**
+- 命题创建/发布相关 route 或 service
+- 测试文件
+
+**完成标准：**
+- text_response 无 rubric 时发布被拒绝
+- auto 题无 standardAnswer 时发布被拒绝
+- "暂无" 不算有效值
+- 测试覆盖所有校验分支
+
+**提交：**
+```bash
+git add ...
+git commit -m "feat(L0): publish validation — text_response requires rubric, auto questions require standardAnswer"
+```
 
 ---
 
 ## 模块 P0 — 考生作答运行时闭环
 
+> **前置依赖：** P-1/L0（P3-PROTO-0/1/2 + P3-L0-1/2/3/4/5）必须先完成。P0 的前端运行时只消费 P-1 定义的 CandidateTakeSnapshot 端点，不发明业务规则。前端不是业务真相源，后端仍是真相源。
+
+### P3-FSM-0：TakeExam Frontend State Machine（L0 升级）
+
+**目标：** 实现 TakeExam 前端状态模型：`deriveTakeExamView(snapshot)` 纯函数 + 瞬态 reducer。**L0 升级后**：消费 CandidateTakeSnapshot，不维护完整业务状态机。
+
+**类型：** 实现
+
+**依赖：** P3-PROTO-2（CandidateTakeSnapshot 端点）
+
+**设计约束：**
+- 后端 CandidateTakeSnapshot 是业务真相源
+- `deriveTakeExamView(snapshot)` 纯函数计算页面展示态
+- 瞬态 reducer 只管：idle / saving / save_failed / submitting / submit_failed / load_failed
+- **不引入 XState**
+- **不做完整业务 transition table**
+
+**待创建/修改文件：**
+- `apps/web/src/exam/deriveTakeExamView.ts`（纯函数）
+- `apps/web/src/exam/deriveTakeExamView.test.ts`
+- `apps/web/src/exam/transientReducer.ts`（瞬态 reducer）
+- `apps/web/src/exam/transientReducer.test.ts`
+- `apps/web/src/pages/exam/TakeExamPage.tsx`（接入）
+
+**完成标准：**
+- deriveTakeExamView 从 snapshot 派生所有 UI 态
+- 瞬态 reducer 覆盖 saving/submitting/error 流程
+- submitted 状态下不能 save
+- submitting 状态下防重复提交
+- 刷新后由 snapshot 恢复锁定态
+- 测试覆盖关键边界
+
+**提交：**
+```bash
+git add apps/web/src/exam/ apps/web/src/pages/exam/TakeExamPage.tsx
+git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming CandidateTakeSnapshot"
+```
+
+---
+
 ### P3-MOD-P0-1：考生作答渲染审计
 
-**目标：** 为每个 MVP 题型的渲染、保存、恢复、提交行为产出精确缺口清单，外加 subjective_text 作答模式。
+**目标：** 为每个 MVP 题型的渲染、保存、恢复、提交行为产出精确缺口清单，包括 text_response 题型。
 
 **类型：** 审计（无代码改动）
 
@@ -81,7 +527,7 @@
 | `multiple_choice` | `type=multiple_choice` | `MultipleChoiceInput` | `string[]`（已排序 option ID） | | | | |
 | `true_false` | `type=true_false` | `TrueFalseInput` | `boolean` | | | | |
 | `fill_blank`（客观） | `type=fill_blank`，`standardAnswer != null` | `FillBlankInput` | `string` 或 `Record<string,string>` | | | | |
-| `subjective_text` v0 | `type=fill_blank`，`standardAnswer == null`，`options` 空/缺失 | 当前无组件——存在孤儿 `SubjectiveAnswerInput` | `string` | | | | |
+| `text_response` | `type=text_response` | `TextResponseInput`（textarea） | `string` | | | | |
 
 3. 确认 `packages/contracts/src/attempt.ts` 中的 `SaveAnswerRequestSchema` 把 `answer` 校验为 `z.unknown()` —— 在 API 边界无类型特定校验。这是一种设计选择（API 接受任意 JSON），不是 bug，但这意味着前端正确性完全依赖 `QuestionRenderer` 分发。
 
@@ -91,158 +537,87 @@
 
 **输出：** `docs/phase3/audit/p0-candidate-answer-rendering-audit.md`
 
-**验证：** 审计表覆盖 4 个题型 + 1 个 subjective_text 作答模式，并精确识别渲染缺口。
+**验证：** 审计表覆盖 5 个题型（含 text_response），并精确识别渲染缺口。
 
 **提交：** `docs: add P0 candidate answer rendering audit`
 
 ---
 
-### P3-MOD-P0-2：主观文本作答 v0
+### P3-MOD-P0-2：text_response 作答运行时
 
-**目标：** 考生能用普通 textarea 作答 subjective_text 题。作答能保存、恢复并正确提交。
+**目标：** 考生能用 textarea 作答 text_response 题。作答能保存、恢复并正确提交。
 
 **类型：** 实现
 
-**依赖：** P3-MOD-P0-1（缺口清单确认方案）
+**依赖：** P3-L0-1（text_response 枚举值存在）、P3-MOD-P0-1（缺口清单确认方案）
 
-**设计决策：** 使用 MVP subjective_text 约定（`type=fill_blank`、`standardAnswer==null`、`options` 空/缺失）触发 textarea 渲染。无新枚举、无 schema 改动、无契约改动。
-
-**推荐做法：** 在 `QuestionRenderer.tsx` 中加一个辅助函数：
-
-```typescript
-function isSubjectiveTextQuestion(question: QuestionSnapshot): boolean {
-  return question.type === "fill_blank"
-    && question.standardAnswer == null
-    && (!question.options || question.options.length === 0);
-}
-```
-
-当其返回 true 时，渲染 `<SubjectiveAnswerInput>` 而非 `<FillBlankInput>`。在读完代码后把辅助函数适配为实际 `QuestionSnapshot` 形状——若 `options` 总是作为数组存在，检查 `options.length === 0`；若可能 undefined，先检查 falsy。
+**设计决策：** text_response 是独立 `QuestionType`，不再是 fill_blank 变体。前端通过 `inputMode === 'multi_line'` 决定渲染 textarea，**不通过** `standardAnswer === null` 判断。
 
 **待修改文件：**
-- `apps/web/src/components/exam/QuestionRenderer.tsx`（用上述辅助函数加 subjective_text 分支）
-- `apps/web/src/components/exam/SubjectiveAnswerInput.tsx`（核对 props 与 QuestionRenderer 接口一致）
-
-**待创建文件（若不存在）：**
+- `apps/web/src/components/exam/QuestionRenderer.tsx`（新增 text_response 分支）
+- `apps/web/src/components/exam/TextResponseInput.tsx`（新组件或复用 SubjectiveAnswerInput）
 - `apps/web/src/components/exam/QuestionRenderer.test.tsx`
 
 **步骤：**
 
-**步骤 1：阅读既有 SubjectiveAnswerInput**
+1. 在 `QuestionRenderer.tsx` 的 switch 中新增 `case 'text_response'` 分支，渲染 textarea。
 
-阅读 `apps/web/src/components/exam/SubjectiveAnswerInput.tsx`。记录其 props 接口。与 `QuestionRenderer` 传给其他输入组件的内容对比。
+2. textarea 要求：
+   - 保留换行（默认行为）
+   - 保存/恢复后换行不丢
+   - 提交后纯文本展示（`white-space: pre-wrap`）
+   - 禁止 `dangerouslySetInnerHTML`
 
-**步骤 2：为 subjective_text 渲染写失败测试**
+3. 加测试：text_response 渲染 textarea、保存/恢复换行、提交后锁定。
 
-在 `QuestionRenderer.test.tsx` 中加一个用 MVP 约定的测试：
-
-```typescript
-it("renders SubjectiveAnswerInput for subjective_text (fill_blank + null standardAnswer + no options)", () => {
-  const question = makeQuestion({
-    type: "fill_blank",
-    standardAnswer: null,
-    options: [],
-  });
-  render(<QuestionRenderer question={question} value={undefined} onChange={vi.fn()} />);
-  expect(screen.getByRole("textbox")).toBeInTheDocument(); // textarea
-});
-```
-
-运行：`pnpm --filter web test -- QuestionRenderer`
-预期：FAIL——尚无 subjective_text 分支。
-
-**步骤 3：在 QuestionRenderer 加 subjective_text 分支**
-
-加 `isSubjectiveTextQuestion` 辅助函数，并在基于类型的 switch 之前加检查：
-
-```typescript
-if (isSubjectiveTextQuestion(question)) {
-  return <SubjectiveAnswerInput ... />;
-}
-```
-
-**步骤 4：运行测试验证通过**
-
-运行：`pnpm --filter web test -- QuestionRenderer`
-预期：PASS
-
-**步骤 5：验证保存/恢复集成**
-
-既有 `TakeExamPage` 保存/恢复流程使用 `useSubmitFlush`，后者直接发送原始作答值。对 subjective_text，作答是 `string`。既有协议正确处理字符串——无需后端改动。
-
-通过阅读 `TakeExamPage.tsx` 验证，确认 `saveAnswer` 直接传递输入组件的值。
-
-**步骤 6：加作答格式测试**
-
-```typescript
-it("subjective_text answer emits string value on change", () => {
-  const onChange = vi.fn();
-  const question = makeQuestion({ type: "fill_blank", standardAnswer: null, options: [] });
-  render(<QuestionRenderer question={question} value={undefined} onChange={onChange} />);
-  fireEvent.change(screen.getByRole("textbox"), { target: { value: "My answer" } });
-  expect(onChange).toHaveBeenCalledWith("My answer");
-});
-```
-
-**步骤 7：验证评分引擎兼容性**
-
-评分引擎（`packages/domain/src/gradingEngine.ts`）已通过 `hasSubjectiveQuestions()`（检查 `standardAnswer == null`）处理主观题。人工评分流水线（`packages/exam-engine/src/manualGrading.ts`）已从 attempt 的 answers 提取 `candidateAnswer`。除非 P0-1 审计暴露缺口，否则无需后端改动。
-
-**步骤 8：运行完整测试套件**
-
-运行：`pnpm verify`
-预期：全部通过。
-
-**步骤 9：提交**
-
-```bash
-git add apps/web/src/components/exam/QuestionRenderer.tsx apps/web/src/components/exam/QuestionRenderer.test.tsx
-git commit -m "feat(P0): wire SubjectiveAnswerInput for fill_blank+null standardAnswer convention"
-```
+4. 运行：`pnpm --filter web test -- QuestionRenderer`
 
 **完成标准：**
-- 考生能用 textarea 作答 subjective_text 题（fill_blank、null standardAnswer、无 options）
+- 考生能用 textarea 作答 text_response 题
 - 作答经既有协议保存
 - 作答在页面刷新后恢复
 - 作答正确提交
-- 评分引擎正确识别其为待人工评分
+- 评分引擎正确识别其为待人工评分（gradingStatus=pending_manual）
+
+**提交：**
+```bash
+git add apps/web/src/components/exam/QuestionRenderer.tsx apps/web/src/components/exam/TextResponseInput.tsx
+git commit -m "feat(P0): text_response textarea rendering with save/restore/submit"
+```
 
 ---
 
 ### P3-MOD-P0-3：提交冻结 UI 证明
 
-**目标：** 验证提交后考生 UI 阻止进一步作答修改。证明后端拒绝提交后保存。
+**目标：** 验证提交后考生 UI 阻止进一步作答修改（UI 侧）。后端拒绝提交后保存的协议已由 P3-PROTO-1 场景 2 证明，本卡不重复后端测试，只补 UI 侧证明。
 
-**类型：** 审计 + 少量测试补充
+**类型：** 审计 + 少量 UI 测试补充
+
+**依赖：** P3-FSM-0（前端状态机）、P3-PROTO-1（后端 save-after-submit 拒绝已证明）
 
 **待检查文件：**
-- `apps/web/src/pages/exam/TakeExamPage.tsx`（提交后 UI 状态）
-- `apps/api/src/routes/attempts.candidate.ts`（提交后保存拒绝）
+- `apps/web/src/pages/exam/TakeExamPage.tsx`（提交后 UI 状态，由 P3-FSM-0 状态机驱动）
+- `apps/web/src/exam/takeExamStateMachine.ts`（P3-FSM-0 产出，确认 `submittedLocked` 态下 SAVE 被拒）
 
 **步骤：**
 
-1. 阅读 `TakeExamPage.tsx`——提交后页面导航到 `ResultPage`。确认不存在"提交后编辑"路径。
+1. 阅读 `TakeExamPage.tsx` 与 `takeExamStateMachine.ts`——确认提交后状态机进入 `submittedLocked`，UI 禁用作答输入，不存在"提交后编辑"路径。
 
-2. 阅读答案保存端点——`packages/exam-engine/src/answerProtocol.ts` 的 `processSaveAnswer()` 在 attempt 状态为 `submitted` 或 `graded` 时拒绝保存。
+2. 后端拒绝保存已由 P3-PROTO-1 场景 2 覆盖——**不重复**。仅在 UI 测试中证明：后端返回 `isEditable=false` 时，状态机进入 `submittedLocked` 且输入组件禁用。
 
-3. 若 `submitFreezeBarrier.test.ts` 已覆盖此场景，记录即可。否则加一个 API 级测试：
+3. 加一个 UI 测试（若不存在）：
 
 ```typescript
-it("rejects answer save after submit", async () => {
-  await submitAttempt(app, attemptId, candidateToken);
-  const res = await app.inject({
-    method: "POST",
-    url: `/api/attempts/${attemptId}/answers/${questionId}`,
-    payload: { answer: "new answer", baseVersion: 1, clientSeq: 100 },
-    cookies: { session: candidateToken },
-  });
-  expect(res.statusCode).toBe(409);
+it("disables answer inputs when backend reports isEditable=false (submitted)", () => {
+  // 后端真相：attemptStatus=submitted, isEditable=false
+  render(<TakeExamPage attempt={submittedAttempt} />);
+  expect(screen.getByRole("textbox")).toBeDisabled();
 });
 ```
 
-4. 运行测试确认拒绝。
+4. 运行：`pnpm --filter web test -- TakeExamPage`
 
-**输出：** 确认提交冻结端到端工作。
+**输出：** 确认提交冻结在 UI 侧端到端工作，且由后端真相字段驱动。
 
 **提交（若加测试）：**
 ```bash
@@ -254,11 +629,11 @@ git commit -m "test(P0): prove answer save rejected after submit"
 
 ### P3-MOD-P0-4：考生作答 E2E
 
-**目标：** 一条 E2E spec 证明完整考生 happy path，包含 subjective_text 作答。
+**目标：** 一条 E2E spec 证明完整考生 happy path，包含 text_response 作答。
 
 **类型：** E2E 测试
 
-**依赖：** P3-MOD-P0-2（subjective_text 作答必须可用）
+**依赖：** P3-MOD-P0-2（text_response 作答必须可用）
 
 **待修改文件：**
 - `apps/e2e/e2e/candidate-happy-path.spec.ts`（扩展现有 spec）
@@ -273,24 +648,24 @@ git commit -m "test(P0): prove answer save rejected after submit"
 
 2. 阅读 `apps/e2e/lib/seed.ts`——理解测试考试如何播种。
 
-3. 扩展种子数据，纳入 subjective_text 题：
-   - 创建一个 `type: "fill_blank"`、`standardAnswer: null`、`options: []` 的题
+3. 扩展种子数据，纳入 text_response 题：
+   - 创建一个 `type: "text_response"` 的题
    - 加入考试的 `questionIds`
 
 4. 扩展 E2E spec：
-   - 在 textarea 中用自由文本作答 subjective_text 题
+   - 在 textarea 中用自由文本作答 text_response 题
    - 验证 textarea 可见
-   - 提交并验证 attempt 进入人工评分路径（如 `gradingStatus` 为 `pending_manual`，或按既有产品行为隐藏考生结果并给出待人工评分原因）
+   - 提交并验证 attempt 进入人工评分路径（`gradingStatus` 为 `pending_manual`）
 
 5. 运行：`pnpm test:e2e -- --grep "candidate-happy-path"`
 
 **提交：**
 ```bash
 git add apps/e2e/e2e/candidate-happy-path.spec.ts apps/e2e/lib/seed.ts
-git commit -m "test(P0): extend candidate happy path E2E with subjective_text answer"
+git commit -m "test(P0): extend candidate happy path E2E with text_response answer"
 ```
 
-**完成标准：** E2E 证明考生能作答客观题 + subjective_text 题、提交、且 attempt 进入正确的提交后状态。
+**完成标准：** E2E 证明考生能作答客观题 + text_response 题、提交、且 attempt 进入正确的提交后状态。
 
 ---
 
@@ -298,7 +673,7 @@ git commit -m "test(P0): extend candidate happy path E2E with subjective_text an
 
 ### P3-MOD-P1-1：人工评分 API/UI 证明
 
-**目标：** 证明既有人工评分 API 与 UI 能渲染 subjective_text 作答、保留换行、避免 XSS、保存得分、完成评分、对账总分、发出审计事件。
+**目标：** 证明既有人工评分 API 与 UI 能渲染 text_response 作答、保留换行、避免 XSS、保存得分、完成评分、对账总分、发出审计事件。
 
 **类型：** 测试验证（测试已存在——运行并确认）
 
@@ -353,11 +728,11 @@ git commit -m "test(P1): verify manual grading API/UI proof"
 
 ### P3-MOD-P1-2：主观评分 E2E
 
-**目标：** 一条 E2E spec 证明：考生提交 subjective_text 作答 → admin 在评分队列看到 → admin 打分 → 考生看到对账后结果。
+**目标：** 一条 E2E spec 证明：考生提交 text_response 作答 → admin 在评分队列看到 → admin 打分 → 考生看到对账后结果。
 
 **类型：** E2E 测试
 
-**依赖：** P3-MOD-P0-2（subjective_text 作答）、P3-MOD-P1-1（评分 API/UI 证明）
+**依赖：** P3-MOD-P0-2（text_response 作答）、P3-MOD-P1-1（评分 API/UI 证明）
 
 **待修改文件：**
 - `apps/e2e/e2e/manual-grading.spec.ts`（当前 SKIPPED——取消跳过并更新）
@@ -366,10 +741,10 @@ git commit -m "test(P1): verify manual grading API/UI proof"
 
 1. 阅读既有跳过的 `manual-grading.spec.ts`。记录它测什么、为什么跳过。
 
-2. 更新种子数据，纳入 subjective_text 题（`type: "fill_blank"`、`standardAnswer: null`、`options: []`）。
+2. 更新种子数据，纳入 text_response 题（`type: "text_response"`）。
 
 3. 取消跳过 spec。更新测试流程：
-   - 考生开始考试、用文本作答 subjective_text 题、提交
+   - 考生开始考试、用文本作答 text_response 题、提交
    - Admin 进入评分队列、看到待评分 attempt
    - Admin 打开评分详情、看到考生文本作答（保留换行）
    - Admin 录入得分并保存
@@ -392,7 +767,7 @@ git commit -m "test(P1): unskip and complete manual grading E2E spec"
 
 ### P3-MOD-P2-1：命题 UI 流程审计
 
-**目标：** 文档化从题目创建到考试发布的完整命题流程，识别任何缺口。尤其验证 subjective_text 题能通过 UI 创建。
+**目标：** 文档化从题目创建到考试发布的完整命题流程，识别任何缺口。尤其验证 text_response 题能通过 UI 创建。
 
 **类型：** 审计
 
@@ -409,7 +784,7 @@ git commit -m "test(P1): unskip and complete manual grading E2E spec"
 1. 追踪题目创建流程：
    - `QuestionEditPage` → API `POST /questions` → 题目出现在 `QuestionPage` 列表
    - 验证 4 个题型都能创建（single_choice、multiple_choice、true_false、fill_blank）
-   - **关键缺口检查：** UI 能创建 subjective_text 题吗？即：type=`fill_blank`、standardAnswer=`null`、无 options。若表单对 fill_blank 强制要求 standardAnswer 或 options，记录为缺口。
+   - **关键缺口检查：** UI 能创建 text_response 题吗？即：type=`text_response`。若表单不支持 text_response 类型，记录为缺口。
 
 2. 追踪考试创建流程：
    - `ExamCreatePage` → `ExamConfigForm` → API `POST /exams`
@@ -423,8 +798,8 @@ git commit -m "test(P1): unskip and complete manual grading E2E spec"
 
 4. 检查缺口：
    - Teacher 角色能创建题吗？（当前仅 Admin 通过 `requireRole` —— 这是预期的，Teacher 切换在 P4）
-   - subjective_text 是否存在题目内容校验缺口？
-   - 考试表单是否正确处理 subjective_text 题？
+   - text_response 是否存在题目内容校验缺口？
+   - 考试表单是否正确处理 text_response 题？
 
 5. 产出流程图与缺口清单。
 
@@ -440,7 +815,7 @@ git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
 
 ### P3-MOD-P2-2：MVP 题目创建测试
 
-**目标：** 确保题目创建与校验测试覆盖所有 MVP 题型，包括 subjective_text 约定。
+**目标：** 确保题目创建与校验测试覆盖所有 MVP 题型，包括 text_response。
 
 **类型：** 测试验证 + 补充
 
@@ -452,18 +827,19 @@ git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
 
 1. 阅读 `question.test.ts`——记录创建/更新流程中测了哪些题型。
 
-2. 检查是否测了 subjective_text 题创建：`type: "fill_blank"`、`standardAnswer: null`、`options: []`。
+2. 检查是否测了 text_response 题创建：`type: "text_response"`。
 
 3. 若缺失，加测试：
    ```typescript
-   it("creates subjective_text question (fill_blank + null standardAnswer + no options)", async () => {
+   it("creates text_response question", async () => {
      const res = await app.inject({
        method: "POST",
        url: "/api/questions",
        payload: {
-         type: "fill_blank",
+         type: "text_response",
          content: "请阐述你的观点",
          standardAnswer: null,
+         rubric: "按逻辑完整性、关键概念、论证质量给分",
          options: [],
          score: 20,
        },
@@ -478,7 +854,7 @@ git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
 **提交（若加测试）：**
 ```bash
 git add apps/api/src/routes/question.test.ts
-git commit -m "test(P2): add subjective_text question creation test"
+git commit -m "test(P2): add text_response question creation test"
 ```
 
 ---
@@ -533,7 +909,7 @@ git commit -m "test(P2): add exam publish-to-candidate E2E slice"
 
 2. 检查是否测了 after_grading 模式。若未测，加场景：
    - 创建 `resultPublicationMode: "after_grading"` 的考试
-   - 考试同时有客观题与 subjective_text 题
+   - 考试同时有客观题与 text_response 题
    - 考生提交 → 结果隐藏（待人工评分）
    - Admin 评主观题 → 结果变可见
 
@@ -1043,41 +1419,53 @@ git commit -m "docs(P6): Phase 3 MVP readiness closeout report"
 ## 执行顺序汇总
 
 ```
-批次 1 — 核心考试闭环（仅 Admin）
-  ├── P3-MOD-P0-1  渲染审计                  [审计]
-  ├── P3-MOD-P0-2  主观文本 v0               [代码：QuestionRenderer.tsx]
-  ├── P3-MOD-P0-3  提交冻结证明              [审计/测试]
-  ├── P3-MOD-P0-4  考生作答 E2E              [e2e]
-  ├── P3-MOD-P1-1  人工评分 API/UI 证明      [审计/测试]
-  ├── P3-MOD-P1-2  主观评分 E2E              [e2e]
-  ├── P3-MOD-P3-1  结果可见性 E2E            [e2e]
-  ├── P3-MOD-P3-2  作答/标准答案泄漏测试     [测试]
-  └── P3-MOD-P3-3  Admin 结果视图验证        [测试]
+批次 0 — 协议与后端状态模型收敛（P-1/L0，前端运行时的前置条件）
+  ├── P3-PROTO-0  Exam Protocol Audit (L0)          [文档：exam-protocol.md]
+  ├── P3-PROTO-1  Backend Consistency Tests (L0)     [测试：14 个场景]
+  ├── P3-PROTO-2  CandidateTakeSnapshot Endpoint     [代码：统一端点]
+  ├── P3-L0-1     Schema Migration                   [代码：text_response + submitted_answers + rubric]
+  ├── P3-L0-2     Submit Freeze Rewrite              [代码：SubmittedAnswersSnapshot 冻结]
+  ├── P3-L0-3     Deadline Reconciliation            [代码：懒触发收口]
+  ├── P3-L0-4     Backfill Script                    [脚本：submitted_answers 回填]
+  └── P3-L0-5     Publish Validation                 [代码：text_response rubric 校验]
+
+批次 1 — 核心考试闭环（仅 Admin，依赖 P-1/L0 完成）
+  ├── P3-FSM-0     deriveTakeExamView + transient    [代码：纯函数 + 瞬态 reducer]
+  ├── P3-MOD-P0-1  渲染审计                           [审计]
+  ├── P3-MOD-P0-2  text_response 运行时               [代码：textarea 渲染]
+  ├── P3-MOD-P0-3  提交冻结证明                       [审计/测试]
+  ├── P3-MOD-P0-4  考生作答 E2E                       [e2e]
+  ├── P3-MOD-P1-1  人工评分 API/UI 证明               [审计/测试]
+  ├── P3-MOD-P1-2  主观评分 E2E                       [e2e]
+  ├── P3-MOD-P3-1  结果可见性 E2E                     [e2e]
+  ├── P3-MOD-P3-2  作答/标准答案泄漏测试              [测试]
+  └── P3-MOD-P3-3  Admin 结果视图验证                 [测试]
 
 批次 2 — 命题闭环（仅 Admin）
-  ├── P3-MOD-P2-1  命题流程审计              [审计]
-  ├── P3-MOD-P2-2  题目创建测试              [测试]
-  └── P3-MOD-P2-3  发布到考生 E2E            [e2e]
+  ├── P3-MOD-P2-1  命题流程审计                       [审计]
+  ├── P3-MOD-P2-2  题目创建测试                       [测试]
+  └── P3-MOD-P2-3  发布到考生 E2E                     [e2e]
 
 批次 3 — RBAC MVP（此处起支持 Teacher）
-  ├── P3-MOD-P4-1  MVP RBAC 路由矩阵         [审计/设计]
-  ├── P3-MOD-P4-2A 评分路由切换              [代码]
-  ├── P3-MOD-P4-2B 题目 CRUD 路由切换        [代码]
-  ├── P3-MOD-P4-2C 考试命题路由切换          [代码]
-  ├── P3-MOD-P4-3  考生归属证明              [测试]
-  └── P3-MOD-P4-4  前端导航门控              [代码]
+  ├── P3-MOD-P4-1  MVP RBAC 路由矩阵                  [审计/设计]
+  ├── P3-MOD-P4-2A 评分路由切换                       [代码]
+  ├── P3-MOD-P4-2B 题目 CRUD 路由切换                 [代码]
+  ├── P3-MOD-P4-2C 考试命题路由切换                   [代码]
+  ├── P3-MOD-P4-3  考生归属证明                       [测试]
+  └── P3-MOD-P4-4  前端导航门控                       [代码]
 
 批次 4 — Email 最小接入
-  ├── P3-MOD-P5-0  收件人来源 + 入队设计     [审计/设计]
-  └── P3-MOD-P5-1  结果发布邮件触发          [代码]
+  ├── P3-MOD-P5-0  收件人来源 + 入队设计              [审计/设计]
+  └── P3-MOD-P5-1  结果发布邮件触发                   [代码]
 
 批次 5 — 收尾
-  └── P3-MOD-P6-1  MVP 就绪报告              [审计/文档]
+  └── P3-MOD-P6-1  MVP 就绪报告                       [审计/文档]
 ```
 
-**合计：跨 7 个模块、5 个批次的 21 张作业卡。**
+**合计：跨 8 个模块（P-1/L0 + P0–P6）、6 个批次的 30 张作业卡。**
 
-- **批次 1** 可仅 Admin 执行。无需 Teacher 角色。
+- **批次 0（P-1/L0）是硬前置。** 协议矩阵、schema migration、submit freeze、deadline reconciliation、CandidateTakeSnapshot 未完成前，不得开始批次 1。
+- **批次 1** 从 `P3-FSM-0` 前端状态模型起步（消费 CandidateTakeSnapshot），再做 text_response 渲染。可仅 Admin 执行。
 - **批次 2** 继续仅 Admin 命题验证。
 - **批次 3** 通过 RBAC 切换开始支持 Teacher。
 - **批次 4** 仅在核心流程稳定后开始邮件接入。
