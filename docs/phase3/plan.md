@@ -57,7 +57,7 @@ Phase 3 执行队列现在是模块优先的。
 
 | 优先级 | 模块 | 目标 | 状态 |
 | -------- | ------ | ---- | ------ |
-| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + backfill。**P0 前端运行时的硬前置。** | **P3-PROTO-0 完成（exam-protocol.md 已落地）；P3-PROTO-1/2 待开始** |
+| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + backfill。**P0 前端运行时的硬前置。** | **P3-PROTO-0/1 完成；P3-PROTO-2 + P3-L0-1~5 待开始** |
 | P0 | **考生作答运行时闭环** | 考生能作答所有 MVP 题型并安全提交。**依赖 P-1/L0 完成。** | P-1/L0 之后 |
 | P1 | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | P0 之后 |
 | P2 | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | P1 之后 |
@@ -177,7 +177,7 @@ candidate attempt API 契约包含 7 个真相字段；
 | ID | 作业 | 产出 |
 | -- | --- | ------ |
 | P3-PROTO-0 ✅ | Exam Protocol Audit (L0) | `docs/phase3/exam-protocol.md`（21 项协议，**已落地**） |
-| P3-PROTO-1 | Backend State Consistency Tests (L0) | 14 个场景的集成测试 |
+| P3-PROTO-1 ✅ | Backend State Consistency Tests (L0) | 14 个场景的集成测试（**已落地**：protocol-consistency.test.ts 11 tests + 既有测试覆盖其余） |
 | P3-PROTO-2 | CandidateTakeSnapshot Endpoint | 统一端点 + 安全投影 + 测试 |
 | P3-L0-1 | Schema Migration | text_response + submitted_answers + rubric 双层存储 |
 | P3-L0-2 | Submit Freeze Rewrite | SubmittedAnswersSnapshot 冻结 + 评分读取路径 |
@@ -584,7 +584,7 @@ Large Job 不再是主执行队列。仅在模块无法安全推进、必须做�
 
 ```text
 P3-PROTO-0  Exam Protocol Audit (L0)  ✅完成    [文档：exam-protocol.md，21 项协议，已落地]
-P3-PROTO-1  Backend Consistency Tests (L0)      [测试：14 个场景]
+P3-PROTO-1  Backend Consistency Tests (L0) ✅完成 [测试：14 个场景，protocol-consistency.test.ts + 既有测试]
 P3-PROTO-2  CandidateTakeSnapshot Endpoint     [代码：统一端点]
 P3-L0-1     Schema Migration                   [代码：text_response + submitted_answers + rubric]
 P3-L0-2     Submit Freeze Rewrite              [代码：SubmittedAnswersSnapshot 冻结]
@@ -745,17 +745,17 @@ P-1/L0 考试协议与后端状态模型收敛（L0 升级）
 ```
 
 P3-PROTO-0（协议文档）**已完成**——`docs/phase3/exam-protocol.md` 已落地，覆盖 21 项协议。
+P3-PROTO-1（后端一致性测试）**已完成**——`protocol-consistency.test.ts` 11 tests + 既有测试覆盖 14 场景。
 
 下一张具体作业卡应为：
 
 ```text
-P3-PROTO-1 Backend Consistency Tests (L0)
+P3-PROTO-2 CandidateTakeSnapshot Endpoint
 ```
 
 然后：
 
 ```text
-P3-PROTO-1 Backend Consistency Tests (L0)
 P3-PROTO-2 CandidateTakeSnapshot Endpoint
 P3-L0-1    Schema Migration
 P3-L0-2    Submit Freeze Rewrite
