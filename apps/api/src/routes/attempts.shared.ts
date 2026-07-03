@@ -50,7 +50,11 @@ function computeResultVisibility(
   attempt: ExamAttempt,
 ): "hidden" | "visible" {
   if (attempt.status !== "graded") return "hidden";
-  const gradingStatus = attempt.gradingStatus ?? "auto_graded";
+  // Default: if gradingStatus is null (pre-migration), use "fully_graded"
+  // for graded attempts to avoid hiding results in after_grading mode
+  const gradingStatus =
+    attempt.gradingStatus ??
+    (attempt.status === "graded" ? "fully_graded" : "auto_graded");
   if (gradingStatus === "pending_manual") return "hidden";
   if (
     exam.resultPublicationMode === "after_grading" &&
@@ -186,14 +190,7 @@ export function buildCandidateTakeSnapshot(
 
   // Build submitted answers lookup if available
   const submittedMap = new Map<string, unknown>();
-  const submittedAnswers = (attempt as unknown as Record<string, unknown>)
-    .submittedAnswers as
-    | {
-        schemaVersion: number;
-        answers: { questionId: string; value: unknown }[];
-      }
-    | null
-    | undefined;
+  const submittedAnswers = attempt.submittedAnswers;
   if (submittedAnswers?.answers) {
     for (const a of submittedAnswers.answers) {
       submittedMap.set(a.questionId, a.value);
@@ -216,15 +213,12 @@ export function buildCandidateTakeSnapshot(
       attemptStatus === "grading" ||
       attemptStatus === "graded"
     ) {
-      // Submitted answers
+      // Submitted answers — only from submitted_answers column
       if (submittedMap.has(q.originalQuestionId)) {
         answerValue = submittedMap.get(q.originalQuestionId);
         answerSource = "submitted";
-      } else if (answerMap.has(q.originalQuestionId)) {
-        // Fallback to draft if submitted_answers not yet populated
-        answerValue = answerMap.get(q.originalQuestionId);
-        answerSource = "submitted";
       }
+      // If submitted_answers doesn't have this question, answerSource stays "none"
     }
     // not_started, queued, voided → answerSource = "none", answerValue = null
 

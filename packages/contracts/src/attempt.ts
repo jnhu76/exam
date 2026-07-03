@@ -558,7 +558,7 @@ export const CandidateTakeSnapshotSchema = z.object({
   submittedAt: z.string().datetime().nullable(),
   serverNow: z.string().datetime(),
   effectiveDeadline: z.string().datetime().nullable(),
-  serverRevision: z.union([z.string(), z.number()]),
+  serverRevision: z.string().datetime(),
   questions: z.array(CandidateTakeQuestionSchema),
 });
 export type CandidateTakeSnapshot = z.infer<typeof CandidateTakeSnapshotSchema>;

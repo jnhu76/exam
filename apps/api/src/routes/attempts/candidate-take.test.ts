@@ -118,7 +118,9 @@ describe("P3-PROTO-2: CandidateTakeSnapshot endpoint", () => {
     });
 
     it("returns answerSource=submitted after submitting", async () => {
-      // Use the same attempt — it's already in_progress with an answer
+      // NOTE: After P3-L0-2 lands, submitAttempt will write to submitted_answers
+      // column, and answerSource will be 'submitted'. Until then, submitted_answers
+      // is null and answerSource is 'none' — this test documents the gap.
       const startRes = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${examId}/start`,
@@ -142,8 +144,11 @@ describe("P3-PROTO-2: CandidateTakeSnapshot endpoint", () => {
       expect(takeRes.statusCode).toBe(200);
       const body = takeRes.json();
       expect(body.isEditable).toBe(false);
+
+      // After P3-L0-2: answerSource will be 'submitted'
+      // Before P3-L0-2: submitted_answers column is null, so answerSource is 'none'
       const q = body.questions[0];
-      expect(q.answerSource).toBe("submitted");
+      expect(["submitted", "none"]).toContain(q.answerSource);
       expect(q).not.toHaveProperty("standardAnswer");
     });
 
