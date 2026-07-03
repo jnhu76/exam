@@ -10,6 +10,7 @@ import {
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
+  ensureAttemptDeadlineReconciled,
 } from "@exam/exam-engine";
 import { createExamEngineRepos } from "../adapters/repoAdapters.js";
 
@@ -77,7 +78,33 @@ export async function submitAndGradeAttempt(
         ctx,
       );
 
+      // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
+      // is past its effective deadline, freeze it as deadline-submitted
+      // (submittedAt = effectiveDeadline, submissionReason='deadline') and
+      // return that frozen result. The candidate's submit then returns the
+      // existing deadline-submitted snapshot — no new answer payload accepted.
       if (status === "in_progress" || status === "disrupted") {
+        const reconciled = await ensureAttemptDeadlineReconciled(
+          exams,
+          enrollments,
+          attempts,
+          attemptId,
+          now,
+        );
+        if (reconciled.status === "graded") {
+          // Deadline reconciliation froze + graded it; nothing more to do.
+          return true;
+        }
+      }
+
+      // Re-read status after potential reconciliation.
+      const postReconcile = (await txAttemptRepo.findByIdForUpdate(
+        ctx,
+        attemptId,
+      ))!;
+      const currentStatus = postReconcile.status;
+
+      if (currentStatus === "in_progress" || currentStatus === "disrupted") {
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.

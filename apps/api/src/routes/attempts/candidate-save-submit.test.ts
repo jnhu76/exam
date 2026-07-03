@@ -716,9 +716,14 @@ describe("attempt routes", () => {
       });
       expect(saveAfter.statusCode).toBe(200);
       expect(saveAfter.json().accepted).toBe(false);
-      expect(saveAfter.json().reason).toBe("DEADLINE_EXCEEDED");
+      // P3-L0-3: lazy deadline reconciliation now freezes the attempt at the
+      // save entry point before the save is evaluated, so the rejection reason
+      // is ATTEMPT_ALREADY_SUBMITTED (the attempt was deadline-submitted),
+      // not the legacy DEADLINE_EXCEEDED. Both communicate the same invariant:
+      // no save accepted past the deadline.
+      expect(saveAfter.json().reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
       expect(saveAfter.json().message).toBe(
-        getSaveAnswerMessage("DEADLINE_EXCEEDED"),
+        getSaveAnswerMessage("ATTEMPT_ALREADY_SUBMITTED"),
       );
 
       const submitRes = await ctx.app.inject({

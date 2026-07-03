@@ -456,6 +456,135 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
     });
   });
 
+  // ─── Scenario #9/#10: deadline reconciliation via candidate entry points ─
+  // P3-L0-3: lazy-triggered reconciliation freezes an expired in_progress
+  // attempt on the next candidate entry (take/save/submit/restore). Proves
+  // the freeze happens, submittedAt = effectiveDeadline, submissionReason =
+  // 'deadline', and the reconciliation is idempotent.
+  describe("#9/#10 deadline reconciliation via take entry point", () => {
+    let reconExamId: string;
+
+    beforeAll(async () => {
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Proto1-#9 Recon",
+          courseId,
+          questionIds: [questionId],
+          durationMinutes: 1, // short window so we can fast-forward past it
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      reconExamId = examRes.json().id as string;
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${reconExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, reconExamId);
+    });
+
+    it("#9 freezes an expired in_progress attempt on take (submitted_answers written, submittedAt=deadline)", async () => {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${reconExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+      const attemptDeadline = new Date(startRes.json().deadlineAt as string);
+
+      // Save a draft, then fast-forward past the deadline.
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "b",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      ctx.setNow(new Date(attemptDeadline.getTime() + 5 * 60 * 1000));
+
+      // take is the entry point that triggers lazy reconciliation.
+      const takeRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/attempts/${attemptId}/take`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(takeRes.statusCode).toBe(200);
+      expect(takeRes.headers["cache-control"]).toContain("no-store");
+
+      const repo = createAttemptRepo(ctx.db);
+      const row = await repo.findById(candidateCtx(), attemptId);
+      expect(row?.status).toBe("graded");
+      expect(row?.submittedAt).toEqual(attemptDeadline);
+      expect(row?.submissionReason).toBe("deadline");
+      expect(row?.submittedAnswers).toEqual({
+        schemaVersion: 1,
+        answers: [{ questionId: expect.any(String), value: "b" }],
+      });
+
+      ctx.setNow(null);
+    });
+
+    it("#10 reconciliation is idempotent — repeated take does not rewrite submitted_answers/submittedAt", async () => {
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${reconExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const attemptId = startRes.json().id as string;
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+      const attemptDeadline = new Date(startRes.json().deadlineAt as string);
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${attemptId}/answers/${qId}`,
+        payload: {
+          attemptId,
+          questionId: qId,
+          answer: "b",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      ctx.setNow(new Date(attemptDeadline.getTime() + 5 * 60 * 1000));
+
+      // First take reconciles + freezes.
+      await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/attempts/${attemptId}/take`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const repo = createAttemptRepo(ctx.db);
+      const afterFirst = await repo.findById(candidateCtx(), attemptId);
+      const firstSubmittedAt = afterFirst?.submittedAt;
+      const firstSnapshot = afterFirst?.submittedAnswers;
+
+      // Second take — must NOT rewrite the frozen fields.
+      await ctx.app.inject({
+        method: "GET",
+        url: `/api/candidate/attempts/${attemptId}/take`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      const afterSecond = await repo.findById(candidateCtx(), attemptId);
+
+      expect(afterSecond?.submittedAt).toEqual(firstSubmittedAt);
+      expect(afterSecond?.submittedAnswers).toEqual(firstSnapshot);
+      expect(afterSecond?.submissionReason).toBe("deadline");
+
+      ctx.setNow(null);
+    });
+  });
+
   // ─── Scenario #11: save after deadline rejected ────────────────
   describe("#11 save after deadline returns DEADLINE_EXCEEDED", () => {
     it("save is rejected when deadline has passed", async () => {
@@ -505,7 +634,10 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
       });
       expect(saveRes.statusCode).toBe(200);
       expect(saveRes.json().accepted).toBe(false);
-      expect(saveRes.json().reason).toBe("DEADLINE_EXCEEDED");
+      // P3-L0-3: lazy deadline reconciliation now freezes the attempt at the
+      // save entry point, so the rejection reason is ATTEMPT_ALREADY_SUBMITTED
+      // (deadline-submitted), not the legacy DEADLINE_EXCEEDED.
+      expect(saveRes.json().reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
 
       ctx.setNow(null);
     });

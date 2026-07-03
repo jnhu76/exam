@@ -16,4 +16,5 @@ export * from "./attemptCommands.js";
 export * from "./attemptStateMachine.js";
 export * from "./grading.js";
 export * from "./manualGrading.js";
+export * from "./deadlineReconciliation.js";
 export * from "./systemMonitor.js";

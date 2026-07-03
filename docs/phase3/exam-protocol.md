@@ -348,7 +348,7 @@ interface SubmittedAnswersSnapshot {
 | 场景 | 行为 |
 | ---- | ---- |
 | save after submit | 返回确定错误 `ATTEMPT_ALREADY_SUBMITTED`，不修改 submitted_answers |
-| save after deadline | 先 reconcile → 返回 `ATTEMPT_DEADLINE_EXPIRED` 或 `ATTEMPT_NOT_EDITABLE` |
+| save after deadline | 先 reconcile（冻结为 deadline-submitted）→ 返回 `ATTEMPT_ALREADY_SUBMITTED`（attempt 已被 deadline 冻结，等价于"已提交"）。L0-3 实现决定：reconcile 在 save 入口事务内执行，冻结后 attemptStatus 已是 submitted/graded，故拒绝原因从 legacy `DEADLINE_EXCEEDED` 收敛为 `ATTEMPT_ALREADY_SUBMITTED`。两者表达同一不变量：deadline 后不接受 save。 |
 
 #### 4.4.3 Save/Submit Race
 
@@ -449,7 +449,7 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
 
 | 操作 | 行为 |
 | ---- | ---- |
-| save 过期 | 先 reconcile → 返回 `ATTEMPT_DEADLINE_EXPIRED` 或 `ATTEMPT_NOT_EDITABLE`；可附带最新 CandidateTakeSnapshot |
+| save 过期 | 先 reconcile（冻结为 deadline-submitted）→ 返回 `ATTEMPT_ALREADY_SUBMITTED`（L0-3 实现决定：reconcile 在 save 入口事务内冻结，attemptStatus 已是 submitted/graded）。可附带最新 CandidateTakeSnapshot。 |
 | submit 过期 | 先 reconcile → 返回已有 deadline-submitted snapshot；不接受新答案 payload |
 
 ### 5.6 不处理的状态
