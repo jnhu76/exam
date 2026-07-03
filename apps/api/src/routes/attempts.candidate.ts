@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   CandidateExamDetailResponseSchema,
   CandidateExamSummarySchema,
+  CandidateTakeSnapshotSchema,
   HeartbeatRequestSchema,
   LoadAttemptParamsSchema,
   LoadAttemptResponseSchema,
@@ -53,7 +54,11 @@ import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js
 import { recordAudit } from "./audit.js";
 import { formatZodError, getRequestContext } from "./helpers.js";
 import { reconcileExamForRead } from "./reconciliation.js";
-import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
+import {
+  cookieAuth,
+  toCandidateAttemptResponse,
+  buildCandidateTakeSnapshot,
+} from "./attempts.shared.js";
 
 // Wire response schemas (Zod) — single source of truth for serialization +
 // OpenAPI. SaveAnswer is an accepted/rejected union.
@@ -737,6 +742,62 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt, fastify.now()),
       );
+    },
+  );
+
+  /**
+   * GET /candidate/attempts/:attemptId/take — CandidateTakeSnapshot (L0 §6.1).
+   *
+   * Returns the unified snapshot with derived capabilities, answerSource
+   * routing, security projection, and Cache-Control: no-store.
+   *
+   * This is the business truth source for the frontend. The frontend derives
+   * its view from this snapshot via a pure function, not from local state.
+   */
+  fastify.get(
+    "/candidate/attempts/:attemptId/take",
+    {
+      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Candidate"],
+        response: {
+          200: CandidateTakeSnapshotSchema,
+          400: ErrorResponseSchema,
+          404: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = z
+        .object({ attemptId: z.string().uuid() })
+        .safeParse(request.params);
+      if (!parsed.success) {
+        return reply.code(400).send(formatZodError(request.id, parsed.error));
+      }
+      const ctx = getRequestContext(request);
+      const attempt = await getOwnedAttempt(
+        fastify,
+        ctx,
+        parsed.data.attemptId,
+      );
+
+      // Load the exam for visibility/deadline computation
+      const examRepo = createExamRepo(fastify.db);
+      const examRow = await examRepo.findById(ctx, attempt.examId);
+      if (!examRow) {
+        throw new NotFoundError("Exam not found");
+      }
+      // Cast DB row to domain Exam type — buildCandidateTakeSnapshot only needs
+      // resultPublicationMode, resultsPublishedAt, and closeAt.
+      const exam = examRow as unknown as Exam;
+
+      const snapshot = buildCandidateTakeSnapshot(attempt, exam, fastify.now());
+
+      // Cache-Control: no-store — GET may trigger deadline reconciliation
+      reply.header("Cache-Control", "no-store");
+
+      return CandidateTakeSnapshotSchema.parse(snapshot);
     },
   );
 

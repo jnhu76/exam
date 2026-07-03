@@ -238,7 +238,7 @@ git commit -m "test(P-1/L0): backend state consistency — 14 scenarios via prot
 
 ---
 
-### P3-PROTO-2：API Contract Alignment（L0 升级为 CandidateTakeSnapshot）
+### P3-PROTO-2：API Contract Alignment（L0 升级为 CandidateTakeSnapshot） ✅
 
 **目标：** 实现 `GET /candidate/attempts/:attemptId/take` 统一端点，返回 attempt 元数据 + 派生能力 + 安全题目 + answerValue + answerSource。**取代旧的 7 个真相字段补丁方案**。
 
@@ -294,9 +294,16 @@ interface CandidateQuestion {
 **完成标准：**
 - 端点返回完整 CandidateTakeSnapshot
 - 安全投影不泄漏 standardAnswer/rubric
-- answerSource 正确路由
+- answerSource 正确路由（draft / submitted / none）
 - isEditable 考虑 deadline
 - 测试覆盖 all answerSource 分支
+- Cache-Control: no-store header
+
+**变更文件：**
+- `packages/contracts/src/attempt.ts`（CandidateTakeSnapshot schema + CandidateTakeQuestion schema + enums）
+- `apps/api/src/routes/attempts.shared.ts`（buildCandidateTakeSnapshot serialization）
+- `apps/api/src/routes/attempts.candidate.ts`（新端点）
+- `apps/api/src/routes/attempts/candidate-take.test.ts`（4 tests）
 
 **提交：**
 ```bash

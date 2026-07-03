@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AvailabilityStatusEnum, PrimaryActionEnum } from "./candidate.js";
+import { GradingStatusEnum as GradingStatusFromScore } from "./score.js";
 
 // ── Attempt ───────────────────────────────────────────────────────
 
@@ -462,6 +463,105 @@ export const CandidateExamDetailResponseSchema = z.object({
 export type CandidateExamDetailResponse = z.infer<
   typeof CandidateExamDetailResponseSchema
 >;
+
+// ── CandidateTakeSnapshot (L0 §6.1) ─────────────────────────────
+
+/**
+ * InputMode derived from QuestionType. Not stored in DB.
+ */
+export const InputModeEnum = z.enum([
+  "choice",
+  "boolean",
+  "single_line",
+  "multi_line",
+]);
+export type InputMode = z.infer<typeof InputModeEnum>;
+
+/**
+ * GradingMode derived from QuestionType. Not stored in DB.
+ */
+export const GradingModeEnum = z.enum(["auto", "manual"]);
+export type GradingMode = z.infer<typeof GradingModeEnum>;
+
+/**
+ * Answer source routing — which column the answerValue comes from.
+ */
+export const AnswerSourceEnum = z.enum(["draft", "submitted", "none"]);
+export type AnswerSource = z.infer<typeof AnswerSourceEnum>;
+
+/**
+ * Visibility flags for candidate result/answer views.
+ */
+export const VisibilityEnum = z.enum(["hidden", "visible"]);
+export type Visibility = z.infer<typeof VisibilityEnum>;
+
+/**
+ * Lock reason when isEditable is false.
+ */
+export const LockReasonEnum = z.enum([
+  "deadline",
+  "submitted",
+  "voided",
+  "disrupted",
+]);
+export type LockReason = z.infer<typeof LockReasonEnum>;
+
+/**
+ * Candidate-safe question with derived inputMode and answerValue/answerSource.
+ * Part of CandidateTakeSnapshot (L0 §6.1).
+ */
+export const CandidateTakeQuestionSchema = z.object({
+  id: z.string(),
+  type: z.enum([
+    "single_choice",
+    "multiple_choice",
+    "fill_blank",
+    "true_false",
+    "text_response",
+  ]),
+  prompt: z.string(),
+  options: z.array(
+    z.object({
+      id: z.string(),
+      content: z.string(),
+    }),
+  ),
+  inputMode: InputModeEnum,
+  maxScore: z.number(),
+  answerValue: z.unknown().nullable(),
+  answerSource: AnswerSourceEnum,
+});
+export type CandidateTakeQuestion = z.infer<typeof CandidateTakeQuestionSchema>;
+
+/**
+ * CandidateTakeSnapshot — the unified response from
+ * GET /candidate/attempts/:attemptId/take (L0 §6.1).
+ *
+ * Contains attempt metadata, derived capabilities, safe questions with
+ * answerValue/answerSource, server time fields, and visibility flags.
+ * Never contains standardAnswer, rubric, gradingMode, correctOption,
+ * teacher notes, or unreleased scores.
+ */
+export const CandidateTakeSnapshotSchema = z.object({
+  attemptId: z.string().uuid(),
+  examId: z.string().uuid(),
+  attemptStatus: AttemptStatusEnum,
+  gradingStatus: GradingStatusFromScore,
+  isEditable: z.boolean(),
+  canStart: z.boolean(),
+  canResume: z.boolean(),
+  canSave: z.boolean(),
+  canSubmit: z.boolean(),
+  lockReason: LockReasonEnum.optional(),
+  resultVisibility: VisibilityEnum,
+  answerVisibility: VisibilityEnum,
+  submittedAt: z.string().datetime().nullable(),
+  serverNow: z.string().datetime(),
+  effectiveDeadline: z.string().datetime().nullable(),
+  serverRevision: z.union([z.string(), z.number()]),
+  questions: z.array(CandidateTakeQuestionSchema),
+});
+export type CandidateTakeSnapshot = z.infer<typeof CandidateTakeSnapshotSchema>;
 
 // ── Candidate Status (Admin / Proctor) ──────────────────────────
 
