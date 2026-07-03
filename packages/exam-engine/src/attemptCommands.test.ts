@@ -40,6 +40,7 @@ function makeSnapshot(): QuestionSnapshot[] {
         fillBlankMatchMode: "exact",
       },
       order: 0,
+      rubric: null,
     },
   ];
 }

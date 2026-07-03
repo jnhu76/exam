@@ -77,6 +77,7 @@ function makeQuestion(id: string, overrides: Partial<Question> = {}): Question {
       multiSelectScoring: "all_correct_full",
       fillBlankMatchMode: "exact",
     },
+    rubric: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -115,6 +116,24 @@ describe("examCommands", () => {
       expect(() =>
         buildQuestionSnapshot(["q1", "missing"], testQuestions),
       ).toThrow(ValidationError);
+    });
+
+    it("copies rubric from Question into QuestionSnapshot (text_response)", () => {
+      const q = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: null,
+        rubric: "按逻辑完整性、关键概念、论证质量给分",
+        score: 20,
+      });
+      const snapshot = buildQuestionSnapshot(["q-text"], [q]);
+      expect(snapshot[0]?.rubric).toBe("按逻辑完整性、关键概念、论证质量给分");
+    });
+
+    it("normalizes rubric: null for objective questions", () => {
+      const snapshot = buildQuestionSnapshot(["q1"], testQuestions);
+      expect(snapshot[0]?.rubric).toBeNull();
     });
   });
 

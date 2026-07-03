@@ -37,6 +37,9 @@ export function buildQuestionSnapshot(
       score: q.score,
       gradingRule: q.gradingRule,
       order: index,
+      // P3-L0-1: rubric dual-layer — copy authoring source into the frozen
+      // grading source. Always string | null; objective questions carry null.
+      rubric: q.rubric ?? null,
     };
   });
 }

@@ -10,6 +10,7 @@ import type {
   QuestionScoreResult,
   QuestionSnapshot,
   ResultPublicationMode,
+  SubmittedAnswersSnapshot,
 } from "@exam/domain";
 import {
   boolean,
@@ -173,6 +174,11 @@ export const questions = pgTable(
     // subjective (manually graded). Objective questions keep a typed answer.
     // See QuestionSnapshot / hasSubjectiveQuestions for the convention.
     standardAnswer: jsonb("standard_answer").$type<unknown>(),
+    // P3-L0-1: rubric authoring/editing source (dual-layer). text_response
+    // requires non-empty at publish (P3-L0-5); objective questions are null.
+    // Copied into QuestionSnapshot.rubric at attempt creation. Nullable so
+    // the migration adds the column without backfilling historical rows.
+    rubric: text("rubric"),
     attachments: jsonb("attachments").$type<Attachment[]>().notNull(),
     score: doublePrecision("score").notNull(),
     difficulty: integer("difficulty").notNull(),
@@ -317,6 +323,17 @@ export const examAttempts = pgTable(
     gradingStatus: text("grading_status")
       .$type<GradingStatus>()
       .default("auto_graded"),
+    // P3-L0-1: frozen answer snapshot written once in the submit transaction
+    // (L0 §4.1). Null for attempts that predate the column or were never
+    // submitted. Read exclusively by grading/result paths; never by the
+    // candidate take endpoint draft-answer branch.
+    submittedAnswers: jsonb(
+      "submitted_answers",
+    ).$type<SubmittedAnswersSnapshot | null>(),
+    // P3-L0-1: why the attempt was submitted ('manual' | 'deadline').
+    // Null for legacy rows (treated as unknown). New submit paths must
+    // populate this; backfill of historical rows is out of scope (P3-L0-4).
+    submissionReason: text("submission_reason"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -18,6 +18,7 @@ function makeQuestion(
       fillBlankMatchMode: "exact",
     },
     order: 0,
+    rubric: null,
     ...overrides,
   };
 }

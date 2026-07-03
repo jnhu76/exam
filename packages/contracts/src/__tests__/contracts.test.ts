@@ -18,7 +18,10 @@ import { CreateExamRequestSchema, ExamSchema } from "../exam.js";
 import {
   CreateQuestionRequestSchema,
   QuestionImportRowSchema,
+  QuestionSchema,
+  UpdateQuestionRequestSchema,
 } from "../question.js";
+import { QuestionSnapshotSchema } from "../attempt.js";
 import {
   ScoreListQuerySchema,
   AuditLogQuerySchema,
@@ -362,6 +365,123 @@ describe("question contracts", () => {
       score: 5,
     });
     expect(result.success).toBe(true);
+  });
+
+  // ── P3-L0-1: text_response + rubric dual-layer ─────────────────
+
+  it("CreateQuestionRequestSchema accepts text_response with rubric and null standardAnswer", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "text_response",
+      content: "请阐述你的观点",
+      options: [],
+      standardAnswer: null,
+      rubric: "按逻辑完整性、关键概念、论证质量给分",
+      score: 20,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.rubric).toBe("按逻辑完整性、关键概念、论证质量给分");
+    }
+  });
+
+  it("CreateQuestionRequestSchema defaults rubric to null when omitted", () => {
+    const result = CreateQuestionRequestSchema.safeParse({
+      courseId: "550e8400-e29b-41d4-a716-446655440000",
+      type: "single_choice",
+      content: "Pick one",
+      options: [
+        { id: "A", content: "Option A" },
+        { id: "B", content: "Option B" },
+      ],
+      standardAnswer: "A",
+      score: 10,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.rubric).toBeNull();
+    }
+  });
+
+  it("QuestionSchema parses a full row with rubric: null", () => {
+    const result = QuestionSchema.safeParse({
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      organizationId: "550e8400-e29b-41d4-a716-446655440001",
+      courseId: "550e8400-e29b-41d4-a716-446655440002",
+      type: "text_response",
+      content: "请阐述你的观点",
+      options: [],
+      standardAnswer: null,
+      attachments: [],
+      score: 20,
+      difficulty: 3,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("UpdateQuestionRequestSchema accepts rubric update", () => {
+    const result = UpdateQuestionRequestSchema.safeParse({
+      rubric: "updated rubric text",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.rubric).toBe("updated rubric text");
+    }
+  });
+
+  it("QuestionSnapshotSchema accepts text_response with rubric", () => {
+    const result = QuestionSnapshotSchema.safeParse({
+      originalQuestionId: "q1",
+      type: "text_response",
+      content: "请阐述",
+      attachments: [],
+      options: [],
+      standardAnswer: null,
+      score: 20,
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      order: 0,
+      rubric: "按逻辑给分",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.rubric).toBe("按逻辑给分");
+    }
+  });
+
+  it("QuestionSnapshotSchema normalizes missing rubric to null (legacy JSONB compat)", () => {
+    const result = QuestionSnapshotSchema.safeParse({
+      originalQuestionId: "q1",
+      type: "single_choice",
+      content: "Pick one",
+      attachments: [],
+      options: [
+        { id: "A", content: "A" },
+        { id: "B", content: "B" },
+      ],
+      standardAnswer: "A",
+      score: 10,
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      order: 0,
+      // rubric intentionally omitted — simulates a pre-L0-1 JSONB row
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.rubric).toBeNull();
+    }
   });
 });
 

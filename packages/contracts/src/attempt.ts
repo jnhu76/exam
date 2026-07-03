@@ -55,6 +55,7 @@ export const QuestionSnapshotSchema = z.object({
     "multiple_choice",
     "fill_blank",
     "true_false",
+    "text_response",
   ]),
   content: z.string(),
   attachments: z.array(
@@ -78,14 +79,24 @@ export const QuestionSnapshotSchema = z.object({
     fillBlankCaseSensitive: z.boolean().optional(),
   }),
   order: z.number().int(),
+  // P3-L0-1: frozen grading source (dual-layer). Historical JSONB rows
+  // predating this field omit the key; the transform normalizes missing
+  // values to null so legacy snapshots parse without migration.
+  rubric: z
+    .string()
+    .nullable()
+    .nullish()
+    .transform((v) => (v === undefined ? null : v)),
 });
 
 /**
- * Candidate-safe question snapshot that omits the standardAnswer field.
- * Used when returning attempt data to candidates.
+ * Candidate-safe question snapshot that omits standardAnswer and rubric.
+ * Used when returning attempt data to candidates. Per L0 §6.1, candidates
+ * must never receive rubric or standardAnswer.
  */
 export const CandidateQuestionSnapshotSchema = QuestionSnapshotSchema.omit({
   standardAnswer: true,
+  rubric: true,
 });
 
 const AnswerRecordSchema = z.object({

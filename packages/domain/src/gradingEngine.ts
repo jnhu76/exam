@@ -120,6 +120,9 @@ function gradeFillBlank(
  * - `single_choice` / `true_false`: exact value match.
  * - `multiple_choice`: set comparison with configurable partial scoring.
  * - `fill_blank`: string matching with exact or keyword mode.
+ * - `text_response`: NOT auto-graded here. Returns a zero-score placeholder;
+ *   manual scoring in {@link manualGrading} owns the real score. Including
+ *   the case keeps the switch exhaustive as QuestionType widens.
  *
  * @returns A {@link QuestionScoreResult} with the awarded score and correctness flag.
  */
@@ -135,6 +138,12 @@ export function gradeQuestion(
       return gradeMultipleChoice(question, candidateAnswer);
     case "fill_blank":
       return gradeFillBlank(question, candidateAnswer);
+    case "text_response":
+      // Manual-graded: the auto-grading engine does not score this type.
+      // The zero-score placeholder is overwritten by manualGrading on
+      // score entry; makeResult sets correct=false (0 !== maxScore), which
+      // is acceptable because correctness is not meaningful for manual types.
+      return makeResult(question, candidateAnswer, 0);
   }
 }
 

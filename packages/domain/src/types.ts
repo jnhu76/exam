@@ -124,6 +124,13 @@ export interface Question {
   difficulty: number;
   tags: string[];
   gradingRule: GradingRule;
+  /**
+   * P3-L0-1: rubric authoring/editing source (dual-layer storage).
+   * text_response requires non-empty at publish (P3-L0-5); objective
+   * questions carry null. Copied into QuestionSnapshot.rubric at attempt
+   * creation. Existing rows read via the db repo normalize undefined → null.
+   */
+  rubric: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -160,6 +167,13 @@ export interface QuestionSnapshot {
   score: number;
   gradingRule: GradingRule;
   order: number;
+  /**
+   * P3-L0-1: frozen grading source (dual-layer). Copied from
+   * Question.rubric at attempt creation; always string | null on newly
+   * built snapshots. Historical JSONB rows may omit the key — readers
+   * normalize missing to null (see QuestionSnapshotSchema transform).
+   */
+  rubric: string | null;
 }
 
 /** Answer option within a question snapshot (no correctness flag — grading uses standardAnswer). */
@@ -324,10 +338,25 @@ export interface ExamAttempt {
    * Written once in the submit transaction; immutable after submit.
    * Used exclusively by grading and result computation.
    */
-  submittedAnswers?: {
-    schemaVersion: number;
-    answers: { questionId: string; value: unknown }[];
-  } | null;
+  submittedAnswers?: SubmittedAnswersSnapshot | null;
+  /**
+   * P3-L0-1: why this attempt was submitted. `'manual'` for candidate
+   * submit; `'deadline'` for lazy deadline reconciliation; null for
+   * legacy rows predating the column (treated as unknown). Future
+   * submit paths must populate this.
+   */
+  submissionReason?: "manual" | "deadline" | null;
+}
+
+/**
+ * Frozen snapshot of answers written to `submitted_answers` at submit
+ * time (L0 §4.1 / §2.3). Built by normalizing draft {@link AnswerRecord}s
+ * against the question snapshot — strips protocol metadata (clientSeq /
+ * baseVersion / timestamps). Immutable after submit.
+ */
+export interface SubmittedAnswersSnapshot {
+  schemaVersion: 1;
+  answers: { questionId: string; value: unknown }[];
 }
 
 /**
