@@ -12887,6 +12887,321 @@
         }
       }
     },
+    "/api/candidate/attempts/{attemptId}/take": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "in": "path",
+            "name": "attemptId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Candidate"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "attemptId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "examId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "attemptStatus": {
+                      "type": "string",
+                      "enum": [
+                        "not_started",
+                        "queued",
+                        "in_progress",
+                        "disrupted",
+                        "submitted",
+                        "grading",
+                        "graded",
+                        "voided"
+                      ]
+                    },
+                    "gradingStatus": {
+                      "type": "string",
+                      "enum": ["auto_graded", "pending_manual", "fully_graded"]
+                    },
+                    "isEditable": {
+                      "type": "boolean"
+                    },
+                    "canStart": {
+                      "type": "boolean"
+                    },
+                    "canResume": {
+                      "type": "boolean"
+                    },
+                    "canSave": {
+                      "type": "boolean"
+                    },
+                    "canSubmit": {
+                      "type": "boolean"
+                    },
+                    "lockReason": {
+                      "type": "string",
+                      "enum": ["deadline", "submitted", "voided", "disrupted"]
+                    },
+                    "resultVisibility": {
+                      "type": "string",
+                      "enum": ["hidden", "visible"]
+                    },
+                    "answerVisibility": {
+                      "type": "string",
+                      "enum": ["hidden", "visible"]
+                    },
+                    "submittedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "serverNow": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "effectiveDeadline": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "serverRevision": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
+                    },
+                    "questions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "single_choice",
+                              "multiple_choice",
+                              "fill_blank",
+                              "true_false",
+                              "text_response"
+                            ]
+                          },
+                          "prompt": {
+                            "type": "string"
+                          },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "content": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["id", "content"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "inputMode": {
+                            "type": "string",
+                            "enum": [
+                              "choice",
+                              "boolean",
+                              "single_line",
+                              "multi_line"
+                            ]
+                          },
+                          "maxScore": {
+                            "type": "number"
+                          },
+                          "answerValue": {
+                            "nullable": true
+                          },
+                          "answerSource": {
+                            "type": "string",
+                            "enum": ["draft", "submitted", "none"]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "type",
+                          "prompt",
+                          "options",
+                          "inputMode",
+                          "maxScore",
+                          "answerSource"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "attemptId",
+                    "examId",
+                    "attemptStatus",
+                    "gradingStatus",
+                    "isEditable",
+                    "canStart",
+                    "canResume",
+                    "canSave",
+                    "canSubmit",
+                    "resultVisibility",
+                    "answerVisibility",
+                    "submittedAt",
+                    "serverNow",
+                    "effectiveDeadline",
+                    "serverRevision",
+                    "questions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized — missing or invalid authentication cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — insufficient role or capability",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requestId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/attempts/{attemptId}/answers/{questionId}": {
       "post": {
         "requestBody": {
