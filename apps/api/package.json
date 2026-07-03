@@ -17,6 +17,7 @@
     "db:seed:e2e": "tsx src/e2e-seed.ts",
     "bootstrap:admin": "tsx src/scripts/bootstrap-admin.ts",
     "reset:admin-password": "tsx src/scripts/reset-admin-password.ts",
+    "backfill:submitted-answers": "tsx src/scripts/backfill-submitted-answers.ts",
     "api:openapi": "tsx src/openapi/export.ts",
     "api:openapi:check": "tsx src/openapi/export.ts --check"
   },
