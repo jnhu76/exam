@@ -12981,14 +12981,8 @@
                       "nullable": true
                     },
                     "serverRevision": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ]
+                      "type": "string",
+                      "format": "date-time"
                     },
                     "questions": {
                       "type": "array",
