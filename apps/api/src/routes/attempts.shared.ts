@@ -147,10 +147,10 @@ export function buildCandidateTakeSnapshot(
   const effectiveDeadlineStr = effectiveDeadline?.toISOString() ?? null;
 
   // Derived capability: isEditable (CONTEXT.md:12, exam-protocol.md §6.1)
-  const isEditable =
-    attemptStatus === "in_progress" &&
-    effectiveDeadline !== null &&
-    now < effectiveDeadline;
+  // effectiveDeadline === null means open-ended (no deadline) — always editable
+  const isDeadlineExpired =
+    effectiveDeadline !== null && now >= effectiveDeadline;
+  const isEditable = attemptStatus === "in_progress" && !isDeadlineExpired;
 
   // Derived capabilities
   const canStart = false; // Already started
@@ -158,13 +158,12 @@ export function buildCandidateTakeSnapshot(
   const canSave = isEditable;
   const canSubmit =
     (attemptStatus === "in_progress" || attemptStatus === "disrupted") &&
-    effectiveDeadline !== null &&
-    now < effectiveDeadline;
+    !isDeadlineExpired;
 
   // Lock reason
   let lockReason: "deadline" | "submitted" | "voided" | "disrupted" | undefined;
   if (!isEditable) {
-    if (effectiveDeadline !== null && now >= effectiveDeadline) {
+    if (isDeadlineExpired) {
       lockReason = "deadline";
     } else if (
       attemptStatus === "submitted" ||

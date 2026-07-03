@@ -4,6 +4,7 @@ import {
   CandidateExamDetailResponseSchema,
   CandidateExamSummarySchema,
   CandidateTakeSnapshotSchema,
+  AttemptIdParamsSchema,
   HeartbeatRequestSchema,
   LoadAttemptParamsSchema,
   LoadAttemptResponseSchema,
@@ -759,6 +760,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
       schema: {
+        params: AttemptIdParamsSchema,
         security: cookieAuth,
         "x-role": ["Candidate"],
         response: {
@@ -769,9 +771,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const parsed = z
-        .object({ attemptId: z.string().uuid() })
-        .safeParse(request.params);
+      const parsed = AttemptIdParamsSchema.safeParse(request.params);
       if (!parsed.success) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
