@@ -319,6 +319,15 @@ export interface ExamAttempt {
    * to `auto_graded` at the application boundary.
    */
   gradingStatus?: GradingStatus;
+  /**
+   * Frozen snapshot of answers at submit time (L0 §4.1).
+   * Written once in the submit transaction; immutable after submit.
+   * Used exclusively by grading and result computation.
+   */
+  submittedAnswers?: {
+    schemaVersion: number;
+    answers: { questionId: string; value: unknown }[];
+  } | null;
 }
 
 /**

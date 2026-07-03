@@ -132,16 +132,21 @@ Result:
 **覆盖协议：** 上述全部 21 项（14 原有 + 7 L0 扩展）
 
 **待检查文件：**
-- `packages/domain/src/enums.ts`（QuestionType 枚举 — 新增 text_response）
-- `packages/domain/src/examStateMachine.ts`（exam lifecycle 命令）
+- `packages/domain/src/enums.ts`（QuestionType / AttemptStatus / GradingStatus / ExamStatus 枚举 — 新增 text_response）
+- `packages/exam-engine/src/examStateMachine.ts`（exam lifecycle transition 表）
+- `packages/exam-engine/src/examCommands.ts`（exam 命令函数：publishExam/openExam/closeExam/cancelExam/unpublishExam/extendExam/archiveExam/publishResults/checkAndUpdateExamStatus）
+- `packages/exam-engine/src/attemptStateMachine.ts`（attempt transition 表）
+- `packages/exam-engine/src/attemptCommands.ts`（attempt 命令函数 + OPEN_STATUSES）
 - `packages/exam-engine/src/answerProtocol.ts`（save/restore/submit/freeze）
 - `packages/exam-engine/src/timer.ts`（server-side time authority）
 - `packages/exam-engine/src/grading.ts`、`packages/exam-engine/src/manualGrading.ts`（grading input）
-- `apps/api/src/routes/attempts.candidate.ts`（candidate attempt API）
+- `apps/api/src/routes/attempts/attempts.candidate.ts`（candidate attempt API）
 - `apps/api/src/routes/scores.ts`（result/standard-answer visibility）
 - `apps/api/src/routes/exam.ts`（exam publish/close）
 - `packages/contracts/src/attempt.ts`（SaveAnswerRequestSchema 等）
-- `packages/db/src/schema.ts`（attempt status / answers / submitted_answers 形状）
+- `packages/db/src/schema/pg.ts`（attempt status / answers / submitted_answers 形状）
+- `CONTEXT.md`（统一语言真相源 — QuestionType / AttemptStatus / GradingStatus / Exam lifecycle / 可见性）
+- `docs/SPEC.md` §455–499（Exam 状态机权威说明，Phase 2 已实现全 6 态）
 
 **步骤：**
 
@@ -174,7 +179,7 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 
 ---
 
-### P3-PROTO-1：Backend State Consistency Tests（L0 扩展）
+### P3-PROTO-1：Backend State Consistency Tests（L0 扩展） ✅
 
 **目标：** 用后端集成测试证明协议矩阵中的关键边界。**L0 扩展后**：增加 deadline reconciliation、text_response、submitted_answers 冻结、double submit 幂等的测试。
 
@@ -206,15 +211,34 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 - 测试名清晰对应协议条目
 - 无既有测试被削弱
 
-**提交（若加测试）：**
+**场景覆盖映射：**
+
+| # | 场景 | 测试文件 |
+|---|------|----------|
+| 1 | save before submit allowed | `protocol-consistency.test.ts` #1 |
+| 2 | save after submit rejected | `candidate-save-submit.test.ts:925` + `protocol-consistency.test.ts` #2 |
+| 3 | double submit idempotency | `candidate-save-submit.test.ts:524` + `protocol-consistency.test.ts` #3 |
+| 4 | save/submit race | `submitFreezeBarrier.test.ts` |
+| 5 | refresh after submit | `protocol-consistency.test.ts` #5 |
+| 6 | candidate cannot see score before release | `scores.test.ts:261` |
+| 7 | candidate cannot see standardAnswer | `candidate-save-submit.test.ts:188` + `protocol-consistency.test.ts` #7 |
+| 8 | grading view sees submitted answers | `gradingQueue.test.ts:728` + `protocol-consistency.test.ts` #8 |
+| 9 | deadline reconciliation via take | `deadline-scanner.test.ts` (scanner) |
+| 10 | deadline reconciliation idempotent | `deadline-scanner.test.ts:390` (scanner) |
+| 11 | save after deadline rejected | `candidate-save-submit.test.ts:678` + `protocol-consistency.test.ts` #11 |
+| 12 | submit after deadline returns existing | `candidate-save-submit.test.ts:764` + `protocol-consistency.test.ts` #12 |
+| 13 | text_response grading reads submitted_answers | 待 P3-L0-1/L0-2 实现后补充 |
+| 14 | grading queue queries gradingStatus | `gradingQueue.test.ts:201,232` + `protocol-consistency.test.ts` #14 |
+
+**提交：**
 ```bash
-git add apps/api/src/routes/attempts.candidate.test.ts
-git commit -m "test(P-1/L0): backend state consistency — 14 scenarios including deadline reconciliation and text_response"
+git add apps/api/src/routes/attempts/protocol-consistency.test.ts docs/phase3/job-cards-phase3-modules.md docs/phase3/plan.md
+git commit -m "test(P-1/L0): backend state consistency — 14 scenarios via protocol-consistency.test.ts + existing tests"
 ```
 
 ---
 
-### P3-PROTO-2：API Contract Alignment（L0 升级为 CandidateTakeSnapshot）
+### P3-PROTO-2：API Contract Alignment（L0 升级为 CandidateTakeSnapshot） ✅
 
 **目标：** 实现 `GET /candidate/attempts/:attemptId/take` 统一端点，返回 attempt 元数据 + 派生能力 + 安全题目 + answerValue + answerSource。**取代旧的 7 个真相字段补丁方案**。
 
@@ -270,9 +294,16 @@ interface CandidateQuestion {
 **完成标准：**
 - 端点返回完整 CandidateTakeSnapshot
 - 安全投影不泄漏 standardAnswer/rubric
-- answerSource 正确路由
+- answerSource 正确路由（draft / submitted / none）
 - isEditable 考虑 deadline
 - 测试覆盖 all answerSource 分支
+- Cache-Control: no-store header
+
+**变更文件：**
+- `packages/contracts/src/attempt.ts`（CandidateTakeSnapshot schema + CandidateTakeQuestion schema + enums）
+- `apps/api/src/routes/attempts.shared.ts`（buildCandidateTakeSnapshot serialization）
+- `apps/api/src/routes/attempts.candidate.ts`（新端点）
+- `apps/api/src/routes/attempts/candidate-take.test.ts`（4 tests）
 
 **提交：**
 ```bash
