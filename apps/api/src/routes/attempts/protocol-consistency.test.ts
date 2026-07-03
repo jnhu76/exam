@@ -1,11 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
-import { buildTestApp, uniquePrefix } from "../testHelpers.js";
+import { buildTestApp } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
-import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import {
   buildExamPayload,
   enrollCandidateForExam,
@@ -568,7 +565,10 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
         url: `/api/attempts/${examId}/start`,
         cookies: { "auth-token": ctx.candidateToken },
       });
-      if (startRes.statusCode !== 201) return; // attempt may already exist
+      if (startRes.statusCode !== 201) {
+        // Attempt already exists from another test — skip assertion
+        return;
+      }
 
       const attemptId = startRes.json().id as string;
       const qId = startRes.json().questionSnapshot[0].originalQuestionId;
