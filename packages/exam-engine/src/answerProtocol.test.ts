@@ -307,4 +307,178 @@ describe("answerProtocol", () => {
       expect(result.serverVersion).toBe(2);
     });
   });
+
+  describe("buildSubmittedAnswersSnapshot (P3-L0-2)", () => {
+    it("normalizes draft AnswerRecords into a clean SubmittedAnswersSnapshot", async () => {
+      const { buildSubmittedAnswersSnapshot } =
+        await import("./answerProtocol.js");
+      const snapshot = [
+        {
+          originalQuestionId: "q1",
+          type: "single_choice" as const,
+          content: "Q1",
+          attachments: [],
+          options: [],
+          standardAnswer: "a",
+          score: 10,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 0,
+          rubric: null,
+        },
+      ];
+      const draft = [
+        makeAnswerRecord({
+          questionId: "q1",
+          answer: "a",
+          version: 3,
+          savedAt: new Date("2025-01-01T10:00:00Z"),
+        }),
+      ];
+
+      const result = buildSubmittedAnswersSnapshot(draft, snapshot);
+
+      expect(result.schemaVersion).toBe(1);
+      expect(result.answers).toEqual([{ questionId: "q1", value: "a" }]);
+    });
+
+    it("strips protocol metadata (no version/savedAt/clientSeq/baseVersion)", async () => {
+      const { buildSubmittedAnswersSnapshot } =
+        await import("./answerProtocol.js");
+      const snapshot = [
+        {
+          originalQuestionId: "q1",
+          type: "true_false" as const,
+          content: "Q1",
+          attachments: [],
+          options: [],
+          standardAnswer: true,
+          score: 5,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 0,
+          rubric: null,
+        },
+      ];
+      const draft = [
+        makeAnswerRecord({
+          questionId: "q1",
+          answer: true,
+          version: 7,
+          savedAt: new Date("2025-06-01T12:00:00Z"),
+        }),
+      ];
+
+      const result = buildSubmittedAnswersSnapshot(draft, snapshot);
+      const entry = result.answers[0];
+
+      expect(entry).toBeDefined();
+      expect(entry).not.toHaveProperty("version");
+      expect(entry).not.toHaveProperty("savedAt");
+      expect(entry).not.toHaveProperty("clientSeq");
+      expect(entry).not.toHaveProperty("baseVersion");
+      expect(Object.keys(entry ?? {}).sort()).toEqual(
+        ["questionId", "value"].sort(),
+      );
+    });
+
+    it("includes all snapshot questions, even unanswered ones (value: null)", async () => {
+      const { buildSubmittedAnswersSnapshot } =
+        await import("./answerProtocol.js");
+      const snapshot = [
+        {
+          originalQuestionId: "q1",
+          type: "single_choice" as const,
+          content: "Q1",
+          attachments: [],
+          options: [],
+          standardAnswer: "a",
+          score: 10,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 0,
+          rubric: null,
+        },
+        {
+          originalQuestionId: "q2",
+          type: "true_false" as const,
+          content: "Q2",
+          attachments: [],
+          options: [],
+          standardAnswer: true,
+          score: 5,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 1,
+          rubric: null,
+        },
+      ];
+      // Only q1 was answered; q2 left blank.
+      const draft = [makeAnswerRecord({ questionId: "q1", answer: "a" })];
+
+      const result = buildSubmittedAnswersSnapshot(draft, snapshot);
+
+      expect(result.answers).toEqual([
+        { questionId: "q1", value: "a" },
+        { questionId: "q2", value: null },
+      ]);
+    });
+
+    it("orders output by question snapshot order, not answer record order", async () => {
+      const { buildSubmittedAnswersSnapshot } =
+        await import("./answerProtocol.js");
+      const snapshot = [
+        {
+          originalQuestionId: "q-first",
+          type: "single_choice" as const,
+          content: "A",
+          attachments: [],
+          options: [],
+          standardAnswer: "a",
+          score: 10,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 0,
+          rubric: null,
+        },
+        {
+          originalQuestionId: "q-second",
+          type: "single_choice" as const,
+          content: "B",
+          attachments: [],
+          options: [],
+          standardAnswer: "b",
+          score: 10,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full" as const,
+            fillBlankMatchMode: "exact" as const,
+          },
+          order: 1,
+          rubric: null,
+        },
+      ];
+      // Draft answers arrive in reverse order.
+      const draft = [
+        makeAnswerRecord({ questionId: "q-second", answer: "b" }),
+        makeAnswerRecord({ questionId: "q-first", answer: "a" }),
+      ];
+
+      const result = buildSubmittedAnswersSnapshot(draft, snapshot);
+
+      expect(result.answers.map((a) => a.questionId)).toEqual([
+        "q-first",
+        "q-second",
+      ]);
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import type {
+  AnswerRecord,
   ExamEnrollment,
   Exam,
   ScoreResult,
@@ -115,16 +116,38 @@ export async function readGradingSnapshot(
 /**
  * Computes the grading result by delegating to the domain-gradeAnswers function.
  * Returns a ScoreResult with per-question scores, total, and pass/fail.
+ *
+ * P3-L0-2 (ADR-008): grading reads the frozen `submitted_answers` snapshot,
+ * NOT the mutable draft `answers` column. A submitted attempt's score is
+ * derived from exactly the answer set captured under the submit lock. The
+ * snapshot's `{ questionId, value }` entries are mapped to the minimal
+ * AnswerRecord shape gradeAnswers expects (version/savedAt are irrelevant
+ * to scoring — only questionId + answer matter).
+ *
+ * TODO(P3-L0-4): once the backfill script populates submitted_answers for
+ * all historical submitted/graded attempts, drop the draft fallback and
+ * require submitted_answers strictly. Until then, legacy attempts with a
+ * NULL submitted_answers column fall back to draft answers so they remain
+ * gradeable during the migration window.
  */
 export function computeGradingResult(
   attempt: ExamAttempt,
   exam: Exam,
   now: Date,
 ): ScoreResult {
+  const sourceAnswers: AnswerRecord[] = attempt.submittedAnswers
+    ? attempt.submittedAnswers.answers.map((a) => ({
+        questionId: a.questionId,
+        answer: a.value,
+        version: 0,
+        savedAt: now,
+      }))
+    : attempt.answers;
+
   return gradeAnswers(
     attempt.id,
     attempt.questionSnapshot,
-    attempt.answers,
+    sourceAnswers,
     exam.passingScore,
     now,
   );

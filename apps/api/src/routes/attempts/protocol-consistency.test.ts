@@ -1,8 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
+import { randomUUID } from "node:crypto";
 import { buildTestApp } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { schema } from "@exam/db/src/schema/pg.js";
 import {
   buildExamPayload,
   enrollCandidateForExam,
@@ -211,7 +213,10 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
 
       const repo = createAttemptRepo(ctx.db);
       const row = await repo.findById(candidateCtx(), attemptId);
-      answersBefore = row?.answers;
+      // P3-L0-2: post-submit, the authoritative frozen snapshot is
+      // submitted_answers. Capture it and assert a rejected post-submit
+      // save does not mutate it.
+      answersBefore = row?.submittedAnswers ?? row?.answers;
     });
 
     it("DB submitted_answers unchanged after rejected save", async () => {
@@ -321,13 +326,14 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
       // submittedAt should be stable (not updated by second submit)
       expect(row?.submittedAt).toBeDefined();
       expect(row?.status).toBe("graded");
-      // submitted_answers column may not exist yet (P3-L0-1);
-      // when it does, it should not be overwritten by second submit
-      const submittedAnswers = (row as Record<string, unknown>)
-        ?.submittedAnswers;
-      if (submittedAnswers !== undefined && submittedAnswers !== null) {
-        expect(submittedAnswers).toBeDefined();
-      }
+      // P3-L0-2: submitted_answers must be frozen once and never rebuilt.
+      // The candidate saved answer "b" before submit; the frozen snapshot
+      // carries that value, and a second submit must deep-equal the first.
+      expect(row?.submittedAnswers).toEqual({
+        schemaVersion: 1,
+        answers: [{ questionId: expect.any(String), value: "b" }],
+      });
+      expect(row?.submissionReason).toBe("manual");
     });
   });
 
@@ -664,6 +670,139 @@ describe("P3-PROTO-1: protocol boundary consistency", () => {
       });
       expect(saveRes.statusCode).toBe(200);
       expect(saveRes.json().accepted).toBe(true);
+    });
+  });
+
+  // ─── Scenario #13: text_response grading reads submitted_answers ───
+  // P3-L0-2: proves the submit freeze barrier end-to-end at the engine/DB
+  // level. The candidate saves a draft text answer, submits (freezing
+  // submitted_answers), then attempts a further save (rejected). The frozen
+  // submitted_answers — NOT the draft — is what grading captures. The route-
+  // level gradingQueue DTO read-path switch is a separate deferred job.
+  describe("#13 text_response — grading reads submitted_answers, not draft", () => {
+    let trAttemptId: string;
+    let trQId: string;
+
+    beforeAll(async () => {
+      trQId = randomUUID();
+      // Insert a text_response question directly (L0-5 publish-validation is
+      // not yet implemented, so we bypass the question-create API and write
+      // the row with standardAnswer: null + rubric, matching the new题型约定).
+      await ctx.db.insert(schema.questions).values({
+        id: trQId,
+        organizationId: ctx.org.id,
+        courseId,
+        type: "text_response",
+        content: "请阐述你的观点",
+        options: [],
+        standardAnswer: null,
+        attachments: [],
+        score: 100,
+        difficulty: 3,
+        tags: [],
+        gradingRule: {
+          multiSelectScoring: "all_correct_full",
+          fillBlankMatchMode: "exact",
+        },
+        rubric: "按逻辑完整性、关键概念、论证质量给分",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const examRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/exams",
+        payload: buildExamPayload({
+          title: "Proto1-#13 text_response freeze",
+          courseId,
+          questionIds: [trQId],
+          totalScore: 100,
+          passingScore: 60,
+        }),
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const trExamId = examRes.json().id as string;
+
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/exams/${trExamId}/publish`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      await enrollCandidateForExam(ctx, candidateProfileId, trExamId);
+
+      const startRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${trExamId}/start`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      trAttemptId = startRes.json().id as string;
+      const qId = startRes.json().questionSnapshot[0].originalQuestionId;
+
+      // Save a draft text answer.
+      await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${trAttemptId}/answers/${qId}`,
+        payload: {
+          attemptId: trAttemptId,
+          questionId: qId,
+          answer: "draft free-text answer before submit",
+          clientSeq: 1,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 0,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+
+      // Submit — freezes submitted_answers.
+      const submitRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${trAttemptId}/submit`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(submitRes.statusCode).toBe(200);
+
+      // Attempt a further save after submit — must be rejected.
+      const postSubmitSave = await ctx.app.inject({
+        method: "POST",
+        url: `/api/attempts/${trAttemptId}/answers/${qId}`,
+        payload: {
+          attemptId: trAttemptId,
+          questionId: qId,
+          answer: "rogue edit after submit",
+          clientSeq: 2,
+          clientSavedAt: new Date().toISOString(),
+          baseVersion: 1,
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(postSubmitSave.json().accepted).toBe(false);
+    });
+
+    it("DB submitted_answers holds the frozen text answer, not a later draft", async () => {
+      const repo = createAttemptRepo(ctx.db);
+      const row = await repo.findById(candidateCtx(), trAttemptId);
+
+      expect(row?.submittedAnswers).toEqual({
+        schemaVersion: 1,
+        answers: [
+          {
+            questionId: expect.any(String),
+            value: "draft free-text answer before submit",
+          },
+        ],
+      });
+      expect(row?.submissionReason).toBe("manual");
+    });
+
+    it("DB draft answers were NOT mutated by the rejected post-submit save", async () => {
+      const repo = createAttemptRepo(ctx.db);
+      const row = await repo.findById(candidateCtx(), trAttemptId);
+
+      // The draft column still holds the pre-submit value; the rogue edit
+      // was rejected and never persisted.
+      expect(row?.answers[0]?.answer).toBe(
+        "draft free-text answer before submit",
+      );
     });
   });
 });

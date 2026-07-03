@@ -868,6 +868,70 @@ describe("attemptCommands", () => {
       expect(final?.status).toBe("graded");
       expect(final?.score).toBe(80);
     });
+
+    // ── P3-L0-2: submit freeze writes submittedAnswers + submissionReason ──
+
+    it("freezes a SubmittedAnswersSnapshot from draft answers on submit", async () => {
+      const attempt = makeAttempt({
+        answers: [
+          {
+            questionId: "q1",
+            answer: "a",
+            version: 2,
+            savedAt: new Date("2025-01-01T10:05:00Z"),
+          },
+        ],
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      expect(result.submittedAnswers).toEqual({
+        schemaVersion: 1,
+        answers: [{ questionId: "q1", value: "a" }],
+      });
+    });
+
+    it("writes submissionReason='manual' by default (candidate submit)", async () => {
+      const attempt = makeAttempt();
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      expect(result.submissionReason).toBe("manual");
+    });
+
+    it("writes submissionReason='deadline' when the caller passes it", async () => {
+      const attempt = makeAttempt();
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow, {
+        submissionReason: "deadline",
+      });
+
+      expect(result.submissionReason).toBe("deadline");
+    });
+
+    it("does NOT rebuild submittedAnswers on an already-submitted attempt (idempotent)", async () => {
+      const frozen = {
+        schemaVersion: 1 as const,
+        answers: [{ questionId: "q1", value: "frozen-value" }],
+      };
+      const attempt = makeAttempt({
+        status: "submitted",
+        submittedAnswers: frozen,
+        submissionReason: "deadline",
+        submittedAt: new Date("2025-01-01T10:30:00Z"),
+      });
+      const attRepo = makeAttemptRepo([attempt]);
+
+      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+
+      // Idempotent: existing frozen snapshot + reason + submittedAt preserved.
+      expect(result.submittedAnswers).toEqual(frozen);
+      expect(result.submissionReason).toBe("deadline");
+      expect(result.submittedAt).toEqual(new Date("2025-01-01T10:30:00Z"));
+    });
   });
 
   describe("markDisrupted", () => {
