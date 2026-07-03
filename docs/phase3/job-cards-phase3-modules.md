@@ -132,16 +132,21 @@ Result:
 **覆盖协议：** 上述全部 21 项（14 原有 + 7 L0 扩展）
 
 **待检查文件：**
-- `packages/domain/src/enums.ts`（QuestionType 枚举 — 新增 text_response）
-- `packages/domain/src/examStateMachine.ts`（exam lifecycle 命令）
+- `packages/domain/src/enums.ts`（QuestionType / AttemptStatus / GradingStatus / ExamStatus 枚举 — 新增 text_response）
+- `packages/exam-engine/src/examStateMachine.ts`（exam lifecycle transition 表）
+- `packages/exam-engine/src/examCommands.ts`（exam 命令函数：publishExam/openExam/closeExam/cancelExam/unpublishExam/extendExam/archiveExam/publishResults/checkAndUpdateExamStatus）
+- `packages/exam-engine/src/attemptStateMachine.ts`（attempt transition 表）
+- `packages/exam-engine/src/attemptCommands.ts`（attempt 命令函数 + OPEN_STATUSES）
 - `packages/exam-engine/src/answerProtocol.ts`（save/restore/submit/freeze）
 - `packages/exam-engine/src/timer.ts`（server-side time authority）
 - `packages/exam-engine/src/grading.ts`、`packages/exam-engine/src/manualGrading.ts`（grading input）
-- `apps/api/src/routes/attempts.candidate.ts`（candidate attempt API）
+- `apps/api/src/routes/attempts/attempts.candidate.ts`（candidate attempt API）
 - `apps/api/src/routes/scores.ts`（result/standard-answer visibility）
 - `apps/api/src/routes/exam.ts`（exam publish/close）
 - `packages/contracts/src/attempt.ts`（SaveAnswerRequestSchema 等）
-- `packages/db/src/schema.ts`（attempt status / answers / submitted_answers 形状）
+- `packages/db/src/schema/pg.ts`（attempt status / answers / submitted_answers 形状）
+- `CONTEXT.md`（统一语言真相源 — QuestionType / AttemptStatus / GradingStatus / Exam lifecycle / 可见性）
+- `docs/SPEC.md` §455–499（Exam 状态机权威说明，Phase 2 已实现全 6 态）
 
 **步骤：**
 

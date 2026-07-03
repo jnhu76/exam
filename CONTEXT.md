@@ -37,6 +37,50 @@ _Avoid_: marking scheme, scoring rubric (use rubric)
 
 **Publish validation**: Auto-graded questions (single_choice, multiple_choice, true_false, fill_blank) require a non-empty standardAnswer. text_response requires a non-empty rubric at publish time; standardAnswer is optional. Empty strings like "暂无" do not count as valid.
 
+## Exam Lifecycle
+
+**ExamStatus**: The lifecycle state of an exam (the container), independent of any candidate's attempt. 6 values; Phase 2 has implemented the full state and all transitions.
+_Avoid_: exam state, exam phase, exam stage
+
+- `draft` — teacher/admin editing; candidates cannot see the exam or start attempts
+- `published` — released; candidates can see the exam and start attempts, but `now < openAt` (not yet auto-opened)
+- `open` — `now >= openAt`; candidates can start attempts
+- `closed` — normal end (`now >= closeAt` or admin close); no new attempts; existing attempts finish their own lifecycle independently
+- `canceled` — **abnormal cancellation, NOT equivalent to `closed`**; results/exports carry a cancellation marker (full Phase 3 semantics)
+- `archived` — terminal archive; reachable only from `closed` or `canceled`
+
+**Transitions** (authoritative; mirrors `examStateMachine.ts`):
+
+```
+draft      → [published]
+published  → [draft, open, canceled, archived]
+open       → [closed, canceled]
+closed     → [archived]
+canceled   → [archived]
+archived   → []  (terminal)
+```
+
+**Critical rules**:
+- `published` and `open` are distinct and must not be collapsed. Both allow attempt start; they differ only by whether `now >= openAt`.
+- `canceled` ≠ `closed`: `closed` is a normal end; `canceled` is an abnormal cancellation requiring a cancellation marker on results/exports.
+- `archived` is the sole terminal state, reachable only from `closed` or `canceled`.
+
+**Candidate attempt boundary**: Candidates may start attempts only when `ExamStatus` is `published` or `open` (`OPEN_STATUSES = { published, open }` in `attemptCommands.ts`). `draft`, `closed`, `canceled`, and `archived` reject attempt start.
+
+**Command functions**: All status changes go through centralized command functions (`packages/exam-engine/src/examCommands.ts`); mutating `status` directly in a route is forbidden.
+
+- `publishExam` — draft → published (builds QuestionSnapshot; guards: ≥1 question, valid schedule, timed_window, manual selection, valid retake policy, score totals)
+- `openExam` — published → open
+- `closeExam` — open → closed (idempotent: already-closed returns unchanged)
+- `cancelExam` — published|open → canceled (NOT idempotent; does not void/force-submit attempts — that guard is route-layer)
+- `unpublishExam` — published → draft (route reconciles by-now first; a `published` exam past openAt is rejected; open→draft is never accepted)
+- `extendExam` — open → open (extends `closeAt` only; positive integer minutes; preserves remaining-window semantics)
+- `archiveExam` — closed|canceled → archived
+- `publishResults` — NOT a state transition; sets `resultsPublishedAt` (drives resultVisibility → visible)
+- `checkAndUpdateExamStatus` — lazy reconcile-by-now (published→open when `now >= openAt`; open→closed when `now >= closeAt`); called at admin operations and candidate entry points
+
+_Avoid_ (command names): `reopen` (use `open`/`openExam`), `delete` (use `archive`/`archiveExam`).
+
 ## Exam Attempt Lifecycle
 
 **AttemptStatus**: The lifecycle state of a candidate's exam attempt. 8 values; the API also returns derived capability fields.

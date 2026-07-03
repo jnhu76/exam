@@ -57,7 +57,7 @@ Phase 3 执行队列现在是模块优先的。
 
 | 优先级 | 模块 | 目标 | 状态 |
 | -------- | ------ | ---- | ------ |
-| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + backfill。**P0 前端运行时的硬前置。** | **下一步进行中** |
+| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + backfill。**P0 前端运行时的硬前置。** | **P3-PROTO-0 完成（exam-protocol.md 已落地）；P3-PROTO-1/2 待开始** |
 | P0 | **考生作答运行时闭环** | 考生能作答所有 MVP 题型并安全提交。**依赖 P-1/L0 完成。** | P-1/L0 之后 |
 | P1 | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | P0 之后 |
 | P2 | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | P1 之后 |
@@ -109,9 +109,15 @@ Phase 3 执行队列现在是模块优先的。
 
 ### 状态分层（协议矩阵的真相源）
 
+> **权威来源：** `CONTEXT.md`（统一语言）+ `docs/phase3/exam-protocol.md`（协议规格）。下方为概念分层摘要；任何细节冲突以两份权威文档为准，**不得在此处扩张或收窄状态/转换**。
+
 ```
-Exam:
-  draft -> published/open -> closed
+Exam (6 状态, Phase 2 已实现, 见 CONTEXT.md "Exam Lifecycle" + exam-protocol.md §2):
+  draft -> published -> open -> closed -> archived
+              |             |
+              +--> canceled <+        (异常取消, ≠ closed)
+  全部 transition / 命令 / 考生可开 attempt 边界 (OPEN_STATUSES={published,open})
+  以 exam-protocol.md §2.2–§2.4 为准。本计划不收窄、不重述。
 
 AttemptStatus (8 values):
   not_started -> in_progress -> submitted -> grading -> graded
@@ -123,7 +129,7 @@ GradingStatus (independent dimension):
 
 Answer:
   answers            draft, mutable before submit
-  submitted_answers  frozen snapshot, immutable after submit
+  submitted_answers  frozen snapshot (SubmittedAnswersSnapshot), immutable after submit
 
 Result:
   score_computed      与 result_released 分离
@@ -170,7 +176,7 @@ candidate attempt API 契约包含 7 个真相字段；
 
 | ID | 作业 | 产出 |
 | -- | --- | ------ |
-| P3-PROTO-0 | Exam Protocol Audit (L0) | `docs/phase3/exam-protocol.md`（21 项协议） |
+| P3-PROTO-0 ✅ | Exam Protocol Audit (L0) | `docs/phase3/exam-protocol.md`（21 项协议，**已落地**） |
 | P3-PROTO-1 | Backend State Consistency Tests (L0) | 14 个场景的集成测试 |
 | P3-PROTO-2 | CandidateTakeSnapshot Endpoint | 统一端点 + 安全投影 + 测试 |
 | P3-L0-1 | Schema Migration | text_response + submitted_answers + rubric 双层存储 |
@@ -577,7 +583,7 @@ Large Job 不再是主执行队列。仅在模块无法安全推进、必须做�
 **这是 P0 之前必须完成的协议+基础设施阶段。** 不仅文档化协议，还实现 text_response 题型、submitted_answers 物理列、submit freeze、CandidateTakeSnapshot、deadline reconciliation、rubric 双层存储、publish validation 和 backfill 脚本。
 
 ```text
-P3-PROTO-0  Exam Protocol Audit (L0)           [文档：exam-protocol.md，21 项协议]
+P3-PROTO-0  Exam Protocol Audit (L0)  ✅完成    [文档：exam-protocol.md，21 项协议，已落地]
 P3-PROTO-1  Backend Consistency Tests (L0)      [测试：14 个场景]
 P3-PROTO-2  CandidateTakeSnapshot Endpoint     [代码：统一端点]
 P3-L0-1     Schema Migration                   [代码：text_response + submitted_answers + rubric]
@@ -738,10 +744,12 @@ Phase 3 的下一步是让 MVP 考试流程真正跑通：
 P-1/L0 考试协议与后端状态模型收敛（L0 升级）
 ```
 
-第一张具体作业卡应为：
+P3-PROTO-0（协议文档）**已完成**——`docs/phase3/exam-protocol.md` 已落地，覆盖 21 项协议。
+
+下一张具体作业卡应为：
 
 ```text
-P3-PROTO-0 Exam Protocol Audit (L0)
+P3-PROTO-1 Backend Consistency Tests (L0)
 ```
 
 然后：
