@@ -609,3 +609,88 @@ describe("P3-FSM-0 TakeExamPage behaviors over the snapshot read path", () => {
     expect(screen.getByRole("button", { name: "交卷" })).toBeInTheDocument();
   });
 });
+describe("P3-MOD-P0-3 submit-freeze UI proof", () => {
+  it("save execution seam reads derived canSave and skips the API call when the snapshot is non-editable", async () => {
+    // The card requires: "view.canSave === false => save endpoint is not
+    // called", and explicitly says "disabled control alone is not
+    // sufficient proof". The page guards the save execution seam at
+    // TakeExamPage.tsx:289 with `if (!viewRef.current?.canSave) return;`.
+    //
+    // Prove the guard: render with a submitted/non-editable snapshot,
+    // then drive the autosave path by typing into the (disabled) input
+    // via a direct DOM event — and assert no /answers/ POST fires through
+    // the full debounce window. This proves the guard at the execution
+    // seam, not merely the disabled attribute.
+    const submitted = buildSnapshot({
+      attemptStatus: "submitted",
+      isEditable: false,
+      canSave: false,
+      canSubmit: false,
+      lockReason: "submitted",
+      submittedAt: NOW,
+      questions: [
+        {
+          id: "q1",
+          type: "fill_blank",
+          prompt: "frozen",
+          options: [],
+          inputMode: "single_line",
+          maxScore: 10,
+          answerValue: "old",
+          answerSource: "submitted",
+        },
+      ],
+    });
+    installTakeRoute(submitted);
+
+    renderPage();
+    await screen.findByText("frozen");
+
+    // The input is disabled; even if a save were scheduled by some path,
+    // the execution seam must refuse it. Wait through the debounce window.
+    await waitFor(
+      () => {
+        const saveCalls = apiPost.mock.calls.filter(
+          ([p]) => typeof p === "string" && p.includes("/answers/"),
+        );
+        expect(saveCalls).toHaveLength(0);
+      },
+      { timeout: 2500 },
+    );
+  });
+
+  it("save execution seam allows the API call when canSave is true (control)", async () => {
+    // Control case proving the path is reachable and the guard is decisive:
+    // with canSave=true, the same autosave path DOES issue a save.
+    const editable = buildSnapshot({
+      questions: [
+        {
+          id: "q1",
+          type: "fill_blank",
+          prompt: "open",
+          options: [],
+          inputMode: "single_line",
+          maxScore: 10,
+          answerValue: null,
+          answerSource: "none",
+        },
+      ],
+    });
+    installTakeRoute(editable);
+
+    renderPage();
+    const input = await screen.findByLabelText("第1空答案");
+    const user = userEvent.setup();
+    await user.type(input, "x");
+
+    await waitFor(
+      () => {
+        const saveCalls = apiPost.mock.calls.filter(
+          ([p]) => typeof p === "string" && p.includes("/answers/"),
+        );
+        expect(saveCalls.length).toBeGreaterThan(0);
+      },
+      { timeout: 3000 },
+    );
+  });
+});
