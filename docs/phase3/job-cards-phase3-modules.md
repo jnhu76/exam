@@ -65,6 +65,7 @@
 ### 协议覆盖清单（P3-PROTO-0 必须覆盖全部 14 项 + L0 扩展）
 
 原有 14 项：
+
 1. exam lifecycle
 2. attempt lifecycle
 3. draft answers vs submitted_answers（原 final_answers）
@@ -132,6 +133,7 @@ Result:
 **覆盖协议：** 上述全部 21 项（14 原有 + 7 L0 扩展）
 
 **待检查文件：**
+
 - `packages/domain/src/enums.ts`（QuestionType / AttemptStatus / GradingStatus / ExamStatus 枚举 — 新增 text_response）
 - `packages/exam-engine/src/examStateMachine.ts`（exam lifecycle transition 表）
 - `packages/exam-engine/src/examCommands.ts`（exam 命令函数：publishExam/openExam/closeExam/cancelExam/unpublishExam/extendExam/archiveExam/publishResults/checkAndUpdateExamStatus）
@@ -164,6 +166,7 @@ Result:
 **输出：** `docs/phase3/exam-protocol.md`
 
 **完成标准：**
+
 - 文档覆盖全部 21 项协议
 - 明确 text_response 是独立题型，不是 fill_blank 变体
 - 明确 submitted_answers 是物理列，不是逻辑等价
@@ -172,6 +175,7 @@ Result:
 - 任何人读完后不会误以为可以先做 TakeExam UI 再补协议
 
 **提交：**
+
 ```bash
 git add docs/phase3/exam-protocol.md
 git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_response, submitted_answers, deadline reconciliation"
@@ -207,6 +211,7 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 | 14 | grading queue queries gradingStatus | 人工评分队列查 gradingStatus='pending_manual'，不查 attemptStatus |
 
 **完成标准：**
+
 - 14 个场景全部有通过的集成测试
 - 测试名清晰对应协议条目
 - 无既有测试被削弱
@@ -231,6 +236,7 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 | 14 | grading queue queries gradingStatus | `gradingQueue.test.ts:201,232` + `protocol-consistency.test.ts` #14 |
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/attempts/protocol-consistency.test.ts docs/phase3/job-cards-phase3-modules.md docs/phase3/plan.md
 git commit -m "test(P-1/L0): backend state consistency — 14 scenarios via protocol-consistency.test.ts + existing tests"
@@ -282,16 +288,19 @@ interface CandidateQuestion {
 ```
 
 **安全投影规则：**
+
 - 不返回 standardAnswer / rubric / gradingMode / correctOption / teacher notes / 未发布 score
 - `answerSource` 由后端根据 attemptStatus 路由：in_progress → draft；submitted/grading/graded → submitted；其他 → none
 - `Cache-Control: no-store`（GET 可能触发 deadline reconciliation 写副作用）
 
 **待创建/修改文件：**
+
 - `apps/api/src/routes/attempts.candidate.ts`（新端点）
 - `packages/contracts/src/attempt.ts`（CandidateTakeSnapshot schema）
 - 测试文件
 
 **完成标准：**
+
 - 端点返回完整 CandidateTakeSnapshot
 - 安全投影不泄漏 standardAnswer/rubric
 - answerSource 正确路由（draft / submitted / none）
@@ -300,12 +309,14 @@ interface CandidateQuestion {
 - Cache-Control: no-store header
 
 **变更文件：**
+
 - `packages/contracts/src/attempt.ts`（CandidateTakeSnapshot schema + CandidateTakeQuestion schema + enums）
 - `apps/api/src/routes/attempts.shared.ts`（buildCandidateTakeSnapshot serialization）
 - `apps/api/src/routes/attempts.candidate.ts`（新端点）
 - `apps/api/src/routes/attempts/candidate-take.test.ts`（4 tests）
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/attempts.candidate.ts packages/contracts/src/attempt.ts
 git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource routing"
@@ -332,12 +343,14 @@ git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource ro
 **不新增：** `inputMode`、`gradingMode`、`submitted_answers_hash`
 
 **待修改文件：**
+
 - `packages/db/src/schema.ts`（Drizzle schema）
 - `packages/db/src/migrations/`（新 migration）
 - `packages/domain/src/enums.ts`（QuestionType 新增 text_response）
 - `packages/contracts/src/`（question/attempt schema 更新）
 
 **完成标准：**
+
 - migration 在 exam_test 上运行成功
 - text_response 可以创建并保存
 - submitted_answers 列可写入 SubmittedAnswersSnapshot
@@ -345,6 +358,7 @@ git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource ro
 - `pnpm typecheck` 通过
 
 **提交：**
+
 ```bash
 git add packages/db/src/schema.ts packages/db/src/migrations/ packages/domain/src/enums.ts
 git commit -m "feat(L0): schema migration — text_response type, submitted_answers column, rubric dual-layer"
@@ -361,18 +375,21 @@ git commit -m "feat(L0): schema migration — text_response type, submitted_answ
 **依赖：** P3-L0-1（schema 就绪）
 
 **核心变更：**
+
 - `submitAttempt` 事务内：读 draft answers → `buildSubmittedAnswersSnapshot()` → 写 submitted_answers → 设 status/submittedAt/submissionReason
 - `gradeQuestion` / `reconcileScores` 从 submitted_answers 读取，不读 draft answers
 - double submit：返回已有 submitted_answers，不重新生成
 - save after submit：返回确定错误
 
 **待修改文件：**
+
 - `apps/api/src/orchestrators/submitAndGradeAttempt.ts`
 - `packages/exam-engine/src/manualGrading.ts`（读取路径）
 - `packages/exam-engine/src/grading.ts`（读取路径）
 - 相关测试
 
 **完成标准：**
+
 - submit 后 submitted_answers 是干净快照（无 clientSeq/baseVersion）
 - 评分从 submitted_answers 读取
 - double submit 幂等
@@ -380,6 +397,7 @@ git commit -m "feat(L0): schema migration — text_response type, submitted_answ
 - 所有既有测试通过
 
 **提交：**
+
 ```bash
 git add apps/api/src/orchestrators/submitAndGradeAttempt.ts packages/exam-engine/src/
 git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading reads from submitted_answers"
@@ -396,6 +414,7 @@ git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading 
 **依赖：** P3-L0-2（submitted_answers 冻结就绪）
 
 **入口：**
+
 - `GET /candidate/attempts/:attemptId/take`（Cache-Control: no-store）
 - `POST /candidate/attempts/:attemptId/answers/save`
 - `POST /candidate/attempts/:attemptId/submit`
@@ -404,11 +423,13 @@ git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading 
 **事务行为：** 见 `docs/phase3/exam-protocol.md` §5.3 伪代码。
 
 **待修改文件：**
+
 - `apps/api/src/routes/attempts.candidate.ts`（4 个入口调用 ensureAttemptDeadlineReconciled）
 - `packages/exam-engine/src/deadlineReconciliation.ts`（新文件，核心逻辑）
 - 测试文件
 
 **完成标准：**
+
 - 4 个入口都调用 ensureAttemptDeadlineReconciled
 - in_progress + expired → submitted + submitted_answers 冻结
 - submittedAt = effectiveDeadline
@@ -418,6 +439,7 @@ git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading 
 - 测试覆盖 14 个 deadline 场景
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/attempts.candidate.ts packages/exam-engine/src/deadlineReconciliation.ts
 git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry points"
@@ -438,15 +460,18 @@ git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry
 **异常处理：** fail fast 默认；`--allow-quarantine` 可选
 
 **待创建文件：**
+
 - `apps/api/src/scripts/backfill-submitted-answers.ts`（位于 API workspace，因为脚本依赖 `@exam/db` 和 `@exam/exam-engine` 工作区包；通过 `pnpm --filter @exam/api backfill:submitted-answers` 调用）
 
 **完成标准：**
+
 - dry-run 输出统计（总attempt数、已回填、跳过、异常）
 - 正式运行后所有 submitted/grading/graded attempt 都有 submitted_answers
 - 异常 attempt 有明确记录
 - 可重复运行（幂等）
 
 **提交：**
+
 ```bash
 git add apps/api/src/scripts/backfill-submitted-answers.ts
 git commit -m "feat(L0): backfill submitted_answers for existing submitted/graded attempts"
@@ -463,21 +488,25 @@ git commit -m "feat(L0): backfill submitted_answers for existing submitted/grade
 **依赖：** P3-L0-1（schema）
 
 **校验规则：**
+
 - auto 题（非 text_response）：standardAnswer 非空且不是占位符
 - text_response：rubric 非空且不是占位符；standardAnswer 可选
 - 创建草稿时允许空值；发布时强制校验
 
 **待修改文件：**
+
 - 命题创建/发布相关 route 或 service
 - 测试文件
 
 **完成标准：**
+
 - text_response 无 rubric 时发布被拒绝
 - auto 题无 standardAnswer 时发布被拒绝
 - "暂无" 不算有效值
 - 测试覆盖所有校验分支
 
 **提交：**
+
 ```bash
 git add ...
 git commit -m "feat(L0): publish validation — text_response requires rubric, auto questions require standardAnswer"
@@ -498,6 +527,7 @@ git commit -m "feat(L0): publish validation — text_response requires rubric, a
 **依赖：** P3-PROTO-2（CandidateTakeSnapshot 端点）
 
 **设计约束：**
+
 - 后端 CandidateTakeSnapshot 是业务真相源
 - `deriveTakeExamView(snapshot)` 纯函数计算页面展示态
 - 瞬态 reducer 只管：idle / saving / save_failed / submitting / submit_failed / load_failed
@@ -505,6 +535,7 @@ git commit -m "feat(L0): publish validation — text_response requires rubric, a
 - **不做完整业务 transition table**
 
 **待创建/修改文件：**
+
 - `apps/web/src/exam/deriveTakeExamView.ts`（纯函数）
 - `apps/web/src/exam/deriveTakeExamView.test.ts`
 - `apps/web/src/exam/transientReducer.ts`（瞬态 reducer）
@@ -512,6 +543,7 @@ git commit -m "feat(L0): publish validation — text_response requires rubric, a
 - `apps/web/src/pages/exam/TakeExamPage.tsx`（接入）
 
 **完成标准：**
+
 - deriveTakeExamView 从 snapshot 派生所有 UI 态
 - 瞬态 reducer 覆盖 saving/submitting/error 流程
 - submitted 状态下不能 save
@@ -520,6 +552,7 @@ git commit -m "feat(L0): publish validation — text_response requires rubric, a
 - 测试覆盖关键边界
 
 **提交：**
+
 ```bash
 git add apps/web/src/exam/ apps/web/src/pages/exam/TakeExamPage.tsx
 git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming CandidateTakeSnapshot"
@@ -534,6 +567,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 **类型：** 审计（无代码改动）
 
 **待检查文件：**
+
 - `apps/web/src/components/exam/QuestionRenderer.tsx`
 - `apps/web/src/components/exam/SingleChoiceInput.tsx`
 - `apps/web/src/components/exam/MultipleChoiceInput.tsx`
@@ -560,11 +594,11 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 | `fill_blank`（客观） | `type=fill_blank`，`standardAnswer != null` | `FillBlankInput` | `string` 或 `Record<string,string>` | | | | |
 | `text_response` | `type=text_response` | `TextResponseInput`（textarea） | `string` | | | | |
 
-3. 确认 `packages/contracts/src/attempt.ts` 中的 `SaveAnswerRequestSchema` 把 `answer` 校验为 `z.unknown()` —— 在 API 边界无类型特定校验。这是一种设计选择（API 接受任意 JSON），不是 bug，但这意味着前端正确性完全依赖 `QuestionRenderer` 分发。
+1. 确认 `packages/contracts/src/attempt.ts` 中的 `SaveAnswerRequestSchema` 把 `answer` 校验为 `z.unknown()` —— 在 API 边界无类型特定校验。这是一种设计选择（API 接受任意 JSON），不是 bug，但这意味着前端正确性完全依赖 `QuestionRenderer` 分发。
 
-4. 确认 `packages/domain/src/enums.ts` 仅定义 4 个 `QuestionType` 值。不存在主观类型。
+2. 确认 `packages/domain/src/enums.ts` 仅定义 4 个 `QuestionType` 值。不存在主观类型。
 
-5. 记录 `SubjectiveAnswerInput.tsx`（78 行、完整 i18n、已测试）是孤儿——从未被 `QuestionRenderer` import。
+3. 记录 `SubjectiveAnswerInput.tsx`（78 行、完整 i18n、已测试）是孤儿——从未被 `QuestionRenderer` import。
 
 **输出：** `docs/phase3/audit/p0-candidate-answer-rendering-audit.md`
 
@@ -585,6 +619,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 **设计决策：** text_response 是独立 `QuestionType`，不再是 fill_blank 变体。前端通过 `inputMode === 'multi_line'` 决定渲染 textarea，**不通过** `standardAnswer === null` 判断。
 
 **待修改文件：**
+
 - `apps/web/src/components/exam/QuestionRenderer.tsx`（新增 text_response 分支）
 - `apps/web/src/components/exam/TextResponseInput.tsx`（新组件或复用 SubjectiveAnswerInput）
 - `apps/web/src/components/exam/QuestionRenderer.test.tsx`
@@ -604,6 +639,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 4. 运行：`pnpm --filter web test -- QuestionRenderer`
 
 **完成标准：**
+
 - 考生能用 textarea 作答 text_response 题
 - 作答经既有协议保存
 - 作答在页面刷新后恢复
@@ -611,6 +647,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 - 评分引擎正确识别其为待人工评分（gradingStatus=pending_manual）
 
 **提交：**
+
 ```bash
 git add apps/web/src/components/exam/QuestionRenderer.tsx apps/web/src/components/exam/TextResponseInput.tsx
 git commit -m "feat(P0): text_response textarea rendering with save/restore/submit"
@@ -620,40 +657,170 @@ git commit -m "feat(P0): text_response textarea rendering with save/restore/subm
 
 ### P3-MOD-P0-3：提交冻结 UI 证明
 
-**目标：** 验证提交后考生 UI 阻止进一步作答修改（UI 侧）。后端拒绝提交后保存的协议已由 P3-PROTO-1 场景 2 证明，本卡不重复后端测试，只补 UI 侧证明。
+**目标：** 验证提交后考生 UI 由权威 `CandidateTakeSnapshot` 恢复为不可编辑状态，并阻止所有前端保存执行路径。后端 save-after-submit 拒绝协议已由 P3-PROTO-1 场景 2 证明，本卡不重复后端协议测试。
 
 **类型：** 审计 + 少量 UI 测试补充
 
-**依赖：** P3-FSM-0（前端状态机）、P3-PROTO-1（后端 save-after-submit 拒绝已证明）
+**依赖：**
+
+- P3-FSM-0（`CandidateTakeSnapshot -> deriveTakeExamView -> TakeExamPage` 已真实接入）
+- P3-PROTO-1（后端 save-after-submit 拒绝已证明）
+- P3-PROTO-2（权威 CandidateTakeSnapshot 端点）
+
+**设计约束：**
+
+- 后端 `CandidateTakeSnapshot` 是业务真相源
+- 不存在 frontend `submittedLocked` 业务状态
+- 不引入完整 frontend business state machine
+- `transientReducer` 不保存 submitted / graded / expired / locked 等业务状态
+- durable submitted lock 必须由刷新后重新获取的 `CandidateTakeSnapshot` 恢复
+- `deriveTakeExamView(snapshot)` 负责派生页面锁定、保存能力和 question disabled presentation
+- 输入 disabled 不能替代 save execution guard 证明
 
 **待检查文件：**
-- `apps/web/src/pages/exam/TakeExamPage.tsx`（提交后 UI 状态，由 P3-FSM-0 状态机驱动）
-- `apps/web/src/exam/takeExamStateMachine.ts`（P3-FSM-0 产出，确认 `submittedLocked` 态下 SAVE 被拒）
+
+- `apps/web/src/pages/exam/TakeExamPage.tsx`
+- `apps/web/src/exam/deriveTakeExamView.ts`
+- `apps/web/src/exam/transientReducer.ts`
+- TakeExamPage 当前测试文件
+- CandidateTakeSnapshot web client/read path
+- P3-PROTO-1 save-after-submit proof tests，仅用于确认后端证明已存在，不修改
 
 **步骤：**
 
-1. 阅读 `TakeExamPage.tsx` 与 `takeExamStateMachine.ts`——确认提交后状态机进入 `submittedLocked`，UI 禁用作答输入，不存在"提交后编辑"路径。
+1. 阅读 `TakeExamPage.tsx`，确认生产读取路径直接消费 P3-PROTO-2 返回的 `CandidateTakeSnapshot`。
 
-2. 后端拒绝保存已由 P3-PROTO-1 场景 2 覆盖——**不重复**。仅在 UI 测试中证明：后端返回 `isEditable=false` 时，状态机进入 `submittedLocked` 且输入组件禁用。
+2. 确认生产页面实际调用：
 
-3. 加一个 UI 测试（若不存在）：
-
-```typescript
-it("disables answer inputs when backend reports isEditable=false (submitted)", () => {
-  // 后端真相：attemptStatus=submitted, isEditable=false
-  render(<TakeExamPage attempt={submittedAttempt} />);
-  expect(screen.getByRole("textbox")).toBeDisabled();
-});
+```ts
+deriveTakeExamView(snapshot)
 ```
 
-4. 运行：`pnpm --filter web test -- TakeExamPage`
+且输入是后端返回的真实 `CandidateTakeSnapshot`，不存在：
 
-**输出：** 确认提交冻结在 UI 侧端到端工作，且由后端真相字段驱动。
+```text
+LoadAttemptResponse -> CandidateTakeSnapshot
+```
 
-**提交（若加测试）：**
+语义适配器。
+
+1. 确认提交成功后的 durable lock 流程为：
+
+```text
+submit request
+    ↓
+submit succeeds
+    ↓
+reload / consume authoritative CandidateTakeSnapshot
+    ↓
+deriveTakeExamView(snapshot)
+    ↓
+locked UI
+```
+
+不得由 `SUBMIT_SUCCESS` 或 frontend business status 永久保存 submitted 状态。
+
+1. 审计所有保存执行路径，包括：
+
+- immediate/manual save
+- autosave
+- debounced save
+- retry save
+- 已排队或延迟执行的 save callback
+
+确认执行 save request 前消费当前 derived `canSave` authority。
+
+要求：
+
+```text
+view.canSave === false
+    =>
+save endpoint is not called
+```
+
+1. 补充或确认 UI 测试：
+
+```ts
+it("disables answer inputs when the authoritative snapshot is submitted and non-editable", ...)
+```
+
+测试必须 mock P3-PROTO-2 CandidateTakeSnapshot endpoint。
+
+给定 submitted/non-editable snapshot：
+
+- question controls disabled
+- disabled 状态来自 derived question view
+- 不从 legacy attempt status 或本地 reducer 推导
+
+1. 补充或确认 save guard 测试：
+
+```ts
+it("does not execute save when the current derived view cannot save", ...)
+```
+
+至少覆盖 TakeExamPage 实际存在的 autosave/debounce 路径。
+
+断言：
+
+```ts
+expect(saveRequest).not.toHaveBeenCalled();
+```
+
+仅证明 input disabled 不足以满足此项。
+
+1. 补充或确认 refresh restore 测试：
+
+- 首次加载 submitted/non-editable CandidateTakeSnapshot
+- 页面显示 locked
+- unmount
+- 重新 render/reload
+- 再次从 CandidateTakeSnapshot endpoint 获取 submitted/non-editable snapshot
+- 页面再次显示 locked
+
+证明 frontend memory、transient reducer 和本地业务状态均不是 durable lock 来源。
+
+1. 确认 `transientReducer` 只包含：
+
+```text
+idle
+saving
+save_failed
+submitting
+submit_failed
+load_failed
+```
+
+不得存在：
+
+```text
+submitted
+submittedLocked
+graded
+expired
+locked
+```
+
+1. 不新增后端测试。确认 P3-PROTO-1 已存在 save-after-submit 拒绝证明即可。
+
+**完成标准：**
+
+- TakeExamPage 直接消费真实 CandidateTakeSnapshot
+- submitted/non-editable snapshot 导致作答输入 disabled
+- question disabled 由 `deriveTakeExamView` 派生结果驱动
+- `view.canSave=false` 时所有实际可达 save execution path 都不能发起 save request
+- 提交成功后的 durable lock 来自重新获取的 CandidateTakeSnapshot
+- 页面刷新后由新 snapshot 恢复锁定态
+- transientReducer 不保存业务状态
+- 不存在 `submittedLocked` frontend business state
+- 不新增重复的后端 save-after-submit 测试
+
+**提交：**
+
 ```bash
-git add apps/api/src/routes/attempts/submit-freeze-proof.test.ts
-git commit -m "test(P0): prove answer save rejected after submit"
+git add apps/web/src/pages/exam/TakeExamPage.tsx \
+        apps/web/src/exam/ \
+        apps/web/src/
+git commit -m "test(P0): prove submitted snapshot locks candidate answer UI"
 ```
 
 ---
@@ -667,9 +834,11 @@ git commit -m "test(P0): prove answer save rejected after submit"
 **依赖：** P3-MOD-P0-2（text_response 作答必须可用）
 
 **待修改文件：**
+
 - `apps/e2e/e2e/candidate-happy-path.spec.ts`（扩展现有 spec）
 
 **待检查文件：**
+
 - `apps/e2e/lib/seed.ts`（测试数据播种）
 - `apps/e2e/lib/flow.ts`（可复用流程辅助）
 
@@ -691,6 +860,7 @@ git commit -m "test(P0): prove answer save rejected after submit"
 5. 运行：`pnpm test:e2e -- --grep "candidate-happy-path"`
 
 **提交：**
+
 ```bash
 git add apps/e2e/e2e/candidate-happy-path.spec.ts apps/e2e/lib/seed.ts
 git commit -m "test(P0): extend candidate happy path E2E with text_response answer"
@@ -709,6 +879,7 @@ git commit -m "test(P0): extend candidate happy path E2E with text_response answ
 **类型：** 测试验证（测试已存在——运行并确认）
 
 **待检查文件：**
+
 - `apps/web/src/pages/admin/GradingDetailPage.tsx`（作答渲染、得分录入、保存）
 - `apps/web/src/pages/admin/GradingDetailPage.test.tsx`（16 个测试：换行、XSS、作答类型）
 - `apps/web/src/pages/admin/GradingQueuePage.tsx`（队列列表）
@@ -737,6 +908,7 @@ git commit -m "test(P0): extend candidate happy path E2E with text_response answ
 **步骤：**
 
 1. 运行既有测试：
+
    ```bash
    pnpm --filter api test -- gradingQueue
    pnpm --filter exam-engine test -- manualGrading
@@ -750,6 +922,7 @@ git commit -m "test(P0): extend candidate happy path E2E with text_response answ
 **输出：** `docs/phase3/audit/p1-manual-grading-proof.md`
 
 **提交（若加/修测试）：**
+
 ```bash
 git add ...
 git commit -m "test(P1): verify manual grading API/UI proof"
@@ -766,6 +939,7 @@ git commit -m "test(P1): verify manual grading API/UI proof"
 **依赖：** P3-MOD-P0-2（text_response 作答）、P3-MOD-P1-1（评分 API/UI 证明）
 
 **待修改文件：**
+
 - `apps/e2e/e2e/manual-grading.spec.ts`（当前 SKIPPED——取消跳过并更新）
 
 **步骤：**
@@ -785,6 +959,7 @@ git commit -m "test(P1): verify manual grading API/UI proof"
 4. 运行：`pnpm test:e2e -- --grep "manual-grading"`
 
 **提交：**
+
 ```bash
 git add apps/e2e/e2e/manual-grading.spec.ts
 git commit -m "test(P1): unskip and complete manual grading E2E spec"
@@ -803,6 +978,7 @@ git commit -m "test(P1): unskip and complete manual grading E2E spec"
 **类型：** 审计
 
 **待检查文件：**
+
 - `apps/web/src/pages/admin/QuestionEditPage.tsx`（题目创建表单）
 - `apps/web/src/pages/admin/QuestionPage.tsx`（题库列表）
 - `apps/web/src/pages/admin/ExamCreatePage.tsx`（考试创建表单）
@@ -837,6 +1013,7 @@ git commit -m "test(P1): unskip and complete manual grading E2E spec"
 **输出：** `docs/phase3/audit/p2-authoring-ui-flow-audit.md`
 
 **提交：**
+
 ```bash
 git add docs/phase3/audit/p2-authoring-ui-flow-audit.md
 git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
@@ -851,6 +1028,7 @@ git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
 **类型：** 测试验证 + 补充
 
 **待检查文件：**
+
 - `apps/api/src/routes/question.test.ts`（既有测试）
 - `apps/web/src/pages/admin/QuestionEditPage.test.tsx`（既有测试）
 
@@ -861,6 +1039,7 @@ git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
 2. 检查是否测了 text_response 题创建：`type: "text_response"`。
 
 3. 若缺失，加测试：
+
    ```typescript
    it("creates text_response question", async () => {
      const res = await app.inject({
@@ -883,6 +1062,7 @@ git commit -m "docs(P2): audit exam authoring UI flow end-to-end"
 4. 运行：`pnpm --filter api test -- question`
 
 **提交（若加测试）：**
+
 ```bash
 git add apps/api/src/routes/question.test.ts
 git commit -m "test(P2): add text_response question creation test"
@@ -897,6 +1077,7 @@ git commit -m "test(P2): add text_response question creation test"
 **类型：** E2E 测试
 
 **待修改文件：**
+
 - `apps/e2e/e2e/admin-flow.spec.ts`（扩展现有 spec，或新建）
 
 **步骤：**
@@ -913,6 +1094,7 @@ git commit -m "test(P2): add text_response question creation test"
 3. 运行：`pnpm test:e2e -- --grep "admin-flow"`
 
 **提交：**
+
 ```bash
 git add apps/e2e/e2e/admin-flow.spec.ts
 git commit -m "test(P2): add exam publish-to-candidate E2E slice"
@@ -929,6 +1111,7 @@ git commit -m "test(P2): add exam publish-to-candidate E2E slice"
 **类型：** E2E 测试
 
 **待修改文件：**
+
 - `apps/e2e/e2e/result-publishing.spec.ts`（已存在 2 个场景——验证覆盖）
 
 **步骤：**
@@ -947,6 +1130,7 @@ git commit -m "test(P2): add exam publish-to-candidate E2E slice"
 3. 运行：`pnpm test:e2e -- --grep "result-publishing"`
 
 **提交（若加测试）：**
+
 ```bash
 git add apps/e2e/e2e/result-publishing.spec.ts
 git commit -m "test(P3): add after_grading result visibility E2E scenario"
@@ -961,6 +1145,7 @@ git commit -m "test(P3): add after_grading result visibility E2E scenario"
 **类型：** 测试验证
 
 **待检查文件：**
+
 - `apps/api/src/routes/scores.ts`（考生 vs admin 视图）
 - `apps/api/src/routes/scores.test.ts`（既有测试）
 - `apps/web/src/pages/exam/ResultPage.tsx`（前端展示逻辑）
@@ -986,6 +1171,7 @@ git commit -m "test(P3): add after_grading result visibility E2E scenario"
 **输出：** `docs/phase3/audit/p3-candidate-answer-leak-test.md`
 
 **提交：**
+
 ```bash
 git add docs/phase3/audit/p3-candidate-answer-leak-test.md
 git commit -m "docs(P3): verify candidate answer/standard-answer leak protection"
@@ -1002,6 +1188,7 @@ git commit -m "docs(P3): verify candidate answer/standard-answer leak protection
 **备注：** Teacher 结果视图验证延后至 P4，在 Teacher 路由切换之后。
 
 **待检查文件：**
+
 - `apps/api/src/routes/scores.ts`（`computeResultVisibility` 中的 admin 绕过）
 - `apps/web/src/pages/admin/ScoreListPage.tsx`（admin 分数列表）
 - `apps/web/src/pages/admin/AttemptDetailPage.tsx`（admin attempt 详情）
@@ -1019,6 +1206,7 @@ git commit -m "docs(P3): verify candidate answer/standard-answer leak protection
 **输出：** `docs/phase3/audit/p3-admin-result-view-verification.md`
 
 **提交：**
+
 ```bash
 git add docs/phase3/audit/p3-admin-result-view-verification.md
 git commit -m "docs(P3): verify admin result view functionality"
@@ -1050,6 +1238,7 @@ git commit -m "docs(P3): verify admin result view functionality"
 **类型：** 审计 + 设计
 
 **待检查文件：**
+
 - `apps/api/src/authz/routeRegistry.ts`（77 个已注册路由）
 - `packages/authz/src/presets.ts`（Teacher 预设含 19 个权限）
 - `apps/api/src/routes/registerApiRoutes.ts`（所有路由注册）
@@ -1081,6 +1270,7 @@ git commit -m "docs(P3): verify admin result view functionality"
 **输出：** `docs/phase3/audit/p4-mvp-rbac-route-matrix.md`
 
 **提交：**
+
 ```bash
 git add docs/phase3/audit/p4-mvp-rbac-route-matrix.md
 git commit -m "docs(P4): produce MVP RBAC route → permission → role matrix"
@@ -1097,6 +1287,7 @@ git commit -m "docs(P4): produce MVP RBAC route → permission → role matrix"
 **依赖：** P3-MOD-P4-1（路由矩阵被接受）
 
 **待修改文件：**
+
 - `apps/api/src/routes/gradingQueue.ts`（3 个 handler）
 
 **步骤：**
@@ -1111,11 +1302,13 @@ git commit -m "docs(P4): produce MVP RBAC route → permission → role matrix"
 3. 保留 `fastify.authenticate` 为第一个 preHandler。
 
 4. 运行 shadow parity 测试：
+
    ```bash
    pnpm --filter api test -- shadowParity
    ```
 
 5. 为 Teacher 角色加权限测试：
+
    ```typescript
    it("Teacher can access grading queue", async () => {
      const res = await app.inject({
@@ -1139,6 +1332,7 @@ git commit -m "docs(P4): produce MVP RBAC route → permission → role matrix"
 6. 运行完整测试套件：`pnpm verify`
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/gradingQueue.ts
 git commit -m "feat(P4-2A): cutover grading routes to requireCapability"
@@ -1155,6 +1349,7 @@ git commit -m "feat(P4-2A): cutover grading routes to requireCapability"
 **依赖：** P3-MOD-P4-1（路由矩阵被接受）
 
 **待修改文件：**
+
 - `apps/api/src/routes/question.ts`（6 个 handler：list、detail、create、update、delete、import）
 
 **步骤：**
@@ -1176,6 +1371,7 @@ git commit -m "feat(P4-2A): cutover grading routes to requireCapability"
 5. 运行完整测试套件：`pnpm verify`
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/question.ts
 git commit -m "feat(P4-2B): cutover question CRUD routes to requireCapability"
@@ -1192,6 +1388,7 @@ git commit -m "feat(P4-2B): cutover question CRUD routes to requireCapability"
 **依赖：** P3-MOD-P4-1（路由矩阵被接受）
 
 **待修改文件：**
+
 - `apps/api/src/routes/exam.ts`（仅选定的 handler）
 
 **步骤：**
@@ -1216,6 +1413,7 @@ git commit -m "feat(P4-2B): cutover question CRUD routes to requireCapability"
 6. 运行完整测试套件：`pnpm verify`
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/exam.ts
 git commit -m "feat(P4-2C): cutover exam authoring/lifecycle routes to requireCapability"
@@ -1230,6 +1428,7 @@ git commit -m "feat(P4-2C): cutover exam authoring/lifecycle routes to requireCa
 **类型：** 测试验证
 
 **待检查文件：**
+
 - `apps/api/src/routes/attempts.candidate.ts`（9 个 handler）
 - `apps/api/src/routes/scores.ts`（考生视图）
 
@@ -1240,6 +1439,7 @@ git commit -m "feat(P4-2C): cutover exam authoring/lifecycle routes to requireCa
 2. 检查归属强制：考生 A 能访问考生 B 的 attempt 吗？
 
 3. 加/验证测试：
+
    ```typescript
    it("candidate cannot access another candidate's attempt", async () => {
      const res = await app.inject({
@@ -1255,6 +1455,7 @@ git commit -m "feat(P4-2C): cutover exam authoring/lifecycle routes to requireCa
 4. 运行：`pnpm --filter api test -- attempts.candidate`
 
 **提交（若加测试）：**
+
 ```bash
 git add apps/api/src/routes/attempts.candidate.test.ts
 git commit -m "test(P4): verify candidate route ownership enforcement"
@@ -1271,6 +1472,7 @@ git commit -m "test(P4): verify candidate route ownership enforcement"
 **依赖：** P3-MOD-P4-2A、P3-MOD-P4-2B、P3-MOD-P4-2C（后端路由已迁移）
 
 **待修改文件：**
+
 - `apps/web/src/components/layout/AppSidebar.tsx`（侧边栏导航）
 
 **步骤：**
@@ -1290,6 +1492,7 @@ git commit -m "test(P4): verify candidate route ownership enforcement"
 5. 验证被隐藏导航项在直接 URL 访问时仍返回 403。
 
 **提交：**
+
 ```bash
 git add apps/web/src/components/layout/AppSidebar.tsx
 git commit -m "feat(P4): hide nav entries for unauthorized MVP roles (UX only)"
@@ -1335,6 +1538,7 @@ git commit -m "feat(P4): hide nav entries for unauthorized MVP roles (UX only)"
 **输出：** `docs/phase3/audit/p5-email-recipient-source-design.md`
 
 **提交：**
+
 ```bash
 git add docs/phase3/audit/p5-email-recipient-source-design.md
 git commit -m "docs(P5): email recipient source and enqueue design v0"
@@ -1351,9 +1555,11 @@ git commit -m "docs(P5): email recipient source and enqueue design v0"
 **依赖：** P3-MOD-P5-0（设计被接受、收件人邮箱来源已确认）
 
 **待修改文件：**
+
 - `apps/api/src/routes/exam.ts`（publish-results 端点）
 
 **待检查文件：**
+
 - `packages/domain/src/email.ts`（EmailType 枚举）
 - `apps/api/src/email/notificationService.ts`（enqueueBestEffort）
 - `apps/api/src/plugins/email.ts`（emailSender 装饰）
@@ -1369,6 +1575,7 @@ git commit -m "docs(P5): email recipient source and enqueue design v0"
 4. 仅入队 outbox。不要内联发 SMTP。不要加后台 worker 守护进程。不要加模板引擎。仅纯文本。
 
 5. 加测试：
+
    ```typescript
    it("enqueues email on publish-results", async () => {
      const res = await app.inject({ ... publish-results ... });
@@ -1382,6 +1589,7 @@ git commit -m "docs(P5): email recipient source and enqueue design v0"
 6. 运行：`pnpm --filter api test -- exam`
 
 **本作业非目标：**
+
 - 无后台 worker 守护进程
 - 无邮件模板渲染（仅纯文本）
 - 无邮件偏好中心
@@ -1389,6 +1597,7 @@ git commit -m "docs(P5): email recipient source and enqueue design v0"
 - 无通知历史 UI
 
 **提交：**
+
 ```bash
 git add apps/api/src/routes/exam.ts apps/api/src/routes/resultPublishing.test.ts
 git commit -m "feat(P5): enqueue best-effort email on result publish"
@@ -1409,11 +1618,13 @@ git commit -m "feat(P5): enqueue best-effort email on result publish"
 **步骤：**
 
 1. 运行完整 MVP E2E 套件：
+
    ```bash
    pnpm test:e2e
    ```
 
 2. 运行完整单元/集成测试套件：
+
    ```bash
    pnpm verify
    ```
@@ -1440,6 +1651,7 @@ git commit -m "feat(P5): enqueue best-effort email on result publish"
 **输出：** `docs/phase3/mvp-readiness-closeout.md`
 
 **提交：**
+
 ```bash
 git add docs/phase3/mvp-readiness-closeout.md
 git commit -m "docs(P6): Phase 3 MVP readiness closeout report"
