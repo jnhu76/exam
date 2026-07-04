@@ -209,9 +209,9 @@ export function buildSubmittedAnswersSnapshot(
     schemaVersion: 1,
     answers: ordered.map((q) => ({
       questionId: q.originalQuestionId,
-      value: answerByQuestion.has(q.originalQuestionId)
-        ? (answerByQuestion.get(q.originalQuestionId) ?? null)
-        : null,
+      // Map.get returns undefined for missing keys; ?? null normalizes both
+      // "no answer record" and "answer record with null value" to null.
+      value: answerByQuestion.get(q.originalQuestionId) ?? null,
     })),
   };
 }

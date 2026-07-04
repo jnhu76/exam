@@ -50,7 +50,6 @@ export interface BackfillQuarantineItem {
 
 export interface BackfillStats {
   total: number;
-  alreadyFilled: number;
   backfilled: number;
   skippedNoSubmitSemantics: number;
   quarantined: number;
@@ -113,7 +112,6 @@ export async function runBackfill(
 
   const stats: BackfillStats = {
     total: candidates.length,
-    alreadyFilled: 0,
     backfilled: 0,
     skippedNoSubmitSemantics: 0,
     quarantined: 0,
@@ -126,7 +124,7 @@ export async function runBackfill(
     const status = attempt.status;
     const hasSubmitSemantics =
       SUBMIT_STATUSES.includes(status as (typeof SUBMIT_STATUSES)[number]) ||
-      (status === VOIDED && attempt.submittedAt != null);
+      (status === VOIDED && attempt.submittedAt !== null);
     if (!hasSubmitSemantics) {
       stats.skippedNoSubmitSemantics++;
       continue;
@@ -162,7 +160,6 @@ function formatStats(stats: BackfillStats, dryRun: boolean): string {
     `Backfill ${dryRun ? "(dry-run) " : ""}complete.`,
     `  total candidates:      ${stats.total}`,
     `  backfilled:            ${stats.backfilled}`,
-    `  already filled:        ${stats.alreadyFilled}`,
     `  skipped (no semantics):${stats.skippedNoSubmitSemantics}`,
     `  quarantined:           ${stats.quarantined}`,
   ];

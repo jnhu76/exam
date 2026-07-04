@@ -178,6 +178,8 @@ export const questions = pgTable(
     // requires non-empty at publish (P3-L0-5); objective questions are null.
     // Copied into QuestionSnapshot.rubric at attempt creation. Nullable so
     // the migration adds the column without backfilling historical rows.
+    // Drizzle columns are nullable by default (no .notNull()); matches the
+    // convention used by `standardAnswer` above.
     rubric: text("rubric"),
     attachments: jsonb("attachments").$type<Attachment[]>().notNull(),
     score: doublePrecision("score").notNull(),

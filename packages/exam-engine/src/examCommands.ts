@@ -20,7 +20,8 @@ const PLACEHOLDER_VALUES: ReadonlySet<string> = new Set([
 
 /** True when the value is missing, blank, or a known placeholder. */
 function isEmptyOrPlaceholder(value: unknown): boolean {
-  if (value == null) return true;
+  // Strict null/undefined check (project lint bans == / !=).
+  if (value === null || value === undefined) return true;
   if (typeof value === "string") {
     const trimmed = value.trim().toLowerCase();
     return trimmed === "" || PLACEHOLDER_VALUES.has(trimmed);
@@ -125,6 +126,16 @@ export async function publishExam(
   //   - text_response requires a non-empty, non-placeholder rubric;
   //     standardAnswer is optional for text_response.
   // Draft-time empty values are allowed; publish enforces.
+  //
+  // The auto-grading check is gated on an explicit autoGradedTypes set rather
+  // than a bare `else`, so any future subjective type (added to QuestionType)
+  // is NOT silently required to have a standardAnswer.
+  const autoGradedTypes: ReadonlySet<Question["type"]> = new Set([
+    "single_choice",
+    "multiple_choice",
+    "true_false",
+    "fill_blank",
+  ]);
   for (const question of questions) {
     if (question.type === "text_response") {
       if (isEmptyOrPlaceholder(question.rubric)) {
@@ -132,13 +143,15 @@ export async function publishExam(
           `text_response question ${question.id} requires a non-empty rubric at publish`,
         );
       }
-    } else {
+    } else if (autoGradedTypes.has(question.type)) {
       if (isEmptyOrPlaceholder(question.standardAnswer)) {
         throw new ValidationError(
           `auto-graded question ${question.id} requires a non-empty standardAnswer at publish`,
         );
       }
     }
+    // Any other type: publish validation is intentionally permissive here;
+    // future subjective types will add their own rubric-style guard as needed.
   }
   const totalScore = questionSnapshot.reduce(
     (sum, question) => sum + question.score,

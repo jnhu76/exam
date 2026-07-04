@@ -4,6 +4,7 @@ import type {
   AttemptRepository,
   EnrollmentRepository,
 } from "./attemptCommands.js";
+import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import {
   readGradingSnapshot,
@@ -15,11 +16,13 @@ import {
  * Auto-submittable attempt states for deadline reconciliation.
  * `not_started`/`queued` never started; `submitted`/`grading`/`graded` are
  * already frozen; `voided` is terminal. Only in-flight states get frozen.
+ *
+ * Typed against ExamAttempt["status"] so a future status rename surfaces at
+ * compile time instead of silently breaking reconciliation.
  */
-const AUTOSUBMITTABLE_STATUSES: ReadonlySet<string> = new Set([
-  "in_progress",
-  "disrupted",
-]);
+const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
+  ExamAttempt["status"]
+>(["in_progress", "disrupted"]);
 
 /**
  * Computes the effective deadline for an attempt.
@@ -110,7 +113,8 @@ export async function ensureAttemptDeadlineReconciled(
   // computeGradingResult → finalizeGrading. The freeze itself (building
   // SubmittedAnswersSnapshot) is owned by submitAttempt (P3-L0-2); we pass
   // the effective deadline as `now` so the frozen submittedAt is correct.
-  const { submitAttempt } = await import("./attemptCommands.js");
+  // submitAttempt is a static import (no circular dep — attemptCommands does
+  // not import from this module).
   await submitAttempt(attemptRepo, attemptId, effectiveDeadline, {
     source: "deadline_scanner",
     submissionReason: "deadline",
