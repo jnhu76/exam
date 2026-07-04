@@ -13,6 +13,9 @@ export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, string> = {
   multiple_choice: "questionType.multiple_choice",
   fill_blank: "questionType.fill_blank",
   true_false: "questionType.true_false",
+  // P3-L0-1: text_response is registered so the type map stays exhaustive.
+  // The TakeExam runtime branch (textarea rendering) is P3-MOD-P0-2.
+  text_response: "questionType.text_response",
 };
 
 /** Minimal translation function shape — accepts i18next's TFunction. */

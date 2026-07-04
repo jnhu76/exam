@@ -7,6 +7,7 @@ const QuestionTypeEnum = z.enum([
   "multiple_choice",
   "fill_blank",
   "true_false",
+  "text_response",
 ]);
 
 const OptionSchema = z.object({
@@ -167,6 +168,10 @@ export const QuestionSchema = z.object({
   difficulty: z.number().int().min(1).max(5),
   tags: z.array(z.string()),
   gradingRule: GradingRuleSchema,
+  // P3-L0-1: rubric dual-layer — authoring/editing source on the live row.
+  // text_response requires non-empty at publish (enforced in P3-L0-5);
+  // objective questions carry null.
+  rubric: z.string().nullable().default(null),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -193,6 +198,7 @@ export const CreateQuestionRequestSchema = z
       multiSelectScoring: "all_correct_full",
       fillBlankMatchMode: "exact",
     }),
+    rubric: z.string().nullable().default(null),
   })
   .superRefine(validateQuestionType);
 
@@ -213,6 +219,7 @@ export const UpdateQuestionRequestSchema = z.object({
   difficulty: z.number().int().min(1).max(5).optional(),
   tags: z.array(z.string()).optional(),
   gradingRule: GradingRuleSchema.optional(),
+  rubric: z.string().nullable().optional(),
 });
 
 /** Type for an update-question request. */
@@ -238,6 +245,7 @@ export const QuestionImportRowSchema = z.object({
     multiSelectScoring: "all_correct_full",
     fillBlankMatchMode: "exact",
   }),
+  rubric: z.string().nullable().default(null),
 });
 
 /** Type for a single question import row. */

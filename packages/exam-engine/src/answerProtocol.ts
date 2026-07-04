@@ -1,8 +1,10 @@
 import type {
   AnswerRecord,
   AttemptStatus,
+  QuestionSnapshot,
   SaveAnswerRequest,
   SaveAnswerResponse,
+  SubmittedAnswersSnapshot,
 } from "@exam/domain";
 
 /**
@@ -175,5 +177,41 @@ export function processSaveAnswer(
     savedAt: savedAtIso,
     newAnswer,
     newClientSeqMap,
+  };
+}
+
+/**
+ * Builds the frozen {@link SubmittedAnswersSnapshot} written to
+ * `exam_attempts.submitted_answers` at submit time (P3-L0-2 / ADR-008).
+ *
+ * Normalizes draft {@link AnswerRecord}s against the attempt's question
+ * snapshot: every snapshot question becomes one entry, ordered by the
+ * snapshot's `order` field (NOT by answer-record arrival order). Protocol
+ * metadata (version / savedAt / clientSeq / baseVersion) is stripped — the
+ * frozen snapshot carries only `{ questionId, value }`. Unanswered questions
+ * yield `value: null` so the snapshot is a complete answer set.
+ *
+ * Pure function: no IO, no mutation of inputs. Caller (`submitAttempt`)
+ * runs this inside the locked submit transaction so the captured answers
+ * are exactly those that existed when the row lock was held.
+ */
+export function buildSubmittedAnswersSnapshot(
+  draftAnswers: AnswerRecord[],
+  questionSnapshot: QuestionSnapshot[],
+): SubmittedAnswersSnapshot {
+  const answerByQuestion = new Map(
+    draftAnswers.map((a) => [a.questionId, a.answer]),
+  );
+
+  const ordered = [...questionSnapshot].sort((a, b) => a.order - b.order);
+
+  return {
+    schemaVersion: 1,
+    answers: ordered.map((q) => ({
+      questionId: q.originalQuestionId,
+      // Map.get returns undefined for missing keys; ?? null normalizes both
+      // "no answer record" and "answer record with null value" to null.
+      value: answerByQuestion.get(q.originalQuestionId) ?? null,
+    })),
   };
 }

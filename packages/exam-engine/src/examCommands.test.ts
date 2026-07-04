@@ -77,6 +77,7 @@ function makeQuestion(id: string, overrides: Partial<Question> = {}): Question {
       multiSelectScoring: "all_correct_full",
       fillBlankMatchMode: "exact",
     },
+    rubric: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -115,6 +116,24 @@ describe("examCommands", () => {
       expect(() =>
         buildQuestionSnapshot(["q1", "missing"], testQuestions),
       ).toThrow(ValidationError);
+    });
+
+    it("copies rubric from Question into QuestionSnapshot (text_response)", () => {
+      const q = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: null,
+        rubric: "按逻辑完整性、关键概念、论证质量给分",
+        score: 20,
+      });
+      const snapshot = buildQuestionSnapshot(["q-text"], [q]);
+      expect(snapshot[0]?.rubric).toBe("按逻辑完整性、关键概念、论证质量给分");
+    });
+
+    it("normalizes rubric: null for objective questions", () => {
+      const snapshot = buildQuestionSnapshot(["q1"], testQuestions);
+      expect(snapshot[0]?.rubric).toBeNull();
     });
   });
 
@@ -158,6 +177,89 @@ describe("examCommands", () => {
       const repo = makeRepo(makeExam({ passingScore: 0 }));
       await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
         ValidationError,
+      );
+    });
+
+    // ── P3-L0-5: publish validation ───────────────────────────────
+
+    it("rejects text_response publish when rubric is null", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-text"], totalScore: 20, passingScore: 10 }),
+      );
+      const textQ = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: null,
+        rubric: null,
+        score: 20,
+      });
+      await expect(publishExam(repo, "exam-1", [textQ])).rejects.toThrow(
+        /rubric/i,
+      );
+    });
+
+    it("rejects text_response publish when rubric is a placeholder ('暂无')", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-text"], totalScore: 20, passingScore: 10 }),
+      );
+      const textQ = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: null,
+        rubric: "暂无",
+        score: 20,
+      });
+      await expect(publishExam(repo, "exam-1", [textQ])).rejects.toThrow(
+        /rubric/i,
+      );
+    });
+
+    it("accepts text_response publish when rubric is non-empty", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-text"], totalScore: 20, passingScore: 10 }),
+      );
+      const textQ = makeQuestion("q-text", {
+        type: "text_response",
+        content: "阐述",
+        options: [],
+        standardAnswer: null,
+        rubric: "按逻辑完整性、关键概念、论证质量给分",
+        score: 20,
+      });
+      const result = await publishExam(repo, "exam-1", [textQ]);
+      expect(result.status).toBe("published");
+      expect(result.questionSnapshot[0]?.rubric).toBe(
+        "按逻辑完整性、关键概念、论证质量给分",
+      );
+    });
+
+    it("rejects auto-question (single_choice) publish when standardAnswer is null", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-auto"], totalScore: 50, passingScore: 25 }),
+      );
+      const autoQ = makeQuestion("q-auto", {
+        type: "single_choice",
+        standardAnswer: null,
+        score: 50,
+      });
+      await expect(publishExam(repo, "exam-1", [autoQ])).rejects.toThrow(
+        /standardAnswer/i,
+      );
+    });
+
+    it("rejects auto-question publish when standardAnswer is a placeholder ('暂无')", async () => {
+      const repo = makeRepo(
+        makeExam({ questionIds: ["q-auto"], totalScore: 50, passingScore: 25 }),
+      );
+      const autoQ = makeQuestion("q-auto", {
+        type: "single_choice",
+        standardAnswer: "暂无",
+        score: 50,
+      });
+      await expect(publishExam(repo, "exam-1", [autoQ])).rejects.toThrow(
+        /standardAnswer/i,
       );
     });
   });

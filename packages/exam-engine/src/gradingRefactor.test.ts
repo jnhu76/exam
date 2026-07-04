@@ -82,6 +82,7 @@ function makeAttempt(overrides: Partial<ExamAttempt> = {}): ExamAttempt {
           fillBlankMatchMode: "exact",
         },
         order: 0,
+        rubric: null,
       },
     ],
     answers: [

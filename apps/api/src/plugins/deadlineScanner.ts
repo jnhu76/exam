@@ -117,9 +117,11 @@ export async function autoSubmitAndGrade(
     );
 
     // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
-    // (source = deadline_scanner).
+    // (source = deadline_scanner). P3-L0-2: record submissionReason='deadline'
+    // so the frozen submitted_answers carries the deadline-trigger marker.
     await submitAttempt(attempts, attemptId, now, {
       source: "deadline_scanner",
+      submissionReason: "deadline",
     });
 
     await gradeAttemptIdempotent(exams, enrollments, attempts, attemptId, now);

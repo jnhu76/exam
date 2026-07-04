@@ -47,6 +47,7 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { startOrRestoreAttempt, restoreAttempt } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
+import { ensureAttemptDeadlineReconciled } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
   createExamEngineRepos,
@@ -776,11 +777,39 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const ctx = getRequestContext(request);
-      const attempt = await getOwnedAttempt(
-        fastify,
-        ctx,
-        parsed.data.attemptId,
-      );
+      const candidateProfile = await getCandidateProfile(fastify, ctx);
+
+      // P3-L0-3: lazy deadline reconciliation. The take endpoint is the
+      // primary entry point; run reconciliation inside a locked tx so an
+      // expired attempt is frozen before the snapshot is built. This is a
+      // command-style GET with side effects — Cache-Control: no-store below.
+      const attempt = (await executeInTransaction(fastify.db, async (tx) => {
+        const { exams, enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: createAttemptRepo(tx),
+            enrollmentRepo: createEnrollmentRepo(tx),
+          },
+          ctx,
+        );
+        // ensureAttemptDeadlineReconciled performs its own findByIdForUpdate
+        // internally and returns the (possibly reconciled) attempt. Verify
+        // ownership on that returned object instead of a separate locked read,
+        // avoiding a redundant DB query. Reconcile is idempotent, so running
+        // it before the ownership check is safe even for non-owners (we throw
+        // before returning any data).
+        const reconciled = await ensureAttemptDeadlineReconciled(
+          exams,
+          enrollments,
+          attempts,
+          parsed.data.attemptId,
+          fastify.now(),
+        );
+        if (reconciled.candidateId !== candidateProfile.id) {
+          throw new NotFoundError("Attempt not found");
+        }
+        return reconciled;
+      })) as ExamAttempt;
 
       // Load the exam for visibility/deadline computation
       const examRepo = createExamRepo(fastify.db);
@@ -860,8 +889,37 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         ) {
           throw new NotFoundError("尝试不存在");
         }
+
+        // P3-L0-3: lazy deadline reconciliation at save entry point. If the
+        // attempt is expired, this freezes it; the processSaveAnswer below
+        // then sees a submitted/graded status and returns a deterministic
+        // rejection (ATTEMPT_ALREADY_SUBMITTED / DEADLINE_EXCEEDED) instead
+        // of accepting the stale save.
+        const { exams, enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: txRepo,
+            enrollmentRepo: createEnrollmentRepo(tx),
+          },
+          ctx,
+        );
+        // ensureAttemptDeadlineReconciled returns the (possibly reconciled)
+        // attempt — reuse it instead of a redundant findByIdForUpdate.
+        // processSaveAnswer then sees the current status (frozen snapshot if
+        // reconciled) and returns a deterministic rejection for an expired
+        // attempt instead of accepting the stale save.
+        const currentAttempt = await ensureAttemptDeadlineReconciled(
+          exams,
+          enrollments,
+          attempts,
+          attemptId,
+          now,
+        );
+        if (currentAttempt.candidateId !== candidateProfile.id) {
+          throw new NotFoundError("尝试不存在");
+        }
         if (
-          !lockedAttempt.questionSnapshot.some(
+          !currentAttempt.questionSnapshot.some(
             (question) => question.originalQuestionId === questionId,
           )
         ) {
@@ -869,17 +927,17 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         }
 
         const storedAnswers = normalizeAnswers(
-          lockedAttempt.answers as StoredAnswer[],
+          currentAttempt.answers as StoredAnswer[],
         );
         const clientSeqMap = buildClientSeqMap(storedAnswers);
 
         const saveResult = processSaveAnswer(
           {
-            attemptStatus: lockedAttempt.status as AttemptStatus,
-            answers: lockedAttempt.answers,
+            attemptStatus: currentAttempt.status as AttemptStatus,
+            answers: currentAttempt.answers,
             clientSeqMap,
-            ...(lockedAttempt.deadlineAt
-              ? { deadlineAt: lockedAttempt.deadlineAt }
+            ...(currentAttempt.deadlineAt
+              ? { deadlineAt: currentAttempt.deadlineAt }
               : {}),
             now,
           },
@@ -1094,13 +1152,25 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       await getOwnedAttempt(fastify, ctx, attemptId);
 
       const attempt = await executeInTransaction(fastify.db, async (tx) => {
-        const { exams, attempts } = createExamEngineRepos(
+        const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
             attemptRepo: createAttemptRepo(tx),
             enrollmentRepo: createEnrollmentRepo(tx),
           },
           ctx,
+        );
+
+        // P3-L0-3: lazy deadline reconciliation at restore entry point. If the
+        // disrupted attempt is past its deadline, freeze it now; restoreAttempt
+        // below then sees a submitted/graded status and the candidate gets the
+        // frozen result instead of resurrecting an expired attempt.
+        await ensureAttemptDeadlineReconciled(
+          exams,
+          enrollments,
+          attempts,
+          attemptId,
+          fastify.now(),
         );
 
         return restoreAttempt(exams, attempts, attemptId, fastify.now());

@@ -16,6 +16,7 @@ function makeQuestion(overrides: Partial<QuestionSnapshot>): QuestionSnapshot {
       fillBlankMatchMode: "exact",
     },
     order: 0,
+    rubric: null,
     ...overrides,
   };
 }

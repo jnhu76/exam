@@ -5082,7 +5082,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -5164,6 +5165,11 @@
                               "fillBlankMatchMode"
                             ],
                             "additionalProperties": false
+                          },
+                          "rubric": {
+                            "type": "string",
+                            "nullable": true,
+                            "default": null
                           },
                           "createdAt": {
                             "type": "string",
@@ -5296,7 +5302,8 @@
                       "single_choice",
                       "multiple_choice",
                       "fill_blank",
-                      "true_false"
+                      "true_false",
+                      "text_response"
                     ]
                   },
                   "content": {
@@ -5383,6 +5390,11 @@
                       "multiSelectScoring": "all_correct_full",
                       "fillBlankMatchMode": "exact"
                     }
+                  },
+                  "rubric": {
+                    "type": "string",
+                    "nullable": true,
+                    "default": null
                   }
                 },
                 "required": [
@@ -5429,7 +5441,8 @@
                         "single_choice",
                         "multiple_choice",
                         "fill_blank",
-                        "true_false"
+                        "true_false",
+                        "text_response"
                       ]
                     },
                     "content": {
@@ -5508,6 +5521,11 @@
                       },
                       "required": ["multiSelectScoring", "fillBlankMatchMode"],
                       "additionalProperties": false
+                    },
+                    "rubric": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
                     },
                     "createdAt": {
                       "type": "string",
@@ -5671,7 +5689,8 @@
                         "single_choice",
                         "multiple_choice",
                         "fill_blank",
-                        "true_false"
+                        "true_false",
+                        "text_response"
                       ]
                     },
                     "content": {
@@ -5750,6 +5769,11 @@
                       },
                       "required": ["multiSelectScoring", "fillBlankMatchMode"],
                       "additionalProperties": false
+                    },
+                    "rubric": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
                     },
                     "createdAt": {
                       "type": "string",
@@ -5885,7 +5909,8 @@
                       "single_choice",
                       "multiple_choice",
                       "fill_blank",
-                      "true_false"
+                      "true_false",
+                      "text_response"
                     ]
                   },
                   "content": {
@@ -5965,6 +5990,10 @@
                     },
                     "required": ["multiSelectScoring", "fillBlankMatchMode"],
                     "additionalProperties": false
+                  },
+                  "rubric": {
+                    "type": "string",
+                    "nullable": true
                   }
                 },
                 "additionalProperties": false
@@ -6015,7 +6044,8 @@
                         "single_choice",
                         "multiple_choice",
                         "fill_blank",
-                        "true_false"
+                        "true_false",
+                        "text_response"
                       ]
                     },
                     "content": {
@@ -6094,6 +6124,11 @@
                       },
                       "required": ["multiSelectScoring", "fillBlankMatchMode"],
                       "additionalProperties": false
+                    },
+                    "rubric": {
+                      "type": "string",
+                      "nullable": true,
+                      "default": null
                     },
                     "createdAt": {
                       "type": "string",
@@ -11986,7 +12021,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -12230,7 +12266,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -12581,7 +12618,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -13503,7 +13541,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -14015,7 +14054,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -14627,7 +14667,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -15067,7 +15108,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -16295,7 +16337,8 @@
                               "single_choice",
                               "multiple_choice",
                               "fill_blank",
-                              "true_false"
+                              "true_false",
+                              "text_response"
                             ]
                           },
                           "content": {
@@ -17130,7 +17173,8 @@
                                   "single_choice",
                                   "multiple_choice",
                                   "fill_blank",
-                                  "true_false"
+                                  "true_false",
+                                  "text_response"
                                 ]
                               },
                               "content": {

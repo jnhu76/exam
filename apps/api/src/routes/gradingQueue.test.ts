@@ -28,6 +28,7 @@ function subjectiveQuestion(id: string, score = 10): QuestionSnapshot {
       fillBlankMatchMode: "exact",
     },
     order: 0,
+    rubric: null,
   };
 }
 

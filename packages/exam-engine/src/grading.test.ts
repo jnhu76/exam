@@ -77,6 +77,7 @@ function makeAttempt(overrides: Partial<ExamAttempt> = {}): ExamAttempt {
           fillBlankMatchMode: "exact",
         },
         order: 0,
+        rubric: null,
       },
     ],
     answers: [
@@ -329,6 +330,97 @@ describe("gradeAttempt", () => {
         new Date(),
       ),
     ).rejects.toThrow("Failed to update enrollment");
+  });
+});
+
+// ── P3-L0-2: grading reads submitted_answers, not draft answers ──────────
+
+describe("computeGradingResult — submitted_answers read path (P3-L0-2)", () => {
+  const exam = makeExam();
+
+  it("scores from submitted_answers when present, ignoring draft answers", () => {
+    // Draft says "x" (wrong); submitted_answers says "a" (correct). Grading
+    // must use the frozen submitted snapshot, not the mutable draft.
+    const attempt = makeAttempt({
+      answers: [
+        { questionId: "q1", answer: "x", version: 1, savedAt: new Date() },
+      ],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q1", value: "a" }],
+      },
+    });
+
+    const result = computeGradingResult(attempt, exam, new Date());
+
+    expect(result.totalScore).toBe(10);
+    expect(result.questionResults[0]?.candidateAnswer).toBe("a");
+    expect(result.questionResults[0]?.correct).toBe(true);
+  });
+
+  it("falls back to draft answers when submitted_answers is null (legacy)", () => {
+    // Pre-L0-2 attempts have a NULL submitted_answers column. Grading must
+    // still work during the migration window by reading draft answers.
+    const attempt = makeAttempt({
+      submittedAnswers: null,
+      answers: [
+        { questionId: "q1", answer: "a", version: 1, savedAt: new Date() },
+      ],
+    });
+
+    const result = computeGradingResult(attempt, exam, new Date());
+
+    expect(result.totalScore).toBe(10);
+    expect(result.questionResults[0]?.candidateAnswer).toBe("a");
+  });
+
+  it("RED #13 — text_response grading reflects submitted_answers, not draft", () => {
+    // text_response is manual-graded; the auto-grader returns a zero-score
+    // placeholder. But the candidateAnswer captured in the grading result
+    // must come from submitted_answers (the frozen value B), NOT from the
+    // draft value A. This is the read-path proof for L0-2 §4.4/§6.2.
+    const textAttempt: ExamAttempt = {
+      ...makeAttempt(),
+      questionSnapshot: [
+        {
+          originalQuestionId: "q-text",
+          type: "text_response",
+          content: "阐述你的观点",
+          attachments: [],
+          options: [],
+          standardAnswer: null,
+          score: 20,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: "按逻辑给分",
+        },
+      ],
+      // Draft still says A (e.g. an in-flight edit before submit locked).
+      answers: [
+        {
+          questionId: "q-text",
+          answer: "draft-value-A",
+          version: 1,
+          savedAt: new Date(),
+        },
+      ],
+      // Frozen submitted snapshot says B — the authoritative answer.
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: "submitted-value-B" }],
+      },
+    };
+
+    const result = computeGradingResult(textAttempt, exam, new Date());
+
+    expect(result.questionResults[0]?.candidateAnswer).toBe(
+      "submitted-value-B",
+    );
+    // Manual type: auto-grader does not score it; placeholder is 0.
+    expect(result.questionResults[0]?.score).toBe(0);
   });
 });
 

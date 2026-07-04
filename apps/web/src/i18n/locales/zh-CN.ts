@@ -101,6 +101,7 @@ const zhCN = {
     multiple_choice: "多选",
     fill_blank: "填空",
     true_false: "判断",
+    text_response: "文本作答",
   },
 
   /**

@@ -242,6 +242,7 @@ describe("attempt routes", () => {
             fillBlankMatchMode: "exact" as const,
           },
           order: 0,
+          rubric: null,
         },
       ];
       await ctx.db.insert(schema.exams).values({

@@ -201,6 +201,7 @@ async function buildFixture(
         fillBlankMatchMode: "exact",
       },
       order: 0,
+      rubric: null,
     },
   ];
   const controlFlags: ControlFlags = {

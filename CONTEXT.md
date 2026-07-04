@@ -148,7 +148,7 @@ Behavior in transaction:
 8. Audit `action = 'attempt.deadline_reconciled'`, `effectiveAt = effectiveDeadline`, `occurredAt = serverNow`
 9. Idempotent: repeated calls do not overwrite existing `submitted_answers` or `submittedAt`
 
-Save after deadline: reconcile first, then return `ATTEMPT_DEADLINE_EXPIRED` or `ATTEMPT_NOT_EDITABLE`; optionally附带最新 CandidateTakeSnapshot.
+Save after deadline: reconcile first (L0-3 freezes the attempt inside the save entry transaction), then return `ATTEMPT_ALREADY_SUBMITTED` (the attempt is now deadline-submitted, so the save is rejected as already-submitted). The legacy `DEADLINE_EXCEEDED` reason is superseded: both communicate the same invariant — no save accepted past the deadline. Optionally附带最新 CandidateTakeSnapshot.
 
 Submit after deadline: reconcile first, return existing deadline-submitted snapshot; do not accept new answer payload.
 

@@ -77,6 +77,9 @@ export const QuestionType = {
   MultipleChoice: "multiple_choice",
   FillBlank: "fill_blank",
   TrueFalse: "true_false",
+  // P3-L0-1: independent QuestionType for constructed free-text responses.
+  // Not a fill_blank variant. gradingMode is manual; inputMode is multi_line.
+  TextResponse: "text_response",
 } as const;
 export type QuestionType = (typeof QuestionType)[keyof typeof QuestionType];
 

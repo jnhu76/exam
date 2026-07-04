@@ -18,6 +18,7 @@ import {
   MaxAttemptsReachedError,
   ExamAlreadyPassedError,
 } from "@exam/domain";
+import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
 import { calculateDeadlineAt } from "./timer.js";
 import type { ExamRepository } from "./examCommands.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
@@ -247,6 +248,13 @@ export async function submitAttempt(
   opts: {
     source?: SubmitSource;
     minSubmitAfterStartMinutes?: number | null;
+    /**
+     * P3-L0-2: why the attempt is being submitted. Defaults to `'manual'`
+     * (candidate submit). Deadline auto-submit callers pass `'deadline'`.
+     * Persisted to `exam_attempts.submission_reason` alongside the frozen
+     * `submitted_answers` snapshot.
+     */
+    submissionReason?: "manual" | "deadline";
   } = {},
 ): Promise<ExamAttempt> {
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
@@ -255,6 +263,8 @@ export async function submitAttempt(
   }
 
   // 1. Idempotent already-submitted path — runs BEFORE any other check.
+  // P3-L0-2: do NOT rebuild submittedAnswers here — return the existing
+  // frozen snapshot + reason + submittedAt unchanged (double-submit safety).
   if (
     attempt.status === "submitted" ||
     attempt.status === "grading" ||
@@ -289,9 +299,21 @@ export async function submitAttempt(
     }
   }
 
+  // 4. P3-L0-2 submit freeze barrier (ADR-008): normalize the locked draft
+  // answers into a clean SubmittedAnswersSnapshot BEFORE the status flip.
+  // After this update lands, any concurrent saveAnswer sees `submitted` and
+  // is rejected (ATTEMPT_ALREADY_SUBMITTED), so the frozen answers can no
+  // longer mutate. Grading reads this snapshot, not draft answers.
+  const submittedAnswers = buildSubmittedAnswersSnapshot(
+    attempt.answers,
+    attempt.questionSnapshot,
+  );
+
   const submitted = await attemptRepo.update(attemptId, {
     status: "submitted",
     submittedAt: now,
+    submittedAnswers,
+    submissionReason: opts.submissionReason ?? "manual",
   });
   if (!submitted) throw new ValidationError("Attempt not found after update");
   return submitted;

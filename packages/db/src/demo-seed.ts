@@ -606,6 +606,10 @@ export async function seedDemo(
         score: q.score,
         gradingRule: q.gradingRule as GradingRule,
         order: i,
+        // P3-L0-1: demo-seed only creates objective questions; rubric is null.
+        // Historical seeded snapshots predate the rubric field and are not
+        // migrated — readers normalize missing to null.
+        rubric: null,
       });
     }
     return snapshots;

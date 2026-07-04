@@ -10,6 +10,7 @@ import {
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
+  ensureAttemptDeadlineReconciled,
 } from "@exam/exam-engine";
 import { createExamEngineRepos } from "../adapters/repoAdapters.js";
 
@@ -77,6 +78,37 @@ export async function submitAndGradeAttempt(
         ctx,
       );
 
+      // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
+      // is past its effective deadline, freeze it as deadline-submitted
+      // (submittedAt = effectiveDeadline, submissionReason='deadline') and
+      // return that frozen result. The candidate's submit then returns the
+      // existing deadline-submitted snapshot — no new answer payload accepted.
+      if (status === "in_progress" || status === "disrupted") {
+        const reconciled = await ensureAttemptDeadlineReconciled(
+          exams,
+          enrollments,
+          attempts,
+          attemptId,
+          now,
+        );
+        // If reconciliation froze the attempt (any terminal/frozen status),
+        // it is already submitted/graded — nothing more to do. Cover all
+        // frozen states, not just "graded": finalizeGrading currently always
+        // lands on "graded", but checking the full frozen set is robust
+        // against future status additions and avoids a redundant DB re-read.
+        if (
+          reconciled.status === "graded" ||
+          reconciled.status === "submitted" ||
+          reconciled.status === "grading"
+        ) {
+          return true;
+        }
+      }
+
+      // The row is still locked by this tx's findByIdForUpdate (no concurrent
+      // tx could have changed its status), so reuse `status` directly without
+      // a redundant re-read. If reconciliation didn't freeze it, the status
+      // is unchanged.
       if (status === "in_progress" || status === "disrupted") {
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
