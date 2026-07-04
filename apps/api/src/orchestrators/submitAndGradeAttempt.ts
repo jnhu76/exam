@@ -91,20 +91,25 @@ export async function submitAndGradeAttempt(
           attemptId,
           now,
         );
-        if (reconciled.status === "graded") {
-          // Deadline reconciliation froze + graded it; nothing more to do.
+        // If reconciliation froze the attempt (any terminal/frozen status),
+        // it is already submitted/graded — nothing more to do. Cover all
+        // frozen states, not just "graded": finalizeGrading currently always
+        // lands on "graded", but checking the full frozen set is robust
+        // against future status additions and avoids a redundant DB re-read.
+        if (
+          reconciled.status === "graded" ||
+          reconciled.status === "submitted" ||
+          reconciled.status === "grading"
+        ) {
           return true;
         }
       }
 
-      // Re-read status after potential reconciliation.
-      const postReconcile = (await txAttemptRepo.findByIdForUpdate(
-        ctx,
-        attemptId,
-      ))!;
-      const currentStatus = postReconcile.status;
-
-      if (currentStatus === "in_progress" || currentStatus === "disrupted") {
+      // The row is still locked by this tx's findByIdForUpdate (no concurrent
+      // tx could have changed its status), so reuse `status` directly without
+      // a redundant re-read. If reconciliation didn't freeze it, the status
+      // is unchanged.
+      if (status === "in_progress" || status === "disrupted") {
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.

@@ -792,17 +792,23 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
-        const locked = await attempts.findByIdForUpdate(parsed.data.attemptId);
-        if (!locked || locked.candidateId !== candidateProfile.id) {
-          throw new NotFoundError("Attempt not found");
-        }
-        return ensureAttemptDeadlineReconciled(
+        // ensureAttemptDeadlineReconciled performs its own findByIdForUpdate
+        // internally and returns the (possibly reconciled) attempt. Verify
+        // ownership on that returned object instead of a separate locked read,
+        // avoiding a redundant DB query. Reconcile is idempotent, so running
+        // it before the ownership check is safe even for non-owners (we throw
+        // before returning any data).
+        const reconciled = await ensureAttemptDeadlineReconciled(
           exams,
           enrollments,
           attempts,
           parsed.data.attemptId,
           fastify.now(),
         );
+        if (reconciled.candidateId !== candidateProfile.id) {
+          throw new NotFoundError("Attempt not found");
+        }
+        return reconciled;
       })) as ExamAttempt;
 
       // Load the exam for visibility/deadline computation
@@ -897,20 +903,19 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
-        await ensureAttemptDeadlineReconciled(
+        // ensureAttemptDeadlineReconciled returns the (possibly reconciled)
+        // attempt — reuse it instead of a redundant findByIdForUpdate.
+        // processSaveAnswer then sees the current status (frozen snapshot if
+        // reconciled) and returns a deterministic rejection for an expired
+        // attempt instead of accepting the stale save.
+        const currentAttempt = await ensureAttemptDeadlineReconciled(
           exams,
           enrollments,
           attempts,
           attemptId,
           now,
         );
-        // Re-read post-reconciliation so processSaveAnswer sees the current
-        // status (the frozen snapshot if reconciled).
-        const currentAttempt = await txRepo.findByIdForUpdate(ctx, attemptId);
-        if (
-          !currentAttempt ||
-          currentAttempt.candidateId !== candidateProfile.id
-        ) {
+        if (currentAttempt.candidateId !== candidateProfile.id) {
           throw new NotFoundError("尝试不存在");
         }
         if (

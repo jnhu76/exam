@@ -33,7 +33,7 @@ import type {
   QuestionSnapshot,
   SubmittedAnswersSnapshot,
 } from "@exam/domain";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 
@@ -75,7 +75,17 @@ export async function loadBackfillCandidates(
       and(
         isNull(schema.examAttempts.submittedAnswers),
         // status in submitted/grading/graded, OR (voided AND submittedAt not null)
-        sql`(${schema.examAttempts.status} in ('submitted','grading','graded') or (${schema.examAttempts.status} = 'voided' and ${schema.examAttempts.submittedAt} is not null))`,
+        or(
+          inArray(schema.examAttempts.status, [
+            "submitted",
+            "grading",
+            "graded",
+          ]),
+          and(
+            eq(schema.examAttempts.status, "voided"),
+            isNotNull(schema.examAttempts.submittedAt),
+          ),
+        ),
       ),
     );
   return rows as unknown as ExamAttempt[];
