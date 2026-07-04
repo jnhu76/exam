@@ -4,6 +4,34 @@ import { assertTransition } from "./examStateMachine.js";
 
 export { assertTransition as assertExamTransition } from "./examStateMachine.js";
 
+/**
+ * P3-L0-5: placeholder strings that look non-empty but carry no real answer
+ * or rubric. CONTEXT.md: "Empty strings like '暂无' do not count as valid."
+ * Trimmed + lowercased before comparison so "  N/A  " matches.
+ */
+const PLACEHOLDER_VALUES: ReadonlySet<string> = new Set([
+  "暂无",
+  "无",
+  "n/a",
+  "na",
+  "null",
+  "none",
+]);
+
+/** True when the value is missing, blank, or a known placeholder. */
+function isEmptyOrPlaceholder(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    return trimmed === "" || PLACEHOLDER_VALUES.has(trimmed);
+  }
+  // Arrays/objects: empty array or empty object counts as empty.
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  // Numbers/booleans: never treated as placeholder answers.
+  return false;
+}
+
 /** Repository interface for persisting exam records. */
 export interface ExamRepository {
   findById(examId: string): Promise<Exam | null> | Exam | null;
@@ -89,6 +117,28 @@ export async function publishExam(
   const questionSnapshot = buildQuestionSnapshot(exam.questionIds, questions);
   if (questions.some((question) => question.courseId !== exam.courseId)) {
     throw new ValidationError("Exam questions must belong to its course");
+  }
+
+  // P3-L0-5 publish validation (CONTEXT.md "Publish validation"):
+  //   - auto questions (single_choice/multiple_choice/true_false/fill_blank)
+  //     require a non-empty, non-placeholder standardAnswer.
+  //   - text_response requires a non-empty, non-placeholder rubric;
+  //     standardAnswer is optional for text_response.
+  // Draft-time empty values are allowed; publish enforces.
+  for (const question of questions) {
+    if (question.type === "text_response") {
+      if (isEmptyOrPlaceholder(question.rubric)) {
+        throw new ValidationError(
+          `text_response question ${question.id} requires a non-empty rubric at publish`,
+        );
+      }
+    } else {
+      if (isEmptyOrPlaceholder(question.standardAnswer)) {
+        throw new ValidationError(
+          `auto-graded question ${question.id} requires a non-empty standardAnswer at publish`,
+        );
+      }
+    }
   }
   const totalScore = questionSnapshot.reduce(
     (sum, question) => sum + question.score,
