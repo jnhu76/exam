@@ -3,11 +3,12 @@ import { SingleChoiceInput } from "./SingleChoiceInput";
 import { MultipleChoiceInput } from "./MultipleChoiceInput";
 import { FillBlankInput } from "./FillBlankInput";
 import { TrueFalseInput } from "./TrueFalseInput";
+import { TextResponseInput } from "./TextResponseInput";
 import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 
 /**
  * Dispatches to the appropriate input component based on question type
- * (single_choice, multiple_choice, fill_blank, true_false).
+ * (single_choice, multiple_choice, fill_blank, true_false, text_response).
  */
 export function QuestionRenderer({
   question,
@@ -54,6 +55,14 @@ export function QuestionRenderer({
       return (
         <TrueFalseInput
           value={answer as boolean | undefined}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      );
+    case "text_response":
+      return (
+        <TextResponseInput
+          value={answer as string | undefined}
           onChange={onChange}
           disabled={disabled}
         />
