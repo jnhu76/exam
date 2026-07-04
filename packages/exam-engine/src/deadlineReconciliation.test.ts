@@ -5,7 +5,10 @@ import type {
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
-import { ensureAttemptDeadlineReconciled } from "./deadlineReconciliation.js";
+import {
+  ensureAttemptDeadlineReconciled,
+  computeEffectiveDeadline,
+} from "./deadlineReconciliation.js";
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -300,5 +303,23 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
 
     expect(result.status).toBe("graded");
     expect(result.submissionReason).toBe("deadline");
+  });
+});
+
+describe("computeEffectiveDeadline", () => {
+  it("throws ValidationError when exam.closeAt is null", () => {
+    const exam = makeExam({ closeAt: null as unknown as Date });
+    const attempt = makeAttempt();
+    expect(() => computeEffectiveDeadline(exam, attempt)).toThrow(
+      /closeAt is required/,
+    );
+  });
+
+  it("throws ValidationError when exam.closeAt is undefined", () => {
+    const exam = makeExam({ closeAt: undefined as unknown as Date });
+    const attempt = makeAttempt();
+    expect(() => computeEffectiveDeadline(exam, attempt)).toThrow(
+      /closeAt is required/,
+    );
   });
 });

@@ -83,6 +83,12 @@ export async function submitAndGradeAttempt(
       // (submittedAt = effectiveDeadline, submissionReason='deadline') and
       // return that frozen result. The candidate's submit then returns the
       // existing deadline-submitted snapshot — no new answer payload accepted.
+      //
+      // After reconciliation the returned attempt carries the authoritative
+      // current state. Use its status directly instead of the stale
+      // pre-reconciliation `status` captured above, so we never issue a
+      // redundant second submitAttempt call.
+      let currentStatus = status;
       if (status === "in_progress" || status === "disrupted") {
         const reconciled = await ensureAttemptDeadlineReconciled(
           exams,
@@ -91,25 +97,24 @@ export async function submitAndGradeAttempt(
           attemptId,
           now,
         );
-        // If reconciliation froze the attempt (any terminal/frozen status),
-        // it is already submitted/graded — nothing more to do. Cover all
-        // frozen states, not just "graded": finalizeGrading currently always
-        // lands on "graded", but checking the full frozen set is robust
-        // against future status additions and avoids a redundant DB re-read.
+        const reconciledStatus = reconciled.status;
+        // If reconciliation already froze the attempt, skip the remaining
+        // submit+grade work. This avoids redundant readGradingSnapshot,
+        // computeGradingResult, and finalizeGrading calls that would extend
+        // the FOR UPDATE lock unnecessarily.
         if (
-          reconciled.status === "graded" ||
-          reconciled.status === "submitted" ||
-          reconciled.status === "grading"
+          reconciledStatus === "graded" ||
+          reconciledStatus === "submitted" ||
+          reconciledStatus === "grading"
         ) {
           return true;
         }
+        currentStatus = reconciledStatus;
       }
 
-      // The row is still locked by this tx's findByIdForUpdate (no concurrent
-      // tx could have changed its status), so reuse `status` directly without
-      // a redundant re-read. If reconciliation didn't freeze it, the status
-      // is unchanged.
-      if (status === "in_progress" || status === "disrupted") {
+      if (currentStatus === "in_progress" || currentStatus === "disrupted") {
+        // Reconciliation did not freeze (deadline not yet expired), or this
+        // is the `submitted` crash-recovery path that skipped reconciliation.
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.

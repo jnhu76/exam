@@ -681,8 +681,8 @@ type TransientEvent =
 ### 9.1 Drizzle Migration（仅结构变更）
 
 - `questions` 表：`type` 枚举新增 `'text_response'`，新增 `rubric text`
-- `question_snapshots`：新增 `rubric text`
 - `exam_attempts` 表：新增 `submitted_answers jsonb`，`submission_reason text nullable`
+- **无独立 `question_snapshots` 表**：`QuestionSnapshot.rubric` 作为 JSONB 内嵌字段存储在 `exam_attempts.question_snapshot` 列中，由 `buildQuestionSnapshot()` 在 attempt 创建时从 `questions.rubric` 冻结写入
 
 ### 9.2 Backfill 脚本（独立 TypeScript）
 
