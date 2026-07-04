@@ -326,8 +326,8 @@ git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource ro
 | 表 | 变更 |
 |---|---|
 | `questions` | `type` 枚举新增 `'text_response'`；新增 `rubric text` |
-| `question_snapshots` | 新增 `rubric text` |
-| `exam_attempts` | 新增 `submitted_answers jsonb`；新增 `submission_reason text nullable` |
+| `exam_attempts` | 新增 `submitted_answers jsonb`；新增 `submission_reason text nullable`；`question_snapshot` JSONB 内嵌 `QuestionSnapshot` 含 `rubric` 字段（由 `buildQuestionSnapshot()` 在 attempt 创建时冻结写入，非独立表/列） |
+| `question_snapshots` | **不存在独立表**；`QuestionSnapshot.rubric` 是 JSONB 快照内字段，通过 `buildQuestionSnapshot()` 从 `questions.rubric` 复制 |
 
 **不新增：** `inputMode`、`gradingMode`、`submitted_answers_hash`
 
@@ -438,7 +438,7 @@ git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry
 **异常处理：** fail fast 默认；`--allow-quarantine` 可选
 
 **待创建文件：**
-- `scripts/backfill-submitted-answers.ts`
+- `apps/api/src/scripts/backfill-submitted-answers.ts`（位于 API workspace，因为脚本依赖 `@exam/db` 和 `@exam/exam-engine` 工作区包；通过 `pnpm --filter @exam/api backfill:submitted-answers` 调用）
 
 **完成标准：**
 - dry-run 输出统计（总attempt数、已回填、跳过、异常）
@@ -448,7 +448,7 @@ git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry
 
 **提交：**
 ```bash
-git add scripts/backfill-submitted-answers.ts
+git add apps/api/src/scripts/backfill-submitted-answers.ts
 git commit -m "feat(L0): backfill submitted_answers for existing submitted/graded attempts"
 ```
 

@@ -1,5 +1,9 @@
 import type { Exam, ExamAttempt } from "@exam/domain";
-import { InvalidStateTransitionError, NotFoundError } from "@exam/domain";
+import {
+  InvalidStateTransitionError,
+  NotFoundError,
+  ValidationError,
+} from "@exam/domain";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -36,6 +40,11 @@ export function computeEffectiveDeadline(
   attempt: ExamAttempt,
 ): Date {
   const examClose = exam.closeAt;
+  if (examClose == null) {
+    throw new ValidationError(
+      "Exam closeAt is required for deadline computation (timed_window invariant)",
+    );
+  }
   return attempt.deadlineAt && attempt.deadlineAt < examClose
     ? attempt.deadlineAt
     : examClose;
