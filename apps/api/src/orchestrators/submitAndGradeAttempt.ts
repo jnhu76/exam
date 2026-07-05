@@ -126,6 +126,21 @@ export async function submitAndGradeAttempt(
         });
       }
 
+      // P3-L0-2C: branch on the authoritative gradingStatus established at
+      // the submit/freeze barrier. A pending_manual attempt MUST hold at
+      // submitted — the manual-grading queue owns the final transition. No
+      // question-type rescan here; the freeze barrier is the single
+      // classification authority. Both the fresh-submit case (submitAttempt
+      // just wrote pending_manual) and the crash-recovery `submitted` case
+      // (carrying its previously-established gradingStatus) are covered.
+      const postSubmit = await attempts.findByIdForUpdate(attemptId);
+      if (!postSubmit) {
+        throw new NotFoundError("Attempt not found after submit");
+      }
+      if (postSubmit.gradingStatus === "pending_manual") {
+        return false;
+      }
+
       // Re-read the grading snapshot from the SAME transaction so the answers
       // feeding the score are the locked, post-submit answers. This is the
       // freeze barrier: the score is derived from exactly the answer set that

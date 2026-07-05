@@ -10,6 +10,7 @@ import {
   hasSubjectiveQuestions,
   InvalidStateTransitionError,
   ValidationError,
+  GradingStatus,
 } from "@exam/domain";
 import type { ExamAttempt } from "@exam/domain";
 import type {
@@ -157,6 +158,15 @@ export function computeGradingResult(
  * Persists the grading results: transitions the attempt to graded, updates the
  * enrollment's final score per the score strategy, and transitions the enrollment
  * to completed if the exam is finished.
+ *
+ * P3-L0-2C terminal guard: this is the AUTOMATIC terminal finalization command.
+ * It is forbidden from advancing a `pending_manual` attempt to `graded` —
+ * protocol §3.3/§4.2 mandate that such an attempt holds at `submitted` until
+ * `completeManualGrading` (the manual-completion command) performs the final
+ * transition. The guard reads the authoritative `gradingStatus` established at
+ * the submit/freeze barrier; it does NOT rescan question types. This protects
+ * every caller (candidate submit, deadline reconciliation, deadline scanner,
+ * admin force-submit) even if a caller incorrectly reaches this path.
  */
 export async function finalizeGrading(
   enrollmentRepo: EnrollmentRepository,
@@ -175,6 +185,16 @@ export async function finalizeGrading(
     return false;
   }
 
+  // P3-L0-2C engine invariant: an attempt awaiting manual grading must NOT
+  // be advanced to `graded` through the automatic finalization path. Fail
+  // closed — only completeManualGrading may close a pending_manual attempt.
+  if (attempt.gradingStatus === GradingStatus.PendingManual) {
+    throw new InvalidStateTransitionError(
+      `Cannot auto-finalize attempt ${attemptId}: gradingStatus=pending_manual; ` +
+        "manual grading completion owns the submitted → graded transition",
+    );
+  }
+
   const tr = transition(attempt.status, "grade" as AttemptCommand);
   if (!isTransitionOk(tr)) {
     throw new InvalidStateTransitionError(
@@ -188,12 +208,18 @@ export async function finalizeGrading(
     score: result.totalScore,
     passed: result.passed,
     gradedAt: result.gradedAt,
-    // P2D-J3: an attempt with any subjective question (no standardAnswer)
-    // enters the manual-grading queue as pending_manual; otherwise it is
-    // fully auto_graded. Orthogonal to the lifecycle status (graded).
-    gradingStatus: hasSubjectiveQuestions(attempt.questionSnapshot)
-      ? "pending_manual"
-      : "auto_graded",
+    // P3-L0-2C: gradingStatus is the authoritative scoring-lifecycle fact,
+    // established at the submit/freeze barrier (attemptCommands.submitAttempt).
+    // A pure-objective attempt reaching here carries auto_graded (set at
+    // submit); preserve that classification. The `hasSubjectiveQuestions`
+    // fallback below is retained only for legacy attempts whose
+    // gradingStatus column predates P3-L0-2C (undefined), and uses the
+    // deprecated standardAnswer==null signal for backwards compatibility.
+    gradingStatus:
+      attempt.gradingStatus ??
+      (hasSubjectiveQuestions(attempt.questionSnapshot)
+        ? GradingStatus.PendingManual
+        : GradingStatus.AutoGraded),
   });
   if (!gradedUpdate) {
     throw new ValidationError("Failed to persist graded results");
@@ -309,6 +335,22 @@ export async function gradeAttemptIdempotent(
       passed: snapshot.attempt.passed ?? false,
       questionResults: snapshot.attempt.gradingResult ?? [],
       gradedAt: snapshot.attempt.gradedAt ?? now,
+    };
+  }
+
+  // P3-L0-2C: an attempt awaiting manual grading holds at `submitted`. The
+  // automatic idempotent grading path must NOT advance it to `graded`; it
+  // returns the partial auto-graded score (objective questions only) without
+  // finalizing, so the manual-grading queue remains authoritative. Branches
+  // on the established gradingStatus — no question-type rescan here.
+  if (snapshot.attempt.gradingStatus === GradingStatus.PendingManual) {
+    const partial = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+    return {
+      attemptId: snapshot.attempt.id,
+      totalScore: partial.totalScore,
+      passed: partial.passed,
+      questionResults: partial.questionResults,
+      gradedAt: now,
     };
   }
 

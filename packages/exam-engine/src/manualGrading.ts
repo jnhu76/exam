@@ -203,7 +203,19 @@ export async function gradeQuestion(
     // Reconcile the total from the complete objective + manual sets. Always
     // recomputed (never incremented) so re-grades are idempotent.
     const reconciled = reconcileScores(attempt, entries, passingScore);
+    // P3-L0-2C: completeManualGrading owns the final submitted → graded
+    // lifecycle transition for manual-grading attempts. protocol §3.3/§4.2 —
+    // only this command may advance a pending_manual attempt to graded once
+    // all subjective scores are entered. Also re-runs the enrollment
+    // finalization (finalScore / completion) so the candidate's record
+    // reflects the reconciled total. This transition is only issued when the
+    // attempt is still at `submitted`; a re-grade on an already-graded
+    // attempt (status=graded) leaves status alone and just refreshes the
+    // score breakdown.
+    const statusUpdate =
+      attempt.status === "submitted" ? { status: "graded" as const } : {};
     await attemptRepo.update(attemptId, {
+      ...statusUpdate,
       gradingStatus: "fully_graded",
       score: reconciled.totalScore,
       passed: reconciled.passed,

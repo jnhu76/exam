@@ -1,5 +1,6 @@
 import type { Exam, ExamAttempt } from "@exam/domain";
 import {
+  GradingStatus,
   InvalidStateTransitionError,
   NotFoundError,
   ValidationError,
@@ -124,10 +125,24 @@ export async function ensureAttemptDeadlineReconciled(
   // the effective deadline as `now` so the frozen submittedAt is correct.
   // submitAttempt is a static import (no circular dep — attemptCommands does
   // not import from this module).
-  await submitAttempt(attemptRepo, attemptId, effectiveDeadline, {
-    source: "deadline_scanner",
-    submissionReason: "deadline",
-  });
+  //
+  // P3-L0-2C: submitAttempt now establishes the authoritative gradingStatus
+  // at the freeze barrier. Branch on it — a pending_manual attempt MUST hold
+  // at submitted (protocol §3.3); only completeManualGrading may advance it.
+  // No per-caller question-type rescan here.
+  const submittedAttempt = await submitAttempt(
+    attemptRepo,
+    attemptId,
+    effectiveDeadline,
+    {
+      source: "deadline_scanner",
+      submissionReason: "deadline",
+    },
+  );
+
+  if (submittedAttempt.gradingStatus === GradingStatus.PendingManual) {
+    return submittedAttempt;
+  }
 
   const snapshot = await readGradingSnapshot(
     examRepo,

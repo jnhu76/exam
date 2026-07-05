@@ -17,6 +17,8 @@ import {
   ValidationError,
   MaxAttemptsReachedError,
   ExamAlreadyPassedError,
+  GradingStatus,
+  requiresManualGrading,
 } from "@exam/domain";
 import { buildSubmittedAnswersSnapshot } from "./answerProtocol.js";
 import { calculateDeadlineAt } from "./timer.js";
@@ -309,11 +311,22 @@ export async function submitAttempt(
     attempt.questionSnapshot,
   );
 
+  // P3-L0-2C: classify the manual-grading requirement ONCE, at the freeze
+  // barrier, from the authoritative frozen question snapshot. protocol §1.4
+  // — text_response is the manual-grading QuestionType, NOT standardAnswer.
+  // The resulting gradingStatus is the single authoritative signal every
+  // downstream orchestrator consumes; callers MUST NOT independently rescan
+  // question types to decide lifecycle behavior.
+  const gradingStatus = requiresManualGrading(attempt.questionSnapshot)
+    ? GradingStatus.PendingManual
+    : GradingStatus.AutoGraded;
+
   const submitted = await attemptRepo.update(attemptId, {
     status: "submitted",
     submittedAt: now,
     submittedAnswers,
     submissionReason: opts.submissionReason ?? "manual",
+    gradingStatus,
   });
   if (!submitted) throw new ValidationError("Attempt not found after update");
   return submitted;

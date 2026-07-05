@@ -161,6 +161,31 @@ export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
 }
 
 /**
+ * Returns true when any question in the snapshot requires manual grading.
+ *
+ * P3-L0-2C authoritative classification seam (exam-protocol.md §1.1, §1.4):
+ * `text_response` is the canonical manual-graded QuestionType —
+ * `gradingMode = manual` is derived from `QuestionType`, NOT from
+ * `standardAnswer`. The protocol explicitly states
+ * "`standardAnswer == null` 不再作为主观性判断依据".
+ *
+ * This is the single place that decides whether an attempt holds at
+ * `submitted + pending_manual` after the submit/freeze barrier. Every
+ * downstream grading orchestration consumes the resulting `gradingStatus`
+ * instead of independently rescanning question types.
+ *
+ * Note: today this coincides with `hasSubjectiveQuestions` because
+ * text_response carries a null standardAnswer. They are kept distinct so a
+ * future subjective type (or a non-text_response null standardAnswer) does
+ * not silently change lifecycle behavior.
+ *
+ * @param questions - The attempt's question snapshot.
+ */
+export function requiresManualGrading(questions: QuestionSnapshot[]): boolean {
+  return questions.some((q) => q.type === "text_response");
+}
+
+/**
  * Grade all questions in an attempt and compute the total score.
  *
  * Matches answers to questions by `questionId`, grades each, sums the

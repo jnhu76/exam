@@ -306,6 +306,150 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   });
 });
 
+// ── P3-L0-2C: manual-grading hold on the deadline path ────────────
+// Protocol §3.3: an expired text_response / mixed attempt must hold at
+//   submitted + pending_manual (submissionReason='deadline'), NOT auto-
+//   finalize to graded. Only completeManualGrading may advance it.
+
+describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
+  it("holds an expired pure text_response attempt at submitted + pending_manual", async () => {
+    const now = new Date("2025-01-01T11:30:00Z"); // after deadline 11:00
+    const textAttempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [
+        {
+          originalQuestionId: "q-text",
+          type: "text_response",
+          content: "Subjective question",
+          attachments: [],
+          options: [],
+          standardAnswer: null,
+          score: 100,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: "按逻辑给分",
+        },
+      ],
+      answers: [
+        {
+          questionId: "q-text",
+          answer: "主观答案",
+          version: 1,
+          savedAt: new Date("2025-01-01T10:30:00Z"),
+        },
+      ],
+    });
+    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([textAttempt]);
+
+    const result = await ensureAttemptDeadlineReconciled(
+      examRepo,
+      enrollmentRepo,
+      attemptRepo,
+      "attempt-1",
+      now,
+    );
+
+    expect(result.status).toBe("submitted");
+    expect(result.gradingStatus).toBe("pending_manual");
+    expect(result.submissionReason).toBe("deadline");
+    expect(result.submittedAt).toEqual(new Date("2025-01-01T11:00:00Z"));
+    // submitted_answers must still be frozen.
+    expect(result.submittedAnswers).toEqual({
+      schemaVersion: 1,
+      answers: [{ questionId: "q-text", value: "主观答案" }],
+    });
+  });
+
+  it("holds an expired mixed (objective + text_response) attempt at submitted + pending_manual", async () => {
+    const now = new Date("2025-01-01T11:30:00Z");
+    const mixedAttempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [
+        {
+          originalQuestionId: "q-obj",
+          type: "true_false",
+          content: "Objective TF",
+          attachments: [],
+          options: [],
+          standardAnswer: true,
+          score: 50,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: null,
+        },
+        {
+          originalQuestionId: "q-text",
+          type: "text_response",
+          content: "Subjective",
+          attachments: [],
+          options: [],
+          standardAnswer: null,
+          score: 50,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 1,
+          rubric: "按逻辑给分",
+        },
+      ],
+      answers: [
+        {
+          questionId: "q-obj",
+          answer: true,
+          version: 1,
+          savedAt: new Date("2025-01-01T10:30:00Z"),
+        },
+        {
+          questionId: "q-text",
+          answer: "主观答案",
+          version: 1,
+          savedAt: new Date("2025-01-01T10:30:00Z"),
+        },
+      ],
+    });
+    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([mixedAttempt]);
+
+    const result = await ensureAttemptDeadlineReconciled(
+      examRepo,
+      enrollmentRepo,
+      attemptRepo,
+      "attempt-1",
+      now,
+    );
+
+    expect(result.status).toBe("submitted");
+    expect(result.gradingStatus).toBe("pending_manual");
+    expect(result.submissionReason).toBe("deadline");
+  });
+
+  it("still grades an expired pure-objective attempt inline (regression)", async () => {
+    // The deadline path's existing synchronous auto-grade behavior for
+    // pure-objective attempts must be preserved.
+    const now = new Date("2025-01-01T11:30:00Z");
+    const attempt = makeAttempt({ status: "in_progress" });
+    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+
+    const result = await ensureAttemptDeadlineReconciled(
+      examRepo,
+      enrollmentRepo,
+      attemptRepo,
+      "attempt-1",
+      now,
+    );
+
+    expect(result.status).toBe("graded");
+    expect(result.gradingStatus).toBe("auto_graded");
+    expect(result.submissionReason).toBe("deadline");
+  });
+});
+
 describe("computeEffectiveDeadline", () => {
   it("throws ValidationError when exam.closeAt is null", () => {
     const exam = makeExam({ closeAt: null as unknown as Date });
