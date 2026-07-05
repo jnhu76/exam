@@ -106,6 +106,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           difficulty: q.difficulty,
           tags: q.tags,
           gradingRule: q.gradingRule,
+          // P3-L0-1C: project rubric on the authoritative question read path.
+          // Candidate-facing contracts (CandidateQuestionSnapshot) omit it
+          // separately; this admin list is authoritative.
+          rubric: q.rubric,
           createdAt: q.createdAt.toISOString(),
           updatedAt: q.updatedAt.toISOString(),
         })),
@@ -155,6 +159,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         difficulty: question.difficulty,
         tags: question.tags,
         gradingRule: question.gradingRule,
+        rubric: question.rubric,
         createdAt: question.createdAt.toISOString(),
         updatedAt: question.updatedAt.toISOString(),
       };
@@ -215,6 +220,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         difficulty: data.difficulty,
         tags: data.tags,
         gradingRule: data.gradingRule,
+        // P3-L0-1C: forward the validated rubric through the production
+        // write path. Previously dropped here, which caused P3-L0-5 to
+        // (correctly) reject text_response publication.
+        rubric: data.rubric,
       });
       recordAudit(
         fastify,
@@ -238,6 +247,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         difficulty: question.difficulty,
         tags: question.tags,
         gradingRule: question.gradingRule,
+        rubric: question.rubric,
         createdAt: question.createdAt.toISOString(),
         updatedAt: question.updatedAt.toISOString(),
       });
@@ -320,6 +330,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         difficulty: updated.difficulty,
         tags: updated.tags,
         gradingRule: updated.gradingRule,
+        rubric: updated.rubric,
         createdAt: updated.createdAt.toISOString(),
         updatedAt: updated.updatedAt.toISOString(),
       };
@@ -454,6 +465,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
               ? raw.tags.split(",").map((t: string) => t.trim())
               : undefined,
           gradingRule: raw.gradingRule,
+          rubric: raw.rubric,
         });
 
         if (!parsed.success) {
@@ -483,6 +495,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
             difficulty: data.difficulty,
             tags: data.tags,
             gradingRule: data.gradingRule,
+            rubric: data.rubric,
           });
         }
         valid++;

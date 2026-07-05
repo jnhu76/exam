@@ -465,6 +465,162 @@ describe("question routes", () => {
     expect(body.logId).toBeUndefined();
   });
 
+  // ── P3-L0-1C: rubric production write/read path closure ─────────
+  // Proves the historical gap is fixed: rubric flows through POST/PATCH
+  // routes (not just repo/contract) and survives a real DB round-trip.
+
+  it("POST /api/questions persists a text_response rubric and returns it", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "请阐述你的观点",
+        standardAnswer: null,
+        score: 20,
+        difficulty: 3,
+        rubric: "按逻辑完整性、关键概念、论证质量给分",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.type).toBe("text_response");
+    expect(body.rubric).toBe("按逻辑完整性、关键概念、论证质量给分");
+    expect(body.id).toBeDefined();
+  });
+
+  it("GET /api/questions/:id returns the persisted text_response rubric", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "返回读取测试",
+        standardAnswer: null,
+        score: 10,
+        rubric: "Award full credit for a correct logical chain",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions/${created.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().rubric).toBe(
+      "Award full credit for a correct logical chain",
+    );
+  });
+
+  it("PATCH /api/questions/:id persists rubric updates", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "待更新 rubric 的题",
+        standardAnswer: null,
+        score: 15,
+        rubric: "初始评分标准",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { rubric: "更新后的评分标准" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(200);
+    expect(patchRes.json().rubric).toBe("更新后的评分标准");
+
+    // Re-read through GET to prove the value is persisted, not just echoed.
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions/${created.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.json().rubric).toBe("更新后的评分标准");
+  });
+
+  it("GET /api/questions list projects rubric (null for objective questions)", async () => {
+    // Objective question created without rubric → null semantics.
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "rubric null semantics marker question",
+        standardAnswer: true,
+        score: 2,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions/${created.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().rubric).toBeNull();
+  });
+
+  it("POST /api/questions/import persists a text_response row with rubric", async () => {
+    const previewRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions/import",
+      payload: {
+        courseId,
+        confirm: true,
+        rows: [
+          {
+            type: "text_response",
+            content: "导入的简答题",
+            standardAnswer: null,
+            score: 8,
+            rubric: "导入评分标准",
+          },
+        ],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(previewRes.statusCode).toBe(200);
+    const body = previewRes.json();
+    expect(body.valid).toBe(1);
+    expect(body.errors).toBe(0);
+
+    // Confirm the imported row's rubric actually reached questions.rubric.
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&type=text_response`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    const items = listRes.json().items as Array<{
+      content: string;
+      rubric: string | null;
+    }>;
+    const imported = items.find((q) => q.content === "导入的简答题");
+    expect(imported).toBeDefined();
+    expect(imported?.rubric).toBe("导入评分标准");
+  });
+
   it("POST /api/questions/import reports errors for invalid rows", async () => {
     const res = await ctx.app.inject({
       method: "POST",
