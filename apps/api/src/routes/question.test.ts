@@ -555,6 +555,79 @@ describe("question routes", () => {
     expect(getRes.json().rubric).toBe("更新后的评分标准");
   });
 
+  it("PATCH /api/questions/:id without rubric field preserves the persisted rubric", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "省略 rubric 字段的 PATCH 测试",
+        standardAnswer: null,
+        score: 12,
+        rubric: "Original rubric",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    // PATCH with an unrelated mutable field, omitting rubric entirely,
+    // so the update path executes without touching the rubric key.
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { content: "Updated content, rubric field omitted" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    // Independent readback through the production GET path.
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions/${created.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.json().rubric).toBe("Original rubric");
+  });
+
+  it("PATCH /api/questions/:id with rubric=null clears the persisted rubric", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "text_response",
+        content: "显式 null 清空 rubric 测试",
+        standardAnswer: null,
+        score: 12,
+        rubric: "Original rubric",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
+    const patchRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/questions/${created.id}`,
+      payload: { rubric: null },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(patchRes.statusCode).toBe(200);
+
+    // Independent readback through the production GET path; do not infer
+    // correctness from the PATCH response alone.
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions/${created.id}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.json().rubric).toBeNull();
+  });
+
   it("GET /api/questions list projects rubric (null for objective questions)", async () => {
     // Objective question created without rubric → null semantics.
     const createRes = await ctx.app.inject({
