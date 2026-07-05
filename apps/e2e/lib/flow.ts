@@ -99,6 +99,22 @@ export async function answerFillBlank(page: Page, text: string): Promise<void> {
   await input.first().fill(text);
 }
 
+/**
+ * Type free-text into the text_response textarea on the take page
+ * (P3-MOD-P0-4). text_response is an independent QuestionType rendered as a
+ * textarea via TextResponseInput.
+ */
+export async function answerTextResponse(
+  page: Page,
+  text: string,
+): Promise<void> {
+  const textarea = page
+    .getByTestId("take-question-section")
+    .locator("textarea");
+  await textarea.first().waitFor({ state: "visible" });
+  await textarea.first().fill(text);
+}
+
 export async function waitForSaveSaved(page: Page): Promise<void> {
   await page.getByText("已保存").waitFor({ state: "visible", timeout: 10_000 });
 }
