@@ -16,6 +16,8 @@ import {
   computeGradingResult,
   finalizeGrading,
 } from "./grading.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import { materializeGradingWorkset } from "./gradingWorkset.js";
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
@@ -78,6 +80,7 @@ export async function ensureAttemptDeadlineReconciled(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
   attemptId: string,
   now: Date,
 ): Promise<ExamAttempt> {
@@ -139,6 +142,12 @@ export async function ensureAttemptDeadlineReconciled(
       submissionReason: "deadline",
     },
   );
+
+  // P3-L0-2E: materialize the durable grading workset from the frozen
+  // submitted_answers. Must happen inside the same transaction as the
+  // submit freeze. Idempotent — a retry after a crash is a no-op if entries
+  // already exist.
+  await materializeGradingWorkset(submittedAttempt, gradingWorksetRepo);
 
   if (submittedAttempt.gradingStatus === GradingStatus.PendingManual) {
     return submittedAttempt;

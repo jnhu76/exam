@@ -5,6 +5,7 @@ import type {
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import {
   ensureAttemptDeadlineReconciled,
   computeEffectiveDeadline,
@@ -180,19 +181,25 @@ function makeRepos(
       return enrStore[idx]!;
     },
   };
-  return { attemptRepo, examRepo, enrollmentRepo };
+  const gradingWorksetRepo: GradingWorksetRepository = {
+    findByAttempt: async () => [],
+    bulkCreate: async () => {},
+  };
+  return { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo };
 }
 
 describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   it("freezes an expired in_progress attempt to submitted with submitted_answers", async () => {
     const now = new Date("2025-01-01T11:30:00Z"); // after deadline 11:00
     const attempt = makeAttempt({ status: "in_progress" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -212,12 +219,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       status: "in_progress",
       deadlineAt: new Date("2025-01-01T10:30:00Z"), // earlier than exam closeAt
     });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -229,12 +238,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   it("returns the attempt unchanged when not expired", async () => {
     const now = new Date("2025-01-01T10:30:00Z"); // before deadline 11:00
     const attempt = makeAttempt({ status: "in_progress" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -255,12 +266,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       submissionReason: "manual",
       submittedAt: new Date("2025-01-01T10:50:00Z"),
     });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -275,11 +288,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const now = new Date("2025-01-01T11:30:00Z");
     for (const status of ["not_started", "queued", "voided"] as const) {
       const attempt = makeAttempt({ status });
-      const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+      const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+        makeRepos([attempt]);
       const result = await ensureAttemptDeadlineReconciled(
         examRepo,
         enrollmentRepo,
         attemptRepo,
+        gradingWorksetRepo,
         "attempt-1",
         now,
       );
@@ -291,12 +306,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   it("reconciles a disrupted attempt (disrupted is auto-submittable)", async () => {
     const now = new Date("2025-01-01T11:30:00Z");
     const attempt = makeAttempt({ status: "disrupted" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -342,12 +359,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
         },
       ],
     });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([textAttempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([textAttempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -414,12 +433,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
         },
       ],
     });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([mixedAttempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([mixedAttempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -434,12 +455,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
     // pure-objective attempts must be preserved.
     const now = new Date("2025-01-01T11:30:00Z");
     const attempt = makeAttempt({ status: "in_progress" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );

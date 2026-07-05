@@ -21,17 +21,20 @@ import {
   gradeAttemptIdempotent,
   flagMisconduct,
   extendAttemptTime,
+  materializeGradingWorkset,
 } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import {
   createAttemptRepoAdapter,
   createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
@@ -208,6 +211,17 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
             await submitAttempt(attempts, attemptId, now, {
               source: "proctor",
             });
+
+            // P3-L0-2E: materialize the durable grading workset from the
+            // frozen submitted_answers before grading.
+            const submitted = await attempts.findByIdForUpdate(attemptId);
+            if (submitted) {
+              const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+                createAttemptGradingEntryRepo(tx),
+                ctx,
+              );
+              await materializeGradingWorkset(submitted, gradingWorksetRepo);
+            }
           }
 
           // Grade inside the SAME locked tx. `gradeAttemptIdempotent` handles

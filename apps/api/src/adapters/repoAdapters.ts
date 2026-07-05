@@ -1,4 +1,5 @@
 import type {
+  AttemptGradingEntry,
   Exam,
   ExamAttempt,
   ExamEnrollment,
@@ -8,11 +9,13 @@ import type { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import type { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import type { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import type { createManualGradingRepo } from "@exam/db/src/repository/manualGradingRepo.js";
+import type { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import type {
   ExamRepository,
   AttemptRepository,
   EnrollmentRepository,
   ManualGradingRepository,
+  GradingWorksetRepository,
 } from "@exam/exam-engine";
 
 /** Adapts the DB exam repo to the ExamRepository interface expected by
@@ -107,6 +110,25 @@ export interface ExamEngineRepos {
   exams: ExamRepository;
   attempts: AttemptRepository;
   enrollments: EnrollmentRepository;
+}
+
+/** Adapts the DB attempt-grading-entry repo to the GradingWorksetRepository
+ * interface expected by the exam-engine `materializeGradingWorkset` function,
+ * binding the request context (P3-L0-2E). */
+export function createGradingWorksetRepoAdapter(
+  repo: ReturnType<typeof createAttemptGradingEntryRepo>,
+  ctx: RequestContext,
+): GradingWorksetRepository {
+  return {
+    findByAttempt: async (attemptId) =>
+      repo.findByAttempt(ctx, attemptId) as Promise<AttemptGradingEntry[]>,
+    bulkCreate: async (inputs) => {
+      await repo.bulkCreate(
+        ctx,
+        inputs as Parameters<typeof repo.bulkCreate>[1],
+      );
+    },
+  };
 }
 
 /** Adapts the DB manual-grading repo to the ManualGradingRepository interface

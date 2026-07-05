@@ -5,14 +5,19 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import {
   submitAttempt,
   readGradingSnapshot,
   computeGradingResult,
   finalizeGrading,
   ensureAttemptDeadlineReconciled,
+  materializeGradingWorkset,
 } from "@exam/exam-engine";
-import { createExamEngineRepos } from "../adapters/repoAdapters.js";
+import {
+  createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
+} from "../adapters/repoAdapters.js";
 
 export interface SubmitAndGradeResult {
   attempt: ExamAttempt;
@@ -77,6 +82,10 @@ export async function submitAndGradeAttempt(
         },
         ctx,
       );
+      const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+        createAttemptGradingEntryRepo(tx),
+        ctx,
+      );
 
       // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
       // is past its effective deadline, freeze it as deadline-submitted
@@ -94,6 +103,7 @@ export async function submitAndGradeAttempt(
           exams,
           enrollments,
           attempts,
+          gradingWorksetRepo,
           attemptId,
           now,
         );
@@ -137,6 +147,13 @@ export async function submitAndGradeAttempt(
       if (!postSubmit) {
         throw new NotFoundError("Attempt not found after submit");
       }
+
+      // P3-L0-2E: materialize the durable grading workset from the frozen
+      // submitted_answers. Covers all submit paths: fresh candidate submit,
+      // deadline reconciliation, and crash-recovery. Idempotent — no-op if
+      // entries already exist (e.g. reconciliation already materialized).
+      await materializeGradingWorkset(postSubmit, gradingWorksetRepo);
+
       if (postSubmit.gradingStatus === "pending_manual") {
         return false;
       }

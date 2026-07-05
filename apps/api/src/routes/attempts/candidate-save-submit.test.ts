@@ -626,6 +626,11 @@ describe("attempt routes", () => {
         .set({
           status: "submitted",
           submittedAt: new Date(),
+          submittedAnswers: {
+            schemaVersion: 1,
+            answers: [{ questionId: qId, value: "b" }],
+          },
+          gradingStatus: "auto_graded",
           updatedAt: new Date(),
         })
         .where(eq(schema.examAttempts.id, stuckAttemptId));

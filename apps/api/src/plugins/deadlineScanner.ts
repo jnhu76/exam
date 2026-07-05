@@ -8,9 +8,17 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
-import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
+import {
+  submitAttempt,
+  gradeAttemptIdempotent,
+  materializeGradingWorkset,
+} from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
-import { createExamEngineRepos } from "../adapters/repoAdapters.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import {
+  createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
+} from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
@@ -123,6 +131,17 @@ export async function autoSubmitAndGrade(
       source: "deadline_scanner",
       submissionReason: "deadline",
     });
+
+    // P3-L0-2E: materialize the durable grading workset from the frozen
+    // submitted_answers before grading.
+    const submitted = await attempts.findByIdForUpdate(attemptId);
+    if (submitted) {
+      const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+        createAttemptGradingEntryRepo(tx),
+        ctx,
+      );
+      await materializeGradingWorkset(submitted, gradingWorksetRepo);
+    }
 
     await gradeAttemptIdempotent(exams, enrollments, attempts, attemptId, now);
 
