@@ -1,9 +1,12 @@
 import type {
   AnswerRecord,
   Attachment,
+  AttemptGradingEntry,
   ControlFlags,
   EmailOutboxStatus,
   EmailType,
+  GradingEntryMode,
+  GradingEntryStatus,
   GradingRule,
   GradingStatus,
   MisconductFlag,
@@ -394,6 +397,78 @@ export const manualGradingEntries = pgTable(
 );
 
 /**
+ * Attempt grading entries — the materialized per-question grading workset
+ * (P3-L0-2E). One durable row per frozen question per attempt, created at
+ * submit-freeze time from `submitted_answers` + the frozen `QuestionSnapshot`.
+ *
+ * This is the single durable grading truth. The manual grading queue reads
+ * `WHERE grading_mode = 'manual' AND status = 'pending_manual'`; manual
+ * scoring flips `pending_manual → completed_manual`; terminal final
+ * aggregation reads all completed entries. `attempt.gradingResult` is a
+ * denormalized projection generated from these entries — never consumed as
+ * scoring input.
+ *
+ * Uniqueness of `(attemptId, questionId)` prevents duplicate work items.
+ * `questionId` joins `QuestionSnapshot.originalQuestionId`.
+ */
+export const attemptGradingEntries = pgTable(
+  "attempt_grading_entries",
+  {
+    id: id(),
+    organizationId: organizationId().references(() => organizations.id),
+    attemptId: text("attempt_id")
+      .notNull()
+      .references(() => examAttempts.id),
+    questionId: text("question_id").notNull(),
+    gradingMode: text("grading_mode").$type<GradingEntryMode>().notNull(),
+    status: text("status").$type<GradingEntryStatus>().notNull(),
+    maxScore: doublePrecision("max_score").notNull(),
+    earnedScore: doublePrecision("earned_score"),
+    candidateAnswer: jsonb("candidate_answer"),
+    standardAnswer: jsonb("standard_answer"),
+    correct: boolean("correct"),
+    comment: text("comment").notNull().default(""),
+    gradedBy: text("graded_by"),
+    gradedAt: timestamp("graded_at", {
+      withTimezone: true,
+      mode: "date",
+    }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("attempt_grading_entries_attempt_question_unique").on(
+      table.attemptId,
+      table.questionId,
+    ),
+    index("attempt_grading_entries_queue_index").on(
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "attempt_grading_entries_mode_check",
+      sql`${table.gradingMode} IN ('auto', 'manual')`,
+    ),
+    check(
+      "attempt_grading_entries_status_check",
+      sql`${table.status} IN ('completed_auto', 'pending_manual', 'completed_manual')`,
+    ),
+    check(
+      "attempt_grading_entries_max_score_check",
+      sql`${table.maxScore} >= 0`,
+    ),
+    check(
+      "attempt_grading_entries_earned_score_check",
+      sql`${table.earnedScore} >= 0`,
+    ),
+    check(
+      "attempt_grading_entries_earned_score_limit_check",
+      sql`${table.earnedScore} <= ${table.maxScore}`,
+    ),
+  ],
+);
+
+/**
  * Import job logs table — persists import operation summaries and diagnostics.
  *
  * `createdCount` / `updatedCount` / `errors` are import-result COUNTS (how
@@ -654,6 +729,7 @@ export const schema = {
   examEnrollments,
   examAttempts,
   manualGradingEntries,
+  attemptGradingEntries,
   auditLogs,
   clientEvents,
   importJobLogs,

@@ -468,6 +468,81 @@ export interface ManualGradingEntry {
   updatedAt: Date;
 }
 
+// ── Attempt Grading Entry (P3-L0-2E) ─────────────────────────────
+
+/**
+ * Grading mode for a single question within an attempt's materialized grading
+ * workset. Derived from {@link QuestionSnapshot.type} at submit-freeze time:
+ * `text_response` → `manual`; all other types → `auto`.
+ */
+export const GradingEntryMode = {
+  Auto: "auto",
+  Manual: "manual",
+} as const;
+export type GradingEntryMode =
+  (typeof GradingEntryMode)[keyof typeof GradingEntryMode];
+
+/**
+ * Status of a single question's grading entry within the materialized grading
+ * workset.
+ *
+ * - `completed_auto`: objective question auto-graded at submit-freeze time.
+ *   `earnedScore`/`correct`/`candidateAnswer`/`standardAnswer` are populated.
+ * - `pending_manual`: text_response question awaiting manual scoring.
+ *   `earnedScore` is null; `candidateAnswer`/`standardAnswer` are frozen for
+ *   the grading view.
+ * - `completed_manual`: text_response question scored by a grader.
+ *   `earnedScore`/`comment`/`gradedBy`/`gradedAt` are populated.
+ */
+export const GradingEntryStatus = {
+  CompletedAuto: "completed_auto",
+  PendingManual: "pending_manual",
+  CompletedManual: "completed_manual",
+} as const;
+export type GradingEntryStatus =
+  (typeof GradingEntryStatus)[keyof typeof GradingEntryStatus];
+
+/**
+ * A materialized grading workset entry for exactly one question within one
+ * attempt (P3-L0-2E).
+ *
+ * Created at submit-freeze time from `submitted_answers` + the frozen
+ * `QuestionSnapshot`. This is the single durable grading truth: the manual
+ * grading queue reads pending entries, manual scoring updates entries, and
+ * terminal final aggregation reads completed entries. `attempt.gradingResult`
+ * is a denormalized projection generated from these entries — never consumed
+ * as scoring input.
+ *
+ * Uniqueness of `(attemptId, questionId)` is enforced at the DB layer.
+ * `questionId` joins `QuestionSnapshot.originalQuestionId`.
+ */
+export interface AttemptGradingEntry {
+  id: string;
+  organizationId: string;
+  attemptId: string;
+  questionId: string;
+  gradingMode: GradingEntryMode;
+  status: GradingEntryStatus;
+  /** Frozen max score from `QuestionSnapshot.score`. */
+  maxScore: number;
+  /** Awarded score; null until the entry is completed (auto or manual). */
+  earnedScore: number | null;
+  /** Frozen submitted answer for this question (from `submitted_answers`). */
+  candidateAnswer: unknown;
+  /** Frozen standard answer from `QuestionSnapshot.standardAnswer`. */
+  standardAnswer: unknown;
+  /** Whether the answer is correct; null for pending_manual entries. */
+  correct: boolean | null;
+  /** Grader comment; empty string for auto-graded / unscored entries. */
+  comment: string;
+  /** Grader id; null for auto-graded / unscored entries. */
+  gradedBy: string | null;
+  /** Server-authoritative grading timestamp; null for pending entries. */
+  gradedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // ── Audit Log (§3.8) ─────────────────────────────────────────────
 
 /** Audit log entry recording an actor's action on a target entity. */
