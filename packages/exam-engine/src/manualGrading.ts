@@ -1,5 +1,12 @@
-import type { ExamAttempt, QuestionScoreResult } from "@exam/domain";
+import type {
+  AnswerRecord,
+  ExamAttempt,
+  QuestionScoreResult,
+  QuestionSnapshot,
+} from "@exam/domain";
 import {
+  gradeQuestion as gradeQuestionAuto,
+  isManualGradedQuestion,
   NotFoundError,
   PermissionDeniedError,
   ValidationError,
@@ -43,13 +50,72 @@ export interface GradeQuestionResult {
 }
 
 /**
- * Returns the subjective question ids in an attempt's snapshot: those whose
- * `standardAnswer` is null/undefined (mirrors `hasSubjectiveQuestions`).
+ * P3-L0-2D canonical manual-grading question ids for an attempt.
+ *
+ * Single semantic authority (protocol §1.4) — derived from
+ * {@link isManualGradedQuestion}, NOT from `standardAnswer == null`. This is
+ * the per-question selection list that the manual grading command consumes;
+ * it is consulted by both the partial-vs-complete check and the
+ * reconciliation fold, so question selection can never diverge from the
+ * freeze-barrier classification in {@link submitAttempt}.
+ *
+ * Replaces the previous `standardAnswer == null` heuristic (Defect B): a
+ * `text_response` question may legally carry a non-null `standardAnswer`
+ * (a reference answer used as grader guidance). Such a question MUST remain
+ * in the manual-grading queue.
  */
-function subjectiveQuestionIds(attempt: ExamAttempt): string[] {
+function manualGradedQuestionIds(attempt: ExamAttempt): string[] {
   return attempt.questionSnapshot
-    .filter((q) => q.standardAnswer == null)
+    .filter((q) => isManualGradedQuestion(q))
     .map((q) => q.originalQuestionId);
+}
+
+/**
+ * Builds the per-question answer lookup the auto-grader consumes, sourced
+ * from the frozen `submitted_answers` snapshot when present. Falls back to
+ * draft `answers` only for legacy attempts whose `submitted_answers` column
+ * is null (pre-P3-L0-2 rows); current attempts always freeze on submit.
+ *
+ * Mirrors {@link computeGradingResult}'s source-of-truth rule so manual
+ * completion reconciles against the SAME locked answer set the freeze
+ * barrier captured. Never reads mutable drafts for a submitted attempt that
+ * has a frozen snapshot.
+ */
+function buildAutoGradingAnswers(
+  attempt: ExamAttempt,
+  now: Date,
+): AnswerRecord[] {
+  if (attempt.submittedAnswers) {
+    return attempt.submittedAnswers.answers.map((a) => ({
+      questionId: a.questionId,
+      answer: a.value,
+      version: 0,
+      savedAt: now,
+    }));
+  }
+  return attempt.answers;
+}
+
+/**
+ * Reconstructs the objective per-question score for a snapshot question from
+ * the frozen answer set, WITHOUT touching manual-grading contributions. Used
+ * by {@link reconcileScores} so the objective total is never lost even when
+ * the candidate-submit orchestrator held the attempt at
+ * `submitted + pending_manual` and never wrote `gradingResult`.
+ *
+ * Reuses the canonical domain auto-grader ({@link gradeQuestion}) — there is
+ * no second scoring formula. Manual-graded questions are skipped here; their
+ * score is folded in by the caller from the manual entry set.
+ */
+function reconstructObjectiveScore(
+  question: QuestionSnapshot,
+  answerMap: Map<string, AnswerRecord>,
+): QuestionScoreResult | null {
+  if (isManualGradedQuestion(question)) {
+    return null;
+  }
+  const answerRecord = answerMap.get(question.originalQuestionId);
+  return gradeQuestionAuto(question, answerRecord?.answer);
 }
 
 /**
@@ -57,23 +123,43 @@ function subjectiveQuestionIds(attempt: ExamAttempt): string[] {
  * breakdown. Objective questions keep their auto-graded result; subjective
  * questions take the manually-entered score (full marks = correct).
  *
- * Recomputed from the COMPLETE objective + manual sets every call, so a
- * re-grade (entry overwrite) is naturally idempotent — manual scores are never
- * added on top of an already-inclusive total. Subjective auto-graded rows
- * always carry score 0 (a null standardAnswer never matches), so they do not
- * double-count.
+ * P3-L0-2D repair (Defect A + Defect B):
+ * - Objective contributions are RECONSTRUCTED from `submitted_answers` +
+ *   the frozen `questionSnapshot` via the canonical domain auto-grader when
+ *   the attempt's persisted `gradingResult` lacks the objective row. The
+ *   candidate-submit orchestrator correctly holds a `pending_manual` attempt
+ *   at `submitted` and never writes `gradingResult`, so the previous
+ *   implementation read an empty `gradingResult` and silently dropped the
+ *   objective total. Reconstruction is deterministic and reuses the SAME
+ *   `gradeAnswers` formula the freeze barrier would have run; no second
+ *   scoring path.
+ * - Manual-question classification uses {@link isManualGradedQuestion}
+ *   (QuestionType semantics), NOT `standardAnswer == null`. A
+ *   `text_response` carrying a non-null reference answer is still recognized
+ *   as manual-graded.
  *
- * @param attempt the attempt (carries questionSnapshot + existing auto-graded
- *   gradingResult).
+ * Recomputed from the COMPLETE objective + manual sets every call, so a
+ * re-grade (entry overwrite) is naturally idempotent — manual scores are
+ * never added on top of an already-inclusive total. When both a
+ * persisted `gradingResult` row AND a reconstructed row exist for the same
+ * objective question, the persisted row wins (it is the authoritative
+ * record an auto-grading path already wrote); reconstruction only fills
+ * gaps.
+ *
+ * @param attempt the attempt (carries questionSnapshot + submittedAnswers +
+ *   optional existing auto-graded gradingResult).
  * @param entries all manual grading entries for the attempt
  *   ({ questionId, score }).
  * @param passingScore the exam's passing threshold.
+ * @param now server time authority (used to shape reconstructed answer
+ *   records; non-grading semantic).
  * @returns the reconciled per-question results, total score, and pass/fail.
  */
 export function reconcileScores(
   attempt: ExamAttempt,
   entries: Array<{ questionId: string; score: number }>,
   passingScore: number,
+  now: Date,
 ): {
   questionResults: QuestionScoreResult[];
   totalScore: number;
@@ -86,26 +172,37 @@ export function reconcileScores(
   const autoByQuestion = new Map(
     (attempt.gradingResult ?? []).map((r) => [r.questionId, r]),
   );
+  const frozenAnswerMap = new Map(
+    buildAutoGradingAnswers(attempt, now).map((a) => [a.questionId, a]),
+  );
 
   const questionResults: QuestionScoreResult[] = attempt.questionSnapshot.map(
     (q) => {
-      const auto = autoByQuestion.get(q.originalQuestionId);
-      const isSubjective = q.standardAnswer == null;
-      if (isSubjective) {
+      if (isManualGradedQuestion(q)) {
         const manualScore = manualByQuestion.get(q.originalQuestionId) ?? 0;
+        // Preserve the candidate's frozen answer for the grading-detail view;
+        // standardAnswer is whatever the snapshot froze (may be non-null).
+        const frozenAnswer = frozenAnswerMap.get(q.originalQuestionId);
         return {
           questionId: q.originalQuestionId,
           score: manualScore,
           maxScore: q.score,
           correct: manualScore >= q.score,
-          candidateAnswer: auto?.candidateAnswer ?? null,
-          standardAnswer: null,
+          candidateAnswer: frozenAnswer?.answer ?? null,
+          standardAnswer: q.standardAnswer ?? null,
         };
       }
-      // Objective: keep the auto-graded result authoritative. Fall back to a
-      // zero-scored row if the snapshot has no auto result yet.
+      // Objective: prefer the persisted auto-graded result when present
+      // (authoritative — written by the auto-finalize path). Otherwise
+      // RECONSTRUCT from submitted_answers + frozen snapshot so the objective
+      // total is not lost on a held pending_manual attempt (Defect A).
+      const persisted = autoByQuestion.get(q.originalQuestionId);
+      if (persisted) {
+        return persisted;
+      }
+      const reconstructed = reconstructObjectiveScore(q, frozenAnswerMap);
       return (
-        auto ?? {
+        reconstructed ?? {
           questionId: q.originalQuestionId,
           score: 0,
           maxScore: q.score,
@@ -125,26 +222,34 @@ export function reconcileScores(
 
 /**
  * Saves (or overwrites) one manual grading entry for an attempt and, when the
- * last subjective question has been scored, flips `gradingStatus` to
+ * last manual-graded question has been scored, flips `gradingStatus` to
  * `fully_graded` and reconciles the attempt total (objective + manual) into
  * `score`/`passed`/`gradingResult`.
  *
  * P2D-J3 decisions (approved plan):
  * - Allowed on `pending_manual` AND `fully_graded` (re-grade overwrites,
  *   per spec §18). Only `auto_graded` attempts are rejected (FORBIDDEN) — they
- *   have no subjective questions to grade.
+ *   have no manual-graded questions to grade.
  * - `gradingStatus` always reflects manual-completion. Once fully graded, the
  *   attempt `score`/`passed`/`gradingResult` are recomputed so the candidate
  *   result reflects objective + manual totals. Reconciliation rebuilds from the
  *   full objective + manual sets every call, so re-grades are idempotent and
  *   never double-count.
  *
+ * P3-L0-2D: manual-question selection uses the canonical
+ * {@link isManualGradedQuestion} / {@link manualGradedQuestionIds} authority
+ * (protocol §1.4). The previous `standardAnswer == null` heuristic is removed:
+ * a `text_response` question may carry a non-null reference answer and MUST
+ * remain gradable (Defect B). Score reconciliation reconstructs objective
+ * contributions from `submitted_answers` + frozen `questionSnapshot` so the
+ * objective total is preserved across the manual hold (Defect A).
+ *
  * The caller is responsible for wrapping this in a transaction that has
  * locked the attempt row (findByIdForUpdate) — see the route handler.
  *
  * @throws {NotFoundError} attempt does not exist.
  * @throws {PermissionDeniedError} attempt is `auto_graded` (nothing to grade).
- * @throws {ValidationError} questionId is not a subjective question in the
+ * @throws {ValidationError} questionId is not a manual-graded question in the
  *   attempt, or score is outside `[0, maxScore]`.
  */
 export async function gradeQuestion(
@@ -169,11 +274,13 @@ export async function gradeQuestion(
     );
   }
 
-  const subjectiveIds = subjectiveQuestionIds(attempt);
+  // P3-L0-2D: canonical manual-grading question selection (QuestionType
+  // semantics). Not standardAnswer-based.
+  const manualIds = manualGradedQuestionIds(attempt);
   const question = attempt.questionSnapshot.find(
     (q) => q.originalQuestionId === questionId,
   );
-  if (!question || !subjectiveIds.includes(questionId)) {
+  if (!question || !manualIds.includes(questionId)) {
     throw new ValidationError(
       `Question ${questionId} is not a subjective question in this attempt`,
     );
@@ -197,12 +304,14 @@ export async function gradeQuestion(
   const entries = await manualGradingRepo.findByAttempt(attemptId);
   const scoredIds = new Set(entries.map((e) => e.questionId));
   const fullyGraded =
-    subjectiveIds.length > 0 && subjectiveIds.every((id) => scoredIds.has(id));
+    manualIds.length > 0 && manualIds.every((id) => scoredIds.has(id));
 
   if (fullyGraded) {
     // Reconcile the total from the complete objective + manual sets. Always
-    // recomputed (never incremented) so re-grades are idempotent.
-    const reconciled = reconcileScores(attempt, entries, passingScore);
+    // recomputed (never incremented) so re-grades are idempotent. P3-L0-2D:
+    // objective contributions are reconstructed from the frozen snapshot when
+    // the persisted gradingResult lacks them.
+    const reconciled = reconcileScores(attempt, entries, passingScore, now);
     // P3-L0-2C: completeManualGrading owns the final submitted → graded
     // lifecycle transition for manual-grading attempts. protocol §3.3/§4.2 —
     // only this command may advance a pending_manual attempt to graded once

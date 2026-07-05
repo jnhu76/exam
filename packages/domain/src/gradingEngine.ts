@@ -151,10 +151,18 @@ export function gradeQuestion(
  * Returns true when any question in the snapshot has no standard answer and
  * therefore requires manual scoring (P2D-J3 subjective-question detection).
  *
- * `QuestionSnapshot.standardAnswer` is typed `unknown`; a missing/null value
- * signals a subjective question. Empty snapshots return false.
+ * P3-L0-2D: this is a LEGACY signal preserved only for backwards-compatibility
+ * on attempts whose `gradingStatus` column predates P3-L0-2C (undefined). It
+ * MUST NOT be used as a manual-grading classifier for current attempts — use
+ * {@link requiresManualGrading} / {@link isManualGradedQuestion}. The freeze
+ * barrier's `gradingStatus` is the single authoritative lifecycle fact, and
+ * manual-grading question selection derives from `QuestionType`, NOT from
+ * `standardAnswer` (protocol §1.4 — a `text_response` may carry a non-null
+ * model answer used as grader guidance).
  *
  * @param questions - The attempt's question snapshot.
+ *
+ * @deprecated for grading-lifecycle classification; use {@link requiresManualGrading}.
  */
 export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
   return questions.some((q) => q.standardAnswer == null);
@@ -183,6 +191,25 @@ export function hasSubjectiveQuestions(questions: QuestionSnapshot[]): boolean {
  */
 export function requiresManualGrading(questions: QuestionSnapshot[]): boolean {
   return questions.some((q) => q.type === "text_response");
+}
+
+/**
+ * P3-L0-2D canonical per-question manual-grading predicate.
+ *
+ * Single semantic authority (protocol §1.4) for whether ONE question
+ * requires manual grading. This is the per-question counterpart of
+ * {@link requiresManualGrading}; the manual-grading completion path and the
+ * freeze-barrier classification both consult it so question selection can
+ * never diverge from lifecycle classification.
+ *
+ * Replaces the deprecated `standardAnswer == null` heuristic in the manual
+ * grading module (Defect B): a `text_response` question may legally carry a
+ * non-null `standardAnswer` (a reference answer used as grader guidance), so
+ * `standardAnswer` MUST NOT decide whether the question is in the manual
+ * grading queue.
+ */
+export function isManualGradedQuestion(question: QuestionSnapshot): boolean {
+  return question.type === "text_response";
 }
 
 /**

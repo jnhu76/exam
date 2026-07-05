@@ -16,10 +16,14 @@ import type { AttemptRepository } from "./attemptCommands.js";
 const fixedNow = new Date("2026-01-01T00:00:00Z");
 const DEFAULT_PASSING = 50;
 
+// P3-L0-2D: a manual-graded question is text_response by protocol §1.4
+// (QuestionType semantics, NOT standardAnswer==null). The default fixture
+// carries a null standardAnswer, but a non-null reference answer is also
+// legal — see manualGradingCompletion.test.ts for that proof.
 function subjectiveQuestion(id: string, score = 10): QuestionSnapshot {
   return {
     originalQuestionId: id,
-    type: "single_choice",
+    type: "text_response",
     content: `Subjective ${id}`,
     attachments: [],
     options: [],
@@ -35,7 +39,21 @@ function subjectiveQuestion(id: string, score = 10): QuestionSnapshot {
 }
 
 function objectiveQuestion(id: string): QuestionSnapshot {
-  return { ...subjectiveQuestion(id), standardAnswer: "a" };
+  return {
+    originalQuestionId: id,
+    type: "single_choice",
+    content: `Objective ${id}`,
+    attachments: [],
+    options: [],
+    standardAnswer: "a",
+    score: 10,
+    gradingRule: {
+      multiSelectScoring: "all_correct_full",
+      fillBlankMatchMode: "exact",
+    },
+    order: 0,
+    rubric: null,
+  };
 }
 
 function makeAttempt(overrides: Partial<ExamAttempt> = {}): ExamAttempt {
@@ -347,6 +365,7 @@ describe("reconcileScores", () => {
       attempt,
       [{ questionId: "q-sub", score: 50 }],
       DEFAULT_PASSING,
+      fixedNow,
     );
     expect(totalScore).toBe(90); // 40 objective + 50 manual
     expect(passed).toBe(true); // 90 >= 50
@@ -365,8 +384,8 @@ describe("reconcileScores", () => {
       gradingResult: [objResult("q-obj", 40, 40)],
     });
     const entries = [{ questionId: "q-sub", score: 50 }];
-    const first = reconcileScores(attempt, entries, DEFAULT_PASSING);
-    const second = reconcileScores(attempt, entries, DEFAULT_PASSING);
+    const first = reconcileScores(attempt, entries, DEFAULT_PASSING, fixedNow);
+    const second = reconcileScores(attempt, entries, DEFAULT_PASSING, fixedNow);
     expect(second.totalScore).toBe(first.totalScore);
     expect(second.passed).toBe(first.passed);
   });
@@ -379,6 +398,7 @@ describe("reconcileScores", () => {
       attempt,
       [{ questionId: "q-sub", score: 60 }],
       DEFAULT_PASSING,
+      fixedNow,
     );
     expect(questionResults[0]!.correct).toBe(true);
     expect(questionResults[0]!.standardAnswer).toBeNull();

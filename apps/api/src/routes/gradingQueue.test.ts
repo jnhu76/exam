@@ -13,11 +13,17 @@ import examRoutes from "./exam.js";
 import attemptRoutes from "./attempts.js";
 import scoreRoutes from "./scores.js";
 
-/** Builds a subjective (no standardAnswer) question snapshot. */
+/**
+ * Builds a subjective (manual-graded) question snapshot.
+ * P3-L0-2D: protocol §1.4 — manual-graded questions are `text_response` by
+ * QuestionType semantics, NOT by `standardAnswer == null`. The default
+ * fixture carries a null standardAnswer; a non-null reference answer is
+ * exercised in exam-engine's manualGradingCompletion.test.ts.
+ */
 function subjectiveQuestion(id: string, score = 10): QuestionSnapshot {
   return {
     originalQuestionId: id,
-    type: "single_choice",
+    type: "text_response",
     content: `Subjective ${id}`,
     attachments: [],
     options: [],
@@ -32,12 +38,22 @@ function subjectiveQuestion(id: string, score = 10): QuestionSnapshot {
   };
 }
 
-/** Builds an objective (has standardAnswer) question snapshot. */
+/** Builds an objective (auto-graded, has standardAnswer) question snapshot. */
 function objectiveQuestion(id: string, score = 10): QuestionSnapshot {
   return {
-    ...subjectiveQuestion(id, score),
+    originalQuestionId: id,
+    type: "single_choice",
     content: `Objective ${id}`,
+    attachments: [],
+    options: [],
     standardAnswer: "a",
+    score,
+    gradingRule: {
+      multiSelectScoring: "all_correct_full",
+      fillBlankMatchMode: "exact",
+    },
+    order: 0,
+    rubric: null,
   };
 }
 

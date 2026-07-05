@@ -7,7 +7,7 @@ import type {
 } from "@exam/domain";
 import {
   gradeAnswers,
-  hasSubjectiveQuestions,
+  requiresManualGrading,
   InvalidStateTransitionError,
   ValidationError,
   GradingStatus,
@@ -211,13 +211,15 @@ export async function finalizeGrading(
     // P3-L0-2C: gradingStatus is the authoritative scoring-lifecycle fact,
     // established at the submit/freeze barrier (attemptCommands.submitAttempt).
     // A pure-objective attempt reaching here carries auto_graded (set at
-    // submit); preserve that classification. The `hasSubjectiveQuestions`
-    // fallback below is retained only for legacy attempts whose
-    // gradingStatus column predates P3-L0-2C (undefined), and uses the
-    // deprecated standardAnswer==null signal for backwards compatibility.
+    // submit); preserve that classification. The `requiresManualGrading`
+    // fallback below is retained only for legacy attempts whose gradingStatus
+    // column predates P3-L0-2C (undefined). P3-L0-2D: the fallback now uses
+    // the canonical QuestionType-based classifier (text_response) rather than
+    // the deprecated standardAnswer==null heuristic, so legacy rows are
+    // classified by the same authority as current rows (Defect B prevention).
     gradingStatus:
       attempt.gradingStatus ??
-      (hasSubjectiveQuestions(attempt.questionSnapshot)
+      (requiresManualGrading(attempt.questionSnapshot)
         ? GradingStatus.PendingManual
         : GradingStatus.AutoGraded),
   });
