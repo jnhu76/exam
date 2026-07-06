@@ -5,6 +5,9 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { materializeGradingWorkset } from "@exam/exam-engine";
+import { createGradingWorksetRepoAdapter } from "../../adapters/repoAdapters.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -371,15 +374,53 @@ describe("attempt routes", () => {
       // `submitted` by a crashed earlier operation is recovered to `graded`
       // by a force-submit, with no audit row (no state *transition* off the
       // in_progress/disrupted baseline — only grading completes).
+      //
+      // Slice 4: the submit freeze barrier materializes grading workset
+      // entries atomically with the status flip, so a real crashed-after-submit
+      // row ALWAYS carries its workset. Simulate that faithfully: raw-flip the
+      // row to `submitted`, then materialize the workset via the same production
+      // helper the crashed submit would have used.
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttempt(
         t,
         "Force Submit Recovery Submitted Exam",
       );
+      // Faithfully simulate a crashed-after-submit row: the status flip AND the
+      // frozen submittedAnswers snapshot are both persisted by the submit freeze
+      // barrier, so a real crashed-after-submit attempt carries both. (Slice 4
+      // also requires the materialized workset, which we seed below.)
+      const frozenAttemptForAnswers = await createAttemptRepo(ctx.db).findById(
+        makeAdminCtx(t),
+        attemptId,
+      );
       await ctx.db
         .update(schema.examAttempts)
-        .set({ status: "submitted" })
+        .set({
+          status: "submitted",
+          submittedAt: new Date(),
+          submittedAnswers: {
+            schemaVersion: 1,
+            answers: frozenAttemptForAnswers!.answers.map((a) => ({
+              questionId: a.questionId,
+              value: a.answer,
+            })),
+          },
+          gradingStatus: "auto_graded",
+        })
         .where(eq(schema.examAttempts.id, attemptId));
+
+      const adminCtx = makeAdminCtx(t);
+      const frozenAttempt = await createAttemptRepo(ctx.db).findById(
+        adminCtx,
+        attemptId,
+      );
+      await materializeGradingWorkset(
+        frozenAttempt! as never,
+        createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(ctx.db),
+          adminCtx,
+        ),
+      );
 
       const res = await ctx.app.inject({
         method: "POST",

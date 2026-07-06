@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
+import type {
+  AttemptGradingEntry,
+  Exam,
+  ExamAttempt,
+  ExamEnrollment,
+} from "@exam/domain";
 import type {
   AttemptRepository,
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import { computeGradingResult } from "./grading.js";
 import {
   ensureAttemptDeadlineReconciled,
   computeEffectiveDeadline,
@@ -181,12 +187,74 @@ function makeRepos(
       return enrStore[idx]!;
     },
   };
+  // Slice 4: finalizeGrading aggregates from the workset. The stub must:
+  //  - store entries materialized by submitAttempt (bulkCreate) so mixed /
+  //    text_response holds see pending_manual entries, and
+  //  - for pure-objective attempts that reach finalizeGrading directly,
+  //    synthesize completed_auto entries from the canonical auto-grader.
+  const worksetStore = new Map<string, AttemptGradingEntry[]>();
   const gradingWorksetRepo: GradingWorksetRepository = {
-    findByAttempt: async () => [],
+    findByAttempt: async (id) => {
+      const stored = worksetStore.get(id);
+      if (stored) return stored.map((e) => ({ ...e }));
+      const att = attemptStore.find((a) => a.id === id);
+      if (!att) return [];
+      // Only synthesize for already-submitted/graded attempts. For
+      // in_progress/disrupted, return [] so submitAttempt's fresh-freeze
+      // precondition (zero entries) passes.
+      if (att.status === "in_progress" || att.status === "disrupted") return [];
+      const ex = examStore.find((e) => e.id === att.examId);
+      if (!ex) return [];
+      const r = computeGradingResult(att, ex, new Date());
+      return r.questionResults.map((qr) => ({
+        id: `entry-${qr.questionId}`,
+        organizationId: att.organizationId,
+        attemptId: att.id,
+        questionId: qr.questionId,
+        gradingMode: "auto" as const,
+        status: "completed_auto" as const,
+        maxScore: qr.maxScore,
+        earnedScore: qr.score,
+        candidateAnswer: qr.candidateAnswer,
+        standardAnswer: qr.standardAnswer,
+        correct: qr.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    },
     findByAttemptAndQuestion: async () => null,
-    bulkCreate: async () => {},
+    bulkCreate: async (inputs) => {
+      const rows: AttemptGradingEntry[] = inputs.map((inp) => ({
+        id: `entry-${inp.questionId}`,
+        organizationId: "org-1",
+        attemptId: inp.attemptId,
+        questionId: inp.questionId,
+        gradingMode: inp.gradingMode,
+        status: inp.status,
+        maxScore: inp.maxScore,
+        earnedScore: inp.earnedScore,
+        candidateAnswer: inp.candidateAnswer,
+        standardAnswer: inp.standardAnswer,
+        correct: inp.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+      const aid = inputs[0]?.attemptId ?? "attempt-1";
+      worksetStore.set(aid, rows);
+    },
     completeManualEntry: async () => null,
-    countPendingManualForAttempt: async () => 0,
+    countPendingManualForAttempt: async (id) => {
+      const rows = worksetStore.get(id) ?? [];
+      return rows.filter(
+        (e) => e.gradingMode === "manual" && e.status === "pending_manual",
+      ).length;
+    },
   };
   return { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo };
 }

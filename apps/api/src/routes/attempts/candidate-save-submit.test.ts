@@ -6,6 +6,9 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { materializeGradingWorkset } from "@exam/exam-engine";
+import { createGradingWorksetRepoAdapter } from "../../adapters/repoAdapters.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getSaveAnswerMessage } from "@exam/contracts";
 import {
@@ -634,6 +637,31 @@ describe("attempt routes", () => {
           updatedAt: new Date(),
         })
         .where(eq(schema.examAttempts.id, stuckAttemptId));
+
+      // Slice 4: the submit freeze barrier materializes grading workset
+      // entries atomically with the status flip, so a real crashed-after-submit
+      // row ALWAYS carries its workset. Simulate that faithfully: re-read the
+      // frozen attempt and materialize the workset via the same production
+      // helper the crashed submit would have used.
+      const adminCtx = {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+        targetOrganizationId: ctx.org.id,
+      };
+      const frozenAttempt = await createAttemptRepo(ctx.db).findById(
+        adminCtx,
+        stuckAttemptId,
+      );
+      await materializeGradingWorkset(
+        frozenAttempt! as never,
+        createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(ctx.db),
+          adminCtx,
+        ),
+      );
 
       const submitRes = await ctx.app.inject({
         method: "POST",

@@ -11,11 +11,7 @@ import type {
 } from "./attemptCommands.js";
 import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
-import {
-  readGradingSnapshot,
-  computeGradingResult,
-  finalizeGrading,
-} from "./grading.js";
+import { readGradingSnapshot, finalizeGrading } from "./grading.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 
 /**
@@ -148,14 +144,17 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Attempt not found after reconciliation");
   }
 
-  const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+  // Slice 4: finalizeGrading aggregates from the grading workset internally —
+  // no externally computed result. gradingWorksetRepo is the caller's
+  // tx-scoped repo (same one submitAttempt materialized into).
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    gradingWorksetRepo,
     attemptId,
     snapshot.enrollment.id,
-    result,
     snapshot.exam,
+    now,
   );
 
   const reconciled = await attemptRepo.findById(attemptId);

@@ -1,13 +1,5 @@
-import type {
-  AnswerRecord,
-  AttemptGradingEntry,
-  ExamAttempt,
-  QuestionScoreResult,
-  QuestionSnapshot,
-} from "@exam/domain";
+import type { AttemptGradingEntry, ExamAttempt } from "@exam/domain";
 import {
-  gradeQuestion as gradeQuestionAuto,
-  isManualGradedQuestion,
   InvalidStateTransitionError,
   NotFoundError,
   PermissionDeniedError,
@@ -15,6 +7,7 @@ import {
 } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import { aggregateGradingEntries } from "./gradingWorkset.js";
 
 /** Result of {@link gradeQuestion}: grading status after the entry was saved. */
 export interface GradeQuestionResult {
@@ -27,172 +20,6 @@ export interface GradeQuestionResult {
    */
   totalScore?: number;
   passed?: boolean;
-}
-
-/**
- * Builds the per-question answer lookup the auto-grader consumes, sourced
- * from the frozen `submitted_answers` snapshot when present. Falls back to
- * draft `answers` only for legacy attempts whose `submitted_answers` column
- * is null (pre-P3-L0-2 rows); current attempts always freeze on submit.
- *
- * Mirrors {@link computeGradingResult}'s source-of-truth rule so manual
- * completion reconciles against the SAME locked answer set the freeze
- * barrier captured. Never reads mutable drafts for a submitted attempt that
- * has a frozen snapshot.
- */
-function buildAutoGradingAnswers(
-  attempt: ExamAttempt,
-  now: Date,
-): AnswerRecord[] {
-  if (attempt.submittedAnswers) {
-    return attempt.submittedAnswers.answers.map((a) => ({
-      questionId: a.questionId,
-      answer: a.value,
-      version: 0,
-      savedAt: now,
-    }));
-  }
-  return attempt.answers;
-}
-
-/**
- * Reconstructs the objective per-question score for a snapshot question from
- * the frozen answer set, WITHOUT touching manual-grading contributions. Used
- * by {@link reconcileScores} so the objective total is never lost even when
- * the candidate-submit orchestrator held the attempt at
- * `submitted + pending_manual` and never wrote `gradingResult`.
- *
- * Reuses the canonical domain auto-grader ({@link gradeQuestion}) — there is
- * no second scoring formula. Manual-graded questions are skipped here; their
- * score is folded in by the caller from the manual entry set.
- */
-function reconstructObjectiveScore(
-  question: QuestionSnapshot,
-  answerMap: Map<string, AnswerRecord>,
-): QuestionScoreResult | null {
-  if (isManualGradedQuestion(question)) {
-    return null;
-  }
-  const answerRecord = answerMap.get(question.originalQuestionId);
-  return gradeQuestionAuto(question, answerRecord?.answer);
-}
-
-/**
- * Pure reconciliation: folds manual grading scores into the attempt's score
- * breakdown. Objective questions keep their auto-graded result; subjective
- * questions take the manually-entered score (full marks = correct).
- *
- * P3-L0-2D repair (Defect A + Defect B):
- * - Objective contributions are RECONSTRUCTED from `submitted_answers` +
- *   the frozen `questionSnapshot` via the canonical domain auto-grader when
- *   the attempt's persisted `gradingResult` lacks the objective row. The
- *   candidate-submit orchestrator correctly holds a `pending_manual` attempt
- *   at `submitted` and never writes `gradingResult`, so the previous
- *   implementation read an empty `gradingResult` and silently dropped the
- *   objective total. Reconstruction is deterministic and reuses the SAME
- *   `gradeAnswers` formula the freeze barrier would have run; no second
- *   scoring path.
- * - Manual-question classification uses {@link isManualGradedQuestion}
- *   (QuestionType semantics), NOT `standardAnswer == null`. A
- *   `text_response` carrying a non-null reference answer is still recognized
- *   as manual-graded.
- *
- * P3-L0-2E Slice 3: manual scores are sourced from the materialized
- * `attempt_grading_entries` rows (status `completed_manual`). The
- * `AttemptGradingEntry` carries the authoritative `earnedScore`, so the
- * reconciler no longer depends on a separate legacy manual-score store.
- *
- * Recomputed from the COMPLETE objective + manual sets every call, so the
- * terminal total is deterministic (manual scores are never added on top of an
- * already-inclusive total). When both a
- * persisted `gradingResult` row AND a reconstructed row exist for the same
- * objective question, the persisted row wins (it is the authoritative
- * record an auto-grading path already wrote); reconstruction only fills
- * gaps.
- *
- * @param attempt the attempt (carries questionSnapshot + submittedAnswers +
- *   optional existing auto-graded gradingResult).
- * @param entries all grading entries for the attempt (Slice 3 source of
- *   manual awarded scores — completed_manual rows contribute their
- *   `earnedScore`).
- * @param passingScore the exam's passing threshold.
- * @param now server time authority (used to shape reconstructed answer
- *   records; non-grading semantic).
- * @returns the reconciled per-question results, total score, and pass/fail.
- */
-export function reconcileScores(
-  attempt: ExamAttempt,
-  entries: AttemptGradingEntry[],
-  passingScore: number,
-  now: Date,
-): {
-  questionResults: QuestionScoreResult[];
-  totalScore: number;
-  passed: boolean;
-} {
-  // Manual awarded score lookup from the authoritative grading entries. Only
-  // completed_manual rows carry a grader-awarded score; pending_manual rows
-  // contribute zero (they have null earnedScore).
-  const manualScoreByQuestion = new Map(
-    entries
-      .filter(
-        (e) => e.gradingMode === "manual" && e.status === "completed_manual",
-      )
-      .map((e) => [e.questionId, e.earnedScore ?? 0]),
-  );
-  const snapshotByQuestion = new Map(
-    attempt.questionSnapshot.map((q) => [q.originalQuestionId, q]),
-  );
-  const autoByQuestion = new Map(
-    (attempt.gradingResult ?? []).map((r) => [r.questionId, r]),
-  );
-  const frozenAnswerMap = new Map(
-    buildAutoGradingAnswers(attempt, now).map((a) => [a.questionId, a]),
-  );
-
-  const questionResults: QuestionScoreResult[] = attempt.questionSnapshot.map(
-    (q) => {
-      if (isManualGradedQuestion(q)) {
-        const manualScore =
-          manualScoreByQuestion.get(q.originalQuestionId) ?? 0;
-        // Preserve the candidate's frozen answer for the grading-detail view;
-        // standardAnswer is whatever the snapshot froze (may be non-null).
-        const frozenAnswer = frozenAnswerMap.get(q.originalQuestionId);
-        return {
-          questionId: q.originalQuestionId,
-          score: manualScore,
-          maxScore: q.score,
-          correct: manualScore >= q.score,
-          candidateAnswer: frozenAnswer?.answer ?? null,
-          standardAnswer: q.standardAnswer ?? null,
-        };
-      }
-      // Objective: prefer the persisted auto-graded result when present
-      // (authoritative — written by the auto-finalize path). Otherwise
-      // RECONSTRUCT from submitted_answers + frozen snapshot so the objective
-      // total is not lost on a held pending_manual attempt (Defect A).
-      const persisted = autoByQuestion.get(q.originalQuestionId);
-      if (persisted) {
-        return persisted;
-      }
-      const reconstructed = reconstructObjectiveScore(q, frozenAnswerMap);
-      return (
-        reconstructed ?? {
-          questionId: q.originalQuestionId,
-          score: 0,
-          maxScore: q.score,
-          correct: false,
-          candidateAnswer: null,
-          standardAnswer:
-            snapshotByQuestion.get(q.originalQuestionId)?.standardAnswer ??
-            null,
-        }
-      );
-    },
-  );
-
-  const totalScore = questionResults.reduce((sum, r) => sum + r.score, 0);
-  return { questionResults, totalScore, passed: totalScore >= passingScore };
 }
 
 /**
@@ -351,16 +178,21 @@ export async function gradeQuestion(
   const fullyGraded = remainingPending === 0;
 
   if (fullyGraded) {
-    // Reconcile the total from the complete objective + manual sets. Always
-    // recomputed (never incremented) so the terminal total is deterministic.
-    // Manual scores are read from the authoritative grading entries.
+    // Slice 4: aggregate the terminal total from the complete grading-entry
+    // workset via the single canonical authority. This reads ONLY the entries
+    // + the frozen questionSnapshot — never `attempt.gradingResult`, never
+    // draft answers, never a re-grade of submittedAnswers. Same aggregator
+    // pure-objective `finalizeGrading` uses, so there is ONE terminal score
+    // algorithm for every lifecycle.
     const allEntries = await worksetRepo.findByAttempt(attemptId);
-    const reconciled = reconcileScores(attempt, allEntries, passingScore, now);
+    const aggregated = aggregateGradingEntries(
+      attempt,
+      allEntries,
+      passingScore,
+    );
     // P3-L0-2C: this command owns the final submitted → graded lifecycle
     // transition for manual-grading attempts. Only this command may advance a
-    // pending_manual attempt to graded once all subjective scores are
-    // entered. Also re-runs the enrollment finalization (finalScore /
-    // completion) so the candidate's record reflects the reconciled total.
+    // pending_manual attempt to graded once all subjective scores are entered.
     // The status transition fires only when the attempt is still at
     // `submitted`; once terminal, the Slice 3C lifecycle guards reject any
     // further grading call before this branch is reached.
@@ -369,15 +201,15 @@ export async function gradeQuestion(
     await attemptRepo.update(attemptId, {
       ...statusUpdate,
       gradingStatus: "fully_graded",
-      score: reconciled.totalScore,
-      passed: reconciled.passed,
-      gradingResult: reconciled.questionResults,
+      score: aggregated.totalScore,
+      passed: aggregated.passed,
+      gradingResult: aggregated.questionResults,
     });
     return {
       gradingStatus: "fully_graded",
       fullyGraded: true,
-      totalScore: reconciled.totalScore,
-      passed: reconciled.passed,
+      totalScore: aggregated.totalScore,
+      passed: aggregated.passed,
     };
   }
 

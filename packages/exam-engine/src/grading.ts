@@ -18,6 +18,8 @@ import type {
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import { aggregateGradingEntries } from "./gradingWorkset.js";
 import {
   transition,
   isTransitionOk,
@@ -155,26 +157,41 @@ export function computeGradingResult(
 }
 
 /**
- * Persists the grading results: transitions the attempt to graded, updates the
- * enrollment's final score per the score strategy, and transitions the enrollment
- * to completed if the exam is finished.
+ * Persists the terminal grading result for an attempt by aggregating its
+ * materialized grading workset, then transitions the attempt to `graded`,
+ * updates the enrollment's final score per the score strategy, and transitions
+ * the enrollment to completed if the exam is finished.
  *
- * P3-L0-2C terminal guard: this is the AUTOMATIC terminal finalization command.
- * It is forbidden from advancing a `pending_manual` attempt to `graded` —
- * protocol §3.3/§4.2 mandate that such an attempt holds at `submitted` until
- * `completeManualGrading` (the manual-completion command) performs the final
- * transition. The guard reads the authoritative `gradingStatus` established at
- * the submit/freeze barrier; it does NOT rescan question types. This protects
- * every caller (candidate submit, deadline reconciliation, deadline scanner,
- * admin force-submit) even if a caller incorrectly reaches this path.
+ * P3-L0-2E Slice 4 — single terminal aggregation authority: the score is
+ * computed ONLY by {@link aggregateGradingEntries} from the attempt's
+ * `attempt_grading_entries` + frozen `questionSnapshot`. This function no
+ * longer accepts an externally computed `ScoreResult` — that would permit a
+ * second score authority to bypass grading-entry truth. Every caller
+ * previously passed a fresh `computeGradingResult` output derived from the
+ * same attempt in the same transaction, so internalizing the aggregation
+ * yields identical input without any external-result injection point.
+ *
+ * P3-L0-2C terminal guard (unchanged): an attempt awaiting manual grading
+ * must NOT be advanced to `graded` here — protocol §3.3/§4.2 mandate that
+ * such an attempt holds at `submitted` until `gradeQuestion` (the
+ * manual-completion command) performs the final transition.
+ *
+ * The caller MUST wrap this in a transaction holding the attempt row lock
+ * (`findByIdForUpdate`) so the read-aggregate-write is atomic against
+ * concurrent grading calls (see submitAndGradeAttempt, autoSubmitAndGrade,
+ * admin force-submit, deadlineReconciliation).
+ *
+ * @returns true if the attempt was transitioned to graded; false if it was
+ *   already graded (idempotent no-op).
  */
 export async function finalizeGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
   attemptId: string,
   enrollmentId: string,
-  result: ScoreResult,
   exam: Exam,
+  now: Date,
 ): Promise<boolean> {
   const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
@@ -187,7 +204,8 @@ export async function finalizeGrading(
 
   // P3-L0-2C engine invariant: an attempt awaiting manual grading must NOT
   // be advanced to `graded` through the automatic finalization path. Fail
-  // closed — only completeManualGrading may close a pending_manual attempt.
+  // closed — only gradeQuestion (manual completion) may close a
+  // pending_manual attempt.
   if (attempt.gradingStatus === GradingStatus.PendingManual) {
     throw new InvalidStateTransitionError(
       `Cannot auto-finalize attempt ${attemptId}: gradingStatus=pending_manual; ` +
@@ -202,12 +220,22 @@ export async function finalizeGrading(
     );
   }
 
+  // Slice 4: aggregate the terminal score from the materialized grading
+  // entries. This is the single canonical score authority — no externally
+  // supplied result, no gradingResult read, no submittedAnswers re-grade.
+  const entries = await gradingWorksetRepo.findByAttempt(attemptId);
+  const aggregated = aggregateGradingEntries(
+    attempt,
+    entries,
+    exam.passingScore,
+  );
+
   const gradedUpdate = await attemptRepo.update(attemptId, {
     status: "graded",
-    gradingResult: result.questionResults,
-    score: result.totalScore,
-    passed: result.passed,
-    gradedAt: result.gradedAt,
+    gradingResult: aggregated.questionResults,
+    score: aggregated.totalScore,
+    passed: aggregated.passed,
+    gradedAt: now,
     // P3-L0-2C: gradingStatus is the authoritative scoring-lifecycle fact,
     // established at the submit/freeze barrier (attemptCommands.submitAttempt).
     // A pure-objective attempt reaching here carries auto_graded (set at
@@ -246,14 +274,14 @@ export async function finalizeGrading(
   const selected = shouldSelectAttempt(
     exam.scoreStrategy,
     enrollment,
-    result.totalScore,
+    aggregated.totalScore,
   );
 
   const targetStatus = shouldEnrollmentComplete(
     exam,
     enrollment,
-    result.passed,
-    result.gradedAt,
+    aggregated.passed,
+    now,
   )
     ? "completed"
     : "started";
@@ -266,8 +294,8 @@ export async function finalizeGrading(
     status: targetStatus,
     ...(selected
       ? {
-          finalScore: result.totalScore,
-          finalPassed: result.passed,
+          finalScore: aggregated.totalScore,
+          finalPassed: aggregated.passed,
           finalAttemptId: attempt.id,
         }
       : {}),
@@ -280,13 +308,20 @@ export async function finalizeGrading(
 }
 
 /**
- * Grades an attempt end-to-end: reads the grading snapshot, computes the result,
- * and finalizes the enrollment. Returns the ScoreResult.
+ * Grades an attempt end-to-end: reads the grading snapshot, then finalizes
+ * via the canonical grading-entry aggregator. Returns the persisted ScoreResult
+ * (re-read from the attempt so the response reflects committed truth).
+ *
+ * Note: `gradeAttempt` is retained for test compatibility; production callers
+ * use {@link gradeAttemptIdempotent}. Both flow terminal scoring through the
+ * SAME {@link finalizeGrading} → {@link aggregateGradingEntries} authority —
+ * there is no second score-computation path.
  */
 export async function gradeAttempt(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
   attemptId: string,
   now: Date,
 ): Promise<ScoreResult> {
@@ -300,23 +335,35 @@ export async function gradeAttempt(
     throw new ValidationError("Attempt not found");
   }
 
-  const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    gradingWorksetRepo,
     attemptId,
     snapshot.enrollment.id,
-    result,
     snapshot.exam,
+    now,
   );
 
-  return result;
+  // Build the response ScoreResult from the now-committed attempt state.
+  const graded = await attemptRepo.findById(attemptId);
+  if (!graded) {
+    throw new ValidationError("Attempt not found after grading");
+  }
+  return {
+    attemptId: graded.id,
+    totalScore: graded.score ?? 0,
+    passed: graded.passed ?? false,
+    questionResults: graded.gradingResult ?? [],
+    gradedAt: graded.gradedAt ?? now,
+  };
 }
 
 export async function gradeAttemptIdempotent(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
   attemptId: string,
   now: Date,
 ): Promise<ScoreResult> {
@@ -345,6 +392,11 @@ export async function gradeAttemptIdempotent(
   // returns the partial auto-graded score (objective questions only) without
   // finalizing, so the manual-grading queue remains authoritative. Branches
   // on the established gradingStatus — no question-type rescan here.
+  //
+  // This partial score is a RESPONSE shape only (never persisted); it is the
+  // one remaining use of `computeGradingResult` in the grading pipeline, and
+  // it does NOT flow into terminal persistence. Slice 4 forbids any
+  // production terminal path from using its output as a score authority.
   if (snapshot.attempt.gradingStatus === GradingStatus.PendingManual) {
     const partial = computeGradingResult(snapshot.attempt, snapshot.exam, now);
     return {
@@ -356,15 +408,25 @@ export async function gradeAttemptIdempotent(
     };
   }
 
-  const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    gradingWorksetRepo,
     attemptId,
     snapshot.enrollment.id,
-    result,
     snapshot.exam,
+    now,
   );
 
-  return result;
+  const graded = await attemptRepo.findById(attemptId);
+  if (!graded) {
+    throw new ValidationError("Attempt not found after grading");
+  }
+  return {
+    attemptId: graded.id,
+    totalScore: graded.score ?? 0,
+    passed: graded.passed ?? false,
+    questionResults: graded.gradingResult ?? [],
+    gradedAt: graded.gradedAt ?? now,
+  };
 }

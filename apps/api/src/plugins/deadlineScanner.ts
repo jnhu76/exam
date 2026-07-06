@@ -133,7 +133,16 @@ export async function autoSubmitAndGrade(
       submissionReason: "deadline",
     });
 
-    await gradeAttemptIdempotent(exams, enrollments, attempts, attemptId, now);
+    // Slice 4: gradeAttemptIdempotent now takes the tx-scoped workset repo so
+    // it can aggregate from the entries submitAttempt just materialized.
+    await gradeAttemptIdempotent(
+      exams,
+      enrollments,
+      attempts,
+      gradingWorksetRepo,
+      attemptId,
+      now,
+    );
 
     return true;
   });

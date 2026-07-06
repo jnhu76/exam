@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  AttemptGradingEntry,
   Exam,
   ExamAttempt,
   ExamEnrollment,
@@ -193,12 +194,75 @@ function makeRepos(
       return storedEnrollment;
     },
   };
+  // Slice 4: finalizeGrading aggregates from the workset. The stub must:
+  //  - store entries materialized by submitAttempt (bulkCreate) so mixed /
+  //    text_response holds see pending_manual entries, and
+  //  - for pure-objective attempts that reach finalizeGrading directly (no
+  //    submit in the test), synthesize completed_auto entries from the
+  //    canonical auto-grader output.
+  const worksetStore = new Map<string, AttemptGradingEntry[]>();
   const gradingWorksetRepo: GradingWorksetRepository = {
-    findByAttempt: async () => [],
+    findByAttempt: async (id) => {
+      const stored = worksetStore.get(id);
+      if (stored) return stored.map((e) => ({ ...e }));
+      if (id !== storedAttempt.id) return [];
+      // Only synthesize for already-submitted/graded attempts (pure-objective
+      // finalize path). For in_progress/disrupted, return [] so submitAttempt's
+      // fresh-freeze precondition (zero entries) passes.
+      if (
+        storedAttempt.status === "in_progress" ||
+        storedAttempt.status === "disrupted"
+      )
+        return [];
+      const r = computeGradingResult(storedAttempt, makeExam(), new Date());
+      return r.questionResults.map((qr) => ({
+        id: `entry-${qr.questionId}`,
+        organizationId: storedAttempt.organizationId,
+        attemptId: storedAttempt.id,
+        questionId: qr.questionId,
+        gradingMode: "auto" as const,
+        status: "completed_auto" as const,
+        maxScore: qr.maxScore,
+        earnedScore: qr.score,
+        candidateAnswer: qr.candidateAnswer,
+        standardAnswer: qr.standardAnswer,
+        correct: qr.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    },
     findByAttemptAndQuestion: async () => null,
-    bulkCreate: async () => {},
+    bulkCreate: async (inputs) => {
+      const rows = inputs.map((inp) => ({
+        id: `entry-${inp.questionId}`,
+        organizationId: storedAttempt.organizationId,
+        attemptId: inp.attemptId,
+        questionId: inp.questionId,
+        gradingMode: inp.gradingMode,
+        status: inp.status,
+        maxScore: inp.maxScore,
+        earnedScore: inp.earnedScore,
+        candidateAnswer: inp.candidateAnswer,
+        standardAnswer: inp.standardAnswer,
+        correct: inp.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+      worksetStore.set(inputs[0]?.attemptId ?? storedAttempt.id, rows);
+    },
     completeManualEntry: async () => null,
-    countPendingManualForAttempt: async () => 0,
+    countPendingManualForAttempt: async (id) => {
+      const rows = worksetStore.get(id) ?? [];
+      return rows.filter(
+        (e) => e.gradingMode === "manual" && e.status === "pending_manual",
+      ).length;
+    },
   };
   return {
     examRepo,
@@ -342,10 +406,11 @@ describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.gradingWorksetRepo,
       "attempt-1",
       "enrollment-1",
-      result,
       makeExam(),
+      NOW,
     );
 
     expect(repos.getAttempt().status).toBe("graded");
@@ -390,10 +455,11 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
       finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.gradingWorksetRepo,
         "attempt-1",
         "enrollment-1",
-        result,
         makeExam(),
+        NOW,
       ),
     ).rejects.toThrow();
 
@@ -420,6 +486,7 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.gradingWorksetRepo,
         "attempt-1",
         NOW,
       ),
@@ -448,6 +515,7 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.gradingWorksetRepo,
         "attempt-1",
         NOW,
       ),

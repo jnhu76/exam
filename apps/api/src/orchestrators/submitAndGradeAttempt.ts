@@ -9,7 +9,6 @@ import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGr
 import {
   submitAttempt,
   readGradingSnapshot,
-  computeGradingResult,
   finalizeGrading,
   ensureAttemptDeadlineReconciled,
 } from "@exam/exam-engine";
@@ -167,14 +166,19 @@ export async function submitAndGradeAttempt(
         throw new NotFoundError("Attempt not found after submit");
       }
 
-      const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+      // Slice 4: finalizeGrading is the single terminal authority — it loads
+      // the grading workset and aggregates via `aggregateGradingEntries`. No
+      // externally computed result is supplied (that would be a second score
+      // authority). The gradingWorksetRepo is tx-scoped (created above) and
+      // reads the same committed entries the freeze barrier materialized.
       await finalizeGrading(
         enrollments,
         attempts,
+        gradingWorksetRepo,
         attemptId,
         snapshot.enrollment.id,
-        result,
         snapshot.exam,
+        now,
       );
       return false;
     }

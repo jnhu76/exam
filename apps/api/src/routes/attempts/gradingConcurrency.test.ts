@@ -5,10 +5,14 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { computeGradingResult, finalizeGrading } from "@exam/exam-engine";
-import { createExamEngineRepos } from "../../adapters/repoAdapters.js";
+import {
+  createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
+} from "../../adapters/repoAdapters.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import type {
@@ -67,7 +71,6 @@ async function finalizeInTx(
   ctx: RequestContext,
   attemptId: string,
   enrollmentId: string,
-  result: ScoreResult,
   exam: Exam,
 ): Promise<boolean> {
   return executeInTransaction(db, async (tx) => {
@@ -82,13 +85,21 @@ async function finalizeInTx(
       },
       ctx,
     );
+    // Slice 4: finalizeGrading aggregates from the grading workset internally —
+    // no externally computed result. Build the tx-scoped workset adapter so it
+    // reads the entries the submit freeze materialized.
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      ctx,
+    );
     return finalizeGrading(
       enrollments,
       attempts,
+      gradingWorksetRepo,
       attemptId,
       enrollmentId,
-      result,
       exam,
+      new Date(),
     );
   });
 }
@@ -335,6 +346,30 @@ async function buildFixture(
   const resultHigh = computeGradingResult(highAttempt as never, exam, now);
   const resultLow = computeGradingResult(lowAttempt as never, exam, now);
 
+  // Slice 4: finalizeGrading aggregates from attempt_grading_entries. Seed
+  // terminal completed_auto entries for each attempt via the repo API (handles
+  // the column mapping) so the aggregator sees the same score the old
+  // result-based path produced.
+  const entryRepo = createAttemptGradingEntryRepo(db);
+  const seedEntries = async (attemptId: string, result: ScoreResult) => {
+    await entryRepo.bulkCreate(
+      adminCtx,
+      result.questionResults.map((qr) => ({
+        attemptId,
+        questionId: qr.questionId,
+        gradingMode: "auto" as const,
+        status: "completed_auto" as const,
+        maxScore: qr.maxScore,
+        earnedScore: qr.score,
+        candidateAnswer: qr.candidateAnswer,
+        standardAnswer: qr.standardAnswer,
+        correct: qr.correct,
+      })),
+    );
+  };
+  await seedEntries(attemptHighId, resultHigh);
+  await seedEntries(attemptLowId, resultLow);
+
   return {
     orgId,
     adminCtx,
@@ -403,7 +438,6 @@ describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-
         f.adminCtx,
         f.attemptHighId,
         f.enrollmentId,
-        f.resultHigh,
         f.exam,
       ),
       finalizeInTx(
@@ -411,7 +445,6 @@ describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-
         f.adminCtx,
         f.attemptLowId,
         f.enrollmentId,
-        f.resultLow,
         f.exam,
       ),
     ]);
@@ -433,7 +466,6 @@ describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-
           f.adminCtx,
           f.attemptHighId,
           f.enrollmentId,
-          f.resultHigh,
           f.exam,
         ),
         finalizeInTx(
@@ -441,7 +473,6 @@ describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-
           f.adminCtx,
           f.attemptLowId,
           f.enrollmentId,
-          f.resultLow,
           f.exam,
         ),
       ]);
@@ -467,7 +498,6 @@ describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-
         f.adminCtx,
         f.attemptHighId,
         f.enrollmentId,
-        f.resultHigh,
         f.exam,
       ),
       finalizeInTx(
@@ -475,7 +505,6 @@ describe("grading concurrency — enrollment finalScore/finalAttemptId race (P0-
         f.adminCtx,
         f.attemptLowId,
         f.enrollmentId,
-        f.resultLow,
         f.exam,
       ),
     ]);

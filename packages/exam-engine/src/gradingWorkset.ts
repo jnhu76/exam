@@ -3,6 +3,7 @@ import type {
   ExamAttempt,
   GradingEntryMode,
   GradingEntryStatus,
+  QuestionScoreResult,
   QuestionSnapshot,
 } from "@exam/domain";
 import { gradeQuestion, isManualGradedQuestion } from "@exam/domain";
@@ -22,8 +23,9 @@ export interface GradingWorksetRepository {
    * Returns all grading entries for an attempt, scoped to the caller's
    * tenant. Used by {@link materializeGradingWorkset} for fresh-submit
    * precondition check, by {@link validateGradingWorksetConsistency} for
-   * idempotent re-entry, by {@link reconcileScores} for terminal aggregation,
-   * and by {@link gradeQuestion} to read the per-question manual state.
+   * idempotent re-entry, by {@link aggregateGradingEntries} for terminal
+   * aggregation, and by {@link gradeQuestion} to read the per-question
+   * manual state.
    */
   findByAttempt(attemptId: string): Promise<AttemptGradingEntry[]>;
 
@@ -314,4 +316,228 @@ export function validateGradingWorksetConsistency(
       );
     }
   }
+}
+
+// ── P3-L0-2E Slice 4: canonical terminal aggregation ─────────────
+
+/**
+ * Result of {@link aggregateGradingEntries}: the single terminal-aggregate
+ * truth that owns `attempt.score` / `gradingResult` / `passed`.
+ *
+ * `maxScore` is the sum of the validated entry max-scores (the canonical
+ * denominator). It is returned alongside `totalScore` so callers that need a
+ * percentage use the SAME validated universe for both numerator and
+ * denominator — never a mixed source.
+ */
+export interface GradingEntryAggregate {
+  questionResults: QuestionScoreResult[];
+  totalScore: number;
+  maxScore: number;
+  passed: boolean;
+}
+
+/**
+ * Expected terminal status for a grading entry of the given mode.
+ *
+ * `auto` mode must be `completed_auto`; `manual` mode must be
+ * `completed_manual`. Any other status means the workset is not terminal and
+ * aggregation must refuse.
+ */
+function expectedTerminalStatus(mode: GradingEntryMode): GradingEntryStatus {
+  return mode === "auto" ? "completed_auto" : "completed_manual";
+}
+
+/**
+ * Aggregates the materialized grading workset into the terminal score result
+ * (P3-L0-2E Slice 4).
+ *
+ * This is the **single canonical terminal aggregation authority**. Every
+ * production path that persists `attempt.score` / `attempt.gradingResult` /
+ * `attempt.passed` for a graded attempt flows through here. It reads ONLY:
+ *
+ *   - the frozen `attempt.questionSnapshot` (question universe, order,
+ *     metadata: type/maxScore/standardAnswer)
+ *   - the materialized `attempt_grading_entries` (earned score, candidate
+ *     answer, correctness)
+ *
+ * It NEVER reads:
+ *   - `attempt.gradingResult` (that is a denormalized *output* projection,
+ *     never a scoring input)
+ *   - draft `attempt.answers`
+ *   - live questions
+ *   - `submittedAnswers` (re-running the objective grader to fill gaps is
+ *     forbidden — the entries already carry the frozen earned score)
+ *
+ * ## Validation (fail-closed, runs BEFORE any projection)
+ *
+ * The workset must be exactly complete and terminal before any score is
+ * summed. Each check throws a descriptive `Error` (surfaced as a 500 by the
+ * API error handler — these are invariant violations, not user input errors):
+ *
+ *   1. exact entry count === frozen question count
+ *   2. entry questionId set === frozen questionId set (no missing, no extra)
+ *   3. no duplicate questionIds within the entry set (defensive — the DB
+ *      UNIQUE(attempt_id, question_id) already prevents this; the check exists
+ *      so an in-memory fake or a corrupt read cannot silently pass)
+ *   4. per entry: `entry.maxScore === frozenQuestion.score`
+ *   5. per entry: `entry.gradingMode` matches canonical question semantics
+ *      (`isManualGradedQuestion` — text_response → manual; all others → auto).
+ *      NOT `standardAnswer == null`.
+ *   6. per entry: terminal status (`auto`→`completed_auto`,
+ *      `manual`→`completed_manual`). A `pending_manual` entry blocks
+ *      aggregation — the caller must not invoke this until all manual work is
+ *      complete.
+ *   7. per entry: `earnedScore != null` and `0 <= earnedScore <= maxScore`
+ *
+ * ## Projection (Steps 7-8)
+ *
+ * Iterates `attempt.questionSnapshot` in **frozen order** (NOT entry DB order)
+ * so the final `gradingResult` row order is stable and matches the snapshot.
+ * One result row per frozen question. Earned score + candidateAnswer +
+ * correctness come from the matching entry; maxScore + standardAnswer come
+ * from the frozen snapshot (already mirrored on the entry — both are checked
+ * for consistency).
+ *
+ * @throws {Error} on ANY workset inconsistency (missing/extra/duplicate entry,
+ *   mode mismatch, maxScore mismatch, non-terminal status, null/out-of-range
+ *   earnedScore).
+ */
+export function aggregateGradingEntries(
+  attempt: ExamAttempt,
+  entries: AttemptGradingEntry[],
+  passingScore: number,
+): GradingEntryAggregate {
+  const questions = attempt.questionSnapshot;
+  const attemptId = attempt.id;
+
+  // 1. Exact count.
+  if (entries.length !== questions.length) {
+    throw new Error(
+      `Grading aggregation inconsistency for attempt ${attemptId}: ` +
+        `expected ${questions.length} entries (one per frozen question), ` +
+        `found ${entries.length}. Aggregation requires an exactly complete ` +
+        "terminal workset — no fill-gaps, no ignore-extras.",
+    );
+  }
+
+  // Index entries by questionId for O(1) lookup. Detect duplicates defensively
+  // (the DB UNIQUE constraint already prevents this; the check guards against
+  // in-memory fakes / corrupt reads).
+  const entryByQuestion = new Map<string, AttemptGradingEntry>();
+  for (const entry of entries) {
+    if (entryByQuestion.has(entry.questionId)) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}: ` +
+          `duplicate grading entry for question ${entry.questionId}. ` +
+          "Exactly one entry per frozen question is required.",
+      );
+    }
+    entryByQuestion.set(entry.questionId, entry);
+  }
+
+  // 2. Validate each frozen question has exactly one matching entry, and that
+  //    the entry's mode/maxScore/status/earnedScore are terminal-consistent.
+  for (const question of questions) {
+    const qid = question.originalQuestionId;
+    const entry = entryByQuestion.get(qid);
+    if (!entry) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}: ` +
+          `missing grading entry for question ${qid}. ` +
+          "Missing entries cannot be reconstructed during aggregation.",
+      );
+    }
+
+    // 5. gradingMode must match canonical question semantics (NOT standardAnswer).
+    const expectedMode: GradingEntryMode = isManualGradedQuestion(question)
+      ? "manual"
+      : "auto";
+    if (entry.gradingMode !== expectedMode) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}, ` +
+          `question ${qid}: gradingMode ${entry.gradingMode} != expected ` +
+          `${expectedMode} (canonical QuestionType semantics).`,
+      );
+    }
+
+    // 4. maxScore must match the frozen snapshot.
+    if (entry.maxScore !== question.score) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}, ` +
+          `question ${qid}: entry maxScore ${entry.maxScore} != frozen ` +
+          `${question.score}.`,
+      );
+    }
+
+    // 6. terminal status for this mode.
+    const expectedStatus = expectedTerminalStatus(entry.gradingMode);
+    if (entry.status !== expectedStatus) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}, ` +
+          `question ${qid}: status ${entry.status} is not terminal ` +
+          `(expected ${expectedStatus}). Aggregation requires every entry ` +
+          "to be terminal.",
+      );
+    }
+
+    // 7. earnedScore present and in range.
+    if (entry.earnedScore === null) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}, ` +
+          `question ${qid}: terminal entry has null earnedScore.`,
+      );
+    }
+    if (
+      !Number.isFinite(entry.earnedScore) ||
+      entry.earnedScore < 0 ||
+      entry.earnedScore > entry.maxScore
+    ) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}, ` +
+          `question ${qid}: earnedScore ${entry.earnedScore} out of range ` +
+          `[0, ${entry.maxScore}].`,
+      );
+    }
+  }
+
+  // 3. Extra entries (entry questionIds not in the frozen snapshot) — the
+  //    count check above (1) catches the common case, but an equal count with
+  //    a swapped questionId would slip through to here. Verify every entry
+  //    maps back to a frozen question.
+  for (const entry of entries) {
+    if (!questions.some((q) => q.originalQuestionId === entry.questionId)) {
+      throw new Error(
+        `Grading aggregation inconsistency for attempt ${attemptId}: ` +
+          `extra grading entry for question ${entry.questionId} not in ` +
+          "the frozen QuestionSnapshot.",
+      );
+    }
+  }
+
+  // ── Projection: iterate frozen questionSnapshot order ───────────────
+  const questionResults: QuestionScoreResult[] = questions.map((question) => {
+    const entry = entryByQuestion.get(question.originalQuestionId)!;
+    const earned = entry.earnedScore as number;
+    // `correct` is materialized on the entry at submit-freeze (auto) /
+    // completeManualEntry (manual = earnedScore >= maxScore). Fall back to
+    // the canonical manual semantic defensively.
+    const correct = entry.correct ?? earned >= entry.maxScore;
+    return {
+      questionId: question.originalQuestionId,
+      score: earned,
+      maxScore: entry.maxScore,
+      correct,
+      candidateAnswer: entry.candidateAnswer ?? null,
+      standardAnswer: question.standardAnswer ?? null,
+    };
+  });
+
+  const totalScore = questionResults.reduce((sum, r) => sum + r.score, 0);
+  const maxScore = questionResults.reduce((sum, r) => sum + r.maxScore, 0);
+  return {
+    questionResults,
+    totalScore,
+    maxScore,
+    passed: totalScore >= passingScore,
+  };
 }

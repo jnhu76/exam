@@ -203,15 +203,20 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           // left by a crashed earlier attempt is recovered to `graded` here.
           const needsSubmit =
             locked.status === "in_progress" || locked.status === "disrupted";
+          // Slice 4: the grading workset repo is needed both for submitAttempt
+          // (when materializing) and for gradeAttemptIdempotent (when
+          // aggregating from the entries). Hoist it out of the `needsSubmit`
+          // block so the crash-recovery path (`submitted` row, no submit) can
+          // still aggregate from the previously-materialized workset.
+          const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+            createAttemptGradingEntryRepo(tx),
+            ctx,
+          );
           if (needsSubmit) {
             // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
             // guard (source = "proctor" — the SubmitSource for admin/proctor
             // intervention; "admin" is not a valid SubmitSource value).
             // P3-L0-2E: submitAttempt owns grading workset materialization.
-            const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-              createAttemptGradingEntryRepo(tx),
-              ctx,
-            );
             await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
               source: "proctor",
             });
@@ -223,11 +228,14 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           // a no-op for `graded`. `grading` is a transient mid-flight state we
           // cannot resume from a row read alone (it is the candidate-path's
           // own submit-tx mid-transition) — leave it untouched.
+          // Slice 4: gradeAttemptIdempotent aggregates from the tx-scoped
+          // workset repo (created above for submitAttempt).
           if (locked.status !== "grading") {
             await gradeAttemptIdempotent(
               exams,
               enrollments,
               attempts,
+              gradingWorksetRepo,
               attemptId,
               now,
             );
