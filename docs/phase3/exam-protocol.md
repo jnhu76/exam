@@ -259,6 +259,8 @@ Deadline 触发：
 
 > **`grading` 态落地语义：** 纯客观题可在 submit / deadline-reconcile 事务内完成自动评分并直接进 `graded`，但转换链形式上必须经过 `grading`（瞬态）。含 text_response 的 attempt 进 `submitted` 后停在 `pending_manual`，人工评分完成后进 `graded`。
 
+> **人工评分完成单向性（P3-L0-2E Slice 3C）：** `gradeQuestion` 仅用于完成 `pending_manual` 评分条目，且仅当 attempt 处于 `submitted + pending_manual` 时允许调用。某条目一旦变为 `completed_manual`，普通评分命令不得再次修改该条目（无论分数是否相同）。attempt 一旦到达 `graded + fully_graded`，普通人工评分调用不得修改评分条目或终态分数/结果字段。终态后的改分/重评不在当前协议范围内，需另行定义 revision 能力。
+
 ### 3.4 命令函数
 
 所有状态变化通过集中命令函数执行，禁止在 route 中直接 update status：

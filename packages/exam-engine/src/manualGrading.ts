@@ -8,6 +8,7 @@ import type {
 import {
   gradeQuestion as gradeQuestionAuto,
   isManualGradedQuestion,
+  InvalidStateTransitionError,
   NotFoundError,
   PermissionDeniedError,
   ValidationError,
@@ -101,9 +102,9 @@ function reconstructObjectiveScore(
  * `AttemptGradingEntry` carries the authoritative `earnedScore`, so the
  * reconciler no longer depends on a separate legacy manual-score store.
  *
- * Recomputed from the COMPLETE objective + manual sets every call, so a
- * re-grade (entry overwrite) is naturally idempotent — manual scores are
- * never added on top of an already-inclusive total. When both a
+ * Recomputed from the COMPLETE objective + manual sets every call, so the
+ * terminal total is deterministic (manual scores are never added on top of an
+ * already-inclusive total). When both a
  * persisted `gradingResult` row AND a reconstructed row exist for the same
  * objective question, the persisted row wins (it is the authoritative
  * record an auto-grading path already wrote); reconstruction only fills
@@ -195,20 +196,24 @@ export function reconcileScores(
 }
 
 /**
- * Saves (or overwrites) one manual grading entry for an attempt and, when the
+ * Completes one pending manual grading entry for an attempt and, when the
  * last manual-graded question has been scored, flips `gradingStatus` to
  * `fully_graded` and reconciles the attempt total (objective + manual) into
  * `score`/`passed`/`gradingResult`.
  *
- * P3-L0-2E Slice 3 — authoritative workset ownership:
+ * P3-L0-2E Slice 3 + Slice 3C — authoritative workset ownership and strict
+ * completion boundary:
  *
  * The single durable manual-score truth is the `attempt_grading_entries` row
  * materialized at submit-freeze time. The command flow is:
  *
  *   load/lock attempt
+ *     → validate attempt.status === submitted
+ *     → validate attempt.gradingStatus === pending_manual
  *     → load the (attemptId, questionId) grading entry
- *     → entry missing?           fail closed (NotFoundError)
- *     → entry.gradingMode=auto?  reject (PermissionDeniedError)
+ *     → entry missing?               fail closed (NotFoundError)
+ *     → entry.gradingMode = auto?    reject (PermissionDeniedError)
+ *     → entry.status != pending?     reject (InvalidStateTransitionError)
  *     → validate 0 ≤ score ≤ entry.maxScore
  *     → UPDATE SAME ENTRY pending_manual → completed_manual
  *     → count remaining pending manual entries
@@ -221,10 +226,13 @@ export function reconcileScores(
  * expected question universe), but it does not authorize manual work after
  * the workset is materialized.
  *
- * Re-grade (entry already `completed_manual`) overwrites the same row via
- * `completeManualEntry`; no second row is ever created. Terminal
- * reconciliation is recomputed from the full entry set every call, so
- * re-grades are idempotent and never double-count.
+ * Slice 3C: gradeQuestion completes pending manual grading work ONLY. Manual
+ * grading completion is one-way; terminal score revision is not part of the
+ * current protocol. Once an entry becomes `completed_manual` the ordinary
+ * grading command cannot mutate that entry (neither same-value nor
+ * different-value overwrites are permitted); once the attempt reaches
+ * `graded + fully_graded` no ordinary manual grading call can mutate grading
+ * entries or final score/result fields.
  *
  * The caller is responsible for wrapping this in a transaction that has
  * locked the attempt row (findByIdForUpdate) — see the route handler.
@@ -234,6 +242,10 @@ export function reconcileScores(
  *   (nothing to manually grade). This subsumes the historical `auto_graded`
  *   attempt rejection: a fully-auto attempt has no manual entries at all, so
  *   the lookup itself misses or returns an auto entry.
+ * @throws {InvalidStateTransitionError} the attempt is not in the
+ *   `submitted + pending_manual` lifecycle, or the entry is already
+ *   `completed_manual` (manual work has already been completed for this
+ *   question and cannot be revised by the ordinary grading command).
  * @throws {ValidationError} score is outside `[0, entry.maxScore]`.
  */
 export async function gradeQuestion(
@@ -250,6 +262,27 @@ export async function gradeQuestion(
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
+  }
+
+  // Slice 3C strict completion boundary — manual-work completion only.
+  // gradeQuestion is the command that completes a pending_manual entry while
+  // the attempt is submitted + pending_manual; it REJECTS score-revision /
+  // re-grade attempts. Lifecycle guards run BEFORE any workset lookup or score
+  // mutation so a rejected call cannot touch truth. exam-protocol.md §3.3:
+  // submitted(pending_manual) → graded(fully_graded) is one-way; post-terminal
+  // score revision is not part of the current protocol.
+  if (attempt.status !== "submitted") {
+    throw new InvalidStateTransitionError(
+      `Cannot grade attempt ${attemptId}: attempt status is ${attempt.status}, ` +
+        "expected submitted (manual grading is only allowed while the attempt " +
+        "is awaiting manual completion)",
+    );
+  }
+  if (attempt.gradingStatus !== "pending_manual") {
+    throw new InvalidStateTransitionError(
+      `Cannot grade attempt ${attemptId}: gradingStatus is ` +
+        `${attempt.gradingStatus}, expected pending_manual`,
+    );
   }
 
   // Slice 3 authoritative workset lookup. The materialized entry is the sole
@@ -269,6 +302,18 @@ export async function gradeQuestion(
       "Question is auto-graded and cannot be manually scored",
     );
   }
+  // Slice 3C: only a pending_manual entry may be completed. A completed_manual
+  // entry is terminal for that question — same-value retry and different-value
+  // revision are both rejected. The entry's status (NOT score equality) is the
+  // authority: the API carries no idempotency key, so payload equality is not
+  // proof of the same operation.
+  if (entry.status !== "pending_manual") {
+    throw new InvalidStateTransitionError(
+      `Cannot grade question ${questionId} for attempt ${attemptId}: grading ` +
+        `entry status is ${entry.status}, expected pending_manual. Manual ` +
+        "grading completion is one-way; score revision is not supported.",
+    );
+  }
 
   // Frozen maxScore authority (entry mirrors the frozen QuestionSnapshot).
   const maxScore = entry.maxScore;
@@ -276,8 +321,10 @@ export async function gradeQuestion(
     throw new ValidationError(`score must be between 0 and ${maxScore}`);
   }
 
-  // UPDATE SAME ENTRY — pending_manual → completed_manual (or overwrite an
-  // already-completed_manual entry on re-grade). No second row is created.
+  // UPDATE SAME ENTRY — pending_manual → completed_manual. The guards above
+  // guarantee the entry is currently pending, so this is a one-way
+  // completion; no second row is created and completed entries are never
+  // re-touched by this command.
   const updated = await worksetRepo.completeManualEntry({
     attemptId,
     questionId,
@@ -305,8 +352,8 @@ export async function gradeQuestion(
 
   if (fullyGraded) {
     // Reconcile the total from the complete objective + manual sets. Always
-    // recomputed (never incremented) so re-grades are idempotent. Manual
-    // scores are read from the authoritative grading entries.
+    // recomputed (never incremented) so the terminal total is deterministic.
+    // Manual scores are read from the authoritative grading entries.
     const allEntries = await worksetRepo.findByAttempt(attemptId);
     const reconciled = reconcileScores(attempt, allEntries, passingScore, now);
     // P3-L0-2C: this command owns the final submitted → graded lifecycle
@@ -314,9 +361,9 @@ export async function gradeQuestion(
     // pending_manual attempt to graded once all subjective scores are
     // entered. Also re-runs the enrollment finalization (finalScore /
     // completion) so the candidate's record reflects the reconciled total.
-    // This transition is only issued when the attempt is still at
-    // `submitted`; a re-grade on an already-graded attempt (status=graded)
-    // leaves status alone and just refreshes the score breakdown.
+    // The status transition fires only when the attempt is still at
+    // `submitted`; once terminal, the Slice 3C lifecycle guards reject any
+    // further grading call before this branch is reached.
     const statusUpdate =
       attempt.status === "submitted" ? { status: "graded" as const } : {};
     await attemptRepo.update(attemptId, {

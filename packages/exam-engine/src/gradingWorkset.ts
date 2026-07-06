@@ -62,10 +62,11 @@ export interface GradingWorksetRepository {
    * Updates the single (attemptId, questionId) entry to completed_manual with
    * the grader's awarded score. Slice 3 manual-score write authority —
    * {@link gradeQuestion} reads the entry first then calls this to UPDATE the
-   * SAME row (no second row created). Targets pending_manual OR
-   * completed_manual (re-grade) entries; never creates a new row. Returns the
-   * updated entry or null if no row matched (which the caller treats as a
-   * fail-closed missing-entry condition).
+   * SAME row (no second row created). Slice 3C: the command guarantees the
+   * entry is `pending_manual` when this is called; a `completed_manual` entry
+   * is never re-touched by the ordinary grading command. Returns the updated
+   * entry or null if no row matched (which the caller treats as a fail-closed
+   * missing-entry condition).
    */
   completeManualEntry(input: {
     attemptId: string;

@@ -137,7 +137,11 @@ test.describe("manual grading (P2D-J4)", () => {
     expect(result.totalScore).toBe(90);
     expect(result.passed).toBe(true); // 90 >= 50
 
-    // ── Admin re-grades over the API; total recomputes idempotently ─────────
+    // ── Admin cannot revise the score post-terminal (Slice 3C) ────────────
+    // Manual grading completion is one-way. The attempt is now graded +
+    // fully_graded, so the ordinary grade-question command must reject any
+    // further mutation of the completed_manual entry. Score revision is not
+    // part of the current protocol.
     const adminToken = await adminApiToken(request);
     const regrade = await request.post(
       `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/api/admin/attempts/${attemptId}/grade-question`,
@@ -150,12 +154,15 @@ test.describe("manual grading (P2D-J4)", () => {
         },
       },
     );
-    expect(regrade.status()).toBe(200);
-    const regradeBody = (await regrade.json()) as {
-      totalScore: number;
-      passed: boolean;
-    };
-    expect(regradeBody.totalScore).toBe(85); // 40 + 45, NOT 90 + 45
-    expect(regradeBody.passed).toBe(true); // 85 >= 50
+    expect(regrade.status()).toBe(409);
+    // Terminal truth persists — the candidate total stays 90 (40 + 50),
+    // NOT recomputed to 85.
+    const resultAfterRegrade = await getCandidateResult(
+      request,
+      candidateToken,
+      attemptId,
+    );
+    expect(resultAfterRegrade.totalScore).toBe(90);
+    expect(resultAfterRegrade.passed).toBe(true);
   });
 });

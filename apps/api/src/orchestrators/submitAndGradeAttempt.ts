@@ -156,7 +156,7 @@ export async function submitAndGradeAttempt(
       // feeding the score are the locked, post-submit answers. This is the
       // freeze barrier: the score is derived from exactly the answer set that
       // existed when the submit lock was held. (For the crash-recovery
-      // `submitted` path this also re-grades idempotently.)
+      // `submitted` path this re-runs objective auto-grading deterministically.)
       const snapshot = await readGradingSnapshot(
         exams,
         enrollments,

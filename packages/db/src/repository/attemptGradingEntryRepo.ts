@@ -152,16 +152,17 @@ export function createAttemptGradingEntryRepo(db: Database) {
     },
 
     /**
-     * Updates a pending_manual (or already completed_manual on re-grade) entry
-     * to completed_manual with the grader's awarded score, comment, and
-     * identity. Targets exactly one row by the unique (attemptId, questionId)
-     * constraint, scoped to the tenant. Must be called inside a transaction
-     * holding the attempt row lock.
+     * Updates a pending_manual entry to completed_manual with the grader's
+     * awarded score, comment, and identity. Targets exactly one row by the
+     * unique (attemptId, questionId) constraint, scoped to the tenant. Must be
+     * called inside a transaction holding the attempt row lock.
      *
      * Slice 3 authoritative manual-score write path: the manual grading command
      * reads the entry first (fail-closed when missing, reject when gradingMode
-     * != manual) and then calls this to UPDATE the SAME entry. No second row is
-     * ever created; re-grades overwrite the existing row.
+     * != manual, reject when status != pending_manual per Slice 3C) and then
+     * calls this to UPDATE the SAME entry. No second row is ever created. The
+     * command guarantees the entry is pending when this is called; this repo
+     * method does not itself enforce the pending → completed transition guard.
      */
     async completeManualEntry(
       ctx: TenantContext | RequestContext,

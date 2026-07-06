@@ -189,7 +189,11 @@ async function seedAttempt(
     enrollmentId: enr.id,
     candidateId: candidateProfileId,
     attemptNo: 1,
-    status: "graded",
+    // Slice 3C: manual grading is only permitted while the attempt is at
+    // `submitted + pending_manual`. Test fixtures seed attempts at the correct
+    // lifecycle state; the Slice 7/11/13/14 tests that need a terminal `graded`
+    // attempt reach it by grading the last pending question.
+    status: "submitted",
     gradingStatus:
       opts.gradingStatus ?? (isObjective ? "auto_graded" : "pending_manual"),
     questionSnapshot: opts.questions,
@@ -666,13 +670,21 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 8: re-grade overwrites the previous score (SAME entry) ──
-  it("overwrites the previous score on re-grade without creating a second entry", async () => {
+  // ── Slice 8 (Slice 3C): a completed_manual entry is terminal — no overwrite ──
+  it("does not overwrite a completed_manual entry and keeps exactly one row", async () => {
     const { attemptId } = await seedAttempt(ctx, {
-      questions: [subjectiveQuestion("q-re")],
-      title: "Re-grade",
+      questions: [
+        subjectiveQuestion("q-re"),
+        subjectiveQuestion("q-other", 10),
+      ],
+      title: "Re-grade Rejected",
     });
-    await seedGradingEntries(ctx, attemptId, [subjectiveQuestion("q-re")], []);
+    await seedGradingEntries(
+      ctx,
+      attemptId,
+      [subjectiveQuestion("q-re"), subjectiveQuestion("q-other", 10)],
+      [],
+    );
 
     const first = await ctx.app.inject({
       method: "POST",
@@ -682,13 +694,14 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
     expect(first.statusCode).toBe(200);
 
+    // Slice 3C: re-grading q-re is rejected (entry already completed_manual).
     const second = await ctx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q-re", score: 8, comment: "second" },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(second.statusCode).toBe(200);
+    expect(second.statusCode).toBe(409);
 
     const requestContext = {
       actorId: ctx.admin.id,
@@ -702,13 +715,17 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
       requestContext,
       attemptId,
     );
-    // Slice 3 invariant M: exactly one entry per (attempt, question).
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({
+    // Exactly one entry for q-re, and it keeps the ORIGINAL score (5).
+    const qreEntries = entries.filter((e) => e.questionId === "q-re");
+    expect(qreEntries).toHaveLength(1);
+    expect(qreEntries[0]).toMatchObject({
       status: "completed_manual",
-      earnedScore: 8,
-      comment: "second",
+      earnedScore: 5,
+      comment: "first",
     });
+    // The other pending question is still gradable (multi-manual preserved).
+    const qother = entries.find((e) => e.questionId === "q-other");
+    expect(qother).toMatchObject({ status: "pending_manual" });
   });
 
   // ── Slice 9: error contract ──────────────────────────────────────
@@ -753,8 +770,8 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(entry).toBeNull();
   });
 
-  // ── Slice 3L: objective entry cannot be manually graded ──────────
-  it("returns 403 when attempting to manually grade an auto (completed_auto) entry", async () => {
+  // ── Slice 3L: an auto_graded attempt is not in the manual-grading lifecycle ──
+  it("rejects manual grading on an auto_graded attempt (not pending_manual)", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [objectiveQuestion("q-obj")],
       title: "Auto Only",
@@ -772,7 +789,9 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
       payload: { questionId: "q-obj", score: 5 },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(res.statusCode).toBe(403);
+    // Slice 3C: the attempt is submitted + auto_graded, not pending_manual —
+    // manual grading is rejected at the lifecycle guard.
+    expect(res.statusCode).toBe(409);
   });
 
   it("returns 400 when score exceeds the question maxScore", async () => {
@@ -1069,16 +1088,13 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     });
   });
 
-  // ── Slice 14: re-grade reconciles idempotently (no double-count) ──
-  it("re-grades idempotently without double-counting", async () => {
+  // ── Slice 14 (Slice 3C): terminal truth is immutable ───────────
+  it("rejects manual grading after the attempt reaches graded + fully_graded and preserves terminal truth", async () => {
     const { attemptId } = await seedAttempt(ctx, {
       questions: [subjectiveQuestion("q-re", 60)],
       passingScore: 50,
+      title: "Terminal Immutable",
     });
-    await ctx.db
-      .update(schema.examAttempts)
-      .set({ status: "submitted" })
-      .where(eq(schema.examAttempts.id, attemptId));
     await seedGradingEntries(
       ctx,
       attemptId,
@@ -1086,22 +1102,50 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
       [],
     );
 
+    // Reach terminal: single manual question graded 60 → graded + fully_graded.
     const first = await ctx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q-re", score: 60, comment: "" },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(first.json()).toMatchObject({ totalScore: 60 });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      gradingStatus: "fully_graded",
+      totalScore: 60,
+      passed: true,
+    });
 
+    // Post-terminal re-grade (different value) must be rejected.
     const second = await ctx.app.inject({
       method: "POST",
       url: `/api/admin/attempts/${attemptId}/grade-question`,
       payload: { questionId: "q-re", score: 45, comment: "re-grade" },
       cookies: { "auth-token": ctx.adminToken },
     });
-    // Recomputed from the single full entry set: 45, NOT 60 + 45.
-    expect(second.json()).toMatchObject({ totalScore: 45, passed: false });
+    expect(second.statusCode).toBe(409);
+
+    // Terminal truth persists — score is NOT recomputed to 45.
+    const requestContext = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const attempt = await createAttemptRepo(ctx.db).findById(
+      requestContext,
+      attemptId,
+    );
+    expect(attempt?.score).toBe(60);
+    expect(attempt?.passed).toBe(true);
+    expect(attempt?.status).toBe("graded");
+    expect(attempt?.gradingStatus).toBe("fully_graded");
+    const entry = await createAttemptGradingEntryRepo(
+      ctx.db,
+    ).findByAttemptAndQuestion(requestContext, attemptId, "q-re");
+    expect(entry?.earnedScore).toBe(60);
   });
 
   // ── Slice 3H/I: multi-manual queue behavior ──────────────────────
@@ -1264,5 +1308,226 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
       gradedBy: ctx.admin.id,
     });
     expect(toDomainEntry(after!)).toMatchObject({ status: "completed_manual" });
+  });
+});
+
+// Note: the tests below were appended; the preceding "});" closed the
+// describe block, so we re-open a sibling describe for the Slice 3C
+// boundary tests to keep them grouped.
+describe("grading queue Slice 3C — strict manual-work completion boundary", () => {
+  let ctx3c: TestContext;
+
+  beforeAll(async () => {
+    ctx3c = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(scoreRoutes, { prefix: "" });
+    });
+  });
+
+  afterAll(async () => {
+    await ctx3c.cleanup();
+  });
+
+  async function readEntry(attemptId: string, questionId: string) {
+    const requestContext = {
+      actorId: ctx3c.admin.id,
+      organizationId: ctx3c.org.id,
+      targetOrganizationId: ctx3c.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    return createAttemptGradingEntryRepo(ctx3c.db).findByAttemptAndQuestion(
+      requestContext,
+      attemptId,
+      questionId,
+    );
+  }
+
+  it("rejects same-value re-grade of a completed_manual entry before terminal completion", async () => {
+    const { attemptId } = await seedAttempt(ctx3c, {
+      questions: [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
+      title: "Pre-Terminal Same",
+    });
+    await seedGradingEntries(
+      ctx3c,
+      attemptId,
+      [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
+      [],
+    );
+
+    const first = await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 30 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const retry = await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 30 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+    expect(retry.statusCode).toBe(409);
+
+    const entry = await readEntry(attemptId, "q1");
+    expect(entry).toMatchObject({
+      status: "completed_manual",
+      earnedScore: 30,
+    });
+  });
+
+  it("rejects different-value re-grade of a completed_manual entry before terminal completion", async () => {
+    const { attemptId } = await seedAttempt(ctx3c, {
+      questions: [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
+      title: "Pre-Terminal Diff",
+    });
+    await seedGradingEntries(
+      ctx3c,
+      attemptId,
+      [subjectiveQuestion("q1", 60), subjectiveQuestion("q2", 40)],
+      [],
+    );
+
+    await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 30 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+
+    const revise = await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 50 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+    expect(revise.statusCode).toBe(409);
+
+    const entry = await readEntry(attemptId, "q1");
+    expect(entry).toMatchObject({
+      status: "completed_manual",
+      earnedScore: 30,
+      comment: "",
+    });
+  });
+
+  it("rejects post-terminal re-grade (same value) and preserves terminal state", async () => {
+    const { attemptId } = await seedAttempt(ctx3c, {
+      questions: [subjectiveQuestion("q1", 60)],
+      passingScore: 50,
+      title: "Post-Terminal Same",
+    });
+    await ctx3c.db
+      .update(schema.examAttempts)
+      .set({ status: "submitted" })
+      .where(eq(schema.examAttempts.id, attemptId));
+    await seedGradingEntries(
+      ctx3c,
+      attemptId,
+      [subjectiveQuestion("q1", 60)],
+      [],
+    );
+
+    const first = await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 60 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({
+      gradingStatus: "fully_graded",
+      fullyGraded: true,
+      totalScore: 60,
+      passed: true,
+    });
+
+    const reqCtx = {
+      actorId: ctx3c.admin.id,
+      organizationId: ctx3c.org.id,
+      targetOrganizationId: ctx3c.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const preAttempt = await createAttemptRepo(ctx3c.db).findById(
+      reqCtx,
+      attemptId,
+    );
+    const retry = await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 60 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+    expect(retry.statusCode).toBe(409);
+
+    const postAttempt = await createAttemptRepo(ctx3c.db).findById(
+      reqCtx,
+      attemptId,
+    );
+    expect(postAttempt?.score).toBe(preAttempt?.score);
+    expect(postAttempt?.passed).toBe(preAttempt?.passed);
+    expect(postAttempt?.gradingResult).toEqual(preAttempt?.gradingResult);
+    expect(postAttempt?.status).toBe("graded");
+    expect(postAttempt?.gradingStatus).toBe("fully_graded");
+    const entry = await readEntry(attemptId, "q1");
+    expect(entry?.earnedScore).toBe(60);
+  });
+
+  it("rejects post-terminal score revision (different value) and preserves terminal state", async () => {
+    const { attemptId } = await seedAttempt(ctx3c, {
+      questions: [subjectiveQuestion("q1", 60)],
+      passingScore: 50,
+      title: "Post-Terminal Diff",
+    });
+    await ctx3c.db
+      .update(schema.examAttempts)
+      .set({ status: "submitted" })
+      .where(eq(schema.examAttempts.id, attemptId));
+    await seedGradingEntries(
+      ctx3c,
+      attemptId,
+      [subjectiveQuestion("q1", 60)],
+      [],
+    );
+
+    await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 60 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+
+    const revise = await ctx3c.app.inject({
+      method: "POST",
+      url: `/api/admin/attempts/${attemptId}/grade-question`,
+      payload: { questionId: "q1", score: 45 },
+      cookies: { "auth-token": ctx3c.adminToken },
+    });
+    expect(revise.statusCode).toBe(409);
+
+    const entry = await readEntry(attemptId, "q1");
+    expect(entry?.earnedScore).toBe(60);
+    const reqCtx = {
+      actorId: ctx3c.admin.id,
+      organizationId: ctx3c.org.id,
+      targetOrganizationId: ctx3c.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const attempt = await createAttemptRepo(ctx3c.db).findById(
+      reqCtx,
+      attemptId,
+    );
+    expect(attempt?.score).toBe(60);
+    expect(attempt?.passed).toBe(true);
+    expect(attempt?.status).toBe("graded");
+    expect(attempt?.gradingStatus).toBe("fully_graded");
   });
 });
