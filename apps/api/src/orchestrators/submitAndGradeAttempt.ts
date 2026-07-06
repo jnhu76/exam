@@ -12,7 +12,6 @@ import {
   computeGradingResult,
   finalizeGrading,
   ensureAttemptDeadlineReconciled,
-  materializeGradingWorkset,
 } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
@@ -128,7 +127,8 @@ export async function submitAndGradeAttempt(
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
-        await submitAttempt(attempts, attemptId, now, {
+        // P3-L0-2E: submitAttempt owns grading workset materialization.
+        await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
           source: "candidate",
           minSubmitAfterStartMinutes:
             (await exams.findById(lockedAttempt.examId))
@@ -147,12 +147,6 @@ export async function submitAndGradeAttempt(
       if (!postSubmit) {
         throw new NotFoundError("Attempt not found after submit");
       }
-
-      // P3-L0-2E: materialize the durable grading workset from the frozen
-      // submitted_answers. Covers all submit paths: fresh candidate submit,
-      // deadline reconciliation, and crash-recovery. Idempotent — no-op if
-      // entries already exist (e.g. reconciliation already materialized).
-      await materializeGradingWorkset(postSubmit, gradingWorksetRepo);
 
       if (postSubmit.gradingStatus === "pending_manual") {
         return false;

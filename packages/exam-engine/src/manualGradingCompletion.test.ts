@@ -10,6 +10,7 @@ import type {
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { submitAttempt } from "./attemptCommands.js";
 import { computeGradingResult } from "./grading.js";
 import {
@@ -219,10 +220,15 @@ function makeRepos(
       return storedEnrollment;
     },
   };
+  const gradingWorksetRepo: GradingWorksetRepository = {
+    findByAttempt: async () => [],
+    bulkCreate: async () => {},
+  };
   return {
     examRepo,
     attemptRepo,
     enrollmentRepo,
+    gradingWorksetRepo,
     getAttempt: () => storedAttempt,
     getEnrollment: () => storedEnrollment,
   };
@@ -279,9 +285,13 @@ async function runMixedLifecycle(input: {
   const repos = makeRepos(initialAttempt, exam);
 
   // 1. Submit/freeze barrier: establishes gradingStatus + submittedAnswers.
-  await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-    source: "candidate",
-  });
+  await submitAttempt(
+    repos.attemptRepo,
+    repos.gradingWorksetRepo,
+    "attempt-1",
+    NOW,
+    { source: "candidate" },
+  );
 
   // 2. The candidate-submit orchestrator path computes the objective result
   //    for an auto_graded attempt; for pending_manual it HOLDS and does not
@@ -407,9 +417,13 @@ describe("P3-L0-2D B/C: text_response with non-null standardAnswer", () => {
     });
     const repos = makeRepos(attempt);
 
-    const submitted = await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    const submitted = await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
 
     expect(submitted.status).toBe("submitted");
     expect(submitted.gradingStatus).toBe("pending_manual");
@@ -477,9 +491,13 @@ describe("P3-L0-2D D: multi-manual partial completion", () => {
     });
     const repos = makeRepos(initialAttempt);
 
-    await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
     const { repo: manualRepo } = makeManualRepo();
 
     const partial = await gradeQuestion(
@@ -535,9 +553,13 @@ describe("P3-L0-2D F: pure-objective auto grading preserved", () => {
     });
     const repos = makeRepos(initialAttempt);
 
-    await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
 
     expect(repos.getAttempt().gradingStatus).toBe("auto_graded");
     expect(repos.getAttempt().status).toBe("submitted");

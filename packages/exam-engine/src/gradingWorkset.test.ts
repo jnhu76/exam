@@ -6,8 +6,12 @@ import type {
   GradingEntryStatus,
   QuestionSnapshot,
 } from "@exam/domain";
-import { materializeGradingWorkset } from "./gradingWorkset.js";
-import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import {
+  materializeGradingWorkset,
+  validateGradingWorksetConsistency,
+  type GradingWorksetRepository,
+} from "./gradingWorkset.js";
+import { submitAttempt, type AttemptRepository } from "./attemptCommands.js";
 
 const NOW = new Date("2026-06-01T12:00:00Z");
 
@@ -134,6 +138,49 @@ function makeWorksetRepo(existing: StoredEntry[] = []) {
   };
   return { repo, created, store };
 }
+
+function makeEntry(
+  attemptId: string,
+  questionId: string,
+  overrides: Partial<StoredEntry> = {},
+): StoredEntry {
+  return {
+    id: `entry-${questionId}`,
+    organizationId: "org-1",
+    attemptId,
+    questionId,
+    gradingMode: "auto",
+    status: "completed_auto",
+    maxScore: 40,
+    earnedScore: 40,
+    candidateAnswer: "a",
+    standardAnswer: "a",
+    correct: true,
+    comment: "",
+    gradedBy: null,
+    gradedAt: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+function makeAttemptRepo(attempt: ExamAttempt): AttemptRepository {
+  let stored = attempt;
+  return {
+    findById: () => stored,
+    findByIdForUpdate: () => stored,
+    findActiveByEnrollment: () => null,
+    findByEnrollmentAndAttemptNo: () => null,
+    create: () => stored,
+    update: (_id, data) => {
+      stored = { ...stored, ...data };
+      return stored;
+    },
+  };
+}
+
+// ── materializeGradingWorkset (pure function, no existence check) ──
 
 describe("materializeGradingWorkset", () => {
   it("creates exactly one entry per frozen question", async () => {
@@ -279,65 +326,6 @@ describe("materializeGradingWorkset", () => {
     expect(obj.candidateAnswer).toBeNull();
   });
 
-  it("retry (entries already exist) does not duplicate work", async () => {
-    const attempt = makeAttempt({
-      questionSnapshot: [
-        objectiveSnapshot("q-obj", 40, "a"),
-        textResponseSnapshot("q-text", 60),
-      ],
-      submittedAnswers: {
-        schemaVersion: 1,
-        answers: [
-          { questionId: "q-obj", value: "a" },
-          { questionId: "q-text", value: "ans" },
-        ],
-      },
-    });
-    const existing: StoredEntry[] = [
-      {
-        id: "existing-1",
-        organizationId: "org-1",
-        attemptId: "attempt-1",
-        questionId: "q-obj",
-        gradingMode: "auto",
-        status: "completed_auto",
-        maxScore: 40,
-        earnedScore: 40,
-        candidateAnswer: "a",
-        standardAnswer: "a",
-        correct: true,
-        comment: "",
-        gradedBy: null,
-        gradedAt: null,
-        createdAt: NOW,
-        updatedAt: NOW,
-      },
-      {
-        id: "existing-2",
-        organizationId: "org-1",
-        attemptId: "attempt-1",
-        questionId: "q-text",
-        gradingMode: "manual",
-        status: "pending_manual",
-        maxScore: 60,
-        earnedScore: null,
-        candidateAnswer: "ans",
-        standardAnswer: null,
-        correct: null,
-        comment: "",
-        gradedBy: null,
-        gradedAt: null,
-        createdAt: NOW,
-        updatedAt: NOW,
-      },
-    ];
-    const { repo, created } = makeWorksetRepo(existing);
-
-    await materializeGradingWorkset(attempt, repo);
-
-    expect(created).toHaveLength(0);
-  });
-
   it("uses submittedAnswers exclusively, never draft answers", async () => {
     const attempt = makeAttempt({
       questionSnapshot: [
@@ -370,5 +358,399 @@ describe("materializeGradingWorkset", () => {
     expect(obj.earnedScore).toBe(40);
     const manual = created.find((e) => e.questionId === "q-text")!;
     expect(manual.candidateAnswer).toBe("frozen answer");
+  });
+});
+
+// ── submitAttempt seam-ownership tests (P3-L0-2E Step 1) ──────────
+
+describe("submitAttempt grading workset ownership", () => {
+  it("A. mixed attempt: submitAttempt creates objective completed_auto + manual pending_manual", async () => {
+    const attempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [
+        objectiveSnapshot("q-obj", 40, "a"),
+        textResponseSnapshot("q-text", 60),
+      ],
+      answers: [
+        { questionId: "q-obj", answer: "a", version: 1, savedAt: NOW },
+        {
+          questionId: "q-text",
+          answer: "student answer",
+          version: 1,
+          savedAt: NOW,
+        },
+      ],
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const { repo, created } = makeWorksetRepo();
+
+    await submitAttempt(attRepo, repo, "attempt-1", NOW);
+
+    expect(created).toHaveLength(2);
+    const obj = created.find((e) => e.questionId === "q-obj")!;
+    expect(obj.gradingMode).toBe("auto");
+    expect(obj.status).toBe("completed_auto");
+    expect(obj.earnedScore).toBe(40);
+    const manual = created.find((e) => e.questionId === "q-text")!;
+    expect(manual.gradingMode).toBe("manual");
+    expect(manual.status).toBe("pending_manual");
+    expect(manual.earnedScore).toBeNull();
+  });
+
+  it("B. pure text_response: submitAttempt creates pending_manual entries", async () => {
+    const attempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [textResponseSnapshot("q-text", 100)],
+      answers: [
+        {
+          questionId: "q-text",
+          answer: "essay answer",
+          version: 1,
+          savedAt: NOW,
+        },
+      ],
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const { repo, created } = makeWorksetRepo();
+
+    await submitAttempt(attRepo, repo, "attempt-1", NOW);
+
+    expect(created).toHaveLength(1);
+    expect(created[0]!.gradingMode).toBe("manual");
+    expect(created[0]!.status).toBe("pending_manual");
+    expect(created[0]!.earnedScore).toBeNull();
+  });
+
+  it("C. pure objective: submitAttempt creates completed_auto entries", async () => {
+    const attempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [
+        objectiveSnapshot("q-obj-1", 30, "a"),
+        objectiveSnapshot("q-obj-2", 20, "b"),
+      ],
+      answers: [
+        { questionId: "q-obj-1", answer: "a", version: 1, savedAt: NOW },
+        { questionId: "q-obj-2", answer: "x", version: 1, savedAt: NOW },
+      ],
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const { repo, created } = makeWorksetRepo();
+
+    await submitAttempt(attRepo, repo, "attempt-1", NOW);
+
+    expect(created).toHaveLength(2);
+    const e1 = created.find((e) => e.questionId === "q-obj-1")!;
+    expect(e1.status).toBe("completed_auto");
+    expect(e1.earnedScore).toBe(30);
+    const e2 = created.find((e) => e.questionId === "q-obj-2")!;
+    expect(e2.status).toBe("completed_auto");
+    expect(e2.earnedScore).toBe(0);
+  });
+});
+
+// ── submitAttempt idempotent validation tests (P3-L0-2E Steps 5-11) ──
+
+describe("submitAttempt idempotent workset validation", () => {
+  it("exact matching workset: idempotent re-entry returns without error", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [
+        objectiveSnapshot("q-obj", 40, "a"),
+        textResponseSnapshot("q-text", 60),
+      ],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [
+          { questionId: "q-obj", value: "a" },
+          { questionId: "q-text", value: "ans" },
+        ],
+      },
+      gradingStatus: "pending_manual",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-obj", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 40,
+        earnedScore: 40,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+        correct: true,
+      }),
+      makeEntry("attempt-1", "q-text", {
+        gradingMode: "manual",
+        status: "pending_manual",
+        maxScore: 60,
+        earnedScore: null,
+        candidateAnswer: "ans",
+        standardAnswer: null,
+        correct: null,
+      }),
+    ];
+    const { repo, created } = makeWorksetRepo(existing);
+
+    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW);
+
+    expect(result.status).toBe("submitted");
+    expect(created).toHaveLength(0);
+  });
+
+  it("partial workset: idempotent re-entry fails closed", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [
+        objectiveSnapshot("q-obj", 40, "a"),
+        objectiveSnapshot("q-obj-2", 20, "b"),
+      ],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [
+          { questionId: "q-obj", value: "a" },
+          { questionId: "q-obj-2", value: "b" },
+        ],
+      },
+      gradingStatus: "auto_graded",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    // Only q-obj exists, q-obj-2 is missing
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-obj", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 40,
+        earnedScore: 40,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+        correct: true,
+      }),
+    ];
+    const { repo } = makeWorksetRepo(existing);
+
+    await expect(
+      submitAttempt(attRepo, repo, "attempt-1", NOW),
+    ).rejects.toThrow(/inconsistency/i);
+  });
+
+  it("extra entry: idempotent re-entry fails closed", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [
+        objectiveSnapshot("q-obj", 40, "a"),
+        objectiveSnapshot("q-obj-2", 20, "b"),
+      ],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [
+          { questionId: "q-obj", value: "a" },
+          { questionId: "q-obj-2", value: "b" },
+        ],
+      },
+      gradingStatus: "auto_graded",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-obj", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 40,
+        earnedScore: 40,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+        correct: true,
+      }),
+      makeEntry("attempt-1", "q-obj-2", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 20,
+        earnedScore: 20,
+        candidateAnswer: "b",
+        standardAnswer: "b",
+        correct: true,
+      }),
+      makeEntry("attempt-1", "q-orphan", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 10,
+        earnedScore: 10,
+      }),
+    ];
+    const { repo } = makeWorksetRepo(existing);
+
+    await expect(
+      submitAttempt(attRepo, repo, "attempt-1", NOW),
+    ).rejects.toThrow(/inconsistency/i);
+  });
+
+  it("mode mismatch: idempotent re-entry fails closed", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [textResponseSnapshot("q-text", 60)],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: "ans" }],
+      },
+      gradingStatus: "pending_manual",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    // Entry has gradingMode=auto but question is text_response → expected manual
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-text", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 60,
+        earnedScore: 0,
+        candidateAnswer: "ans",
+      }),
+    ];
+    const { repo } = makeWorksetRepo(existing);
+
+    await expect(
+      submitAttempt(attRepo, repo, "attempt-1", NOW),
+    ).rejects.toThrow(/gradingMode.*!=.*expected/i);
+  });
+
+  it("max-score mismatch: idempotent re-entry fails closed", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [objectiveSnapshot("q-obj", 40, "a")],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-obj", value: "a" }],
+      },
+      gradingStatus: "auto_graded",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-obj", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 30, // wrong — snapshot says 40
+        earnedScore: 30,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+        correct: true,
+      }),
+    ];
+    const { repo } = makeWorksetRepo(existing);
+
+    await expect(
+      submitAttempt(attRepo, repo, "attempt-1", NOW),
+    ).rejects.toThrow(/maxScore.*!=.*expected/i);
+  });
+
+  it("objective score mismatch: idempotent re-entry fails closed", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [objectiveSnapshot("q-obj", 40, "a")],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-obj", value: "a" }],
+      },
+      gradingStatus: "auto_graded",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    // Answer "a" is correct → canonical score = 40, but entry says 0
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-obj", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 40,
+        earnedScore: 0,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+        correct: false,
+      }),
+    ];
+    const { repo } = makeWorksetRepo(existing);
+
+    await expect(
+      submitAttempt(attRepo, repo, "attempt-1", NOW),
+    ).rejects.toThrow(/earnedScore.*!=.*expected/i);
+  });
+
+  it("pending manual progress: idempotent re-entry passes validation", async () => {
+    const attempt = makeAttempt({
+      status: "submitted",
+      questionSnapshot: [textResponseSnapshot("q-text", 60)],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: "ans" }],
+      },
+      gradingStatus: "pending_manual",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-text", {
+        gradingMode: "manual",
+        status: "pending_manual",
+        maxScore: 60,
+        earnedScore: null,
+        candidateAnswer: "ans",
+        standardAnswer: null,
+        correct: null,
+      }),
+    ];
+    const { repo, created } = makeWorksetRepo(existing);
+
+    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW);
+
+    expect(result.status).toBe("submitted");
+    expect(created).toHaveLength(0);
+  });
+
+  it("completed manual progress: idempotent re-entry passes validation", async () => {
+    const attempt = makeAttempt({
+      status: "graded",
+      questionSnapshot: [textResponseSnapshot("q-text", 60)],
+      submittedAnswers: {
+        schemaVersion: 1,
+        answers: [{ questionId: "q-text", value: "ans" }],
+      },
+      gradingStatus: "fully_graded",
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-text", {
+        gradingMode: "manual",
+        status: "completed_manual",
+        maxScore: 60,
+        earnedScore: 30,
+        candidateAnswer: "ans",
+        standardAnswer: null,
+        correct: null,
+        comment: "good effort",
+        gradedBy: "grader-1",
+        gradedAt: NOW,
+      }),
+    ];
+    const { repo, created } = makeWorksetRepo(existing);
+
+    const result = await submitAttempt(attRepo, repo, "attempt-1", NOW);
+
+    expect(result.status).toBe("graded");
+    expect(created).toHaveLength(0);
+  });
+
+  it("fresh submit with pre-existing entries: fails closed", async () => {
+    const attempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [objectiveSnapshot("q-obj", 40, "a")],
+      answers: [{ questionId: "q-obj", answer: "a", version: 1, savedAt: NOW }],
+    });
+    const attRepo = makeAttemptRepo(attempt);
+    const existing: StoredEntry[] = [
+      makeEntry("attempt-1", "q-obj", {
+        gradingMode: "auto",
+        status: "completed_auto",
+        maxScore: 40,
+        earnedScore: 0,
+      }),
+    ];
+    const { repo } = makeWorksetRepo(existing);
+
+    await expect(
+      submitAttempt(attRepo, repo, "attempt-1", NOW),
+    ).rejects.toThrow(/before authoritative submission freeze/i);
   });
 });

@@ -8,11 +8,7 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
-import {
-  submitAttempt,
-  gradeAttemptIdempotent,
-  materializeGradingWorkset,
-} from "@exam/exam-engine";
+import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import {
@@ -127,21 +123,15 @@ export async function autoSubmitAndGrade(
     // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
     // (source = deadline_scanner). P3-L0-2: record submissionReason='deadline'
     // so the frozen submitted_answers carries the deadline-trigger marker.
-    await submitAttempt(attempts, attemptId, now, {
+    // P3-L0-2E: submitAttempt owns grading workset materialization.
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      ctx,
+    );
+    await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
       source: "deadline_scanner",
       submissionReason: "deadline",
     });
-
-    // P3-L0-2E: materialize the durable grading workset from the frozen
-    // submitted_answers before grading.
-    const submitted = await attempts.findByIdForUpdate(attemptId);
-    if (submitted) {
-      const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-        createAttemptGradingEntryRepo(tx),
-        ctx,
-      );
-      await materializeGradingWorkset(submitted, gradingWorksetRepo);
-    }
 
     await gradeAttemptIdempotent(exams, enrollments, attempts, attemptId, now);
 

@@ -29,6 +29,11 @@ import {
   isTransitionOk,
   type AttemptCommand,
 } from "./attemptStateMachine.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import {
+  materializeGradingWorkset,
+  validateGradingWorksetConsistency,
+} from "./gradingWorkset.js";
 
 /** Repository interface for persisting exam attempt records. */
 export interface AttemptRepository {
@@ -225,26 +230,36 @@ export async function startOrRestoreAttempt(
 /**
  * Submits an attempt, transitioning in_progress/disrupted -> submitted.
  *
+ * This is the SINGLE authoritative submit/freeze/materialization seam
+ * (P3-L0-2E). A successful return guarantees:
+ *
+ *   - `submitted_answers` is frozen from draft answers
+ *   - exactly one grading entry exists per frozen question
+ *   - every grading entry is consistent with frozen grading truth
+ *   - attempt lifecycle state is consistent with the grading workset
+ *
  * Row-lock discipline: the attempt is read via `findByIdForUpdate` so the
  * read → validate → write window is serialized against a concurrent
- * deadline-scanner autoSubmit (and admin force-submit) on the same row. This
- * matches `restoreAttempt` / `extendAttemptTime`. Callers that already hold a
- * transaction and a locked row (e.g. `submitAndGradeAttempt` TX1,
- * `autoSubmitAndGrade`, force-submit) pay only a harmless re-lock on the same
- * row; callers that do not pre-lock are still defended here.
+ * deadline-scanner autoSubmit (and admin force-submit) on the same row.
  *
  * ADR-005 Slice 3 §4.4 guard ordering (binding):
  * 1. Idempotent already-submitted path FIRST: if the attempt is already in a
- *    terminal/post-submit state (submitted/grading/graded), return it as-is.
- *    A re-submit after the deadline scanner already submitted must not be
- *    re-rejected by the early-submit guard.
+ *    terminal/post-submit state (submitted/grading/graded), validate the
+ *    existing workset for exact consistency and return it as-is. A re-submit
+ *    after the deadline scanner already submitted must not be re-rejected by
+ *    the early-submit guard.
  * 2. State-machine transition assertion.
  * 3. Only for a genuine in_progress/disrupted -> submitted transition with
  *    `source === "candidate"` -> apply minSubmitAfterStartMinutes. Other
  *    sources (deadline_scanner/proctor/system) bypass it.
+ *
+ * Workset materialization is owned by this function, NOT by callers. The
+ * `gradingWorksetRepo` parameter is REQUIRED — there is no valid production
+ * invocation that skips grading workset ownership.
  */
 export async function submitAttempt(
   attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
   attemptId: string,
   now: Date,
   opts: {
@@ -264,14 +279,19 @@ export async function submitAttempt(
     throw new ValidationError("Attempt not found");
   }
 
+  const existingEntries = await gradingWorksetRepo.findByAttempt(attemptId);
+
   // 1. Idempotent already-submitted path — runs BEFORE any other check.
   // P3-L0-2: do NOT rebuild submittedAnswers here — return the existing
   // frozen snapshot + reason + submittedAt unchanged (double-submit safety).
+  // P3-L0-2E: validate the existing workset for exact consistency — fail
+  // closed on partial, mismatched, or extra entries.
   if (
     attempt.status === "submitted" ||
     attempt.status === "grading" ||
     attempt.status === "graded"
   ) {
+    validateGradingWorksetConsistency(attempt, existingEntries);
     return attempt;
   }
 
@@ -301,11 +321,19 @@ export async function submitAttempt(
     }
   }
 
-  // 4. P3-L0-2 submit freeze barrier (ADR-008): normalize the locked draft
+  // 4. P3-L0-2E fresh-submit precondition: zero pre-existing grading entries.
+  // If entries exist before the authoritative submission freeze, the model is
+  // violated — fail closed. Do not merge, fill gaps, or delete-and-rebuild.
+  if (existingEntries.length > 0) {
+    throw new Error(
+      `Grading workset entries exist before authoritative submission freeze ` +
+        `for attempt ${attemptId}: found ${existingEntries.length} entries. ` +
+        "The submit freeze barrier must be the sole workset creation authority.",
+    );
+  }
+
+  // 5. P3-L0-2 submit freeze barrier (ADR-008): normalize the locked draft
   // answers into a clean SubmittedAnswersSnapshot BEFORE the status flip.
-  // After this update lands, any concurrent saveAnswer sees `submitted` and
-  // is rejected (ATTEMPT_ALREADY_SUBMITTED), so the frozen answers can no
-  // longer mutate. Grading reads this snapshot, not draft answers.
   const submittedAnswers = buildSubmittedAnswersSnapshot(
     attempt.answers,
     attempt.questionSnapshot,
@@ -314,13 +342,11 @@ export async function submitAttempt(
   // P3-L0-2C: classify the manual-grading requirement ONCE, at the freeze
   // barrier, from the authoritative frozen question snapshot. protocol §1.4
   // — text_response is the manual-grading QuestionType, NOT standardAnswer.
-  // The resulting gradingStatus is the single authoritative signal every
-  // downstream orchestrator consumes; callers MUST NOT independently rescan
-  // question types to decide lifecycle behavior.
   const gradingStatus = requiresManualGrading(attempt.questionSnapshot)
     ? GradingStatus.PendingManual
     : GradingStatus.AutoGraded;
 
+  // 6. Persist submit lifecycle state (freeze barrier).
   const submitted = await attemptRepo.update(attemptId, {
     status: "submitted",
     submittedAt: now,
@@ -329,6 +355,12 @@ export async function submitAttempt(
     gradingStatus,
   });
   if (!submitted) throw new ValidationError("Attempt not found after update");
+
+  // 7. P3-L0-2E: materialize the durable grading workset from frozen truth.
+  // This is the sole workset creation site. Atomic with the submit update
+  // within the same caller transaction.
+  await materializeGradingWorkset(submitted, gradingWorksetRepo);
+
   return submitted;
 }
 

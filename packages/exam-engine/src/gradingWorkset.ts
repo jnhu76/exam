@@ -20,8 +20,9 @@ import { gradeQuestion, isManualGradedQuestion } from "@exam/domain";
 export interface GradingWorksetRepository {
   /**
    * Returns all grading entries for an attempt, scoped to the caller's
-   * tenant. Used by {@link materializeGradingWorkset} for idempotent retry
-   * detection and by terminal aggregation.
+   * tenant. Used by {@link materializeGradingWorkset} for fresh-submit
+   * precondition check, by {@link validateGradingWorksetConsistency} for
+   * idempotent re-entry, and by terminal aggregation.
    */
   findByAttempt(attemptId: string): Promise<AttemptGradingEntry[]>;
 
@@ -45,6 +46,18 @@ export interface GradingWorksetRepository {
   ): Promise<void>;
 }
 
+/** Expected grading entry derived from frozen submitted truth. */
+export interface ExpectedGradingEntry {
+  questionId: string;
+  gradingMode: GradingEntryMode;
+  status: GradingEntryStatus;
+  maxScore: number;
+  earnedScore: number | null;
+  candidateAnswer: unknown;
+  standardAnswer: unknown;
+  correct: boolean | null;
+}
+
 /**
  * Builds the per-question answer lookup from the frozen `submitted_answers`
  * snapshot. Never reads mutable draft `answers`. Returns a Map keyed by
@@ -54,51 +67,37 @@ function buildFrozenAnswerMap(attempt: ExamAttempt): Map<string, unknown> {
   const submitted = attempt.submittedAnswers;
   if (!submitted) {
     throw new Error(
-      `Cannot materialize grading workset for attempt ${attempt.id}: ` +
+      `Cannot compute grading workset for attempt ${attempt.id}: ` +
         "submittedAnswers is null. The submit freeze barrier must run before " +
-        "materialization.",
+        "workset computation.",
     );
   }
   return new Map(submitted.answers.map((a) => [a.questionId, a.value]));
 }
 
 /**
- * Materializes the durable grading workset for a submitted attempt (P3-L0-2E).
+ * Computes the expected grading entries from frozen submitted truth (P3-L0-2E).
  *
- * Creates exactly one `attempt_grading_entries` row per frozen question:
- * - Objective questions (`single_choice`, `multiple_choice`, `true_false`,
- *   `fill_blank`) are auto-graded immediately via the canonical domain
- *   {@link gradeQuestion} and stored as `completed_auto`.
- * - `text_response` questions are stored as `pending_manual` with the frozen
- *   candidate answer and frozen standard answer for the grading view.
+ * Pure function — no side effects, no repo calls. Derives exactly one expected
+ * entry per frozen question from:
+ * - `attempt.submittedAnswers` (frozen at submit-freeze time)
+ * - `attempt.questionSnapshot` (frozen at attempt-creation time)
+ * - canonical `gradeQuestion` for objective scoring
+ * - canonical `isManualGradedQuestion` for manual classification
  *
- * Inputs are exclusively `submitted_answers` + the frozen `questionSnapshot`.
- * No live questions, no draft answer fallback.
- *
- * Idempotent: if entries already exist for this attempt (retry after a
- * crash), the function returns without creating duplicates. This is NOT
- * `ON CONFLICT DO NOTHING` — the function explicitly checks for existing
- * entries and only creates them when the workset is absent.
- *
- * Must be called inside the submit transaction holding the attempt row lock.
+ * No live questions, no draft answer fallback, no `standardAnswer` nullness
+ * classification.
  */
-export async function materializeGradingWorkset(
+export function computeExpectedGradingEntries(
   attempt: ExamAttempt,
-  repo: GradingWorksetRepository,
-): Promise<void> {
-  const existing = await repo.findByAttempt(attempt.id);
-  if (existing.length > 0) {
-    return;
-  }
-
+): ExpectedGradingEntry[] {
   const answerMap = buildFrozenAnswerMap(attempt);
 
-  const inputs = attempt.questionSnapshot.map((question: QuestionSnapshot) => {
+  return attempt.questionSnapshot.map((question: QuestionSnapshot) => {
     const candidateAnswer = answerMap.get(question.originalQuestionId) ?? null;
 
     if (isManualGradedQuestion(question)) {
       return {
-        attemptId: attempt.id,
         questionId: question.originalQuestionId,
         gradingMode: "manual" as GradingEntryMode,
         status: "pending_manual" as GradingEntryStatus,
@@ -112,7 +111,6 @@ export async function materializeGradingWorkset(
 
     const result = gradeQuestion(question, candidateAnswer);
     return {
-      attemptId: attempt.id,
       questionId: question.originalQuestionId,
       gradingMode: "auto" as GradingEntryMode,
       status: "completed_auto" as GradingEntryStatus,
@@ -123,6 +121,156 @@ export async function materializeGradingWorkset(
       correct: result.correct,
     };
   });
+}
 
-  await repo.bulkCreate(inputs);
+/**
+ * Materializes the durable grading workset for a fresh submit (P3-L0-2E).
+ *
+ * Creates exactly one `attempt_grading_entries` row per frozen question via a
+ * single atomic bulk insert. This function does NOT check for existing entries
+ * — the caller (submitAttempt) is responsible for ensuring the fresh-submit
+ * precondition (zero pre-existing entries) before calling this.
+ *
+ * Inputs are exclusively `submitted_answers` + the frozen `questionSnapshot`.
+ * No live questions, no draft answer fallback.
+ *
+ * Must be called inside the submit transaction holding the attempt row lock.
+ */
+export async function materializeGradingWorkset(
+  attempt: ExamAttempt,
+  repo: GradingWorksetRepository,
+): Promise<void> {
+  const expected = computeExpectedGradingEntries(attempt);
+
+  await repo.bulkCreate(
+    expected.map((e) => ({
+      attemptId: attempt.id,
+      ...e,
+    })),
+  );
+}
+
+/**
+ * Validates that existing workset entries exactly match the expected truth
+ * derived from the frozen attempt (P3-L0-2E idempotent re-entry).
+ *
+ * Throws on ANY inconsistency. Does not modify entries, does not fill gaps,
+ * does not repair partial state, does not overwrite mismatched rows.
+ *
+ * Validation checks per frozen question:
+ * - Entry exists (count + question ID set match)
+ * - `gradingMode` matches canonical classification
+ * - `maxScore` matches frozen `QuestionSnapshot.score`
+ * - Objective: `status === completed_auto` and `earnedScore` matches canonical
+ *   `gradeQuestion` result from frozen submitted answer
+ * - Manual: `status ∈ {pending_manual, completed_manual}`; pending requires
+ *   `earnedScore === null`; completed requires `0 <= earnedScore <= maxScore`
+ *
+ * @throws {Error} on any workset inconsistency.
+ */
+export function validateGradingWorksetConsistency(
+  attempt: ExamAttempt,
+  existing: AttemptGradingEntry[],
+): void {
+  const expected = computeExpectedGradingEntries(attempt);
+  const expectedMap = new Map(expected.map((e) => [e.questionId, e]));
+  const existingMap = new Map(existing.map((e) => [e.questionId, e]));
+
+  if (existing.length !== expected.length) {
+    throw new Error(
+      `Grading workset inconsistency for attempt ${attempt.id}: ` +
+        `expected ${expected.length} entries, found ${existing.length}. ` +
+        "Partial or extra workset entries are not repairable.",
+    );
+  }
+
+  for (const exp of expected) {
+    const entry = existingMap.get(exp.questionId);
+    if (!entry) {
+      throw new Error(
+        `Grading workset inconsistency for attempt ${attempt.id}: ` +
+          `missing entry for question ${exp.questionId}.`,
+      );
+    }
+
+    if (entry.gradingMode !== exp.gradingMode) {
+      throw new Error(
+        `Grading workset inconsistency for attempt ${attempt.id}, ` +
+          `question ${exp.questionId}: ` +
+          `gradingMode ${entry.gradingMode} != expected ${exp.gradingMode}.`,
+      );
+    }
+
+    if (entry.maxScore !== exp.maxScore) {
+      throw new Error(
+        `Grading workset inconsistency for attempt ${attempt.id}, ` +
+          `question ${exp.questionId}: ` +
+          `maxScore ${entry.maxScore} != expected ${exp.maxScore}.`,
+      );
+    }
+
+    if (exp.gradingMode === "auto") {
+      if (entry.status !== "completed_auto") {
+        throw new Error(
+          `Grading workset inconsistency for attempt ${attempt.id}, ` +
+            `question ${exp.questionId}: ` +
+            `auto entry status ${entry.status} != expected completed_auto.`,
+        );
+      }
+      if (entry.earnedScore !== exp.earnedScore) {
+        throw new Error(
+          `Grading workset inconsistency for attempt ${attempt.id}, ` +
+            `question ${exp.questionId}: ` +
+            `earnedScore ${entry.earnedScore} != expected ${exp.earnedScore} ` +
+            "(objective score must match canonical frozen truth).",
+        );
+      }
+    } else {
+      if (
+        entry.status !== "pending_manual" &&
+        entry.status !== "completed_manual"
+      ) {
+        throw new Error(
+          `Grading workset inconsistency for attempt ${attempt.id}, ` +
+            `question ${exp.questionId}: ` +
+            `manual entry status ${entry.status} is not valid ` +
+            "(expected pending_manual or completed_manual).",
+        );
+      }
+      if (entry.status === "pending_manual" && entry.earnedScore !== null) {
+        throw new Error(
+          `Grading workset inconsistency for attempt ${attempt.id}, ` +
+            `question ${exp.questionId}: ` +
+            "pending_manual entry must have null earnedScore.",
+        );
+      }
+      if (entry.status === "completed_manual") {
+        if (entry.earnedScore === null) {
+          throw new Error(
+            `Grading workset inconsistency for attempt ${attempt.id}, ` +
+              `question ${exp.questionId}: ` +
+              "completed_manual entry must have non-null earnedScore.",
+          );
+        }
+        if (entry.earnedScore < 0 || entry.earnedScore > entry.maxScore) {
+          throw new Error(
+            `Grading workset inconsistency for attempt ${attempt.id}, ` +
+              `question ${exp.questionId}: ` +
+              `completed_manual earnedScore ${entry.earnedScore} out of range ` +
+              `[0, ${entry.maxScore}].`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const entry of existing) {
+    if (!expectedMap.has(entry.questionId)) {
+      throw new Error(
+        `Grading workset inconsistency for attempt ${attempt.id}: ` +
+          `extra entry for question ${entry.questionId} ` +
+          "not in frozen QuestionSnapshot.",
+      );
+    }
+  }
 }

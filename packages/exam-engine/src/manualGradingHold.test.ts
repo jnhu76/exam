@@ -10,6 +10,7 @@ import type {
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { submitAttempt } from "./attemptCommands.js";
 import {
   finalizeGrading,
@@ -192,10 +193,15 @@ function makeRepos(
       return storedEnrollment;
     },
   };
+  const gradingWorksetRepo: GradingWorksetRepository = {
+    findByAttempt: async () => [],
+    bulkCreate: async () => {},
+  };
   return {
     examRepo,
     attemptRepo,
     enrollmentRepo,
+    gradingWorksetRepo,
     getAttempt: () => storedAttempt,
     getEnrollment: () => storedEnrollment,
   };
@@ -229,9 +235,13 @@ describe("P3-L0-2C: mixed objective + text_response submit hold", () => {
     });
     const repos = makeRepos(attempt);
 
-    const submitted = await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    const submitted = await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
 
     // Protocol §4.2 step 6/8: submit freeze barrier sets BOTH the lifecycle
     // status AND the authoritative gradingStatus.
@@ -261,9 +271,13 @@ describe("P3-L0-2C: mixed objective + text_response submit hold", () => {
     });
     const repos = makeRepos(attempt);
 
-    await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
 
     // After submit, the attempt MUST rest at submitted + pending_manual.
     // The historical bug advanced to graded in the same submit transaction.
@@ -289,9 +303,13 @@ describe("P3-L0-2C: pure text_response submit hold", () => {
     });
     const repos = makeRepos(textOnly);
 
-    const submitted = await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    const submitted = await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
 
     expect(submitted.status).toBe("submitted");
     expect(submitted.gradingStatus).toBe("pending_manual");
@@ -310,9 +328,13 @@ describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
     const repos = makeRepos(objectiveOnly);
 
     // Submit then finalize via the synchronous objective path.
-    await submitAttempt(repos.attemptRepo, "attempt-1", NOW, {
-      source: "candidate",
-    });
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
     const result = computeGradingResult(repos.getAttempt(), makeExam(), NOW);
     await finalizeGrading(
       repos.enrollmentRepo,

@@ -21,7 +21,6 @@ import {
   gradeAttemptIdempotent,
   flagMisconduct,
   extendAttemptTime,
-  materializeGradingWorkset,
 } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -208,20 +207,14 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
             // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
             // guard (source = "proctor" — the SubmitSource for admin/proctor
             // intervention; "admin" is not a valid SubmitSource value).
-            await submitAttempt(attempts, attemptId, now, {
+            // P3-L0-2E: submitAttempt owns grading workset materialization.
+            const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+              createAttemptGradingEntryRepo(tx),
+              ctx,
+            );
+            await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
               source: "proctor",
             });
-
-            // P3-L0-2E: materialize the durable grading workset from the
-            // frozen submitted_answers before grading.
-            const submitted = await attempts.findByIdForUpdate(attemptId);
-            if (submitted) {
-              const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-                createAttemptGradingEntryRepo(tx),
-                ctx,
-              );
-              await materializeGradingWorkset(submitted, gradingWorksetRepo);
-            }
           }
 
           // Grade inside the SAME locked tx. `gradeAttemptIdempotent` handles

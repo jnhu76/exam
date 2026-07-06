@@ -17,7 +17,6 @@ import {
   finalizeGrading,
 } from "./grading.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
-import { materializeGradingWorkset } from "./gradingWorkset.js";
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
@@ -122,19 +121,11 @@ export async function ensureAttemptDeadlineReconciled(
   // wall-clock reconciliation instant. submissionReason='deadline' marks the
   // freeze as deadline-triggered.
   //
-  // We reuse the existing grading pipeline: readGradingSnapshot →
-  // computeGradingResult → finalizeGrading. The freeze itself (building
-  // SubmittedAnswersSnapshot) is owned by submitAttempt (P3-L0-2); we pass
-  // the effective deadline as `now` so the frozen submittedAt is correct.
-  // submitAttempt is a static import (no circular dep — attemptCommands does
-  // not import from this module).
-  //
-  // P3-L0-2C: submitAttempt now establishes the authoritative gradingStatus
-  // at the freeze barrier. Branch on it — a pending_manual attempt MUST hold
-  // at submitted (protocol §3.3); only completeManualGrading may advance it.
-  // No per-caller question-type rescan here.
+  // P3-L0-2E: submitAttempt owns the grading workset materialization. The
+  // gradingWorksetRepo is passed through — no caller-level materialize call.
   const submittedAttempt = await submitAttempt(
     attemptRepo,
+    gradingWorksetRepo,
     attemptId,
     effectiveDeadline,
     {
@@ -142,12 +133,6 @@ export async function ensureAttemptDeadlineReconciled(
       submissionReason: "deadline",
     },
   );
-
-  // P3-L0-2E: materialize the durable grading workset from the frozen
-  // submitted_answers. Must happen inside the same transaction as the
-  // submit freeze. Idempotent — a retry after a crash is a no-op if entries
-  // already exist.
-  await materializeGradingWorkset(submittedAttempt, gradingWorksetRepo);
 
   if (submittedAttempt.gradingStatus === GradingStatus.PendingManual) {
     return submittedAttempt;
