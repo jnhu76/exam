@@ -22,9 +22,22 @@ export interface GradingWorksetRepository {
    * Returns all grading entries for an attempt, scoped to the caller's
    * tenant. Used by {@link materializeGradingWorkset} for fresh-submit
    * precondition check, by {@link validateGradingWorksetConsistency} for
-   * idempotent re-entry, and by terminal aggregation.
+   * idempotent re-entry, by {@link reconcileScores} for terminal aggregation,
+   * and by {@link gradeQuestion} to read the per-question manual state.
    */
   findByAttempt(attemptId: string): Promise<AttemptGradingEntry[]>;
+
+  /**
+   * Returns the single grading entry for (attemptId, questionId), scoped to
+   * the caller's tenant, or null when no entry exists. Slice 3 authoritative
+   * manual-work lookup: {@link gradeQuestion} consumes this to fail closed on
+   * a missing entry and to authorize grading from the materialized
+   * `gradingMode` (NOT from question-type/standardAnswer rescanning).
+   */
+  findByAttemptAndQuestion(
+    attemptId: string,
+    questionId: string,
+  ): Promise<AttemptGradingEntry | null>;
 
   /**
    * Bulk-inserts grading workset entries. Exactly one entry per frozen
@@ -44,6 +57,33 @@ export interface GradingWorksetRepository {
       correct: boolean | null;
     }>,
   ): Promise<void>;
+
+  /**
+   * Updates the single (attemptId, questionId) entry to completed_manual with
+   * the grader's awarded score. Slice 3 manual-score write authority —
+   * {@link gradeQuestion} reads the entry first then calls this to UPDATE the
+   * SAME row (no second row created). Targets pending_manual OR
+   * completed_manual (re-grade) entries; never creates a new row. Returns the
+   * updated entry or null if no row matched (which the caller treats as a
+   * fail-closed missing-entry condition).
+   */
+  completeManualEntry(input: {
+    attemptId: string;
+    questionId: string;
+    earnedScore: number;
+    maxScore: number;
+    comment: string;
+    gradedBy: string;
+    gradedAt: Date;
+    now: Date;
+  }): Promise<AttemptGradingEntry | null>;
+
+  /**
+   * Counts the remaining pending_manual manual-mode entries for an attempt,
+   * scoped to the caller's tenant. {@link gradeQuestion} uses this to detect
+   * terminal completion (when the last manual question has been scored).
+   */
+  countPendingManualForAttempt(attemptId: string): Promise<number>;
 }
 
 /** Expected grading entry derived from frozen submitted truth. */

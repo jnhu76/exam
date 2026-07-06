@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  AttemptGradingEntry,
   Exam,
   ExamAttempt,
   ExamEnrollment,
@@ -13,10 +14,7 @@ import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { submitAttempt } from "./attemptCommands.js";
 import { computeGradingResult } from "./grading.js";
-import {
-  gradeQuestion,
-  type ManualGradingRepository,
-} from "./manualGrading.js";
+import { gradeQuestion, type GradeQuestionResult } from "./manualGrading.js";
 
 /**
  * P3-L0-2D — Manual-Grading Completion Integrity Closure (RED→GREEN).
@@ -220,10 +218,7 @@ function makeRepos(
       return storedEnrollment;
     },
   };
-  const gradingWorksetRepo: GradingWorksetRepository = {
-    findByAttempt: async () => [],
-    bulkCreate: async () => {},
-  };
+  const gradingWorksetRepo = makeInMemoryWorksetRepo();
   return {
     examRepo,
     attemptRepo,
@@ -234,24 +229,71 @@ function makeRepos(
   };
 }
 
-function makeManualRepo(
-  initial: Array<{ questionId: string; score: number }> = [],
-) {
-  const entries = new Map(initial.map((e) => [e.questionId, e]));
-  const repo: ManualGradingRepository = {
-    upsert: async (input) => {
-      entries.set(input.questionId, {
-        questionId: input.questionId,
-        score: input.score,
-      });
+/**
+ * Builds an in-memory {@link GradingWorksetRepository} backing BOTH the
+ * submit-freeze materialization (`bulkCreate`) and the manual-grading command
+ * (`findByAttemptAndQuestion` / `completeManualEntry` /
+ * `countPendingManualForAttempt` / `findByAttempt`). Slice 3 unified the
+ * manual-score write path onto the workset surface, so a single store now
+ * serves the whole lifecycle in these engine tests — exactly mirroring the
+ * single durable `attempt_grading_entries` table the production adapter
+ * fronts.
+ */
+function makeInMemoryWorksetRepo(): GradingWorksetRepository {
+  const store = new Map<string, AttemptGradingEntry>();
+  let counter = 0;
+  return {
+    findByAttempt: async (attemptId) =>
+      Array.from(store.values())
+        .filter((e) => e.attemptId === attemptId)
+        .map((e) => ({ ...e })),
+    findByAttemptAndQuestion: async (attemptId, questionId) => {
+      const found = store.get(`${attemptId}:${questionId}`);
+      return found ? { ...found } : null;
     },
-    findByAttempt: async () =>
-      Array.from(entries.values()).map((e) => ({
-        questionId: e.questionId,
-        score: e.score,
-      })),
+    bulkCreate: async (inputs) => {
+      for (const input of inputs) {
+        const key = `${input.attemptId}:${input.questionId}`;
+        if (store.has(key)) {
+          throw new Error(`duplicate grading entry for ${key}`);
+        }
+        store.set(key, {
+          id: `entry-${++counter}`,
+          organizationId: "org-1",
+          comment: "",
+          gradedBy: null,
+          gradedAt: null,
+          createdAt: NOW,
+          updatedAt: NOW,
+          ...input,
+        });
+      }
+    },
+    completeManualEntry: async (input) => {
+      const key = `${input.attemptId}:${input.questionId}`;
+      const existing = store.get(key);
+      if (!existing) return null;
+      const updated: AttemptGradingEntry = {
+        ...existing,
+        status: "completed_manual",
+        earnedScore: input.earnedScore,
+        correct: input.earnedScore >= input.maxScore,
+        comment: input.comment,
+        gradedBy: input.gradedBy,
+        gradedAt: input.gradedAt,
+        updatedAt: input.now,
+      };
+      store.set(key, updated);
+      return { ...updated };
+    },
+    countPendingManualForAttempt: async (attemptId) =>
+      Array.from(store.values()).filter(
+        (e) =>
+          e.attemptId === attemptId &&
+          e.gradingMode === "manual" &&
+          e.status === "pending_manual",
+      ).length,
   };
-  return { repo };
 }
 
 /**
@@ -307,17 +349,16 @@ async function runMixedLifecycle(input: {
   }
 
   // 3. Manual grade each text_response question through the real command.
-  const { repo: manualRepo } = makeManualRepo();
-  let lastResult: {
-    gradingStatus?: ExamAttempt["gradingStatus"];
-    fullyGraded?: boolean;
-    totalScore?: number;
-    passed?: boolean;
-  } = {};
+  //    Slice 3: the SAME workset repo that submitAttempt materialized into is
+  //    the manual-score authority — gradeQuestion updates its entries in place.
+  let lastResult: GradeQuestionResult = {
+    gradingStatus: "pending_manual",
+    fullyGraded: false,
+  };
   for (const m of input.manualScores) {
     lastResult = await gradeQuestion(
       repos.attemptRepo,
-      manualRepo,
+      repos.gradingWorksetRepo,
       "attempt-1",
       m.questionId,
       m.score,
@@ -498,11 +539,10 @@ describe("P3-L0-2D D: multi-manual partial completion", () => {
       NOW,
       { source: "candidate" },
     );
-    const { repo: manualRepo } = makeManualRepo();
 
     const partial = await gradeQuestion(
       repos.attemptRepo,
-      manualRepo,
+      repos.gradingWorksetRepo,
       "attempt-1",
       "q-text-1",
       20,

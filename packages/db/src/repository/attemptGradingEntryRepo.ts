@@ -152,10 +152,16 @@ export function createAttemptGradingEntryRepo(db: Database) {
     },
 
     /**
-     * Updates a pending_manual entry to completed_manual with the grader's
-     * awarded score, comment, and identity. Uses the unique
-     * (attemptId, questionId) constraint to target exactly one row. Must be
-     * called inside a transaction holding the attempt row lock.
+     * Updates a pending_manual (or already completed_manual on re-grade) entry
+     * to completed_manual with the grader's awarded score, comment, and
+     * identity. Targets exactly one row by the unique (attemptId, questionId)
+     * constraint, scoped to the tenant. Must be called inside a transaction
+     * holding the attempt row lock.
+     *
+     * Slice 3 authoritative manual-score write path: the manual grading command
+     * reads the entry first (fail-closed when missing, reject when gradingMode
+     * != manual) and then calls this to UPDATE the SAME entry. No second row is
+     * ever created; re-grades overwrite the existing row.
      */
     async completeManualEntry(
       ctx: TenantContext | RequestContext,
@@ -182,6 +188,33 @@ export function createAttemptGradingEntryRepo(db: Database) {
         )
         .returning();
       return (updated[0] as AttemptGradingEntrySelect | undefined) ?? null;
+    },
+
+    /**
+     * Counts the remaining pending_manual manual-mode entries for an attempt,
+     * scoped to the tenant. The manual grading command uses this to detect
+     * terminal completion (when the last manual question is scored).
+     */
+    async countPendingManualForAttempt(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ): Promise<number> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(attemptGradingEntries)
+        .where(
+          and(
+            eq(attemptGradingEntries.organizationId, orgId),
+            eq(attemptGradingEntries.attemptId, attemptId),
+            eq(attemptGradingEntries.gradingMode, "manual" as GradingEntryMode),
+            eq(
+              attemptGradingEntries.status,
+              "pending_manual" as GradingEntryStatus,
+            ),
+          ),
+        );
+      return Number((rows[0] as { count: number } | undefined)?.count ?? 0);
     },
 
     /**

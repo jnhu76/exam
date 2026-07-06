@@ -352,51 +352,6 @@ export const examAttempts = pgTable(
 );
 
 /**
- * Manual grading entries — one grader's score + comment for one subjective
- * question within one attempt (P2D-J2). Uniqueness of (attemptId, questionId)
- * prevents duplicate entries for the same question in the same attempt.
- */
-export const manualGradingEntries = pgTable(
-  "manual_grading_entries",
-  {
-    id: id(),
-    organizationId: organizationId().references(() => organizations.id),
-    attemptId: text("attempt_id")
-      .notNull()
-      .references(() => examAttempts.id),
-    questionId: text("question_id").notNull(),
-    score: doublePrecision("score").notNull(),
-    maxScore: doublePrecision("max_score").notNull(),
-    comment: text("comment").notNull().default(""),
-    gradedBy: text("graded_by").notNull(),
-    gradedAt: timestamp("graded_at", {
-      withTimezone: true,
-      mode: "date",
-    }).notNull(),
-    createdAt: createdAt(),
-    updatedAt: updatedAt(),
-  },
-  (table) => [
-    uniqueIndex("manual_grading_entries_attempt_question_unique").on(
-      table.attemptId,
-      table.questionId,
-    ),
-    // Data-integrity guards at the DB boundary (mirrors the exams table's
-    // check-constraint convention). Application-level (Zod) validation is the
-    // primary gate; these protect persisted data against direct DB writes.
-    check("manual_grading_entries_score_check", sql`${table.score} >= 0`),
-    check(
-      "manual_grading_entries_max_score_check",
-      sql`${table.maxScore} >= 0`,
-    ),
-    check(
-      "manual_grading_entries_score_limit_check",
-      sql`${table.score} <= ${table.maxScore}`,
-    ),
-  ],
-);
-
-/**
  * Attempt grading entries — the materialized per-question grading workset
  * (P3-L0-2E). One durable row per frozen question per attempt, created at
  * submit-freeze time from `submitted_answers` + the frozen `QuestionSnapshot`.
@@ -728,7 +683,6 @@ export const schema = {
   exams,
   examEnrollments,
   examAttempts,
-  manualGradingEntries,
   attemptGradingEntries,
   auditLogs,
   clientEvents,

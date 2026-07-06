@@ -113,6 +113,10 @@ function makeWorksetRepo(existing: StoredEntry[] = []) {
         .filter((e) => e.attemptId === attemptId)
         .map((e) => ({ ...e }));
     },
+    async findByAttemptAndQuestion(attemptId, questionId) {
+      const found = store.get(`${attemptId}:${questionId}`);
+      return found ? { ...found } : null;
+    },
     async bulkCreate(inputs) {
       for (const input of inputs) {
         const key = `${input.attemptId}:${input.questionId}`;
@@ -134,6 +138,31 @@ function makeWorksetRepo(existing: StoredEntry[] = []) {
         store.set(key, entry);
         created.push(entry);
       }
+    },
+    async completeManualEntry(input) {
+      const key = `${input.attemptId}:${input.questionId}`;
+      const existing = store.get(key);
+      if (!existing) return null;
+      const updated: StoredEntry = {
+        ...existing,
+        status: "completed_manual",
+        earnedScore: input.earnedScore,
+        correct: input.earnedScore >= input.maxScore,
+        comment: input.comment,
+        gradedBy: input.gradedBy,
+        gradedAt: input.gradedAt,
+        updatedAt: input.now,
+      };
+      store.set(key, updated);
+      return { ...updated };
+    },
+    async countPendingManualForAttempt(attemptId) {
+      return Array.from(store.values()).filter(
+        (e) =>
+          e.attemptId === attemptId &&
+          e.gradingMode === "manual" &&
+          e.status === "pending_manual",
+      ).length;
     },
   };
   return { repo, created, store };

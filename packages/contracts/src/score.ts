@@ -37,27 +37,11 @@ export const GradingStatusEnum = z.enum([
  * for one subjective question within one attempt. Uniqueness of
  * (attemptId, questionId) is enforced at the DB layer.
  *
- * `questionId` is the `QuestionSnapshot.originalQuestionId` (not necessarily
- * a uuid), so it is validated as a plain string.
+ * P3-L0-2E Slice 3: manual grading entries now live in
+ * `attempt_grading_entries` (status `completed_manual`). The legacy
+ * `manual_grading_entries` table and its dedicated DTO are removed; the
+ * public grading-details/grade-question response shapes remain unchanged.
  */
-export const ManualGradingEntrySchema = z
-  .object({
-    id: z.string().uuid(),
-    attemptId: z.string().uuid(),
-    questionId: z.string().min(1),
-    score: z.number().min(0),
-    maxScore: z.number().min(0),
-    comment: z.string().max(2000).default(""),
-    gradedBy: z.string().uuid(),
-    gradedAt: z.string().datetime(),
-  })
-  .refine((data) => data.score <= data.maxScore, {
-    message: "score must be less than or equal to maxScore",
-    path: ["score"],
-  });
-
-/** DTO for a manual grading entry. */
-export type ManualGradingEntryDTO = z.infer<typeof ManualGradingEntrySchema>;
 
 // ── Grading Queue (P2D-J3) ───────────────────────────────────────
 

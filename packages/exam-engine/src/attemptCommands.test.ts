@@ -205,6 +205,10 @@ function makeWorksetRepo(
         (e) => e.attemptId === attemptId,
       );
     },
+    findByAttemptAndQuestion: async (attemptId, questionId) => {
+      const found = store.get(`${attemptId}:${questionId}`);
+      return found ? { ...found } : null;
+    },
     bulkCreate: async (inputs) => {
       for (const input of inputs) {
         const key = `${input.attemptId}:${input.questionId}`;
@@ -223,6 +227,30 @@ function makeWorksetRepo(
         });
       }
     },
+    completeManualEntry: async (input) => {
+      const key = `${input.attemptId}:${input.questionId}`;
+      const existing = store.get(key);
+      if (!existing) return null;
+      const updated: AttemptGradingEntry = {
+        ...existing,
+        status: "completed_manual",
+        earnedScore: input.earnedScore,
+        correct: input.earnedScore >= input.maxScore,
+        comment: input.comment,
+        gradedBy: input.gradedBy,
+        gradedAt: input.gradedAt,
+        updatedAt: input.now,
+      };
+      store.set(key, updated);
+      return { ...updated };
+    },
+    countPendingManualForAttempt: async (attemptId) =>
+      Array.from(store.values()).filter(
+        (e) =>
+          e.attemptId === attemptId &&
+          e.gradingMode === "manual" &&
+          e.status === "pending_manual",
+      ).length,
   };
   return repo;
 }

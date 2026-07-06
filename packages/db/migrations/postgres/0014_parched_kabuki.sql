@@ -1,0 +1,1 @@
+DROP TABLE "manual_grading_entries" CASCADE;

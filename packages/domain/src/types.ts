@@ -442,32 +442,6 @@ export interface QuestionScoreResult {
   standardAnswer: unknown;
 }
 
-// ── Manual Grading Entry (P2D-J2) ────────────────────────────────
-
-/**
- * A single manual grading entry: one grader's score + comment for one
- * subjective question within one attempt.
- *
- * Uniqueness of (attemptId, questionId) is enforced at the DB layer.
- * `questionId` joins `QuestionSnapshot.originalQuestionId`. `gradedBy` is
- * the Admin userId in Phase 2 (the Grader role is a Phase 3+ bundle).
- */
-export interface ManualGradingEntry {
-  id: string;
-  organizationId: string;
-  attemptId: string;
-  questionId: string;
-  score: number;
-  maxScore: number;
-  /** Free-text grader comment; empty string when none. */
-  comment: string;
-  gradedBy: string;
-  /** Server-authoritative grading timestamp. */
-  gradedAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 // ── Attempt Grading Entry (P3-L0-2E) ─────────────────────────────
 
 /**

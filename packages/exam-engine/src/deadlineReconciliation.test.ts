@@ -183,7 +183,10 @@ function makeRepos(
   };
   const gradingWorksetRepo: GradingWorksetRepository = {
     findByAttempt: async () => [],
+    findByAttemptAndQuestion: async () => null,
     bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
   };
   return { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo };
 }
