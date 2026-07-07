@@ -31,20 +31,30 @@ function extractValidationIssues(error: unknown): ZodIssue[] {
 }
 
 /**
- * Checks whether an error represents a database unique-constraint violation.
- * Matches PostgreSQL error code `23505` and common duplicate-key message
- * patterns.
+ * Checks whether an error represents a database unique-constraint violation
+ * or serialization failure. These are retryable concurrency errors.
+ *
+ * 23505 = unique_violation — duplicate key value violation
+ * 40001 = serialization_failure — "could not serialize access due to
+ *         concurrent update" — occurs in REPEATABLE READ isolation when
+ *         two transactions race to lock the same row.
  */
 function isConstraintError(err: unknown): boolean {
   if (typeof err !== "object" || err === null) return false;
   const e = err as Record<string, unknown>;
-  if (e.code === "23505") return true;
+  if (e.code === "23505" || e.code === "40001") return true;
   const cause = e.cause as Record<string, unknown> | undefined;
-  if (cause && typeof cause === "object" && cause.code === "23505") return true;
+  if (
+    cause &&
+    typeof cause === "object" &&
+    (cause.code === "23505" || cause.code === "40001")
+  )
+    return true;
   if (
     typeof e.message === "string" &&
     (e.message.includes("duplicate key") ||
-      e.message.includes("unique constraint"))
+      e.message.includes("unique constraint") ||
+      e.message.includes("serialize"))
   )
     return true;
   return false;
