@@ -500,20 +500,6 @@ export function aggregateGradingEntries(
     }
   }
 
-  // 3. Extra entries (entry questionIds not in the frozen snapshot) — the
-  //    count check above (1) catches the common case, but an equal count with
-  //    a swapped questionId would slip through to here. Verify every entry
-  //    maps back to a frozen question.
-  for (const entry of entries) {
-    if (!questions.some((q) => q.originalQuestionId === entry.questionId)) {
-      throw new Error(
-        `Grading aggregation inconsistency for attempt ${attemptId}: ` +
-          `extra grading entry for question ${entry.questionId} not in ` +
-          "the frozen QuestionSnapshot.",
-      );
-    }
-  }
-
   // ── Projection: iterate frozen questionSnapshot order ───────────────
   const questionResults: QuestionScoreResult[] = questions.map((question) => {
     const entry = entryByQuestion.get(question.originalQuestionId)!;

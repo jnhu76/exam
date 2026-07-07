@@ -197,16 +197,40 @@ export function buildCandidateTakeSnapshot(
     }
   }
 
+  // Build answer metadata lookup (clientSeq, version) for restoring
+  // client-side state on page reload.
+  const answerMetaMap = new Map<
+    string,
+    { clientSeq?: number; version: number }
+  >();
+  for (const a of attempt.answers as Array<{
+    questionId: string;
+    clientSeq?: number;
+    version: number;
+  }>) {
+    answerMetaMap.set(a.questionId, {
+      ...(a.clientSeq !== undefined ? { clientSeq: a.clientSeq } : {}),
+      version: a.version,
+    });
+  }
+
   // Build questions with answerSource routing (L0 §6.1)
   const questions = attempt.questionSnapshot.map((q) => {
     let answerValue: unknown = null;
     let answerSource: "draft" | "submitted" | "none" = "none";
+    let currentClientSeq: number | undefined;
+    let currentVersion: number | undefined;
 
     if (attemptStatus === "in_progress" || attemptStatus === "disrupted") {
       // Draft answers
       if (answerMap.has(q.originalQuestionId)) {
         answerValue = answerMap.get(q.originalQuestionId);
         answerSource = "draft";
+        const meta = answerMetaMap.get(q.originalQuestionId);
+        if (meta) {
+          currentClientSeq = meta.clientSeq;
+          currentVersion = meta.version;
+        }
       }
     } else if (
       attemptStatus === "submitted" ||
@@ -231,6 +255,8 @@ export function buildCandidateTakeSnapshot(
       maxScore: q.score,
       answerValue,
       answerSource,
+      currentClientSeq,
+      currentVersion,
     };
   });
 

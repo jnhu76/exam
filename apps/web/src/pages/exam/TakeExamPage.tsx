@@ -174,11 +174,11 @@ export function TakeExamPage() {
       for (const q of data.questions) {
         if (q.answerValue != null) {
           answerMap.set(q.id, q.answerValue);
-          // Draft answers carry no version; initialize at 0 so the first
-          // save uses baseVersion=0. Server returns the real version on
-          // accept and we track it from there.
-          versionMap.set(q.id, 0);
-          clientSeqMap.set(q.id, 0);
+          // Restore server version and last clientSeq from snapshot so the
+          // first save after reload uses a correct baseVersion and a fresh
+          // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
+          versionMap.set(q.id, q.currentVersion ?? 0);
+          clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
         }
       }
       setAnswers(answerMap);

@@ -25,7 +25,7 @@ export function TextResponseInput({
 }) {
   return (
     <SubjectiveAnswerInput
-      value={value}
+      value={value ?? ""}
       onChange={onChange}
       readOnly={disabled}
     />
