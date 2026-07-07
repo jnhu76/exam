@@ -541,6 +541,8 @@ export const CandidateTakeQuestionSchema = z.object({
   maxScore: z.number(),
   answerValue: z.unknown().nullable(),
   answerSource: AnswerSourceEnum,
+  currentClientSeq: z.number().int().optional(),
+  currentVersion: z.number().int().optional(),
 });
 export type CandidateTakeQuestion = z.infer<typeof CandidateTakeQuestionSchema>;
 

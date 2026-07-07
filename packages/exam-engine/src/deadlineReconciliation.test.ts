@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
+import type {
+  AttemptGradingEntry,
+  Exam,
+  ExamAttempt,
+  ExamEnrollment,
+} from "@exam/domain";
 import type {
   AttemptRepository,
   EnrollmentRepository,
 } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import { computeGradingResult } from "./grading.js";
 import {
   ensureAttemptDeadlineReconciled,
   computeEffectiveDeadline,
@@ -180,19 +187,90 @@ function makeRepos(
       return enrStore[idx]!;
     },
   };
-  return { attemptRepo, examRepo, enrollmentRepo };
+  // Slice 4: finalizeGrading aggregates from the workset. The stub must:
+  //  - store entries materialized by submitAttempt (bulkCreate) so mixed /
+  //    text_response holds see pending_manual entries, and
+  //  - for pure-objective attempts that reach finalizeGrading directly,
+  //    synthesize completed_auto entries from the canonical auto-grader.
+  const worksetStore = new Map<string, AttemptGradingEntry[]>();
+  const gradingWorksetRepo: GradingWorksetRepository = {
+    findByAttempt: async (id) => {
+      const stored = worksetStore.get(id);
+      if (stored) return stored.map((e) => ({ ...e }));
+      const att = attemptStore.find((a) => a.id === id);
+      if (!att) return [];
+      // Only synthesize for already-submitted/graded attempts. For
+      // in_progress/disrupted, return [] so submitAttempt's fresh-freeze
+      // precondition (zero entries) passes.
+      if (att.status === "in_progress" || att.status === "disrupted") return [];
+      const ex = examStore.find((e) => e.id === att.examId);
+      if (!ex) return [];
+      const r = computeGradingResult(att, ex, new Date());
+      return r.questionResults.map((qr) => ({
+        id: `entry-${qr.questionId}`,
+        organizationId: att.organizationId,
+        attemptId: att.id,
+        questionId: qr.questionId,
+        gradingMode: "auto" as const,
+        status: "completed_auto" as const,
+        maxScore: qr.maxScore,
+        earnedScore: qr.score,
+        candidateAnswer: qr.candidateAnswer,
+        standardAnswer: qr.standardAnswer,
+        correct: qr.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    },
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async (inputs) => {
+      const rows: AttemptGradingEntry[] = inputs.map((inp) => ({
+        id: `entry-${inp.questionId}`,
+        organizationId: "org-1",
+        attemptId: inp.attemptId,
+        questionId: inp.questionId,
+        gradingMode: inp.gradingMode,
+        status: inp.status,
+        maxScore: inp.maxScore,
+        earnedScore: inp.earnedScore,
+        candidateAnswer: inp.candidateAnswer,
+        standardAnswer: inp.standardAnswer,
+        correct: inp.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+      const aid = inputs[0]?.attemptId ?? "attempt-1";
+      worksetStore.set(aid, rows);
+    },
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async (id) => {
+      const rows = worksetStore.get(id) ?? [];
+      return rows.filter(
+        (e) => e.gradingMode === "manual" && e.status === "pending_manual",
+      ).length;
+    },
+  };
+  return { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo };
 }
 
 describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   it("freezes an expired in_progress attempt to submitted with submitted_answers", async () => {
     const now = new Date("2025-01-01T11:30:00Z"); // after deadline 11:00
     const attempt = makeAttempt({ status: "in_progress" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -212,12 +290,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       status: "in_progress",
       deadlineAt: new Date("2025-01-01T10:30:00Z"), // earlier than exam closeAt
     });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -229,12 +309,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   it("returns the attempt unchanged when not expired", async () => {
     const now = new Date("2025-01-01T10:30:00Z"); // before deadline 11:00
     const attempt = makeAttempt({ status: "in_progress" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -255,12 +337,14 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       submissionReason: "manual",
       submittedAt: new Date("2025-01-01T10:50:00Z"),
     });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
@@ -275,11 +359,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const now = new Date("2025-01-01T11:30:00Z");
     for (const status of ["not_started", "queued", "voided"] as const) {
       const attempt = makeAttempt({ status });
-      const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+      const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+        makeRepos([attempt]);
       const result = await ensureAttemptDeadlineReconciled(
         examRepo,
         enrollmentRepo,
         attemptRepo,
+        gradingWorksetRepo,
         "attempt-1",
         now,
       );
@@ -291,17 +377,169 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
   it("reconciles a disrupted attempt (disrupted is auto-submittable)", async () => {
     const now = new Date("2025-01-01T11:30:00Z");
     const attempt = makeAttempt({ status: "disrupted" });
-    const { attemptRepo, examRepo, enrollmentRepo } = makeRepos([attempt]);
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
 
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
+      gradingWorksetRepo,
       "attempt-1",
       now,
     );
 
     expect(result.status).toBe("graded");
+    expect(result.submissionReason).toBe("deadline");
+  });
+});
+
+// ── P3-L0-2C: manual-grading hold on the deadline path ────────────
+// Protocol §3.3: an expired text_response / mixed attempt must hold at
+//   submitted + pending_manual (submissionReason='deadline'), NOT auto-
+//   finalize to graded. Only completeManualGrading may advance it.
+
+describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
+  it("holds an expired pure text_response attempt at submitted + pending_manual", async () => {
+    const now = new Date("2025-01-01T11:30:00Z"); // after deadline 11:00
+    const textAttempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [
+        {
+          originalQuestionId: "q-text",
+          type: "text_response",
+          content: "Subjective question",
+          attachments: [],
+          options: [],
+          standardAnswer: null,
+          score: 100,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: "按逻辑给分",
+        },
+      ],
+      answers: [
+        {
+          questionId: "q-text",
+          answer: "主观答案",
+          version: 1,
+          savedAt: new Date("2025-01-01T10:30:00Z"),
+        },
+      ],
+    });
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([textAttempt]);
+
+    const result = await ensureAttemptDeadlineReconciled(
+      examRepo,
+      enrollmentRepo,
+      attemptRepo,
+      gradingWorksetRepo,
+      "attempt-1",
+      now,
+    );
+
+    expect(result.status).toBe("submitted");
+    expect(result.gradingStatus).toBe("pending_manual");
+    expect(result.submissionReason).toBe("deadline");
+    expect(result.submittedAt).toEqual(new Date("2025-01-01T11:00:00Z"));
+    // submitted_answers must still be frozen.
+    expect(result.submittedAnswers).toEqual({
+      schemaVersion: 1,
+      answers: [{ questionId: "q-text", value: "主观答案" }],
+    });
+  });
+
+  it("holds an expired mixed (objective + text_response) attempt at submitted + pending_manual", async () => {
+    const now = new Date("2025-01-01T11:30:00Z");
+    const mixedAttempt = makeAttempt({
+      status: "in_progress",
+      questionSnapshot: [
+        {
+          originalQuestionId: "q-obj",
+          type: "true_false",
+          content: "Objective TF",
+          attachments: [],
+          options: [],
+          standardAnswer: true,
+          score: 50,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 0,
+          rubric: null,
+        },
+        {
+          originalQuestionId: "q-text",
+          type: "text_response",
+          content: "Subjective",
+          attachments: [],
+          options: [],
+          standardAnswer: null,
+          score: 50,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "exact",
+          },
+          order: 1,
+          rubric: "按逻辑给分",
+        },
+      ],
+      answers: [
+        {
+          questionId: "q-obj",
+          answer: true,
+          version: 1,
+          savedAt: new Date("2025-01-01T10:30:00Z"),
+        },
+        {
+          questionId: "q-text",
+          answer: "主观答案",
+          version: 1,
+          savedAt: new Date("2025-01-01T10:30:00Z"),
+        },
+      ],
+    });
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([mixedAttempt]);
+
+    const result = await ensureAttemptDeadlineReconciled(
+      examRepo,
+      enrollmentRepo,
+      attemptRepo,
+      gradingWorksetRepo,
+      "attempt-1",
+      now,
+    );
+
+    expect(result.status).toBe("submitted");
+    expect(result.gradingStatus).toBe("pending_manual");
+    expect(result.submissionReason).toBe("deadline");
+  });
+
+  it("still grades an expired pure-objective attempt inline (regression)", async () => {
+    // The deadline path's existing synchronous auto-grade behavior for
+    // pure-objective attempts must be preserved.
+    const now = new Date("2025-01-01T11:30:00Z");
+    const attempt = makeAttempt({ status: "in_progress" });
+    const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
+      makeRepos([attempt]);
+
+    const result = await ensureAttemptDeadlineReconciled(
+      examRepo,
+      enrollmentRepo,
+      attemptRepo,
+      gradingWorksetRepo,
+      "attempt-1",
+      now,
+    );
+
+    expect(result.status).toBe("graded");
+    expect(result.gradingStatus).toBe("auto_graded");
     expect(result.submissionReason).toBe("deadline");
   });
 });

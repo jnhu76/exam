@@ -45,12 +45,14 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { startOrRestoreAttempt, restoreAttempt } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
 import { ensureAttemptDeadlineReconciled } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
   createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
 import { recordAudit } from "./audit.js";
@@ -802,6 +804,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           exams,
           enrollments,
           attempts,
+          createGradingWorksetRepoAdapter(
+            createAttemptGradingEntryRepo(tx),
+            ctx,
+          ),
           parsed.data.attemptId,
           fastify.now(),
         );
@@ -912,6 +918,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           exams,
           enrollments,
           attempts,
+          createGradingWorksetRepoAdapter(
+            createAttemptGradingEntryRepo(tx),
+            ctx,
+          ),
           attemptId,
           now,
         );
@@ -1169,6 +1179,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           exams,
           enrollments,
           attempts,
+          createGradingWorksetRepoAdapter(
+            createAttemptGradingEntryRepo(tx),
+            ctx,
+          ),
           attemptId,
           fastify.now(),
         );

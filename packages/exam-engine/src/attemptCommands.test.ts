@@ -10,12 +10,14 @@ import {
   type EnrollmentRepository,
 } from "./attemptCommands.js";
 import type {
+  AttemptGradingEntry,
   Exam,
   ExamAttempt,
   ExamEnrollment,
   QuestionSnapshot,
   RequestContext,
 } from "@exam/domain";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import {
   AttemptDeadlineExceedsExamCloseError,
   ExamNotOpenError,
@@ -186,6 +188,95 @@ function makeAttemptRepo(attempts: ExamAttempt[] = []): AttemptRepository {
       store[idx] = { ...store[idx]!, ...data };
       return store[idx]!;
     },
+  };
+}
+
+function makeWorksetRepo(
+  existing: AttemptGradingEntry[] = [],
+): GradingWorksetRepository {
+  const store = new Map<string, AttemptGradingEntry>();
+  for (const e of existing) {
+    store.set(`${e.attemptId}:${e.questionId}`, e);
+  }
+  let counter = 0;
+  const repo: GradingWorksetRepository = {
+    findByAttempt: async (attemptId: string) => {
+      return Array.from(store.values()).filter(
+        (e) => e.attemptId === attemptId,
+      );
+    },
+    findByAttemptAndQuestion: async (attemptId, questionId) => {
+      const found = store.get(`${attemptId}:${questionId}`);
+      return found ? { ...found } : null;
+    },
+    bulkCreate: async (inputs) => {
+      for (const input of inputs) {
+        const key = `${input.attemptId}:${input.questionId}`;
+        if (store.has(key)) {
+          throw new Error(`duplicate grading entry for ${key}`);
+        }
+        store.set(key, {
+          id: `entry-${++counter}`,
+          organizationId: "org-1",
+          comment: "",
+          gradedBy: null,
+          gradedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...input,
+        });
+      }
+    },
+    completeManualEntry: async (input) => {
+      const key = `${input.attemptId}:${input.questionId}`;
+      const existing = store.get(key);
+      if (!existing) return null;
+      const updated: AttemptGradingEntry = {
+        ...existing,
+        status: "completed_manual",
+        earnedScore: input.earnedScore,
+        correct: input.earnedScore >= input.maxScore,
+        comment: input.comment,
+        gradedBy: input.gradedBy,
+        gradedAt: input.gradedAt,
+        updatedAt: input.now,
+      };
+      store.set(key, updated);
+      return { ...updated };
+    },
+    countPendingManualForAttempt: async (attemptId) =>
+      Array.from(store.values()).filter(
+        (e) =>
+          e.attemptId === attemptId &&
+          e.gradingMode === "manual" &&
+          e.status === "pending_manual",
+      ).length,
+  };
+  return repo;
+}
+
+function q1AutoEntry(
+  attemptId: string,
+  earnedScore: number,
+  candidateAnswer: unknown = null,
+): AttemptGradingEntry {
+  return {
+    id: "entry-q1",
+    organizationId: "org-1",
+    attemptId,
+    questionId: "q1",
+    gradingMode: "auto",
+    status: "completed_auto",
+    maxScore: 50,
+    earnedScore,
+    candidateAnswer,
+    standardAnswer: "a",
+    correct: earnedScore === 50,
+    comment: "",
+    gradedBy: null,
+    gradedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 }
 
@@ -620,8 +711,14 @@ describe("attemptCommands", () => {
     it("transitions in_progress → submitted", async () => {
       const attempt = makeAttempt();
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+      );
 
       expect(result.status).toBe("submitted");
       expect(result.submittedAt).toEqual(fixedNow);
@@ -631,19 +728,39 @@ describe("attemptCommands", () => {
     // the early-submit rejection. A re-submit of an already-submitted/graded
     // attempt returns the current attempt instead of erroring.
     it("returns idempotent success for an already-submitted attempt", async () => {
-      const attempt = makeAttempt({ status: "submitted" });
+      const attempt = makeAttempt({
+        status: "submitted",
+        submittedAnswers: { schemaVersion: 1, answers: [] },
+        gradingStatus: "auto_graded",
+      });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo([q1AutoEntry("attempt-1", 0)]);
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+      );
 
       expect(result.status).toBe("submitted");
     });
 
     it("returns idempotent success for a graded attempt", async () => {
-      const attempt = makeAttempt({ status: "graded" });
+      const attempt = makeAttempt({
+        status: "graded",
+        submittedAnswers: { schemaVersion: 1, answers: [] },
+        gradingStatus: "auto_graded",
+      });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo([q1AutoEntry("attempt-1", 0)]);
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+      );
 
       expect(result.status).toBe("graded");
     });
@@ -652,12 +769,19 @@ describe("attemptCommands", () => {
       const startedAt = new Date("2025-01-01T10:00:00Z");
       const attempt = makeAttempt({ status: "in_progress", startedAt });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
       await expect(
-        submitAttempt(attRepo, "attempt-1", new Date("2025-01-01T10:05:00Z"), {
-          source: "candidate",
-          minSubmitAfterStartMinutes: 30,
-        }),
+        submitAttempt(
+          attRepo,
+          wsRepo,
+          "attempt-1",
+          new Date("2025-01-01T10:05:00Z"),
+          {
+            source: "candidate",
+            minSubmitAfterStartMinutes: 30,
+          },
+        ),
       ).rejects.toThrow(/too early/i);
     });
 
@@ -665,9 +789,11 @@ describe("attemptCommands", () => {
       const startedAt = new Date("2025-01-01T10:00:00Z");
       const attempt = makeAttempt({ status: "in_progress", startedAt });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
       const result = await submitAttempt(
         attRepo,
+        wsRepo,
         "attempt-1",
         new Date("2025-01-01T10:31:00Z"),
         { source: "candidate", minSubmitAfterStartMinutes: 30 },
@@ -680,9 +806,11 @@ describe("attemptCommands", () => {
       const startedAt = new Date("2025-01-01T10:00:00Z");
       const attempt = makeAttempt({ status: "in_progress", startedAt });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
       const result = await submitAttempt(
         attRepo,
+        wsRepo,
         "attempt-1",
         new Date("2025-01-01T10:01:00Z"),
         { source: "deadline_scanner", minSubmitAfterStartMinutes: 30 },
@@ -693,9 +821,10 @@ describe("attemptCommands", () => {
 
     it("throws ValidationError for non-existent attempt", async () => {
       const attRepo = makeAttemptRepo();
+      const wsRepo = makeWorksetRepo();
 
       await expect(
-        submitAttempt(attRepo, "nonexistent", fixedNow),
+        submitAttempt(attRepo, wsRepo, "nonexistent", fixedNow),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -704,9 +833,11 @@ describe("attemptCommands", () => {
         deadlineAt: new Date("2025-01-01T09:00:00Z"),
       });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
       const result = await submitAttempt(
         attRepo,
+        wsRepo,
         "attempt-1",
         new Date("2025-01-01T11:00:00Z"),
       );
@@ -724,9 +855,10 @@ describe("attemptCommands", () => {
         create: () => attempt,
         update: () => null,
       };
+      const wsRepo = makeWorksetRepo();
 
       await expect(
-        submitAttempt(attRepo, "attempt-1", fixedNow),
+        submitAttempt(attRepo, wsRepo, "attempt-1", fixedNow),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -747,8 +879,9 @@ describe("attemptCommands", () => {
       };
       const findByIdSpy = vi.spyOn(attRepo, "findById");
       const findForUpdateSpy = vi.spyOn(attRepo, "findByIdForUpdate");
+      const wsRepo = makeWorksetRepo();
 
-      await submitAttempt(attRepo, "attempt-1", fixedNow);
+      await submitAttempt(attRepo, wsRepo, "attempt-1", fixedNow);
 
       expect(findForUpdateSpy).toHaveBeenCalledTimes(1);
       expect(findForUpdateSpy).toHaveBeenCalledWith("attempt-1");
@@ -789,17 +922,26 @@ describe("attemptCommands", () => {
         },
       };
       const updateSpy = vi.spyOn(attRepo, "update");
+      const wsRepo = makeWorksetRepo();
 
       // Candidate submits first, then the scanner observes the locked row and
       // must NOT mutate it again.
       const candidateNow = new Date("2025-01-01T10:45:00Z");
       const scannerNow = new Date("2025-01-01T10:46:00Z");
-      const first = await submitAttempt(attRepo, "attempt-1", candidateNow, {
-        source: "candidate",
-      });
-      const second = await submitAttempt(attRepo, "attempt-1", scannerNow, {
-        source: "deadline_scanner",
-      });
+      const first = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        candidateNow,
+        { source: "candidate" },
+      );
+      const second = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        scannerNow,
+        { source: "deadline_scanner" },
+      );
 
       expect(first.status).toBe("submitted");
       expect(first.submittedAt).toEqual(candidateNow);
@@ -827,6 +969,8 @@ describe("attemptCommands", () => {
         status: "graded",
         score: 80,
         submittedAt: new Date("2025-01-01T10:45:00Z"),
+        submittedAnswers: { schemaVersion: 1, answers: [] },
+        gradingStatus: "auto_graded",
       });
       const store: ExamAttempt[] = [graded];
       const attRepo: AttemptRepository = {
@@ -852,9 +996,11 @@ describe("attemptCommands", () => {
         },
       };
       const updateSpy = vi.spyOn(attRepo, "update");
+      const wsRepo = makeWorksetRepo([q1AutoEntry("attempt-1", 0)]);
 
       const result = await submitAttempt(
         attRepo,
+        wsRepo,
         "attempt-1",
         new Date("2025-01-01T12:00:00Z"),
         { source: "candidate" },
@@ -883,8 +1029,14 @@ describe("attemptCommands", () => {
         ],
       });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+      );
 
       expect(result.submittedAnswers).toEqual({
         schemaVersion: 1,
@@ -895,8 +1047,14 @@ describe("attemptCommands", () => {
     it("writes submissionReason='manual' by default (candidate submit)", async () => {
       const attempt = makeAttempt();
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+      );
 
       expect(result.submissionReason).toBe("manual");
     });
@@ -904,10 +1062,15 @@ describe("attemptCommands", () => {
     it("writes submissionReason='deadline' when the caller passes it", async () => {
       const attempt = makeAttempt();
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo();
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow, {
-        submissionReason: "deadline",
-      });
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+        { submissionReason: "deadline" },
+      );
 
       expect(result.submissionReason).toBe("deadline");
     });
@@ -922,10 +1085,19 @@ describe("attemptCommands", () => {
         submittedAnswers: frozen,
         submissionReason: "deadline",
         submittedAt: new Date("2025-01-01T10:30:00Z"),
+        gradingStatus: "auto_graded",
       });
       const attRepo = makeAttemptRepo([attempt]);
+      const wsRepo = makeWorksetRepo([
+        q1AutoEntry("attempt-1", 0, "frozen-value"),
+      ]);
 
-      const result = await submitAttempt(attRepo, "attempt-1", fixedNow);
+      const result = await submitAttempt(
+        attRepo,
+        wsRepo,
+        "attempt-1",
+        fixedNow,
+      );
 
       // Idempotent: existing frozen snapshot + reason + submittedAt preserved.
       expect(result.submittedAnswers).toEqual(frozen);

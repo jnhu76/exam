@@ -1,5 +1,6 @@
 import type { Exam, ExamAttempt } from "@exam/domain";
 import {
+  GradingStatus,
   InvalidStateTransitionError,
   NotFoundError,
   ValidationError,
@@ -10,11 +11,8 @@ import type {
 } from "./attemptCommands.js";
 import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
-import {
-  readGradingSnapshot,
-  computeGradingResult,
-  finalizeGrading,
-} from "./grading.js";
+import { readGradingSnapshot, finalizeGrading } from "./grading.js";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
@@ -77,6 +75,7 @@ export async function ensureAttemptDeadlineReconciled(
   examRepo: ExamRepository,
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
   attemptId: string,
   now: Date,
 ): Promise<ExamAttempt> {
@@ -118,16 +117,22 @@ export async function ensureAttemptDeadlineReconciled(
   // wall-clock reconciliation instant. submissionReason='deadline' marks the
   // freeze as deadline-triggered.
   //
-  // We reuse the existing grading pipeline: readGradingSnapshot →
-  // computeGradingResult → finalizeGrading. The freeze itself (building
-  // SubmittedAnswersSnapshot) is owned by submitAttempt (P3-L0-2); we pass
-  // the effective deadline as `now` so the frozen submittedAt is correct.
-  // submitAttempt is a static import (no circular dep — attemptCommands does
-  // not import from this module).
-  await submitAttempt(attemptRepo, attemptId, effectiveDeadline, {
-    source: "deadline_scanner",
-    submissionReason: "deadline",
-  });
+  // P3-L0-2E: submitAttempt owns the grading workset materialization. The
+  // gradingWorksetRepo is passed through — no caller-level materialize call.
+  const submittedAttempt = await submitAttempt(
+    attemptRepo,
+    gradingWorksetRepo,
+    attemptId,
+    effectiveDeadline,
+    {
+      source: "deadline_scanner",
+      submissionReason: "deadline",
+    },
+  );
+
+  if (submittedAttempt.gradingStatus === GradingStatus.PendingManual) {
+    return submittedAttempt;
+  }
 
   const snapshot = await readGradingSnapshot(
     examRepo,
@@ -139,14 +144,17 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Attempt not found after reconciliation");
   }
 
-  const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+  // Slice 4: finalizeGrading aggregates from the grading workset internally —
+  // no externally computed result. gradingWorksetRepo is the caller's
+  // tx-scoped repo (same one submitAttempt materialized into).
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
+    gradingWorksetRepo,
     attemptId,
     snapshot.enrollment.id,
-    result,
     snapshot.exam,
+    now,
   );
 
   const reconciled = await attemptRepo.findById(attemptId);

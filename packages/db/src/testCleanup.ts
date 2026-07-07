@@ -75,11 +75,11 @@ async function deleteExamBusinessData(
   await tx
     .delete(schema.importJobLogs)
     .where(eq(schema.importJobLogs.organizationId, organizationId));
-  // manualGradingEntries has a FK → examAttempts.id (onDelete: no action);
+  // attemptGradingEntries has a FK → examAttempts.id (onDelete: no action);
   // must be deleted before examAttempts to avoid FK violation.
   await tx
-    .delete(schema.manualGradingEntries)
-    .where(eq(schema.manualGradingEntries.organizationId, organizationId));
+    .delete(schema.attemptGradingEntries)
+    .where(eq(schema.attemptGradingEntries.organizationId, organizationId));
   await tx
     .delete(schema.examAttempts)
     .where(eq(schema.examAttempts.organizationId, organizationId));

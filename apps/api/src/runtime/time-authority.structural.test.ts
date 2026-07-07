@@ -121,6 +121,11 @@ const ALLOWLIST: { path: string; reason: string }[] = [
     reason:
       "Uses baseRepo now() for role-assignment createdAt/updatedAt storage stamps only (non-business — role assignment is not an exam-lifecycle time authority decision). Mirrors organizationRepo/settingsRepo convention.",
   },
+  {
+    path: "packages/db/src/repository/attemptGradingEntryRepo.ts",
+    reason:
+      "Uses new Date() for createdAt/updatedAt storage stamps only (non-business); grading authority timestamps are passed in explicitly by callers.",
+  },
 ];
 
 /** Directories scanned for raw-time regressions in business paths. */

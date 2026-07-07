@@ -12,6 +12,7 @@ import type {
 import type { ExamRepository } from "./examCommands.js";
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
 import { InvalidStateTransitionError } from "@exam/domain";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -141,10 +142,42 @@ function makeRepos(
       return storedEnrollment;
     },
   };
+  // Slice 4: derive the workset repo from the canonical auto-grader output
+  // so finalizeGrading/gradeAttempt aggregate the same score the old
+  // result-based path produced.
+  const worksetRepo: GradingWorksetRepository = {
+    findByAttempt: async (id) => {
+      if (id !== storedAttempt.id) return [];
+      const r = computeGradingResult(storedAttempt, exam, new Date());
+      return r.questionResults.map((qr) => ({
+        id: `entry-${qr.questionId}`,
+        organizationId: storedAttempt.organizationId,
+        attemptId: storedAttempt.id,
+        questionId: qr.questionId,
+        gradingMode: "auto" as const,
+        status: "completed_auto" as const,
+        maxScore: qr.maxScore,
+        earnedScore: qr.score,
+        candidateAnswer: qr.candidateAnswer,
+        standardAnswer: qr.standardAnswer,
+        correct: qr.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    },
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
+  };
   return {
     examRepo,
     attemptRepo,
     enrollmentRepo,
+    worksetRepo,
     getAttempt: () => storedAttempt,
     getEnrollment: () => storedEnrollment,
   };
@@ -159,6 +192,7 @@ describe("gradeAttempt", () => {
       repos.examRepo,
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       gradedAt,
     );
@@ -192,6 +226,7 @@ describe("gradeAttempt", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.worksetRepo,
         "attempt-1",
         new Date(),
       ),
@@ -223,6 +258,7 @@ describe("gradeAttempt", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.worksetRepo,
         "attempt-1",
         new Date(),
       );
@@ -247,6 +283,7 @@ describe("gradeAttempt", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.worksetRepo,
         "attempt-1",
         new Date(),
       );
@@ -280,11 +317,44 @@ describe("gradeAttempt", () => {
       update: () => enrollment,
     };
 
+    // Slice 4: gradeAttempt now aggregates from a workset repo. Derive entries
+    // from the canonical auto-grader so aggregation succeeds and the test
+    // reaches the intended persist-failure point.
+    const worksetRepo: GradingWorksetRepository = {
+      findByAttempt: async (id) => {
+        if (id !== attempt.id) return [];
+        const r = computeGradingResult(attempt, exam, new Date());
+        return r.questionResults.map((qr) => ({
+          id: `entry-${qr.questionId}`,
+          organizationId: attempt.organizationId,
+          attemptId: attempt.id,
+          questionId: qr.questionId,
+          gradingMode: "auto" as const,
+          status: "completed_auto" as const,
+          maxScore: qr.maxScore,
+          earnedScore: qr.score,
+          candidateAnswer: qr.candidateAnswer,
+          standardAnswer: qr.standardAnswer,
+          correct: qr.correct,
+          comment: "",
+          gradedBy: null,
+          gradedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      },
+      findByAttemptAndQuestion: async () => null,
+      bulkCreate: async () => {},
+      completeManualEntry: async () => null,
+      countPendingManualForAttempt: async () => 0,
+    };
+
     await expect(
       gradeAttempt(
         examRepo,
         enrollmentRepo,
         attemptRepo,
+        worksetRepo,
         "attempt-1",
         new Date(),
       ),
@@ -321,11 +391,44 @@ describe("gradeAttempt", () => {
       update: () => null,
     };
 
+    // Slice 4: gradeAttempt now aggregates from a workset repo. Derive entries
+    // from the canonical auto-grader so aggregation succeeds and the test
+    // reaches the intended persist-failure point.
+    const worksetRepo: GradingWorksetRepository = {
+      findByAttempt: async (id) => {
+        if (id !== attempt.id) return [];
+        const r = computeGradingResult(attempt, exam, new Date());
+        return r.questionResults.map((qr) => ({
+          id: `entry-${qr.questionId}`,
+          organizationId: attempt.organizationId,
+          attemptId: attempt.id,
+          questionId: qr.questionId,
+          gradingMode: "auto" as const,
+          status: "completed_auto" as const,
+          maxScore: qr.maxScore,
+          earnedScore: qr.score,
+          candidateAnswer: qr.candidateAnswer,
+          standardAnswer: qr.standardAnswer,
+          correct: qr.correct,
+          comment: "",
+          gradedBy: null,
+          gradedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }));
+      },
+      findByAttemptAndQuestion: async () => null,
+      bulkCreate: async () => {},
+      completeManualEntry: async () => null,
+      countPendingManualForAttempt: async () => 0,
+    };
+
     await expect(
       gradeAttempt(
         examRepo,
         enrollmentRepo,
         attemptRepo,
+        worksetRepo,
         "attempt-1",
         new Date(),
       ),
@@ -446,6 +549,46 @@ describe("computeGradingResult — submitted_answers read path (P3-L0-2)", () =>
  * Postgres transaction does for the caller-wrapped grading path. Mirrors the
  * pattern the production callers rely on (executeInTransaction + tx repos).
  */
+/**
+ * Slice 4 helper: builds an in-memory GradingWorksetRepository whose
+ * findByAttempt returns terminal completed_auto entries derived from the
+ * canonical auto-grader output for the given attempt/exam. Used by the
+ * transactional-boundary tests so finalizeGrading can aggregate.
+ */
+function makeResultWorksetRepo(
+  attempt: ExamAttempt,
+  exam: Exam,
+  now: Date,
+): GradingWorksetRepository {
+  const result = computeGradingResult(attempt, exam, now);
+  const entries = result.questionResults.map((qr) => ({
+    id: `entry-${qr.questionId}`,
+    organizationId: attempt.organizationId,
+    attemptId: attempt.id,
+    questionId: qr.questionId,
+    gradingMode: "auto" as const,
+    status: "completed_auto" as const,
+    maxScore: qr.maxScore,
+    earnedScore: qr.score,
+    candidateAnswer: qr.candidateAnswer,
+    standardAnswer: qr.standardAnswer,
+    correct: qr.correct,
+    comment: "",
+    gradedBy: null,
+    gradedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  return {
+    findByAttempt: async (id) =>
+      id === attempt.id ? entries.map((e) => ({ ...e })) : [],
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
+  };
+}
+
 function makeTransactionalRepos(
   exam: Exam,
   attempt: ExamAttempt,
@@ -561,10 +704,11 @@ describe("grading transactional boundary (P0-2)", () => {
       finalizeGrading(
         failingEnrollmentRepo,
         failingScope.attemptRepo,
+        makeResultWorksetRepo(attempt, exam, gradedAt),
         "attempt-1",
         enrollment.id,
-        computeResult(attempt, exam, gradedAt),
         exam,
+        gradedAt,
       ),
     ).rejects.toThrow("enrollment write failed");
 
@@ -593,10 +737,11 @@ describe("grading transactional boundary (P0-2)", () => {
       finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
+        makeResultWorksetRepo(attempt, exam, gradedAt),
         "attempt-1",
         enrollment.id,
-        result,
         exam,
+        gradedAt,
       ),
     );
 
@@ -630,10 +775,11 @@ describe("grading transactional boundary (P0-2)", () => {
     await finalizeGrading(
       scope.enrollmentRepo,
       scope.attemptRepo,
+      makeResultWorksetRepo(attempt, exam, gradedAt),
       "attempt-1",
       enrollment.id,
-      computeResult(attempt, exam, gradedAt),
       exam,
+      gradedAt,
     );
 
     // Exactly one attempt write (the graded transition) and one enrollment
@@ -692,6 +838,7 @@ describe("gradeAttemptIdempotent", () => {
       repos.examRepo,
       repos.enrollmentRepo,
       spiedAttemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       new Date("2026-06-05T00:00:00Z"),
     );
@@ -711,6 +858,7 @@ describe("gradeAttemptIdempotent", () => {
       repos.examRepo,
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       fixedGradedAt,
     );
@@ -733,6 +881,7 @@ describe("gradeAttemptIdempotent", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.worksetRepo,
         "attempt-1",
         new Date(),
       ),
@@ -751,6 +900,7 @@ describe("gradeAttemptIdempotent", () => {
         repos.examRepo,
         repos.enrollmentRepo,
         missingAttemptRepo,
+        repos.worksetRepo,
         "nonexistent",
         new Date(),
       ),

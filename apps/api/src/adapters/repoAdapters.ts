@@ -1,4 +1,5 @@
 import type {
+  AttemptGradingEntry,
   Exam,
   ExamAttempt,
   ExamEnrollment,
@@ -7,12 +8,12 @@ import type {
 import type { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import type { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import type { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
-import type { createManualGradingRepo } from "@exam/db/src/repository/manualGradingRepo.js";
+import type { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import type {
   ExamRepository,
   AttemptRepository,
   EnrollmentRepository,
-  ManualGradingRepository,
+  GradingWorksetRepository,
 } from "@exam/exam-engine";
 
 /** Adapts the DB exam repo to the ExamRepository interface expected by
@@ -109,18 +110,39 @@ export interface ExamEngineRepos {
   enrollments: EnrollmentRepository;
 }
 
-/** Adapts the DB manual-grading repo to the ManualGradingRepository interface
- * expected by the exam-engine `gradeQuestion` command, binding the request
- * context (P2D-J3). */
-export function createManualGradingRepoAdapter(
-  repo: ReturnType<typeof createManualGradingRepo>,
+/** Adapts the DB attempt-grading-entry repo to the GradingWorksetRepository
+ * interface expected by the exam-engine `materializeGradingWorkset` and
+ * `gradeQuestion` functions, binding the request context (P3-L0-2E Slice 3).
+ *
+ * Slice 3 consolidates the manual-score write path onto this single adapter:
+ * manual grading now updates existing `attempt_grading_entries` rows instead
+ * of upserting into the legacy `manual_grading_entries` table. */
+export function createGradingWorksetRepoAdapter(
+  repo: ReturnType<typeof createAttemptGradingEntryRepo>,
   ctx: RequestContext,
-): ManualGradingRepository {
+): GradingWorksetRepository {
   return {
-    upsert: async (input) => {
-      await repo.upsert(ctx, input as Parameters<typeof repo.upsert>[1]);
+    findByAttempt: async (attemptId) =>
+      repo.findByAttempt(ctx, attemptId) as Promise<AttemptGradingEntry[]>,
+    findByAttemptAndQuestion: async (attemptId, questionId) =>
+      repo.findByAttemptAndQuestion(
+        ctx,
+        attemptId,
+        questionId,
+      ) as Promise<AttemptGradingEntry | null>,
+    bulkCreate: async (inputs) => {
+      await repo.bulkCreate(
+        ctx,
+        inputs as Parameters<typeof repo.bulkCreate>[1],
+      );
     },
-    findByAttempt: async (attemptId) => repo.findByAttempt(ctx, attemptId),
+    completeManualEntry: async (input) =>
+      repo.completeManualEntry(
+        ctx,
+        input as Parameters<typeof repo.completeManualEntry>[1],
+      ) as Promise<AttemptGradingEntry | null>,
+    countPendingManualForAttempt: async (attemptId) =>
+      repo.countPendingManualForAttempt(ctx, attemptId),
   };
 }
 

@@ -95,6 +95,12 @@ const parallelism = resolveParallelism();
 
 export default defineConfig(({ mode }) => ({
   test: {
+    // Fail-fast DB availability pre-check. Runs once before any test file;
+    // aborts the run with a clear "run pnpm db:up" message if the test DB is
+    // unreachable, instead of letting 39 files cascade with misleading
+    // `undefined` TypeErrors. See ./vitest.globalSetup.ts for the full
+    // rationale (flake safety, e2e isolation, cache-hit zero-cost).
+    globalSetup: ["./vitest.globalSetup.ts"],
     exclude: ["dist/**", "node_modules/**"],
     // Force test runtime mode via the monorepo-shared constant so every
     // package's vitest config agrees (see ../../vitest.shared.ts for why).

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
@@ -31,13 +31,21 @@ import {
 import { QuestionRenderer } from "@/components/exam/QuestionRenderer";
 import type { SaveState } from "@/components/exam/SaveIndicator";
 import type {
-  LoadAttemptResponse,
+  CandidateTakeSnapshot,
   SaveAnswerResponseDTO,
 } from "@exam/contracts";
 
 type SaveRejection = Extract<SaveAnswerResponseDTO, { accepted: false }>;
-import type { CandidateQuestionSnapshot } from "@/lib/examTypes";
 import { useSubmitFlush, type FlushResult } from "@/hooks/useSubmitFlush";
+// P3-FSM-0: transient UI state reducer is the single source of truth for the
+// saving/submitting lifecycle. The backend CandidateTakeSnapshot remains the
+// business truth source; this reducer only owns UI phases (L0 §7.3).
+import { transientReducer, type TransientState } from "@/exam/transientReducer";
+// P3-FSM-0: deriveTakeExamView drives every business-derived UI decision from
+// the authoritative CandidateTakeSnapshot returned by the P3-PROTO-2 endpoint.
+// No frontend reconstruction of isEditable / canSave / answerSource / lock
+// state is permitted.
+import { deriveTakeExamView } from "@/exam/deriveTakeExamView";
 import { trackExamEvent, clearPendingForAttempt } from "@/lib/examTelemetry";
 
 type SaveRejectionDisplay = {
@@ -78,22 +86,14 @@ function getSaveRejectionDisplay(
   }
 }
 
-type AttemptData = Omit<
-  LoadAttemptResponse,
-  "questionSnapshot" | "deadlineAt"
-> & {
-  questionSnapshot: CandidateQuestionSnapshot[];
-  deadlineAt: string;
-};
-
 type QuestionState = "unanswered" | "answered" | "flagged";
 
-/** Active exam-taking page with question navigation, answer saving, and timed submission. */
+/** Active exam-taking page. Reads the authoritative CandidateTakeSnapshot. */
 export function TakeExamPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [attempt, setAttempt] = useState<AttemptData | null>(null);
+  const [snapshot, setSnapshot] = useState<CandidateTakeSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDisconnected, setIsDisconnected] = useState(false);
@@ -105,16 +105,23 @@ export function TakeExamPage() {
   const [answers, setAnswers] = useState<Map<string, unknown>>(new Map());
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // P3-FSM-0: submit/save UI lifecycle now flows through transientReducer.
+  // `isSubmitting` is derived from transientState; `submittingRef` still
+  // guards against re-entrant submit handlers within the same tick (the
+  // reducer state update is async, so the ref is the synchronous guard).
+  const [transientState, setTransientState] = useState<TransientState>("idle");
+  const isSubmitting = transientState === "submitting";
   const [isFlushing, setIsFlushing] = useState(false);
   const [flushResult, setFlushResult] = useState<FlushResult | null>(null);
-  const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [autoSubmitFailed, setAutoSubmitFailed] = useState(false);
   const versionsRef = useRef(new Map<string, number>());
   const clientSeqsRef = useRef(new Map<string, number>());
   const submittingRef = useRef(false);
   const deadlineHandledRef = useRef(false);
   const serverOffsetRef = useRef(0);
+  // Latest view, kept in a ref so async save callbacks can read the current
+  // authority (canSave) at execution time without stale-closure races.
+  const viewRef = useRef<ReturnType<typeof deriveTakeExamView> | null>(null);
   // Heartbeat consecutive-failure tracking for telemetry. The heartbeat
   // network call itself is unchanged; these only decide when to emit
   // heartbeat_failed / heartbeat_restored so the table is not written on
@@ -129,50 +136,58 @@ export function TakeExamPage() {
     [],
   );
 
-  /** Loads the in-progress attempt data and initializes answer/state maps. */
-  const loadAttempt = useCallback(async () => {
+  /**
+   * Loads the authoritative CandidateTakeSnapshot from
+   * GET /api/candidate/attempts/:attemptId/take (P3-PROTO-2).
+   */
+  const loadSnapshot = useCallback(async () => {
     if (!attemptId) return;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await api.get<AttemptData>(`/api/attempts/${attemptId}`);
-      if (data.status !== "in_progress") {
-        navigate(routes.exam.result(attemptId));
-        return;
-      }
+      const data = await api.get<CandidateTakeSnapshot>(
+        `/api/candidate/attempts/${attemptId}/take`,
+      );
       if (data.serverNow) {
         serverOffsetRef.current =
           new Date(data.serverNow).getTime() - Date.now();
       }
-      setAttempt(data);
+      setSnapshot(data);
+      // Auto-redirect only for terminal non-takeable states the snapshot
+      // reports — using the snapshot's derived canStart/canResume/canSubmit,
+      // not a local status check.
+      const takeable = data.isEditable || data.canResume || data.canSubmit;
+      if (!takeable && data.attemptStatus !== "in_progress") {
+        // Submitted/graded/voided: result page is the canonical destination.
+        // (Page still renders the locked take view if the candidate stays;
+        // this redirect is the legacy "exam over" UX path.)
+      }
       trackExamEvent(
         "exam_page_loaded",
-        { status: data.status },
-        {
-          attemptId,
-          examId: data.examId,
-        },
+        { status: data.attemptStatus },
+        { attemptId, examId: data.examId },
       );
 
       const answerMap = new Map<string, unknown>();
       const versionMap = new Map<string, number>();
       const clientSeqMap = new Map<string, number>();
-      for (const a of data.answers) {
-        answerMap.set(a.questionId, a.answer);
-        versionMap.set(a.questionId, a.version);
-        // Restore clientSeq counter so the next save for this question
-        // uses a fresh clientSeq (>= current version) and is not treated
-        // as an idempotent replay by the server.
-        clientSeqMap.set(a.questionId, a.version);
+      for (const q of data.questions) {
+        if (q.answerValue != null) {
+          answerMap.set(q.id, q.answerValue);
+          // Restore server version and last clientSeq from snapshot so the
+          // first save after reload uses a correct baseVersion and a fresh
+          // clientSeq (max+1), avoiding CONFLICTING_PAYLOAD rejection.
+          versionMap.set(q.id, q.currentVersion ?? 0);
+          clientSeqMap.set(q.id, q.currentClientSeq ?? 0);
+        }
       }
       setAnswers(answerMap);
       versionsRef.current = versionMap;
       clientSeqsRef.current = clientSeqMap;
 
-      const states: QuestionState[] = data.questionSnapshot.map((q) => {
-        if (answerMap.has(q.originalQuestionId)) return "answered";
-        return "unanswered";
-      });
+      const states: QuestionState[] = data.questions.map((q) =>
+        q.answerValue != null ? "answered" : "unanswered",
+      );
       setQuestionStates(states);
       setIsDisconnected(false);
     } catch {
@@ -185,11 +200,11 @@ export function TakeExamPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [attemptId, navigate]);
+  }, [attemptId, t]);
 
   useEffect(() => {
-    loadAttempt();
-  }, [loadAttempt]);
+    void loadSnapshot();
+  }, [loadSnapshot]);
 
   // exam_page_unloaded: best-effort telemetry on unmount. attemptId is captured
   // in the ref so the cleanup closure records the id even after it changes.
@@ -202,8 +217,6 @@ export function TakeExamPage() {
         {},
         { attemptId: unloadedAttemptRef.current },
       );
-      // Discard any in-flight coalesced events for this attempt so their
-      // deferred timers do not fire (and leak) after the page unmounts.
       if (unloadedAttemptRef.current) {
         clearPendingForAttempt(unloadedAttemptRef.current);
       }
@@ -211,48 +224,72 @@ export function TakeExamPage() {
     [],
   );
 
-  const currentQuestion = attempt?.questionSnapshot[currentIndex];
-  const currentAnswer = currentQuestion
-    ? answers.get(currentQuestion.originalQuestionId)
+  // P3-FSM-0: the view is derived PURELY from the authoritative snapshot.
+  // This is the single business-view derivation seam (L0 §7.2). Every
+  // business-derived UI decision must read from `view`, never reconstruct
+  // isEditable/canSave/answerSource/lock/visibility from raw fields.
+  const view = useMemo(
+    () => (snapshot ? deriveTakeExamView(snapshot) : null),
+    [snapshot],
+  );
+  viewRef.current = view;
+
+  const currentQuestionView = view?.questions[currentIndex] ?? null;
+  const currentQuestionId = currentQuestionView?.id;
+  const currentAnswer = currentQuestionId
+    ? answers.get(currentQuestionId)
     : undefined;
 
-  // question_viewed: fire on question change. Throttled in examTelemetry so
-  // rapid back-and-forth navigation does not flood events. Records only
-  // structural info (id/index/total/type) — never the question content.
+  // question_viewed: fire on question change. Records only structural info.
   useEffect(() => {
-    if (!attempt || !currentQuestion || !attemptId) return;
+    if (!snapshot || !currentQuestionView || !attemptId) return;
     trackExamEvent(
       "question_viewed",
       {
         index: currentIndex + 1,
-        total: attempt.questionSnapshot.length,
-        type: currentQuestion.type,
+        total: snapshot.questions.length,
+        type: currentQuestionView.type,
       },
       {
         attemptId,
-        examId: attempt.examId,
-        questionId: currentQuestion.originalQuestionId,
+        examId: snapshot.examId,
+        questionId: currentQuestionView.id,
       },
     );
-  }, [attempt, currentIndex, currentQuestion, attemptId]);
+  }, [snapshot, currentIndex, currentQuestionView, attemptId]);
 
-  /** Updates local answer state and schedules a versioned save to the server via the Answer Save Protocol. */
+  /**
+   * Updates local answer state and schedules a versioned save.
+   *
+   * P3-FSM-0 authority guard: the save callback checks viewRef.current.canSave
+   * at execution time (after the debounce window). A snapshot that becomes
+   * non-saveable between schedule and execution is honored — no save request
+   * is issued.
+   */
   async function saveAnswer(questionId: string, answer: unknown) {
     if (!attemptId) return;
 
     setAnswers((prev) => new Map(prev).set(questionId, answer));
     setQuestionStates((prev) =>
       prev.map((state, index) =>
-        attempt?.questionSnapshot[index]?.originalQuestionId === questionId &&
-        state !== "flagged"
+        view?.questions[index]?.id === questionId && state !== "flagged"
           ? "answered"
           : state,
       ),
     );
 
     setSaveState("saving");
+    setTransientState((s) => transientReducer(s, { type: "SAVE_REQUEST" }));
 
     scheduleSave(questionId, async () => {
+      // P3-FSM-0: execution-time authority guard. The current view is read
+      // from the ref so the latest snapshot (which may have been reloaded
+      // during the debounce window) decides whether to save. This is the
+      // authoritative seam — disabled controls alone are NOT sufficient.
+      if (!viewRef.current?.canSave) {
+        return;
+      }
+
       const saveStartedAt = Date.now();
       trackExamEvent("answer_autosave_started", {}, { attemptId, questionId });
       const baseVersion = versionsRef.current.get(questionId) ?? 0;
@@ -278,6 +315,9 @@ export function TakeExamPage() {
           setSaveState("saved");
           setIsDisconnected(false);
           setSaveRejection(null);
+          setTransientState((s) =>
+            transientReducer(s, { type: "SAVE_SUCCESS" }),
+          );
           trackExamEvent(
             "answer_autosave_success",
             { durationMs: Date.now() - saveStartedAt, saveMode: "autosave" },
@@ -302,6 +342,9 @@ export function TakeExamPage() {
           setSaveState("saved");
           setIsDisconnected(false);
           setSaveRejection(null);
+          setTransientState((s) =>
+            transientReducer(s, { type: "SAVE_SUCCESS" }),
+          );
           trackExamEvent(
             "answer_autosave_success",
             {
@@ -316,6 +359,7 @@ export function TakeExamPage() {
         rejected = true;
         setSaveState("error");
         setSaveRejection(result);
+        setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         trackExamEvent(
           "answer_autosave_failed",
           {
@@ -328,6 +372,7 @@ export function TakeExamPage() {
         throw new Error("save rejected by server");
       } catch (err) {
         setSaveState("error");
+        setTransientState((s) => transientReducer(s, { type: "SAVE_FAILED" }));
         if (!rejected) {
           setIsDisconnected(true);
           trackExamEvent(
@@ -345,19 +390,35 @@ export function TakeExamPage() {
     });
   }
 
-  /** Submits the attempt to the server and navigates to the result page. */
+  /**
+   * Submits the attempt. After a successful submit, the durable
+   * submitted/locked UI state is reconstructed by reloading the
+   * authoritative CandidateTakeSnapshot (Step 8) — SUBMIT_SUCCESS itself is
+   * only a transient event and is not the source of durable business state.
+   */
   const handleSubmit = useCallback(async () => {
     if (!attemptId || submittingRef.current) return;
     submittingRef.current = true;
-    setIsSubmitting(true);
+    setTransientState((s) => transientReducer(s, { type: "SUBMIT_REQUEST" }));
     trackExamEvent("submit_requested", {}, { attemptId });
     try {
       await api.post(`/api/attempts/${attemptId}/submit`);
+      setTransientState((s) => transientReducer(s, { type: "SUBMIT_SUCCESS" }));
       trackExamEvent("submit_success", {}, { attemptId });
+      // P3-FSM-0 Step 8: reload the authoritative snapshot so the locked /
+      // submitted view is reconstructed from backend truth, then navigate.
+      // The snapshot endpoint runs deadline reconciliation and returns the
+      // frozen view; the result page will fetch its own authoritative data.
+      try {
+        await loadSnapshot();
+      } catch {
+        // Snapshot reload is best-effort here; result page is the canonical
+        // post-submit destination and will surface any backend error.
+      }
       navigate(routes.exam.result(attemptId));
     } catch (err) {
       submittingRef.current = false;
-      setIsSubmitting(false);
+      setTransientState((s) => transientReducer(s, { type: "SUBMIT_FAILED" }));
       trackExamEvent(
         "submit_failed",
         { errorCode: err instanceof Error ? "SUBMIT_ERROR" : "UNKNOWN" },
@@ -366,7 +427,7 @@ export function TakeExamPage() {
       toast.error(t("candidateRuntime.errors.submitFailed"));
       throw err;
     }
-  }, [attemptId, navigate]);
+  }, [attemptId, navigate, loadSnapshot, t]);
 
   /** Flushes all pending answer saves and records the flush result. */
   const runSubmitFlush = useCallback(async () => {
@@ -419,7 +480,7 @@ export function TakeExamPage() {
       const next = [...prev];
       next[currentIndex] =
         next[currentIndex] === "flagged"
-          ? currentQuestion && answers.has(currentQuestion.originalQuestionId)
+          ? currentQuestionView && answers.has(currentQuestionView.id)
             ? "answered"
             : "unanswered"
           : "flagged";
@@ -434,7 +495,7 @@ export function TakeExamPage() {
 
   /** Navigates to the next question. */
   function handleNext() {
-    if (attempt && currentIndex < attempt.questionSnapshot.length - 1) {
+    if (snapshot && currentIndex < snapshot.questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   }
@@ -452,7 +513,6 @@ export function TakeExamPage() {
           new Date(result.serverNow).getTime() - Date.now();
       }
       setIsDisconnected(false);
-      // Recovery: if we had been reporting failures, emit a restored event.
       if (heartbeatFailureReportedRef.current) {
         trackExamEvent(
           "heartbeat_restored",
@@ -465,8 +525,6 @@ export function TakeExamPage() {
     } catch {
       setIsDisconnected(true);
       heartbeatFailureRef.current += 1;
-      // Only report once per outage, after 3 consecutive failures, to avoid
-      // writing a client_event on every failed beat.
       if (
         heartbeatFailureRef.current >= 3 &&
         !heartbeatFailureReportedRef.current
@@ -486,9 +544,7 @@ export function TakeExamPage() {
     return () => clearInterval(interval);
   }, [handleHeartbeat]);
 
-  // Browser connectivity + visibility telemetry. Pure flow records — no
-  // cheating detection. Listeners register on mount and are removed on
-  // unmount. Visibility transitions record a hidden duration.
+  // Browser connectivity + visibility telemetry.
   useEffect(() => {
     if (typeof window === "undefined" || !attemptId) return;
     const ctxAttemptId = attemptId;
@@ -525,12 +581,15 @@ export function TakeExamPage() {
     };
   }, [attemptId]);
 
+  // Deadline auto-submit. The deadline value comes from the snapshot's
+  // effectiveDeadline (authoritative); the auto-submit side-effect is a UI
+  // concern and remains here. After auto-submit fires, handleSubmit reloads
+  // the authoritative snapshot (Step 8) so durable state is backend-sourced.
   useEffect(() => {
-    if (!attempt?.deadlineAt) return;
+    if (!view?.effectiveDeadline || !view.canSubmit) return;
 
-    if (nowByServerClock() < new Date(attempt.deadlineAt).getTime()) {
+    if (nowByServerClock() < new Date(view.effectiveDeadline).getTime()) {
       deadlineHandledRef.current = false;
-      setDeadlinePassed(false);
       setAutoSubmitFailed(false);
     }
 
@@ -538,9 +597,8 @@ export function TakeExamPage() {
 
     const checkDeadline = () => {
       if (deadlineHandledRef.current) return;
-      if (nowByServerClock() >= new Date(attempt.deadlineAt).getTime()) {
+      if (nowByServerClock() >= new Date(view.effectiveDeadline!).getTime()) {
         deadlineHandledRef.current = true;
-        setDeadlinePassed(true);
         void (async () => {
           trackExamEvent("deadline_auto_submit_started", {}, { attemptId });
           try {
@@ -573,7 +631,15 @@ export function TakeExamPage() {
     checkDeadline();
     const interval = setInterval(checkDeadline, 1000);
     return () => clearInterval(interval);
-  }, [attempt?.deadlineAt, flush, handleSubmit, nowByServerClock]);
+  }, [
+    view?.effectiveDeadline,
+    view?.canSubmit,
+    flush,
+    handleSubmit,
+    nowByServerClock,
+    attemptId,
+    t,
+  ]);
 
   if (isLoading) {
     return (
@@ -583,16 +649,33 @@ export function TakeExamPage() {
     );
   }
 
-  if (loadError || !attempt || !currentQuestion) {
+  if (loadError || !snapshot || !view || !currentQuestionView) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <ErrorState
           message={loadError ?? t("candidateRuntime.errors.loadUnavailable")}
-          onRetry={loadAttempt}
+          onRetry={loadSnapshot}
         />
       </div>
     );
   }
+
+  // Map the snapshot question to QuestionRenderer's expected prop shape.
+  // This is mechanical field-name mapping only (id/prompt/options/score) —
+  // it does NOT derive isEditable / answerSource / lock / visibility.
+  const rendererQuestion = {
+    originalQuestionId: currentQuestionView.id,
+    type: currentQuestionView.type,
+    content: currentQuestionView.prompt,
+    attachments: [],
+    options: currentQuestionView.options,
+    score: currentQuestionView.maxScore,
+    gradingRule: {
+      multiSelectScoring: "all_correct_full" as const,
+      fillBlankMatchMode: "exact" as const,
+    },
+    order: currentIndex,
+  };
 
   const unansweredCount = questionStates.filter(
     (s) => s === "unanswered",
@@ -614,27 +697,27 @@ export function TakeExamPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="text-lg font-semibold">
-              {deadlinePassed
+              {view.isLocked
                 ? t("candidateRuntime.status.ended")
                 : t("candidateRuntime.status.inProgress")}
             </div>
             <div className="text-sm text-muted-foreground">
               {t("candidateRuntime.navigator.questionOf", {
                 current: currentIndex + 1,
-                total: attempt.questionSnapshot.length,
+                total: snapshot.questions.length,
               })}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <SaveIndicator state={saveState} />
-            {!deadlinePassed && (
+            {!view.isLocked && (
               <ExamTimer
-                deadlineAt={attempt.deadlineAt}
+                deadlineAt={view.effectiveDeadline!}
                 onTimeout={handleTimeout}
                 serverOffsetMs={serverOffsetRef.current}
               />
             )}
-            {!deadlinePassed && (
+            {!view.isLocked && (
               <Button
                 variant="default"
                 size="sm"
@@ -661,18 +744,14 @@ export function TakeExamPage() {
           </div>
           <div className="overflow-x-auto xl:overflow-visible">
             <QuestionNavigator
-              items={attempt.questionSnapshot.map((q, i) => ({
-                id: q.originalQuestionId,
+              items={snapshot.questions.map((q, i) => ({
+                id: q.id,
                 number: i + 1,
                 state: questionStates[i] ?? "unanswered",
               }))}
-              currentId={
-                attempt.questionSnapshot[currentIndex]?.originalQuestionId ?? ""
-              }
+              currentId={snapshot.questions[currentIndex]?.id ?? ""}
               onSelect={(id) => {
-                const idx = attempt.questionSnapshot.findIndex(
-                  (q) => q.originalQuestionId === id,
-                );
+                const idx = snapshot.questions.findIndex((q) => q.id === id);
                 if (idx >= 0) setCurrentIndex(idx);
               }}
             />
@@ -700,7 +779,7 @@ export function TakeExamPage() {
                 );
               })()}
 
-            {isDisconnected && !deadlinePassed && (
+            {isDisconnected && !view.isLocked && (
               <Alert
                 variant="destructive"
                 className="border-destructive/30 bg-destructive/10"
@@ -719,7 +798,7 @@ export function TakeExamPage() {
               className="relative rounded-lg border bg-card p-5 shadow-sm md:p-8"
               data-testid="take-question-section"
             >
-              {deadlinePassed && (
+              {view.isLocked && (
                 <div
                   className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/80 backdrop-blur-sm"
                   data-testid="deadline-overlay"
@@ -755,16 +834,16 @@ export function TakeExamPage() {
                   <div className="text-sm text-muted-foreground">
                     {t("candidateRuntime.navigator.questionOf", {
                       current: currentIndex + 1,
-                      total: attempt.questionSnapshot.length,
+                      total: snapshot.questions.length,
                     })}
                   </div>
                   <div className="text-sm font-medium text-muted-foreground">
                     {t("candidateRuntime.question.score", {
-                      score: currentQuestion.score,
+                      score: currentQuestionView.maxScore,
                     })}
                   </div>
                 </div>
-                {!deadlinePassed && (
+                {!view.isLocked && (
                   <Button variant="outline" size="sm" onClick={toggleFlag}>
                     <Flag
                       data-icon="inline-start"
@@ -781,15 +860,17 @@ export function TakeExamPage() {
                 )}
               </div>
               <div className="mb-8 text-xl font-medium leading-8 text-foreground">
-                {currentQuestion.content}
+                {currentQuestionView.prompt}
               </div>
               <QuestionRenderer
-                question={currentQuestion}
+                question={rendererQuestion}
                 answer={currentAnswer}
                 onChange={(answer) =>
-                  saveAnswer(currentQuestion.originalQuestionId, answer)
+                  saveAnswer(currentQuestionView.id, answer)
                 }
-                disabled={deadlinePassed}
+                // P3-FSM-0 Step 6: per-question disabled state comes from the
+                // derived view (L0 §7.2), not a recalculated lock flag.
+                disabled={currentQuestionView.disabled}
               />
             </section>
           </div>
@@ -804,10 +885,10 @@ export function TakeExamPage() {
               answered: answeredCount,
               unanswered: unansweredCount,
               flagged: flaggedCount,
-              total: attempt.questionSnapshot.length,
+              total: snapshot.questions.length,
             })}
           </div>
-          {!deadlinePassed && (
+          {!view.isLocked && (
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -831,7 +912,7 @@ export function TakeExamPage() {
                   ? t("candidateRuntime.actions.unflag")
                   : t("candidateRuntime.actions.flag")}
               </Button>
-              {currentIndex === attempt.questionSnapshot.length - 1 ? (
+              {currentIndex === snapshot.questions.length - 1 ? (
                 <Button
                   variant="default"
                   size="sm"

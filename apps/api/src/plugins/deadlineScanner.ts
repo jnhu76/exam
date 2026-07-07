@@ -10,7 +10,11 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
-import { createExamEngineRepos } from "../adapters/repoAdapters.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import {
+  createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
+} from "../adapters/repoAdapters.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
@@ -119,12 +123,26 @@ export async function autoSubmitAndGrade(
     // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
     // (source = deadline_scanner). P3-L0-2: record submissionReason='deadline'
     // so the frozen submitted_answers carries the deadline-trigger marker.
-    await submitAttempt(attempts, attemptId, now, {
+    // P3-L0-2E: submitAttempt owns grading workset materialization.
+    const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+      createAttemptGradingEntryRepo(tx),
+      ctx,
+    );
+    await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
       source: "deadline_scanner",
       submissionReason: "deadline",
     });
 
-    await gradeAttemptIdempotent(exams, enrollments, attempts, attemptId, now);
+    // Slice 4: gradeAttemptIdempotent now takes the tx-scoped workset repo so
+    // it can aggregate from the entries submitAttempt just materialized.
+    await gradeAttemptIdempotent(
+      exams,
+      enrollments,
+      attempts,
+      gradingWorksetRepo,
+      attemptId,
+      now,
+    );
 
     return true;
   });

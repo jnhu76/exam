@@ -17,6 +17,7 @@ import type {
   ScoreResult,
 } from "@exam/domain";
 import { InvalidStateTransitionError } from "@exam/domain";
+import type { GradingWorksetRepository } from "./gradingWorkset.js";
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -115,6 +116,45 @@ function makeEnrollment(
   };
 }
 
+/**
+ * Slice 4: finalizeGrading now aggregates from `attempt_grading_entries` and
+ * no longer accepts an externally computed ScoreResult. These tests pre-date
+ * the workset; this helper derives a workset repo from the canonical
+ * auto-grader output so the aggregator sees the same score the old
+ * result-based path produced.
+ */
+function makeWorksetRepoFromResult(
+  result: ScoreResult,
+  attemptId = "attempt-1",
+): GradingWorksetRepository {
+  const entries = result.questionResults.map((qr) => ({
+    id: `entry-${qr.questionId}`,
+    organizationId: "org-1",
+    attemptId,
+    questionId: qr.questionId,
+    gradingMode: "auto" as const,
+    status: "completed_auto" as const,
+    maxScore: qr.maxScore,
+    earnedScore: qr.score,
+    candidateAnswer: qr.candidateAnswer,
+    standardAnswer: qr.standardAnswer,
+    correct: qr.correct,
+    comment: "",
+    gradedBy: null,
+    gradedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+  return {
+    findByAttempt: async (id) =>
+      id === attemptId ? entries.map((e) => ({ ...e })) : [],
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
+  };
+}
+
 function makeRepos(
   exam: Exam,
   attempt: ExamAttempt,
@@ -146,10 +186,40 @@ function makeRepos(
       return storedEnrollment;
     },
   };
+  // Slice 4: derive the workset repo from the canonical auto-grader output.
+  const worksetRepo: GradingWorksetRepository = {
+    findByAttempt: async (id) => {
+      if (id !== storedAttempt.id) return [];
+      const r = computeGradingResult(storedAttempt, exam, new Date());
+      return r.questionResults.map((qr) => ({
+        id: `entry-${qr.questionId}`,
+        organizationId: storedAttempt.organizationId,
+        attemptId: storedAttempt.id,
+        questionId: qr.questionId,
+        gradingMode: "auto" as const,
+        status: "completed_auto" as const,
+        maxScore: qr.maxScore,
+        earnedScore: qr.score,
+        candidateAnswer: qr.candidateAnswer,
+        standardAnswer: qr.standardAnswer,
+        correct: qr.correct,
+        comment: "",
+        gradedBy: null,
+        gradedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    },
+    findByAttemptAndQuestion: async () => null,
+    bulkCreate: async () => {},
+    completeManualEntry: async () => null,
+    countPendingManualForAttempt: async () => 0,
+  };
   return {
     examRepo,
     attemptRepo,
     enrollmentRepo,
+    worksetRepo,
     getAttempt: () => storedAttempt,
     getEnrollment: () => storedEnrollment,
   };
@@ -236,6 +306,7 @@ describe("finalizeGrading", () => {
     ],
     gradedAt: new Date("2026-06-01T12:00:00Z"),
   };
+  const now = new Date("2026-06-01T12:00:00Z");
 
   it("atomically writes attempt score and enrollment finalScore", async () => {
     const exam = makeExam();
@@ -248,10 +319,11 @@ describe("finalizeGrading", () => {
     const result = await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(result).toBe(true);
@@ -259,7 +331,6 @@ describe("finalizeGrading", () => {
       status: "graded",
       score: 10,
       passed: true,
-      gradingResult: gradingResult.questionResults,
     });
     expect(repos.getEnrollment()).toMatchObject({
       status: "started",
@@ -301,10 +372,11 @@ describe("finalizeGrading", () => {
     const result = await finalizeGrading(
       trackingEnrollmentRepo,
       trackingAttemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(result).toBe(false);
@@ -324,10 +396,11 @@ describe("finalizeGrading", () => {
       finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
+        repos.worksetRepo,
         "attempt-1",
         "enrollment-1",
-        gradingResult,
         exam,
+        now,
       ),
     ).rejects.toThrow(InvalidStateTransitionError);
   });
@@ -352,10 +425,11 @@ describe("finalizeGrading", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       trackingAttemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(statusesSeen).not.toContain("grading");
@@ -377,10 +451,11 @@ describe("finalizeGrading", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      repos.worksetRepo,
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(repos.getEnrollment().finalScore).toBe(12);
@@ -491,6 +566,7 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
     ],
     gradedAt: new Date("2026-06-01T12:00:00Z"),
   };
+  const now = new Date("2026-06-01T12:00:00Z");
 
   it("keeps enrollment started when max_attempts not exhausted", async () => {
     const exam = {
@@ -507,10 +583,11 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      makeWorksetRepoFromResult(gradingResult),
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(repos.getEnrollment().status).toBe("started");
@@ -531,10 +608,11 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      makeWorksetRepoFromResult(gradingResult),
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(repos.getEnrollment().status).toBe("completed");
@@ -551,10 +629,11 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      makeWorksetRepoFromResult(gradingResult),
       "attempt-1",
       "enrollment-1",
-      gradingResult,
       exam,
+      now,
     );
 
     expect(repos.getEnrollment().status).toBe("completed");
@@ -565,6 +644,16 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
       ...gradingResult,
       passed: false,
       totalScore: 3,
+      questionResults: [
+        {
+          questionId: "q1",
+          correct: false,
+          score: 3,
+          maxScore: 10,
+          candidateAnswer: "a",
+          standardAnswer: "a",
+        },
+      ],
     };
     const exam = { ...makeExam(), retakePolicy: "pass_then_stop" as const };
     const repos = makeRepos(
@@ -576,10 +665,11 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
+      makeWorksetRepoFromResult(failResult),
       "attempt-1",
       "enrollment-1",
-      failResult,
       exam,
+      now,
     );
 
     expect(repos.getEnrollment().status).toBe("started");

@@ -12,14 +12,14 @@ import type { RequestContext } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
 import { gradeQuestion } from "@exam/exam-engine";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import { createManualGradingRepo } from "@exam/db/src/repository/manualGradingRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { createGradingQueueRepo } from "@exam/db/src/repository/gradingQueueRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
   createAttemptRepoAdapter,
-  createManualGradingRepoAdapter,
+  createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
   ensureTargetOrg,
@@ -31,18 +31,30 @@ import { Permission } from "@exam/authz";
 import { recordAudit } from "./audit.js";
 
 /**
- * Registers the admin manual-grading queue routes (P2D-J3):
+ * Registers the admin manual-grading queue routes (P2D-J3 / P3-L0-2E Slice 3):
  * - GET  /admin/grading-queue
  * - GET  /admin/attempts/:attemptId/grading-details
  * - POST /admin/attempts/:attemptId/grade-question
  *
  * All routes are Admin-only (RBAC + organization boundary). Handlers mirror
  * attempts.admin.ts: validate -> ensureTargetOrg -> command/repo -> audit.
+ *
+ * Slice 3 ownership: the manual grading queue, grading-details view, and
+ * manual-score write path are ALL sourced from the durable
+ * `attempt_grading_entries` workset. The queue reads
+ * `WHERE grading_mode='manual' AND status='pending_manual'`; manual scoring
+ * flips `pending_manual → completed_manual` on the SAME entry; the public
+ * response shape is preserved as a presentation projection over those entries.
  */
 export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
   /**
-   * GET /admin/grading-queue - lists attempts awaiting manual scoring
-   * (gradingStatus = pending_manual), with pagination and optional exam filter.
+   * GET /admin/grading-queue - lists attempts that have at least one pending
+   * manual grading entry, with pagination and optional exam filter.
+   *
+   * Slice 3: the work source is `attempt_grading_entries` filtered to
+   * `grading_mode='manual' AND status='pending_manual'`, NOT
+   * `exam_attempts.gradingStatus` or any `questionSnapshot` rescan. Attempt
+   * lifecycle state alone cannot fabricate queue work.
    */
   fastify.get(
     "/admin/grading-queue",
@@ -69,40 +81,32 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
         return reply.code(400).send(formatZodError(request.id, parsed.error));
       }
       const { page, pageSize, examId } = parsed.data;
-      const attemptRepo = createAttemptRepo(fastify.db);
+      const entryRepo = createAttemptGradingEntryRepo(fastify.db);
       const offset = (page - 1) * pageSize;
       const [rows, total] = await Promise.all([
-        attemptRepo.listPendingManual(ctx, {
+        entryRepo.listPendingManualQueue(ctx, {
           ...(examId ? { examId } : {}),
           limit: pageSize,
           offset,
         }),
-        attemptRepo.countPendingManual(ctx, examId ? { examId } : {}),
+        entryRepo.countPendingManualQueue(ctx, examId ? { examId } : {}),
       ]);
 
-      const items = rows.map((r) => {
-        // Subjective question count comes from the snapshot; scored count from
-        // the joined manual_grading_entries.
-        const subjectiveCount = r.attempt.questionSnapshot.filter(
-          (q) => q.standardAnswer == null,
-        ).length;
-        const pendingQuestionCount = Math.max(
-          0,
-          subjectiveCount - r.scoredCount,
-        );
-        return {
-          attemptId: r.attempt.id,
-          examId: r.exam.id,
-          examTitle: r.exam.title,
-          candidateId: r.candidateProfile.id,
-          candidateName: r.candidateUser.name,
-          submittedAt: r.attempt.submittedAt
-            ? r.attempt.submittedAt.toISOString()
-            : null,
-          gradingStatus: r.attempt.gradingStatus ?? "auto_graded",
-          pendingQuestionCount,
-        };
-      });
+      // Presentation projection: each attempt-level row carries its
+      // authoritative pending-manual entry count (count(attempt_grading_entries.id)
+      // from the repo). No questionSnapshot rescan, no standardAnswer heuristic.
+      const items = rows.map((r) => ({
+        attemptId: r.attempt.id,
+        examId: r.exam.id,
+        examTitle: r.exam.title,
+        candidateId: r.candidateProfile.id,
+        candidateName: r.candidateUser.name,
+        submittedAt: r.attempt.submittedAt
+          ? r.attempt.submittedAt.toISOString()
+          : null,
+        gradingStatus: r.attempt.gradingStatus ?? "auto_graded",
+        pendingQuestionCount: r.pendingCount,
+      }));
 
       return reply.send({ items, total, page, pageSize });
     },
@@ -110,7 +114,13 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /admin/attempts/:attemptId/grading-details - returns the attempt's
-   * subjective questions with their current manual-grading state.
+   * manual-mode questions with their current grading-entry state.
+   *
+   * Slice 3: the question universe is projected from the frozen
+   * `questionSnapshot` (presentation only — content/type/maxScore/expected
+   * question IDs). The per-question grading state and candidate answer come
+   * from the authoritative `attempt_grading_entries` rows, NOT from a legacy
+   * manual-score table.
    */
   fastify.get(
     "/admin/attempts/:attemptId/grading-details",
@@ -140,7 +150,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const { attemptId } = params.data;
 
       const attemptRepo = createAttemptRepo(fastify.db);
-      const manualGradingRepo = createManualGradingRepo(fastify.db);
+      const entryRepo = createAttemptGradingEntryRepo(fastify.db);
       const gradingQueueRepo = createGradingQueueRepo(fastify.db);
 
       const attempt = await attemptRepo.findById(ctx, attemptId);
@@ -157,31 +167,34 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Attempt grading context not found");
       }
 
-      const entries = await manualGradingRepo.findByAttempt(ctx, attemptId);
+      // Authoritative per-question grading state. Keyed by questionId — the
+      // entry's `candidateAnswer` is the frozen submitted answer (identical to
+      // `submittedAnswers`), so we read display data from the entry.
+      const entries = await entryRepo.findByAttempt(ctx, attemptId);
       const entryByQuestion = new Map(entries.map((e) => [e.questionId, e]));
-      const answerByQuestion = new Map(
-        attempt.answers.map((a) => [a.questionId, a.answer]),
-      );
       const questions = attempt.questionSnapshot
-        .filter((q) => q.standardAnswer == null)
+        .filter((q) => entryByQuestion.has(q.originalQuestionId))
+        .filter(
+          (q) =>
+            entryByQuestion.get(q.originalQuestionId)?.gradingMode === "manual",
+        )
         .map((q) => {
-          const entry = entryByQuestion.get(q.originalQuestionId);
+          const entry = entryByQuestion.get(q.originalQuestionId)!;
           return {
             questionId: q.originalQuestionId,
             type: q.type,
             content: q.content,
             maxScore: q.score,
-            candidateAnswer: answerByQuestion.has(q.originalQuestionId)
-              ? (answerByQuestion.get(q.originalQuestionId) ?? null)
-              : null,
-            entry: entry
-              ? {
-                  score: entry.score,
-                  comment: entry.comment,
-                  gradedBy: entry.gradedBy,
-                  gradedAt: entry.gradedAt.toISOString(),
-                }
-              : null,
+            candidateAnswer: entry.candidateAnswer ?? null,
+            entry:
+              entry.status === "completed_manual"
+                ? {
+                    score: entry.earnedScore ?? 0,
+                    comment: entry.comment,
+                    gradedBy: entry.gradedBy ?? "",
+                    gradedAt: (entry.gradedAt ?? new Date(0)).toISOString(),
+                  }
+                : null,
           };
         });
 
@@ -217,6 +230,12 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
    * POST /admin/attempts/:attemptId/grade-question - saves (or overwrites)
    * one manual grading entry. Transactional with a row lock on the attempt.
    * Audit: grading.score_entered.
+   *
+   * Slice 3: the command updates the SAME `attempt_grading_entries` row that
+   * the freeze barrier materialized (pending_manual → completed_manual). It
+   * fails closed when no entry exists and rejects attempts to score an
+   * auto-graded entry. The route pre-fetches attempt/exam metadata for audit
+   * only; the authoritative maxScore and entry lookup live in the command.
    */
   fastify.post(
     "/admin/attempts/:attemptId/grade-question",
@@ -252,44 +271,38 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const { questionId, score, comment } = body.data;
       const now = fastify.now();
 
-      // Pre-fetch the attempt to read maxScore and previousScore for audit metadata.
+      // Pre-fetch the attempt + grading entry for audit metadata only. The
+      // authoritative maxScore/previousScore come from the frozen workset.
       const attemptRepo = createAttemptRepo(fastify.db);
+      const entryRepo = createAttemptGradingEntryRepo(fastify.db);
       const preAttempt = await attemptRepo.findById(ctx, attemptId);
-      const questionSnapshot = preAttempt?.questionSnapshot;
-      const targetQuestion = questionSnapshot?.find(
-        (q) => q.originalQuestionId === questionId,
+      if (!preAttempt) {
+        throw new NotFoundError("Attempt grading context not found");
+      }
+      const preEntry = await entryRepo.findByAttemptAndQuestion(
+        ctx,
+        attemptId,
+        questionId,
       );
-      const maxScore = targetQuestion?.score ?? 0;
+      const maxScore = preEntry?.maxScore ?? 0;
+      const previousScore = preEntry?.earnedScore ?? null;
 
-      // Load the exam to read passingScore for manual-score reconciliation
-      // (the attempt total is recomputed as objective + manual on full grading).
+      // Load the exam to read passingScore for manual-score reconciliation.
       const gradingQueueRepo = createGradingQueueRepo(fastify.db);
-      const exam = preAttempt
-        ? await gradingQueueRepo.findExamById(ctx, preAttempt.examId)
-        : null;
-      if (!preAttempt || !exam) {
+      const exam = await gradingQueueRepo.findExamById(ctx, preAttempt.examId);
+      if (!exam) {
         throw new NotFoundError("Attempt grading context not found");
       }
       const passingScore = exam.passingScore;
 
-      const manualGradingRepo = createManualGradingRepo(fastify.db);
-      const existingEntries = await manualGradingRepo.findByAttempt(
-        ctx,
-        attemptId,
-      );
-      const previousEntry = existingEntries.find(
-        (e) => e.questionId === questionId,
-      );
-      const previousScore = previousEntry?.score ?? null;
-
       const result = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
-        const txManualGradingRepo = createManualGradingRepo(tx);
+        const txEntryRepo = createAttemptGradingEntryRepo(tx);
         // Lock the attempt row for the duration of the grade (§17).
         await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
         return gradeQuestion(
           createAttemptRepoAdapter(txAttemptRepo, ctx),
-          createManualGradingRepoAdapter(txManualGradingRepo, ctx),
+          createGradingWorksetRepoAdapter(txEntryRepo, ctx),
           attemptId,
           questionId,
           score,

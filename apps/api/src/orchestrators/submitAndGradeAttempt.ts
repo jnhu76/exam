@@ -5,14 +5,17 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import {
   submitAttempt,
   readGradingSnapshot,
-  computeGradingResult,
   finalizeGrading,
   ensureAttemptDeadlineReconciled,
 } from "@exam/exam-engine";
-import { createExamEngineRepos } from "../adapters/repoAdapters.js";
+import {
+  createExamEngineRepos,
+  createGradingWorksetRepoAdapter,
+} from "../adapters/repoAdapters.js";
 
 export interface SubmitAndGradeResult {
   attempt: ExamAttempt;
@@ -77,6 +80,10 @@ export async function submitAndGradeAttempt(
         },
         ctx,
       );
+      const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+        createAttemptGradingEntryRepo(tx),
+        ctx,
+      );
 
       // P3-L0-3: lazy deadline reconciliation before submit. If the attempt
       // is past its effective deadline, freeze it as deadline-submitted
@@ -94,6 +101,7 @@ export async function submitAndGradeAttempt(
           exams,
           enrollments,
           attempts,
+          gradingWorksetRepo,
           attemptId,
           now,
         );
@@ -118,7 +126,8 @@ export async function submitAndGradeAttempt(
         // Submit flips the row to `submitted` under the same lock. After this,
         // any concurrent saveAnswer sees `submitted` and is rejected
         // (ATTEMPT_ALREADY_SUBMITTED), so the answers can no longer mutate.
-        await submitAttempt(attempts, attemptId, now, {
+        // P3-L0-2E: submitAttempt owns grading workset materialization.
+        await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
           source: "candidate",
           minSubmitAfterStartMinutes:
             (await exams.findById(lockedAttempt.examId))
@@ -126,11 +135,27 @@ export async function submitAndGradeAttempt(
         });
       }
 
+      // P3-L0-2C: branch on the authoritative gradingStatus established at
+      // the submit/freeze barrier. A pending_manual attempt MUST hold at
+      // submitted — the manual-grading queue owns the final transition. No
+      // question-type rescan here; the freeze barrier is the single
+      // classification authority. Both the fresh-submit case (submitAttempt
+      // just wrote pending_manual) and the crash-recovery `submitted` case
+      // (carrying its previously-established gradingStatus) are covered.
+      const postSubmit = await attempts.findByIdForUpdate(attemptId);
+      if (!postSubmit) {
+        throw new NotFoundError("Attempt not found after submit");
+      }
+
+      if (postSubmit.gradingStatus === "pending_manual") {
+        return false;
+      }
+
       // Re-read the grading snapshot from the SAME transaction so the answers
       // feeding the score are the locked, post-submit answers. This is the
       // freeze barrier: the score is derived from exactly the answer set that
       // existed when the submit lock was held. (For the crash-recovery
-      // `submitted` path this also re-grades idempotently.)
+      // `submitted` path this re-runs objective auto-grading deterministically.)
       const snapshot = await readGradingSnapshot(
         exams,
         enrollments,
@@ -141,14 +166,19 @@ export async function submitAndGradeAttempt(
         throw new NotFoundError("Attempt not found after submit");
       }
 
-      const result = computeGradingResult(snapshot.attempt, snapshot.exam, now);
+      // Slice 4: finalizeGrading is the single terminal authority — it loads
+      // the grading workset and aggregates via `aggregateGradingEntries`. No
+      // externally computed result is supplied (that would be a second score
+      // authority). The gradingWorksetRepo is tx-scoped (created above) and
+      // reads the same committed entries the freeze barrier materialized.
       await finalizeGrading(
         enrollments,
         attempts,
+        gradingWorksetRepo,
         attemptId,
         snapshot.enrollment.id,
-        result,
         snapshot.exam,
+        now,
       );
       return false;
     }

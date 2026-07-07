@@ -1,9 +1,12 @@
 import type {
   AnswerRecord,
   Attachment,
+  AttemptGradingEntry,
   ControlFlags,
   EmailOutboxStatus,
   EmailType,
+  GradingEntryMode,
+  GradingEntryStatus,
   GradingRule,
   GradingStatus,
   MisconductFlag,
@@ -349,12 +352,22 @@ export const examAttempts = pgTable(
 );
 
 /**
- * Manual grading entries — one grader's score + comment for one subjective
- * question within one attempt (P2D-J2). Uniqueness of (attemptId, questionId)
- * prevents duplicate entries for the same question in the same attempt.
+ * Attempt grading entries — the materialized per-question grading workset
+ * (P3-L0-2E). One durable row per frozen question per attempt, created at
+ * submit-freeze time from `submitted_answers` + the frozen `QuestionSnapshot`.
+ *
+ * This is the single durable grading truth. The manual grading queue reads
+ * `WHERE grading_mode = 'manual' AND status = 'pending_manual'`; manual
+ * scoring flips `pending_manual → completed_manual`; terminal final
+ * aggregation reads all completed entries. `attempt.gradingResult` is a
+ * denormalized projection generated from these entries — never consumed as
+ * scoring input.
+ *
+ * Uniqueness of `(attemptId, questionId)` prevents duplicate work items.
+ * `questionId` joins `QuestionSnapshot.originalQuestionId`.
  */
-export const manualGradingEntries = pgTable(
-  "manual_grading_entries",
+export const attemptGradingEntries = pgTable(
+  "attempt_grading_entries",
   {
     id: id(),
     organizationId: organizationId().references(() => organizations.id),
@@ -362,33 +375,50 @@ export const manualGradingEntries = pgTable(
       .notNull()
       .references(() => examAttempts.id),
     questionId: text("question_id").notNull(),
-    score: doublePrecision("score").notNull(),
+    gradingMode: text("grading_mode").$type<GradingEntryMode>().notNull(),
+    status: text("status").$type<GradingEntryStatus>().notNull(),
     maxScore: doublePrecision("max_score").notNull(),
+    earnedScore: doublePrecision("earned_score"),
+    candidateAnswer: jsonb("candidate_answer"),
+    standardAnswer: jsonb("standard_answer"),
+    correct: boolean("correct"),
     comment: text("comment").notNull().default(""),
-    gradedBy: text("graded_by").notNull(),
+    gradedBy: text("graded_by"),
     gradedAt: timestamp("graded_at", {
       withTimezone: true,
       mode: "date",
-    }).notNull(),
+    }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex("manual_grading_entries_attempt_question_unique").on(
+    uniqueIndex("attempt_grading_entries_attempt_question_unique").on(
       table.attemptId,
       table.questionId,
     ),
-    // Data-integrity guards at the DB boundary (mirrors the exams table's
-    // check-constraint convention). Application-level (Zod) validation is the
-    // primary gate; these protect persisted data against direct DB writes.
-    check("manual_grading_entries_score_check", sql`${table.score} >= 0`),
+    index("attempt_grading_entries_queue_index").on(
+      table.organizationId,
+      table.status,
+    ),
     check(
-      "manual_grading_entries_max_score_check",
+      "attempt_grading_entries_mode_check",
+      sql`${table.gradingMode} IN ('auto', 'manual')`,
+    ),
+    check(
+      "attempt_grading_entries_status_check",
+      sql`${table.status} IN ('completed_auto', 'pending_manual', 'completed_manual')`,
+    ),
+    check(
+      "attempt_grading_entries_max_score_check",
       sql`${table.maxScore} >= 0`,
     ),
     check(
-      "manual_grading_entries_score_limit_check",
-      sql`${table.score} <= ${table.maxScore}`,
+      "attempt_grading_entries_earned_score_check",
+      sql`${table.earnedScore} >= 0`,
+    ),
+    check(
+      "attempt_grading_entries_earned_score_limit_check",
+      sql`${table.earnedScore} <= ${table.maxScore}`,
     ),
   ],
 );
@@ -653,7 +683,7 @@ export const schema = {
   exams,
   examEnrollments,
   examAttempts,
-  manualGradingEntries,
+  attemptGradingEntries,
   auditLogs,
   clientEvents,
   importJobLogs,
