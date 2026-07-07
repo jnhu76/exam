@@ -13077,6 +13077,12 @@
                           "answerSource": {
                             "type": "string",
                             "enum": ["draft", "submitted", "none"]
+                          },
+                          "currentClientSeq": {
+                            "type": "integer"
+                          },
+                          "currentVersion": {
+                            "type": "integer"
                           }
                         },
                         "required": [
