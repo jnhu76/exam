@@ -49,11 +49,10 @@ export function pgNum(val: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-/** PostgreSQL retryable error codes. */
+/** PostgreSQL retryable error codes (transient concurrency failures only). */
 const RETRYABLE_ERROR_CODES = new Set([
   "40001", // serialization_failure
   "40P01", // deadlock_detected
-  "23505", // unique_violation
 ]);
 
 /** Max retry attempts for retryable transaction failures. */
@@ -62,10 +61,13 @@ const MAX_RETRIES = 3;
 /**
  * Checks if an error represents a retryable transaction concurrency error.
  * Walks the error chain (Drizzle wraps the underlying Postgres error).
+ * Uses a `visited` Set to guard against circular `cause` references.
  */
 function isRetryableError(err: unknown): boolean {
   let current: unknown = err;
-  while (current) {
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
     if (
       typeof current === "object" &&
       current !== null &&
@@ -88,10 +90,19 @@ function isRetryableError(err: unknown): boolean {
  * Executes the provided function inside a Drizzle database transaction
  * with automatic retry for concurrency failures.
  *
+ * The transaction explicitly uses REPEATABLE READ isolation to ensure
+ * consistent behavior across all environments regardless of database
+ * defaults. Under REPEATABLE READ, concurrent transactions that modify
+ * the same row trigger serialization_failure (40001) which is retried.
+ *
  * Retries automatically when the transaction fails with:
  * - 40001: serialization_failure (REPEATABLE READ concurrent update)
  * - 40P01: deadlock_detected
- * - 23505: unique_violation (concurrent INSERT after race condition on read)
+ *
+ * Note: unique_violation (23505) is NOT retried globally — most unique
+ * violations are permanent conflicts (duplicate email, username, etc.)
+ * and retrying them wastes resources. The startAttempt race is handled
+ * by the enrollment FOR UPDATE lock which triggers 40001 under REPEATABLE READ.
  *
  * @param db - Database instance.
  * @param fn - Async function that receives a transactional `Database` handle.
@@ -111,9 +122,12 @@ export async function executeInTransaction<T>(
       );
     }
     try {
-      return await db.transaction(async (tx) => {
-        return fn(tx as Database);
-      });
+      return await db.transaction(
+        async (tx) => {
+          return fn(tx as Database);
+        },
+        { isolationLevel: "repeatable read" },
+      );
     } catch (err) {
       lastError = err;
       if (attempt === MAX_RETRIES || !isRetryableError(err)) {

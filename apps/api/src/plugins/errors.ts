@@ -32,31 +32,36 @@ function extractValidationIssues(error: unknown): ZodIssue[] {
 
 /**
  * Checks whether an error represents a database unique-constraint violation
- * or serialization failure. These are retryable concurrency errors.
+ * or serialization failure. These are mapped to 409 Conflict responses.
  *
- * 23505 = unique_violation — duplicate key value violation
+ * 23505 = unique_violation — duplicate key value violation (permanent conflict)
  * 40001 = serialization_failure — "could not serialize access due to
  *         concurrent update" — occurs in REPEATABLE READ isolation when
- *         two transactions race to lock the same row.
+ *         two transactions race to lock the same row. After exhausting
+ *         retries in executeInTransaction, surfaces as 409 to the client.
+ *
+ * Walks the error chain iteratively (Drizzle may wrap the underlying
+ * Postgres error multiple levels deep). Uses a `visited` Set to guard
+ * against circular `cause` references.
  */
 function isConstraintError(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const e = err as Record<string, unknown>;
-  if (e.code === "23505" || e.code === "40001") return true;
-  const cause = e.cause as Record<string, unknown> | undefined;
-  if (
-    cause &&
-    typeof cause === "object" &&
-    (cause.code === "23505" || cause.code === "40001")
-  )
-    return true;
-  if (
-    typeof e.message === "string" &&
-    (e.message.includes("duplicate key") ||
-      e.message.includes("unique constraint") ||
-      e.message.includes("serialize"))
-  )
-    return true;
+  let current: unknown = err;
+  const visited = new Set<unknown>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current !== "object" || current === null) break;
+    const e = current as Record<string, unknown>;
+    if (e.code === "23505" || e.code === "40001") return true;
+    if (
+      typeof e.message === "string" &&
+      (e.message.includes("duplicate key") ||
+        e.message.includes("unique constraint") ||
+        e.message.includes("serialize"))
+    ) {
+      return true;
+    }
+    current = e.cause;
+  }
   return false;
 }
 
