@@ -6,6 +6,16 @@
 >
 > **协议优先（2026-07-03 修订）：** 模块队列在 P0 之前新增 **P-1 考试协议与后端状态模型收敛**（P3-PROTO-0/1/2）。P-1 是 P0 前端运行时的硬前置：协议矩阵与后端一致性测试未完成前，不得推进前端作答状态机（P3-FSM-0）或主观题运行时。后端是业务真相源；前端只消费后端真相字段。
 
+> **执行基线（2026-07-07）：**
+>
+> - P3-PROTO-0/1/2、P3-L0-1~5 已完成。
+> - P3-L0-2 的后续 corrective closure（2C/2D/2E）已完成，并建立 materialized grading workset、durable manual queue、pending-only manual completion、grading-entry-only terminal aggregation。
+> - P3-FSM-0 与 P3-MOD-P0-1~4 已完成；P0 已 CLOSED。
+> - 当前活动模块是 P1。P3-MOD-P1-1 已完成 rebaseline，确认 grading detail 缺少 frozen `standardAnswer` / `rubric`。
+> - 在继续 P1 前，必须先完成 **P3-PROTO-0C — Accepted Grading Model Mirror Closure**，把 `exam-protocol.md` 中尚未吸收 P3-L0-2E 的旧 grading 语义镜像到已接受模型。
+>
+> **Corrective ownership rule：** 后置模块暴露历史协议/依赖缺口时，回到真实 owner 做 corrective closure；闭包完成后必须返回原 Job Card。不得在后置模块增加 compatibility workaround。
+
 ---
 
 ## 全局非目标
@@ -20,7 +30,7 @@
 - Proctor 角色激活
 - Proctor 派单/scoped 监考
 - WebSocket/SSE 监考
-- 租户/学校/组织作用域
+- 新增或重设计租户/学校/组织作用域模型（**现有 organization/tenant isolation 必须保留，不得因“非目标”而绕过**）
 - 自定义 RBAC 角色
 - Scoped 角色派单（teacher@course、proctor@exam）
 - 邮件模板引擎
@@ -50,7 +60,7 @@
 | `rubric` | 发布时必填（评分依据） |
 | `options` | 空 |
 | `前端渲染` | `<textarea>`（纯文本，保留换行，无富文本） |
-| `评分流水线` | `gradingMode=manual` → 进入人工评分队列（`gradingStatus=pending_manual`） |
+| `评分流水线` | submit freeze 物化 `gradingMode=manual,status=pending_manual` 的 grading entry → 进入 durable PG manual queue |
 
 **rubric 双层存储**：`questions.rubric`（命题编辑源）→ `QuestionSnapshot.rubric`（冻结评分源）。grading 视图从 snapshot 读取，不 JOIN live questions 表。
 
@@ -85,7 +95,7 @@ L0 扩展项：
 15. text_response 题型与 rubric 双层存储
 16. CandidateTakeSnapshot 统一端点
 17. Deadline reconciliation（懒触发收口）
-18. GradingStatus 独立维度（人工评分队列查 gradingStatus，不查 attemptStatus）
+18. GradingStatus 独立维度（attempt-level grading lifecycle）；manual queue work authority 由 materialized grading entries 决定，不从 attemptStatus/gradingStatus 反推
 19. inputMode / gradingMode 派生（不存储）
 20. submitted_answers 格式（SubmittedAnswersSnapshot，干净快照）
 21. Migration 策略（schema + backfill 脚本）
@@ -101,15 +111,15 @@ AttemptStatus (8 values):
                                    ↑           ↓
                                disrupted     voided (terminal)
 
-GradingStatus (3 independent values):
-  pending_auto     — auto-grading queued or in progress
-  pending_manual   — manual grading needed (text_response questions exist)
-  fully_graded     — all scoring complete
+GradingStatus (independent dimension):
+  exact enum / pure-objective terminal status — 由 P3-PROTO-0C 对照 current enum + contracts 镜像，Job Card 不再复制旧 `pending_auto` 假设
+  pending_manual   — attempt-level manual grading lifecycle hold
+  fully_graded     — manual/mixed grading complete
 
 Completion paths:
-  objective-only exam:  submitted → grading → graded (auto-grade in submit transaction)
-  manual-only exam:     submitted (gradingStatus=pending_manual) → graded (after human scoring)
-  mixed exam:           submitted (gradingStatus=pending_manual) → graded (auto + manual complete)
+  objective-only exam:  由 current production terminal path + P3-PROTO-0C 镜像；最终 score authority 必须是 grading entries
+  manual-only exam:     submitted (gradingStatus=pending_manual) → graded (after all manual entries complete)
+  mixed exam:           submitted (gradingStatus=pending_manual) → graded (completed_auto + completed_manual entries aggregate)
 
 Answer:
   answers            draft, mutable before submit
@@ -119,6 +129,25 @@ Result:
   resultVisibility   score/pass visibility (hidden | visible)
   answerVisibility   standardAnswer/rubric visibility (hidden | visible)
 ```
+
+**已接受的 grading workset 修订（P3-L0-2E）：**
+
+```text
+submitted_answers + frozen QuestionSnapshot
+        ↓ submitAttempt
+attempt_grading_entries
+        ├── completed_auto
+        └── pending_manual → completed_manual
+        ↓
+aggregateGradingEntries
+        ↓
+terminal score / gradingResult / passed
+```
+
+- manual queue predicate：`grading_mode='manual' AND status='pending_manual'`
+- `gradingStatus` 描述 attempt-level grading lifecycle，**不得用于重建 question-level queue work**
+- `attempt.gradingResult` 仅为 terminal denormalized projection，绝不作为 scoring input
+- `gradeQuestion` 只完成 pending manual work；`completed_manual` 与 `graded + fully_graded` 在当前协议下不可由普通 gradeQuestion 修改
 
 ---
 
@@ -207,8 +236,8 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 | 10 | deadline reconciliation idempotent | 重复 take 不覆盖已有 submitted_answers |
 | 11 | save after deadline rejected | 过期后 save 返回错误 |
 | 12 | submit after deadline returns existing | 过期后 submit 返回已有 deadline-submitted snapshot |
-| 13 | text_response grading reads submitted_answers | 人工评分从 submitted_answers 读取，不读 draft answers |
-| 14 | grading queue queries gradingStatus | 人工评分队列查 gradingStatus='pending_manual'，不查 attemptStatus |
+| 13 | text_response grading uses frozen submitted truth | submit-time workset 从 submitted_answers 物化 frozen candidateAnswer；grading detail/command 不读 draft answers，terminal aggregation不重评 submitted_answers |
+| 14 | grading queue uses materialized work | 人工评分队列直接查询 `attempt_grading_entries` 的 manual + pending_manual work，不从 attemptStatus/gradingStatus 重建题目工作 |
 
 **完成标准：**
 
@@ -232,8 +261,8 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 | 10 | deadline reconciliation idempotent | `deadline-scanner.test.ts:390` (scanner) |
 | 11 | save after deadline rejected | `candidate-save-submit.test.ts:678` + `protocol-consistency.test.ts` #11 |
 | 12 | submit after deadline returns existing | `candidate-save-submit.test.ts:764` + `protocol-consistency.test.ts` #12 |
-| 13 | text_response grading reads submitted_answers | 待 P3-L0-1/L0-2 实现后补充 |
-| 14 | grading queue queries gradingStatus | `gradingQueue.test.ts:201,232` + `protocol-consistency.test.ts` #14 |
+| 13 | text_response grading frozen-answer provenance | `protocol-consistency.test.ts` #13 + grading workset/poison tests |
+| 14 | grading queue uses materialized work | `gradingQueue.test.ts` durable queue tests + `attemptGradingEntryRepo` query tests + grading architecture structural tests |
 
 **提交：**
 
@@ -324,7 +353,77 @@ git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource ro
 
 ---
 
-### P3-L0-1：Schema Migration + Rubric 双层存储
+### P3-PROTO-0C：Accepted Grading Model Mirror Closure（CURRENT GATE）
+
+**目标：** 仅修订 `docs/phase3/exam-protocol.md`，把 P3-L0-2C/2D/2E 已接受并被结构测试锁定的 grading 模型镜像回协议真相源。**这是 P1 的协议前置纠偏，不修改产品代码。**
+
+**类型：** corrective documentation closure
+
+**真实 owner：** P3-PROTO-0（协议规格）
+
+**依赖：** P3-L0-2E Slice 5 closure (`85de459`)；P0 closeout
+
+**已确认的协议漂移：**
+
+1. §3.2 / Grading Tests 仍写 manual queue 按 `gradingStatus=pending_manual` 发现 work；当前权威 work source 是 `attempt_grading_entries(grading_mode=manual,status=pending_manual)`。
+2. §4.2 Submit Freeze 只写 `submitted_answers` + gradingStatus，没有记录同事务 materialize exactly one grading entry per frozen question。
+3. §3.4 / §11 仍使用 `completeManualGrading`；当前 one-way completion command 是 `gradeQuestion`，最终一条 pending manual entry 完成后由同一 command 路径进入 terminal aggregation。
+4. §4.1 / §4.5 “grading/result 只读 submitted_answers” 已过宽。正确 phase boundary 是：`submitted_answers` 仅是 submit-time workset materialization input；terminal score authority exclusively comes from grading entries。
+5. 协议未记录 `aggregateGradingEntries` 为唯一 production terminal score aggregation seam，也未明确 `attempt.gradingResult` 仅为 terminal projection。
+6. `GradingQuestionDTO` 的字段命名/来源描述需与当前 API contract 做一次精确 mirror：无论保留 `candidateAnswer` 还是改为 `submittedAnswer`，都必须明确 provenance 是 frozen submitted truth；不得从 `attempt.answers` 读取。
+7. GradingStatus 枚举/纯客观题 terminal status 描述必须对照当前 `packages/domain/src/enums.ts`、contracts 和已接受生产行为逐项校正；不得凭旧文档猜测 `pending_auto` / `auto_graded`。
+
+**步骤：**
+
+1. READ current production + contracts:
+   - `packages/domain/src/enums.ts`
+   - `packages/contracts/src/attempt.ts`
+   - `packages/contracts/src/score.ts`
+   - `packages/exam-engine/src/attemptCommands.ts`
+   - `packages/exam-engine/src/gradingWorkset.ts`
+   - `packages/exam-engine/src/grading.ts`
+   - `packages/exam-engine/src/manualGrading.ts`
+   - `packages/db/src/repository/attemptGradingEntryRepo.ts`
+   - `apps/api/src/routes/gradingQueue.ts`
+   - `apps/api/src/runtime/gradingArchitecture.structural.test.ts`
+
+2. 只修改 `docs/phase3/exam-protocol.md`，同步：
+   - AttemptStatus / GradingStatus 当前枚举与 reachable pairs
+   - submit freeze + atomic grading-workset materialization
+   - exactly one grading entry per frozen question
+   - objective `completed_auto`; text_response `pending_manual`
+   - durable manual queue predicate
+   - `gradeQuestion` pending-only one-way transition
+   - `aggregateGradingEntries` exclusive terminal score authority
+   - `gradingResult` terminal projection only
+   - no reconstruction / fill-gaps / persisted-wins / runtime fallback / post-terminal re-grade
+   - GradingQuestionDTO frozen metadata + frozen submitted-answer provenance
+   - grading audit trigger wording
+   - grading test matrix
+
+3. 禁止以文档为由修改生产代码来“匹配旧协议”。若 current production 与 accepted L0-2E structural locks 冲突，报告 BLOCKED，不得重设计。
+
+**完成标准：**
+
+- 协议不再出现 “manual queue queries gradingStatus to discover work”
+- 协议不再出现 `completeManualGrading` 作为当前命令
+- 协议明确 submit freeze owns workset materialization
+- 协议明确 terminal score authority = `attempt_grading_entries`
+- 协议明确 `attempt.gradingResult` = terminal projection only
+- 协议明确 `submitted_answers` 的 phase boundary：materialization input, not terminal aggregation input
+- 协议明确 strict terminal manual grading / no ordinary re-grade
+- `git diff` only touches `docs/phase3/exam-protocol.md`
+
+**提交：**
+
+```bash
+git add docs/phase3/exam-protocol.md
+git commit -m "docs(P-1/L0): mirror accepted grading workset protocol"
+```
+
+---
+
+### P3-L0-1：Schema Migration + Rubric 双层存储 ✅
 
 **目标：** 实现数据库 schema 变更：新增 text_response 枚举值、submitted_answers 列、rubric 双层存储。
 
@@ -354,7 +453,7 @@ git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource ro
 - migration 在 exam_test 上运行成功
 - text_response 可以创建并保存
 - submitted_answers 列可写入 SubmittedAnswersSnapshot
-- rubric 在 questions 和 question_snapshots 上都存在
+- rubric 同时存在于 `questions.rubric` 编辑源与 `exam_attempts.question_snapshot` 内嵌 `QuestionSnapshot.rubric` 冻结源（无独立 question_snapshots 表）
 - `pnpm typecheck` 通过
 
 **提交：**
@@ -366,46 +465,99 @@ git commit -m "feat(L0): schema migration — text_response type, submitted_answ
 
 ---
 
-### P3-L0-2：Submit Freeze 重写（submitted_answers 冻结）
+### P3-L0-2：Submit Freeze + Materialized Grading Workset ✅
 
-**目标：** 重写 submit 事务，在提交时生成 `SubmittedAnswersSnapshot` 并写入 `submitted_answers` 列。评分从 `submitted_answers` 读取。
+**目标：** 在 authoritative submit/freeze seam 中原子冻结 `submitted_answers`，并为 frozen QuestionSnapshot 中每道题物化 exactly one grading entry。后续 queue、manual completion 与 terminal aggregation消费已物化 work，不重新解释题型或重建分数。
 
-**类型：** 实现
+**类型：** 实现 + corrective architecture closure
 
-**依赖：** P3-L0-1（schema 就绪）
+**依赖：** P3-L0-1
 
-**核心变更：**
+**accepted final architecture（P3-L0-2C/2D/2E 后）：**
 
-- `submitAttempt` 事务内：读 draft answers → `buildSubmittedAnswersSnapshot()` → 写 submitted_answers → 设 status/submittedAt/submissionReason
-- `gradeQuestion` / `reconcileScores` 从 submitted_answers 读取，不读 draft answers
-- double submit：返回已有 submitted_answers，不重新生成
-- save after submit：返回确定错误
+```text
+draft answers
+    ↓
+buildSubmittedAnswersSnapshot
+    ↓
+submitAttempt (authoritative freeze seam)
+    ├── freeze submitted_answers
+    ├── materialize exactly one grading entry per frozen question
+    │     ├── objective → completed_auto
+    │     └── text_response → pending_manual
+    └── establish attempt/grading lifecycle
+             ↓
+pending manual entries → durable PG queue
+             ↓
+gradeQuestion consumes pending_manual only
+             ↓
+all entries terminal
+             ↓
+aggregateGradingEntries
+             ↓
+score + gradingResult + passed + terminal state
+```
 
-**待修改文件：**
+**权威约束：**
 
-- `apps/api/src/orchestrators/submitAndGradeAttempt.ts`
-- `packages/exam-engine/src/manualGrading.ts`（读取路径）
-- `packages/exam-engine/src/grading.ts`（读取路径）
-- 相关测试
+- `submitAttempt` 必须拥有 freeze + workset materialization；caller 不得独立调用 materialization。
+- materialization input 仅为 frozen `submitted_answers` + frozen `QuestionSnapshot`。
+- fresh submit 前不得已有 grading entries；fresh materialization 一次性 bulk-create N rows for N frozen questions。
+- idempotent re-entry 不创建、不 repair、不 fill gaps；必须 exact-validate count、question ID set、gradingMode、maxScore、objective earnedScore 与合法 manual progress。
+- manual queue truth：`attempt_grading_entries WHERE grading_mode='manual' AND status='pending_manual'`。
+- `gradeQuestion` 仅接受 `submitted + pending_manual` attempt 上的 manual + pending_manual entry；完成后 entry → completed_manual。
+- completed_manual 与 `graded + fully_graded` 不可由普通 `gradeQuestion` 再修改。
+- terminal score source exclusively = grading entries。
+- `QuestionSnapshot` 只拥有 expected question universe / frozen metadata / canonical ordering。
+- `attempt.gradingResult` 仅为 terminal denormalized projection，绝不作为 scoring input。
+- 禁止 `reconcileScores` / `reconstructObjectiveScore` / persisted-wins / fill-gaps / missing→zero / runtime compatibility。
+- `computeGradingResult` 仅保留为 pending_manual response-only transient calculation；不得持久化或进入 terminal aggregation。
+
+**主要实现 seam：**
+
+- `packages/exam-engine/src/attemptCommands.ts` — `submitAttempt`
+- `packages/exam-engine/src/gradingWorkset.ts` — materialize / consistency validation
+- `packages/db/src/repository/attemptGradingEntryRepo.ts`
+- `packages/exam-engine/src/manualGrading.ts` — pending-only `gradeQuestion`
+- `packages/exam-engine/src/grading.ts` — `aggregateGradingEntries` / grading-entry-owned finalization
+- `apps/api/src/routes/gradingQueue.ts` — durable queue + manual completion API
+- `apps/api/src/runtime/gradingArchitecture.structural.test.ts`
 
 **完成标准：**
 
-- submit 后 submitted_answers 是干净快照（无 clientSeq/baseVersion）
-- 评分从 submitted_answers 读取
-- double submit 幂等
-- save after submit 拒绝
-- 所有既有测试通过
+- submit 后 `submitted_answers` 是干净快照（无 clientSeq/baseVersion）
+- successful submit commit ⇒ frozen answers + complete/consistent grading workset + matching lifecycle state
+- exactly one grading entry per frozen question
+- objective entries synchronously completed_auto
+- text_response entries pending_manual
+- manual queue from durable PG grading entries
+- repeated submit exact-validates workset；partial/mismatched workset fail closed
+- manual completion is one-way pending-only
+- pure objective and manual/mixed terminal paths share `aggregateGradingEntries`
+- terminal score exclusively from grading entries
+- gradingResult never scoring input
+- no runtime fallback/dual-read/dual-write/reconstruction
+- structural + poison + score-identity tests lock the authority graph
 
-**提交：**
+**accepted corrective commits：**
 
-```bash
-git add apps/api/src/orchestrators/submitAndGradeAttempt.ts packages/exam-engine/src/
-git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading reads from submitted_answers"
+```text
+cb562a2  fix(L0): hold manual-grading attempts at submitted
+4ec3f45  fix(L0): reconcile mixed scores through manual completion   [historical bridge; superseded as terminal authority by L0-2E]
+6e818ed  feat(L0): add materialized attempt grading entries
+3ad9615  feat(L0): materialize grading workset at submit freeze
+f096e28  fix(L0): make grading workset part of submit freeze
+f89162c  feat(L0): drive manual grading queue from grading entries
+7af5d13  fix(L0): enforce pending-only manual grading completion
+220bc18  fix(L0): aggregate final scores from grading entries only
+85de459  test(L0): lock durable grading workset truth (Slice 5)
 ```
+
+**状态：** CLOSED. 后续模块不得重开旧 reconciliation 模型；若新证据暴露 grading protocol 漂移，回 P3-PROTO-0 owner 做文档镜像，不在 P1/P3 增加兼容路径。
 
 ---
 
-### P3-L0-3：Deadline Reconciliation（懒触发收口）
+### P3-L0-3：Deadline Reconciliation（懒触发收口） ✅
 
 **目标：** 实现 `ensureAttemptDeadlineReconciled()`，在 candidate 入口事务性冻结过期 attempt。
 
@@ -436,7 +588,7 @@ git commit -m "feat(L0): submit freeze writes SubmittedAnswersSnapshot, grading 
 - submissionReason = 'deadline'
 - 幂等：重复调用不覆盖
 - save/submit 过期返回确定错误
-- 测试覆盖 14 个 deadline 场景
+- 覆盖 `exam-protocol` deadline reconciliation matrix；当前 focused `deadlineReconciliation.test.ts` + protocol consistency #9-#12 提供回归证据（不得把“14 个协议总场景”误写为“14 个 deadline 场景”）
 
 **提交：**
 
@@ -447,7 +599,7 @@ git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry
 
 ---
 
-### P3-L0-4：Backfill 脚本（submitted_answers 回填）
+### P3-L0-4：Backfill 脚本（submitted_answers 回填） ✅
 
 **目标：** 实现独立 TypeScript backfill 脚本，为已有 submitted/grading/graded/voided attempt 生成 submitted_answers。
 
@@ -466,7 +618,7 @@ git commit -m "feat(L0): lazy deadline reconciliation at candidate attempt entry
 **完成标准：**
 
 - dry-run 输出统计（总attempt数、已回填、跳过、异常）
-- 正式运行后所有 submitted/grading/graded attempt 都有 submitted_answers
+- 正式运行后 supported scope（submitted / grading / graded / voided-with-submittedAt）均按规则拥有 submitted_answers 或被明确 quarantine
 - 异常 attempt 有明确记录
 - 可重复运行（幂等）
 
@@ -479,7 +631,7 @@ git commit -m "feat(L0): backfill submitted_answers for existing submitted/grade
 
 ---
 
-### P3-L0-5：Publish Validation（text_response 发布校验）
+### P3-L0-5：Publish Validation（text_response 发布校验） ✅
 
 **目标：** 实现题目发布前校验：text_response 必须有 rubric；auto 题必须有 standardAnswer。
 
@@ -516,9 +668,11 @@ git commit -m "feat(L0): publish validation — text_response requires rubric, a
 
 ## 模块 P0 — 考生作答运行时闭环
 
+> **状态：P0 CLOSED。** 下方已完成卡中的“步骤/待检查文件”保留为 construction history，不得把其中的历史时态（例如“当前只测判断题”）重新当作 current repository fact。当前验收基线以 P3-MOD-P0-4 Resume Verification Closure 为准。
+>
 > **前置依赖：** P-1/L0（P3-PROTO-0/1/2 + P3-L0-1/2/3/4/5）必须先完成。P0 的前端运行时只消费 P-1 定义的 CandidateTakeSnapshot 端点，不发明业务规则。前端不是业务真相源，后端仍是真相源。
 
-### P3-FSM-0：TakeExam Frontend State Machine（L0 升级）
+### P3-FSM-0：TakeExam Frontend Runtime Model（legacy ID preserved） ✅
 
 **目标：** 实现 TakeExam 前端状态模型：`deriveTakeExamView(snapshot)` 纯函数 + 瞬态 reducer。**L0 升级后**：消费 CandidateTakeSnapshot，不维护完整业务状态机。
 
@@ -560,7 +714,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 
 ---
 
-### P3-MOD-P0-1：考生作答渲染审计
+### P3-MOD-P0-1：考生作答渲染审计 ✅
 
 **目标：** 为每个 MVP 题型的渲染、保存、恢复、提交行为产出精确缺口清单，包括 text_response 题型。
 
@@ -596,9 +750,9 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 
 1. 确认 `packages/contracts/src/attempt.ts` 中的 `SaveAnswerRequestSchema` 把 `answer` 校验为 `z.unknown()` —— 在 API 边界无类型特定校验。这是一种设计选择（API 接受任意 JSON），不是 bug，但这意味着前端正确性完全依赖 `QuestionRenderer` 分发。
 
-2. 确认 `packages/domain/src/enums.ts` 仅定义 4 个 `QuestionType` 值。不存在主观类型。
+2. 确认 `packages/domain/src/enums.ts` 定义 5 个 `QuestionType` 值，且 `text_response` 是独立主观文本题型。
 
-3. 记录 `SubjectiveAnswerInput.tsx`（78 行、完整 i18n、已测试）是孤儿——从未被 `QuestionRenderer` import。
+3. 记录历史 `SubjectiveAnswerInput.tsx`/旧 subjective encoding 仅作迁移背景；当前验收以 `text_response` + multi_line runtime path 为准，不得把历史孤儿组件重新定义为业务类型。
 
 **输出：** `docs/phase3/audit/p0-candidate-answer-rendering-audit.md`
 
@@ -608,7 +762,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 
 ---
 
-### P3-MOD-P0-2：text_response 作答运行时
+### P3-MOD-P0-2：text_response 作答运行时 ✅
 
 **目标：** 考生能用 textarea 作答 text_response 题。作答能保存、恢复并正确提交。
 
@@ -644,7 +798,7 @@ git commit -m "feat(P0): deriveTakeExamView + transient reducer consuming Candid
 - 作答经既有协议保存
 - 作答在页面刷新后恢复
 - 作答正确提交
-- 评分引擎正确识别其为待人工评分（gradingStatus=pending_manual）
+- submit freeze 按 canonical QuestionType semantics 为 text_response 物化 manual + pending_manual grading entry；backend snapshot 反映 submitted + pending_manual，前端不自行分类
 
 **提交：**
 
@@ -655,7 +809,7 @@ git commit -m "feat(P0): text_response textarea rendering with save/restore/subm
 
 ---
 
-### P3-MOD-P0-3：提交冻结 UI 证明
+### P3-MOD-P0-3：提交冻结 UI 证明 ✅
 
 **目标：** 验证提交后考生 UI 由权威 `CandidateTakeSnapshot` 恢复为不可编辑状态，并阻止所有前端保存执行路径。后端 save-after-submit 拒绝协议已由 P3-PROTO-1 场景 2 证明，本卡不重复后端协议测试。
 
@@ -825,7 +979,7 @@ git commit -m "test(P0): prove submitted snapshot locks candidate answer UI"
 
 ---
 
-### P3-MOD-P0-4：考生作答 E2E
+### P3-MOD-P0-4：考生作答 E2E ✅
 
 **目标：** 一条 E2E spec 证明完整考生 happy path，包含 text_response 作答。
 
@@ -872,100 +1026,245 @@ git commit -m "test(P0): extend candidate happy path E2E with text_response answ
 
 ## 模块 P1 — 人工评分闭环
 
-### P3-MOD-P1-1：人工评分 API/UI 证明
+> **协议前置：** P3-PROTO-0C 必须先完成。P1 不得依据 stale `reconcileScores` / `manual_grading_entries` / attempt-level queue inference 恢复旧 grading 模型。
+>
+> **当前状态：** P3-MOD-P1-1 rebaseline 已完成并 BLOCKED：grading details API/UI 丢弃 frozen `standardAnswer` 与 `rubric`。Corrective owner = P3-MOD-P1-1。
 
-**目标：** 证明既有人工评分 API 与 UI 能渲染 text_response 作答、保留换行、避免 XSS、保存得分、完成评分、对账总分、发出审计事件。
+### P3-MOD-P1-1：人工评分 API/UI 闭环修复与证明（CURRENT）
 
-**类型：** 测试验证（测试已存在——运行并确认）
+**目标：** 在不改变 L0 grading authority 的前提下，补齐 grader 所需 frozen grading metadata，并证明 durable queue → frozen grading detail → pending-only score completion → grading-entry-only terminal aggregation 的 API/UI 闭环。
 
-**待检查文件：**
+**类型：** 实现 + 测试 + verification proof
 
-- `apps/web/src/pages/admin/GradingDetailPage.tsx`（作答渲染、得分录入、保存）
-- `apps/web/src/pages/admin/GradingDetailPage.test.tsx`（16 个测试：换行、XSS、作答类型）
-- `apps/web/src/pages/admin/GradingQueuePage.tsx`（队列列表）
-- `apps/api/src/routes/gradingQueue.ts`（API：队列、详情、grade-question）
-- `apps/api/src/routes/gradingQueue.test.ts`（831 行：集成测试）
-- `packages/exam-engine/src/manualGrading.ts`（gradeQuestion、reconcileScores）
-- `packages/exam-engine/src/manualGrading.test.ts`（385 行）
-- `packages/db/src/repository/manualGradingRepo.test.ts`（312 行）
+**依赖：**
 
-**验证清单——确认每项被既有测试覆盖：**
+- P3-PROTO-0C（accepted grading model 已镜像到协议）
+- P3-MOD-P0-4 ✅
+- P3-L0-2E accepted grading baseline
 
-| 检查项 | 预期 | 来源 |
-|-------|----------|--------|
-| 评分详情 API 返回 `candidateAnswer` | 来自 `attempt.answers` 的原始作答 | `gradingQueue.ts:162-186` |
-| 前端把 `candidateAnswer` 显示为文本内容 | `formatAnswer()` 原样返回字符串 | `GradingDetailPage.tsx` |
-| 保留换行 | `whitespace-pre-wrap` CSS 类 | `GradingDetailPage.tsx:212` |
-| XSS 安全 | 无 `dangerouslySetInnerHTML`；React 文本内容 | `GradingDetailPage.test.tsx:436` |
-| 空/null/数组/布尔/对象作答安全 | `formatAnswer()` 处理所有类型 | `GradingDetailPage.test.tsx` |
-| 得分边界校验 | 客户端 `validateScore()` + 服务端 check 约束 | `GradingDetailPage.tsx` + DB schema |
-| 得分保存 | `POST /admin/attempts/:id/grade-question` | `gradingQueue.test.ts` |
-| 完全评分翻转 | `gradingStatus` 翻转为 `fully_graded` | `gradingQueue.test.ts` + `manualGrading.test.ts` |
-| 对账总分 | `reconcileScores()` 折叠人工 + 自动得分 | `manualGrading.test.ts` |
-| `grading.score_entered` 审计 | grade-question handler 中的 `recordAudit` | `gradingQueue.test.ts` |
-| `grading.finalized` 审计 | 在 fully_graded 翻转时发出 | `gradingQueue.test.ts` |
+**confirmed production defect：**
 
-**步骤：**
+当前 `GradingDetailsQuestionSchema` / grading-details projection 丢弃：
 
-1. 运行既有测试：
+```text
+standardAnswer
+rubric
+```
 
-   ```bash
-   pnpm --filter api test -- gradingQueue
-   pnpm --filter exam-engine test -- manualGrading
-   pnpm --filter web test -- GradingDetailPage
-   ```
+两者均已存在于 frozen `QuestionSnapshot`。协议要求 grader 使用 frozen grading basis；不得 JOIN live questions。
 
-2. 若全部通过，产出验证报告确认全链可用。
+**accepted P1 authority graph：**
 
-3. 若有任何测试损坏或缺失上表中的检查项，补上。
+```text
+candidate submitted + pending_manual
+        ↓
+attempt_grading_entries
+  manual + pending_manual
+        ↓
+durable PG grading queue
+        ↓
+GET grading-details
+  question metadata  ← frozen QuestionSnapshot
+  candidate answer   ← grading entry frozen candidateAnswer
+                        (provenance: submitted_answers at materialization)
+  standardAnswer     ← frozen QuestionSnapshot
+  rubric             ← frozen QuestionSnapshot
+        ↓
+GradingDetailPage safe plain-text rendering
+        ↓
+POST grade-question
+        ↓
+gradeQuestion
+  requires submitted + pending_manual
+  requires manual + pending_manual entry
+        ↓
+same entry → completed_manual
+        ↓
+remaining pending?
+  YES → hold submitted + pending_manual
+  NO  → aggregateGradingEntries
+        ↓
+graded + fully_graded
+```
+
+**禁止恢复的历史 seam：**
+
+```text
+manual_grading_entries
+attempt gradingStatus → reconstruct queue work
+QuestionSnapshot scan → recreate manual work
+attempt.answers as grader answer truth
+standardAnswer == null manual classifier
+reconcileScores
+reconstructObjectiveScore
+persisted gradingResult wins
+fill gaps
+post-terminal re-grade overwrite
+```
+
+**允许修改文件：**
+
+- `packages/contracts/src/score.ts`
+- `apps/api/src/routes/gradingQueue.ts`
+- `apps/api/src/routes/gradingQueue.test.ts`
+- `apps/web/src/pages/admin/GradingDetailPage.tsx`
+- `apps/web/src/pages/admin/GradingDetailPage.test.tsx`
+- `docs/phase3/audit/p1-manual-grading-proof.md`
+
+只有 RED 证明需要时才修改上述最小集合。不得修改 grading workset schema、queue authority、manual completion lifecycle、terminal aggregation。
+
+**TDD / 验收步骤：**
+
+1. **RED — frozen grader metadata contract**
+   - real `text_response`
+   - frozen `QuestionSnapshot.standardAnswer` 有值时，grading-details API 返回该 frozen reference answer
+   - frozen `QuestionSnapshot.rubric` 返回 grader
+   - live question row 后续修改不得改变 grading detail
+   - candidate take/result visibility rules不得因此泄漏 rubric/standardAnswer
+
+2. **GREEN — contract + projection**
+   - grading detail 从 frozen QuestionSnapshot projection `standardAnswer` / `rubric`
+   - candidate answer 继续来自 materialized grading entry frozen answer provenance
+   - 不 JOIN live questions
+   - 不从 draft `attempt.answers` 读取
+
+3. **RED/GREEN — UI**
+   - GradingDetailPage 显示 applicable standard answer
+   - text_response 显示 rubric
+   - rubric/answer 作为 React plain text；禁止 `dangerouslySetInnerHTML`
+   - real `text_response` fixture 证明 multiline `whitespace-pre-wrap`
+   - real `text_response` fixture 证明 script-like payload 仅按文本显示
+
+4. **score command evidence**
+   - backend authoritative score bounds：`0 <= score <= entry.maxScore`
+   - missing entry fail closed
+   - auto entry reject
+   - completed_manual reject 409
+   - graded + fully_graded reject 409
+   - 不要求/不恢复 re-grade overwrite
+
+5. **partial/final completion**
+   - two manual entries: q1 complete → q2 remains pending; attempt holds submitted+pending_manual; queue count=1
+   - q2 complete → both completed_manual; queue absent; attempt graded+fully_graded
+   - terminal path = `aggregateGradingEntries`
+
+6. **mixed score identity**
+   - distinct objective/manual scores
+   - `attempt.score == SUM(gradingResult question earned) == SUM(grading entries earnedScore)`
+   - `passed` from same canonical aggregate
+
+7. **audit evidence**
+   - accepted manual completion emits `grading.score_entered`
+   - partial grade: `grading.finalized` absent
+   - final pending completion: `grading.finalized` present
+   - actor/attempt/org metadata follows existing audit conventions
+   - no candidate answer/rubric leakage into audit metadata
+
+8. **tenant boundary**
+   - preserve existing organization isolation
+   - no tenant model redesign
+
+**完成标准：**
+
+- grader sees frozen prompt, candidate answer, applicable standardAnswer, text_response rubric, maxScore, current score/status
+- real text_response preserves line breaks and XSS-safe plain-text rendering
+- queue source remains pending manual grading entries
+- grading detail reads no draft answers and no live question metadata
+- score command completes existing pending manual entry only
+- partial hold / final completion semantics preserved
+- mixed final score identity proven
+- score-entered/finalized audit timing proven
+- strict terminal grading preserved
+- no L0 grading authority changes
+- focused API + engine + web tests GREEN
+- full `pnpm verify` GREEN
 
 **输出：** `docs/phase3/audit/p1-manual-grading-proof.md`
 
-**提交（若加/修测试）：**
+**提交：**
 
 ```bash
-git add ...
-git commit -m "test(P1): verify manual grading API/UI proof"
+git add packages/contracts/src/score.ts
+git add apps/api/src/routes/gradingQueue.ts apps/api/src/routes/gradingQueue.test.ts
+git add apps/web/src/pages/admin/GradingDetailPage.tsx apps/web/src/pages/admin/GradingDetailPage.test.tsx
+git add docs/phase3/audit/p1-manual-grading-proof.md
+
+git commit -m "fix(P1): expose frozen grading metadata in manual grading detail"
 ```
 
 ---
 
 ### P3-MOD-P1-2：主观评分 E2E
 
-**目标：** 一条 E2E spec 证明：考生提交 text_response 作答 → admin 在评分队列看到 → admin 打分 → 考生看到对账后结果。
+**目标：** 一条真实 E2E 证明：考生提交 `text_response` → pending manual work durable 入队 → Admin 打开评分详情并看到 frozen 作答/评分依据 → 完成 pending manual work → attempt 进入 `graded + fully_graded`，最终计算结果与 grading entries 一致。
 
 **类型：** E2E 测试
 
-**依赖：** P3-MOD-P0-2（text_response 作答）、P3-MOD-P1-1（评分 API/UI 证明）
+**依赖：** P3-MOD-P1-1 DONE
+
+**重要模块边界：**
+
+- P1 证明 **score becomes computed / attempt grading completes**。
+- **P1 不要求考生立即看到结果。**
+- candidate result visibility / answer visibility / release policy 属于 P3。
+- 若 E2E seed 恰好使用 immediate/visible policy，可额外观察 candidate result，但不得把“candidate sees result”作为 P1 acceptance requirement。
 
 **待修改文件：**
 
-- `apps/e2e/e2e/manual-grading.spec.ts`（当前 SKIPPED——取消跳过并更新）
+- `apps/e2e/e2e/manual-grading.spec.ts`（读取当前状态；若 skipped 则按当前原因解除）
 
 **步骤：**
 
-1. 阅读既有跳过的 `manual-grading.spec.ts`。记录它测什么、为什么跳过。
+1. 使用真实 `type: "text_response"` + non-empty frozen rubric；可选 standardAnswer。
+2. Candidate 开始考试，用 multiline plain text 作答并提交。
+3. 通过 authoritative take API 证明：
+   - attemptStatus=`submitted`
+   - gradingStatus=`pending_manual`
+4. Admin 打开 manual grading queue：
+   - queue item 来自 durable pending manual grading entry
+   - objective work 不出现在 manual queue
+5. Admin 打开 grading details：
+   - candidate answer 与提交内容一致且保留换行
+   - rubric 来自 frozen QuestionSnapshot
+   - applicable standardAnswer 来自 frozen QuestionSnapshot
+6. Admin 对 pending manual entry 录入合法得分并提交。
+7. 若存在多个 manual questions：
+   - first completion 后仍 submitted+pending_manual，queue pending count 减少
+   - final completion 后 graded+fully_graded，queue item 消失
+8. 通过 Admin grading/result surface 或 API 验证：
+   - final score = grading-entry earnedScore sum
+   - gradingResult earned sum = same score
+   - passed = canonical aggregate policy
+9. 验证 `grading.score_entered` / final `grading.finalized` audit evidence where E2E harness supports it；若 audit UI 不暴露，API/integration evidence由 P1-1承担，不在 E2E 造旁路。
+10. 不调用 post-terminal gradeQuestion 做 re-grade。
+11. 不把 candidate result release 作为 P1 gate。
 
-2. 更新种子数据，纳入 text_response 题（`type: "text_response"`）。
+**运行：**
 
-3. 取消跳过 spec。更新测试流程：
-   - 考生开始考试、用文本作答 text_response 题、提交
-   - Admin 进入评分队列、看到待评分 attempt
-   - Admin 打开评分详情、看到考生文本作答（保留换行）
-   - Admin 录入得分并保存
-   - Admin 完成评分（若所有题已评分）
-   - 考生查看结果——看到对账后总分
+```bash
+pnpm test:e2e -- --grep "manual-grading"
+```
 
-4. 运行：`pnpm test:e2e -- --grep "manual-grading"`
+使用仓库实际 E2E runner 参数；若项目要求 `bash scripts/e2e/run-wsl.sh ...`，按现有 E2E 约定执行。
+
+**完成标准：**
+
+```text
+candidate text_response submit
+→ submitted + pending_manual
+→ durable manual queue
+→ grader sees frozen answer + rubric/reference answer
+→ pending manual entry completed
+→ graded + fully_graded
+→ final score identity proven
+```
 
 **提交：**
 
 ```bash
-git add apps/e2e/e2e/manual-grading.spec.ts
-git commit -m "test(P1): unskip and complete manual grading E2E spec"
+git add apps/e2e/e2e/manual-grading.spec.ts apps/e2e/lib/
+git commit -m "test(P1): complete subjective grading E2E"
 ```
-
-**完成标准：** E2E 证明完整主观评分闭环端到端可用。
 
 ---
 
@@ -990,8 +1289,8 @@ git commit -m "test(P1): unskip and complete manual grading E2E spec"
 
 1. 追踪题目创建流程：
    - `QuestionEditPage` → API `POST /questions` → 题目出现在 `QuestionPage` 列表
-   - 验证 4 个题型都能创建（single_choice、multiple_choice、true_false、fill_blank）
-   - **关键缺口检查：** UI 能创建 text_response 题吗？即：type=`text_response`。若表单不支持 text_response 类型，记录为缺口。
+   - 验证 5 个 MVP 题型都能创建（single_choice、multiple_choice、true_false、fill_blank、text_response）。
+   - **关键缺口检查：** UI 的 text_response 表单是否提供 rubric 编辑并符合 publish validation；standardAnswer 保持可选。
 
 2. 追踪考试创建流程：
    - `ExamCreatePage` → `ExamConfigForm` → API `POST /exams`
@@ -1106,82 +1405,71 @@ git commit -m "test(P2): add exam publish-to-candidate E2E slice"
 
 ### P3-MOD-P3-1：结果可见性 E2E
 
-**目标：** 证明完整结果可见性流程：考试评分完成 → 考生看到结果（或不看到，取决于发布模式）。
+**目标：** 证明完整结果可见性流程：考试评分完成后，candidate score/pass 是否可见严格由 resultVisibility / result publication policy 决定。
 
 **类型：** E2E 测试
 
 **待修改文件：**
 
-- `apps/e2e/e2e/result-publishing.spec.ts`（已存在 2 个场景——验证覆盖）
+- `apps/e2e/e2e/result-publishing.spec.ts`
 
 **步骤：**
 
-1. 阅读 `result-publishing.spec.ts`——它已覆盖：
-   - 场景 A：立即发布——考生提交后看到结果
-   - 场景 B：手动发布——admin 发布前隐藏，之后可见
-   - 幂等再发布
+1. 验证 immediate / manual publication 现有场景。
+2. 验证 after_grading mixed exam：
+   - candidate submit → submitted+pending_manual；result hidden
+   - Admin completes final manual work → graded+fully_graded
+   - result visibility 按 after_grading policy 变为 visible
+3. 证明 `score_computed != result_released`：manual completion 本身不得绕过 configured visibility policy。
+4. 运行 result-publishing E2E。
 
-2. 检查是否测了 after_grading 模式。若未测，加场景：
-   - 创建 `resultPublicationMode: "after_grading"` 的考试
-   - 考试同时有客观题与 text_response 题
-   - 考生提交 → 结果隐藏（待人工评分）
-   - Admin 评主观题 → 结果变可见
-
-3. 运行：`pnpm test:e2e -- --grep "result-publishing"`
-
-**提交（若加测试）：**
-
-```bash
-git add apps/e2e/e2e/result-publishing.spec.ts
-git commit -m "test(P3): add after_grading result visibility E2E scenario"
-```
+**完成标准：** score/pass visibility 与 grading completion 分层正确；candidate own-result boundary 保持。
 
 ---
 
-### P3-MOD-P3-2：考生作答/标准答案泄漏测试
+### P3-MOD-P3-2：Candidate Result / Answer Visibility Boundary Proof
 
-**目标：** 证明考生结果视图剥离 `standardAnswer`，只展示考生被允许看到的内容。
+**目标：** 证明 candidate result projection 严格分别受 `resultVisibility` 与 `answerVisibility` 门控；不得把“永远剥离 standardAnswer”误当成协议。
 
-**类型：** 测试验证
+**类型：** API + Web 测试验证
 
 **待检查文件：**
 
-- `apps/api/src/routes/scores.ts`（考生 vs admin 视图）
-- `apps/api/src/routes/scores.test.ts`（既有测试）
-- `apps/web/src/pages/exam/ResultPage.tsx`（前端展示逻辑）
+- `apps/api/src/routes/scores.ts`
+- `apps/api/src/routes/scores.test.ts`
+- `apps/web/src/pages/exam/ResultPage.tsx`
 
-**步骤：**
+**必须证明：**
 
-1. 阅读 `scores.ts`——确认考生视图剥离 `standardAnswer`：
-   - Admin 看到完整 `gradingResult` 含 `standardAnswer`
-   - 考生视图从响应中移除 `standardAnswer`
+| Gate | hidden | visible |
+|---|---|---|
+| resultVisibility | 不返回 score/pass | 返回 score/pass |
+| answerVisibility | 不返回 standardAnswer/rubric | 按协议返回 standardAnswer/rubric |
 
-2. 阅读 `scores.test.ts`——确认测试验证：
-   - 考生看不到 `standardAnswer`
-   - 考生能看到自己的分数与通过/不通过
-   - 考生看不到其他考生的结果
+并证明：
 
-3. 阅读 `ResultPage.tsx`——确认前端处理被剥离的响应：
-   - `standardAnswer` 为 null 时显示"manual"标签
-   - 显示分数与通过/不通过状态
-   - `standardAnswer` 未提供时不展示
+- Candidate 只能查看自己的 result
+- answer visibility 不由 `standardAnswer == null` 推断
+- text_response rubric 与 applicable standardAnswer 仅在 answerVisibility 允许时返回
+- frontend 只消费 projection，不自行猜 release 状态
+- no grading workset/internal teacher metadata leaks beyond ResultDTO contract
 
-4. 产出验证报告。
-
-**输出：** `docs/phase3/audit/p3-candidate-answer-leak-test.md`
+**输出：** `docs/phase3/audit/p3-candidate-result-answer-visibility-proof.md`
 
 **提交：**
 
 ```bash
-git add docs/phase3/audit/p3-candidate-answer-leak-test.md
-git commit -m "docs(P3): verify candidate answer/standard-answer leak protection"
+git add apps/api/src/routes/scores.test.ts
+git add apps/web/src/pages/exam/ResultPage.test.tsx
+git add docs/phase3/audit/p3-candidate-result-answer-visibility-proof.md
+git commit -m "test(P3): prove candidate result and answer visibility boundaries"
 ```
 
 ---
 
 ### P3-MOD-P3-3：Admin 结果视图验证
 
-**目标：** 验证 admin 能查看完整评分结果，含标准答案。
+**目标：** 验证 Admin 可在 candidate release 之前查看完整 frozen grading/result projection，包括 standardAnswer、rubric 与逐题得分。
 
 **类型：** 测试验证
 
@@ -1189,19 +1477,18 @@ git commit -m "docs(P3): verify candidate answer/standard-answer leak protection
 
 **待检查文件：**
 
-- `apps/api/src/routes/scores.ts`（`computeResultVisibility` 中的 admin 绕过）
-- `apps/web/src/pages/admin/ScoreListPage.tsx`（admin 分数列表）
-- `apps/web/src/pages/admin/AttemptDetailPage.tsx`（admin attempt 详情）
+- `apps/api/src/routes/scores.ts`
+- `apps/api/src/routes/scores.test.ts`
+- `apps/web/src/pages/admin/ScoreListPage.tsx`
+- `apps/web/src/pages/admin/AttemptDetailPage.tsx`
 
 **步骤：**
 
-1. 阅读 `scores.ts`——确认 admin 绕过：`computeResultVisibility` 对 admin 无论发布模式都返回 visible。
-
-2. 阅读 `scores.test.ts`——确认 admin 能在发布前查看分数。
-
-3. 阅读 `AttemptDetailPage.tsx`——确认它展示含 `standardAnswer` 的逐题明细。
-
-4. 产出验证报告。
+1. 确认 Admin result view 按 current contract 绕过 candidate resultVisibility 门控。
+2. 确认 Admin 可在发布前查看 score/pass。
+3. 确认逐题明细来自 terminal gradingResult projection / frozen metadata，并包含 applicable standardAnswer、rubric、逐题 earned score。
+4. 确认不 JOIN live questions 作为既有 attempt 的 grading metadata truth。
+5. 产出验证报告。
 
 **输出：** `docs/phase3/audit/p3-admin-result-view-verification.md`
 
@@ -1209,7 +1496,7 @@ git commit -m "docs(P3): verify candidate answer/standard-answer leak protection
 
 ```bash
 git add docs/phase3/audit/p3-admin-result-view-verification.md
-git commit -m "docs(P3): verify admin result view functionality"
+git commit -m "docs(P3): verify admin frozen result view functionality"
 ```
 
 ---
@@ -1221,7 +1508,7 @@ git commit -m "docs(P3): verify admin result view functionality"
 - Admin 拥有完全访问。
 - Teacher 是单租户/私有化部署内的**全局角色**。
 - Candidate 只能访问自己的考生运行时与结果。
-- 无租户作用域。
+- 不新增 tenant-scoped role assignment / tenant RBAC scope；**现有 organization isolation 继续强制执行**。
 - 无课程作用域。
 - 无 `teacher_exam_assignments`。
 - 无 scoped 角色派单。
@@ -1661,55 +1948,63 @@ git commit -m "docs(P6): Phase 3 MVP readiness closeout report"
 
 ## 执行顺序汇总
 
+```text
+批次 0 — 协议与后端状态模型收敛
+  ├── P3-PROTO-0   Exam Protocol Audit                         ✅
+  ├── P3-PROTO-1   Backend Consistency Tests                    ✅
+  ├── P3-PROTO-2   CandidateTakeSnapshot Endpoint               ✅
+  ├── P3-L0-1      Schema Migration                             ✅
+  ├── P3-L0-2      Submit Freeze + Materialized Grading Workset ✅
+  ├── P3-L0-3      Deadline Reconciliation                      ✅
+  ├── P3-L0-4      Backfill Script                              ✅
+  └── P3-L0-5      Publish Validation                           ✅
+
+批次 1 — Candidate Runtime
+  ├── P3-FSM-0     deriveTakeExamView + transient reducer       ✅
+  ├── P3-MOD-P0-1  Candidate rendering audit                    ✅
+  ├── P3-MOD-P0-2  text_response runtime                        ✅
+  ├── P3-MOD-P0-3  Submit-lock UI proof                         ✅
+  └── P3-MOD-P0-4  Candidate happy-path E2E                     ✅
+  P0 CLOSED
+
+Corrective gate — return to protocol owner before P1
+  └── P3-PROTO-0C  Mirror accepted grading workset protocol     ← CURRENT NEXT
+
+批次 2 — Manual Grading
+  ├── P3-MOD-P1-1  Manual grading API/UI closure                ← BLOCKED defect known; run after PROTO-0C
+  └── P3-MOD-P1-2  Subjective grading E2E
+
+批次 3 — Authoring (P2)
+  ├── P3-MOD-P2-1  Authoring UI flow audit
+  ├── P3-MOD-P2-2  MVP question creation proof
+  └── P3-MOD-P2-3  Publish-to-candidate E2E
+
+批次 4 — Result Publication (P3)
+  ├── P3-MOD-P3-1  Result visibility E2E
+  ├── P3-MOD-P3-2  Candidate result/answer visibility proof
+  └── P3-MOD-P3-3  Admin frozen result view proof
+
+批次 5 — RBAC MVP
+  ├── P3-MOD-P4-1
+  ├── P3-MOD-P4-2A
+  ├── P3-MOD-P4-2B
+  ├── P3-MOD-P4-2C
+  ├── P3-MOD-P4-3
+  └── P3-MOD-P4-4
+
+批次 6 — Email minimum integration
+  ├── P3-MOD-P5-0
+  └── P3-MOD-P5-1
+
+批次 7 — MVP closeout
+  └── P3-MOD-P6-1
 ```
-批次 0 — 协议与后端状态模型收敛（P-1/L0，前端运行时的前置条件）
-  ├── P3-PROTO-0  Exam Protocol Audit (L0)          [文档：exam-protocol.md]
-  ├── P3-PROTO-1  Backend Consistency Tests (L0)     [测试：14 个场景]
-  ├── P3-PROTO-2  CandidateTakeSnapshot Endpoint     [代码：统一端点]
-  ├── P3-L0-1     Schema Migration                   [代码：text_response + submitted_answers + rubric]
-  ├── P3-L0-2     Submit Freeze Rewrite              [代码：SubmittedAnswersSnapshot 冻结]
-  ├── P3-L0-3     Deadline Reconciliation            [代码：懒触发收口]
-  ├── P3-L0-4     Backfill Script                    [脚本：submitted_answers 回填]
-  └── P3-L0-5     Publish Validation                 [代码：text_response rubric 校验]
 
-批次 1 — 核心考试闭环（仅 Admin，依赖 P-1/L0 完成）
-  ├── P3-FSM-0     deriveTakeExamView + transient    [代码：纯函数 + 瞬态 reducer]
-  ├── P3-MOD-P0-1  渲染审计                           [审计]
-  ├── P3-MOD-P0-2  text_response 运行时               [代码：textarea 渲染]
-  ├── P3-MOD-P0-3  提交冻结证明                       [审计/测试]
-  ├── P3-MOD-P0-4  考生作答 E2E                       [e2e]
-  ├── P3-MOD-P1-1  人工评分 API/UI 证明               [审计/测试]
-  ├── P3-MOD-P1-2  主观评分 E2E                       [e2e]
-  ├── P3-MOD-P3-1  结果可见性 E2E                     [e2e]
-  ├── P3-MOD-P3-2  作答/标准答案泄漏测试              [测试]
-  └── P3-MOD-P3-3  Admin 结果视图验证                 [测试]
+**执行纪律：**
 
-批次 2 — 命题闭环（仅 Admin）
-  ├── P3-MOD-P2-1  命题流程审计                       [审计]
-  ├── P3-MOD-P2-2  题目创建测试                       [测试]
-  └── P3-MOD-P2-3  发布到考生 E2E                     [e2e]
-
-批次 3 — RBAC MVP（此处起支持 Teacher）
-  ├── P3-MOD-P4-1  MVP RBAC 路由矩阵                  [审计/设计]
-  ├── P3-MOD-P4-2A 评分路由切换                       [代码]
-  ├── P3-MOD-P4-2B 题目 CRUD 路由切换                 [代码]
-  ├── P3-MOD-P4-2C 考试命题路由切换                   [代码]
-  ├── P3-MOD-P4-3  考生归属证明                       [测试]
-  └── P3-MOD-P4-4  前端导航门控                       [代码]
-
-批次 4 — Email 最小接入
-  ├── P3-MOD-P5-0  收件人来源 + 入队设计              [审计/设计]
-  └── P3-MOD-P5-1  结果发布邮件触发                   [代码]
-
-批次 5 — 收尾
-  └── P3-MOD-P6-1  MVP 就绪报告                       [审计/文档]
-```
-
-**合计：跨 8 个模块（P-1/L0 + P0–P6）、6 个批次的 30 张作业卡。**
-
-- **批次 0（P-1/L0）是硬前置。** 协议矩阵、schema migration、submit freeze、deadline reconciliation、CandidateTakeSnapshot 未完成前，不得开始批次 1。
-- **批次 1** 从 `P3-FSM-0` 前端状态模型起步（消费 CandidateTakeSnapshot），再做 text_response 渲染。可仅 Admin 执行。
-- **批次 2** 继续仅 Admin 命题验证。
-- **批次 3** 通过 RBAC 切换开始支持 Teacher。
-- **批次 4** 仅在核心流程稳定后开始邮件接入。
-- **批次 5** 产出收尾报告。
+- P-1/L0 与 P0 已 CLOSED；不得因为旧卡文字重新施工。
+- P3-PROTO-0C 是当前 corrective protocol gate。完成后返回 P3-MOD-P1-1。
+- P1 只证明 grading completion / score computed；candidate result release 属于 P3。
+- 模块顺序遵循 `plan.md`：P1 → P2 → P3。不得把 P3 result tasks 提前到 P2 authoring closure 之前。
+- P1/P2 当前验证 actor 可使用 Admin；Teacher route/capability switch 属于 P4。保留现有 tenant isolation，但不在这些卡中重设计 org model。
+- 后置 E2E 暴露历史依赖缺口时，回真实 owner corrective closure；修完返回原 RED。
