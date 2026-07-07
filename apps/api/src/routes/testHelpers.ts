@@ -52,6 +52,20 @@ import {
 // Files that share a ctx across builds (e.g. a beforeAll ctx reused in
 // multiple it blocks) are NOT affected because they call buildTestApp once.
 
+/**
+ * Module-level flag: has the worker DB been truncated in this process?
+ *
+ * Worker databases persist across test runs, and `seed()` upserts on org
+ * slug ("default"), so the same organization is reused. Without a one-time
+ * truncation, business data accumulates indefinitely across runs, eventually
+ * breaking tests that rely on pagination (e.g. grading queue default page 1).
+ *
+ * Set to `true` after the first `resetPostgres()` call in `buildTestApp`.
+ * Each new test run spawns fresh worker processes, so the flag resets
+ * naturally — no manual cleanup needed between runs.
+ */
+let workerDbTruncated = false;
+
 /** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
 export const LEGACY_ROLES = [
   "SuperAdmin",
@@ -137,23 +151,36 @@ export async function buildTestApp(
   // in `drizzle.__drizzle_migrations`, so re-running is a no-op).
   //
   // RESET BOUNDARY (deliberate choice): we do NOT call adapter.resetPostgres()
-  // here. Several API test files (e.g. auth.test.ts, user.test.ts) build the
+  // RESET BOUNDARY: we do NOT call adapter.resetPostgres() on every buildTestApp
+  // call. Several API test files (e.g. auth.test.ts, user.test.ts) build the
   // app MORE THAN ONCE per file — a shared `ctx` in beforeAll plus additional
   // buildTestApp() calls inside individual `it` blocks — and reuse `ctx.org`
   // across those builds. If we truncated on every build, a later in-file
   // build would wipe the org that the shared ctx still references, causing FK
-  // violations (organizations row gone). Instead, isolation between test
-  // FILES is provided by the per-worker database itself: each vitest worker
-  // owns its own DB, and legacy `fileParallelism:false` means only one worker
-  // runs at a time. Within a file, tests keep their existing per-test reset
-  // helpers (uniquePrefix fixtures, org-scoped cleanup) — unchanged from the
-  // legacy path. If a future file needs explicit worker-DB truncation, it can
-  // call `setupApiTestDatabaseFromEnv()` directly and use resetPostgres().
+  // violations (organizations row gone).
+  //
+  // However, worker databases persist across test RUNS. The seed() function
+  // upserts on org slug ("default"), so the same organization is reused
+  // across runs. Without a reset, business data accumulates indefinitely
+  // (e.g. grading queue entries), eventually causing tests that rely on
+  // pagination to fail when accumulated rows exceed the default page size.
+  //
+  // Solution: truncate business tables ONCE per worker process, on the first
+  // buildTestApp call. Subsequent calls within the same worker process skip
+  // truncation (preserving the multi-build pattern). Each new test run spawns
+  // fresh worker processes, so the flag resets naturally.
   if (!resolvedSchemaName && isWorkerDatabaseMode()) {
     const adapter: ApiTestDatabaseHandle = await setupApiTestDatabaseFromEnv({
       namespace: "api",
       ...(opts?.databaseUrl ? { databaseUrl: opts.databaseUrl } : {}),
     });
+    // Truncate on the first build in this worker process to clear data from
+    // previous test runs. The seed() upsert reuses the same org, so without
+    // this, business data accumulates across runs.
+    if (!workerDbTruncated) {
+      await adapter.resetPostgres();
+      workerDbTruncated = true;
+    }
     // In worker mode there is no per-file schemaName; business tables live in
     // the worker DB's default `public` schema.
     resolvedSchemaName = undefined;
