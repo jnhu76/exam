@@ -183,7 +183,7 @@ candidate attempt API 契约包含 7 个真相字段；
 | P3-PROTO-1 ✅ DONE | Backend State Consistency Tests (L0) | 14 场景集成测试（protocol-consistency.test.ts） |
 | P3-PROTO-2 ✅ DONE | CandidateTakeSnapshot Endpoint | 统一端点 + 安全投影 + 测试 |
 | P3-L0-1 ✅ DONE | Schema Migration + rubric 双层 | text_response + submitted_answers + rubric 双层存储 |
-| P3-L0-2 ✅ DONE | Submit Freeze + 物化 grading workset + 终态聚合权威 | SubmittedAnswersSnapshot 冻结 + attempt_grading_entries 物化 + aggregateGradingEntries 终态权威（含 2C/2D/2E 纠正链） |
+| P3-L0-2 ✅ DONE | Submit Freeze + 物化 grading workset + 终态聚合权威 | SubmittedAnswersSnapshot 冻结 + attempt_grading_entries 物化 + aggregateGradingEntries 终态权威（含 2C/2D/2E 纠正链；P3-FORMAL-P0-A 后 auto/manual 收敛到唯一 `finalizeTerminalGrading` closure） |
 | P3-L0-3 ✅ DONE | Deadline Reconciliation | 懒触发收口 + 4 入口 + 走同一 submit 冻结屏障 |
 | P3-L0-4 ✅ DONE | Backfill Script | submitted_answers 回填脚本（dry-run + 幂等 + quarantine） |
 | P3-L0-5 ✅ DONE | Publish Validation | text_response rubric 校验 + auto 题 standardAnswer 校验 |

@@ -13,12 +13,14 @@ import { NotFoundError } from "@exam/domain";
 import { gradeQuestion } from "@exam/exam-engine";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createGradingQueueRepo } from "@exam/db/src/repository/gradingQueueRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
   createAttemptRepoAdapter,
+  createEnrollmentRepoAdapter,
   createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
@@ -287,21 +289,39 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const maxScore = preEntry?.maxScore ?? 0;
       const previousScore = preEntry?.earnedScore ?? null;
 
-      // Load the exam to read passingScore for manual-score reconciliation.
+      // Load the exam for the terminal closure (P3-FORMAL-P0-A): gradeQuestion
+      // now delegates terminal projection to finalizeTerminalGrading, which
+      // needs the full Exam (passingScore, scoreStrategy, retakePolicy, etc.).
       const gradingQueueRepo = createGradingQueueRepo(fastify.db);
       const exam = await gradingQueueRepo.findExamById(ctx, preAttempt.examId);
       if (!exam) {
         throw new NotFoundError("Attempt grading context not found");
       }
-      const passingScore = exam.passingScore;
+
+      // Load the enrollment to pass enrollmentId into gradeQuestion →
+      // finalizeTerminalGrading. The closure re-locks the enrollment inside
+      // the same transaction (findByExamAndCandidateForUpdate) and verifies
+      // the id matches; this pre-fetch is only to obtain the id.
+      const enrollmentRepo = createEnrollmentRepo(fastify.db);
+      const enrollment = await enrollmentRepo.findByExamAndCandidate(
+        ctx,
+        preAttempt.examId,
+        preAttempt.candidateId,
+      );
+      if (!enrollment) {
+        throw new NotFoundError("Attempt grading context not found");
+      }
+      const enrollmentId = enrollment.id;
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
         const txAttemptRepo = createAttemptRepo(tx);
         const txEntryRepo = createAttemptGradingEntryRepo(tx);
+        const txEnrollmentRepo = createEnrollmentRepo(tx);
         // Lock the attempt row for the duration of the grade (§17).
         await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
         return gradeQuestion(
           createAttemptRepoAdapter(txAttemptRepo, ctx),
+          createEnrollmentRepoAdapter(txEnrollmentRepo, ctx),
           createGradingWorksetRepoAdapter(txEntryRepo, ctx),
           attemptId,
           questionId,
@@ -309,7 +329,14 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           comment,
           ctx.actorId,
           now,
-          passingScore,
+          // The DB-layer findExamById returns the raw Drizzle row (status:
+          // string); gradeQuestion's canonical closure expects the domain Exam
+          // type (status: ExamStatus). The row IS a valid Exam at runtime
+          // (Postgres enums map 1:1); the cast narrows the string-literal type
+          // for TypeScript. Mirrors how other engine callers bridge DB rows to
+          // the domain type.
+          exam as unknown as import("@exam/domain").Exam,
+          enrollmentId,
         );
       });
 

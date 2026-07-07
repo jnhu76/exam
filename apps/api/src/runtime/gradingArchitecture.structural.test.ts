@@ -247,20 +247,102 @@ describe("Slice 5 — Step 2: submitAttempt exclusively owns workset materializa
 });
 
 describe("Slice 5 — Step 3: gradingResult cannot become scoring input", () => {
-  it("aggregateGradingEntries is the single terminal score authority (exactly 2 production call sites)", () => {
-    // Two terminal paths flow through ONE aggregation seam:
-    //   1. finalizeGrading (pure-objective: submit/deadline/force-submit)
-    //   2. gradeQuestion manual terminal branch (manual/mixed completion)
-    // Any third production caller would be a second terminal authority.
+  it("aggregateGradingEntries is invoked from exactly one production file (the canonical terminal closure)", () => {
+    // P3-FORMAL-P0-A convergence: previously aggregateGradingEntries had two
+    // direct production call sites (finalizeGrading in grading.ts AND the
+    // gradeQuestion terminal branch in manualGrading.ts). Both paths now
+    // delegate to a single canonical terminal closure, finalizeTerminalGrading,
+    // which is the sole direct caller of the aggregator. gradeQuestion's
+    // terminal branch and the auto path both flow through that closure, so
+    // terminal scoring has ONE provenance-agnostic seam.
+    //
+    // This is a writer-inventory assertion (an allowlist of exact production
+    // files), NOT a brittle raw call-count. Limitation: it scans source text
+    // and is therefore best-effort against truly adversarial obfuscation
+    // (e.g. dynamic dispatch via computed member access). The repo has no
+    // AST-based architecture-test infrastructure today; the allowlist is the
+    // narrowest sound guard available and is paired with the invariant that
+    // every direct caller of the aggregator must live in the allowlist.
     const callSites = findInProduction(
       invocationCallSites("aggregateGradingEntries"),
     );
-    expect(callSites).toHaveLength(2);
-    const files = callSites.map((h) => h.file).sort();
-    expect(files).toEqual([
-      "packages/exam-engine/src/grading.ts",
-      "packages/exam-engine/src/manualGrading.ts",
-    ]);
+    const files = [...new Set(callSites.map((h) => h.file))].sort();
+    expect(files).toEqual(["packages/exam-engine/src/grading.ts"]);
+  });
+
+  it("finalizeTerminalGrading is the single production writer of enrollment terminal projection (finalScore/finalPassed/finalAttemptId)", () => {
+    // P3-FORMAL-P0-A architecture invariant: the Enrollment terminal result
+    // projection (finalScore, finalPassed, finalAttemptId) has exactly one
+    // canonical production writer seam — finalizeTerminalGrading in grading.ts.
+    // No production site outside the canonical closure may WRITE these three
+    // fields. This is the structural lock for the manual-path closure bug:
+    // previously gradeQuestion wrote attempt.score but never
+    // enrollment.finalScore, leaving the projection stale for manual-graded
+    // exams; the fix routes both auto and manual terminal closure through
+    // finalizeTerminalGrading.
+    //
+    // Implementation note (limitation, stated per design): the repo has no AST
+    // infrastructure for architecture tests. This guard is a writer-inventory
+    // scan that targets the actual DB-write seam: production call sites of
+    // `enrollmentRepo.update(` (the only runtime enrollment-update path in the
+    // engine; the DB repo fronts `examEnrollments` via a generic crud helper,
+    // so any engine write goes through this method). For each such call site
+    // we classify the payload: a payload that writes ANY of the three
+    // projection fields is a "projection writer"; any other payload (e.g.
+    // startOrRestoreAttempt writing only status/attemptCount) is allowed. The
+    // invariant: the set of projection-writer files is exactly { grading.ts }.
+    //
+    // This is robust against a new file adding a direct enrollment-projection
+    // write (it would have to call enrollmentRepo.update with a projection
+    // field, which this scan catches). Like all source-text scans it is
+    // best-effort against truly adversarial obfuscation (e.g. dynamic dispatch
+    // via computed member access), which the codebase does not use today.
+    // Response-shaping reads (`finalScore: enrollment.finalScore`) and Zod
+    // schema declarations (`finalScore: z.number()`) are NOT writes and do not
+    // call enrollmentRepo.update, so they are excluded by construction.
+    const PROJECTION_FIELDS = ["finalScore", "finalPassed", "finalAttemptId"];
+    const WRITER_FILES = collectProductionFiles();
+    const projectionWriters: Hit[] = [];
+    for (const file of WRITER_FILES) {
+      const text = readFileSync(file, "utf8");
+      const lines = text.split(/\r?\n/);
+      // Find each enrollmentRepo.update( call and walk forward through its
+      // payload object literal until the matching close paren, collecting any
+      // projection-field keys present in the payload.
+      for (let i = 0; i < lines.length; i++) {
+        const code = stripComments(lines[i]!);
+        if (!code.trim()) continue;
+        if (!/enrollmentRepo\.update\s*\(/.test(code)) continue;
+        // Collect payload lines from the call until depth-balanced close.
+        let depth = 0;
+        let seenOpen = false;
+        const payload: string[] = [];
+        for (let j = i; j < lines.length; j++) {
+          const c = stripComments(lines[j]!);
+          for (const ch of c) {
+            if (ch === "(") {
+              depth++;
+              seenOpen = true;
+            } else if (ch === ")") depth--;
+          }
+          payload.push(c);
+          if (seenOpen && depth <= 0) break;
+        }
+        const payloadText = payload.join("\n");
+        for (const field of PROJECTION_FIELDS) {
+          if (new RegExp(`\\b${field}\\s*:`).test(payloadText)) {
+            projectionWriters.push({
+              file: toRepoRelative(file),
+              line: i + 1,
+              snippet: lines[i]!.trim(),
+            });
+            break;
+          }
+        }
+      }
+    }
+    const writerFiles = [...new Set(projectionWriters.map((h) => h.file))];
+    expect(writerFiles.sort()).toEqual(["packages/exam-engine/src/grading.ts"]);
   });
 
   it("deleted reconciliation functions stay deleted from production", () => {

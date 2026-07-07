@@ -639,7 +639,11 @@ aggregateGradingEntries
 唯一的生产终态分数聚合 seam
 ```
 
-生产实现：`packages/exam-engine/src/gradingWorkset.ts` `aggregateGradingEntries`。结构性锁：`apps/api/src/runtime/gradingArchitecture.structural.test.ts`（恰好 2 个生产调用点：`finalizeGrading` 与 `gradeQuestion` 终态分支）。
+生产实现：`packages/exam-engine/src/gradingWorkset.ts` `aggregateGradingEntries`。结构性锁：`apps/api/src/runtime/gradingArchitecture.structural.test.ts`。
+
+P3-FORMAL-P0-A 收敛（2026-07-07）：`aggregateGradingEntries` 现在只有 **1 个** 生产调用点 —— `finalizeTerminalGrading`（`packages/exam-engine/src/grading.ts`）。此前有两个直接调用点（`finalizeGrading` 与 `gradeQuestion` 终态分支）；两者现在都委托给同一个 canonical terminal closure。closure 不接受 auto/manual 模式参数，其唯一前置条件是「权威终态 workset 已就绪」（由 `aggregateGradingEntries` 自身的逐条终态校验保证）。同一结构性测试还断言：`enrollment.{finalScore, finalPassed, finalAttemptId}` 的运行期写入点唯一来自 `finalizeTerminalGrading`（writer-inventory allowlist = `{ grading.ts }`）。
+
+历史调用点计数（2）在此修订前有效；本节描述的「终态分数聚合权威」语义不变，只是收敛到单一 closure seam 以修复 manual 路径下 `enrollment` 投影从未被写入的缺陷。
 
 **输入**：
 
