@@ -57,6 +57,7 @@ export function createAttemptRepo(db: Database) {
       const rows = await db
         .select()
         .from(examAttempts)
+        .for("update")
         .where(
           and(
             eq(examAttempts.organizationId, orgId),

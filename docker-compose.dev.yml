@@ -9,6 +9,7 @@ services:
       POSTGRES_DB: exam
       TZ: ${TZ:-Asia/Shanghai}
       PGTZ: ${APP_TIMEZONE:-Asia/Shanghai}
+    command: postgres -c default_transaction_isolation='repeatable read'
     # Create the exam_test database (required by pnpm test's testDb.ts
     # name-safety check) alongside the exam dev DB. POSTGRES_DB auto-creates
     # only one DB; this init script creates the second. Runs once on first
