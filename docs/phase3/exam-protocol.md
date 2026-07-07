@@ -19,7 +19,7 @@
 | 7 | Save after submit rejection | §4.4.2 |
 | 8 | Save vs submit race | §4.4.3 |
 | 9 | Refresh/resume after submit | §4.4.4, §7.4 |
-| 10 | Grading input uses submitted_answers only | §4.4, §6.2 |
+| 10 | Grading workset + terminal aggregation authority | §4.2, §4.4, §6.2 |
 | 11 | Result visibility | §6.3 |
 | 12 | Standard answer visibility | §6.3 |
 | 13 | Candidate own-result boundary | §6.4 |
@@ -226,40 +226,48 @@ type AttemptStatus =
 
 ```ts
 type GradingStatus =
-  | 'pending_auto'
+  | 'auto_graded'
   | 'pending_manual'
   | 'fully_graded';
 ```
 
+镜像 `packages/domain/src/enums.ts` `GradingStatus`。**注意**：当前协议枚举**没有** `pending_auto` 值——历史文档出现的 `pending_auto` 已被移除。纯客观 attempt 在 submit 冻结屏障即定为 `auto_graded`。
+
 **两个维度独立**：`attemptStatus` 表示作答生命周期，`gradingStatus` 表示评分生命周期。
 
-**关键规则**：人工评分队列查询 `gradingStatus = 'pending_manual'`，**不是** `attemptStatus = 'grading'`。
+**关键规则（P3-L0-2E）**：`gradingStatus` 是 attempt 级评分生命周期/展示态，**不是**人工评分队列发现权威。人工评分队列的工作真相源是物化的 `attempt_grading_entries`（见 §6.2），`gradingStatus` 单独不能凭空制造队列工作项。`QuestionSnapshot` 扫描也不能重建缺失的人工工作项。
 
-### 3.3 主路径状态流转
+### 3.3 主路径状态流转（P3-L0-2E workset 模型）
 
-状态转换链遵循 CONTEXT.md：`submitted → grading → graded`。`grading` 是瞬态、仅机器自动评分指示，不可用于人工评分等待。
+P3-L0-2E 收口后，`grading` 态不再是人工评分的等待态。含 text_response 的 attempt 在 submit 后停在 `submitted`（`gradingStatus=pending_manual`），等待人工评分完成才进 `graded`。submit 冻结屏障在每个冻结题目物化恰好一条 `attempt_grading_entry`，作为队列与终态分数的唯一权威。
 
 ```
 纯客观题：
-  in_progress → submitted → grading → graded
-  （grading 为瞬态，可在 submit 事务内同步过渡到 graded；但转换链必须经过 grading）
+  in_progress → submitted (gradingStatus=auto_graded)
+              → graded (gradingStatus=auto_graded 或 fully_graded)
+  （submit 冻结屏障物化全部 completed_auto 条目；submit 事务后由 finalizeGrading 聚合为终态；
+    `grading` 态可作瞬态经过，但持久化真相是 submitted → graded）
 
 纯 text_response：
-  in_progress → submitted (gradingStatus=pending_manual) → graded (gradingStatus=fully_graded)
-  （submitted 后等人工评分完成才进 graded；grading 态可选经过）
+  in_progress → submitted (gradingStatus=pending_manual)
+              → graded (gradingStatus=fully_graded)
+  （submit 冻结屏障物化 pending_manual 条目；停在 submitted 等待人工评分；
+    最后一条 pending_manual 完成时由 gradeQuestion 终态分支聚合为 graded + fully_graded）
 
 混合题：
-  in_progress → submitted (gradingStatus=pending_manual) → graded (gradingStatus=fully_graded)
-  （客观题可先算分，但必须等主观题完成才进 graded）
+  in_progress → submitted (gradingStatus=pending_manual)
+              → graded (gradingStatus=fully_graded)
+  （客观题物化为 completed_auto、text_response 物化为 pending_manual；
+    停在 submitted；最后一条 pending_manual 完成时由 gradeQuestion 终态分支聚合为 graded + fully_graded）
 
 Deadline 触发：
-  in_progress/disrupted → submitted (submissionReason='deadline') → grading → graded
-  （deadline 提交同样经过 grading 态；自动可评则快速过渡到 graded）
+  in_progress/disrupted → submitted (submissionReason='deadline')
+  （deadline reconcile 走同一 submit 冻结屏障 + 工作集物化；之后按纯客观 / 纯 text / 混合走对应路径）
 ```
 
-> **`grading` 态落地语义：** 纯客观题可在 submit / deadline-reconcile 事务内完成自动评分并直接进 `graded`，但转换链形式上必须经过 `grading`（瞬态）。含 text_response 的 attempt 进 `submitted` 后停在 `pending_manual`，人工评分完成后进 `graded`。
+> **`grading` 态落地语义：** `grading` 是瞬态、仅机器自动评分指示，**不**作为人工评分等待态。P3-L0-2E 之前文档把含主观题的 attempt 停在 `grading` 是历史模型，已废弃。
 
-> **人工评分完成单向性（P3-L0-2E Slice 3C）：** `gradeQuestion` 仅用于完成 `pending_manual` 评分条目，且仅当 attempt 处于 `submitted + pending_manual` 时允许调用。某条目一旦变为 `completed_manual`，普通评分命令不得再次修改该条目（无论分数是否相同）。attempt 一旦到达 `graded + fully_graded`，普通人工评分调用不得修改评分条目或终态分数/结果字段。终态后的改分/重评不在当前协议范围内，需另行定义 revision 能力。
+> **人工评分完成单向性（P3-L0-2E Slice 3C/4）：** `gradeQuestion` 是"完成一个已存在的 pending_manual 工作项"的单向命令，**不是**改分/重评命令。前置：`attempt.status=submitted && attempt.gradingStatus=pending_manual && entry.gradingMode=manual && entry.status=pending_manual`。允许的迁移：`pending_manual → completed_manual`。某条目一旦变为 `completed_manual`，普通评分命令不得再次修改（同值不视为幂等，异值不视为改分——两者均被拒）。attempt 一旦到达 `graded + fully_graded`，普通人工评分调用不得修改评分条目或终态分数/结果字段。终态后的改分/重评不在当前协议范围内，需另行定义 revision 能力。
 
 ### 3.4 命令函数
 
@@ -269,14 +277,16 @@ Deadline 触发：
 | -------- | -------------- | -------- |
 | `startAttempt` | not_started | 锁 attempt，设 in_progress |
 | `resumeAttempt` | disrupted | 锁 attempt，设 in_progress |
-| `submitAttempt` | in_progress | 锁 attempt，冻结 submitted_answers，设 submitted |
-| `saveAnswer` | in_progress | 锁 attempt，更新 answers |
+| `submitAttempt` | in_progress | 锁 attempt，冻结 submitted_answers，物化 grading workset，设 submitted（见 §4.2） |
+| `saveAnswer` | in_progress | 锁 attempt，更新 answers（draft；submit 后永不为评分真相） |
 | `markDisrupted` | in_progress | 锁 attempt，设 disrupted |
-| `completeManualGrading` | submitted (gradingStatus=pending_manual) | 合并分数，设 graded |
+| `gradeQuestion` | attempt.status=submitted ∧ attempt.gradingStatus=pending_manual ∧ entry.gradingMode=manual ∧ entry.status=pending_manual | 单向完成一个 pending_manual 工作项：pending_manual → completed_manual；剩余 pending>0 则保持 submitted+pending_manual；剩余 pending=0 则 `aggregateGradingEntries` 聚合并写 graded+fully_graded（见 §6.6） |
 | `voidAttempt` | any | 设 voided |
-| `ensureAttemptDeadlineReconciled` | in_progress/disrupted | 过期则冻结 submitted_answers |
+| `ensureAttemptDeadlineReconciled` | in_progress/disrupted | 过期则走同一 submit 冻结屏障 + 工作集物化 |
 
 每个命令使用 transition matrix + business guard，在数据库事务内用 `FOR UPDATE` row lock 落库。
+
+> **历史命令已移除**：旧的 `completeManualGrading` 不存在于当前生产代码。当前协议唯一的人工评分完成命令是 `gradeQuestion`（`packages/exam-engine/src/manualGrading.ts`）。任何对 `completeManualGrading` 的引用都是历史文档漂移。
 
 ---
 
@@ -300,24 +310,45 @@ interface SubmittedAnswersSnapshot {
 }
 ```
 
-由 draft answers 按 question snapshot 规范化而来，**剥离协议元数据**（clientSeq / baseVersion / 时间戳）。grading 与 result 计算只读 `submitted_answers`。
+由 draft answers 按 question snapshot 规范化而来，**剥离协议元数据**（clientSeq / baseVersion / 时间戳）。
 
-### 4.2 Submit 冻结屏障
+> **阶段边界（P3-L0-2E）**：`submitted_answers` = 冻结的提交答案真相 **+** submit 时 grading-workset 物化输入。物化之后，`attempt_grading_entries` 是权威评分真相，终态聚合不再重评 `submitted_answers`。draft `answers` 在 submit 之后永不为评分真相。详见 §4.2 与 §6.6。
 
-`submitAttempt` 事务内执行：
+### 4.2 Submit 冻结屏障（P3-L0-2E）
+
+`submitAttempt` 是 submitted_answers 冻结 **和** grading-workset 物化的唯一权威（生产调用见 `packages/exam-engine/src/attemptCommands.ts`；结构性锁见 `apps/api/src/runtime/gradingArchitecture.structural.test.ts`）。事务内执行：
 
 ```
-1. FOR UPDATE 锁 attempt
-2. 确认 status = 'in_progress'
-3. 读取 draft answers (AnswerRecord[])
-4. 按 question snapshot 规范化为 SubmittedAnswersSnapshot
-5. 写入 submitted_answers
-6. 设置 status = 'submitted', submittedAt = serverNow
-7. 设置 submissionReason = 'manual'
-8. 决定 gradingStatus（纯客观 → fully_graded；含 text_response → pending_manual）
-9. 插入 audit log: attempt.submitted
-10. 整个过程原子完成
+ 1. FOR UPDATE 锁 attempt
+ 2. 校验 fresh submit（零已存在 grading entries）或认可的幂等重入
+ 3. 读取 draft answers (AnswerRecord[])
+ 4. 用冻结的 QuestionSnapshot 规范化为 SubmittedAnswersSnapshot
+ 5. 写入 submitted_answers（冻结的提交答案真相）
+ 6. 用冻结 submitted_answers + 冻结 QuestionSnapshot 推导预期 grading workset
+ 7. 物化恰好一条 attempt_grading_entry per 冻结题目：
+      - objective 题 → gradingMode=auto, status=completed_auto（同步自动评分）
+      - text_response → gradingMode=manual, status=pending_manual
+ 8. 设置 attempt.status='submitted', submittedAt=serverNow
+ 9. 设置 submissionReason='manual'（deadline 路径为 'deadline'）
+10. 设置 attempt.gradingStatus（纯客观 → auto_graded；含 text_response → pending_manual）
+11. 插入 audit log: attempt.submitted
+12. 整个过程原子提交
 ```
+
+**原子不变量**：
+
+```text
+成功 submit 提交
+⇒
+submitted_answers 已冻结
+AND 完整 grading workset 已存在
+AND workset 与冻结题目宇宙一致（恰好一条 entry per 冻结题目）
+AND attempt 生命周期与 workset 匹配
+```
+
+**幂等重入**：不创建、不修复、不填缺。它对已存在 workset 做精确校验（条目数、题目 ID 集合、gradingMode/status/maxScore 一致）。部分/不匹配的 workset fail closed。
+
+**禁止**：`missing → zero`、填缺、忽略多余条目、重评 submittedAnswers、reconstructObjectiveScore、reconcileScores、persisted-wins、dual-read、dual-write。这些历史语义在当前协议中均不存在。
 
 ### 4.3 Save/Restore 协议
 
@@ -420,14 +451,19 @@ async function ensureAttemptDeadlineReconciled(attemptId: string, now: Date) {
     });
     const gradingPlan = deriveGradingPlan(questionSnapshot);
 
-    const next = await markDeadlineSubmitted(tx, {
+    // P3-L0-2E: deadline reconcile 走与手动 submit 相同的冻结屏障 +
+    // grading-workset 物化。submitAttempt 是唯一物化权威，故此处调用
+    // submitAttempt（submissionReason='deadline'）而非直接 mark。
+    const next = await submitAttempt(tx, {
       attemptId,
       submittedAnswers,
       submittedAt: effectiveDeadline(attempt),
       submissionReason: 'deadline',
-      attemptStatus: gradingPlan.fullyAutoGradable ? 'graded' : 'submitted',
-      gradingStatus: gradingPlan.fullyAutoGradable ? 'fully_graded' : 'pending_manual',
     });
+    // submitAttempt 在事务内冻结 submitted_answers、物化 workset、
+    // 设置 attempt.status='submitted'、gradingStatus（auto_graded 或
+    // pending_manual）。纯客观 attempt 之后由 finalizeGrading 聚合到 graded；
+    // 含 text_response 的 attempt 停在 submitted+pending_manual 等人工评分。
 
     await audit(tx, {
       action: 'attempt.deadline_reconciled',
@@ -530,28 +566,46 @@ interface CandidateQuestion {
 - `not_started` / `queued` / `voided` → `answerValue = null`，`answerSource = 'none'`
 - `disrupted` → 返回 draft answers，但 `isEditable = false`
 
-### 6.2 GradingQuestionDTO
+### 6.2 GradingDetails（人工评分详情）
 
-`GET /admin/attempts/:attemptId/grading-details` 的响应。从 `QuestionSnapshot` + `submitted_answers` 构建。
+`GET /admin/attempts/:attemptId/grading-details` 的响应。生产 contract 为 `GradingDetailsResponseSchema`（`packages/contracts/src/score.ts`）。
+
+**实际 wire 字段**（镜像当前 contract，请勿按偏好重命名）：
 
 ```ts
-interface GradingQuestionDTO {
-  id: string;
-  type: QuestionType;
-  prompt: string;
-  options: QuestionOption[];
-  inputMode: InputMode;
-  gradingMode: GradingMode;
-  standardAnswer: unknown | null;
-  rubric: string | null;
-  submittedAnswer: unknown;  // 从 submitted_answers 读取
-  maxScore: number;
+interface GradingDetailsQuestion {
+  questionId: string;          // 来自冻结 QuestionSnapshot.originalQuestionId
+  type: QuestionType;          // 来自冻结 QuestionSnapshot
+  content: string;             // 题目 prompt，来自冻结 QuestionSnapshot
+  maxScore: number;            // 来自冻结 QuestionSnapshot.score
+  candidateAnswer: unknown | null;   // 来自 attempt_grading_entries.candidateAnswer
+  entry: {                     // null 直到该题已评分
+    score: number;             //   entry.earnedScore
+    comment: string;
+    gradedBy: string;
+    gradedAt: string;
+  } | null;
 }
 ```
 
-**关键约束**：`submittedAnswer` 来自 `submitted_answers`，**不读** draft `answers`。`rubric` 来自 `QuestionSnapshot`，**不 JOIN** live `questions` 表。
+**candidateAnswer 溯源**：DTO 字段名 `candidateAnswer` 来自 **`attempt_grading_entries.candidateAnswer`**（在 submit 冻结屏障从 `submitted_answers` 物化写入），**不**意味着 draft `attempt.answers`。draft `answers` 永不为评分真相。graded detail 不读取 draft `attempt.answers`，也不 JOIN live `questions` 表。
 
-**教师/管理员评分可见性**：教师/管理员在评分视图中能看到考生已提交答案（`submitted_answers`），不受考生可见性策略约束。
+**评分者可见元数据要求（协议级，P3-L0-1 + 当前 P1 模块要求）**：评分者需要看到：
+
+```text
+prompt（content）
+冻结的 candidate answer
+适用的 standardAnswer
+text_response 的 rubric
+maxScore
+当前评分分数/状态
+```
+
+上述元数据必须来自冻结 `QuestionSnapshot`（`QuestionSnapshot.standardAnswer`、`QuestionSnapshot.rubric`），不得 JOIN live `questions` 表。协议级要求 `rubric` 为 text_response 的冻结评分元数据（§1.5）。Candidate 可见性由 result/answer visibility 单独控制（§6.3），grader 元数据不通过 CandidateTakeSnapshot 泄漏（§6.1 安全投影）。
+
+> **实现差距记录**：当前 `GradingDetailsQuestionSchema` 与 grading-details 路由投影**尚未**投影 `standardAnswer` 与 `rubric`（两者在冻结 `QuestionSnapshot` 中已存在）。这是 P3-MOD-P1-1 已确认的生产缺陷（评分者缺少冻结评分依据），由 P1-1 修复——本协议要求不变。
+
+**教师/管理员评分可见性**：教师/管理员在评分视图中能看到考生已提交答案（来自冻结 entry 的 candidateAnswer），不受考生可见性策略约束。
 
 ### 6.3 ResultDTO
 
@@ -576,6 +630,104 @@ interface GradingQuestionDTO {
 - 教师/管理员可查看所有考生的评分结果。
 - Admin 视图绕过 resultVisibility 门控（发布前也可查看）。
 - 教师/管理员视图包含 standardAnswer、rubric、逐题得分明细。
+
+### 6.6 终态分数聚合权威（P3-L0-2E Slice 4）
+
+```text
+aggregateGradingEntries
+=
+唯一的生产终态分数聚合 seam
+```
+
+生产实现：`packages/exam-engine/src/gradingWorkset.ts` `aggregateGradingEntries`。结构性锁：`apps/api/src/runtime/gradingArchitecture.structural.test.ts`（恰好 2 个生产调用点：`finalizeGrading` 与 `gradeQuestion` 终态分支）。
+
+**输入**：
+
+```text
+attempt_grading_entries（终态、已物化）
+冻结的 QuestionSnapshot（题目宇宙/元数据/排序）
+passingScore / 当前规范的 pass 策略输入
+```
+
+**分数来源**：
+
+```text
+grading entry earnedScore（仅此一项）
+```
+
+**题目宇宙/排序/元数据来源**：
+
+```text
+冻结的 QuestionSnapshot
+```
+
+**聚合前校验（fail closed）**：
+
+```text
+entry count == 冻结题目数
+题目 ID 集合精确匹配
+每个冻结题目恰好一条有效 entry
+entry.maxScore == 冻结 maxScore
+gradingMode 与题目规范语义匹配
+auto entry status == completed_auto
+manual entry status == completed_manual
+earnedScore != null
+0 <= earnedScore <= maxScore
+```
+
+**禁止**：
+
+```text
+missing → zero
+填缺
+忽略多余 entry
+reconstruct objective score
+reconcileScores（已删除）
+persisted gradingResult wins
+```
+
+缺失 entry → fail closed。多余 entry → fail closed。pending_manual entry → 不是终态聚合输入。
+
+最终投影 `questionResults` 按冻结 QuestionSnapshot 排序。`attempt.score = aggregated.totalScore`、`attempt.gradingResult = aggregated.questionResults`、`attempt.passed = aggregated.passed`。
+
+**`attempt.gradingResult` 角色**：
+
+```text
+attempt.gradingResult = 终态去规范化投影
+```
+
+允许：candidate/admin 结果读取、export/read 投影、终态投影持久化。
+
+禁止：评分输入、人工分数来源、workset 物化来源、队列发现来源、终态聚合输入。
+
+> 生产结构性证明：`gradingArchitecture.structural.test.ts` 断言 `aggregateGradingEntries` 函数体永不读取 `attempt.answers` / `attempt.submittedAnswers` / `attempt.gradingResult`，只读 `attempt.id` + `attempt.questionSnapshot`。stale `gradingResult` poison 测试（`gradingPoison.test.ts`）证明零分投影不能覆盖 entry 真相。
+
+**`computeGradingResult` 保留语义**：`computeGradingResult` 仅保留为非持久的 `pending_manual` 响应计算（`gradeAttemptIdempotent` 的部分分数响应分支）。它**不是**终态分数权威，永不持久化。
+
+### 6.7 人工评分队列权威（P3-L0-2E）
+
+人工评分队列的工作真相源是物化的 `attempt_grading_entries`，**不是** `gradingStatus`、**不是** `QuestionSnapshot` 扫描。
+
+**精确谓词**：
+
+```text
+attempt_grading_entries.grading_mode = 'manual'
+AND attempt_grading_entries.status = 'pending_manual'
+AND organization_id = <caller org>   -- tenant 边界
+```
+
+生产实现：`packages/db/src/repository/attemptGradingEntryRepo.ts` `listPendingManualQueue` / `countPendingManualQueue`。公共形状按 attempt 分组（`GradingQueueItem`：每 attempt 一行，含 `pendingQuestionCount`）。
+
+**关键约束**：
+
+```text
+attempt.gradingStatus 可描述 attempt 级生命周期/展示态
+但它不能凭空制造或重建人工队列工作项
+```
+
+`gradingStatus=pending_manual` 但无 `pending_manual` grading entry 的 attempt **不**出现在队列中（生产测试 `gradingQueue.test.ts` ghost-attempt 守卫）。`QuestionSnapshot` 扫描不能重建缺失的人工工作项。
+
+**队列持久性**：队列由 PostgreSQL `attempt_grading_entries` 表支撑，进程/请求重载后工作不丢（durable）。
 
 ---
 
@@ -758,14 +910,33 @@ type TransientEvent =
 - [ ] CandidateTakeSnapshot after reconciliation returns answerSource='submitted'
 - [ ] CandidateTakeSnapshot after reconciliation never returns standardAnswer/rubric
 
-### Grading Tests
-- [ ] grading detail 读取 submitted_answers
-- [ ] grading detail 展示 text_response 纯文本答案
-- [ ] manual text_response 可以录入分数
-- [ ] all manual scores complete 后 attempt 可 graded
-- [ ] grading 不读取 draft answers
-- [ ] 人工评分队列查询 gradingStatus=pending_manual
-- [ ] grading rubric 来自 QuestionSnapshot，不 JOIN live questions
+### Grading Tests（P3-L0-2E workset 模型）
+- [x] submit 冻结屏障物化恰好一条 grading entry per 冻结题目（`gradingWorkset.test.ts`）
+- [x] objective 题 → completed_auto；text_response → pending_manual（`gradingWorkset.test.ts`）
+- [x] partial workset fail closed（`gradingAggregation.test.ts` C/D/E）
+- [x] pending_manual 条目不是终态聚合输入（`gradingAggregation.test.ts` F）
+- [x] submitted_answers 提供冻结提交答案溯源 at workset 物化（`gradingWorkset.test.ts` "uses submittedAnswers exclusively"）
+- [x] grading detail 消费物化的冻结 candidateAnswer（`gradingQueue.test.ts:997`）
+- [x] 终态聚合只消费 grading entries（`gradingScoreIdentity.test.ts`、`gradingAggregation.test.ts`）
+- [x] draft answers 不能影响终态（`gradingPoison.test.ts` draft-answer poison）
+- [x] submittedAnswers 终态 poison（`gradingPoison.test.ts` submittedAnswers poison）
+- [x] stale gradingResult poison（`gradingPoison.test.ts` stale-gradingResult poison）
+- [x] 人工评分队列使用物化的 pending_manual grading entries（`gradingQueue.test.ts:307`）
+- [x] gradingStatus 单独不能凭空制造队列工作项（`gradingQueue.test.ts:381` ghost-attempt 守卫）
+- [x] 人工 text_response 可以录入分数（`gradingQueue.test.ts:641`）
+- [x] 最后一条 pending_manual 完成后 attempt graded+fully_graded（`gradingQueue.test.ts:1200`）
+- [x] 部分 pending_manual 完成保持 submitted+pending_manual（`manualGradingCompletion.test.ts:512`）
+- [x] strict terminal：completed_manual 不可被普通 gradeQuestion 重写；graded+fully_graded 不可重评（`gradingQueue.test.ts:1348/1418`）
+- [x] grading rubric 来自 QuestionSnapshot，不 JOIN live questions（结构性：grading-detail 路由无 questionRepo）
+- [x] 混合总分身份：attempt.score == SUM(gradingResult earned) == SUM(entries earnedScore)（`gradingScoreIdentity.test.ts`）
+- [x] 冻结题目排序投影（`gradingAggregation.test.ts` frozen-order 守卫）
+
+### 已移除的历史证据（不再作为当前协议要求）
+- ~~人工评分队列查询 gradingStatus=pending_manual~~ → REPLACED：队列谓词是 `attempt_grading_entries` WHERE `grading_mode='manual' AND status='pending_manual'`
+- ~~grading reads submitted_answers only~~ → REPLACED：阶段准确——submitted_answers 在物化时是输入，之后 attempt_grading_entries 是权威
+- ~~reconcileScores 折叠客观+人工~~ → REMOVED：reconcileScores 已删除，权威是 aggregateGradingEntries
+- ~~completeManualGrading~~ → REMOVED：当前命令是 gradeQuestion
+- ~~post-terminal re-grade idempotency~~ → STALE：终态后普通改分被拒，不是幂等
 
 ### Result Visibility Tests
 - [ ] graded 但未 release 时 candidate 不能看分数
@@ -819,9 +990,12 @@ type TransientEvent =
 | `attempt.submitted` | submitAttempt 成功 |
 | `attempt.deadline_reconciled` | ensureAttemptDeadlineReconciled 触发冻结 |
 | `attempt.voided` | voidAttempt 成功 |
-| `grading.score_entered` | gradeQuestion 成功 |
-| `grading.finalized` | completeManualGrading 成功（gradingStatus → fully_graded） |
+| `grading.detail_viewed` | grading-details 路由被访问（敏感读取审计，仅记录 FACT，元数据不含 candidateAnswer/rubric） |
+| `grading.score_entered` | gradeQuestion 成功（每次接受的 pending_manual 完成都发出，含部分完成与最终完成） |
+| `grading.finalized` | 仅当最后一条 pending_manual 完成、attempt 从 submitted+pending_manual → graded+fully_graded 时发出（由 gradeQuestion 终态分支触发；部分完成**不**发出） |
 | `result.released` | publishResults 成功 |
+
+> **审计元数据边界**：除非当前 contract 显式包含，审计元数据不包含 candidateAnswer / rubric 内容（生产 `gradingQueue.test.ts` 隐私断言）。终态后改分/重评不在当前协议范围内，故无对应的 revision 审计事件。
 
 ---
 
