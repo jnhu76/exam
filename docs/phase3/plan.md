@@ -10,23 +10,22 @@
 
 ## 0. 状态快照
 
-> **时效性说明（2026-07-03）。** 本计划取代早先的能力优先 Phase 3 计划。旧计划正确地跟踪了许多基础设施作业，但在核心产品模块尚未完成时仍在催生更多 Middle Job。新计划把现有基础设施当作构建块，把执行重心放到 MVP 模块闭环上。
+> **时效性说明（2026-07-07 同步）。** 本计划取代早先的能力优先 Phase 3 计划。模块队列与执行状态反映当前已接受的闭环结果。
 >
-> **协议优先修订（2026-07-03）。** 在 P0 考生作答运行时之前新增 **P-1 考试协议与后端状态模型收敛**，后升级为 **P3-L0-EXAM-PROTOCOL-FOUNDATION**。L0 不仅文档化协议，还实现 text_response 题型、submitted_answers 物理列、submit freeze 重写、CandidateTakeSnapshot 统一端点、deadline reconciliation 懒触发收口、rubric 双层存储、publish validation 和 backfill 脚本。任何人不得在 L0 完成前推进前端作答状态机或 text_response 运行时。
+> **协议权威：** 评分/提交/冻结/工作集等协议语义以 `docs/phase3/exam-protocol.md` 为权威真相源；本计划不重述协议细节。可执行作业卡位于 `docs/phase3/job-cards-phase3-modules.md`。本计划只回答：什么已完成、什么活跃、什么下一个。
 
-| 领域 | 修订后状态 | 计划决策 |
-| ---- | -------------- | ------------- |
-| 考试协议/后端状态模型 | **L0 升级：不仅文档化，还实现基础设施变更。** text_response 题型、submitted_answers 物理列、submit freeze、CandidateTakeSnapshot、deadline reconciliation。 | **P-1/L0：当前最高优先级。** 协议矩阵 + schema + submit freeze + reconciliation + 测试。 |
-| 考生作答运行时 | **未完成。** 客观题作答路径已存在；主观题作答运行时尚未达到 MVP 就绪。 | P-1 之后的第一模块（P0）。 |
-| 人工评分 | **后端基本就绪；前端/E2E 闭环待补。** 评分队列/详情和人工打分已存在，但被作答渲染/运行时缺口阻塞。 | 紧随考生作答运行时之后闭环。 |
-| 考试命题 | **部分可用。** 题目 CRUD、考试配置、发布流程已存在；需要产品流程验证。 | 作为 MVP 命题模块闭环。 |
-| 结果发布 | **后端就绪；需 E2E 证明。** 结果发布模式与考生可见性门控已存在。 | 通过完整 MVP 流程验证。 |
-| RBAC | **基础设施已合并；MVP 落地未完成。** `requireCapability` 已存在，但大量路由仍使用 legacy `requireRole`；scoped 角色尚未端到端打通。 | 先收敛到 MVP 角色：Admin / Teacher / Candidate。Proctor 与 scoped 派单延后。 |
-| Email | **基础设施就绪；无业务调用方。** Outbox/retry/test endpoint 已存在，但没有产品触发点调用它。 | 仅在核心流程稳定后接入最小 MVP 触发点。 |
-| Redis | **仅用于诊断。** 任何考生/考试业务路径都不应依赖 Redis。 | 业务逻辑层面保持休眠。 |
-| Proctor | **监控 v0 已存在；产品角色/权限缺失。** | 暂缓，直到 RBAC MVP 切换稳定。 |
-| 审计 / 诊断 | **足以支撑 MVP。** 应当复用既有审计与诊断，而非随机扩张。 | 仅补充模块闭环所必需的事件。 |
-| 大型设计队列 | **范围过广，无法立即执行。** 许多 Large Job 有用，但并非 MVP 闭环前所需。 | 重新分类为：阻塞、模块本地、延后。 |
+| 模块 | 状态 | 说明 |
+| ---- | ---- | ---- |
+| **P-1/L0** | **CLOSED** | P3-PROTO-0/1/2 + P3-L0-1~5 + P3-L0-2 纠正链（2C/2D/2E 物化 grading workset + 终态聚合权威）+ P3-PROTO-0C 协议镜像全部完成。 |
+| **P0** | **CLOSED** | P3-FSM-0 + P3-MOD-P0-1~4 完成。CandidateTakeSnapshot 权威、deriveTakeExamView 纯、瞬态 reducer 仅管操作态、text_response 运行时完整、提交冻结证明、原始 candidate happy-path E2E 未改一字即通过。 |
+| **P1** | **ACTIVE** | P3-MOD-P1-1 rebaseline 已完成，**已确认生产缺陷**：grading details API/UI 漏投影冻结的 standardAnswer 与 rubric，评分者缺少冻结评分依据。P3-MOD-P1-2 未开始。 |
+| P2 | QUEUED AFTER P1 | 考试命题闭环。 |
+| P3 | QUEUED AFTER P2 | 结果发布闭环。 |
+| P4 | QUEUED AFTER P3 | RBAC MVP 切换——按当前计划在 MVP 流程证明之后。 |
+| P5 | AFTER P0–P4 | Email 最小接入。 |
+| P6 | FINAL | MVP 就绪收尾。 |
+
+> **关键边界（不变）：** `score_computed ≠ result_released`。P1 只负责人工评分完成、graded + fully_graded、规范终态分数计算；**不**要求考生立即看到结果。考生结果发布/答案可见性属于 P3。
 
 ---
 
@@ -57,16 +56,16 @@ Phase 3 执行队列现在是模块优先的。
 
 | 优先级 | 模块 | 目标 | 状态 |
 | -------- | ------ | ---- | ------ |
-| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + backfill。**P0 前端运行时的硬前置。** | **P3-PROTO-0/1/2 完成；P3-L0-1~5 待开始** |
-| P0 | **考生作答运行时闭环** | 考生能作答所有 MVP 题型并安全提交。**依赖 P-1/L0 完成。** | P-1/L0 之后 |
-| P1 | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | P0 之后 |
-| P2 | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | P1 之后 |
-| P3 | **结果发布闭环** | 结果按策略可见；考生只看到自己的结果。 | P2 之后 |
-| P4 | **RBAC MVP 切换** | Admin / Teacher / Candidate 权限在 MVP 流程中被强制执行。 | MVP 闭环证明启动后 |
-| P5 | **Email 最小接入** | 考试发布和/或结果发布的可选通知。 | P0–P4 之后 |
-| P6 | **MVP 就绪收尾** | 一份报告证明整个流程可用并列举延后能力。 | 最终批次 |
+| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + 物化 grading workset + 终态聚合权威 + backfill。 | **CLOSED**（含 P3-L0-2C/2D/2E 纠正链 + P3-PROTO-0C 协议镜像） |
+| **P0** | **考生作答运行时闭环** | 考生能作答所有 MVP 题型并安全提交。 | **CLOSED** |
+| **P1** | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | **ACTIVE**（P1-1 BLOCKED on grading-detail 元数据缺陷） |
+| P2 | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | QUEUED AFTER P1 |
+| P3 | **结果发布闘环** | 结果按策略可见；考生只看到自己的结果。 | QUEUED AFTER P2 |
+| P4 | **RBAC MVP 切换** | Admin / Teacher / Candidate 权限在 MVP 流程中被强制执行。 | QUEUED AFTER P3（按当前计划在 MVP 流程证明之后） |
+| P5 | **Email 最小接入** | 考试发布和/或结果发布的可选通知。 | AFTER P0–P4 |
+| P6 | **MVP 就绪收尾** | 一份报告证明整个流程可用并列举延后能力。 | FINAL |
 
-> **执行顺序硬约束：** P-1/L0 必须先于 P0 完成。任何人不得在 L0 的协议矩阵、schema migration、submit freeze、CandidateTakeSnapshot 和 deadline reconciliation 完成前推进前端作答状态机（P3-FSM-0）或 text_response 运行时（P3-MOD-P0-*）。
+> **执行顺序硬约束（保留）：** P-1/L0 → P0 → P1 → P2 → P3 → P4 → P5 → P6。不要因结果后端代码已存在就把结果发布移到命题之前。
 
 ---
 
@@ -101,7 +100,7 @@ Phase 3 执行队列现在是模块优先的。
 - save after submit rejection
 - save vs submit race
 - refresh/resume after submit
-- grading input uses submitted_answers only
+- grading workset + terminal aggregation authority（详见 exam-protocol.md §6.6/§6.7）
 - result visibility
 - standard answer visibility
 - candidate own-result boundary
@@ -125,11 +124,15 @@ AttemptStatus (8 values):
                                disrupted     voided (terminal)
 
 GradingStatus (independent dimension):
-  pending_auto | pending_manual | fully_graded
+  auto_graded | pending_manual | fully_graded
 
 Answer:
   answers            draft, mutable before submit
   submitted_answers  frozen snapshot (SubmittedAnswersSnapshot), immutable after submit
+                     = 冻结提交真相 + submit 时 grading-workset 物化输入
+  attempt_grading_entries
+                     物化 grading workset；人工队列与终态分数权威
+                     （详见 exam-protocol.md §6.6/§6.7）
 
 Result:
   score_computed      与 result_released 分离
@@ -147,7 +150,7 @@ Result:
 | ---- | -------- |
 | 协议文档 | `docs/phase3/exam-protocol.md` 含 21 项协议（14 原有 + 7 L0 扩展）。 |
 | Schema 变更 | text_response 枚举值、submitted_answers 列、rubric 双层存储。 |
-| Submit Freeze 重写 | 提交时生成 SubmittedAnswersSnapshot，评分从 submitted_answers 读取。 |
+| Submit Freeze 重写 | 提交时冻结 SubmittedAnswersSnapshot + 物化 grading workset（见 exam-protocol.md §4.2）。 |
 | CandidateTakeSnapshot | 统一端点返回 attempt 元数据 + 派生能力 + 安全题目 + answerValue + answerSource + serverNow + effectiveDeadline。 |
 | Deadline Reconciliation | 懒触发收口，4 个 candidate 入口共享 ensureAttemptDeadlineReconciled()。 |
 | Publish Validation | text_response 发布时 rubric 必填；auto 题 standardAnswer 必填。 |
@@ -176,14 +179,17 @@ candidate attempt API 契约包含 7 个真相字段；
 
 | ID | 作业 | 产出 |
 | -- | --- | ------ |
-| P3-PROTO-0 ✅ | Exam Protocol Audit (L0) | `docs/phase3/exam-protocol.md`（21 项协议，**已落地**） |
-| P3-PROTO-1 ✅ | Backend State Consistency Tests (L0) | 14 个场景的集成测试（**已落地**：protocol-consistency.test.ts 11 tests + 既有测试覆盖其余） |
-| P3-PROTO-2 ✅ | CandidateTakeSnapshot Endpoint | 统一端点 + 安全投影 + 测试（**已落地**） |
-| P3-L0-1 | Schema Migration | text_response + submitted_answers + rubric 双层存储 |
-| P3-L0-2 | Submit Freeze Rewrite | SubmittedAnswersSnapshot 冻结 + 评分读取路径 |
-| P3-L0-3 | Deadline Reconciliation | 懒触发收口 + 4 入口 + 测试 |
-| P3-L0-4 | Backfill Script | submitted_answers 回填脚本 |
-| P3-L0-5 | Publish Validation | text_response rubric 校验 + auto 题 standardAnswer 校验 |
+| P3-PROTO-0 ✅ DONE | Exam Protocol Audit (L0) | `docs/phase3/exam-protocol.md`（已落地并镜像 L0-2E workset 模型） |
+| P3-PROTO-1 ✅ DONE | Backend State Consistency Tests (L0) | 14 场景集成测试（protocol-consistency.test.ts） |
+| P3-PROTO-2 ✅ DONE | CandidateTakeSnapshot Endpoint | 统一端点 + 安全投影 + 测试 |
+| P3-L0-1 ✅ DONE | Schema Migration + rubric 双层 | text_response + submitted_answers + rubric 双层存储 |
+| P3-L0-2 ✅ DONE | Submit Freeze + 物化 grading workset + 终态聚合权威 | SubmittedAnswersSnapshot 冻结 + attempt_grading_entries 物化 + aggregateGradingEntries 终态权威（含 2C/2D/2E 纠正链） |
+| P3-L0-3 ✅ DONE | Deadline Reconciliation | 懒触发收口 + 4 入口 + 走同一 submit 冻结屏障 |
+| P3-L0-4 ✅ DONE | Backfill Script | submitted_answers 回填脚本（dry-run + 幂等 + quarantine） |
+| P3-L0-5 ✅ DONE | Publish Validation | text_response rubric 校验 + auto 题 standardAnswer 校验 |
+| P3-PROTO-0C ✅ DONE | Accepted Grading Model Mirror | exam-protocol.md 镜像已接受的 workset 协议 |
+
+> **评分语义权威：** 本模块的 grading/submit/workset 语义以 `docs/phase3/exam-protocol.md` 为权威。本计划不重述协议细节。`reconcileScores`/`reconstructObjectiveScore`/`manual_grading_entries` 等历史内部符号已删除/重命名，由结构性测试锁住，不再作为当前模型描述。
 
 ---
 
@@ -234,19 +240,33 @@ candidate attempt API 契约包含 7 个真相字段；
 前端状态模型只消费 CandidateTakeSnapshot，后端仍是真相源。
 ```
 
-### 派生 Middle Job
+### 派生 Middle Job（全部 DONE — P0 CLOSED）
 
 | ID | 作业 | 产出 |
 | -- | --- | ------ |
-| P3-FSM-0 | deriveTakeExamView + transient reducer | 纯函数 + 瞬态 reducer，消费 CandidateTakeSnapshot（依赖 L0 完成） |
-| P3-MOD-P0-1 | 考生作答渲染审计 | 每个题型的精确运行时缺口清单 |
-| P3-MOD-P0-2 | text_response 运行时 | textarea 渲染 + 保存/恢复/提交支持 |
-| P3-MOD-P0-3 | 提交冻结 UI 证明 | UI 禁用态 + 后端冲突证明 |
-| P3-MOD-P0-4 | 考生作答 E2E | 完整考生作答 happy path |
+| P3-FSM-0 ✅ DONE | deriveTakeExamView + transient reducer | 纯函数 + 瞬态 reducer，消费 CandidateTakeSnapshot |
+| P3-MOD-P0-1 ✅ DONE | 考生作答渲染审计 | 每个题型的精确运行时缺口清单 |
+| P3-MOD-P0-2 ✅ DONE | text_response 运行时 | textarea 渲染 + 保存/恢复/提交支持 |
+| P3-MOD-P0-3 ✅ DONE | 提交冻结 UI 证明 | UI 禁用态 + 后端冲突证明 |
+| P3-MOD-P0-4 ✅ DONE | 考生作答 E2E | 完整考生作答 happy path（含 text_response） |
+
+> **P0 CLOSED 含义：** CandidateTakeSnapshot 权威、deriveTakeExamView 纯派生、瞬态 reducer 仅管操作态、text_response 运行时完整、提交冻结证明、原始 candidate happy-path E2E 未改一字即通过（L0 纠正链修复后端真相后 DEPENDENCY CLOSURE SATISFIED）。
 
 ---
 
-## 5. 模块 P1 — 人工评分闭环
+## 5. 模块 P1 — 人工评分闭环（ACTIVE）
+
+### 当前状态
+
+P1 是当前活跃模块。P3-MOD-P1-1 rebaseline 已完成，**确认一处生产缺陷**：
+
+```text
+grading details API/UI 漏投影冻结的 standardAnswer 与 rubric。
+两者在冻结 QuestionSnapshot 中已存在，但 GradingDetailsQuestionSchema
+与 grading-details 路由投影都未暴露。评分者缺少冻结评分依据。
+```
+
+P1-1 不再是"测试已存在；运行它们即可"——它需要一处窄实现修正（投影冻结的 standardAnswer + rubric）。可执行作业卡详情见 `docs/phase3/job-cards-phase3-modules.md`。
 
 ### 目标
 
@@ -498,8 +518,9 @@ Admin、Teacher、Candidate 各自能完成其 MVP 职责，
 | 能力 | 状态 | 计划决策 |
 | ---------- | ------ | ------------- |
 | 答案保存协议 | 强 | L0 已显式化为协议矩阵与一致性测试；在 P0 中消费；除非矩阵暴露真实缺口，否则不要重设计为 L4 v2。 |
-| 提交冻结屏障 | 强 | L0 已重写为生成 SubmittedAnswersSnapshot；评分从 submitted_answers 读取；默认不要发起 L5 新设计。 |
-| submitted_answers | **L0 新增** | 物理列，干净快照格式；submit 事务写入；评分/结果只从此读取。 |
+| 提交冻结屏障 | 强 | L0 已重写为冻结 SubmittedAnswersSnapshot + 物化 grading workset；评分语义见 exam-protocol.md §6.6/§6.7。默认不要发起 L5 新设计。 |
+| submitted_answers | **L0 新增** | 物理列，干净快照格式；submit 事务写入；= 冻结提交真相 + submit 时 workset 物化输入（不作为终态分数重评来源）。 |
+| attempt_grading_entries | **L0-2E 新增** | 物化 grading workset；人工队列与终态分数权威（详见 exam-protocol.md §6.6/§6.7）。 |
 | CandidateTakeSnapshot | **L0 新增** | 统一端点，返回 attempt 元数据 + 派生能力 + 安全题目 + answerValue + answerSource + serverNow + effectiveDeadline。 |
 | Deadline Reconciliation | **L0 新增** | 懒触发收口，4 个 candidate 入口共享 ensureAttemptDeadlineReconciled()。 |
 | 考试生命周期命令 | 足够强 | 在 P2/P3 中使用；除非生命周期歧义阻塞模块闭环，否则不发起 L13。 |
@@ -570,99 +591,44 @@ Large Job 不再是主执行队列。仅在模块无法安全推进、必须做�
 
 ---
 
-## 14. 近期执行计划
+## 14. 近期执行计划（2026-07-07 同步）
 
-### Step 0 — 替换计划
-
-- 用本模块闭环计划替换旧 `docs/phase3/plan.md`。
-- 在任意旧 job-card 索引中加一条短注：能力优先队列已退役。
-- 保留旧审计文档作参考；不要删除。
-
-### Step 1 — P-1/L0 考试协议与后端状态模型收敛
-
-**这是 P0 之前必须完成的协议+基础设施阶段。** 不仅文档化协议，还实现 text_response 题型、submitted_answers 物理列、submit freeze、CandidateTakeSnapshot、deadline reconciliation、rubric 双层存储、publish validation 和 backfill 脚本。
+### COMPLETED
 
 ```text
-P3-PROTO-0  Exam Protocol Audit (L0)  ✅完成    [文档：exam-protocol.md，21 项协议，已落地]
-P3-PROTO-1  Backend Consistency Tests (L0) ✅完成 [测试：14 个场景，protocol-consistency.test.ts + 既有测试]
-P3-PROTO-2  CandidateTakeSnapshot Endpoint ✅完成 [代码：统一端点 + 4 tests]
-P3-L0-1     Schema Migration                   [代码：text_response + submitted_answers + rubric]
-P3-L0-2     Submit Freeze Rewrite              [代码：SubmittedAnswersSnapshot 冻结]
-P3-L0-3     Deadline Reconciliation            [代码：懒触发收口]
-P3-L0-4     Backfill Script                    [脚本：submitted_answers 回填]
-P3-L0-5     Publish Validation                 [代码：text_response rubric 校验]
+P-1/L0（含 P3-PROTO-0/1/2 + P3-L0-1~5 + P3-L0-2C/2D/2E 纠正链 + P3-PROTO-0C 协议镜像）
+↓
+P0（P3-FSM-0 + P3-MOD-P0-1~4，candidate happy-path E2E 通过）
 ```
 
-Step 1 的验收应狭窄：
-
-- 产出 `docs/phase3/exam-protocol.md`，覆盖 21 项协议
-- text_response 题型在 DB/API/Web 全链可用
-- submitted_answers 物理列在 submit 时写入，评分从其读取
-- CandidateTakeSnapshot 端点返回安全投影
-- deadline reconciliation 在 4 个入口懒触发
-- rubric 双层存储（questions.rubric → QuestionSnapshot.rubric）
-- backfill 脚本可回填已有数据
-- 不重写保存协议/冻结屏障实现（除非矩阵暴露真实阻塞）
-- 不引入状态机库到后端
-- 不做前端运行时
-
-### Step 2 — 启动 P0（前端运行时，依赖 P-1/L0 完成）
-
-在 P-1/L0 完成后：
+### CURRENT
 
 ```text
-P3-FSM-0     deriveTakeExamView + transient reducer（消费 CandidateTakeSnapshot）
-P3-MOD-P0-1  考生作答渲染审计
-P3-MOD-P0-2  text_response 运行时
+P3-MOD-P1-1 人工评分 API/UI Proof / Closure
+  → BLOCKED：grading details API/UI 漏投影冻结的 standardAnswer 与 rubric
+  → 需要窄实现修正（投影冻结评分元数据），不是"测试已存在；运行即可"
+  → 可执行详情见 docs/phase3/job-cards-phase3-modules.md
 ```
 
-P0 的验收应狭窄：
-
-- 前端状态模型只消费 CandidateTakeSnapshot，不发明业务规则
-- 不引入 XState
-- text_response 渲染 textarea，保留换行
-- 不做富文本
-- 不做文件上传
-- 文本作答保存/恢复/提交的测试
-
-### Step 3 — 立即推进 P1
-
-在考生文本作答可用之后：
+### NEXT
 
 ```text
-P3-MOD-P1-1 人工评分 API/UI 证明
-P3-MOD-P1-2 主观评分 E2E   （在考生主观作答可用之后）
+P3-MOD-P1-2 主观评分 E2E
+↓
+P1 CLOSED
+↓
+P2 考试命题闭环
+↓
+P3 结果发布闭环
+↓
+P4 RBAC MVP 切换（按当前计划在 MVP 流程证明之后）
+↓
+P5 Email 最小接入
+↓
+P6 MVP 就绪收尾
 ```
 
-### Step 4 — 闭环命题与结果流程
-
-然后：
-
-```text
-P3-MOD-P2-3 考试发布到考生 E2E
-P3-MOD-P3-1 结果可见性 E2E
-```
-
-### Step 5 — RBAC MVP 切换
-
-仅在流程存在之后：
-
-```text
-P3-MOD-P4-1  MVP RBAC 路由矩阵
-P3-MOD-P4-2A 评分路由切换
-P3-MOD-P4-2B 题目 CRUD 路由切换
-P3-MOD-P4-2C 考试命题/生命周期路由切换
-P3-MOD-P4-3  考生路由保护验证
-```
-
-### Step 6 — 可选 Email 最小接入
-
-在结果发布稳定之后：
-
-```text
-P3-MOD-P5-0 邮件收件人来源 + outbox 入队设计 v0
-P3-MOD-P5-1 结果发布邮件触发 v0   （依赖 P5-0）
-```
+> **协议/作业卡权威边界：** 本计划只跟踪模块序列与执行状态。评分/提交/workset 协议语义以 `docs/phase3/exam-protocol.md` 为权威；可执行作业步骤以 `docs/phase3/job-cards-phase3-modules.md` 为权威。本计划不复制协议全文或作业卡全文。
 
 ---
 
@@ -731,46 +697,27 @@ Phase 3 的下一步不是又一个基础设施 PR。
 
 Phase 3 的下一步是让 MVP 考试流程真正跑通：
 教师命题 → 考生作答 → 考生提交 → 教师评分 → 结果发布。
-
-但考生作答运行时的正确性依赖协议真相与基础设施变更。
-因此先做 P-1/L0（协议矩阵 + text_response + submitted_answers + submit freeze
-+ CandidateTakeSnapshot + deadline reconciliation + rubric + backfill），
-后做前端状态模型与 text_response 运行时。
 ```
 
-执行从以下开始：
+P-1/L0（协议矩阵 + text_response + submitted_answers + submit freeze
++ CandidateTakeSnapshot + deadline reconciliation + rubric + 物化 grading workset
++ 终态聚合权威 + backfill）**已 CLOSED**。
+
+P0（考生作答运行时）**已 CLOSED**：candidate happy-path E2E 通过。
+
+当前执行从以下开始：
 
 ```text
-P-1/L0 考试协议与后端状态模型收敛（L0 升级）
+P3-MOD-P1-1 人工评分 API/UI Proof / Closure
+  → BLOCKED：grading details API/UI 漏投影冻结的 standardAnswer 与 rubric
 ```
 
-P3-PROTO-0（协议文档）**已完成**——`docs/phase3/exam-protocol.md` 已落地，覆盖 21 项协议。
-P3-PROTO-1（后端一致性测试）**已完成**——`protocol-consistency.test.ts` 11 tests + 既有测试覆盖 14 场景。
-P3-PROTO-2（CandidateTakeSnapshot 端点）**已完成**——新端点 + 契约 schema + 4 tests。
-
-下一张具体作业卡应为：
+P1-1 修复后进入：
 
 ```text
-P3-L0-1 Schema Migration
+P3-MOD-P1-2 主观评分 E2E
+→ P1 CLOSED
+→ P2 / P3 / P4 / P5 / P6
 ```
 
-然后：
-
-```text
-P3-PROTO-2 CandidateTakeSnapshot Endpoint
-P3-L0-1    Schema Migration
-P3-L0-2    Submit Freeze Rewrite
-P3-L0-3    Deadline Reconciliation
-P3-L0-4    Backfill Script
-P3-L0-5    Publish Validation
-```
-
-在 P-1/L0 完成后，才进入 P0：
-
-```text
-P3-FSM-0    deriveTakeExamView + transient reducer（消费 CandidateTakeSnapshot）
-P3-MOD-P0-1 考生作答渲染审计
-P3-MOD-P0-2 text_response 运行时
-```
-
-只有在 P0 之后，才应按顺序推进评分、命题、结果发布、RBAC 与邮件。
+只有在 P1 之后，才应按顺序推进命题、结果发布、RBAC 与邮件。
