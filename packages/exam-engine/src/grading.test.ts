@@ -3,8 +3,10 @@ import {
   gradeAttempt,
   gradeAttemptIdempotent,
   finalizeGrading,
+  finalizeTerminalGrading,
   computeGradingResult,
 } from "./grading.js";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -13,6 +15,18 @@ import type { ExamRepository } from "./examCommands.js";
 import type { Exam, ExamAttempt, ExamEnrollment } from "@exam/domain";
 import { InvalidStateTransitionError } from "@exam/domain";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
+
+/**
+ * P3-FORMAL-P0-D2 test helper: mints a genuine capability against the
+ * provided repo pair by invoking the canonical seam. Test-only.
+ */
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -186,6 +200,11 @@ function makeRepos(
 describe("gradeAttempt", () => {
   it("persists question results and marks a passing attempt graded", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     const gradedAt = new Date("2026-06-01T12:00:00Z");
 
     const result = await gradeAttempt(
@@ -193,7 +212,7 @@ describe("gradeAttempt", () => {
       repos.enrollmentRepo,
       repos.attemptRepo,
       repos.worksetRepo,
-      "attempt-1",
+      cap,
       gradedAt,
     );
 
@@ -221,13 +240,18 @@ describe("gradeAttempt", () => {
       makeEnrollment(),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.worksetRepo,
-        "attempt-1",
+        cap,
         new Date(),
       ),
     ).rejects.toThrow(InvalidStateTransitionError);
@@ -254,12 +278,17 @@ describe("gradeAttempt", () => {
         }),
       );
 
+      const cap = await mintCap(
+        repos.enrollmentRepo,
+        repos.attemptRepo,
+        "attempt-1",
+      );
       await gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.worksetRepo,
-        "attempt-1",
+        cap,
         new Date(),
       );
 
@@ -279,12 +308,17 @@ describe("gradeAttempt", () => {
         makeEnrollment(),
       );
 
+      const cap = await mintCap(
+        repos.enrollmentRepo,
+        repos.attemptRepo,
+        "attempt-1",
+      );
       await gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.worksetRepo,
-        "attempt-1",
+        cap,
         new Date(),
       );
 
@@ -349,13 +383,14 @@ describe("gradeAttempt", () => {
       countPendingManualForAttempt: async () => 0,
     };
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     await expect(
       gradeAttempt(
         examRepo,
         enrollmentRepo,
         attemptRepo,
         worksetRepo,
-        "attempt-1",
+        cap,
         new Date(),
       ),
     ).rejects.toThrow("Failed to persist graded results");
@@ -423,13 +458,14 @@ describe("gradeAttempt", () => {
       countPendingManualForAttempt: async () => 0,
     };
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     await expect(
       gradeAttempt(
         examRepo,
         enrollmentRepo,
         attemptRepo,
         worksetRepo,
-        "attempt-1",
+        cap,
         new Date(),
       ),
     ).rejects.toThrow("Failed to update enrollment");
@@ -700,13 +736,17 @@ describe("grading transactional boundary (P0-2)", () => {
       }),
     };
 
+    const cap = await mintCap(
+      failingEnrollmentRepo,
+      failingScope.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       finalizeGrading(
         failingEnrollmentRepo,
         failingScope.attemptRepo,
         makeResultWorksetRepo(attempt, exam, gradedAt),
-        "attempt-1",
-        enrollment.id,
+        cap,
         exam,
         gradedAt,
       ),
@@ -733,17 +773,21 @@ describe("grading transactional boundary (P0-2)", () => {
     const harness = makeTransactionalRepos(exam, attempt, enrollment);
     const result = computeResult(attempt, exam, gradedAt);
 
-    await runInTransaction(harness, async (repos) =>
-      finalizeGrading(
+    await runInTransaction(harness, async (repos) => {
+      const cap = await mintCap(
+        repos.enrollmentRepo,
+        repos.attemptRepo,
+        "attempt-1",
+      );
+      return finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
         makeResultWorksetRepo(attempt, exam, gradedAt),
-        "attempt-1",
-        enrollment.id,
+        cap,
         exam,
         gradedAt,
-      ),
-    );
+      );
+    });
 
     expect(harness.getAttempt()).toMatchObject({
       status: "graded",
@@ -772,12 +816,16 @@ describe("grading transactional boundary (P0-2)", () => {
     const attemptUpdateSpy = vi.spyOn(scope.attemptRepo, "update");
     const enrollmentUpdateSpy = vi.spyOn(scope.enrollmentRepo, "update");
 
+    const cap = await mintCap(
+      scope.enrollmentRepo,
+      scope.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       scope.enrollmentRepo,
       scope.attemptRepo,
       makeResultWorksetRepo(attempt, exam, gradedAt),
-      "attempt-1",
-      enrollment.id,
+      cap,
       exam,
       gradedAt,
     );
@@ -834,12 +882,17 @@ describe("gradeAttemptIdempotent", () => {
       },
     };
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      spiedAttemptRepo,
+      "attempt-1",
+    );
     const result = await gradeAttemptIdempotent(
       repos.examRepo,
       repos.enrollmentRepo,
       spiedAttemptRepo,
       repos.worksetRepo,
-      "attempt-1",
+      cap,
       new Date("2026-06-05T00:00:00Z"),
     );
 
@@ -854,12 +907,17 @@ describe("gradeAttemptIdempotent", () => {
     const attempt = makeAttempt({ status: "submitted" });
     const repos = makeRepos(makeExam(), attempt, makeEnrollment());
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     const result = await gradeAttemptIdempotent(
       repos.examRepo,
       repos.enrollmentRepo,
       repos.attemptRepo,
       repos.worksetRepo,
-      "attempt-1",
+      cap,
       fixedGradedAt,
     );
 
@@ -876,13 +934,18 @@ describe("gradeAttemptIdempotent", () => {
       makeEnrollment(),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       gradeAttemptIdempotent(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.worksetRepo,
-        "attempt-1",
+        cap,
         new Date(),
       ),
     ).rejects.toThrow(InvalidStateTransitionError);
@@ -890,18 +953,22 @@ describe("gradeAttemptIdempotent", () => {
 
   it("throws ValidationError when attempt not found", async () => {
     const repos = makeRepos(makeExam(), makeAttempt(), makeEnrollment());
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     const missingAttemptRepo: AttemptRepository = {
       ...repos.attemptRepo,
       findById: () => null,
     };
-
     await expect(
       gradeAttemptIdempotent(
         repos.examRepo,
         repos.enrollmentRepo,
         missingAttemptRepo,
         repos.worksetRepo,
-        "nonexistent",
+        cap,
         new Date(),
       ),
     ).rejects.toThrow("Attempt not found");

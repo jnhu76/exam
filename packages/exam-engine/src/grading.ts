@@ -26,6 +26,10 @@ import {
   type AttemptCommand,
 } from "./attemptStateMachine.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
+import {
+  assertCapabilityFor,
+  type LockedEnrollmentAttemptIdentity,
+} from "./lockSeam.js";
 
 /**
  * Determines whether this attempt's score should replace the current final score
@@ -221,11 +225,21 @@ export async function finalizeTerminalGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
-  enrollmentId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   exam: Exam,
   now: Date,
 ): Promise<boolean> {
+  // P3-FORMAL-P0-D2: the FIRST executable protocol action is the transaction-
+  // affinity assertion. No repository read, lock, write, or workset access
+  // may occur before it. The capability proves the caller's transaction
+  // already acquired Enrollment before Attempt via the canonical seam, using
+  // the exact repo pair this consumer is now using.
+  assertCapabilityFor(capability, enrollmentRepo, attemptRepo);
+  const { attemptId, enrollmentId } = capability;
+
+  // Re-read mutable Attempt state through the current (tx-bound, affinity-
+  // proven) AttemptRepository. Non-locking: the seam already holds the row
+  // lock, and under REPEATABLE READ this tx sees its own prior writes.
   const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
@@ -287,14 +301,18 @@ export async function finalizeTerminalGrading(
     throw new ValidationError("Failed to persist graded results");
   }
 
-  // Lock the enrollment row (`FOR UPDATE`) in the SAME transaction the caller
-  // wrapped us in. This serializes concurrent finalization of different
-  // attempts on the same enrollment: a second transaction cannot read the
-  // enrollment's finalScore/finalAttemptId until the first commits.
-  // Recomputing `shouldSelectAttempt` against the locked enrollment therefore
-  // defeats the last-writer-wins race where two attempts otherwise each see
-  // the pre-existing finalScore and both overwrite.
-  const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
+  // P3-FORMAL-P0-D2 / HR-2: the Enrollment row is NOT re-locked with an
+  // explicit FOR UPDATE here. The capability's affinity assertion already
+  // proved the caller's transaction acquired the Enrollment lock before the
+  // Attempt lock via the canonical seam. We re-read mutable Enrollment state
+  // through a NON-locking lookup; under REPEATABLE READ this tx observes its
+  // own writes and the already-held lock serializes concurrent finalizers.
+  //
+  // The Enrollment UPDATE below remains and is itself a lock-acquiring
+  // operation (implicit row write-lock). Its safety depends ENTIRELY on the
+  // capability affinity assertion above having succeeded. Removing the
+  // explicit FOR UPDATE does NOT remove the Enrollment lock dependency.
+  const enrollment = await enrollmentRepo.findByExamAndCandidate(
     attempt.examId,
     attempt.candidateId,
   );
@@ -359,12 +377,11 @@ export async function finalizeGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
-  enrollmentId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   exam: Exam,
   now: Date,
 ): Promise<boolean> {
-  const attempt = await attemptRepo.findById(attemptId);
+  const attempt = await attemptRepo.findById(capability.attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
@@ -379,7 +396,7 @@ export async function finalizeGrading(
   // pending_manual attempt.
   if (attempt.gradingStatus === GradingStatus.PendingManual) {
     throw new InvalidStateTransitionError(
-      `Cannot auto-finalize attempt ${attemptId}: gradingStatus=pending_manual; ` +
+      `Cannot auto-finalize attempt ${capability.attemptId}: gradingStatus=pending_manual; ` +
         "manual grading completion owns the submitted → graded transition",
     );
   }
@@ -388,8 +405,7 @@ export async function finalizeGrading(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    enrollmentId,
+    capability,
     exam,
     now,
   );
@@ -399,6 +415,11 @@ export async function finalizeGrading(
  * Grades an attempt end-to-end: reads the grading snapshot, then finalizes
  * via the canonical grading-entry aggregator. Returns the persisted ScoreResult
  * (re-read from the attempt so the response reflects committed truth).
+ *
+ * P3-FORMAL-P0-D2: the caller MUST mint the transaction-affine capability via
+ * `lockEnrollmentAndAttempt` in the same transaction before calling this. The
+ * capability is the EA protocol authority threaded through to
+ * {@link finalizeTerminalGrading}.
  *
  * Note: `gradeAttempt` is retained for test compatibility; production callers
  * use {@link gradeAttemptIdempotent}. Both flow terminal scoring through the
@@ -410,14 +431,14 @@ export async function gradeAttempt(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<ScoreResult> {
   const snapshot = await readGradingSnapshot(
     examRepo,
     enrollmentRepo,
     attemptRepo,
-    attemptId,
+    capability.attemptId,
   );
   if (!snapshot) {
     throw new ValidationError("Attempt not found");
@@ -427,14 +448,13 @@ export async function gradeAttempt(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    snapshot.enrollment.id,
+    capability,
     snapshot.exam,
     now,
   );
 
   // Build the response ScoreResult from the now-committed attempt state.
-  const graded = await attemptRepo.findById(attemptId);
+  const graded = await attemptRepo.findById(capability.attemptId);
   if (!graded) {
     throw new ValidationError("Attempt not found after grading");
   }
@@ -452,14 +472,14 @@ export async function gradeAttemptIdempotent(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<ScoreResult> {
   const snapshot = await readGradingSnapshot(
     examRepo,
     enrollmentRepo,
     attemptRepo,
-    attemptId,
+    capability.attemptId,
   );
   if (!snapshot) {
     throw new ValidationError("Attempt not found");
@@ -500,13 +520,12 @@ export async function gradeAttemptIdempotent(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    snapshot.enrollment.id,
+    capability,
     snapshot.exam,
     now,
   );
 
-  const graded = await attemptRepo.findById(attemptId);
+  const graded = await attemptRepo.findById(capability.attemptId);
   if (!graded) {
     throw new ValidationError("Attempt not found after grading");
   }

@@ -9,6 +9,7 @@ import type { AttemptRepository } from "./attemptCommands.js";
 import type { EnrollmentRepository } from "./attemptCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { finalizeTerminalGrading } from "./grading.js";
+import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
 
 /** Result of {@link gradeQuestion}: grading status after the entry was saved. */
 export interface GradeQuestionResult {
@@ -86,15 +87,15 @@ export async function gradeQuestion(
   attemptRepo: AttemptRepository,
   enrollmentRepo: EnrollmentRepository,
   worksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   questionId: string,
   score: number,
   comment: string,
   graderId: string,
   now: Date,
   exam: Exam,
-  enrollmentId: string,
 ): Promise<GradeQuestionResult> {
+  const { attemptId } = capability;
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
@@ -198,12 +199,14 @@ export async function gradeQuestion(
     // through finalizeTerminalGrading, the single canonical writer. This
     // closes the pre-repair gap where manual terminal left
     // enrollment.finalScore NULL/stale.
+    //
+    // P3-FORMAL-P0-D2: the caller-minted capability is threaded through; the
+    // closure asserts transaction affinity at its entry.
     const closed = await finalizeTerminalGrading(
       enrollmentRepo,
       attemptRepo,
       worksetRepo,
-      attemptId,
-      enrollmentId,
+      capability,
       exam,
       now,
     );

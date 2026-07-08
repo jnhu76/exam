@@ -21,6 +21,7 @@ import {
   gradeAttemptIdempotent,
   flagMisconduct,
   extendAttemptTime,
+  lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
 import { Permission } from "@exam/authz";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -178,8 +179,25 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       const forceSubmitted = await executeInTransaction(
         fastify.db,
         async (tx) => {
+          // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
+          // capability via the canonical seam, and thread the same instances
+          // + capability to the grading consumer.
           const txAttemptRepo = createAttemptRepo(tx);
-          const locked = await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+          const txEnrollmentRepo = createEnrollmentRepo(tx);
+          const { exams, enrollments, attempts } = createExamEngineRepos(
+            {
+              examRepo: createExamRepo(tx),
+              attemptRepo: txAttemptRepo,
+              enrollmentRepo: txEnrollmentRepo,
+            },
+            ctx,
+          );
+          const cap = await lockEnrollmentAndAttempt(
+            enrollments,
+            attempts,
+            attemptId,
+          );
+          const locked = await attempts.findByIdForUpdate(attemptId);
           if (!locked) {
             throw new NotFoundError("Attempt not found");
           }
@@ -189,14 +207,6 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
               `Cannot force-submit attempt in ${locked.status} state`,
             );
           }
-          const { exams, enrollments, attempts } = createExamEngineRepos(
-            {
-              examRepo: createExamRepo(tx),
-              attemptRepo: txAttemptRepo,
-              enrollmentRepo: createEnrollmentRepo(tx),
-            },
-            ctx,
-          );
 
           // Idempotent: already terminal (submitted/grading/graded) -> skip
           // submit, but still run gradeAttemptIdempotent so a `submitted` row
@@ -230,13 +240,14 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           // own submit-tx mid-transition) — leave it untouched.
           // Slice 4: gradeAttemptIdempotent aggregates from the tx-scoped
           // workset repo (created above for submitAttempt).
+          // P3-FORMAL-P0-D2: the capability is the EA protocol authority.
           if (locked.status !== "grading") {
             await gradeAttemptIdempotent(
               exams,
               enrollments,
               attempts,
               gradingWorksetRepo,
-              attemptId,
+              cap,
               now,
             );
           }

@@ -13,6 +13,7 @@ import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import { readGradingSnapshot, finalizeGrading } from "./grading.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
@@ -122,9 +123,10 @@ export async function ensureAttemptDeadlineReconciled(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<ExamAttempt> {
+  const { attemptId } = capability;
   const attempt = await attemptRepo.findByIdForUpdate(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
@@ -193,12 +195,13 @@ export async function ensureAttemptDeadlineReconciled(
   // Slice 4: finalizeGrading aggregates from the grading workset internally —
   // no externally computed result. gradingWorksetRepo is the caller's
   // tx-scoped repo (same one submitAttempt materialized into).
+  // P3-FORMAL-P0-D2: the caller-minted capability is threaded through to
+  // finalizeGrading → finalizeTerminalGrading (affinity-proven).
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    snapshot.enrollment.id,
+    capability,
     snapshot.exam,
     now,
   );

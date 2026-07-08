@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
+import type {
+  AttemptRepository,
+  EnrollmentRepository,
+} from "./attemptCommands.js";
 import type {
   AttemptGradingEntry,
   Exam,
   ExamAttempt,
   ExamEnrollment,
 } from "@exam/domain";
-import type {
-  AttemptRepository,
-  EnrollmentRepository,
-} from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { computeGradingResult } from "./grading.js";
@@ -17,6 +18,14 @@ import {
   computeEffectiveDeadline,
   isAttemptDeadlineExpired,
 } from "./deadlineReconciliation.js";
+
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -267,12 +276,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -294,12 +304,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -313,12 +324,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -341,12 +353,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -362,12 +375,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
       const attempt = makeAttempt({ status });
       const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
         makeRepos([attempt]);
+      const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
       const result = await ensureAttemptDeadlineReconciled(
         examRepo,
         enrollmentRepo,
         attemptRepo,
         gradingWorksetRepo,
-        "attempt-1",
+        cap,
         now,
       );
       expect(result.status).toBe(status);
@@ -381,12 +395,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-3)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -434,12 +449,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([textAttempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -508,12 +524,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([mixedAttempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 
@@ -530,12 +547,13 @@ describe("ensureAttemptDeadlineReconciled (P3-L0-2C manual hold)", () => {
     const { attemptRepo, examRepo, enrollmentRepo, gradingWorksetRepo } =
       makeRepos([attempt]);
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await ensureAttemptDeadlineReconciled(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       gradingWorksetRepo,
-      "attempt-1",
+      cap,
       now,
     );
 

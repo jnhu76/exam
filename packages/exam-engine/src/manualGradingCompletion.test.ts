@@ -14,6 +14,7 @@ import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { submitAttempt } from "./attemptCommands.js";
 import { computeGradingResult } from "./grading.js";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import { gradeQuestion, type GradeQuestionResult } from "./manualGrading.js";
 
 /**
@@ -61,6 +62,17 @@ import { gradeQuestion, type GradeQuestionResult } from "./manualGrading.js";
 
 const NOW = new Date("2026-06-01T12:00:00Z");
 const DEFAULT_PASSING = 50;
+
+/**
+ * P3-FORMAL-P0-D2 test helper: mints a genuine capability via the canonical seam.
+ */
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -356,18 +368,22 @@ async function runMixedLifecycle(input: {
     fullyGraded: false,
   };
   for (const m of input.manualScores) {
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     lastResult = await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap,
       m.questionId,
       m.score,
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
   }
 
@@ -542,18 +558,22 @@ describe("P3-L0-2D D: multi-manual partial completion", () => {
       { source: "candidate" },
     );
 
+    const cap2 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     const partial = await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap2,
       "q-text-1",
       20,
       "",
       "grader-1",
       NOW,
       makeExam(),
-      "enrollment-1",
     );
 
     expect(partial.fullyGraded).toBe(false);
@@ -695,18 +715,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap3 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap3,
       "q-text-2",
       30,
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
 
     const enrollment = repos.getEnrollment();
@@ -751,18 +775,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap4 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap4,
       "q-text",
       80,
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
     expect(repos.getEnrollment().finalScore).toBe(80);
     expect(repos.getEnrollment().finalAttemptId).toBe("attempt-1");
@@ -786,18 +814,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap5 = await mintCap(
+      repos2.enrollmentRepo,
+      repos2.attemptRepo,
+      "attempt-2",
+    );
     await gradeQuestion(
       repos2.attemptRepo,
       repos2.enrollmentRepo,
       repos2.gradingWorksetRepo,
-      "attempt-2",
+      cap5,
       "q-text",
       50,
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
 
     // highest: 80 > 50, so the projection keeps attempt-1's 80.
@@ -835,18 +867,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap6 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap6,
       "q-text",
       80,
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
     expect(repos.getEnrollment().finalScore).toBe(80);
 
@@ -866,18 +902,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap7 = await mintCap(
+      repos2.enrollmentRepo,
+      repos2.attemptRepo,
+      "attempt-2",
+    );
     await gradeQuestion(
       repos2.attemptRepo,
       repos2.enrollmentRepo,
       repos2.gradingWorksetRepo,
-      "attempt-2",
+      cap7,
       "q-text",
       50,
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
 
     // latest always wins, even when lower.
@@ -912,18 +952,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap8 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap8,
       "q-text",
       70, // >= 50 passing → pass_then_stop completes
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
 
     expect(repos.getEnrollment().status).toBe("completed");
@@ -957,18 +1001,22 @@ describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => 
       NOW,
       { source: "candidate" },
     );
+    const cap9 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await gradeQuestion(
       repos.attemptRepo,
       repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap9,
       "q-text",
       20, // < 50, fails; max_attempts=5 not exhausted; window open
       "",
       "grader-1",
       NOW,
       exam,
-      "enrollment-1",
     );
 
     expect(repos.getEnrollment().status).toBe("started");

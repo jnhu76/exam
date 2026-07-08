@@ -49,6 +49,20 @@ await forbid("packages/contracts/src", [
 ]);
 await forbid("packages/exam-engine/src", [
   [/from ["']fastify/, "exam-engine cannot depend on fastify"],
+  // P3-FORMAL-P0-D2 — no explicit cast to the transaction-affine EA capability.
+  // The brand symbols are module-private; the only legitimate mint is the
+  // canonical seam (lockEnrollmentAndAttempt). A cast is a forgery bypass.
+  [
+    /\bas\s+LockedEnrollmentAttemptIdentity\b/,
+    "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
+  ],
+]);
+await forbid("apps/api/src", [
+  // P3-FORMAL-P0-D2 — same cast ban for the API surface (routes/orchestrators).
+  [
+    /\bas\s+LockedEnrollmentAttemptIdentity\b/,
+    "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
+  ],
 ]);
 await forbid("apps/web/src", [
   [/from ["']@exam\/db/, "web cannot import the database package"],

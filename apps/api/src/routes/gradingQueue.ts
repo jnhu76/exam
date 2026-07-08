@@ -10,17 +10,17 @@ import {
 } from "@exam/contracts";
 import type { RequestContext } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
-import { gradeQuestion } from "@exam/exam-engine";
+import { gradeQuestion, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createGradingQueueRepo } from "@exam/db/src/repository/gradingQueueRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
-  createAttemptRepoAdapter,
-  createEnrollmentRepoAdapter,
+  createExamEngineRepos,
   createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
@@ -298,32 +298,39 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Attempt grading context not found");
       }
 
-      // Load the enrollment to pass enrollmentId into gradeQuestion →
-      // finalizeTerminalGrading. The closure re-locks the enrollment inside
-      // the same transaction (findByExamAndCandidateForUpdate) and verifies
-      // the id matches; this pre-fetch is only to obtain the id.
-      const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollment = await enrollmentRepo.findByExamAndCandidate(
-        ctx,
-        preAttempt.examId,
-        preAttempt.candidateId,
-      );
-      if (!enrollment) {
-        throw new NotFoundError("Attempt grading context not found");
-      }
-      const enrollmentId = enrollment.id;
+      // P3-FORMAL-P0-D2: the pre-tx enrollment pre-fetch that previously fed
+      // `enrollmentId` into gradeQuestion is removed. The capability minted
+      // inside the transaction carries enrollment identity (proven by the
+      // canonical seam), so gradeQuestion + finalizeTerminalGrading no longer
+      // take an enrollmentId argument.
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
+        // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
+        // capability via the canonical seam, and thread the SAME instances +
+        // capability into gradeQuestion → finalizeTerminalGrading. Switched
+        // from granular adapters to createExamEngineRepos so one object pair
+        // flows from mint to consumer (HR-6: exact repo object identity).
         const txAttemptRepo = createAttemptRepo(tx);
-        const txEntryRepo = createAttemptGradingEntryRepo(tx);
         const txEnrollmentRepo = createEnrollmentRepo(tx);
-        // Lock the attempt row for the duration of the grade (§17).
-        await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
-        return gradeQuestion(
-          createAttemptRepoAdapter(txAttemptRepo, ctx),
-          createEnrollmentRepoAdapter(txEnrollmentRepo, ctx),
-          createGradingWorksetRepoAdapter(txEntryRepo, ctx),
+        const txEntryRepo = createAttemptGradingEntryRepo(tx);
+        const { enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: txAttemptRepo,
+            enrollmentRepo: txEnrollmentRepo,
+          },
+          ctx,
+        );
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
           attemptId,
+        );
+        return gradeQuestion(
+          attempts,
+          enrollments,
+          createGradingWorksetRepoAdapter(txEntryRepo, ctx),
+          cap,
           questionId,
           score,
           comment,
@@ -336,7 +343,6 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           // for TypeScript. Mirrors how other engine callers bridge DB rows to
           // the domain type.
           exam as unknown as import("@exam/domain").Exam,
-          enrollmentId,
         );
       });
 

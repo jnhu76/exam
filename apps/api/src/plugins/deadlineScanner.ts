@@ -12,6 +12,7 @@ import {
   submitAttempt,
   gradeAttemptIdempotent,
   isAttemptDeadlineExpired,
+  lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
@@ -144,27 +145,37 @@ export async function autoSubmitAndGrade(
   now: Date,
 ): Promise<boolean> {
   const stateChanged = await executeInTransaction(db, async (tx) => {
+    // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA capability
+    // via the canonical seam BEFORE the Exam FOR UPDATE. The resulting
+    // scanner-local lock order is Enrollment → Attempt → Exam (the seam's
+    // E→A followed by the Exam lock). Documented here only as the audited
+    // scanner ordering; NOT promoted to a global invariant.
     const txAttemptRepo = createAttemptRepo(tx);
-    const locked = await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+    const txEnrollmentRepo = createEnrollmentRepo(tx);
+    const txExamRepo = createExamRepo(tx);
+    const { exams, enrollments, attempts } = createExamEngineRepos(
+      {
+        examRepo: txExamRepo,
+        attemptRepo: txAttemptRepo,
+        enrollmentRepo: txEnrollmentRepo,
+      },
+      ctx,
+    );
+    const cap = await lockEnrollmentAndAttempt(
+      enrollments,
+      attempts,
+      attemptId,
+    );
+    const locked = await attempts.findByIdForUpdate(attemptId);
     if (!locked) return false;
     if (locked.status !== "in_progress" && locked.status !== "disrupted") {
       return false;
     }
 
-    const txExamRepo = createExamRepo(tx);
     // Authoritative Exam read under FOR UPDATE — serialization point vs
-    // extendExam (Decision B). Lock order Attempt → Exam (see doc above).
+    // extendExam (Decision B). Lock order Enrollment → Attempt → Exam here.
     const lockedExam = await txExamRepo.findByIdForUpdate(ctx, locked.examId);
     if (!lockedExam) return false;
-
-    const { exams, enrollments, attempts } = createExamEngineRepos(
-      {
-        examRepo: txExamRepo,
-        attemptRepo: txAttemptRepo,
-        enrollmentRepo: createEnrollmentRepo(tx),
-      },
-      ctx,
-    );
 
     // CANONICAL AUTHORITY: the ONLY "is this attempt expired?" decision that
     // triggers mutation. Never re-derive deadlineAt<=now || closeAt<=now here;
@@ -194,12 +205,13 @@ export async function autoSubmitAndGrade(
 
     // Slice 4: gradeAttemptIdempotent now takes the tx-scoped workset repo so
     // it can aggregate from the entries submitAttempt just materialized.
+    // P3-FORMAL-P0-D2: the capability is the EA protocol authority.
     await gradeAttemptIdempotent(
       exams,
       enrollments,
       attempts,
       gradingWorksetRepo,
-      attemptId,
+      cap,
       now,
     );
 
