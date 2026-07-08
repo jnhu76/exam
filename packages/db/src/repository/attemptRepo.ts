@@ -8,7 +8,7 @@ import {
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
@@ -170,22 +170,53 @@ export function createAttemptRepo(db: Database) {
           ),
         )) as AttemptSelect[];
     },
-    async listExpirableByDeadline(
+    /**
+     * DEADLINE SCANNER CANDIDATE DISCOVERY (DERIVED, NOT AUTHORITY).
+     *
+     * Returns in_progress/disrupted attempts that are CANDIDATES for deadline
+     * auto-submission. The predicate mirrors the canonical
+     * `computeEffectiveDeadline` expiry decision EXACTLY on the P0-B
+     * non-NULL deadlineAt domain:
+     *
+     *   deadlineAt IS NOT NULL AND (deadlineAt <= now OR exam.closeAt <= now)
+     *
+     * The OR-with-exam-closeAt arm is what catches an attempt whose per-attempt
+     * deadlineAt is still in the future but whose exam window has closed — the
+     * divergence bug fixed alongside this query. The NULL carve-out (P0-C,
+     * intentionally open) is preserved: attempts with no per-attempt deadline
+     * are NOT selected here; they are reconciled lazily on candidate access.
+     *
+     * This query is CANDIDATE DISCOVERY ONLY. The authoritative expiry
+     * decision is `isAttemptDeadlineExpired` (exam-engine), re-evaluated by
+     * the scanner under `Attempt FOR UPDATE` + authoritative `Exam FOR UPDATE`
+     * read. A candidate returned here MUST NOT be auto-submitted without that
+     * under-lock recheck (it may have been extended, reconciled, or be a stale
+     * snapshot).
+     *
+     * Renamed from listExpirableByDeadline to reflect its candidate-discovery
+     * role, not protocol authority.
+     */
+    async listDeadlineCandidates(
       ctx: TenantContext | RequestContext,
       before: Date,
     ): Promise<AttemptSelect[]> {
       const orgId = resolveOptionalOrganizationId(ctx);
-      return (await db
-        .select()
+      const rows = await db
+        .select({ attempt: examAttempts })
         .from(examAttempts)
+        .innerJoin(exams, eq(examAttempts.examId, exams.id))
         .where(
           and(
             eq(examAttempts.organizationId, orgId),
             inArray(examAttempts.status, ["in_progress", "disrupted"]),
             isNotNull(examAttempts.deadlineAt),
-            lte(examAttempts.deadlineAt, before),
+            or(
+              lte(examAttempts.deadlineAt, before),
+              lte(exams.closeAt, before),
+            ),
           ),
-        )) as AttemptSelect[];
+        );
+      return rows.map((r) => r.attempt) as AttemptSelect[];
     },
     /**
      * Lists ALL attempts for a given exam, joined with candidate profiles and

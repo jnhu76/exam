@@ -8,7 +8,11 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
-import { submitAttempt, gradeAttemptIdempotent } from "@exam/exam-engine";
+import {
+  submitAttempt,
+  gradeAttemptIdempotent,
+  isAttemptDeadlineExpired,
+} from "@exam/exam-engine";
 import { SYSTEM_ACTOR_IDS, createSystemRequestContext } from "@exam/authz";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import {
@@ -20,30 +24,18 @@ import { getRuntimeConfig } from "../config/runtimeConfig.js";
 const DEFAULT_SCAN_INTERVAL_MS = 30_000;
 const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
 
-export interface ExpiredAttemptCandidate {
+/**
+ * A candidate for deadline auto-submission, produced by
+ * `attemptRepo.listDeadlineCandidates` (DERIVED discovery predicate, NOT an
+ * authority). The scanner iterates these and makes the authoritative expiry
+ * decision under `Attempt FOR UPDATE` + `Exam FOR UPDATE` in
+ * `autoSubmitAndGrade`. A candidate MUST NOT be auto-submitted without that
+ * under-lock canonical recheck.
+ */
+export interface DeadlineCandidate {
   id: string;
   status: string;
-  deadlineAt?: Date | null;
   organizationId: string;
-}
-
-const AUTOSUBMITTABLE_STATUSES: ReadonlySet<string> = new Set([
-  "in_progress",
-  "disrupted",
-]);
-
-export function selectExpiredAttempts(
-  attempts: ExpiredAttemptCandidate[],
-  now: Date,
-): ExpiredAttemptCandidate[] {
-  const nowMs = now.getTime();
-  return attempts.filter((attempt) => {
-    if (!AUTOSUBMITTABLE_STATUSES.has(attempt.status)) {
-      return false;
-    }
-    if (!attempt.deadlineAt) return false;
-    return attempt.deadlineAt.getTime() <= nowMs;
-  });
 }
 
 export interface ScanResult {
@@ -65,25 +57,38 @@ export const deadlineScannerMetrics = {
   scanIntervalMs: DEFAULT_SCAN_INTERVAL_MS,
 };
 
-export async function scanExpiredAttempts(
-  attempts: ExpiredAttemptCandidate[],
+/**
+ * Iterates DB-discovered candidates and invokes `onCandidate` for each.
+ *
+ * The candidate set is produced by `listDeadlineCandidates` (DERIVED discovery
+ * predicate, exact on the non-NULL deadlineAt domain). This function performs
+ * NO in-memory expiry filtering — there is no second competing authority. The
+ * authoritative expiry decision lives in `autoSubmitAndGrade`, which re-checks
+ * the canonical `isAttemptDeadlineExpired` seam under `Attempt FOR UPDATE` +
+ * `Exam FOR UPDATE`. A `false` return from `onCandidate` (candidate was not
+ * actually expired under lock — e.g. extended between discovery and lock) is
+ * NOT counted as a submission.
+ *
+ * `now` is threaded through as the single time sample for the cycle.
+ */
+export async function scanDeadlineCandidates(
+  candidates: DeadlineCandidate[],
   now: Date,
-  onExpired: (attemptId: string) => Promise<boolean | void>,
+  onCandidate: (attemptId: string) => Promise<boolean | void>,
   options: { onError?: (attemptId: string, err: unknown) => void } = {},
 ): Promise<ScanResult> {
-  const expired = selectExpiredAttempts(attempts, now);
   let submittedCount = 0;
   let failedCount = 0;
 
-  for (const attempt of expired) {
+  for (const candidate of candidates) {
     try {
-      const result = await onExpired(attempt.id);
+      const result = await onCandidate(candidate.id);
       if (result !== false) {
         submittedCount++;
       }
     } catch (err) {
       failedCount++;
-      options.onError?.(attempt.id, err);
+      options.onError?.(candidate.id, err);
     }
   }
 
@@ -97,6 +102,33 @@ function createSystemContext(organizationId: string): RequestContext {
   return createSystemRequestContext(organizationId, SYSTEM_ACTOR_ID);
 }
 
+/**
+ * Authoritative deadline auto-submit + grade for ONE attempt.
+ *
+ * Concurrency model (proven for the `extendExam(closeAt) || Scanner` race):
+ *
+ * 1. `executeInTransaction` runs at REPEATABLE READ with 40001/40P01 retry.
+ * 2. Lock `Attempt FOR UPDATE` first.
+ * 3. Lock `Exam FOR UPDATE` AFTER the attempt lock — lock order is
+ *    `Attempt → Exam`. This is consistent with `extendAttemptTime` (which
+ *    locks Attempt then reads Exam) and inverts no existing path (admin
+ *    exam transitions lock Exam only; `extendExam` locks Exam only). No
+ *    `Exam → Attempt` path exists, so no deadlock inversion is introduced.
+ * 4. The `Exam FOR UPDATE` is the SERIALIZATION POINT vs `extendExam`
+ *    (which takes `Exam FOR UPDATE` in `executeAdminExamTransition`):
+ *    - if the scanner's Exam lock acquires before `extendExam` commits, the
+ *      scanner sees the pre-extension closeAt (and may submit if it is past);
+ *    - if `extendExam` commits first, the scanner's `Exam FOR UPDATE` under
+ *      REPEATABLE READ raises 40001 serialization_failure, which
+ *      `executeInTransaction` retries; on retry the scanner sees the
+ *      post-extension closeAt and correctly does NOT submit.
+ *    Either outcome is a valid linearization.
+ * 5. The canonical `isAttemptDeadlineExpired(exam, lockedAttempt, now)` seam
+ *    is the SOLE authority for "submit or skip". A candidate that was extended
+ *    or reconciled between discovery and lock returns false here → no-op.
+ *
+ * @returns true iff the attempt was submitted+graded by this call.
+ */
 export async function autoSubmitAndGrade(
   db: Database,
   ctx: RequestContext,
@@ -111,14 +143,33 @@ export async function autoSubmitAndGrade(
       return false;
     }
 
+    const txExamRepo = createExamRepo(tx);
+    // Authoritative Exam read under FOR UPDATE — serialization point vs
+    // extendExam (Decision B). Lock order Attempt → Exam (see doc above).
+    const lockedExam = await txExamRepo.findByIdForUpdate(ctx, locked.examId);
+    if (!lockedExam) return false;
+
     const { exams, enrollments, attempts } = createExamEngineRepos(
       {
-        examRepo: createExamRepo(tx),
+        examRepo: txExamRepo,
         attemptRepo: txAttemptRepo,
         enrollmentRepo: createEnrollmentRepo(tx),
       },
       ctx,
     );
+
+    // CANONICAL AUTHORITY: the ONLY "is this attempt expired?" decision that
+    // triggers mutation. Never re-derive deadlineAt<=now || closeAt<=now here;
+    // that OR predicate exists ONLY in the DB discovery query. Cast the locked
+    // DB rows to domain types (status string -> Exam/AttemptStatus), matching
+    // createExamRepoAdapter's cast — the canonical seam needs the union types.
+    if (
+      !isAttemptDeadlineExpired(lockedExam as Exam, locked as ExamAttempt, now)
+    ) {
+      // Discovery was a superset / stale snapshot (extended, or already
+      // reconciled): no-op this tick. Not an error.
+      return false;
+    }
 
     // ADR-005 Slice 3: deadline scanner bypasses minSubmitAfterStartMinutes
     // (source = deadline_scanner). P3-L0-2: record submissionReason='deadline'
@@ -180,13 +231,15 @@ export async function scanDatabaseForExpiredAttempts(
   for (const organization of organizations) {
     const ctx = createSystemContext(organization.id);
     const attemptRepo = createAttemptRepo(db);
-    const candidates = await attemptRepo.listExpirableByDeadline(ctx, now);
+    // DERIVED discovery predicate (exact on non-NULL deadlineAt domain). The
+    // authoritative decision is the under-lock canonical recheck in
+    // autoSubmitAndGrade — candidate membership never submits directly.
+    const candidates = await attemptRepo.listDeadlineCandidates(ctx, now);
 
-    const result = await scanExpiredAttempts(
+    const result = await scanDeadlineCandidates(
       candidates.map((c) => ({
         id: c.id,
         status: c.status,
-        deadlineAt: c.deadlineAt,
         organizationId: c.organizationId,
       })),
       now,

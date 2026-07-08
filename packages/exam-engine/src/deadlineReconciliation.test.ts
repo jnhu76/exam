@@ -15,6 +15,7 @@ import { computeGradingResult } from "./grading.js";
 import {
   ensureAttemptDeadlineReconciled,
   computeEffectiveDeadline,
+  isAttemptDeadlineExpired,
 } from "./deadlineReconciliation.js";
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
@@ -559,5 +560,81 @@ describe("computeEffectiveDeadline", () => {
     expect(() => computeEffectiveDeadline(exam, attempt)).toThrow(
       /closeAt is required/,
     );
+  });
+});
+
+// T1-T4: the canonical "is this attempt expired?" seam. This is the SOLE
+// authority for any code path that mutates attempt state on deadline (inline
+// reconciliation AND the scanner under-lock recheck). Both paths MUST call
+// this — never re-derive deadlineAt<=now || closeAt<=now.
+describe("isAttemptDeadlineExpired (canonical expiry authority)", () => {
+  const EXAM_CLOSE = new Date("2025-01-01T12:00:00Z");
+
+  // T1: now strictly after the effective deadline => expired.
+  it("returns true when now > min(exam.closeAt, attempt.deadlineAt)", () => {
+    const exam = makeExam({ closeAt: EXAM_CLOSE });
+    const attempt = makeAttempt({
+      status: "in_progress",
+      deadlineAt: new Date("2025-01-01T11:00:00Z"),
+    });
+    const now = new Date("2025-01-01T11:30:00Z");
+    // effectiveDeadline = min(12:00, 11:00) = 11:00; now 11:30 > 11:00
+    expect(isAttemptDeadlineExpired(exam, attempt, now)).toBe(true);
+  });
+
+  // T2: now at-or-before the effective deadline => NOT expired.
+  it("returns false when now <= min(exam.closeAt, attempt.deadlineAt)", () => {
+    const exam = makeExam({ closeAt: EXAM_CLOSE });
+    const attempt = makeAttempt({
+      status: "in_progress",
+      deadlineAt: new Date("2025-01-01T11:00:00Z"),
+    });
+    // exactly at effective deadline (11:00) => expired (>= is the boundary)
+    expect(
+      isAttemptDeadlineExpired(exam, attempt, new Date("2025-01-01T11:00:00Z")),
+    ).toBe(true);
+    // one ms before => not expired
+    expect(
+      isAttemptDeadlineExpired(
+        exam,
+        attempt,
+        new Date("2025-01-01T10:59:59.999Z"),
+      ),
+    ).toBe(false);
+  });
+
+  // T3: absent attempt deadline => falls back to exam.closeAt (carve-out).
+  it("expires at exam.closeAt when attempt.deadlineAt is absent (NULL carve-out)", () => {
+    const exam = makeExam({ closeAt: EXAM_CLOSE });
+    const attempt = makeAttempt({ status: "in_progress" });
+    // exactOptionalPropertyTypes forbids `deadlineAt: undefined`; delete the
+    // key to model an attempt with no per-attempt deadline (domain optional).
+    delete (attempt as { deadlineAt?: Date }).deadlineAt;
+    // effectiveDeadline = closeAt = 12:00
+    expect(
+      isAttemptDeadlineExpired(exam, attempt, new Date("2025-01-01T11:59:00Z")),
+    ).toBe(false);
+    expect(
+      isAttemptDeadlineExpired(exam, attempt, new Date("2025-01-01T12:00:00Z")),
+    ).toBe(true);
+  });
+
+  // T4: non-NULL attempt.deadlineAt PAST exam.closeAt => expires at closeAt.
+  // This is the bug scenario: an attempt whose per-attempt deadline was
+  // extended beyond the exam window must still expire when the WINDOW closes.
+  it("expires at exam.closeAt when attempt.deadlineAt is past closeAt (the divergence bug scenario)", () => {
+    const exam = makeExam({ closeAt: EXAM_CLOSE });
+    const attempt = makeAttempt({
+      status: "in_progress",
+      // per-attempt deadline is in the FUTURE, beyond the exam window.
+      deadlineAt: new Date("2025-01-01T13:00:00Z"),
+    });
+    // effectiveDeadline = min(12:00, 13:00) = 12:00 (closeAt wins)
+    // At 12:30 the exam window has closed even though the per-attempt
+    // deadline is 13:00. The scanner's old predicate (deadlineAt<=now only)
+    // MISSED this; the canonical seam and the new discovery predicate catch it.
+    expect(
+      isAttemptDeadlineExpired(exam, attempt, new Date("2025-01-01T12:30:00Z")),
+    ).toBe(true);
   });
 });

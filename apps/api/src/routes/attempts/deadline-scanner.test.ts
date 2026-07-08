@@ -491,5 +491,76 @@ describe("attempt routes", () => {
       );
       expect(attempt?.status).toBe("in_progress");
     });
+
+    // T7 — extendExam(closeAt) || Scanner linearization regression.
+    //
+    // Scenario: an attempt is a discovery candidate (deadlineAt in the past,
+    // so the DB query selects it). Between discovery and the scanner's
+    // under-lock authoritative recheck, the exam window is EXTENDED so that
+    // the canonical effective deadline is now in the future. The scanner MUST
+    // NOT submit: the canonical isAttemptDeadlineExpired recheck, evaluated
+    // under Attempt FOR UPDATE + Exam FOR UPDATE, sees the new closeAt.
+    //
+    // This proves the accepted linearization for the
+    // extendExam || Scanner race: the Exam FOR UPDATE (lock order
+    // Attempt -> Exam) is the serialization point, and a concurrent
+    // closeAt extension that lands before the scanner's exam read makes the
+    // recheck return false (no-op). (Decision B.)
+    it("does not auto-submit when exam.closeAt is extended before the under-lock recheck (T7 linearization)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        t,
+        "Deadline AutoSubmit Extend Race Exam",
+      );
+      // Backdate the per-attempt deadline so the discovery query selects it.
+      await backdateDeadline(attemptId);
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      const examId = attempt!.examId;
+
+      // EXTEND the exam window BEFORE the scanner runs, so that by the time
+      // autoSubmitAndGrade re-reads exam.closeAt under lock the canonical
+      // effective deadline (min(closeAt, deadlineAt)) is in the future.
+      // closeAt is pushed far into the future; the per-attempt deadlineAt
+      // stays in the past, so min() = deadlineAt (past) => still expired.
+      // To make the canonical decision NOT-expired we must push BOTH into the
+      // future: extend closeAt AND restore deadlineAt to the future.
+      await ctx.db
+        .update(schema.exams)
+        .set({ closeAt: new Date(Date.now() + 7200_000) })
+        .where(eq(schema.exams.id, examId));
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: new Date(Date.now() + 3600_000) })
+        .where(eq(schema.examAttempts.id, attemptId));
+
+      const scannerCtx = {
+        actorId: "system:deadline-scanner",
+        organizationId: t.orgId,
+        role: "System" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "system:deadline-scanner",
+        targetOrganizationId: t.orgId,
+      };
+      const stateChanged = await autoSubmitAndGrade(
+        ctx.db,
+        scannerCtx,
+        attemptId,
+        new Date(),
+      );
+
+      // The under-lock canonical recheck must see the extended deadline and
+      // skip submission.
+      expect(stateChanged).toBe(false);
+
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("in_progress");
+      expect(after?.submittedAt).toBeNull();
+    });
   });
 });
