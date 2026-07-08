@@ -562,5 +562,232 @@ describe("attempt routes", () => {
       expect(after?.status).toBe("in_progress");
       expect(after?.submittedAt).toBeNull();
     });
+
+    // ── P0-C: NULL DEADLINE MEANS EXAM-CLOSE-ONLY DEADLINE ───────────────
+    //
+    // Background: production creates attempts with a non-null deadlineAt
+    // (startOrRestoreAttempt line 200). A NULL active deadlineAt is therefore
+    // not reachable via ordinary production, but the canonical authority
+    // (computeEffectiveDeadline) assigns it EffectiveDeadline = exam.closeAt.
+    // P0-C makes scanner discovery globally consistent with that authority.
+    //
+    // T1 (NULL reachability): ordinary production CANNOT create an active
+    // attempt with deadlineAt = NULL. We assert the production-started attempt
+    // always carries a non-null deadlineAt before any direct DB mutation.
+    it("production start always establishes a non-null deadlineAt (T1 reachability invariant)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        t,
+        "Deadline NULL Reachability Exam",
+      );
+      const started = await ctx.db
+        .select({ deadlineAt: schema.examAttempts.deadlineAt })
+        .from(schema.examAttempts)
+        .where(eq(schema.examAttempts.id, attemptId));
+      expect(started[0]!.deadlineAt).not.toBeNull();
+      expect(started[0]!.deadlineAt instanceof Date).toBe(true);
+    });
+
+    // Path B T5: deadlineAt = NULL AND exam.closeAt < now => the attempt is
+    // canonically expired (EffectiveDeadline = closeAt) and MUST be a scanner
+    // candidate that gets auto-submitted+graded. This is the liveness gap P0-C
+    // closes: previously the NULL carve-out left such an attempt active
+    // indefinitely under NoCandidateAction.
+    it("auto-submits a NULL-deadline attempt whose exam.closeAt has passed (P0-C T5)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId, questionId } = await createStartedAttemptWithQuestion(
+        t,
+        "Deadline NULL ExamClose Passed Exam",
+      );
+      // Produce the NULL active state via direct update (not reachable via
+      // ordinary production — see T1). Close the exam window in the past.
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: null, status: "in_progress" })
+        .where(eq(schema.examAttempts.id, attemptId));
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      await ctx.db
+        .update(schema.exams)
+        .set({ closeAt: new Date(Date.now() - 60_000) })
+        .where(eq(schema.exams.id, attempt!.examId));
+
+      const result = await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+      expect(result.submittedCount).toBeGreaterThanOrEqual(1);
+
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("graded");
+      expect(after?.submittedAt).toBeDefined();
+      expect(after?.submissionReason).toBe("deadline");
+      // sanity: questionId still resolves on the graded attempt
+      expect(questionId).toBeDefined();
+    });
+
+    // Path B T6 (negative): deadlineAt = NULL AND exam.closeAt > now => NOT
+    // canonically expired => NOT a candidate, NOT submitted.
+    it("does NOT auto-submit a NULL-deadline attempt while exam.closeAt is future (P0-C T6)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        t,
+        "Deadline NULL ExamClose Future Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: null, status: "in_progress" })
+        .where(eq(schema.examAttempts.id, attemptId));
+      // Exam window stays in the future (default seeded closeAt is future).
+
+      await scanDatabaseForExpiredAttempts(ctx.app, new Date());
+
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("in_progress");
+      expect(after?.submittedAt).toBeNull();
+    });
+
+    // Path B T7 (NULL || exam closeAt extension || scanner): the accepted
+    // P0-B Attempt->Exam serialization must remain valid for NULL-deadline
+    // attempts. If exam.closeAt is extended into the future before the
+    // under-lock recheck, the canonical decision is NOT expired => no submit.
+    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended before the under-lock recheck (P0-C T7)", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttemptWithQuestion(
+        t,
+        "Deadline NULL Extend Race Exam",
+      );
+      await ctx.db
+        .update(schema.examAttempts)
+        .set({ deadlineAt: null, status: "in_progress" })
+        .where(eq(schema.examAttempts.id, attemptId));
+      const attempt = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      // Extend the exam window into the future BEFORE the scanner's under-lock
+      // recheck. Under the P0-C semantic EffectiveDeadline = closeAt (future),
+      // so the canonical recheck returns false => no-op.
+      await ctx.db
+        .update(schema.exams)
+        .set({ closeAt: new Date(Date.now() + 7200_000) })
+        .where(eq(schema.exams.id, attempt!.examId));
+
+      const scannerCtx = {
+        actorId: "system:deadline-scanner",
+        organizationId: t.orgId,
+        role: "System" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "system:deadline-scanner",
+        targetOrganizationId: t.orgId,
+      };
+      const stateChanged = await autoSubmitAndGrade(
+        ctx.db,
+        scannerCtx,
+        attemptId,
+        new Date(),
+      );
+      expect(stateChanged).toBe(false);
+
+      const after = await createAttemptRepo(ctx.db).findById(
+        makeCandidateCtx(t),
+        attemptId,
+      );
+      expect(after?.status).toBe("in_progress");
+      expect(after?.submittedAt).toBeNull();
+    });
+
+    // Path B T8 (global discovery equivalence): for every scanner-eligible
+    // active attempt — including NULL per-attempt deadline —
+    // CanonicalExpired <=> ScannerCandidate. We construct the four cells of
+    // the truth table over (deadlineAt NULL|past) x (closeAt past|future) and
+    // assert discovery matches the canonical isAttemptDeadlineExpired seam.
+    it("discovery matches canonical expiry over the full domain incl. NULL (P0-C T8 equivalence)", async () => {
+      const t = await createIsolatedTestOrg();
+      const cells: Array<{
+        name: string;
+        deadlineAt: Date | null;
+        closeAtPast: boolean;
+        expectCandidate: boolean;
+      }> = [
+        // (deadlineAt, closeAt) -> CanonicalExpired (= ScannerCandidate)
+        {
+          name: "null+closePast",
+          deadlineAt: null,
+          closeAtPast: true,
+          expectCandidate: true,
+        },
+        {
+          name: "null+closeFuture",
+          deadlineAt: null,
+          closeAtPast: false,
+          expectCandidate: false,
+        },
+        {
+          name: "past+closeFuture",
+          deadlineAt: new Date(Date.now() - 60_000),
+          closeAtPast: false,
+          expectCandidate: true,
+        },
+        {
+          name: "future+closeFuture",
+          deadlineAt: new Date(Date.now() + 3600_000),
+          closeAtPast: false,
+          expectCandidate: false,
+        },
+      ];
+
+      const created: Array<{
+        id: string;
+        name: string;
+        expectCandidate: boolean;
+        examId: string;
+      }> = [];
+      for (const cell of cells) {
+        const { attemptId } = await createStartedAttemptWithQuestion(
+          t,
+          `Deadline T8 ${cell.name}`,
+        );
+        const attempt = await createAttemptRepo(ctx.db).findById(
+          makeCandidateCtx(t),
+          attemptId,
+        );
+        if (cell.closeAtPast) {
+          await ctx.db
+            .update(schema.exams)
+            .set({ closeAt: new Date(Date.now() - 60_000) })
+            .where(eq(schema.exams.id, attempt!.examId));
+        }
+        await ctx.db
+          .update(schema.examAttempts)
+          .set({ deadlineAt: cell.deadlineAt, status: "in_progress" })
+          .where(eq(schema.examAttempts.id, attemptId));
+        created.push({
+          id: attemptId,
+          name: cell.name,
+          expectCandidate: cell.expectCandidate,
+          examId: attempt!.examId,
+        });
+      }
+
+      const before = new Date();
+      const found = await createAttemptRepo(ctx.db).listDeadlineCandidates(
+        makeCandidateCtx(t),
+        before,
+      );
+      const foundIds = new Set(found.map((a) => a.id));
+
+      for (const c of created) {
+        expect(
+          foundIds.has(c.id),
+          `cell ${c.name}: expectCandidate=${c.expectCandidate}`,
+        ).toBe(c.expectCandidate);
+      }
+    });
   });
 });

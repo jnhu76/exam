@@ -23,8 +23,9 @@ import { fileURLToPath } from "node:url";
 //        |
 //        +-- scanner
 //                |-- listDeadlineCandidates (DB)  DERIVED DISCOVERY PREDICATE
-//                |       exact on deadlineAt != NULL domain; OR-with-closeAt
-//                |       arm allowed ONLY here
+//                |       exact over the FULL scanner-eligible domain incl.
+//                |       NULL per-attempt deadlines (P0-C: NULL deadline =>
+//                |       exam.closeAt); OR-with-closeAt arm allowed ONLY here
 //                +-- autoSubmitAndGrade (tx)
 //                        Attempt FOR UPDATE -> Exam FOR UPDATE ->
 //                        canonical isAttemptDeadlineExpired recheck ->

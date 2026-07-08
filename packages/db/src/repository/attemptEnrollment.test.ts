@@ -461,16 +461,18 @@ describe("attemptRepo custom methods", () => {
       expect(found.some((a) => a.enrollmentId === enrW.id)).toBe(true);
     });
 
-    // T6 (carve-out preserved): NULL per-attempt deadline attempts are NOT
-    // selected by the discovery query (P0-C intentionally open; reconciled
-    // lazily on candidate access instead).
-    it("does NOT return attempts whose deadlineAt is NULL (NULL carve-out)", async () => {
+    // T6 (P0-C global completeness): NULL per-attempt deadline attempts have
+    // EffectiveDeadline = exam.closeAt. Discovery MUST select them once the
+    // exam window closes, so CanonicalExpired <=> ScannerCandidate holds over
+    // the full scanner-eligible domain (including NULL per-attempt deadlines).
+    it("returns NULL-deadline attempts once exam.closeAt <= now (P0-C exam-close-only semantic)", async () => {
       const orgN = randomUUID();
       const idsN = makeIds();
       const ctxN = createContext(orgN);
       await seedBaseData(db, orgN, idsN);
-      // Close the exam window so the only thing keeping it out is the
-      // `deadlineAt IS NOT NULL` arm.
+      // Close the exam window. Under the P0-C semantic a NULL per-attempt
+      // deadline falls back to exam.closeAt, so this attempt is canonically
+      // expired and MUST be a scanner candidate.
       await db
         .update(schema.exams)
         .set({ closeAt: new Date(Date.now() - 60_000) })
@@ -497,7 +499,41 @@ describe("attemptRepo custom methods", () => {
       const before = new Date();
       const found = await attemptRepo.listDeadlineCandidates(ctxN, before);
 
-      expect(found.some((a) => a.enrollmentId === enrN.id)).toBe(false);
+      expect(found.some((a) => a.enrollmentId === enrN.id)).toBe(true);
+    });
+
+    // T6b (P0-C negative): NULL-deadline attempt whose exam window is still
+    // OPEN is NOT canonically expired (EffectiveDeadline = closeAt > now) and
+    // therefore MUST NOT be a scanner candidate.
+    it("does NOT return NULL-deadline attempts while exam.closeAt > now", async () => {
+      const orgF = randomUUID();
+      const idsF = makeIds();
+      const ctxF = createContext(orgF);
+      await seedBaseData(db, orgF, idsF);
+      // Exam window far in the future — default seeded closeAt is future.
+      const enrF = await enrollmentRepo.create(ctxF, {
+        examId: idsF.examId,
+        candidateId: idsF.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      await attemptRepo.create(ctxF, {
+        examId: idsF.examId,
+        enrollmentId: enrF.id,
+        candidateId: idsF.candidateId,
+        attemptNo: 1,
+        status: "in_progress",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(Date.now() - 3600_000),
+        deadlineAt: null,
+        lastActivityAt: new Date(),
+      });
+
+      const before = new Date();
+      const found = await attemptRepo.listDeadlineCandidates(ctxF, before);
+
+      expect(found.some((a) => a.enrollmentId === enrF.id)).toBe(false);
     });
   });
 

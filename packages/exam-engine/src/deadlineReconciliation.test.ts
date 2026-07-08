@@ -619,6 +619,18 @@ describe("isAttemptDeadlineExpired (canonical expiry authority)", () => {
     ).toBe(true);
   });
 
+  // P0-C T2: computeEffectiveDeadline assigns exam.closeAt to a NULL-deadline
+  // attempt. This is the global authority for both inline reconciliation and
+  // scanner discovery (NULL DEADLINE MEANS EXAM-CLOSE-ONLY DEADLINE).
+  it("computeEffectiveDeadline returns exam.closeAt when attempt.deadlineAt is absent (P0-C)", () => {
+    const exam = makeExam({ closeAt: EXAM_CLOSE });
+    const attempt = makeAttempt({ status: "in_progress" });
+    delete (attempt as { deadlineAt?: Date }).deadlineAt;
+    expect(computeEffectiveDeadline(exam, attempt).getTime()).toBe(
+      EXAM_CLOSE.getTime(),
+    );
+  });
+
   // T4: non-NULL attempt.deadlineAt PAST exam.closeAt => expires at closeAt.
   // This is the bug scenario: an attempt whose per-attempt deadline was
   // extended beyond the exam window must still expire when the WINDOW closes.

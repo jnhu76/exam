@@ -175,16 +175,24 @@ export function createAttemptRepo(db: Database) {
      *
      * Returns in_progress/disrupted attempts that are CANDIDATES for deadline
      * auto-submission. The predicate mirrors the canonical
-     * `computeEffectiveDeadline` expiry decision EXACTLY on the P0-B
-     * non-NULL deadlineAt domain:
+     * `computeEffectiveDeadline` expiry decision EXACTLY over the FULL
+     * scanner-eligible domain (P0-C global completeness):
      *
-     *   deadlineAt IS NOT NULL AND (deadlineAt <= now OR exam.closeAt <= now)
+     *   exam.closeAt <= now
+     *   OR
+     *   (attempt.deadlineAt IS NOT NULL AND attempt.deadlineAt <= now)
      *
-     * The OR-with-exam-closeAt arm is what catches an attempt whose per-attempt
+     * P0-C semantic (NULL DEADLINE MEANS EXAM-CLOSE-ONLY DEADLINE): an attempt
+     * with no per-attempt deadlineAt has EffectiveDeadline = exam.closeAt, so
+     * it IS a candidate once the exam window closes. The previous NULL
+     * carve-out (`deadlineAt IS NOT NULL`) is removed: discovery and the
+     * canonical `isAttemptDeadlineExpired` seam now agree on NULL-deadline
+     * attempts, closing the liveness gap where a NULL-deadline active attempt
+     * whose exam had closed was never background-progressed.
+     *
+     * The OR-with-exam-closeAt arm also catches an attempt whose per-attempt
      * deadlineAt is still in the future but whose exam window has closed — the
-     * divergence bug fixed alongside this query. The NULL carve-out (P0-C,
-     * intentionally open) is preserved: attempts with no per-attempt deadline
-     * are NOT selected here; they are reconciled lazily on candidate access.
+     * divergence bug fixed alongside this query (P0-B).
      *
      * This query is CANDIDATE DISCOVERY ONLY. The authoritative expiry
      * decision is `isAttemptDeadlineExpired` (exam-engine), re-evaluated by
@@ -209,10 +217,12 @@ export function createAttemptRepo(db: Database) {
           and(
             eq(examAttempts.organizationId, orgId),
             inArray(examAttempts.status, ["in_progress", "disrupted"]),
-            isNotNull(examAttempts.deadlineAt),
             or(
-              lte(examAttempts.deadlineAt, before),
               lte(exams.closeAt, before),
+              and(
+                isNotNull(examAttempts.deadlineAt),
+                lte(examAttempts.deadlineAt, before),
+              ),
             ),
           ),
         );

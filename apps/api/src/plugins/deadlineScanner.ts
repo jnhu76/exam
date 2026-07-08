@@ -31,6 +31,9 @@ const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
  * decision under `Attempt FOR UPDATE` + `Exam FOR UPDATE` in
  * `autoSubmitAndGrade`. A candidate MUST NOT be auto-submitted without that
  * under-lock canonical recheck.
+ *
+ * Discovery is complete over the scanner-eligible domain (P0-C): NULL
+ * per-attempt deadlines are candidates once `exam.closeAt <= now`.
  */
 export interface DeadlineCandidate {
   id: string;
@@ -61,8 +64,10 @@ export const deadlineScannerMetrics = {
  * Iterates DB-discovered candidates and invokes `onCandidate` for each.
  *
  * The candidate set is produced by `listDeadlineCandidates` (DERIVED discovery
- * predicate, exact on the non-NULL deadlineAt domain). This function performs
- * NO in-memory expiry filtering — there is no second competing authority. The
+ * predicate, exact over the FULL scanner-eligible domain including NULL
+ * per-attempt deadlines under the P0-C exam-close-only semantic). This
+ * function performs NO in-memory expiry filtering — there is no second
+ * competing authority. The
  * authoritative expiry decision lives in `autoSubmitAndGrade`, which re-checks
  * the canonical `isAttemptDeadlineExpired` seam under `Attempt FOR UPDATE` +
  * `Exam FOR UPDATE`. A `false` return from `onCandidate` (candidate was not
@@ -231,9 +236,11 @@ export async function scanDatabaseForExpiredAttempts(
   for (const organization of organizations) {
     const ctx = createSystemContext(organization.id);
     const attemptRepo = createAttemptRepo(db);
-    // DERIVED discovery predicate (exact on non-NULL deadlineAt domain). The
-    // authoritative decision is the under-lock canonical recheck in
-    // autoSubmitAndGrade — candidate membership never submits directly.
+    // DERIVED discovery predicate (exact over the full scanner-eligible
+    // domain, including NULL per-attempt deadlines under the P0-C
+    // exam-close-only semantic). The authoritative decision is the under-lock
+    // canonical recheck in autoSubmitAndGrade — candidate membership never
+    // submits directly.
     const candidates = await attemptRepo.listDeadlineCandidates(ctx, now);
 
     const result = await scanDeadlineCandidates(

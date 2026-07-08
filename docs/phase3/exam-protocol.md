@@ -419,6 +419,25 @@ attemptStatus in ('in_progress', 'disrupted')
 
 `effectiveDeadline` = min(exam deadline, attempt deadline, extension-adjusted deadline)，从现有字段派生，不新建 deadline 模型。
 
+**P0-C 可空 deadline 语义（权威）**：`attempt.deadlineAt = NULL` 是合法的 active 协议状态，其 Effective Deadline 为 `exam.closeAt`。即：
+
+```
+EffectiveDeadline(exam, attempt) =
+  attempt.deadlineAt == NULL
+    ? exam.closeAt
+    : min(exam.closeAt, attempt.deadlineAt)
+```
+
+此语义为内联 reconciliation 与 deadline scanner 候选发现的**共同权威**。Scanner 候选发现谓词为：
+
+```
+exam.closeAt <= now
+OR
+(attempt.deadlineAt IS NOT NULL AND attempt.deadlineAt <= now)
+```
+
+对全部 scanner-eligible active attempt 满足 `CanonicalExpired <=> ScannerCandidate`（含 NULL deadline 情形）。Phase 1 `timed_window` 下普通生产路径在 attempt 创建时即写入非空 `deadlineAt`（`startedAt + durationMinutes`），故 NULL active attempt 当前不可经普通生产达到；本语义同时作为对未来 timing mode / legacy 数据的防御性兜底。
+
 ### 5.2 入口
 
 以下 4 个 candidate 端点共享 `ensureAttemptDeadlineReconciled(attemptId, serverNow)`：
