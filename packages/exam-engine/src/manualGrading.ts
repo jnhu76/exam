@@ -96,7 +96,7 @@ export async function gradeQuestion(
   exam: Exam,
 ): Promise<GradeQuestionResult> {
   const { attemptId } = capability;
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
   }

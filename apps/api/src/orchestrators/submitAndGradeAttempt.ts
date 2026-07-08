@@ -76,7 +76,7 @@ export async function submitAndGradeAttempt(
     // Re-read mutable attempt state inside this tx (the seam already holds the
     // Attempt lock; REPEATABLE READ sees own writes). Ownership check + status
     // branch use this fresh read.
-    const lockedAttempt = await attempts.findByIdForUpdate(attemptId);
+    const lockedAttempt = await attempts.findById(attemptId);
     if (!lockedAttempt || lockedAttempt.candidateId !== candidateProfileId) {
       throw new NotFoundError("Attempt not found");
     }

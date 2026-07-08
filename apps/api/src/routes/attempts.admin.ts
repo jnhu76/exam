@@ -197,7 +197,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
             attempts,
             attemptId,
           );
-          const locked = await attempts.findByIdForUpdate(attemptId);
+          const locked = await attempts.findById(attemptId);
           if (!locked) {
             throw new NotFoundError("Attempt not found");
           }

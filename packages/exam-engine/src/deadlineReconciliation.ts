@@ -127,7 +127,7 @@ export async function ensureAttemptDeadlineReconciled(
   now: Date,
 ): Promise<ExamAttempt> {
   const { attemptId } = capability;
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
   }

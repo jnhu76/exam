@@ -166,7 +166,7 @@ export async function autoSubmitAndGrade(
       attempts,
       attemptId,
     );
-    const locked = await attempts.findByIdForUpdate(attemptId);
+    const locked = await attempts.findById(attemptId);
     if (!locked) return false;
     if (locked.status !== "in_progress" && locked.status !== "disrupted") {
       return false;

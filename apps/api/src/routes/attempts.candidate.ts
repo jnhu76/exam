@@ -921,7 +921,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           attempts,
           attemptId,
         );
-        const lockedAttempt = await txRepo.findByIdForUpdate(ctx, attemptId);
+        const lockedAttempt = await txRepo.findById(ctx, attemptId);
         if (
           !lockedAttempt ||
           lockedAttempt.candidateId !== candidateProfile.id
