@@ -533,7 +533,7 @@ score + gradingResult + passed + terminal state
 - manual queue from durable PG grading entries
 - repeated submit exact-validates workset；partial/mismatched workset fail closed
 - manual completion is one-way pending-only
-- pure objective and manual/mixed terminal paths share `aggregateGradingEntries`
+- pure objective and manual/mixed terminal paths share `aggregateGradingEntries`（P3-FORMAL-P0-A: 收敛到唯一 canonical terminal closure `finalizeTerminalGrading`；auto 与 manual 路径都委托给它，closure 无 auto/manual 模式参数）
 - terminal score exclusively from grading entries
 - gradingResult never scoring input
 - no runtime fallback/dual-read/dual-write/reconstruction

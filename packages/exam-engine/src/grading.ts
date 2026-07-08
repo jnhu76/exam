@@ -26,6 +26,10 @@ import {
   type AttemptCommand,
 } from "./attemptStateMachine.js";
 import { assertTransition as assertEnrollmentTransition } from "./enrollmentStateMachine.js";
+import {
+  assertCapabilityFor,
+  type LockedEnrollmentAttemptIdentity,
+} from "./lockSeam.js";
 
 /**
  * Determines whether this attempt's score should replace the current final score
@@ -157,60 +161,97 @@ export function computeGradingResult(
 }
 
 /**
- * Persists the terminal grading result for an attempt by aggregating its
- * materialized grading workset, then transitions the attempt to `graded`,
- * updates the enrollment's final score per the score strategy, and transitions
- * the enrollment to completed if the exam is finished.
+ * Canonical terminal grading closure (P3-FORMAL-P0-A).
  *
- * P3-L0-2E Slice 4 — single terminal aggregation authority: the score is
- * computed ONLY by {@link aggregateGradingEntries} from the attempt's
- * `attempt_grading_entries` + frozen `questionSnapshot`. This function no
- * longer accepts an externally computed `ScoreResult` — that would permit a
- * second score authority to bypass grading-entry truth. Every caller
- * previously passed a fresh `computeGradingResult` output derived from the
- * same attempt in the same transaction, so internalizing the aggregation
- * yields identical input without any external-result injection point.
+ * One seam closes the terminal projection for both auto and manual grading.
+ * It is provenance-agnostic: it does NOT know (and must not know) whether the
+ * terminal entries came from auto materialization at submit-freeze time or
+ * from `gradeQuestion` completing the last pending manual entry. Its sole
+ * precondition is an authoritative terminal grading workset, which
+ * {@link aggregateGradingEntries} validates up front (exact entry count,
+ * question-universe match, per-entry terminal status: `auto→completed_auto`,
+ * `manual→completed_manual`, non-null in-range earnedScore). If any entry is
+ * not terminal, the aggregator throws before any projection is written.
  *
- * P3-L0-2C terminal guard (unchanged): an attempt awaiting manual grading
- * must NOT be advanced to `graded` here — protocol §3.3/§4.2 mandate that
- * such an attempt holds at `submitted` until `gradeQuestion` (the
- * manual-completion command) performs the final transition.
+ * The closure performs exactly:
  *
- * The caller MUST wrap this in a transaction holding the attempt row lock
- * (`findByIdForUpdate`) so the read-aggregate-write is atomic against
- * concurrent grading calls (see submitAndGradeAttempt, autoSubmitAndGrade,
- * admin force-submit, deadlineReconciliation).
+ *   1. load attempt; reject if missing
+ *   2. validate the submitted → graded state-machine transition is legal
+ *      (no graded/voided/canceled attempts; an attempt awaiting manual work
+ *      still passes — see the manual-path note below)
+ *   3. load entries + aggregate via the single canonical scorer (this is the
+ *      authority for terminality: a non-terminal workset throws here)
+ *   4. write Attempt terminal projection (status, gradingResult, score,
+ *      passed, gradedAt, gradingStatus — fully_graded once the workset is
+ *      terminal under both modes)
+ *   5. lock Enrollment `FOR UPDATE` (same caller transaction)
+ *   6. select enrollment result via {@link shouldSelectAttempt}
+ *   7. evaluate enrollment completion via {@link shouldEnrollmentComplete}
+ *   8. write Enrollment projection (status, finalScore, finalPassed,
+ *      finalAttemptId) when selected
  *
- * @returns true if the attempt was transitioned to graded; false if it was
- *   already graded (idempotent no-op).
+ * Manual-path note: `gradeQuestion` completes the last pending manual entry
+ * (setting it to `completed_manual`) BEFORE calling this closure. By the time
+ * the closure runs, the workset is fully terminal regardless of whether any
+ * manual entries existed — so the closure needs no mode parameter and makes no
+ * mode-dependent decision. This is the convergence contract:
+ *
+ *     auto entry completion  ─┐
+ *                             ├─→ terminal workset → finalizeTerminalGrading
+ *     manual entry completion ┘
+ *
+ * The caller MUST hold the attempt row lock (`findByIdForUpdate`) for the
+ * duration of this call so the read-aggregate-write + enrollment lock is
+ * atomic against concurrent grading calls. `gradeQuestion` and the auto
+ * paths (`submitAndGradeAttempt`, `autoSubmitAndGrade`, admin force-submit,
+ * `deadlineReconciliation`) all wrap this in a transaction holding that lock.
+ *
+ * Idempotency vs. retry vs. historical inconsistency:
+ *   - Transaction retry (40001/40P01): re-execution re-reads the attempt; if
+ *     the prior attempt committed, the transition guard at step 2 fires
+ *     (`graded → grade` is not legal) and the caller's idempotent wrapper
+ *     returns the committed result. Retry therefore never observes a
+ *     half-closed committed state.
+ *   - Pre-existing inconsistent historical rows (attempt graded but
+ *     enrollment stale/NULL from the pre-repair manual path) are NOT repaired
+ *     by this closure: the transition guard rejects `graded` attempts rather
+ *     than re-projecting. Such rows require a separate data-repair follow-up
+ *     (out of scope for P3-FORMAL-P0-A; reported in the final report).
+ *
+ * @returns true if the attempt was newly transitioned to graded by this call;
+ *   false if it was already graded (caller-treated as idempotent no-op).
  */
-export async function finalizeGrading(
+export async function finalizeTerminalGrading(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
-  enrollmentId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   exam: Exam,
   now: Date,
 ): Promise<boolean> {
+  // P3-FORMAL-P0-D2: the FIRST executable protocol action is the transaction-
+  // affinity assertion. No repository read, lock, write, or workset access
+  // may occur before it. The capability proves the caller's transaction
+  // already acquired Enrollment before Attempt via the canonical seam, using
+  // the exact repo pair this consumer is now using.
+  assertCapabilityFor(capability, enrollmentRepo, attemptRepo);
+  const { attemptId, enrollmentId } = capability;
+
+  // Re-read mutable Attempt state through the current (tx-bound, affinity-
+  // proven) AttemptRepository. Non-locking: the seam already holds the row
+  // lock, and under REPEATABLE READ this tx sees its own prior writes.
   const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new ValidationError("Attempt not found");
   }
 
+  // Idempotency: an already-graded attempt has its terminal projection. The
+  // caller (finalizeGrading / gradeQuestion) wraps this in a transaction and
+  // discards a false return. This guard is for retry re-entry of a committed
+  // closure within the SAME logical operation — NOT a historical-row repair
+  // path (see the function doc).
   if (attempt.status === "graded") {
     return false;
-  }
-
-  // P3-L0-2C engine invariant: an attempt awaiting manual grading must NOT
-  // be advanced to `graded` through the automatic finalization path. Fail
-  // closed — only gradeQuestion (manual completion) may close a
-  // pending_manual attempt.
-  if (attempt.gradingStatus === GradingStatus.PendingManual) {
-    throw new InvalidStateTransitionError(
-      `Cannot auto-finalize attempt ${attemptId}: gradingStatus=pending_manual; ` +
-        "manual grading completion owns the submitted → graded transition",
-    );
   }
 
   const tr = transition(attempt.status, "grade" as AttemptCommand);
@@ -220,9 +261,11 @@ export async function finalizeGrading(
     );
   }
 
-  // Slice 4: aggregate the terminal score from the materialized grading
-  // entries. This is the single canonical score authority — no externally
-  // supplied result, no gradingResult read, no submittedAnswers re-grade.
+  // Canonical terminal aggregation. This is BOTH the score authority AND the
+  // terminal-workset precondition: aggregateGradingEntries validates that
+  // every entry is in its terminal status (completed_auto / completed_manual)
+  // and throws before any projection is written if the workset is incomplete.
+  // No mode parameter is needed — terminality is a property of the workset.
   const entries = await gradingWorksetRepo.findByAttempt(attemptId);
   const aggregated = aggregateGradingEntries(
     attempt,
@@ -236,34 +279,40 @@ export async function finalizeGrading(
     score: aggregated.totalScore,
     passed: aggregated.passed,
     gradedAt: now,
-    // P3-L0-2C: gradingStatus is the authoritative scoring-lifecycle fact,
-    // established at the submit/freeze barrier (attemptCommands.submitAttempt).
-    // A pure-objective attempt reaching here carries auto_graded (set at
-    // submit); preserve that classification. The `requiresManualGrading`
-    // fallback below is retained only for legacy attempts whose gradingStatus
-    // column predates P3-L0-2C (undefined). P3-L0-2D: the fallback now uses
-    // the canonical QuestionType-based classifier (text_response) rather than
-    // the deprecated standardAnswer==null heuristic, so legacy rows are
-    // classified by the same authority as current rows (Defect B prevention).
+    // gradingStatus is the authoritative scoring-LIFECYCLE label, established
+    // at the submit/freeze barrier. Three reaching states are possible:
+    //   - AutoGraded (pure-objective auto path): preserved as-is.
+    //   - PendingManual reaching closure via the manual path: by this point
+    //     gradeQuestion has completed the last pending manual entry, so the
+    //     lifecycle advances to FullyGraded.
+    //   - undefined (legacy column predating P3-L0-2C): classified via the
+    //     canonical text_response classifier (Defect B prevention).
+    // The closure itself is mode-agnostic; it derives the lifecycle label
+    // from the attempt's pre-closure gradingStatus, not from a caller flag.
     gradingStatus:
-      attempt.gradingStatus ??
-      (requiresManualGrading(attempt.questionSnapshot)
-        ? GradingStatus.PendingManual
-        : GradingStatus.AutoGraded),
+      attempt.gradingStatus === GradingStatus.PendingManual
+        ? GradingStatus.FullyGraded
+        : (attempt.gradingStatus ??
+          (requiresManualGrading(attempt.questionSnapshot)
+            ? GradingStatus.PendingManual
+            : GradingStatus.AutoGraded)),
   });
   if (!gradedUpdate) {
     throw new ValidationError("Failed to persist graded results");
   }
 
-  // Lock the enrollment row (`FOR UPDATE`) in the SAME transaction the caller
-  // wrapped us in (submitAndGradeAttempt, autoSubmitAndGrade, admin
-  // force-submit, gradingQueue all pass tx-scoped repos). This serializes
-  // concurrent finalization of different attempts on the same enrollment: a
-  // second transaction cannot read the enrollment's finalScore/finalAttemptId
-  // until the first commits. Recomputing `shouldSelectAttempt` against the
-  // locked enrollment therefore defeats the last-writer-wins race where two
-  // attempts otherwise each see the pre-existing finalScore and both overwrite.
-  const enrollment = await enrollmentRepo.findByExamAndCandidateForUpdate(
+  // P3-FORMAL-P0-D2 / HR-2: the Enrollment row is NOT re-locked with an
+  // explicit FOR UPDATE here. The capability's affinity assertion already
+  // proved the caller's transaction acquired the Enrollment lock before the
+  // Attempt lock via the canonical seam. We re-read mutable Enrollment state
+  // through a NON-locking lookup; under REPEATABLE READ this tx observes its
+  // own writes and the already-held lock serializes concurrent finalizers.
+  //
+  // The Enrollment UPDATE below remains and is itself a lock-acquiring
+  // operation (implicit row write-lock). Its safety depends ENTIRELY on the
+  // capability affinity assertion above having succeeded. Removing the
+  // explicit FOR UPDATE does NOT remove the Enrollment lock dependency.
+  const enrollment = await enrollmentRepo.findByExamAndCandidate(
     attempt.examId,
     attempt.candidateId,
   );
@@ -308,9 +357,69 @@ export async function finalizeGrading(
 }
 
 /**
+ * Auto-path entry into the canonical terminal closure.
+ *
+ * Validates the auto-path lifecycle preconditions, then delegates to
+ * {@link finalizeTerminalGrading}. The terminal-workset precondition is
+ * enforced inside the closure by {@link aggregateGradingEntries}.
+ *
+ * P3-L0-2C terminal guard (unchanged): an attempt awaiting manual grading
+ * must NOT be advanced to `graded` through the automatic finalization path.
+ * Fail closed — only `gradeQuestion` (manual completion) may close a
+ * pending_manual attempt, and it does so by completing the last pending
+ * manual entry first, after which the workset is terminal and this guard's
+ * precondition is moot for the closure itself.
+ *
+ * @returns true if the attempt was transitioned to graded; false if it was
+ *   already graded (idempotent no-op).
+ */
+export async function finalizeGrading(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  gradingWorksetRepo: GradingWorksetRepository,
+  capability: LockedEnrollmentAttemptIdentity,
+  exam: Exam,
+  now: Date,
+): Promise<boolean> {
+  const attempt = await attemptRepo.findById(capability.attemptId);
+  if (!attempt) {
+    throw new ValidationError("Attempt not found");
+  }
+
+  if (attempt.status === "graded") {
+    return false;
+  }
+
+  // P3-L0-2C engine invariant: an attempt awaiting manual grading must NOT
+  // be advanced to `graded` through the automatic finalization path. Fail
+  // closed — only gradeQuestion (manual completion) may close a
+  // pending_manual attempt.
+  if (attempt.gradingStatus === GradingStatus.PendingManual) {
+    throw new InvalidStateTransitionError(
+      `Cannot auto-finalize attempt ${capability.attemptId}: gradingStatus=pending_manual; ` +
+        "manual grading completion owns the submitted → graded transition",
+    );
+  }
+
+  return finalizeTerminalGrading(
+    enrollmentRepo,
+    attemptRepo,
+    gradingWorksetRepo,
+    capability,
+    exam,
+    now,
+  );
+}
+
+/**
  * Grades an attempt end-to-end: reads the grading snapshot, then finalizes
  * via the canonical grading-entry aggregator. Returns the persisted ScoreResult
  * (re-read from the attempt so the response reflects committed truth).
+ *
+ * P3-FORMAL-P0-D2: the caller MUST mint the transaction-affine capability via
+ * `lockEnrollmentAndAttempt` in the same transaction before calling this. The
+ * capability is the EA protocol authority threaded through to
+ * {@link finalizeTerminalGrading}.
  *
  * Note: `gradeAttempt` is retained for test compatibility; production callers
  * use {@link gradeAttemptIdempotent}. Both flow terminal scoring through the
@@ -322,14 +431,14 @@ export async function gradeAttempt(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<ScoreResult> {
   const snapshot = await readGradingSnapshot(
     examRepo,
     enrollmentRepo,
     attemptRepo,
-    attemptId,
+    capability.attemptId,
   );
   if (!snapshot) {
     throw new ValidationError("Attempt not found");
@@ -339,14 +448,13 @@ export async function gradeAttempt(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    snapshot.enrollment.id,
+    capability,
     snapshot.exam,
     now,
   );
 
   // Build the response ScoreResult from the now-committed attempt state.
-  const graded = await attemptRepo.findById(attemptId);
+  const graded = await attemptRepo.findById(capability.attemptId);
   if (!graded) {
     throw new ValidationError("Attempt not found after grading");
   }
@@ -364,14 +472,14 @@ export async function gradeAttemptIdempotent(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<ScoreResult> {
   const snapshot = await readGradingSnapshot(
     examRepo,
     enrollmentRepo,
     attemptRepo,
-    attemptId,
+    capability.attemptId,
   );
   if (!snapshot) {
     throw new ValidationError("Attempt not found");
@@ -412,13 +520,12 @@ export async function gradeAttemptIdempotent(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    snapshot.enrollment.id,
+    capability,
     snapshot.exam,
     now,
   );
 
-  const graded = await attemptRepo.findById(attemptId);
+  const graded = await attemptRepo.findById(capability.attemptId);
   if (!graded) {
     throw new ValidationError("Attempt not found after grading");
   }

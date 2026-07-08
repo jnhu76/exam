@@ -13,6 +13,7 @@ import type {
 import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { gradeAttemptIdempotent } from "./grading.js";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 
 /**
  * P3-L0-2E Slice 5 Step 11 — partial-score branch containment.
@@ -41,6 +42,17 @@ import { gradeAttemptIdempotent } from "./grading.js";
  */
 
 const NOW = new Date("2026-06-01T12:00:00Z");
+
+/**
+ * P3-FORMAL-P0-D2 test helper: mints a genuine capability via the canonical seam.
+ */
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function mixedQuestions(): QuestionSnapshot[] {
   return [
@@ -202,12 +214,13 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
       countPendingManualForAttempt: async () => 0,
     };
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await gradeAttemptIdempotent(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       worksetRepo,
-      "attempt-1",
+      cap,
       NOW,
     );
 
@@ -293,12 +306,13 @@ describe("Slice 5 Step 11 — partial-score branch cannot mutate terminal score 
       countPendingManualForAttempt: async () => 0,
     };
 
+    const cap = await mintCap(enrollmentRepo, attemptRepo, "attempt-1");
     const result = await gradeAttemptIdempotent(
       examRepo,
       enrollmentRepo,
       attemptRepo,
       worksetRepo,
-      "attempt-1",
+      cap,
       NOW,
     );
 

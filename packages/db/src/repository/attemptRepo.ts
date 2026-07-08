@@ -8,7 +8,7 @@ import {
 import { resolveOrganizationId } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 
 type AttemptSelect = typeof examAttempts.$inferSelect;
 type CandidateSelect = typeof candidateProfiles.$inferSelect;
@@ -170,22 +170,67 @@ export function createAttemptRepo(db: Database) {
           ),
         )) as AttemptSelect[];
     },
-    async listExpirableByDeadline(
+    /**
+     * DEADLINE SCANNER CANDIDATE DISCOVERY (DERIVED, NOT AUTHORITY).
+     *
+     * Returns in_progress/disrupted attempts that are CANDIDATES for deadline
+     * auto-submission. The predicate mirrors the canonical
+     * `computeEffectiveDeadline` expiry decision EXACTLY over the full
+     * scanner-eligible domain (reachable + defensive NULL):
+     *
+     *   exam.closeAt <= now
+     *   OR
+     *   (attempt.deadlineAt IS NOT NULL AND attempt.deadlineAt <= now)
+     *
+     * REACHABILITY BOUNDARY (P0-C1): the `exam.closeAt <= now` arm is the
+     * DEFENSIVE recovery coverage for schema-admissible NULL `deadlineAt`
+     * rows — NOT evidence of a Phase-1 timing mode in which active attempts
+     * normally carry a NULL deadline. The reachable-domain invariant
+     * (ACTIVE-DEADLINE-001) is that every protocol-reachable active attempt
+     * has a non-null `deadlineAt`; ordinary production always writes one at
+     * attempt creation. Discovery therefore agrees with the canonical
+     * `isAttemptDeadlineExpired` seam over BOTH domains so that a legacy /
+     * corrupt / historical NULL row whose exam window has closed cannot stay
+     * active forever — but that row is a defensive-recovery state, not a
+     * valid protocol timing state.
+     *
+     * The OR-with-exam-closeAt arm also catches an attempt whose per-attempt
+     * deadlineAt is still in the future but whose exam window has closed — the
+     * divergence bug fixed alongside this query (P0-B).
+     *
+     * This query is CANDIDATE DISCOVERY ONLY. The authoritative expiry
+     * decision is `isAttemptDeadlineExpired` (exam-engine), re-evaluated by
+     * the scanner under `Attempt FOR UPDATE` + authoritative `Exam FOR UPDATE`
+     * read. A candidate returned here MUST NOT be auto-submitted without that
+     * under-lock recheck (it may have been extended, reconciled, or be a stale
+     * snapshot).
+     *
+     * Renamed from listExpirableByDeadline to reflect its candidate-discovery
+     * role, not protocol authority.
+     */
+    async listDeadlineCandidates(
       ctx: TenantContext | RequestContext,
       before: Date,
     ): Promise<AttemptSelect[]> {
       const orgId = resolveOptionalOrganizationId(ctx);
-      return (await db
-        .select()
+      const rows = await db
+        .select({ attempt: examAttempts })
         .from(examAttempts)
+        .innerJoin(exams, eq(examAttempts.examId, exams.id))
         .where(
           and(
             eq(examAttempts.organizationId, orgId),
             inArray(examAttempts.status, ["in_progress", "disrupted"]),
-            isNotNull(examAttempts.deadlineAt),
-            lte(examAttempts.deadlineAt, before),
+            or(
+              lte(exams.closeAt, before),
+              and(
+                isNotNull(examAttempts.deadlineAt),
+                lte(examAttempts.deadlineAt, before),
+              ),
+            ),
           ),
-        )) as AttemptSelect[];
+        );
+      return rows.map((r) => r.attempt) as AttemptSelect[];
     },
     /**
      * Lists ALL attempts for a given exam, joined with candidate profiles and

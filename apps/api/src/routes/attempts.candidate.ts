@@ -48,7 +48,10 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { startOrRestoreAttempt, restoreAttempt } from "@exam/exam-engine";
 import { processSaveAnswer } from "@exam/exam-engine";
-import { ensureAttemptDeadlineReconciled } from "@exam/exam-engine";
+import {
+  ensureAttemptDeadlineReconciled,
+  lockEnrollmentAndAttempt,
+} from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
   createExamEngineRepos,
@@ -794,6 +797,13 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
+        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam and
+        // thread it (plus the same repo pair) into the reconciliation path.
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
+          parsed.data.attemptId,
+        );
         // ensureAttemptDeadlineReconciled performs its own findByIdForUpdate
         // internally and returns the (possibly reconciled) attempt. Verify
         // ownership on that returned object instead of a separate locked read,
@@ -808,7 +818,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             createAttemptGradingEntryRepo(tx),
             ctx,
           ),
-          parsed.data.attemptId,
+          cap,
           fastify.now(),
         );
         if (reconciled.candidateId !== candidateProfile.id) {
@@ -888,13 +898,6 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         if (!candidateProfile) {
           throw new NotFoundError("候选人资料不存在");
         }
-        const lockedAttempt = await txRepo.findByIdForUpdate(ctx, attemptId);
-        if (
-          !lockedAttempt ||
-          lockedAttempt.candidateId !== candidateProfile.id
-        ) {
-          throw new NotFoundError("尝试不存在");
-        }
 
         // P3-L0-3: lazy deadline reconciliation at save entry point. If the
         // attempt is expired, this freezes it; the processSaveAnswer below
@@ -909,6 +912,22 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
+        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam
+        // (Enrollment → Attempt order) and thread it into reconciliation. The
+        // canonical seam's locator read doubles as the existence check; the
+        // ownership check runs against the post-mint re-read below.
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
+          attemptId,
+        );
+        const lockedAttempt = await txRepo.findById(ctx, attemptId);
+        if (
+          !lockedAttempt ||
+          lockedAttempt.candidateId !== candidateProfile.id
+        ) {
+          throw new NotFoundError("尝试不存在");
+        }
         // ensureAttemptDeadlineReconciled returns the (possibly reconciled)
         // attempt — reuse it instead of a redundant findByIdForUpdate.
         // processSaveAnswer then sees the current status (frozen snapshot if
@@ -922,7 +941,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             createAttemptGradingEntryRepo(tx),
             ctx,
           ),
-          attemptId,
+          cap,
           now,
         );
         if (currentAttempt.candidateId !== candidateProfile.id) {
@@ -1170,6 +1189,13 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
+        // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam and
+        // thread it (plus the same repo pair) into the reconciliation path.
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
+          attemptId,
+        );
 
         // P3-L0-3: lazy deadline reconciliation at restore entry point. If the
         // disrupted attempt is past its deadline, freeze it now; restoreAttempt
@@ -1183,7 +1209,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             createAttemptGradingEntryRepo(tx),
             ctx,
           ),
-          attemptId,
+          cap,
           fastify.now(),
         );
 

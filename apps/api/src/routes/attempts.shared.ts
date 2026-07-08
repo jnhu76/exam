@@ -1,5 +1,6 @@
 import type { ExamAttempt, AnswerRecord, Exam } from "@exam/domain";
 import type { GradingStatus } from "@exam/domain";
+import { computeEffectiveDeadline } from "@exam/exam-engine";
 
 /**
  * OpenAPI security scheme: HTTP-only cookie authentication. Shared by every
@@ -30,17 +31,12 @@ function getInputMode(
 
 /**
  * Computes effectiveDeadline from exam and attempt fields.
- * effectiveDeadline = min(exam deadline, attempt deadline)
+ * Delegates to the canonical @exam/exam-engine seam (L0 §5.1). A null attempt
+ * deadline falls back to the exam close. NOTE: the canonical helper throws if
+ * `exam.closeAt` is null (timed_window invariant); the take path only reaches
+ * here for `timed_window` exams where closeAt is always set.
  */
-function computeEffectiveDeadline(
-  exam: Exam,
-  attempt: ExamAttempt,
-): Date | null {
-  const examDeadline = exam.closeAt;
-  const attemptDeadline = attempt.deadlineAt;
-  if (!attemptDeadline) return examDeadline;
-  return examDeadline < attemptDeadline ? examDeadline : attemptDeadline;
-}
+// computeEffectiveDeadline is re-exported above from @exam/exam-engine.
 
 /**
  * Computes resultVisibility based on exam publication mode and attempt state.
@@ -147,7 +143,13 @@ export function buildCandidateTakeSnapshot(
 ) {
   const attemptStatus = attempt.status;
   const gradingStatus: GradingStatus = attempt.gradingStatus ?? "auto_graded";
-  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
+  // Canonical seam. On the candidate take path timingMode is always
+  // `timed_window` (Phase 1), so exam.closeAt is non-null and this never
+  // throws; the nullish guard preserves the legacy "open-ended" snapshot
+  // semantics if a non-timed exam ever reaches this projection.
+  const effectiveDeadline = exam.closeAt
+    ? computeEffectiveDeadline(exam, attempt)
+    : null;
   const effectiveDeadlineStr = effectiveDeadline?.toISOString() ?? null;
 
   // Derived capability: isEditable (CONTEXT.md:12, exam-protocol.md §6.1)

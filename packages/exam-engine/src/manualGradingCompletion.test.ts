@@ -14,6 +14,7 @@ import type { ExamRepository } from "./examCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
 import { submitAttempt } from "./attemptCommands.js";
 import { computeGradingResult } from "./grading.js";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import { gradeQuestion, type GradeQuestionResult } from "./manualGrading.js";
 
 /**
@@ -61,6 +62,17 @@ import { gradeQuestion, type GradeQuestionResult } from "./manualGrading.js";
 
 const NOW = new Date("2026-06-01T12:00:00Z");
 const DEFAULT_PASSING = 50;
+
+/**
+ * P3-FORMAL-P0-D2 test helper: mints a genuine capability via the canonical seam.
+ */
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -356,16 +368,22 @@ async function runMixedLifecycle(input: {
     fullyGraded: false,
   };
   for (const m of input.manualScores) {
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     lastResult = await gradeQuestion(
       repos.attemptRepo,
+      repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap,
       m.questionId,
       m.score,
       "",
       "grader-1",
       NOW,
-      passingScore,
+      exam,
     );
   }
 
@@ -540,16 +558,22 @@ describe("P3-L0-2D D: multi-manual partial completion", () => {
       { source: "candidate" },
     );
 
+    const cap2 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     const partial = await gradeQuestion(
       repos.attemptRepo,
+      repos.enrollmentRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
+      cap2,
       "q-text-1",
       20,
       "",
       "grader-1",
       NOW,
-      DEFAULT_PASSING,
+      makeExam(),
     );
 
     expect(partial.fullyGraded).toBe(false);
@@ -636,5 +660,366 @@ describe("P3-L0-2D G: graded + pending_manual impossible", () => {
     const forbidden =
       attempt.status === "graded" && attempt.gradingStatus === "pending_manual";
     expect(forbidden).toBe(false);
+  });
+});
+
+// ── H. P3-FORMAL-P0-A: terminal closure projects Enrollment ──────────
+//
+// The pre-repair bug: gradeQuestion wrote attempt.score but never
+// enrollment.{finalScore, finalPassed, finalAttemptId, status}, leaving the
+// enrollment projection stale/NULL for manual-graded exams. These tests lock
+// the fix: the canonical terminal closure (finalizeTerminalGrading, shared
+// with the auto path) projects BOTH Attempt and Enrollment in the same
+// transaction.
+
+describe("P3-FORMAL-P0-A H: manual terminal closure projects Enrollment", () => {
+  it("T1: after the last manual grade, enrollment.finalScore/finalPassed/finalAttemptId are written", async () => {
+    // Pre-repair regression target: this would have left finalScore NULL.
+    const { attempt, result } = await runMixedLifecycle({
+      questionSnapshot: [
+        objectiveSnapshot("q-obj", 40, "a"),
+        textResponseSnapshot("q-text", 60),
+      ],
+      answers: [
+        { questionId: "q-obj", answer: "a" }, // 40
+        { questionId: "q-text", answer: "ans" },
+      ],
+      manualScores: [{ questionId: "q-text", score: 30 }], // 30 → total 70
+    });
+
+    expect(result.fullyGraded).toBe(true);
+    expect(result.totalScore).toBe(70);
+
+    // Re-read the enrollment the same way production would (the helper
+    // exposes it via getEnrollment()).
+    // runMixedLifecycle returns the attempt + result; reconstruct repos to
+    // inspect the enrollment. Simpler: drive the lifecycle inline here so we
+    // can read repos.getEnrollment() directly.
+    const questionSnapshot = [
+      objectiveSnapshot("q-obj-2", 40, "a"),
+      textResponseSnapshot("q-text-2", 60),
+    ];
+    const exam = makeExam({ passingScore: DEFAULT_PASSING });
+    const initialAttempt = makeAttempt({
+      questionSnapshot,
+      answers: [
+        { questionId: "q-obj-2", answer: "a", version: 1, savedAt: NOW },
+        { questionId: "q-text-2", answer: "ans", version: 1, savedAt: NOW },
+      ],
+    });
+    const repos = makeRepos(initialAttempt, exam);
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap3 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
+    await gradeQuestion(
+      repos.attemptRepo,
+      repos.enrollmentRepo,
+      repos.gradingWorksetRepo,
+      cap3,
+      "q-text-2",
+      30,
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+
+    const enrollment = repos.getEnrollment();
+    // The closure wrote the projection. Pre-repair these were all
+    // NULL/undefined/`started`.
+    expect(enrollment.finalScore).toBe(70);
+    expect(enrollment.finalPassed).toBe(true); // 70 >= 50 passing
+    expect(enrollment.finalAttemptId).toBe("attempt-1");
+    void attempt;
+  });
+
+  it("T3: scoreStrategy=highest keeps the higher-scoring attempt's projection (manual path)", async () => {
+    // Two manual-graded attempts on the same enrollment. The second scores
+    // lower; highest must keep the first's finalScore.
+    const exam = makeExam({
+      passingScore: DEFAULT_PASSING,
+      scoreStrategy: "highest",
+      retakePolicy: "unlimited",
+      maxAttempts: 5,
+      closeAt: new Date("2026-12-31T00:00:00Z"),
+    });
+    const questionSnapshot = [textResponseSnapshot("q-text", 100)];
+
+    // Attempt 1: score 80.
+    const a1 = makeAttempt({
+      id: "attempt-1",
+      attemptNo: 1,
+      questionSnapshot,
+      answers: [
+        { questionId: "q-text", answer: "ans", version: 1, savedAt: NOW },
+      ],
+    });
+    const enrollment = makeEnrollment({
+      id: "enrollment-1",
+      attemptCount: 2,
+    });
+    const repos = makeRepos(a1, exam, enrollment);
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap4 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
+    await gradeQuestion(
+      repos.attemptRepo,
+      repos.enrollmentRepo,
+      repos.gradingWorksetRepo,
+      cap4,
+      "q-text",
+      80,
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+    expect(repos.getEnrollment().finalScore).toBe(80);
+    expect(repos.getEnrollment().finalAttemptId).toBe("attempt-1");
+
+    // Attempt 2: score 50. highest must NOT replace.
+    const a2 = makeAttempt({
+      id: "attempt-2",
+      attemptNo: 2,
+      questionSnapshot,
+      answers: [
+        { questionId: "q-text", answer: "ans2", version: 1, savedAt: NOW },
+      ],
+    });
+    // The second attempt must go through submitAttempt to materialize its
+    // grading entry (the in-memory workset repo is per-repos-instance).
+    const repos2 = makeRepos(a2, exam, repos.getEnrollment());
+    await submitAttempt(
+      repos2.attemptRepo,
+      repos2.gradingWorksetRepo,
+      "attempt-2",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap5 = await mintCap(
+      repos2.enrollmentRepo,
+      repos2.attemptRepo,
+      "attempt-2",
+    );
+    await gradeQuestion(
+      repos2.attemptRepo,
+      repos2.enrollmentRepo,
+      repos2.gradingWorksetRepo,
+      cap5,
+      "q-text",
+      50,
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+
+    // highest: 80 > 50, so the projection keeps attempt-1's 80.
+    expect(repos2.getEnrollment().finalScore).toBe(80);
+    expect(repos2.getEnrollment().finalAttemptId).toBe("attempt-1");
+    // The attempt itself is still graded with its own score.
+    expect(repos2.getAttempt().id).toBe("attempt-2");
+    expect(repos2.getAttempt().score).toBe(50);
+  });
+
+  it("T4: scoreStrategy=latest replaces with the most recent manual attempt", async () => {
+    const exam = makeExam({
+      passingScore: DEFAULT_PASSING,
+      scoreStrategy: "latest",
+      retakePolicy: "unlimited",
+      maxAttempts: 5,
+      closeAt: new Date("2026-12-31T00:00:00Z"),
+    });
+    const questionSnapshot = [textResponseSnapshot("q-text", 100)];
+
+    const a1 = makeAttempt({
+      id: "attempt-1",
+      attemptNo: 1,
+      questionSnapshot,
+      answers: [
+        { questionId: "q-text", answer: "ans", version: 1, savedAt: NOW },
+      ],
+    });
+    const enrollment = makeEnrollment({ id: "enrollment-1", attemptCount: 2 });
+    const repos = makeRepos(a1, exam, enrollment);
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap6 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
+    await gradeQuestion(
+      repos.attemptRepo,
+      repos.enrollmentRepo,
+      repos.gradingWorksetRepo,
+      cap6,
+      "q-text",
+      80,
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+    expect(repos.getEnrollment().finalScore).toBe(80);
+
+    const a2 = makeAttempt({
+      id: "attempt-2",
+      attemptNo: 2,
+      questionSnapshot,
+      answers: [
+        { questionId: "q-text", answer: "ans2", version: 1, savedAt: NOW },
+      ],
+    });
+    const repos2 = makeRepos(a2, exam, repos.getEnrollment());
+    await submitAttempt(
+      repos2.attemptRepo,
+      repos2.gradingWorksetRepo,
+      "attempt-2",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap7 = await mintCap(
+      repos2.enrollmentRepo,
+      repos2.attemptRepo,
+      "attempt-2",
+    );
+    await gradeQuestion(
+      repos2.attemptRepo,
+      repos2.enrollmentRepo,
+      repos2.gradingWorksetRepo,
+      cap7,
+      "q-text",
+      50,
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+
+    // latest always wins, even when lower.
+    expect(repos2.getEnrollment().finalScore).toBe(50);
+    expect(repos2.getEnrollment().finalAttemptId).toBe("attempt-2");
+  });
+
+  it("T5: shouldEnrollmentComplete fires for pass_then_stop on a passing manual grade", async () => {
+    const exam = makeExam({
+      passingScore: DEFAULT_PASSING,
+      scoreStrategy: "highest",
+      retakePolicy: "pass_then_stop",
+      maxAttempts: 5,
+      closeAt: new Date("2026-12-31T00:00:00Z"),
+    });
+    const questionSnapshot = [textResponseSnapshot("q-text", 100)];
+
+    const a1 = makeAttempt({
+      id: "attempt-1",
+      attemptNo: 1,
+      questionSnapshot,
+      answers: [
+        { questionId: "q-text", answer: "ans", version: 1, savedAt: NOW },
+      ],
+    });
+    const enrollment = makeEnrollment({ id: "enrollment-1", attemptCount: 1 });
+    const repos = makeRepos(a1, exam, enrollment);
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap8 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
+    await gradeQuestion(
+      repos.attemptRepo,
+      repos.enrollmentRepo,
+      repos.gradingWorksetRepo,
+      cap8,
+      "q-text",
+      70, // >= 50 passing → pass_then_stop completes
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+
+    expect(repos.getEnrollment().status).toBe("completed");
+    expect(repos.getEnrollment().finalPassed).toBe(true);
+  });
+
+  it("T5b: enrollment stays started when manual grade fails passing and exam window is open (max_attempts)", async () => {
+    const exam = makeExam({
+      passingScore: DEFAULT_PASSING,
+      scoreStrategy: "highest",
+      retakePolicy: "max_attempts",
+      maxAttempts: 5,
+      closeAt: new Date("2026-12-31T00:00:00Z"),
+    });
+    const questionSnapshot = [textResponseSnapshot("q-text", 100)];
+
+    const a1 = makeAttempt({
+      id: "attempt-1",
+      attemptNo: 1,
+      questionSnapshot,
+      answers: [
+        { questionId: "q-text", answer: "ans", version: 1, savedAt: NOW },
+      ],
+    });
+    const enrollment = makeEnrollment({ id: "enrollment-1", attemptCount: 1 });
+    const repos = makeRepos(a1, exam, enrollment);
+    await submitAttempt(
+      repos.attemptRepo,
+      repos.gradingWorksetRepo,
+      "attempt-1",
+      NOW,
+      { source: "candidate" },
+    );
+    const cap9 = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
+    await gradeQuestion(
+      repos.attemptRepo,
+      repos.enrollmentRepo,
+      repos.gradingWorksetRepo,
+      cap9,
+      "q-text",
+      20, // < 50, fails; max_attempts=5 not exhausted; window open
+      "",
+      "grader-1",
+      NOW,
+      exam,
+    );
+
+    expect(repos.getEnrollment().status).toBe("started");
+    expect(repos.getEnrollment().finalPassed).toBe(false);
   });
 });

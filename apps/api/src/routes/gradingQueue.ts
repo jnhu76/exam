@@ -10,15 +10,17 @@ import {
 } from "@exam/contracts";
 import type { RequestContext } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
-import { gradeQuestion } from "@exam/exam-engine";
+import { gradeQuestion, lockEnrollmentAndAttempt } from "@exam/exam-engine";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
+import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createGradingQueueRepo } from "@exam/db/src/repository/gradingQueueRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
-  createAttemptRepoAdapter,
+  createExamEngineRepos,
   createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import {
@@ -287,29 +289,60 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       const maxScore = preEntry?.maxScore ?? 0;
       const previousScore = preEntry?.earnedScore ?? null;
 
-      // Load the exam to read passingScore for manual-score reconciliation.
+      // Load the exam for the terminal closure (P3-FORMAL-P0-A): gradeQuestion
+      // now delegates terminal projection to finalizeTerminalGrading, which
+      // needs the full Exam (passingScore, scoreStrategy, retakePolicy, etc.).
       const gradingQueueRepo = createGradingQueueRepo(fastify.db);
       const exam = await gradingQueueRepo.findExamById(ctx, preAttempt.examId);
       if (!exam) {
         throw new NotFoundError("Attempt grading context not found");
       }
-      const passingScore = exam.passingScore;
+
+      // P3-FORMAL-P0-D2: the pre-tx enrollment pre-fetch that previously fed
+      // `enrollmentId` into gradeQuestion is removed. The capability minted
+      // inside the transaction carries enrollment identity (proven by the
+      // canonical seam), so gradeQuestion + finalizeTerminalGrading no longer
+      // take an enrollmentId argument.
 
       const result = await executeInTransaction(fastify.db, async (tx) => {
+        // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
+        // capability via the canonical seam, and thread the SAME instances +
+        // capability into gradeQuestion → finalizeTerminalGrading. Switched
+        // from granular adapters to createExamEngineRepos so one object pair
+        // flows from mint to consumer (HR-6: exact repo object identity).
         const txAttemptRepo = createAttemptRepo(tx);
+        const txEnrollmentRepo = createEnrollmentRepo(tx);
         const txEntryRepo = createAttemptGradingEntryRepo(tx);
-        // Lock the attempt row for the duration of the grade (§17).
-        await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
-        return gradeQuestion(
-          createAttemptRepoAdapter(txAttemptRepo, ctx),
-          createGradingWorksetRepoAdapter(txEntryRepo, ctx),
+        const { enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: txAttemptRepo,
+            enrollmentRepo: txEnrollmentRepo,
+          },
+          ctx,
+        );
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
           attemptId,
+        );
+        return gradeQuestion(
+          attempts,
+          enrollments,
+          createGradingWorksetRepoAdapter(txEntryRepo, ctx),
+          cap,
           questionId,
           score,
           comment,
           ctx.actorId,
           now,
-          passingScore,
+          // The DB-layer findExamById returns the raw Drizzle row (status:
+          // string); gradeQuestion's canonical closure expects the domain Exam
+          // type (status: ExamStatus). The row IS a valid Exam at runtime
+          // (Postgres enums map 1:1); the cast narrows the string-literal type
+          // for TypeScript. Mirrors how other engine callers bridge DB rows to
+          // the domain type.
+          exam as unknown as import("@exam/domain").Exam,
         );
       });
 

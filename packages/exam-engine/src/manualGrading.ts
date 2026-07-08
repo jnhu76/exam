@@ -1,4 +1,4 @@
-import type { AttemptGradingEntry, ExamAttempt } from "@exam/domain";
+import type { AttemptGradingEntry, Exam, ExamAttempt } from "@exam/domain";
 import {
   InvalidStateTransitionError,
   NotFoundError,
@@ -6,8 +6,10 @@ import {
   ValidationError,
 } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
+import type { EnrollmentRepository } from "./attemptCommands.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
-import { aggregateGradingEntries } from "./gradingWorkset.js";
+import { finalizeTerminalGrading } from "./grading.js";
+import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
 
 /** Result of {@link gradeQuestion}: grading status after the entry was saved. */
 export interface GradeQuestionResult {
@@ -24,15 +26,20 @@ export interface GradeQuestionResult {
 
 /**
  * Completes one pending manual grading entry for an attempt and, when the
- * last manual-graded question has been scored, flips `gradingStatus` to
- * `fully_graded` and reconciles the attempt total (objective + manual) into
- * `score`/`passed`/`gradingResult`.
+ * last manual-graded question has been scored, invokes the canonical terminal
+ * grading closure (P3-FORMAL-P0-A) to project the attempt total + enrollment
+ * result in the SAME transaction.
  *
- * P3-L0-2E Slice 3 + Slice 3C — authoritative workset ownership and strict
- * completion boundary:
+ * Ownership split (P3-FORMAL-P0-A convergence contract):
  *
- * The single durable manual-score truth is the `attempt_grading_entries` row
- * materialized at submit-freeze time. The command flow is:
+ *   - This command owns: completing the pending_manual entry
+ *     (`pending_manual → completed_manual`), exactly one per call.
+ *   - {@link finalizeTerminalGrading} owns: terminal score projection
+ *     (Attempt + Enrollment) for BOTH auto and manual paths. It is
+ *     provenance-agnostic: its sole precondition is a fully terminal
+ *     workset, which the canonical aggregator validates.
+ *
+ * The flow is therefore:
  *
  *   load/lock attempt
  *     → validate attempt.status === submitted
@@ -44,7 +51,8 @@ export interface GradeQuestionResult {
  *     → validate 0 ≤ score ≤ entry.maxScore
  *     → UPDATE SAME ENTRY pending_manual → completed_manual
  *     → count remaining pending manual entries
- *     → if 0: reconcile + terminal lifecycle flip; else hold
+ *     → if 0: finalizeTerminalGrading (projects Attempt + Enrollment)
+ *     → else: hold
  *
  * The materialized entry's `gradingMode` is the SOLE authority for whether
  * this question may be manually scored — NOT `questionSnapshot` rescanning,
@@ -77,16 +85,18 @@ export interface GradeQuestionResult {
  */
 export async function gradeQuestion(
   attemptRepo: AttemptRepository,
+  enrollmentRepo: EnrollmentRepository,
   worksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   questionId: string,
   score: number,
   comment: string,
   graderId: string,
   now: Date,
-  passingScore: number,
+  exam: Exam,
 ): Promise<GradeQuestionResult> {
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  const { attemptId } = capability;
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
   }
@@ -178,38 +188,54 @@ export async function gradeQuestion(
   const fullyGraded = remainingPending === 0;
 
   if (fullyGraded) {
-    // Slice 4: aggregate the terminal total from the complete grading-entry
-    // workset via the single canonical authority. This reads ONLY the entries
-    // + the frozen questionSnapshot — never `attempt.gradingResult`, never
-    // draft answers, never a re-grade of submittedAnswers. Same aggregator
-    // pure-objective `finalizeGrading` uses, so there is ONE terminal score
-    // algorithm for every lifecycle.
-    const allEntries = await worksetRepo.findByAttempt(attemptId);
-    const aggregated = aggregateGradingEntries(
-      attempt,
-      allEntries,
-      passingScore,
+    // P3-FORMAL-P0-A: the workset is now fully terminal (every manual entry
+    // has just been completed_manual; auto entries were completed_auto at
+    // submit-freeze). Delegate terminal projection to the canonical closure,
+    // which is shared with the auto path. The closure validates the
+    // terminal-workset precondition via aggregateGradingEntries and writes
+    // the Attempt + Enrollment projection in this transaction.
+    //
+    // `gradeQuestion` does NOT write enrollment state directly — it goes
+    // through finalizeTerminalGrading, the single canonical writer. This
+    // closes the pre-repair gap where manual terminal left
+    // enrollment.finalScore NULL/stale.
+    //
+    // P3-FORMAL-P0-D2: the caller-minted capability is threaded through; the
+    // closure asserts transaction affinity at its entry.
+    const closed = await finalizeTerminalGrading(
+      enrollmentRepo,
+      attemptRepo,
+      worksetRepo,
+      capability,
+      exam,
+      now,
     );
-    // P3-L0-2C: this command owns the final submitted → graded lifecycle
-    // transition for manual-grading attempts. Only this command may advance a
-    // pending_manual attempt to graded once all subjective scores are entered.
-    // The status transition fires only when the attempt is still at
-    // `submitted`; once terminal, the Slice 3C lifecycle guards reject any
-    // further grading call before this branch is reached.
-    const statusUpdate =
-      attempt.status === "submitted" ? { status: "graded" as const } : {};
-    await attemptRepo.update(attemptId, {
-      ...statusUpdate,
-      gradingStatus: "fully_graded",
-      score: aggregated.totalScore,
-      passed: aggregated.passed,
-      gradingResult: aggregated.questionResults,
-    });
+    if (!closed) {
+      // Defensive: the lifecycle guards above guarantee attempt.status was
+      // `submitted` at entry, and finalizeTerminalGrading is the only thing
+      // that flips it to `graded` in this transaction. A false return means
+      // the attempt was already graded by a concurrent path the guards did
+      // not catch — fail closed rather than silently returning a stale score.
+      throw new InvalidStateTransitionError(
+        `Cannot grade question ${questionId} for attempt ${attemptId}: ` +
+          "the attempt was already graded by the time the terminal closure " +
+          "ran; manual grading completion is one-way.",
+      );
+    }
+
+    // Re-read the attempt so the response reflects the just-committed
+    // terminal projection. The closure wrote score/passed/gradingResult via
+    // aggregateGradingEntries, so the response is sourced from the same
+    // authority.
+    const graded = await attemptRepo.findById(attemptId);
+    if (!graded) {
+      throw new NotFoundError("Attempt not found after terminal closure");
+    }
     return {
       gradingStatus: "fully_graded",
       fullyGraded: true,
-      totalScore: aggregated.totalScore,
-      passed: aggregated.passed,
+      totalScore: graded.score ?? 0,
+      passed: graded.passed ?? false,
     };
   }
 

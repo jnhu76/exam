@@ -19,6 +19,7 @@ import {
   gradeAttemptIdempotent,
   computeGradingResult,
 } from "./grading.js";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 
 /**
  * P3-L0-2C — Manual-Grading Hold Lifecycle Closure (RED tests).
@@ -43,6 +44,17 @@ import {
  */
 
 // ── fixtures ───────────────────────────────────────────────────────
+
+/**
+ * P3-FORMAL-P0-D2 test helper: mints a genuine capability via the canonical seam.
+ */
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function makeExam(overrides: Partial<Exam> = {}): Exam {
   return {
@@ -403,12 +415,16 @@ describe("P3-L0-2C: pure-objective inline auto-grade regression", () => {
       { source: "candidate" },
     );
     const result = computeGradingResult(repos.getAttempt(), makeExam(), NOW);
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       repos.gradingWorksetRepo,
-      "attempt-1",
-      "enrollment-1",
+      cap,
       makeExam(),
       NOW,
     );
@@ -451,13 +467,17 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
 
     // The engine boundary must fail closed (or return a non-finalized
     // outcome). It must NOT write graded + pending_manual.
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.gradingWorksetRepo,
-        "attempt-1",
-        "enrollment-1",
+        cap,
         makeExam(),
         NOW,
       ),
@@ -481,13 +501,18 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
     });
     const repos = makeRepos(submittedPendingManual);
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       gradeAttemptIdempotent(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.gradingWorksetRepo,
-        "attempt-1",
+        cap,
         NOW,
       ),
     ).resolves.toBeDefined();
@@ -510,13 +535,18 @@ describe("P3-L0-2C: finalizeGrading terminal guard on pending_manual", () => {
     });
     const repos = makeRepos(submittedPendingManual);
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       gradeAttempt(
         repos.examRepo,
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.gradingWorksetRepo,
-        "attempt-1",
+        cap,
         NOW,
       ),
     ).rejects.toThrow();

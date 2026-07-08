@@ -11,6 +11,7 @@ import {
   readGradingSnapshot,
   finalizeGrading,
   ensureAttemptDeadlineReconciled,
+  lockEnrollmentAndAttempt,
 } from "@exam/exam-engine";
 import {
   createExamEngineRepos,
@@ -52,8 +53,30 @@ export async function submitAndGradeAttempt(
   now: Date,
 ): Promise<SubmitAndGradeResult> {
   const alreadyGraded = await executeInTransaction(db, async (tx) => {
+    // P3-FORMAL-P0-D2: build the engine repo pair ONCE, mint the
+    // transaction-affine EA capability via the canonical seam (Enrollment
+    // FOR UPDATE before Attempt FOR UPDATE), and thread the SAME repo
+    // object instances + capability to every affinity-dependent consumer.
     const txAttemptRepo = createAttemptRepo(tx);
-    const lockedAttempt = await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
+    const txEnrollmentRepo = createEnrollmentRepo(tx);
+    const { exams, enrollments, attempts } = createExamEngineRepos(
+      {
+        examRepo: createExamRepo(tx),
+        attemptRepo: txAttemptRepo,
+        enrollmentRepo: txEnrollmentRepo,
+      },
+      ctx,
+    );
+    const cap = await lockEnrollmentAndAttempt(
+      enrollments,
+      attempts,
+      attemptId,
+    );
+
+    // Re-read mutable attempt state inside this tx (the seam already holds the
+    // Attempt lock; REPEATABLE READ sees own writes). Ownership check + status
+    // branch use this fresh read.
+    const lockedAttempt = await attempts.findById(attemptId);
     if (!lockedAttempt || lockedAttempt.candidateId !== candidateProfileId) {
       throw new NotFoundError("Attempt not found");
     }
@@ -72,14 +95,6 @@ export async function submitAndGradeAttempt(
       status === "disrupted" ||
       status === "submitted"
     ) {
-      const { exams, enrollments, attempts } = createExamEngineRepos(
-        {
-          examRepo: createExamRepo(tx),
-          attemptRepo: txAttemptRepo,
-          enrollmentRepo: createEnrollmentRepo(tx),
-        },
-        ctx,
-      );
       const gradingWorksetRepo = createGradingWorksetRepoAdapter(
         createAttemptGradingEntryRepo(tx),
         ctx,
@@ -95,14 +110,14 @@ export async function submitAndGradeAttempt(
       // current state. Use its status directly instead of the stale
       // pre-reconciliation `status` captured above, so we never issue a
       // redundant second submitAttempt call.
-      let currentStatus = status;
+      let currentStatus: ExamAttempt["status"] = status;
       if (status === "in_progress" || status === "disrupted") {
         const reconciled = await ensureAttemptDeadlineReconciled(
           exams,
           enrollments,
           attempts,
           gradingWorksetRepo,
-          attemptId,
+          cap,
           now,
         );
         const reconciledStatus = reconciled.status;
@@ -171,12 +186,13 @@ export async function submitAndGradeAttempt(
       // externally computed result is supplied (that would be a second score
       // authority). The gradingWorksetRepo is tx-scoped (created above) and
       // reads the same committed entries the freeze barrier materialized.
+      // P3-FORMAL-P0-D2: the capability is the EA protocol authority threaded
+      // into finalizeGrading → finalizeTerminalGrading.
       await finalizeGrading(
         enrollments,
         attempts,
         gradingWorksetRepo,
-        attemptId,
-        snapshot.enrollment.id,
+        cap,
         snapshot.exam,
         now,
       );

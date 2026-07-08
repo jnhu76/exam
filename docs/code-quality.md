@@ -202,6 +202,46 @@ pnpm lint:arch
 3. web 不直接依赖 db
 4. 没有循环依赖
 5. packages 之间依赖方向正确
+6. P3-FORMAL-P0-D2: attemptId-rooted dual-lock transactions mint the EA
+   capability via `lockEnrollmentAndAttempt` — no `as LockedEnrollmentAttemptIdentity`
+   cast, no exported brand/affinity symbol, no exported capability type guard
+
+### Enrollment ↔ Attempt Lock Order (P3-FORMAL-P0-D2)
+
+AttemptId-rooted dual-lock transactions use `lockEnrollmentAndAttempt`
+(`packages/exam-engine/src/lockSeam.ts`). The returned witness
+(`LockedEnrollmentAttemptIdentity`) represents:
+
+- canonical E-before-A acquisition provenance
+- Enrollment / Attempt identity binding
+- affinity to the exact tx-bound repo pair used at mint time
+
+`finalizeTerminalGrading` asserts repo affinity (`assertCapabilityFor`)
+before repository operations. The Enrollment `UPDATE` remains a
+lock-acquiring operation and is protected by the current-transaction EA
+protocol (removing the explicit Enrollment `FOR UPDATE` does NOT remove the
+Enrollment lock dependency).
+
+The 7 attemptId-rooted AE production entry points (submitAndGradeAttempt,
+candidate take/save/restore, admin force-submit, deadline autoSubmitAndGrade,
+manual gradeQuestion route) each mint via the seam and thread the SAME repo
+pair + capability from mint to terminal consumer. `startOrRestoreAttempt`
+keeps its natural Enrollment→Attempt order as the explicit EA exception.
+
+**Runtime repo-affinity assertion is the correctness boundary.** Static
+lint rules (`pnpm lint:arch` + the structural test
+`apps/api/src/runtime/lock-order.structural.test.ts`) are guardrails, NOT a
+TypeScript lifetime proof. They do NOT claim that:
+
+- TypeScript proves transaction lifetime
+- AST proves arbitrary capability escape impossible
+- `assertCapabilityFor` alone proves the transaction session is live
+
+Cross-transaction / expired-witness safety is correct even if a future static
+escape rule misses a leak, because the consume-time `assertCapabilityFor`
+reference-identity check rejects any capability minted against a different
+repo pair, and the underlying tx-bound repo session rejects further use
+after commit/rollback.
 
 ---
 

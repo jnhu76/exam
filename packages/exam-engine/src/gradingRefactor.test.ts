@@ -5,6 +5,7 @@ import {
   finalizeGrading,
   shouldEnrollmentComplete,
 } from "./grading.js";
+import { lockEnrollmentAndAttempt } from "./lockSeam.js";
 import type {
   AttemptRepository,
   EnrollmentRepository,
@@ -18,6 +19,18 @@ import type {
 } from "@exam/domain";
 import { InvalidStateTransitionError } from "@exam/domain";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
+
+/**
+ * P3-FORMAL-P0-D2 test helper: mints a genuine capability against the provided
+ * repo pair via the canonical seam. Test-only.
+ */
+async function mintCap(
+  enrollmentRepo: EnrollmentRepository,
+  attemptRepo: AttemptRepository,
+  attemptId: string,
+) {
+  return lockEnrollmentAndAttempt(enrollmentRepo, attemptRepo, attemptId);
+}
 
 function makeExam(scoreStrategy: Exam["scoreStrategy"] = "highest"): Exam {
   return {
@@ -316,12 +329,16 @@ describe("finalizeGrading", () => {
       makeEnrollment(),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     const result = await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       repos.worksetRepo,
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -369,12 +386,16 @@ describe("finalizeGrading", () => {
       },
     };
 
+    const cap = await mintCap(
+      trackingEnrollmentRepo,
+      trackingAttemptRepo,
+      "attempt-1",
+    );
     const result = await finalizeGrading(
       trackingEnrollmentRepo,
       trackingAttemptRepo,
       repos.worksetRepo,
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -392,13 +413,17 @@ describe("finalizeGrading", () => {
       makeEnrollment(),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await expect(
       finalizeGrading(
         repos.enrollmentRepo,
         repos.attemptRepo,
         repos.worksetRepo,
-        "attempt-1",
-        "enrollment-1",
+        cap,
         exam,
         now,
       ),
@@ -422,12 +447,16 @@ describe("finalizeGrading", () => {
       },
     };
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      trackingAttemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       trackingAttemptRepo,
       repos.worksetRepo,
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -448,12 +477,16 @@ describe("finalizeGrading", () => {
       }),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       repos.worksetRepo,
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -580,12 +613,16 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
       makeEnrollment({ attemptCount: 2 }),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       makeWorksetRepoFromResult(gradingResult),
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -605,12 +642,16 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
       makeEnrollment({ attemptCount: 2 }),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       makeWorksetRepoFromResult(gradingResult),
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -626,12 +667,16 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
       makeEnrollment({ attemptCount: 1 }),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       makeWorksetRepoFromResult(gradingResult),
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );
@@ -662,12 +707,16 @@ describe("finalizeGrading — enrollment status by retake policy", () => {
       makeEnrollment({ attemptCount: 1 }),
     );
 
+    const cap = await mintCap(
+      repos.enrollmentRepo,
+      repos.attemptRepo,
+      "attempt-1",
+    );
     await finalizeGrading(
       repos.enrollmentRepo,
       repos.attemptRepo,
       makeWorksetRepoFromResult(failResult),
-      "attempt-1",
-      "enrollment-1",
+      cap,
       exam,
       now,
     );

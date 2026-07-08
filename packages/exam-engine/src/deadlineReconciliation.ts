@@ -13,6 +13,7 @@ import { submitAttempt } from "./attemptCommands.js";
 import type { ExamRepository } from "./examCommands.js";
 import { readGradingSnapshot, finalizeGrading } from "./grading.js";
 import type { GradingWorksetRepository } from "./gradingWorkset.js";
+import type { LockedEnrollmentAttemptIdentity } from "./lockSeam.js";
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
@@ -32,6 +33,29 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  * `effectiveDeadline = min(exam.closeAt, attempt.deadlineAt)` — derived from
  * existing fields, no new deadline model (L0 §5.1). A null attempt deadline
  * falls back to the exam close.
+ *
+ * REACHABILITY BOUNDARY (P0-C1): the NULL `attempt.deadlineAt` branch is a
+ * DEFENSIVE recovery over the schema-admissible NULL domain, NOT a normative
+ * Phase-1 timing mode. The Phase-1 `timed_window` protocol invariant is:
+ *
+ *   ProtocolReachable(a) AND Active(a)  =>  a.deadlineAt != NULL
+ *
+ * because every ordinary production active-Attempt writer
+ * (`startOrRestoreAttempt` via `calculateDeadlineAt`, `extendAttemptTime`)
+ * writes a non-null `deadlineAt`, and no transition into `in_progress`/
+ * `disrupted` introduces NULL (`restoreAttempt` only preserves it). The
+ * fallback therefore covers schema-admissible but protocol-unreachable
+ * legacy / corrupt / historical NULL rows; it does not declare NULL a valid
+ * protocol timing state. See `docs/phase3/exam-protocol.md` §5.1 for the
+ * reachable-invariant / defensive-recovery split.
+ *
+ * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
+ * "effective deadline" value. The scanner's DB candidate predicate is a
+ * DERIVED discovery approximation that agrees with this seam over BOTH the
+ * reachable domain (non-NULL `deadlineAt`) and the defensive NULL domain
+ * (NULL => `exam.closeAt`); the authoritative expiry decision is
+ * `isAttemptDeadlineExpired` below, which is the ONLY place "is this attempt
+ * expired?" is answered for mutation purposes.
  */
 export function computeEffectiveDeadline(
   exam: Exam,
@@ -43,9 +67,32 @@ export function computeEffectiveDeadline(
       "Exam closeAt is required for deadline computation (timed_window invariant)",
     );
   }
+  // attempt.deadlineAt == null is a defensive recovery branch: reachable
+  // active attempts always carry a non-null deadlineAt (P0-C1 invariant
+  // ACTIVE-DEADLINE-001). Falling back to exam.closeAt here lets the scanner
+  // and inline reconciliation converge on legacy/schema-admissible NULL rows.
   return attempt.deadlineAt && attempt.deadlineAt < examClose
     ? attempt.deadlineAt
     : examClose;
+}
+
+/**
+ * Canonical "is this attempt past its effective deadline?" decision.
+ *
+ * `now >= computeEffectiveDeadline(exam, attempt)`. This is the SOLE
+ * authoritative expiry seam for any code path that mutates attempt state on
+ * deadline (inline reconciliation AND the scanner under-lock recheck). Both
+ * the candidate path and the scanner MUST call this — never re-derive
+ * `deadlineAt <= now || closeAt <= now` inline.
+ *
+ * @throws {ValidationError} if `exam.closeAt` is null (timed_window invariant).
+ */
+export function isAttemptDeadlineExpired(
+  exam: Exam,
+  attempt: ExamAttempt,
+  now: Date,
+): boolean {
+  return now.getTime() >= computeEffectiveDeadline(exam, attempt).getTime();
 }
 
 /**
@@ -76,10 +123,11 @@ export async function ensureAttemptDeadlineReconciled(
   enrollmentRepo: EnrollmentRepository,
   attemptRepo: AttemptRepository,
   gradingWorksetRepo: GradingWorksetRepository,
-  attemptId: string,
+  capability: LockedEnrollmentAttemptIdentity,
   now: Date,
 ): Promise<ExamAttempt> {
-  const attempt = await attemptRepo.findByIdForUpdate(attemptId);
+  const { attemptId } = capability;
+  const attempt = await attemptRepo.findById(attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
   }
@@ -105,12 +153,12 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Exam not found");
   }
 
-  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
-
-  // Not expired yet — nothing to reconcile.
-  if (now.getTime() < effectiveDeadline.getTime()) {
+  // Canonical expiry decision. The inline reconciliation path and the scanner
+  // under-lock recheck both go through this single seam — never re-derive.
+  if (!isAttemptDeadlineExpired(exam, attempt, now)) {
     return attempt;
   }
+  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
 
   // Lazy inline submit-and-grade using effectiveDeadline as the submit time,
   // so submittedAt = effectiveDeadline (the business deadline), not the
@@ -147,12 +195,13 @@ export async function ensureAttemptDeadlineReconciled(
   // Slice 4: finalizeGrading aggregates from the grading workset internally —
   // no externally computed result. gradingWorksetRepo is the caller's
   // tx-scoped repo (same one submitAttempt materialized into).
+  // P3-FORMAL-P0-D2: the caller-minted capability is threaded through to
+  // finalizeGrading → finalizeTerminalGrading (affinity-proven).
   await finalizeGrading(
     enrollmentRepo,
     attemptRepo,
     gradingWorksetRepo,
-    attemptId,
-    snapshot.enrollment.id,
+    capability,
     snapshot.exam,
     now,
   );

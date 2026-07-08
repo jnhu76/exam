@@ -8,7 +8,11 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
-import { computeGradingResult, finalizeGrading } from "@exam/exam-engine";
+import {
+  computeGradingResult,
+  finalizeGrading,
+  lockEnrollmentAndAttempt,
+} from "@exam/exam-engine";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
@@ -75,8 +79,6 @@ async function finalizeInTx(
 ): Promise<boolean> {
   return executeInTransaction(db, async (tx) => {
     const txAttemptRepo = createAttemptRepo(tx);
-    // Lock the attempt row (matches every production caller).
-    await txAttemptRepo.findByIdForUpdate(ctx, attemptId);
     const { exams, enrollments, attempts } = createExamEngineRepos(
       {
         examRepo: createExamRepo(tx),
@@ -84,6 +86,14 @@ async function finalizeInTx(
         enrollmentRepo: createEnrollmentRepo(tx),
       },
       ctx,
+    );
+    // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam (matches
+    // every production caller); thread it into finalizeGrading. The capability
+    // replaces the old (attemptId, enrollmentId) arguments.
+    const cap = await lockEnrollmentAndAttempt(
+      enrollments,
+      attempts,
+      attemptId,
     );
     // Slice 4: finalizeGrading aggregates from the grading workset internally —
     // no externally computed result. Build the tx-scoped workset adapter so it
@@ -96,8 +106,7 @@ async function finalizeInTx(
       enrollments,
       attempts,
       gradingWorksetRepo,
-      attemptId,
-      enrollmentId,
+      cap,
       exam,
       new Date(),
     );
