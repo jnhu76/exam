@@ -563,18 +563,22 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // ── P0-C: NULL DEADLINE MEANS EXAM-CLOSE-ONLY DEADLINE ───────────────
+    // ── P0-C1: REACHABILITY vs NULL-RECOVERY BOUNDARY ──────────────────
     //
-    // Background: production creates attempts with a non-null deadlineAt
-    // (startOrRestoreAttempt line 200). A NULL active deadlineAt is therefore
-    // not reachable via ordinary production, but the canonical authority
-    // (computeEffectiveDeadline) assigns it EffectiveDeadline = exam.closeAt.
-    // P0-C makes scanner discovery globally consistent with that authority.
+    // Reachability invariant (ACTIVE-DEADLINE-001): ordinary production
+    // CANNOT create an active attempt with deadlineAt = NULL.
+    // startOrRestoreAttempt (line 200) writes a non-null deadlineAt via
+    // calculateDeadlineAt; extendAttemptTime writes non-null; restoreAttempt
+    // only preserves an existing value; scanner/submit never write deadlineAt.
+    // A NULL active deadlineAt is therefore schema-admissible but
+    // protocol-unreachable — a legacy/corrupt/historical defensive-recovery
+    // state, NOT a Phase-1 timing mode (see docs/phase3/exam-protocol.md §5.1
+    // and computeEffectiveDeadline REACHABILITY BOUNDARY).
     //
-    // T1 (NULL reachability): ordinary production CANNOT create an active
-    // attempt with deadlineAt = NULL. We assert the production-started attempt
-    // always carries a non-null deadlineAt before any direct DB mutation.
-    it("production start always establishes a non-null deadlineAt (T1 reachability invariant)", async () => {
+    // T1 (reachability invariant): production-started attempts always carry a
+    // non-null deadlineAt. This is the ACTIVE-DEADLINE-001 invariant, NOT
+    // evidence that NULL is a valid protocol state.
+    it("production start always establishes a non-null deadlineAt (ACTIVE-DEADLINE-001 reachability invariant)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -588,12 +592,14 @@ describe("attempt routes", () => {
       expect(started[0]!.deadlineAt instanceof Date).toBe(true);
     });
 
-    // Path B T5: deadlineAt = NULL AND exam.closeAt < now => the attempt is
-    // canonically expired (EffectiveDeadline = closeAt) and MUST be a scanner
-    // candidate that gets auto-submitted+graded. This is the liveness gap P0-C
-    // closes: previously the NULL carve-out left such an attempt active
-    // indefinitely under NoCandidateAction.
-    it("auto-submits a NULL-deadline attempt whose exam.closeAt has passed (P0-C T5)", async () => {
+    // DEFENSIVE RECOVERY (DL-ROB-001): deadlineAt = NULL AND exam.closeAt <
+    // now => the attempt is canonically expired via the defensive fallback
+    // (EffectiveDeadline = closeAt) and MUST be a scanner candidate so it gets
+    // auto-submitted+graded. This is a robustness property over the
+    // schema-admissible NULL domain, NOT a protocol liveness claim — the
+    // starting state is protocol-unreachable (see T1). The test constructs it
+    // via direct DB update to exercise the defensive recovery path.
+    it("auto-submits a NULL-deadline attempt whose exam.closeAt has passed (P0-C1 defensive recovery DL-ROB-001)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId, questionId } = await createStartedAttemptWithQuestion(
         t,
@@ -628,9 +634,10 @@ describe("attempt routes", () => {
       expect(questionId).toBeDefined();
     });
 
-    // Path B T6 (negative): deadlineAt = NULL AND exam.closeAt > now => NOT
-    // canonically expired => NOT a candidate, NOT submitted.
-    it("does NOT auto-submit a NULL-deadline attempt while exam.closeAt is future (P0-C T6)", async () => {
+    // DEFENSIVE RECOVERY (negative): deadlineAt = NULL AND exam.closeAt > now
+    // => NOT canonically expired via the defensive fallback (EffectiveDeadline
+    // = closeAt > now) => NOT a candidate, NOT submitted.
+    it("does NOT auto-submit a NULL-deadline attempt while exam.closeAt is future (P0-C1 defensive recovery, negative)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -652,11 +659,12 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // Path B T7 (NULL || exam closeAt extension || scanner): the accepted
-    // P0-B Attempt->Exam serialization must remain valid for NULL-deadline
-    // attempts. If exam.closeAt is extended into the future before the
-    // under-lock recheck, the canonical decision is NOT expired => no submit.
-    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended before the under-lock recheck (P0-C T7)", async () => {
+    // DEFENSIVE RECOVERY (concurrency): the accepted P0-B Attempt->Exam
+    // serialization must remain valid for NULL-deadline (defensive) rows. If
+    // exam.closeAt is extended into the future before the under-lock recheck,
+    // the canonical decision via the defensive fallback is NOT expired => no
+    // submit.
+    it("does not auto-submit a NULL-deadline attempt when exam.closeAt is extended before the under-lock recheck (P0-C1 defensive recovery race)", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -671,8 +679,8 @@ describe("attempt routes", () => {
         attemptId,
       );
       // Extend the exam window into the future BEFORE the scanner's under-lock
-      // recheck. Under the P0-C semantic EffectiveDeadline = closeAt (future),
-      // so the canonical recheck returns false => no-op.
+      // recheck. Under the defensive fallback EffectiveDeadline = closeAt
+      // (future), so the canonical recheck returns false => no-op.
       await ctx.db
         .update(schema.exams)
         .set({ closeAt: new Date(Date.now() + 7200_000) })
@@ -702,12 +710,16 @@ describe("attempt routes", () => {
       expect(after?.submittedAt).toBeNull();
     });
 
-    // Path B T8 (global discovery equivalence): for every scanner-eligible
-    // active attempt — including NULL per-attempt deadline —
-    // CanonicalExpired <=> ScannerCandidate. We construct the four cells of
-    // the truth table over (deadlineAt NULL|past) x (closeAt past|future) and
-    // assert discovery matches the canonical isAttemptDeadlineExpired seam.
-    it("discovery matches canonical expiry over the full domain incl. NULL (P0-C T8 equivalence)", async () => {
+    // DISCOVERY CONFORMANCE (defensive domain): for every scanner-eligible
+    // active attempt — including the schema-admissible NULL per-attempt
+    // deadline (defensive recovery domain) — CanonicalExpired <=>
+    // ScannerCandidate. We construct the four cells of the truth table over
+    // (deadlineAt NULL|past) x (closeAt past|future) and assert discovery
+    // matches the canonical isAttemptDeadlineExpired seam. (The NULL cells are
+    // protocol-unreachable; they are exercised by direct DB update to prove
+    // discovery/helper agreement over the defensive domain, not to assert
+    // NULL is a valid protocol state.)
+    it("discovery matches canonical expiry over the full domain incl. NULL (P0-C1 defensive discovery conformance)", async () => {
       const t = await createIsolatedTestOrg();
       const cells: Array<{
         name: string;

@@ -419,16 +419,31 @@ attemptStatus in ('in_progress', 'disrupted')
 
 `effectiveDeadline` = min(exam deadline, attempt deadline, extension-adjusted deadline)，从现有字段派生，不新建 deadline 模型。
 
-**P0-C 可空 deadline 语义（权威）**：`attempt.deadlineAt = NULL` 是合法的 active 协议状态，其 Effective Deadline 为 `exam.closeAt`。即：
+**P0-C1 可空 deadline 边界（可达不变式 + 防御性兜底）**：必须区分两层语义。
+
+(1) **可达协议不变式（normative）**：Phase 1 `timed_window` 下，普通生产路径在 attempt 创建时即写入非空 `deadlineAt`（`startedAt + durationMinutes`，见 `startOrRestoreAttempt`）。`extendAttemptTime` 也写入非空 `deadlineAt`；`restoreAttempt` 只保留既有值，不引入 NULL；scanner/submit 不写 `deadlineAt`。因此：
 
 ```
-EffectiveDeadline(exam, attempt) =
+ACTIVE-DEADLINE-001:
+  ProtocolReachable(a) AND Active(a)  =>  a.deadlineAt != NULL
+```
+
+对普通协议可达的 active attempt，规范 EffectiveDeadline 为：
+
+```
+EffectiveDeadline(exam, attempt) = min(exam.closeAt, attempt.deadlineAt)
+```
+
+(2) **防御性存储兜底（robustness，非协议语义）**：`exam_attempts.deadline_at` 在 schema 中历史性可空，且无迁移为其写入 active 行。`computeEffectiveDeadline` 因此保留 NULL 兜底，以覆盖 schema-admissible 但协议不可达的 legacy/历史/损坏 NULL 行：
+
+```
+DefensiveEffectiveDeadline(exam, attempt) =
   attempt.deadlineAt == NULL
     ? exam.closeAt
     : min(exam.closeAt, attempt.deadlineAt)
 ```
 
-此语义为内联 reconciliation 与 deadline scanner 候选发现的**共同权威**。Scanner 候选发现谓词为：
+`exam.closeAt`（schema `notNull`、domain `Date`）恒为权威上界，故 NULL 兜底绝不发明候选专属时序状态。Scanner 候选发现谓词为：
 
 ```
 exam.closeAt <= now
@@ -436,7 +451,9 @@ OR
 (attempt.deadlineAt IS NOT NULL AND attempt.deadlineAt <= now)
 ```
 
-对全部 scanner-eligible active attempt 满足 `CanonicalExpired <=> ScannerCandidate`（含 NULL deadline 情形）。Phase 1 `timed_window` 下普通生产路径在 attempt 创建时即写入非空 `deadlineAt`（`startedAt + durationMinutes`），故 NULL active attempt 当前不可经普通生产达到；本语义同时作为对未来 timing mode / legacy 数据的防御性兜底。
+`exam.closeAt <= now` 一臂同时覆盖两类行：可达行（per-attempt deadline 仍在未来但考试窗口已关，P0-B 修复）与防御性 NULL 行。对全部 scanner-eligible active attempt 满足 `CanonicalExpired <=> ScannerCandidate`（含 NULL 防御情形）。
+
+**关键区分**：本兜底是 recovery 行为——它使 legacy/schema-admissible NULL 行在考试窗口关闭后不会无限期保持 active，并在内联 reconciliation 与 scanner 之间保持一致。它**不**定义当前任何 timing mode 会正常产生 NULL `deadlineAt`。"runtime 可安全处理 NULL" 与 "NULL 是合法协议时序状态" 不是同一命题；P0-C 将二者混同，P0-C1 在此显式分离。
 
 ### 5.2 入口
 

@@ -175,20 +175,24 @@ export function createAttemptRepo(db: Database) {
      *
      * Returns in_progress/disrupted attempts that are CANDIDATES for deadline
      * auto-submission. The predicate mirrors the canonical
-     * `computeEffectiveDeadline` expiry decision EXACTLY over the FULL
-     * scanner-eligible domain (P0-C global completeness):
+     * `computeEffectiveDeadline` expiry decision EXACTLY over the full
+     * scanner-eligible domain (reachable + defensive NULL):
      *
      *   exam.closeAt <= now
      *   OR
      *   (attempt.deadlineAt IS NOT NULL AND attempt.deadlineAt <= now)
      *
-     * P0-C semantic (NULL DEADLINE MEANS EXAM-CLOSE-ONLY DEADLINE): an attempt
-     * with no per-attempt deadlineAt has EffectiveDeadline = exam.closeAt, so
-     * it IS a candidate once the exam window closes. The previous NULL
-     * carve-out (`deadlineAt IS NOT NULL`) is removed: discovery and the
-     * canonical `isAttemptDeadlineExpired` seam now agree on NULL-deadline
-     * attempts, closing the liveness gap where a NULL-deadline active attempt
-     * whose exam had closed was never background-progressed.
+     * REACHABILITY BOUNDARY (P0-C1): the `exam.closeAt <= now` arm is the
+     * DEFENSIVE recovery coverage for schema-admissible NULL `deadlineAt`
+     * rows — NOT evidence of a Phase-1 timing mode in which active attempts
+     * normally carry a NULL deadline. The reachable-domain invariant
+     * (ACTIVE-DEADLINE-001) is that every protocol-reachable active attempt
+     * has a non-null `deadlineAt`; ordinary production always writes one at
+     * attempt creation. Discovery therefore agrees with the canonical
+     * `isAttemptDeadlineExpired` seam over BOTH domains so that a legacy /
+     * corrupt / historical NULL row whose exam window has closed cannot stay
+     * active forever — but that row is a defensive-recovery state, not a
+     * valid protocol timing state.
      *
      * The OR-with-exam-closeAt arm also catches an attempt whose per-attempt
      * deadlineAt is still in the future but whose exam window has closed — the

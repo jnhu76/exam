@@ -32,8 +32,11 @@ const SYSTEM_ACTOR_ID = SYSTEM_ACTOR_IDS.DeadlineScanner;
  * `autoSubmitAndGrade`. A candidate MUST NOT be auto-submitted without that
  * under-lock canonical recheck.
  *
- * Discovery is complete over the scanner-eligible domain (P0-C): NULL
- * per-attempt deadlines are candidates once `exam.closeAt <= now`.
+ * Discovery is complete over the scanner-eligible domain (P0-C coverage):
+ * NULL per-attempt deadlines are candidates once `exam.closeAt <= now`. Per
+ * P0-C1 this NULL coverage is DEFENSIVE recovery over the schema-admissible
+ * NULL domain — reachable active attempts always carry a non-null
+ * `deadlineAt` (invariant ACTIVE-DEADLINE-001) — not a Phase-1 timing mode.
  */
 export interface DeadlineCandidate {
   id: string;
@@ -64,10 +67,10 @@ export const deadlineScannerMetrics = {
  * Iterates DB-discovered candidates and invokes `onCandidate` for each.
  *
  * The candidate set is produced by `listDeadlineCandidates` (DERIVED discovery
- * predicate, exact over the FULL scanner-eligible domain including NULL
- * per-attempt deadlines under the P0-C exam-close-only semantic). This
- * function performs NO in-memory expiry filtering — there is no second
- * competing authority. The
+ * predicate, exact over the FULL scanner-eligible domain — reachable non-NULL
+ * `deadlineAt` rows PLUS the defensive NULL domain where
+ * EffectiveDeadline = exam.closeAt per P0-C1). This function performs NO
+ * in-memory expiry filtering — there is no second competing authority. The
  * authoritative expiry decision lives in `autoSubmitAndGrade`, which re-checks
  * the canonical `isAttemptDeadlineExpired` seam under `Attempt FOR UPDATE` +
  * `Exam FOR UPDATE`. A `false` return from `onCandidate` (candidate was not
@@ -237,10 +240,10 @@ export async function scanDatabaseForExpiredAttempts(
     const ctx = createSystemContext(organization.id);
     const attemptRepo = createAttemptRepo(db);
     // DERIVED discovery predicate (exact over the full scanner-eligible
-    // domain, including NULL per-attempt deadlines under the P0-C
-    // exam-close-only semantic). The authoritative decision is the under-lock
-    // canonical recheck in autoSubmitAndGrade — candidate membership never
-    // submits directly.
+    // domain — reachable non-NULL deadlineAt rows plus the defensive NULL
+    // domain per P0-C1, where NULL => exam.closeAt). The authoritative
+    // decision is the under-lock canonical recheck in autoSubmitAndGrade —
+    // candidate membership never submits directly.
     const candidates = await attemptRepo.listDeadlineCandidates(ctx, now);
 
     const result = await scanDeadlineCandidates(

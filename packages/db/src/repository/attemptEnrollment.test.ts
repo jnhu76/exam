@@ -461,18 +461,22 @@ describe("attemptRepo custom methods", () => {
       expect(found.some((a) => a.enrollmentId === enrW.id)).toBe(true);
     });
 
-    // T6 (P0-C global completeness): NULL per-attempt deadline attempts have
-    // EffectiveDeadline = exam.closeAt. Discovery MUST select them once the
-    // exam window closes, so CanonicalExpired <=> ScannerCandidate holds over
-    // the full scanner-eligible domain (including NULL per-attempt deadlines).
-    it("returns NULL-deadline attempts once exam.closeAt <= now (P0-C exam-close-only semantic)", async () => {
+    // T6 (P0-C1 defensive recovery coverage): NULL per-attempt deadline
+    // attempts are schema-admissible but protocol-unreachable
+    // (ACTIVE-DEADLINE-001). The defensive fallback gives them
+    // EffectiveDeadline = exam.closeAt, so discovery MUST select them once the
+    // exam window closes — CanonicalExpired <=> ScannerCandidate over the full
+    // scanner-eligible domain (reachable + defensive NULL). This is recovery
+    // coverage, not a Phase-1 timing mode.
+    it("returns NULL-deadline attempts once exam.closeAt <= now (P0-C1 defensive recovery coverage)", async () => {
       const orgN = randomUUID();
       const idsN = makeIds();
       const ctxN = createContext(orgN);
       await seedBaseData(db, orgN, idsN);
-      // Close the exam window. Under the P0-C semantic a NULL per-attempt
-      // deadline falls back to exam.closeAt, so this attempt is canonically
-      // expired and MUST be a scanner candidate.
+      // Close the exam window. Under the defensive fallback a NULL per-attempt
+      // deadline falls back to exam.closeAt, so this (protocol-unreachable)
+      // attempt is canonically expired and MUST be a scanner candidate so it
+      // cannot stay active forever.
       await db
         .update(schema.exams)
         .set({ closeAt: new Date(Date.now() - 60_000) })
@@ -502,10 +506,11 @@ describe("attemptRepo custom methods", () => {
       expect(found.some((a) => a.enrollmentId === enrN.id)).toBe(true);
     });
 
-    // T6b (P0-C negative): NULL-deadline attempt whose exam window is still
-    // OPEN is NOT canonically expired (EffectiveDeadline = closeAt > now) and
-    // therefore MUST NOT be a scanner candidate.
-    it("does NOT return NULL-deadline attempts while exam.closeAt > now", async () => {
+    // T6b (P0-C1 defensive recovery, negative): NULL-deadline attempt whose
+    // exam window is still OPEN is NOT canonically expired via the defensive
+    // fallback (EffectiveDeadline = closeAt > now) and therefore MUST NOT be a
+    // scanner candidate.
+    it("does NOT return NULL-deadline attempts while exam.closeAt > now (P0-C1 defensive recovery, negative)", async () => {
       const orgF = randomUUID();
       const idsF = makeIds();
       const ctxF = createContext(orgF);

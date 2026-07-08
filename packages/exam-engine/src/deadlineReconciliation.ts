@@ -33,12 +33,28 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  * existing fields, no new deadline model (L0 §5.1). A null attempt deadline
  * falls back to the exam close.
  *
+ * REACHABILITY BOUNDARY (P0-C1): the NULL `attempt.deadlineAt` branch is a
+ * DEFENSIVE recovery over the schema-admissible NULL domain, NOT a normative
+ * Phase-1 timing mode. The Phase-1 `timed_window` protocol invariant is:
+ *
+ *   ProtocolReachable(a) AND Active(a)  =>  a.deadlineAt != NULL
+ *
+ * because every ordinary production active-Attempt writer
+ * (`startOrRestoreAttempt` via `calculateDeadlineAt`, `extendAttemptTime`)
+ * writes a non-null `deadlineAt`, and no transition into `in_progress`/
+ * `disrupted` introduces NULL (`restoreAttempt` only preserves it). The
+ * fallback therefore covers schema-admissible but protocol-unreachable
+ * legacy / corrupt / historical NULL rows; it does not declare NULL a valid
+ * protocol timing state. See `docs/phase3/exam-protocol.md` §5.1 for the
+ * reachable-invariant / defensive-recovery split.
+ *
  * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
  * "effective deadline" value. The scanner's DB candidate predicate is a
- * DERIVED discovery approximation (exact only on the non-NULL deadlineAt
- * domain); the authoritative expiry decision is `isAttemptDeadlineExpired`
- * below, which is the ONLY place "is this attempt expired?" is answered for
- * mutation purposes.
+ * DERIVED discovery approximation that agrees with this seam over BOTH the
+ * reachable domain (non-NULL `deadlineAt`) and the defensive NULL domain
+ * (NULL => `exam.closeAt`); the authoritative expiry decision is
+ * `isAttemptDeadlineExpired` below, which is the ONLY place "is this attempt
+ * expired?" is answered for mutation purposes.
  */
 export function computeEffectiveDeadline(
   exam: Exam,
@@ -50,6 +66,10 @@ export function computeEffectiveDeadline(
       "Exam closeAt is required for deadline computation (timed_window invariant)",
     );
   }
+  // attempt.deadlineAt == null is a defensive recovery branch: reachable
+  // active attempts always carry a non-null deadlineAt (P0-C1 invariant
+  // ACTIVE-DEADLINE-001). Falling back to exam.closeAt here lets the scanner
+  // and inline reconciliation converge on legacy/schema-admissible NULL rows.
   return attempt.deadlineAt && attempt.deadlineAt < examClose
     ? attempt.deadlineAt
     : examClose;

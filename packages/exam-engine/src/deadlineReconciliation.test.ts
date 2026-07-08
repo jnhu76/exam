@@ -619,10 +619,13 @@ describe("isAttemptDeadlineExpired (canonical expiry authority)", () => {
     ).toBe(true);
   });
 
-  // P0-C T2: computeEffectiveDeadline assigns exam.closeAt to a NULL-deadline
-  // attempt. This is the global authority for both inline reconciliation and
-  // scanner discovery (NULL DEADLINE MEANS EXAM-CLOSE-ONLY DEADLINE).
-  it("computeEffectiveDeadline returns exam.closeAt when attempt.deadlineAt is absent (P0-C)", () => {
+  // P0-C1 defensive fallback: computeEffectiveDeadline assigns exam.closeAt
+  // to a NULL-deadline attempt. This is the DEFENSIVE recovery behavior over
+  // the schema-admissible NULL domain (Active+NULL is protocol-unreachable per
+  // ACTIVE-DEADLINE-001), NOT a normative Phase-1 timing mode. The helper and
+  // scanner discovery agree on this fallback so legacy/corrupt NULL rows
+  // converge with reachable rows.
+  it("computeEffectiveDeadline returns exam.closeAt when attempt.deadlineAt is absent (P0-C1 defensive fallback)", () => {
     const exam = makeExam({ closeAt: EXAM_CLOSE });
     const attempt = makeAttempt({ status: "in_progress" });
     delete (attempt as { deadlineAt?: Date }).deadlineAt;

@@ -23,13 +23,22 @@ import { fileURLToPath } from "node:url";
 //        |
 //        +-- scanner
 //                |-- listDeadlineCandidates (DB)  DERIVED DISCOVERY PREDICATE
-//                |       exact over the FULL scanner-eligible domain incl.
-//                |       NULL per-attempt deadlines (P0-C: NULL deadline =>
-//                |       exam.closeAt); OR-with-closeAt arm allowed ONLY here
+//                |       exact over the full scanner-eligible domain: the
+//                |       reachable non-NULL deadlineAt domain PLUS the
+//                |       defensive NULL domain (NULL => exam.closeAt, P0-C1
+//                |       defensive recovery, NOT a Phase-1 timing mode);
+//                |       OR-with-closeAt arm allowed ONLY here
 //                +-- autoSubmitAndGrade (tx)
 //                        Attempt FOR UPDATE -> Exam FOR UPDATE ->
 //                        canonical isAttemptDeadlineExpired recheck ->
 //                        submitAttempt iff expired
+//
+// REACHABILITY BOUNDARY (P0-C1): two separate invariants are guarded —
+//   1. ordinary active-Attempt creation paths establish a non-null
+//      deadlineAt (reachable-state safety invariant ACTIVE-DEADLINE-001);
+//   2. the canonical deadline helper and scanner discovery AGREE on
+//      defensive NULL fallback handling (robustness, not protocol semantics).
+// These are NOT collapsed into "NULL is a valid protocol timing state".
 //
 // It scans SOURCE TEXT (not tests) and fails when:
 //  (a) more than one `computeEffectiveDeadline` definition exists,
