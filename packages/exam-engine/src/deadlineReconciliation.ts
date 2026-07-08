@@ -32,6 +32,13 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  * `effectiveDeadline = min(exam.closeAt, attempt.deadlineAt)` — derived from
  * existing fields, no new deadline model (L0 §5.1). A null attempt deadline
  * falls back to the exam close.
+ *
+ * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the
+ * "effective deadline" value. The scanner's DB candidate predicate is a
+ * DERIVED discovery approximation (exact only on the non-NULL deadlineAt
+ * domain); the authoritative expiry decision is `isAttemptDeadlineExpired`
+ * below, which is the ONLY place "is this attempt expired?" is answered for
+ * mutation purposes.
  */
 export function computeEffectiveDeadline(
   exam: Exam,
@@ -46,6 +53,25 @@ export function computeEffectiveDeadline(
   return attempt.deadlineAt && attempt.deadlineAt < examClose
     ? attempt.deadlineAt
     : examClose;
+}
+
+/**
+ * Canonical "is this attempt past its effective deadline?" decision.
+ *
+ * `now >= computeEffectiveDeadline(exam, attempt)`. This is the SOLE
+ * authoritative expiry seam for any code path that mutates attempt state on
+ * deadline (inline reconciliation AND the scanner under-lock recheck). Both
+ * the candidate path and the scanner MUST call this — never re-derive
+ * `deadlineAt <= now || closeAt <= now` inline.
+ *
+ * @throws {ValidationError} if `exam.closeAt` is null (timed_window invariant).
+ */
+export function isAttemptDeadlineExpired(
+  exam: Exam,
+  attempt: ExamAttempt,
+  now: Date,
+): boolean {
+  return now.getTime() >= computeEffectiveDeadline(exam, attempt).getTime();
 }
 
 /**
@@ -105,12 +131,12 @@ export async function ensureAttemptDeadlineReconciled(
     throw new NotFoundError("Exam not found");
   }
 
-  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
-
-  // Not expired yet — nothing to reconcile.
-  if (now.getTime() < effectiveDeadline.getTime()) {
+  // Canonical expiry decision. The inline reconciliation path and the scanner
+  // under-lock recheck both go through this single seam — never re-derive.
+  if (!isAttemptDeadlineExpired(exam, attempt, now)) {
     return attempt;
   }
+  const effectiveDeadline = computeEffectiveDeadline(exam, attempt);
 
   // Lazy inline submit-and-grade using effectiveDeadline as the submit time,
   // so submittedAt = effectiveDeadline (the business deadline), not the

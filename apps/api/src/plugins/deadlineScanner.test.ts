@@ -1,181 +1,52 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  selectExpiredAttempts,
-  scanExpiredAttempts,
-  scanDatabaseForExpiredAttempts,
-  type ExpiredAttemptCandidate,
+  scanDeadlineCandidates,
+  type DeadlineCandidate,
 } from "./deadlineScanner.js";
 
-function makeAttempt(
-  overrides: Partial<ExpiredAttemptCandidate>,
-): ExpiredAttemptCandidate {
+function makeCandidate(
+  overrides: Partial<DeadlineCandidate>,
+): DeadlineCandidate {
   return {
     id: "att-1",
     status: "in_progress",
-    deadlineAt: new Date("2025-01-01T11:00:00Z"),
     organizationId: "org-1",
     ...overrides,
   };
 }
 
-describe("deadline scanner — selectExpiredAttempts", () => {
-  it("selects in_progress attempt whose deadline has passed", () => {
-    const now = new Date("2025-01-01T11:30:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({
-          id: "att-1",
-          status: "in_progress",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-      ],
-      now,
-    );
+// NOTE: there is deliberately NO "selectExpiredAttempts" / in-memory expiry
+// filter test here. That function was removed — the DB query
+// (listDeadlineCandidates) is the sole discovery authority, and the under-lock
+// canonical recheck in autoSubmitAndGrade is the sole mutation authority.
+// These tests cover ONLY the pure iterator contract of scanDeadlineCandidates.
 
-    expect(selected.map((a) => a.id)).toEqual(["att-1"]);
-  });
-
-  it("selects disrupted attempt whose deadline has passed", () => {
-    const now = new Date("2025-01-01T11:30:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({
-          id: "att-2",
-          status: "disrupted",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-      ],
-      now,
-    );
-
-    expect(selected.map((a) => a.id)).toEqual(["att-2"]);
-  });
-
-  it("selects attempt exactly at deadline (now === deadlineAt)", () => {
-    const now = new Date("2025-01-01T11:00:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({
-          id: "att-3",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-      ],
-      now,
-    );
-
-    expect(selected.map((a) => a.id)).toEqual(["att-3"]);
-  });
-
-  it("does NOT select in_progress attempt whose deadline has not passed", () => {
-    const now = new Date("2025-01-01T11:00:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({
-          id: "att-4",
-          status: "in_progress",
-          deadlineAt: new Date("2025-01-01T12:00:00Z"),
-        }),
-      ],
-      now,
-    );
-
-    expect(selected).toHaveLength(0);
-  });
-
-  it("does NOT select submitted / grading / graded / voided attempts (idempotent skip)", () => {
-    const now = new Date("2025-01-01T11:30:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({ id: "s", status: "submitted" }),
-        makeAttempt({ id: "g1", status: "grading" }),
-        makeAttempt({ id: "g2", status: "graded" }),
-        makeAttempt({ id: "v", status: "voided" }),
-      ],
-      now,
-    );
-
-    expect(selected).toHaveLength(0);
-  });
-
-  it("does NOT select attempts without a deadline", () => {
-    const now = new Date("2025-01-01T11:30:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({
-          id: "att-5",
-          status: "in_progress",
-          deadlineAt: null,
-        }),
-      ],
-      now,
-    );
-
-    expect(selected).toHaveLength(0);
-  });
-
-  it("selects multiple expired attempts from a mixed list", () => {
-    const now = new Date("2025-01-01T12:00:00Z");
-    const selected = selectExpiredAttempts(
-      [
-        makeAttempt({
-          id: "exp-1",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-        makeAttempt({
-          id: "live-1",
-          deadlineAt: new Date("2025-01-01T13:00:00Z"),
-        }),
-        makeAttempt({
-          id: "exp-2",
-          status: "disrupted",
-          deadlineAt: new Date("2025-01-01T11:30:00Z"),
-        }),
-        makeAttempt({ id: "graded-1", status: "graded" }),
-      ],
-      now,
-    );
-
-    expect(selected.map((a) => a.id).sort()).toEqual(["exp-1", "exp-2"]);
-  });
-});
-
-describe("deadline scanner — scanExpiredAttempts", () => {
-  it("invokes the submit callback for each expired attempt and returns counts", async () => {
+describe("deadline scanner — scanDeadlineCandidates (iterator)", () => {
+  it("invokes the callback for each candidate and returns submitted count", async () => {
     const now = new Date("2025-01-01T11:30:00Z");
     const submittedIds: string[] = [];
-    const onExpired = vi.fn(async (id: string) => {
+    const onCandidate = vi.fn(async (id: string) => {
       submittedIds.push(id);
     });
 
-    const result = await scanExpiredAttempts(
+    const result = await scanDeadlineCandidates(
       [
-        makeAttempt({
-          id: "exp-1",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-        makeAttempt({
-          id: "exp-2",
-          status: "disrupted",
-          deadlineAt: new Date("2025-01-01T11:10:00Z"),
-        }),
-        makeAttempt({
-          id: "live-1",
-          deadlineAt: new Date("2025-01-01T13:00:00Z"),
-        }),
+        makeCandidate({ id: "exp-1" }),
+        makeCandidate({ id: "exp-2", status: "disrupted" }),
       ],
       now,
-      onExpired,
+      onCandidate,
     );
 
     expect(result.submittedCount).toBe(2);
     expect(submittedIds.sort()).toEqual(["exp-1", "exp-2"]);
-    expect(onExpired).toHaveBeenCalledTimes(2);
+    expect(onCandidate).toHaveBeenCalledTimes(2);
   });
 
-  it("logs and continues when submit fails for one attempt (retry next scan)", async () => {
+  it("logs and continues when submit fails for one candidate (retry next scan)", async () => {
     const now = new Date("2025-01-01T11:30:00Z");
     const submittedIds: string[] = [];
-    const onExpired = vi.fn(async (id: string) => {
+    const onCandidate = vi.fn(async (id: string) => {
       if (id === "exp-fail") {
         throw new Error("transient db error");
       }
@@ -183,19 +54,10 @@ describe("deadline scanner — scanExpiredAttempts", () => {
     });
     const onError = vi.fn();
 
-    const result = await scanExpiredAttempts(
-      [
-        makeAttempt({
-          id: "exp-fail",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-        makeAttempt({
-          id: "exp-ok",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-      ],
+    const result = await scanDeadlineCandidates(
+      [makeCandidate({ id: "exp-fail" }), makeCandidate({ id: "exp-ok" })],
       now,
-      onExpired,
+      onCandidate,
       { onError },
     );
 
@@ -206,76 +68,56 @@ describe("deadline scanner — scanExpiredAttempts", () => {
     expect(onError.mock.calls[0]![0]).toBe("exp-fail");
   });
 
-  it("returns zero counts when no attempts are expired", async () => {
+  it("returns zero counts when there are no candidates", async () => {
     const now = new Date("2025-01-01T11:00:00Z");
-    const onExpired = vi.fn();
+    const onCandidate = vi.fn();
 
-    const result = await scanExpiredAttempts(
+    const result = await scanDeadlineCandidates([], now, onCandidate);
+
+    expect(result.submittedCount).toBe(0);
+    expect(result.failedCount).toBe(0);
+    expect(onCandidate).not.toHaveBeenCalled();
+  });
+
+  it("does NOT increment submittedCount when onCandidate returns false (under-lock no-op)", async () => {
+    // T7 contract at the iterator level: a candidate that returns false from
+    // onCandidate (autoSubmitAndGrade found it not-expired under lock) must
+    // not be counted as a submission. The authoritative skip happens inside
+    // autoSubmitAndGrade; the DB-backed linearization regression is in the
+    // integration test (deadline-authority.structural.test.ts).
+    const now = new Date("2025-01-01T11:30:00Z");
+    const onCandidate = vi.fn(async () => false);
+
+    const result = await scanDeadlineCandidates(
       [
-        makeAttempt({
-          id: "live-1",
-          deadlineAt: new Date("2025-01-01T13:00:00Z"),
-        }),
+        makeCandidate({ id: "noop-1" }),
+        makeCandidate({ id: "noop-2", status: "disrupted" }),
       ],
       now,
-      onExpired,
+      onCandidate,
     );
 
     expect(result.submittedCount).toBe(0);
     expect(result.failedCount).toBe(0);
-    expect(onExpired).not.toHaveBeenCalled();
+    expect(onCandidate).toHaveBeenCalledTimes(2);
   });
 
-  it("does NOT increment submittedCount when onExpired returns false (no-op race)", async () => {
+  it("increments submittedCount when onCandidate returns true or void", async () => {
     const now = new Date("2025-01-01T11:30:00Z");
-    const onExpired = vi.fn(async () => false);
-
-    const result = await scanExpiredAttempts(
-      [
-        makeAttempt({
-          id: "noop-1",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-        makeAttempt({
-          id: "noop-2",
-          status: "disrupted",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-      ],
-      now,
-      onExpired,
-    );
-
-    expect(result.submittedCount).toBe(0);
-    expect(result.failedCount).toBe(0);
-    expect(onExpired).toHaveBeenCalledTimes(2);
-  });
-
-  it("increments submittedCount when onExpired returns true or void", async () => {
-    const now = new Date("2025-01-01T11:30:00Z");
-    const onExpired = vi.fn(async (id: string) => {
+    const onCandidate = vi.fn(async (id: string) => {
       if (id === "ret-true") return true;
       if (id === "ret-void") return undefined;
       return false;
     });
 
-    const result = await scanExpiredAttempts(
+    const result = await scanDeadlineCandidates(
       [
-        makeAttempt({
-          id: "ret-true",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-        makeAttempt({
-          id: "ret-void",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
-        makeAttempt({
-          id: "ret-false",
-          deadlineAt: new Date("2025-01-01T11:00:00Z"),
-        }),
+        makeCandidate({ id: "ret-true" }),
+        makeCandidate({ id: "ret-void" }),
+        makeCandidate({ id: "ret-false" }),
       ],
       now,
-      onExpired,
+      onCandidate,
     );
 
     expect(result.submittedCount).toBe(2);

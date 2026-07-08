@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import { getIsolatedTestDb } from "../testDb.js";
 import { schema } from "../schema/pg.js";
 import { createAttemptRepo } from "./attemptRepo.js";
@@ -239,7 +240,7 @@ describe("attemptRepo custom methods", () => {
     expect(found[0]!.attemptNo).toBe(1);
   });
 
-  describe("listExpirableByDeadline", () => {
+  describe("listDeadlineCandidates", () => {
     it("returns in_progress attempts whose deadlineAt <= before", async () => {
       const orgL = randomUUID();
       const idsL = makeIds();
@@ -266,7 +267,7 @@ describe("attemptRepo custom methods", () => {
       });
 
       const before = new Date();
-      const found = await attemptRepo.listExpirableByDeadline(ctxL, before);
+      const found = await attemptRepo.listDeadlineCandidates(ctxL, before);
 
       expect(found.some((a) => a.enrollmentId === enrL.id)).toBe(true);
       const ours = found.find((a) => a.enrollmentId === enrL.id)!;
@@ -298,7 +299,7 @@ describe("attemptRepo custom methods", () => {
       });
 
       const before = new Date();
-      const found = await attemptRepo.listExpirableByDeadline(ctxD, before);
+      const found = await attemptRepo.listDeadlineCandidates(ctxD, before);
 
       expect(found.some((a) => a.enrollmentId === enrD.id)).toBe(true);
       const ours = found.find((a) => a.enrollmentId === enrD.id)!;
@@ -330,7 +331,7 @@ describe("attemptRepo custom methods", () => {
       });
 
       const before = new Date();
-      const found = await attemptRepo.listExpirableByDeadline(ctxF, before);
+      const found = await attemptRepo.listDeadlineCandidates(ctxF, before);
 
       expect(found.some((a) => a.enrollmentId === enrF.id)).toBe(false);
     });
@@ -381,7 +382,7 @@ describe("attemptRepo custom methods", () => {
       }
 
       const before = new Date();
-      const found = await attemptRepo.listExpirableByDeadline(ctxS, before);
+      const found = await attemptRepo.listDeadlineCandidates(ctxS, before);
       const ours = found.filter((a) => a.enrollmentId === enrS.id);
       expect(ours).toEqual([]);
     });
@@ -414,8 +415,89 @@ describe("attemptRepo custom methods", () => {
         lastActivityAt: new Date(),
       });
 
-      const found = await attemptRepo.listExpirableByDeadline(ctxB, new Date());
+      const found = await attemptRepo.listDeadlineCandidates(ctxB, new Date());
       expect(found.some((a) => a.enrollmentId === enrA.id)).toBe(false);
+    });
+
+    // T5 (NEW — the bug scenario): attempt whose per-attempt deadlineAt is in
+    // the FUTURE but whose exam window (closeAt) has CLOSED must be selected.
+    // Before the Join-Exam fix this attempt was missed by the scanner.
+    it("returns attempts whose deadlineAt is future but exam.closeAt has passed (exam-window-closed)", async () => {
+      const orgW = randomUUID();
+      const idsW = makeIds();
+      const ctxW = createContext(orgW);
+      // Seed with a CLOSED exam window (closeAt in the past).
+      await seedBaseData(db, orgW, idsW);
+      await db
+        .update(schema.exams)
+        .set({ closeAt: new Date(Date.now() - 60_000) })
+        .where(eq(schema.exams.id, idsW.examId));
+      const enrW = await enrollmentRepo.create(ctxW, {
+        examId: idsW.examId,
+        candidateId: idsW.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      // Per-attempt deadline is still in the FUTURE.
+      await attemptRepo.create(ctxW, {
+        examId: idsW.examId,
+        enrollmentId: enrW.id,
+        candidateId: idsW.candidateId,
+        attemptNo: 1,
+        status: "in_progress",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(Date.now() - 3600_000),
+        deadlineAt: new Date(Date.now() + 3600_000),
+        lastActivityAt: new Date(),
+      });
+
+      const before = new Date();
+      const found = await attemptRepo.listDeadlineCandidates(ctxW, before);
+
+      // Canonical expiry = min(closeAt past, deadlineAt future) = closeAt past
+      // => expired. Discovery predicate (deadlineAt IS NOT NULL AND
+      // (deadlineAt<=now OR closeAt<=now)) must select it.
+      expect(found.some((a) => a.enrollmentId === enrW.id)).toBe(true);
+    });
+
+    // T6 (carve-out preserved): NULL per-attempt deadline attempts are NOT
+    // selected by the discovery query (P0-C intentionally open; reconciled
+    // lazily on candidate access instead).
+    it("does NOT return attempts whose deadlineAt is NULL (NULL carve-out)", async () => {
+      const orgN = randomUUID();
+      const idsN = makeIds();
+      const ctxN = createContext(orgN);
+      await seedBaseData(db, orgN, idsN);
+      // Close the exam window so the only thing keeping it out is the
+      // `deadlineAt IS NOT NULL` arm.
+      await db
+        .update(schema.exams)
+        .set({ closeAt: new Date(Date.now() - 60_000) })
+        .where(eq(schema.exams.id, idsN.examId));
+      const enrN = await enrollmentRepo.create(ctxN, {
+        examId: idsN.examId,
+        candidateId: idsN.candidateId,
+        status: "started",
+        attemptCount: 1,
+      });
+      await attemptRepo.create(ctxN, {
+        examId: idsN.examId,
+        enrollmentId: enrN.id,
+        candidateId: idsN.candidateId,
+        attemptNo: 1,
+        status: "in_progress",
+        questionSnapshot: [],
+        answers: [],
+        startedAt: new Date(Date.now() - 3600_000),
+        deadlineAt: null,
+        lastActivityAt: new Date(),
+      });
+
+      const before = new Date();
+      const found = await attemptRepo.listDeadlineCandidates(ctxN, before);
+
+      expect(found.some((a) => a.enrollmentId === enrN.id)).toBe(false);
     });
   });
 
