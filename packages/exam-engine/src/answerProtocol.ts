@@ -403,7 +403,9 @@ export async function saveAnswer(
   // the Save Answer command itself must be illegal. This internalizes the
   // invariant the old route owned (the route's `.some(...)` guard is removed).
   // Preserved error semantics: ValidationError, matching the old route throw.
-  const isMember = attempt.questionSnapshot.some(
+  // Defensive guard: questionSnapshot may be null/undefined on legacy rows.
+  const snapshot = attempt.questionSnapshot ?? [];
+  const isMember = snapshot.some(
     (q) => q.originalQuestionId === request.questionId,
   );
   if (!isMember) {
