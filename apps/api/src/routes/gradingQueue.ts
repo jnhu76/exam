@@ -187,6 +187,11 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
             type: q.type,
             content: q.content,
             maxScore: q.score,
+            // Frozen grading metadata from QuestionSnapshot (never JOIN live
+            // questions). standardAnswer is the applicable reference answer;
+            // rubric is the frozen scoring guide for text_response questions.
+            standardAnswer: q.standardAnswer ?? null,
+            rubric: q.rubric ?? null,
             candidateAnswer: entry.candidateAnswer ?? null,
             entry:
               entry.status === "completed_manual"

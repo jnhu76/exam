@@ -481,6 +481,133 @@ describe("candidateAnswer rendering", () => {
   });
 });
 
+describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
+  const baseData = {
+    attemptId: "att-1",
+    examId: "exam-1",
+    examTitle: "期末考试",
+    candidateId: "c1",
+    candidateName: "张三",
+    gradingStatus: "pending_manual",
+  };
+
+  it("renders the frozen standardAnswer and rubric as plain text for text_response", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          standardAnswer: "参考答案第一行\n参考答案第二行",
+          rubric: "评分细则：\n1. 逻辑清晰\n2. 概念准确",
+          candidateAnswer: "我的回答",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    // textContent collapses newlines to spaces; verify the literal text is
+    // present, and rely on the whitespace-pre-wrap class assertion (separate
+    // test) to prove the line breaks are visually preserved.
+    const rubricEl = screen.getByTestId("grading-rubric-q1");
+    expect(rubricEl).toHaveTextContent("评分细则：");
+    expect(rubricEl).toHaveTextContent("1. 逻辑清晰");
+    expect(rubricEl).toHaveTextContent("2. 概念准确");
+    expect(rubricEl).toHaveClass("whitespace-pre-wrap");
+
+    const refEl = screen.getByTestId("grading-standard-answer-q1");
+    expect(refEl).toHaveTextContent("参考答案第一行");
+    expect(refEl).toHaveTextContent("参考答案第二行");
+    expect(refEl).toHaveClass("whitespace-pre-wrap");
+  });
+
+  it("shows not-set labels when standardAnswer and rubric are null", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          standardAnswer: null,
+          rubric: null,
+          candidateAnswer: "我的回答",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-rubric-q1")).toHaveTextContent("未设置");
+    expect(screen.getByTestId("grading-standard-answer-q1")).toHaveTextContent(
+      "未设置",
+    );
+  });
+
+  it("renders rubric and standardAnswer as literal text (no HTML execution)", async () => {
+    delete (window as unknown as Record<string, unknown>).__xssMeta;
+    const unsafeRubric =
+      "<script>window.__xssMeta = true</script><b>rubric</b>";
+    const unsafeRef = "<script>window.__xssMeta = true</script><b>ref</b>";
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          standardAnswer: unsafeRef,
+          rubric: unsafeRubric,
+          candidateAnswer: "我的回答",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const rubricEl = screen.getByTestId("grading-rubric-q1");
+    expect(rubricEl).toHaveTextContent(unsafeRubric);
+    expect(rubricEl.querySelector("script")).toBeNull();
+    expect(rubricEl.querySelector("b")).toBeNull();
+    expect(
+      (window as unknown as Record<string, unknown>).__xssMeta,
+    ).toBeUndefined();
+  });
+
+  it("preserves multiline whitespace-pre-wrap on rubric and standardAnswer", async () => {
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          standardAnswer: "行1\n行2\n行3",
+          rubric: "细则1\n细则2",
+          candidateAnswer: "答案",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+    expect(screen.getByTestId("grading-rubric-q1")).toHaveClass(
+      "whitespace-pre-wrap",
+    );
+    expect(screen.getByTestId("grading-standard-answer-q1")).toHaveClass(
+      "whitespace-pre-wrap",
+    );
+  });
+});
+
 describe("validateScore", () => {
   it("returns null for valid score", () => {
     expect(validateScore(5, 10)).toBeNull();

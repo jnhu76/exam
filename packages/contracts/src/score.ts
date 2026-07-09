@@ -105,6 +105,17 @@ export const GradingDetailsQuestionSchema = z.object({
   ]),
   content: z.string(),
   maxScore: z.number(),
+  /**
+   * Frozen reference answer from the QuestionSnapshot (not the live question
+   * row). Null when the text_response had no standardAnswer at freeze time.
+   * Grader basis only — never surfaced to candidates via CandidateTakeSnapshot.
+   */
+  standardAnswer: z.unknown().nullable(),
+  /**
+   * Frozen scoring rubric from the QuestionSnapshot (text_response grading
+   * basis). Null for objective questions or snapshots without a rubric.
+   */
+  rubric: z.string().nullable(),
   /** The candidate's submitted answer for this question, or null if unanswered. */
   candidateAnswer: z.unknown().nullable(),
   entry: z

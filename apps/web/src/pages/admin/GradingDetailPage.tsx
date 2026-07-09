@@ -48,6 +48,18 @@ function formatAnswer(answer: unknown): string {
   return String(answer);
 }
 
+/**
+ * Formats the frozen standardAnswer for the grader. A null/empty reference
+ * answer renders as "未设置" (not set) — distinct from the candidate's
+ * "未作答" (unanswered) label, because a missing reference answer is a
+ * question-authoring state, not a candidate omission.
+ */
+function formatStandardAnswer(answer: unknown): string {
+  if (answer === undefined || answer === null || answer === "")
+    return i18n.t("admin.gradingDetail.format.notSet" as never);
+  return formatAnswer(answer);
+}
+
 interface GradingEntry {
   score: number;
   comment: string;
@@ -60,6 +72,8 @@ interface GradingQuestion {
   type: string;
   content: string;
   maxScore: number;
+  standardAnswer: unknown;
+  rubric: string | null;
   candidateAnswer: unknown;
   entry: GradingEntry | null;
 }
@@ -212,6 +226,25 @@ export function GradingDetailPage() {
                 className="min-h-16 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
               >
                 {formatAnswer(q.candidateAnswer)}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("admin.gradingDetail.question.standardAnswer")}</Label>
+              <div
+                data-testid={`grading-standard-answer-${q.questionId}`}
+                className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+              >
+                {formatStandardAnswer(q.standardAnswer)}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("admin.gradingDetail.question.rubric")}</Label>
+              <div
+                data-testid={`grading-rubric-${q.questionId}`}
+                className="min-h-12 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+              >
+                {q.rubric ||
+                  i18n.t("admin.gradingDetail.format.notSet" as never)}
               </div>
             </div>
             <div className="space-y-2">

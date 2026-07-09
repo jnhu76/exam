@@ -1596,6 +1596,8 @@ const zhCN = {
         maxScore: "满分: {{score}}",
         subjective: "主观题",
         candidateAnswer: "考生作答",
+        standardAnswer: "参考答案",
+        rubric: "评分细则",
         scoreLabel: "分数",
         commentLabel: "评语（可选）",
         commentPlaceholder: "输入评语...",
@@ -1611,6 +1613,7 @@ const zhCN = {
         unanswered: "未作答",
         correct: "正确",
         incorrect: "错误",
+        notSet: "未设置",
       },
       toast: {
         fullyGraded: "评分已完成",

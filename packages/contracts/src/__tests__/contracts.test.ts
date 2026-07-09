@@ -975,6 +975,9 @@ describe("grading detail contracts", () => {
     type: "fill_blank" as const,
     content: "请简述光合作用的过程",
     maxScore: 10,
+    // P3-MOD-P1-1: frozen grading metadata projected from QuestionSnapshot.
+    standardAnswer: "参考答案：光反应与暗反应",
+    rubric: "按逻辑完整性给分",
     candidateAnswer: "光合作用是植物利用光能...",
     entry: null,
   };
@@ -1027,6 +1030,16 @@ describe("grading detail contracts", () => {
       questionId: "q1",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("GradingDetailsQuestionSchema accepts null standardAnswer and rubric (text_response without reference answer)", () => {
+    const result = GradingDetailsQuestionSchema.safeParse({
+      ...validQuestion,
+      type: "text_response",
+      standardAnswer: null,
+      rubric: null,
+    });
+    expect(result.success).toBe(true);
   });
 
   it("GradingDetailsQuestionSchema rejects invalid gradedAt datetime", () => {
