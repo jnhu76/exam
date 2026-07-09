@@ -6,13 +6,13 @@
 >
 > **协议优先（2026-07-03 修订）：** 模块队列在 P0 之前新增 **P-1 考试协议与后端状态模型收敛**（P3-PROTO-0/1/2）。P-1 是 P0 前端运行时的硬前置：协议矩阵与后端一致性测试未完成前，不得推进前端作答状态机（P3-FSM-0）或主观题运行时。后端是业务真相源；前端只消费后端真相字段。
 
-> **执行基线（2026-07-07）：**
+> **执行基线（2026-07-09）：**
 >
 > - P3-PROTO-0/1/2、P3-L0-1~5 已完成。
-> - P3-L0-2 的后续 corrective closure（2C/2D/2E）已完成，并建立 materialized grading workset、durable manual queue、pending-only manual completion、grading-entry-only terminal aggregation。
+> - P3-L0-2 的后续 corrective closure（2C/2D/2E）已完成，并建立 materialized grading workset、durable manual queue、pending-only manual completion、grading-entry-only terminal score authority。
+> - **P3-PROTO-0C — Accepted Grading Model Mirror Closure 已 CLOSED / DONE**（corrective history）：把 `exam-protocol.md` 中尚未吸收 P3-L0-2E 的旧 grading 语义镜像到已接受模型。其历史作业卡与完成标准保留为建设历史，不再作为 current gate 或 pending prerequisite。
 > - P3-FSM-0 与 P3-MOD-P0-1~4 已完成；P0 已 CLOSED。
-> - 当前活动模块是 P1。P3-MOD-P1-1 已完成 rebaseline，确认 grading detail 缺少 frozen `standardAnswer` / `rubric`。
-> - 在继续 P1 前，必须先完成 **P3-PROTO-0C — Accepted Grading Model Mirror Closure**，把 `exam-protocol.md` 中尚未吸收 P3-L0-2E 的旧 grading 语义镜像到已接受模型。
+> - **当前活动模块是 P1，P3-MOD-P1-1 = CURRENT。** P3-MOD-P1-1 已完成 rebaseline，确认一处窄生产缺陷：grading detail 漏投影冻结 `standardAnswer` / `rubric`（两者已在冻结 QuestionSnapshot 中存在）。该缺陷是 P1-1 自身所有权的修正工作，不是未决前置。P3-MOD-P1-2 = NEXT。
 >
 > **Corrective ownership rule：** 后置模块暴露历史协议/依赖缺口时，回到真实 owner 做 corrective closure；闭包完成后必须返回原 Job Card。不得在后置模块增加 compatibility workaround。
 
@@ -116,10 +116,10 @@ GradingStatus (independent dimension):
   pending_manual   — attempt-level manual grading lifecycle hold
   fully_graded     — manual/mixed grading complete
 
-Completion paths:
-  objective-only exam:  由 current production terminal path + P3-PROTO-0C 镜像；最终 score authority 必须是 grading entries
-  manual-only exam:     submitted (gradingStatus=pending_manual) → graded (after all manual entries complete)
-  mixed exam:           submitted (gradingStatus=pending_manual) → graded (completed_auto + completed_manual entries aggregate)
+Completion paths（auto/manual 都委托给同一 canonical `finalizeTerminalGrading` closure；closure 内部用 `aggregateGradingEntries` 作聚合 seam；terminal score source = `attempt_grading_entries`）:
+  objective-only exam:  in_progress → submitted (gradingStatus=auto_graded) → graded；由 canonical terminal closure 投影
+  manual-only exam:     submitted (gradingStatus=pending_manual) → graded (after all manual entries complete → finalizeTerminalGrading)
+  mixed exam:           submitted (gradingStatus=pending_manual) → graded (completed_auto + completed_manual entries → finalizeTerminalGrading 聚合)
 
 Answer:
   answers            draft, mutable before submit
@@ -130,7 +130,7 @@ Result:
   answerVisibility   standardAnswer/rubric visibility (hidden | visible)
 ```
 
-**已接受的 grading workset 修订（P3-L0-2E）：**
+**已接受的 grading workset 修订（P3-L0-2E + P3-FORMAL-P0-A）：**
 
 ```text
 submitted_answers + frozen QuestionSnapshot
@@ -139,9 +139,13 @@ attempt_grading_entries
         ├── completed_auto
         └── pending_manual → completed_manual
         ↓
-aggregateGradingEntries
+finalizeTerminalGrading        ← canonical 生产终态 closure（auto/manual 共用）
         ↓
-terminal score / gradingResult / passed
+aggregateGradingEntries        ← canonical 终态评分校验/聚合 seam（closure 内部唯一调用）
+        ↓
+canonical terminal projections
+        score / gradingResult / passed / status / gradingStatus / gradedAt
+        + enrollment finalScore / finalPassed / finalAttemptId
 ```
 
 - manual queue predicate：`grading_mode='manual' AND status='pending_manual'`
@@ -231,7 +235,7 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 | 5 | refresh after submit | GET attempt 返回 locked、answerSource='submitted' |
 | 6 | candidate cannot see score before release | 发布前考生视图不含 score |
 | 7 | candidate cannot see standardAnswer | 考生视图按 answerVisibility 剥离 standardAnswer |
-| 8 | teacher/admin grading view sees submitted answers | 评分视图从 submitted_answers 读取 |
+| 8 | teacher/admin grading view sees frozen submitted-answer truth | 评分详情 candidateAnswer 读取自物化 grading entry 的冻结 candidateAnswer（provenance = submit 时从 submitted_answers 物化）；不读 draft attempt.answers，不 JOIN live questions |
 | 9 | deadline reconciliation via take | in_progress + expired → submitted + submitted_answers 冻结 |
 | 10 | deadline reconciliation idempotent | 重复 take 不覆盖已有 submitted_answers |
 | 11 | save after deadline rejected | 过期后 save 返回错误 |
@@ -256,7 +260,7 @@ git commit -m "docs(P-1/L0): exam protocol — 21-item matrix including text_res
 | 5 | refresh after submit | `protocol-consistency.test.ts` #5 |
 | 6 | candidate cannot see score before release | `scores.test.ts:261` |
 | 7 | candidate cannot see standardAnswer | `candidate-save-submit.test.ts:188` + `protocol-consistency.test.ts` #7 |
-| 8 | grading view sees submitted answers | `gradingQueue.test.ts:728` + `protocol-consistency.test.ts` #8 |
+| 8 | grading view sees frozen submitted-answer truth | `gradingQueue.test.ts:728` + `protocol-consistency.test.ts` #8 |
 | 9 | deadline reconciliation via take | `deadline-scanner.test.ts` (scanner) |
 | 10 | deadline reconciliation idempotent | `deadline-scanner.test.ts:390` (scanner) |
 | 11 | save after deadline rejected | `candidate-save-submit.test.ts:678` + `protocol-consistency.test.ts` #11 |
@@ -353,7 +357,9 @@ git commit -m "feat(P-1/L0): CandidateTakeSnapshot endpoint with answerSource ro
 
 ---
 
-### P3-PROTO-0C：Accepted Grading Model Mirror Closure（CURRENT GATE）
+### P3-PROTO-0C：Accepted Grading Model Mirror Closure ✅ DONE
+
+> **状态：CLOSED / DONE（corrective history）。** 本卡保留为建设历史：历史目的与完成标准仍记录"为何做、验收什么"。不再作为 current gate 或 pending prerequisite——P1 不再 BLOCKED 于 PROTO-0C。
 
 **目标：** 仅修订 `docs/phase3/exam-protocol.md`，把 P3-L0-2C/2D/2E 已接受并被结构测试锁定的 grading 模型镜像回协议真相源。**这是 P1 的协议前置纠偏，不修改产品代码。**
 
@@ -473,7 +479,7 @@ git commit -m "feat(L0): schema migration — text_response type, submitted_answ
 
 **依赖：** P3-L0-1
 
-**accepted final architecture（P3-L0-2C/2D/2E 后）：**
+**accepted final architecture（P3-L0-2C/2D/2E + P3-FORMAL-P0-A 后）：**
 
 ```text
 draft answers
@@ -491,12 +497,18 @@ pending manual entries → durable PG queue
              ↓
 gradeQuestion consumes pending_manual only
              ↓
-all entries terminal
+all required grading entries terminal
              ↓
-aggregateGradingEntries
-             ↓
-score + gradingResult + passed + terminal state
+finalizeTerminalGrading   ← canonical 生产终态 closure（auto/manual 路径共用）
+        ↓
+aggregateGradingEntries   ← canonical 终态评分校验/聚合 seam（closure 内部唯一调用）
+        ↓
+canonical terminal projections
+        status / gradingStatus / score / passed / gradingResult / gradedAt
+        + enrollment 投影（finalScore / finalPassed / finalAttemptId）
 ```
+
+> **内部调用顺序（镜像 current production）：** `finalizeTerminalGrading`（`packages/exam-engine/src/grading.ts`）内部调用 `aggregateGradingEntries`（`packages/exam-engine/src/gradingWorkset.ts`）；`aggregateGradingEntries` 是 `finalizeTerminalGrading` 的**唯一**生产调用点（结构性锁：`apps/api/src/runtime/gradingArchitecture.structural.test.ts`）。`gradeQuestion`（manualGrading.ts）与 auto 路径（`finalizeGrading` / `gradeAttemptIdempotent`）都委托给 `finalizeTerminalGrading`，**不**直接调用 `aggregateGradingEntries`。
 
 **权威约束：**
 
@@ -533,8 +545,10 @@ score + gradingResult + passed + terminal state
 - manual queue from durable PG grading entries
 - repeated submit exact-validates workset；partial/mismatched workset fail closed
 - manual completion is one-way pending-only
-- pure objective and manual/mixed terminal paths share `aggregateGradingEntries`（P3-FORMAL-P0-A: 收敛到唯一 canonical terminal closure `finalizeTerminalGrading`；auto 与 manual 路径都委托给它，closure 无 auto/manual 模式参数）
-- terminal score exclusively from grading entries
+- pure-objective and manual/mixed terminal paths delegate to the same canonical `finalizeTerminalGrading` closure（P3-FORMAL-P0-A 收敛）。该 closure 用 `aggregateGradingEntries` 作为 canonical 终态评分校验/聚合 seam；closure 无 auto/manual 模式参数。
+- 终态分数源（terminal score source）exclusively = `attempt_grading_entries`
+- **不变量：** 生产终态调用方**不得**在 `finalizeTerminalGrading` 之外直接走第二条 `aggregateGradingEntries` + 终态投影路径。
+- gradingResult never scoring input
 - gradingResult never scoring input
 - no runtime fallback/dual-read/dual-write/reconstruction
 - structural + poison + score-identity tests lock the authority graph
@@ -1026,13 +1040,17 @@ git commit -m "test(P0): extend candidate happy path E2E with text_response answ
 
 ## 模块 P1 — 人工评分闭环
 
-> **协议前置：** P3-PROTO-0C 必须先完成。P1 不得依据 stale `reconcileScores` / `manual_grading_entries` / attempt-level queue inference 恢复旧 grading 模型。
+> **协议前置（已满足）：** P3-PROTO-0C 已 CLOSED / DONE。P1 不得依据 stale `reconcileScores` / `manual_grading_entries` / attempt-level queue inference 恢复旧 grading 模型。
 >
-> **当前状态：** P3-MOD-P1-1 rebaseline 已完成并 BLOCKED：grading details API/UI 丢弃 frozen `standardAnswer` 与 `rubric`。Corrective owner = P3-MOD-P1-1。
+> **当前状态：** P3-MOD-P1-1 = **CURRENT**。rebaseline 已确认一处窄生产缺陷：grading details API/UI 丢弃 frozen `standardAnswer` 与 `rubric`。该缺陷的 corrective owner = P3-MOD-P1-1 自身（非未决前置）。P3-MOD-P1-2 = NEXT。
 
 ### P3-MOD-P1-1：人工评分 API/UI 闭环修复与证明（CURRENT）
 
-**目标：** 在不改变 L0 grading authority 的前提下，补齐 grader 所需 frozen grading metadata，并证明 durable queue → frozen grading detail → pending-only score completion → grading-entry-only terminal aggregation 的 API/UI 闭环。
+**目标：** 在不改变 L0 grading authority 的前提下，补齐 grader 所需 frozen grading metadata，并证明 durable queue → frozen grading detail → pending-only score completion → canonical terminal grading closure 的 API/UI 闭环。
+>
+> **范围保持（B7）：** P1-1 不是人工评分架构重设计。当前使命 = 修复 grading-details 投影使评分者获得完整冻结评分依据，然后在**不改变 grading authority**的前提下证明既有 manual-grading closure。确认缺陷仍是：missing frozen `standardAnswer`、missing frozen `rubric`。**禁止扩展**为：新 grading engine、新 queue model、新 grading lifecycle、新 scoring reconciliation、新 re-grade policy、新 role model、result release。
+
+**类型：** 实现 + 测试 + verification proof
 
 **类型：** 实现 + 测试 + verification proof
 
@@ -1082,9 +1100,14 @@ same entry → completed_manual
         ↓
 remaining pending?
   YES → hold submitted + pending_manual
-  NO  → aggregateGradingEntries
-        ↓
-graded + fully_graded
+  NO  → finalizeTerminalGrading   ← canonical 生产终态 closure
+              ↓
+        aggregateGradingEntries   ← canonical 终态评分校验/聚合 seam（closure 内部唯一调用）
+              ↓
+        graded + fully_graded
+        + canonical terminal projections
+        (status / gradingStatus / score / passed / gradingResult / gradedAt
+         + enrollment finalScore / finalPassed / finalAttemptId)
 ```
 
 **禁止恢复的历史 seam：**
@@ -1099,6 +1122,7 @@ reconcileScores
 reconstructObjectiveScore
 persisted gradingResult wins
 fill gaps
+runtime fallback / dual-read / dual-write
 post-terminal re-grade overwrite
 ```
 
@@ -1146,7 +1170,7 @@ post-terminal re-grade overwrite
 5. **partial/final completion**
    - two manual entries: q1 complete → q2 remains pending; attempt holds submitted+pending_manual; queue count=1
    - q2 complete → both completed_manual; queue absent; attempt graded+fully_graded
-   - terminal path = `aggregateGradingEntries`
+   - canonical terminal path = `finalizeTerminalGrading`（closure 内部调用 `aggregateGradingEntries`）；terminal score source = `attempt_grading_entries`。**非回归守卫：** P1 不得直接调用 `aggregateGradingEntries` 制造第二个终态投影写入器或独立的人工终态 closure。
 
 6. **mixed score identity**
    - distinct objective/manual scores
@@ -1967,12 +1991,12 @@ git commit -m "docs(P6): Phase 3 MVP readiness closeout report"
   └── P3-MOD-P0-4  Candidate happy-path E2E                     ✅
   P0 CLOSED
 
-Corrective gate — return to protocol owner before P1
-  └── P3-PROTO-0C  Mirror accepted grading workset protocol     ← CURRENT NEXT
+Corrective gate — return to protocol owner before P1（DONE — corrective history）
+  └── P3-PROTO-0C  Mirror accepted grading workset protocol     ✅ DONE
 
-批次 2 — Manual Grading
-  ├── P3-MOD-P1-1  Manual grading API/UI closure                ← BLOCKED defect known; run after PROTO-0C
-  └── P3-MOD-P1-2  Subjective grading E2E
+批次 2 — Manual Grading（P1 ACTIVE）
+  ├── P3-MOD-P1-1  Manual grading API/UI closure                ← CURRENT（窄缺陷：漏投影 frozen standardAnswer/rubric；P1-1 自身所有权，非 BLOCKED）
+  └── P3-MOD-P1-2  Subjective grading E2E                       ← NEXT
 
 批次 3 — Authoring (P2)
   ├── P3-MOD-P2-1  Authoring UI flow audit
@@ -2003,7 +2027,7 @@ Corrective gate — return to protocol owner before P1
 **执行纪律：**
 
 - P-1/L0 与 P0 已 CLOSED；不得因为旧卡文字重新施工。
-- P3-PROTO-0C 是当前 corrective protocol gate。完成后返回 P3-MOD-P1-1。
+- P3-PROTO-0C 已 CLOSED / DONE（corrective history，不再作为 current gate）。P3-MOD-P1-1 = CURRENT；P3-MOD-P1-2 = NEXT。
 - P1 只证明 grading completion / score computed；candidate result release 属于 P3。
 - 模块顺序遵循 `plan.md`：P1 → P2 → P3。不得把 P3 result tasks 提前到 P2 authoring closure 之前。
 - P1/P2 当前验证 actor 可使用 Admin；Teacher route/capability switch 属于 P4。保留现有 tenant isolation，但不在这些卡中重设计 org model。
