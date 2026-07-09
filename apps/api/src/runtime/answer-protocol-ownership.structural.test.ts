@@ -111,7 +111,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
 
   it("the Save Answer route does NOT write the draft answers field directly", () => {
     // The route must not call `.update(` with a payload containing the draft
-    // `answers:` field (word-bounded so `submittedAnswers:` is NOT matched).
+    // `answers:` field (word-wounded so `submittedAnswers:` is NOT matched).
     // Walk each `.update(` call forward to its depth-balanced close and inspect
     // the payload for the leaked field name.
     const violations: { line: number; snippet: string }[] = [];
@@ -144,5 +144,97 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
       }
     }
     expect(violations).toEqual([]);
+  });
+
+  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the route delegates to the canonical preparation seam", () => {
+    // The route must establish the external preconditions (EA lock provenance +
+    // canonical deadline reconciliation + canonical effective deadline) via the
+    // canonical preparation seam, which mints the opaque mutation evidence
+    // saveAnswer consumes. It must NOT hand-compute the effective deadline or
+    // read attempt.deadlineAt for save legality.
+    expect(routeText).toMatch(/prepareReconciledAttemptMutation\s*\(/);
+  });
+
+  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the route does NOT own question-membership legality (P1 moved into saveAnswer)", () => {
+    // The membership `.some(...)` protocol guard over questionSnapshot is now
+    // owned by the canonical saveAnswer action (§9). The route must no longer
+    // contain it. This is the P1 ownership transfer negative lock.
+    const hits = routeLines
+      .map((line, i) => ({ line: i + 1, code: stripComments(line) }))
+      .filter(
+        (h) =>
+          /questionSnapshot\s*\.\s*some\s*\(/.test(h.code) ||
+          (/\.some\s*\(/.test(h.code) && /originalQuestionId/.test(h.code)),
+      );
+    expect(hits).toEqual([]);
+  });
+
+  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the route calls saveAnswer with the mutation context (not the old 4-arg shape)", () => {
+    // Positive lock: the route must call saveAnswer(attempts, mutationContext, …),
+    // the corrected 3-arg shape, and must not pass a bare `now` as the 4th arg.
+    expect(routeText).toMatch(/saveAnswer\s*\(/);
+    expect(routeText).toMatch(/mutationContext/);
+    // The old signature passed `now` as the last positional arg right after the
+    // request object literal close. The new signature does not. We assert the
+    // route binds mutationContext near the saveAnswer call.
+    const saveCallIdx = routeLines.findIndex((l) =>
+      /return\s+saveAnswer\s*\(/.test(stripComments(l)),
+    );
+    expect(saveCallIdx).toBeGreaterThanOrEqual(0);
+    const window = routeLines.slice(saveCallIdx, saveCallIdx + 12).join("\n");
+    expect(window).toMatch(/mutationContext/);
+  });
+
+  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the architecture lint forbids casting to ReconciledAttemptMutationContext (forgery guard)", () => {
+    // The arch-lint script (scripts/check-architecture.mjs) must contain a rule
+    // banning `as ReconciledAttemptMutationContext` in both exam-engine and the
+    // API surface, mirroring the LEA capability cast ban. This is the
+    // §13 forgery-resistance proof: the narrow opaque context cannot be forged
+    // by a production cast outside the legitimate mint authority.
+    const archScript = readFileSync(
+      resolve(REPO_ROOT, "scripts/check-architecture.mjs"),
+      "utf8",
+    );
+    // The rule text references the forbidden cast target type.
+    expect(archScript).toMatch(/ReconciledAttemptMutationContext/);
+    expect(archScript).toMatch(
+      /do not cast to ReconciledAttemptMutationContext/,
+    );
+    // The rule must be scoped to BOTH packages/exam-engine/src and apps/api/src.
+    expect(archScript).toMatch(/packages\/exam-engine\/src/);
+    expect(archScript).toMatch(/apps\/api\/src/);
+
+    // The ban regex itself must match a representative forgery shape so the
+    // guard actually rejects production casts.
+    const banRegex = /\bas\s+ReconciledAttemptMutationContext\b/;
+    expect(banRegex.test("x as ReconciledAttemptMutationContext")).toBe(true);
+    expect(
+      banRegex.test("const y = obj as ReconciledAttemptMutationContext;"),
+    ).toBe(true);
+  });
+
+  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the mutation context mint is the sole constructor (module-private symbols)", () => {
+    // The context type's provenance + affinity symbols are module-private to
+    // attemptMutationContext.ts. Only mintMutationContext (called by the
+    // preparation seam) can attach them. Confirm the mint module exports the
+    // type + consumer assertion but the symbols themselves are NOT exported.
+    const ctxModule = readFileSync(
+      resolve(REPO_ROOT, "packages/exam-engine/src/attemptMutationContext.ts"),
+      "utf8",
+    );
+    // The mint function is exported (used by the preparation seam).
+    expect(ctxModule).toMatch(/export function mintMutationContext/);
+    // The consumer affinity assertion is exported (used by saveAnswer).
+    expect(ctxModule).toMatch(/export function assertMutationContextFor/);
+    // The unique-symbol provenance/affinity tokens are module-private const
+    // (NOT exported) — they are the unforgeable brand.
+    expect(ctxModule).toMatch(
+      /const MUTATION_PROVENANCE_TOKEN:\s*unique symbol/,
+    );
+    expect(ctxModule).toMatch(/const MUTATION_AFFINITY_TOKEN:\s*unique symbol/);
+    // No `export` keyword may appear on the symbol declarations themselves.
+    const symbolExported =
+      /export\s+const\s+MUTATION_(?:PROVENANCE|AFFINITY)_TOKEN/.test(ctxModule);
+    expect(symbolExported).toBe(false);
   });
 });

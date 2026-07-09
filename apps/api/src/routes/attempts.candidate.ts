@@ -49,6 +49,7 @@ import { saveAnswer } from "@exam/exam-engine";
 import {
   ensureAttemptDeadlineReconciled,
   lockEnrollmentAndAttempt,
+  prepareReconciledAttemptMutation,
 } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
@@ -809,11 +810,6 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           throw new NotFoundError("候选人资料不存在");
         }
 
-        // P3-L0-3: lazy deadline reconciliation at save entry point. If the
-        // attempt is expired, this freezes it; the canonical saveAnswer action
-        // below then sees a submitted/graded status and returns a deterministic
-        // rejection (ATTEMPT_ALREADY_SUBMITTED / DEADLINE_EXCEEDED) instead
-        // of accepting the stale save.
         const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
@@ -823,67 +819,54 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           ctx,
         );
         // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam
-        // (Enrollment → Attempt order) and thread it into reconciliation. The
-        // canonical seam's locator read doubles as the existence check; the
-        // ownership check runs against the post-mint re-read below.
+        // (Enrollment → Attempt order). The canonical seam's locator read
+        // doubles as the existence check; the ownership check runs against the
+        // post-preparation attempt below.
         const cap = await lockEnrollmentAndAttempt(
           enrollments,
           attempts,
           attemptId,
         );
-        const lockedAttempt = await txRepo.findById(ctx, attemptId);
-        if (
-          !lockedAttempt ||
-          lockedAttempt.candidateId !== candidateProfile.id
-        ) {
-          throw new NotFoundError("尝试不存在");
-        }
-        // ensureAttemptDeadlineReconciled returns the (possibly reconciled)
-        // attempt — reuse it instead of a redundant findByIdForUpdate.
-        // The canonical saveAnswer action then sees the current status (frozen
-        // snapshot if reconciled) and returns a deterministic rejection for an
-        // expired attempt instead of accepting the stale save.
-        const currentAttempt = await ensureAttemptDeadlineReconciled(
-          exams,
-          enrollments,
-          attempts,
-          createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          ),
-          cap,
-          now,
-        );
+        // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0: the canonical preparation seam
+        // establishes the external preconditions a local Attempt mutation
+        // requires — EA lock provenance (verified against these exact repos),
+        // canonical deadline reconciliation (preserving freeze/grade behavior),
+        // and the canonical effective deadline (computeEffectiveDeadline). It
+        // mints the narrow opaque mutation evidence saveAnswer consumes. The
+        // route no longer owns question-membership legality, effective-deadline
+        // computation, or attempt.deadlineAt read-for-save — those live in
+        // saveAnswer / the preparation seam.
+        const { attempt: currentAttempt, mutationContext } =
+          await prepareReconciledAttemptMutation(
+            exams,
+            enrollments,
+            attempts,
+            createGradingWorksetRepoAdapter(
+              createAttemptGradingEntryRepo(tx),
+              ctx,
+            ),
+            cap,
+            now,
+          );
         if (currentAttempt.candidateId !== candidateProfile.id) {
           throw new NotFoundError("尝试不存在");
         }
-        if (
-          !currentAttempt.questionSnapshot.some(
-            (question) => question.originalQuestionId === questionId,
-          )
-        ) {
-          throw new ValidationError("问题不在此尝试中");
-        }
 
-        // P3-ANSWER-CLOSURE-0: the canonical Save Answer action owns load →
-        // reconstruct AnswerState → decide (processSaveAnswer) → apply → persist.
-        // The route delegates and only inspects the returned semantic result to
-        // translate it to the wire contract. It does NOT normalize persisted
-        // answers, build the clientSeqMap, construct AnswerState, or write
-        // attempt.answers itself.
-        return saveAnswer(
-          attempts,
+        // P3-ANSWER-CLOSURE-0 + PRECONDITION-CORRECTIVE-0: the canonical Save
+        // Answer action owns load → P1 membership → reconstruct AnswerState →
+        // decide (processSaveAnswer, using the canonical effective deadline
+        // from the context) → apply → persist. The route delegates and only
+        // inspects the returned semantic result to translate it to the wire
+        // contract. It does NOT validate membership, compute the effective
+        // deadline, reconstruct AnswerState, or write attempt.answers itself.
+        return saveAnswer(attempts, mutationContext, {
           attemptId,
-          {
-            attemptId,
-            questionId,
-            answer: body.answer,
-            clientSeq: body.clientSeq,
-            clientSavedAt: body.clientSavedAt,
-            baseVersion: body.baseVersion,
-          },
-          now,
-        );
+          questionId,
+          answer: body.answer,
+          clientSeq: body.clientSeq,
+          clientSavedAt: body.clientSavedAt,
+          baseVersion: body.baseVersion,
+        });
       });
 
       if (result.accepted) {

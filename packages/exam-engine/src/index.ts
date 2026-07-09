@@ -19,4 +19,5 @@ export * from "./manualGrading.js";
 export * from "./gradingWorkset.js";
 export * from "./deadlineReconciliation.js";
 export * from "./lockSeam.js";
+export * from "./attemptMutationContext.js";
 export * from "./systemMonitor.js";

@@ -1,137 +1,75 @@
 import { describe, expect, it } from "vitest";
-import type { ExamAttempt, QuestionSnapshot } from "@exam/domain";
-import type { AttemptRepository } from "./attemptCommands.js";
+import type { ExamAttempt } from "@exam/domain";
 import { saveAnswer } from "./answerProtocol.js";
+import {
+  makeExam,
+  makeAttempt,
+  makeEnrollment,
+  makeManualSnapshot,
+  prepare,
+  type PreparedHarness,
+} from "./attemptMutation.testHelpers.js";
 
-// EXAM-ANSWER-CLOSURE-0 — composite-action tests for the canonical engine-owned
-// Save Answer action. These prove the protocol action is CLOSED: load →
-// reconstruct → decide (pure processSaveAnswer) → apply → persist all live
-// inside `saveAnswer`, so the API route no longer owns reconstruction or the
-// attempt.answers write. Pure-decision coverage stays in answerProtocol.test.ts;
-// this file covers persistence behavior and rejection no-mutation.
+// EXAM-ANSWER-CLOSURE-0 + EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — composite-action
+// regression tests for the canonical engine-owned Save Answer action. These
+// prove the protocol action is CLOSED and now consumes opaque mutation
+// evidence: load → P1 validate membership → reconstruct → decide (pure
+// processSaveAnswer, using the canonical effective deadline from the context)
+// → apply → persist all live inside `saveAnswer`, and the API route no longer
+// owns reconstruction, membership, or the attempt.answers write. Pure-decision
+// coverage stays in answerProtocol.test.ts; this file covers persistence
+// behavior and rejection no-mutation against the corrected context-based API.
 
-function makeSnapshot(): QuestionSnapshot[] {
-  return [
-    {
-      originalQuestionId: "q1",
-      type: "single_choice",
-      content: "Q1",
-      attachments: [],
-      options: [{ id: "a", content: "A" }],
-      standardAnswer: "a",
-      score: 50,
-      gradingRule: {
-        multiSelectScoring: "all_correct_full",
-        fillBlankMatchMode: "exact",
-      },
-      order: 0,
-      rubric: null,
-    },
-  ];
-}
-
-function makeAttempt(overrides: Partial<ExamAttempt> = {}): ExamAttempt {
-  return {
-    id: "attempt-1",
-    organizationId: "org-1",
-    examId: "exam-1",
-    enrollmentId: "enr-1",
-    candidateId: "cand-1",
-    attemptNo: 1,
-    status: "in_progress",
-    questionSnapshot: makeSnapshot(),
-    answers: [],
-    startedAt: new Date("2025-01-01T10:00:00Z"),
-    deadlineAt: new Date("2025-01-01T11:00:00Z"),
-    lastActivityAt: new Date("2025-01-01T10:00:00Z"),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    ...overrides,
-  };
-}
-
-/** In-memory AttemptRepository fake. `updateCalls` records every update payload
- * so tests can assert "no write on rejection" and "single write on accept". */
-function makeAttemptRepo(attempts: ExamAttempt[]): AttemptRepository & {
-  updateCalls: Partial<ExamAttempt>[];
-  get(id: string): ExamAttempt;
-} {
-  const store = [...attempts];
-  const updateCalls: Partial<ExamAttempt>[] = [];
-  return {
-    findById(id) {
-      return store.find((a) => a.id === id) ?? null;
-    },
-    findByIdForUpdate(id) {
-      return store.find((a) => a.id === id) ?? null;
-    },
-    findActiveByEnrollment() {
-      return null;
-    },
-    findByEnrollmentAndAttemptNo() {
-      return null;
-    },
-    create() {
-      throw new Error("not used");
-    },
-    update(id, data) {
-      updateCalls.push(data);
-      const idx = store.findIndex((a) => a.id === id);
-      if (idx === -1) return null;
-      store[idx] = { ...store[idx]!, ...data };
-      return store[idx]!;
-    },
-    updateCalls,
-    // Typed-synchronous accessor so tests read durable state without awaiting
-    // (the fake is synchronous; the engine interface allows async but the fake
-    // never returns a Promise).
-    get(id: string): ExamAttempt {
-      const found = store.find((a) => a.id === id);
-      if (!found) throw new Error(`attempt ${id} not found in fake store`);
-      return found;
-    },
-  };
+/**
+ * Helper that builds the canonical preparation harness (EA lock + reconciliation
+ * + context mint) for an in-progress attempt and returns it ready to drive
+ * `saveAnswer`. The exam window is wide so `now` (10:05) is well within the
+ * canonical effective deadline (min(closeAt=12:00, deadlineAt=11:00) = 11:00).
+ */
+async function harness(
+  attemptOverrides: Partial<ExamAttempt> = {},
+  now = new Date("2025-01-01T10:05:00Z"),
+): Promise<PreparedHarness> {
+  return prepare(
+    makeExam(),
+    makeAttempt(attemptOverrides),
+    makeEnrollment(),
+    now,
+  );
 }
 
 describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
   it("1. accepted save persists the new answer with the correct next version", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
-    const repo = makeAttemptRepo([makeAttempt()]);
-    const before = repo.get("attempt-1");
+    const h = await harness({}, now);
+    const before = h.attemptRepo.get("attempt-1");
     expect(before.answers).toHaveLength(0);
 
-    const result = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "b",
-        clientSeq: 1,
-        clientSavedAt: now.toISOString(),
-        baseVersion: 0,
-      },
-      now,
-    );
+    const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "b",
+      clientSeq: 1,
+      clientSavedAt: now.toISOString(),
+      baseVersion: 0,
+    });
 
     expect(result.accepted).toBe(true);
     expect(result.serverVersion).toBe(1);
-    // Persistence: the canonical action performed the repo write.
-    expect(repo.updateCalls).toHaveLength(1);
-    const after = repo.get("attempt-1");
+    expect(h.attemptRepo.updateCalls).toHaveLength(1);
+    const after = h.attemptRepo.get("attempt-1");
     expect(after.answers).toHaveLength(1);
     expect(after.answers[0]).toMatchObject({
       questionId: "q1",
       answer: "b",
       version: 1,
     });
-    // lastActivityAt is stamped by the action (heartbeat bookkeeping).
+    // lastActivityAt is stamped by the action from the context checkedAt.
     expect(after.lastActivityAt).toEqual(now);
   });
 
   it("2. stale version returns a semantic rejection and leaves persisted answers unchanged", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
-    // Existing q1 answer at version 2.
     const existing = {
       questionId: "q1",
       answer: "c",
@@ -147,35 +85,28 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
         },
       ],
     };
-    const repo = makeAttemptRepo([makeAttempt({ answers: [existing] })]);
-    const beforeAnswers = repo.get("attempt-1").answers;
+    const h = await harness({ answers: [existing] }, now);
+    const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
 
-    const result = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "x",
-        clientSeq: 3,
-        clientSavedAt: now.toISOString(),
-        baseVersion: 1, // behind current version 2
-      },
-      now,
-    );
+    const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "x",
+      clientSeq: 3,
+      clientSavedAt: now.toISOString(),
+      baseVersion: 1, // behind current version 2
+    });
 
     expect(result.accepted).toBe(false);
     expect(result.conflict?.reason).toBe("STALE_VERSION");
     expect(result.serverVersion).toBe(2);
-    // No protocol write on rejection.
-    expect(repo.updateCalls).toHaveLength(0);
-    expect(repo.get("attempt-1").answers).toEqual(beforeAnswers);
+    expect(h.attemptRepo.updateCalls).toHaveLength(0);
+    expect(h.attemptRepo.get("attempt-1").answers).toEqual(beforeAnswers);
   });
 
   it("3. idempotent replay performs no write and preserves the original savedAt", async () => {
     const originalSavedAt = new Date("2025-01-01T10:04:00Z");
     const now = new Date("2025-01-01T10:05:00Z");
-    // Existing q1 answer saved at clientSeq=1 with answer "b".
     const existing = {
       questionId: "q1",
       answer: "b",
@@ -191,31 +122,24 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
         },
       ],
     };
-    const repo = makeAttemptRepo([makeAttempt({ answers: [existing] })]);
-    const before = repo.get("attempt-1").answers;
+    const h = await harness({ answers: [existing] }, now);
+    const before = h.attemptRepo.get("attempt-1").answers;
 
-    const result = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "b", // identical payload
-        clientSeq: 1, // same seq
-        clientSavedAt: now.toISOString(),
-        baseVersion: 0,
-      },
-      now,
-    );
+    const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "b", // identical payload
+      clientSeq: 1, // same seq
+      clientSavedAt: now.toISOString(),
+      baseVersion: 0,
+    });
 
     expect(result.accepted).toBe(true);
-    // Replay returns the ORIGINAL savedAt, not `now`.
     expect(result.savedAt).toBe(originalSavedAt.toISOString());
     expect(result.serverVersion).toBe(1);
-    // No write performed — durable state is unchanged.
-    expect(repo.updateCalls).toHaveLength(0);
-    const after = repo.get("attempt-1").answers;
-    expect(after).toBe(before); // same reference — no write touched the store
+    expect(h.attemptRepo.updateCalls).toHaveLength(0);
+    const after = h.attemptRepo.get("attempt-1").answers;
+    expect(after).toBe(before);
     expect(after[0]).toMatchObject({
       questionId: "q1",
       answer: "b",
@@ -226,7 +150,6 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
   it("4. conflicting payload returns a semantic rejection and leaves persisted answers unchanged", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
     const originalSavedAt = new Date("2025-01-01T10:04:00Z");
-    // Existing q1 answer at clientSeq=1 with answer "b".
     const existing = {
       questionId: "q1",
       answer: "b",
@@ -242,137 +165,132 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
         },
       ],
     };
-    const repo = makeAttemptRepo([makeAttempt({ answers: [existing] })]);
-    const beforeAnswers = repo.get("attempt-1").answers;
+    const h = await harness({ answers: [existing] }, now);
+    const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
 
-    const result = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "DIFFERENT", // different payload, same clientSeq
-        clientSeq: 1,
-        clientSavedAt: now.toISOString(),
-        baseVersion: 0,
-      },
-      now,
-    );
+    const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "DIFFERENT", // different payload, same clientSeq
+      clientSeq: 1,
+      clientSavedAt: now.toISOString(),
+      baseVersion: 0,
+    });
 
     expect(result.accepted).toBe(false);
     expect(result.conflict?.reason).toBe("CONFLICTING_PAYLOAD");
     expect(result.conflict?.latestAnswer).toBe("b");
-    expect(repo.updateCalls).toHaveLength(0);
-    expect(repo.get("attempt-1").answers).toEqual(beforeAnswers);
+    expect(h.attemptRepo.updateCalls).toHaveLength(0);
+    expect(h.attemptRepo.get("attempt-1").answers).toEqual(beforeAnswers);
   });
 
   it("5. submitted/terminal attempt is rejected with no draft mutation", async () => {
     const now = new Date("2025-01-01T10:05:00Z");
     for (const terminal of ["submitted", "grading", "graded"] as const) {
-      const repo = makeAttemptRepo([makeAttempt({ status: terminal })]);
-      const beforeAnswers = repo.get("attempt-1").answers;
+      const h = await harness({ status: terminal }, now);
+      const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
 
-      const result = await saveAnswer(
-        repo,
-        "attempt-1",
-        {
-          attemptId: "attempt-1",
-          questionId: "q1",
-          answer: "b",
-          clientSeq: 1,
-          clientSavedAt: now.toISOString(),
-          baseVersion: 0,
-        },
-        now,
-      );
-
-      expect(result.accepted).toBe(false);
-      expect(result.conflict?.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
-      expect(repo.updateCalls).toHaveLength(0);
-      expect(repo.get("attempt-1").answers).toEqual(beforeAnswers);
-    }
-  });
-
-  it("6. deadline exceeded is rejected with no draft mutation", async () => {
-    // Attempt deadline already in the past relative to `now`.
-    const deadline = new Date("2025-01-01T10:00:00Z");
-    const now = new Date("2025-01-01T10:00:01Z");
-    const repo = makeAttemptRepo([makeAttempt({ deadlineAt: deadline })]);
-    const beforeAnswers = repo.get("attempt-1").answers;
-
-    const result = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
+      const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
         attemptId: "attempt-1",
         questionId: "q1",
         answer: "b",
         clientSeq: 1,
         clientSavedAt: now.toISOString(),
         baseVersion: 0,
-      },
+      });
+
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("ATTEMPT_ALREADY_SUBMITTED");
+      expect(h.attemptRepo.updateCalls).toHaveLength(0);
+      expect(h.attemptRepo.get("attempt-1").answers).toEqual(beforeAnswers);
+    }
+  });
+
+  it("6. deadline exceeded (now >= canonical effective deadline) closes mutation safety with no draft write", async () => {
+    // The canonical effective deadline comes from the context
+    // (computeEffectiveDeadline = min(exam.closeAt, attempt.deadlineAt)).
+    // Build an attempt whose effective deadline is in the past relative to the
+    // preparation `now`: attempt.deadlineAt = 10:00 < now = 10:00:01. A manual
+    // snapshot lets the reconciliation seam freeze cleanly to pending_manual.
+    const now = new Date("2025-01-01T10:00:01Z");
+    const h = await prepare(
+      makeExam(),
+      makeAttempt({
+        questionSnapshot: makeManualSnapshot(),
+        deadlineAt: new Date("2025-01-01T10:00:00Z"),
+      }),
+      makeEnrollment(),
       now,
     );
+    const beforeAnswers = h.attemptRepo.get("attempt-1").answers;
 
+    const result = await saveAnswer(h.attemptRepo, h.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "b",
+      clientSeq: 1,
+      clientSavedAt: now.toISOString(),
+      baseVersion: 0,
+    });
+
+    // The preparation seam froze the attempt at the canonical effective
+    // deadline (a lifecycle status write, not a draft `answers` write);
+    // saveAnswer sees the frozen status and refuses the draft mutation.
     expect(result.accepted).toBe(false);
-    expect(result.conflict?.reason).toBe("DEADLINE_EXCEEDED");
-    expect(repo.updateCalls).toHaveLength(0);
-    expect(repo.get("attempt-1").answers).toEqual(beforeAnswers);
+    expect(h.attemptRepo.draftAnswerWriteCount()).toBe(0);
+    expect(h.attemptRepo.get("attempt-1").answers).toEqual(beforeAnswers);
   });
 
   it("7. answer version increments correctly across sequential accepted saves", async () => {
     const t0 = new Date("2025-01-01T10:05:00Z");
     const t1 = new Date("2025-01-01T10:06:00Z");
     const t2 = new Date("2025-01-01T10:07:00Z");
-    const repo = makeAttemptRepo([makeAttempt()]);
 
-    const r1 = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "a",
-        clientSeq: 1,
-        clientSavedAt: t0.toISOString(),
-        baseVersion: 0,
-      },
-      t0,
-    );
+    const h0 = await harness({}, t0);
+    const r1 = await saveAnswer(h0.attemptRepo, h0.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "a",
+      clientSeq: 1,
+      clientSavedAt: t0.toISOString(),
+      baseVersion: 0,
+    });
     expect(r1.serverVersion).toBe(1);
 
-    const r2 = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "b",
-        clientSeq: 2,
-        clientSavedAt: t1.toISOString(),
-        baseVersion: 1,
-      },
+    // Fresh context (new tx) for the second save against the persisted state.
+    const h1 = await prepare(
+      makeExam(),
+      h0.attemptRepo.get("attempt-1"),
+      makeEnrollment(),
       t1,
     );
+    const r2 = await saveAnswer(h1.attemptRepo, h1.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "b",
+      clientSeq: 2,
+      clientSavedAt: t1.toISOString(),
+      baseVersion: 1,
+    });
     expect(r2.serverVersion).toBe(2);
 
-    const r3 = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "c",
-        clientSeq: 3,
-        clientSavedAt: t2.toISOString(),
-        baseVersion: 2,
-      },
+    const h2 = await prepare(
+      makeExam(),
+      h1.attemptRepo.get("attempt-1"),
+      makeEnrollment(),
       t2,
     );
+    const r3 = await saveAnswer(h2.attemptRepo, h2.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "c",
+      clientSeq: 3,
+      clientSavedAt: t2.toISOString(),
+      baseVersion: 2,
+    });
     expect(r3.serverVersion).toBe(3);
 
-    // Final persisted answer carries the latest version.
-    const after = repo.get("attempt-1");
+    const after = h2.attemptRepo.get("attempt-1");
     expect(after.answers).toHaveLength(1);
     expect(after.answers[0]).toMatchObject({
       questionId: "q1",
@@ -384,61 +302,50 @@ describe("saveAnswer composite action (EXAM-ANSWER-CLOSURE-0)", () => {
   it("8. clientSeq history is preserved across a subsequent action call (idempotency replay)", async () => {
     const t0 = new Date("2025-01-01T10:05:00Z");
     const t1 = new Date("2025-01-01T10:06:00Z");
-    const repo = makeAttemptRepo([makeAttempt()]);
 
-    // First save at clientSeq=1, answer "a".
-    await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "a",
-        clientSeq: 1,
-        clientSavedAt: t0.toISOString(),
-        baseVersion: 0,
-      },
-      t0,
-    );
-    // Second save at clientSeq=2, answer "b" (new version).
-    await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "b",
-        clientSeq: 2,
-        clientSavedAt: t1.toISOString(),
-        baseVersion: 1,
-      },
+    const h0 = await harness({}, t0);
+    await saveAnswer(h0.attemptRepo, h0.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "a",
+      clientSeq: 1,
+      clientSavedAt: t0.toISOString(),
+      baseVersion: 0,
+    });
+
+    const h1 = await prepare(
+      makeExam(),
+      h0.attemptRepo.get("attempt-1"),
+      makeEnrollment(),
       t1,
     );
+    await saveAnswer(h1.attemptRepo, h1.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "b",
+      clientSeq: 2,
+      clientSavedAt: t1.toISOString(),
+      baseVersion: 1,
+    });
 
     // Replay the FIRST clientSeq=1 with the SAME payload "a" — must be accepted
     // as idempotent (NOT treated as a conflicting payload), proving the prior
     // clientSeq=1 history was preserved by the second save's reconstruction.
-    const replay = await saveAnswer(
-      repo,
-      "attempt-1",
-      {
-        attemptId: "attempt-1",
-        questionId: "q1",
-        answer: "a",
-        clientSeq: 1,
-        clientSavedAt: t0.toISOString(),
-        baseVersion: 0,
-      },
-      t1,
-    );
+    const replay = await saveAnswer(h1.attemptRepo, h1.mutationContext, {
+      attemptId: "attempt-1",
+      questionId: "q1",
+      answer: "a",
+      clientSeq: 1,
+      clientSavedAt: t0.toISOString(),
+      baseVersion: 0,
+    });
 
     expect(replay.accepted).toBe(true);
     expect(replay.conflict).toBeUndefined();
-    // No new write on replay.
-    // Two accepted saves => two writes; the replay must not add a third.
-    expect(repo.updateCalls).toHaveLength(2);
-    // Durable answer remains the latest ("b" at version 2).
-    const after = repo.get("attempt-1");
+    // h1's repo recorded exactly one write (the second accepted save at t1);
+    // the replay against h1's context performs no additional write.
+    expect(h1.attemptRepo.updateCalls).toHaveLength(1);
+    const after = h1.attemptRepo.get("attempt-1");
     expect(after.answers[0]).toMatchObject({
       questionId: "q1",
       answer: "b",

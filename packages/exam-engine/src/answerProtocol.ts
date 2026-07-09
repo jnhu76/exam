@@ -10,6 +10,10 @@ import {
   type SubmittedAnswersSnapshot,
 } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
+import {
+  assertMutationContextFor,
+  type ReconciledAttemptMutationContext,
+} from "./attemptMutationContext.js";
 
 /**
  * Stable structural equality for answer values.
@@ -113,7 +117,12 @@ export function processSaveAnswer(
     };
   }
 
-  if (state.deadlineAt && now.getTime() > state.deadlineAt.getTime()) {
+  // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 §11 — canonical expiry predicate is
+  // `now >= effectiveDeadline`. Equality at the deadline is expired, aligning
+  // the pure Save decision with the canonical `isAttemptDeadlineExpired`
+  // authority (`now >= computeEffectiveDeadline(...)`). This closes the prior
+  // `>` vs `>=` boundary divergence at the instant `now === deadlineAt`.
+  if (state.deadlineAt && now.getTime() >= state.deadlineAt.getTime()) {
     return {
       accepted: false,
       serverVersion: 0,
@@ -318,28 +327,43 @@ function applyAcceptedResult(
 }
 
 /**
- * Canonical composite Save Answer protocol action (EXAM-ANSWER-CLOSURE-0).
+ * Canonical composite Save Answer protocol action
+ * (EXAM-ANSWER-CLOSURE-0 + EXAM-ANSWER-PRECONDITION-CORRECTIVE-0).
  *
  * Owns the full SAVE_ANSWER action inside the engine:
  *
- *   load authoritative persisted attempt state
+ *   consume opaque mutation evidence (provenance + repo affinity)
+ *     → load authoritative persisted attempt state
+ *     → P1: validate questionId ∈ attempt.questionSnapshot (local legality)
  *     → reconstruct AnswerState (normalize + build clientSeqMap)
- *     → invoke the pure `processSaveAnswer` decision core
- *     → on accept: apply the result and persist `attempt.answers` + heartbeat
+ *     → invoke the pure `processSaveAnswer` decision core using the CANONICAL
+ *       effective deadline from the mutation context (P3), not attempt.deadlineAt
+ *     → on accept: apply the result and persist `attempt.answers` + heartbeat,
+ *       stamped with the context's authoritative checkedAt
  *     → return the semantic result
  *
- * The caller (API route) is responsible ONLY for: transaction composition, the
- * EA lock predecessor seam (`lockEnrollmentAndAttempt`), deadline
- * reconciliation (`ensureAttemptDeadlineReconciled`), ownership / snapshot
- * guards, and mapping the returned semantic result to the wire contract. It
- * must NOT construct `AnswerState`, rebuild the clientSeqMap, or write
- * `attempt.answers` itself.
+ * Precondition evidence (`mutationContext`): minted by the canonical
+ * preparation seam (`prepareReconciledAttemptMutation`) AFTER the EA lock seam
+ * and canonical deadline reconciliation have run. The evidence carries attempt
+ * identity, the authoritative checked-at snapshot, the canonical effective
+ * deadline (output of `computeEffectiveDeadline`), and the exact
+ * transaction-scoped AttemptRepository the seam minted against. This action
+ * runtime-asserts repo affinity against that exact object — proving the
+ * Attempt row lock established through the EA capability path is the one this
+ * action mutates under (P2).
  *
- * Transaction assumption: `TX_REQUIRED_EA_PROTOCOL` — runs inside a
- * caller-owned transaction that has already acquired the EA capability and
- * reconciled the deadline. The internal `DEADLINE_EXCEEDED` / status checks in
- * `processSaveAnswer` are preserved as fail-closed defense (§12); this action
- * does NOT duplicate deadline logic.
+ * The action does NOT accept the EA capability directly, does NOT acquire its
+ * own row lock, does NOT load the Exam, and does NOT run deadline
+ * reconciliation — those cross-region facts arrive as narrow evidence. The
+ * context is attempt-bound, checkedAt-bound, and AttemptRepository-bound; it
+ * cannot be reused with a different transaction/repository object.
+ *
+ * The caller (API route) is responsible ONLY for: transaction composition, the
+ * EA lock predecessor seam (`lockEnrollmentAndAttempt`), the canonical
+ * preparation seam, candidate-ownership checks, and mapping the returned
+ * semantic result to the wire contract. It must NOT construct `AnswerState`,
+ * rebuild the clientSeqMap, compute the effective deadline, or write
+ * `attempt.answers` itself.
  *
  * Persistence semantics:
  *   - accepted NEW answer        → single `update({ answers, lastActivityAt })`
@@ -347,24 +371,46 @@ function applyAcceptedResult(
  *   - any rejection              → NO WRITE (draft answers unchanged)
  *
  * @throws {NotFoundError} attempt not found.
- * @throws {ValidationError} if `now` is omitted (programming error; the route
- *   always supplies the server time authority).
+ * @throws {ValidationError} request.attemptId does not match the context's
+ *   bound attempt identity, or the request targets a question that is not a
+ *   member of the attempt's frozen question snapshot (P1 local legality).
+ * @throws {Error} mutation-context repo-affinity violation (P2).
  */
 export async function saveAnswer(
   attemptRepo: AttemptRepository,
-  attemptId: string,
+  mutationContext: ReconciledAttemptMutationContext,
   request: SaveAnswerRequest,
-  now: Date,
 ): Promise<ProcessSaveResult> {
-  if (!now) {
+  // P2 — mechanical precondition evidence. Assert the context was minted against
+  // the exact AttemptRepository object this action is now using. This proves the
+  // Attempt row lock established through the EA capability path is the one whose
+  // read-modify-write window this action runs under. Throws before any mutation.
+  assertMutationContextFor(mutationContext, attemptRepo);
+
+  // Identity binding — the context is bound to one attempt identity; the request
+  // must target that same attempt. Do not silently trust a mismatched identity.
+  if (request.attemptId !== mutationContext.attemptId) {
     throw new ValidationError(
-      "saveAnswer requires an authoritative `now` (server time authority)",
+      "Save answer request attemptId does not match the mutation context's bound attempt identity",
     );
   }
 
-  const attempt = await attemptRepo.findById(attemptId);
+  const attempt = await attemptRepo.findById(mutationContext.attemptId);
   if (!attempt) {
     throw new NotFoundError("Attempt not found");
+  }
+
+  // P1 — local legality. The attempt is a frozen universe of questions
+  // (`questionSnapshot`, INV-010). Accepting an answer for a question outside
+  // that universe produces a structurally invalid `attempt.answers` element, so
+  // the Save Answer command itself must be illegal. This internalizes the
+  // invariant the old route owned (the route's `.some(...)` guard is removed).
+  // Preserved error semantics: ValidationError, matching the old route throw.
+  const isMember = attempt.questionSnapshot.some(
+    (q) => q.originalQuestionId === request.questionId,
+  );
+  if (!isMember) {
+    throw new ValidationError("问题不在此尝试中");
   }
 
   const storedAnswers = normalizePersistedAnswers(
@@ -372,13 +418,22 @@ export async function saveAnswer(
   );
   const clientSeqMap = buildClientSeqMap(storedAnswers);
 
+  // P3 — the canonical effective deadline. The pure decision receives the
+  // canonical effective deadline from the mutation context (output of
+  // `computeEffectiveDeadline(exam, attempt)`), NOT `attempt.deadlineAt`. This
+  // closes the reachability gap where a reachable active attempt can have
+  // `attempt.deadlineAt > exam.closeAt`: the action now refuses a save past the
+  // canonical `min(exam.closeAt, attempt.deadlineAt)` even when called without
+  // the predecessor. The checkedAt snapshot is the single time authority for
+  // the deadline decision, savedAt, and lastActivityAt — never a second
+  // caller-provided `now`.
   const saveResult = processSaveAnswer(
     {
       attemptStatus: attempt.status as AttemptStatus,
       answers: attempt.answers,
       clientSeqMap,
-      ...(attempt.deadlineAt ? { deadlineAt: attempt.deadlineAt } : {}),
-      now,
+      deadlineAt: mutationContext.effectiveDeadline,
+      now: mutationContext.checkedAt,
     },
     request,
   );
@@ -392,9 +447,9 @@ export async function saveAnswer(
       saveResult.newAnswer,
       request,
     );
-    await attemptRepo.update(attemptId, {
+    await attemptRepo.update(mutationContext.attemptId, {
       answers: newAnswers,
-      lastActivityAt: now,
+      lastActivityAt: mutationContext.checkedAt,
     });
   }
 
