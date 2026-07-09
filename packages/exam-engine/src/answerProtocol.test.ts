@@ -144,7 +144,10 @@ describe("answerProtocol", () => {
       expect(result.conflict?.reason).toBe("DEADLINE_EXCEEDED");
     });
 
-    it("allows save when now equals deadline exactly", () => {
+    it("rejects save when now equals deadline exactly (canonical >= boundary)", () => {
+      // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 §11 — the canonical expiry
+      // predicate is `now >= effectiveDeadline`, aligned with
+      // `isAttemptDeadlineExpired`. Equality at the deadline is expired.
       const deadline = new Date("2025-01-01T10:00:00Z");
       const state = makeState({
         attemptStatus: "in_progress",
@@ -155,7 +158,8 @@ describe("answerProtocol", () => {
 
       const result = processSaveAnswer(state, request);
 
-      expect(result.accepted).toBe(true);
+      expect(result.accepted).toBe(false);
+      expect(result.conflict?.reason).toBe("DEADLINE_EXCEEDED");
     });
 
     it("allows save when deadline guards are not provided", () => {

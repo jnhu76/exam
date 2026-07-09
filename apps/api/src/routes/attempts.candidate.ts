@@ -26,9 +26,7 @@ import type {
   Exam,
   ExamEnrollment,
   EnrollmentStatus,
-  AttemptStatus,
 } from "@exam/domain";
-import type { AnswerRecord } from "@exam/domain";
 import {
   NotFoundError,
   ValidationError,
@@ -47,10 +45,11 @@ import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js"
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
 import { startOrRestoreAttempt, restoreAttempt } from "@exam/exam-engine";
-import { processSaveAnswer } from "@exam/exam-engine";
+import { saveAnswer } from "@exam/exam-engine";
 import {
   ensureAttemptDeadlineReconciled,
   lockEnrollmentAndAttempt,
+  prepareReconciledAttemptMutation,
 } from "@exam/exam-engine";
 import {
   createExamRepoAdapter,
@@ -76,37 +75,6 @@ const heartbeatResponseSchema = z.object({
 });
 
 /**
- * Represents a stored answer with client-side sequencing metadata.
- * Extends AnswerRecord with a flexible savedAt type (Date or ISO string)
- * and optional clientSeq / clientSeqHistory for idempotent save deduplication.
- */
-interface StoredAnswer extends Omit<AnswerRecord, "savedAt"> {
-  savedAt: Date | string;
-  clientSeq?: number;
-  clientSeqHistory?: StoredAnswerReceipt[];
-}
-
-/**
- * Receipt of a single client-side answer save, recording the clientSeq,
- * answer payload, version, and timestamp for conflict detection.
- */
-interface StoredAnswerReceipt {
-  clientSeq: number;
-  answer: unknown;
-  version: number;
-  savedAt: Date | string;
-}
-
-/**
- * A StoredAnswer that has been normalized so savedAt is always a Date.
- * Used after normalizeAnswers() for consistent server-side processing.
- */
-interface NormalizedStoredAnswer extends AnswerRecord {
-  clientSeq?: number;
-  clientSeqHistory?: StoredAnswerReceipt[];
-}
-
-/**
  * A candidate's entry in the in-memory exam queue, tracking when they joined.
  */
 interface QueueEntry {
@@ -119,33 +87,6 @@ interface QueueEntry {
  * Used for batch-release queue gating when requireQueue is enabled.
  */
 const examQueues = new Map<string, QueueEntry[]>();
-
-/**
- * Converts StoredAnswer[] (which may have string dates) to NormalizedStoredAnswer[]
- * with all savedAt fields guaranteed to be Date objects.
- */
-function normalizeAnswers(answers: StoredAnswer[]): NormalizedStoredAnswer[] {
-  return answers.map((a) => ({
-    ...a,
-    savedAt: typeof a.savedAt === "string" ? new Date(a.savedAt) : a.savedAt,
-    ...(a.clientSeqHistory
-      ? {
-          clientSeqHistory: a.clientSeqHistory.map((receipt) => ({
-            ...receipt,
-            savedAt:
-              typeof receipt.savedAt === "string"
-                ? new Date(receipt.savedAt)
-                : receipt.savedAt,
-          })),
-        }
-      : {}),
-  }));
-}
-
-/**
- * Serializes an ExamAttempt domain object into the API response shape,
- * converting Date fields to ISO strings and conditionally including score/passed.
- */
 
 /**
  * Computes the queue admission status for a candidate, adding them to the
@@ -181,36 +122,6 @@ function getQueueStatus(exam: Exam, candidateId: string, now: Date) {
     waitCount: Math.max(0, position - releasedCount),
     estimatedWaitSeconds: batchesUntilReady * exam.controlFlags.batchInterval,
   });
-}
-
-/**
- * Serializes an ExamAttempt for candidate-facing responses, stripping
- * standardAnswer and other admin-only fields from the question snapshot.
- */
-
-/**
- * Builds a lookup map from "questionId:clientSeq" to AnswerRecord,
- * used for idempotent answer deduplication during the save protocol.
- */
-function buildClientSeqMap(answers: StoredAnswer[]): Map<string, AnswerRecord> {
-  const map = new Map<string, AnswerRecord>();
-  for (const answer of answers) {
-    for (const receipt of answer.clientSeqHistory ?? []) {
-      map.set(`${answer.questionId}:${receipt.clientSeq}`, {
-        questionId: answer.questionId,
-        answer: receipt.answer,
-        version: receipt.version,
-        savedAt: new Date(receipt.savedAt),
-      });
-    }
-    if (answer.clientSeq !== undefined) {
-      map.set(
-        `${answer.questionId}:${answer.clientSeq}`,
-        answer as AnswerRecord,
-      );
-    }
-  }
-  return map;
 }
 
 /**
@@ -899,11 +810,6 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           throw new NotFoundError("候选人资料不存在");
         }
 
-        // P3-L0-3: lazy deadline reconciliation at save entry point. If the
-        // attempt is expired, this freezes it; the processSaveAnswer below
-        // then sees a submitted/graded status and returns a deterministic
-        // rejection (ATTEMPT_ALREADY_SUBMITTED / DEADLINE_EXCEEDED) instead
-        // of accepting the stale save.
         const { exams, enrollments, attempts } = createExamEngineRepos(
           {
             examRepo: createExamRepo(tx),
@@ -913,107 +819,54 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           ctx,
         );
         // P3-FORMAL-P0-D2: mint the EA capability via the canonical seam
-        // (Enrollment → Attempt order) and thread it into reconciliation. The
-        // canonical seam's locator read doubles as the existence check; the
-        // ownership check runs against the post-mint re-read below.
+        // (Enrollment → Attempt order). The canonical seam's locator read
+        // doubles as the existence check; the ownership check runs against the
+        // post-preparation attempt below.
         const cap = await lockEnrollmentAndAttempt(
           enrollments,
           attempts,
           attemptId,
         );
-        const lockedAttempt = await txRepo.findById(ctx, attemptId);
-        if (
-          !lockedAttempt ||
-          lockedAttempt.candidateId !== candidateProfile.id
-        ) {
-          throw new NotFoundError("尝试不存在");
-        }
-        // ensureAttemptDeadlineReconciled returns the (possibly reconciled)
-        // attempt — reuse it instead of a redundant findByIdForUpdate.
-        // processSaveAnswer then sees the current status (frozen snapshot if
-        // reconciled) and returns a deterministic rejection for an expired
-        // attempt instead of accepting the stale save.
-        const currentAttempt = await ensureAttemptDeadlineReconciled(
-          exams,
-          enrollments,
-          attempts,
-          createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          ),
-          cap,
-          now,
-        );
+        // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0: the canonical preparation seam
+        // establishes the external preconditions a local Attempt mutation
+        // requires — EA lock provenance (verified against these exact repos),
+        // canonical deadline reconciliation (preserving freeze/grade behavior),
+        // and the canonical effective deadline (computeEffectiveDeadline). It
+        // mints the narrow opaque mutation evidence saveAnswer consumes. The
+        // route no longer owns question-membership legality, effective-deadline
+        // computation, or attempt.deadlineAt read-for-save — those live in
+        // saveAnswer / the preparation seam.
+        const { attempt: currentAttempt, mutationContext } =
+          await prepareReconciledAttemptMutation(
+            exams,
+            enrollments,
+            attempts,
+            createGradingWorksetRepoAdapter(
+              createAttemptGradingEntryRepo(tx),
+              ctx,
+            ),
+            cap,
+            now,
+          );
         if (currentAttempt.candidateId !== candidateProfile.id) {
           throw new NotFoundError("尝试不存在");
         }
-        if (
-          !currentAttempt.questionSnapshot.some(
-            (question) => question.originalQuestionId === questionId,
-          )
-        ) {
-          throw new ValidationError("问题不在此尝试中");
-        }
 
-        const storedAnswers = normalizeAnswers(
-          currentAttempt.answers as StoredAnswer[],
-        );
-        const clientSeqMap = buildClientSeqMap(storedAnswers);
-
-        const saveResult = processSaveAnswer(
-          {
-            attemptStatus: currentAttempt.status as AttemptStatus,
-            answers: currentAttempt.answers,
-            clientSeqMap,
-            ...(currentAttempt.deadlineAt
-              ? { deadlineAt: currentAttempt.deadlineAt }
-              : {}),
-            now,
-          },
-          {
-            attemptId,
-            questionId,
-            answer: body.answer,
-            clientSeq: body.clientSeq,
-            clientSavedAt: body.clientSavedAt,
-            baseVersion: body.baseVersion,
-          },
-        );
-
-        if (saveResult.accepted && saveResult.newAnswer) {
-          const previousAnswer = storedAnswers.find(
-            (answer) => answer.questionId === questionId,
-          );
-          const previousReceipt =
-            previousAnswer?.clientSeq === undefined
-              ? []
-              : [
-                  {
-                    clientSeq: previousAnswer.clientSeq,
-                    answer: previousAnswer.answer,
-                    version: previousAnswer.version,
-                    savedAt: previousAnswer.savedAt,
-                  },
-                ];
-          const storedNewAnswer: NormalizedStoredAnswer = {
-            ...saveResult.newAnswer,
-            clientSeq: body.clientSeq,
-            clientSeqHistory: [
-              ...(previousAnswer?.clientSeqHistory ?? []),
-              ...previousReceipt,
-            ],
-          };
-          const newAnswers = storedAnswers
-            .filter((a) => a.questionId !== questionId)
-            .concat([storedNewAnswer]);
-
-          await txRepo.update(ctx, attemptId, {
-            answers: newAnswers,
-            lastActivityAt: now,
-          } as Parameters<typeof txRepo.update>[2]);
-        }
-
-        return saveResult;
+        // P3-ANSWER-CLOSURE-0 + PRECONDITION-CORRECTIVE-0: the canonical Save
+        // Answer action owns load → P1 membership → reconstruct AnswerState →
+        // decide (processSaveAnswer, using the canonical effective deadline
+        // from the context) → apply → persist. The route delegates and only
+        // inspects the returned semantic result to translate it to the wire
+        // contract. It does NOT validate membership, compute the effective
+        // deadline, reconstruct AnswerState, or write attempt.answers itself.
+        return saveAnswer(attempts, mutationContext, {
+          attemptId,
+          questionId,
+          answer: body.answer,
+          clientSeq: body.clientSeq,
+          clientSavedAt: body.clientSavedAt,
+          baseVersion: body.baseVersion,
+        });
       });
 
       if (result.accepted) {

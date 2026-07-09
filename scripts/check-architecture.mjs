@@ -56,12 +56,27 @@ await forbid("packages/exam-engine/src", [
     /\bas\s+LockedEnrollmentAttemptIdentity\b/,
     "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
   ],
+  // EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 — no explicit cast to the narrow
+  // opaque Attempt mutation context. Its provenance brand is module-private
+  // (deadlineReconciliation.ts); the only legitimate mint is the canonical
+  // preparation seam (prepareReconciledAttemptMutation). A cast is a
+  // forgery bypass that would defeat the P2 repo-affinity proof. The
+  // .testHelpers.ts file is exempt (test harness).
+  [
+    /\bas\s+ReconciledAttemptMutationContext\b/,
+    "do not cast to ReconciledAttemptMutationContext — mint via prepareReconciledAttemptMutation",
+  ],
 ]);
 await forbid("apps/api/src", [
   // P3-FORMAL-P0-D2 — same cast ban for the API surface (routes/orchestrators).
   [
     /\bas\s+LockedEnrollmentAttemptIdentity\b/,
     "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
+  ],
+  // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — same mutation-context cast ban.
+  [
+    /\bas\s+ReconciledAttemptMutationContext\b/,
+    "do not cast to ReconciledAttemptMutationContext — mint via prepareReconciledAttemptMutation",
   ],
 ]);
 await forbid("apps/web/src", [
