@@ -213,28 +213,64 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     ).toBe(true);
   });
 
-  it("EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — the mutation context mint is the sole constructor (module-private symbols)", () => {
-    // The context type's provenance + affinity symbols are module-private to
-    // attemptMutationContext.ts. Only mintMutationContext (called by the
-    // preparation seam) can attach them. Confirm the mint module exports the
-    // type + consumer assertion but the symbols themselves are NOT exported.
-    const ctxModule = readFileSync(
-      resolve(REPO_ROOT, "packages/exam-engine/src/attemptMutationContext.ts"),
+  it("EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 — the mutation context mint is private to the preparation owner (deadlineReconciliation.ts)", () => {
+    // The context type's provenance brand is module-private to
+    // deadlineReconciliation.ts. Only the private mint (called by
+    // prepareReconciledAttemptMutation) can attach it. The module exports
+    // the type but the mint function itself is NOT exported.
+    const prepModule = readFileSync(
+      resolve(REPO_ROOT, "packages/exam-engine/src/deadlineReconciliation.ts"),
       "utf8",
     );
-    // The mint function is exported (used by the preparation seam).
-    expect(ctxModule).toMatch(/export function mintMutationContext/);
-    // The consumer affinity assertion is exported (used by saveAnswer).
-    expect(ctxModule).toMatch(/export function assertMutationContextFor/);
-    // The unique-symbol provenance/affinity tokens are module-private const
-    // (NOT exported) — they are the unforgeable brand.
-    expect(ctxModule).toMatch(
-      /const MUTATION_PROVENANCE_TOKEN:\s*unique symbol/,
+    // The context type is exported (used by saveAnswer as a type-only import).
+    expect(prepModule).toMatch(
+      /export interface ReconciledAttemptMutationContext/,
     );
-    expect(ctxModule).toMatch(/const MUTATION_AFFINITY_TOKEN:\s*unique symbol/);
-    // No `export` keyword may appear on the symbol declarations themselves.
-    const symbolExported =
-      /export\s+const\s+MUTATION_(?:PROVENANCE|AFFINITY)_TOKEN/.test(ctxModule);
-    expect(symbolExported).toBe(false);
+    // The mint function is NOT exported (private to the preparation owner).
+    expect(prepModule).not.toMatch(
+      /export function mintReconciledAttemptMutationContext/,
+    );
+    // The unique-symbol brand token is module-private const (NOT exported).
+    expect(prepModule).toMatch(/const MUTATION_CONTEXT_BRAND:\s*unique symbol/);
+    const brandExported = /export\s+const\s+MUTATION_CONTEXT_BRAND/.test(
+      prepModule,
+    );
+    expect(brandExported).toBe(false);
+    // The context carries an assertAttemptRepository closure method.
+    expect(prepModule).toMatch(/assertAttemptRepository/);
+  });
+
+  // RED proof — EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 §3.
+  // Before the authority-surface corrective, mintMutationContext was publicly
+  // importable from the @exam/exam-engine barrel via the wildcard re-export of
+  // attemptMutationContext.ts. After the corrective, the standalone authority
+  // module is deleted and the mint is private to the preparation owner.
+  // This test verifies the corrected state: no public mint surface remains.
+  it("EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 RED — mintMutationContext is NOT publicly importable (corrected)", () => {
+    const barrel = readFileSync(
+      resolve(REPO_ROOT, "packages/exam-engine/src/index.ts"),
+      "utf8",
+    );
+    // The barrel must NOT re-export the old attemptMutationContext module.
+    expect(barrel).not.toMatch(
+      /export \* from "\.\/attemptMutationContext\.js"/,
+    );
+    // The barrel must NOT contain any mint-related export.
+    expect(barrel).not.toMatch(/mintMutationContext/);
+    // The standalone authority module must not exist.
+    const { statSync } = require("node:fs");
+    let moduleExists = false;
+    try {
+      statSync(
+        resolve(
+          REPO_ROOT,
+          "packages/exam-engine/src/attemptMutationContext.ts",
+        ),
+      );
+      moduleExists = true;
+    } catch {
+      moduleExists = false;
+    }
+    expect(moduleExists).toBe(false);
   });
 });

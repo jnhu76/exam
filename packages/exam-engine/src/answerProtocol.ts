@@ -10,10 +10,7 @@ import {
   type SubmittedAnswersSnapshot,
 } from "@exam/domain";
 import type { AttemptRepository } from "./attemptCommands.js";
-import {
-  assertMutationContextFor,
-  type ReconciledAttemptMutationContext,
-} from "./attemptMutationContext.js";
+import type { ReconciledAttemptMutationContext } from "./deadlineReconciliation.js";
 
 /**
  * Stable structural equality for answer values.
@@ -385,7 +382,7 @@ export async function saveAnswer(
   // the exact AttemptRepository object this action is now using. This proves the
   // Attempt row lock established through the EA capability path is the one whose
   // read-modify-write window this action runs under. Throws before any mutation.
-  assertMutationContextFor(mutationContext, attemptRepo);
+  mutationContext.assertAttemptRepository(attemptRepo);
 
   // Identity binding — the context is bound to one attempt identity; the request
   // must target that same attempt. Do not silently trust a mismatched identity.

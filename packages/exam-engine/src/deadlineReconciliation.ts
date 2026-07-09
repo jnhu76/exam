@@ -17,10 +17,100 @@ import {
   assertCapabilityFor,
   type LockedEnrollmentAttemptIdentity,
 } from "./lockSeam.js";
-import {
-  mintMutationContext,
-  type ReconciledAttemptMutationContext,
-} from "./attemptMutationContext.js";
+
+// ── Mutation context authority (EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0) ──
+//
+// The mutation-context type, brand, and private mint live under the canonical
+// preparation owner (this module). There is no publicly importable standalone
+// mint function — only prepareReconciledAttemptMutation may construct a genuine
+// ReconciledAttemptMutationContext.
+//
+// The context carries a runtime affinity assertion closure that captures the
+// exact AttemptRepository object at mint time, so saveAnswer can prove repo
+// identity without a runtime import of this module (type-only edge).
+
+const MUTATION_CONTEXT_BRAND: unique symbol = Symbol(
+  "ReconciledAttemptMutationContext",
+);
+
+/**
+ * Narrow opaque evidence that the external preconditions required by a local
+ * Attempt mutation have been established by the canonical composition path.
+ *
+ * It represents — for Attempt A at authoritative server-time snapshot N:
+ *
+ *   1. the canonical EA lock seam established transaction/repository affinity;
+ *   2. the Attempt row is serialized by the Attempt FOR UPDATE acquired by
+ *      that seam;
+ *   3. canonical deadline reconciliation has executed;
+ *   4. the canonical effective deadline used for mutation safety is known
+ *      (output of `computeEffectiveDeadline(exam, attempt)`);
+ *   5. the evidence is bound to the exact transaction-scoped
+ *      AttemptRepository used to establish it;
+ *   6. the evidence is bound to the exact attempt identity and authoritative
+ *      time snapshot.
+ *
+ * It is NOT an authorization permit. It is NOT a general Attempt capability.
+ * It is NOT the existing EA capability. It is narrow evidence that the external
+ * transactional/cross-region preconditions required by a local Attempt mutation
+ * have been established.
+ *
+ * It does NOT own transaction lifetime. It carries ONLY:
+ *   - attempt identity, the authoritative checked-at snapshot, the canonical
+ *     effective deadline (immutable facts)
+ *   - a hidden provenance receipt (only the preparation seam mints it)
+ *   - a runtime repo-affinity assertion closure (captures the exact
+ *     AttemptRepository at mint time; compared by reference identity)
+ */
+export interface ReconciledAttemptMutationContext {
+  /** Immutable attempt identity the context was minted for. */
+  readonly attemptId: string;
+  /** Authoritative server-time snapshot captured at mint time. */
+  readonly checkedAt: Date;
+  /** Canonical effective deadline = computeEffectiveDeadline(exam, attempt). */
+  readonly effectiveDeadline: Date;
+  readonly [MUTATION_CONTEXT_BRAND]: true;
+
+  /**
+   * Proves the mutation context was minted against the SAME engine-facing
+   * AttemptRepository object the consumer is now using. Reference-identity
+   * comparison (`===`) on the repo. Mismatch throws BEFORE the protected
+   * action performs any mutation.
+   */
+  assertAttemptRepository(attemptRepo: AttemptRepository): void;
+}
+
+/**
+ * Private mint — ONLY the canonical preparation seam may call this.
+ * The brand symbol is module-private; a plain object literal or `as` cast
+ * cannot construct a valid context. The affinity assertion closure captures
+ * the exact repo reference at mint time.
+ *
+ * NOT EXPORTED — do not add `export`.
+ */
+function mintReconciledAttemptMutationContext(
+  attemptId: string,
+  checkedAt: Date,
+  effectiveDeadline: Date,
+  attemptRepo: AttemptRepository,
+): ReconciledAttemptMutationContext {
+  return {
+    attemptId,
+    checkedAt,
+    effectiveDeadline,
+    [MUTATION_CONTEXT_BRAND]: true as const,
+    assertAttemptRepository(candidateRepo: AttemptRepository): void {
+      if (candidateRepo !== attemptRepo) {
+        throw new Error(
+          "Attempt mutation-context transaction-affinity violation: the evidence " +
+            "was minted against a different transaction-bound AttemptRepository " +
+            "than the one now consuming it. Re-mint via the canonical preparation " +
+            "seam (prepareReconciledAttemptMutation) in this transaction.",
+        );
+      }
+    },
+  };
+}
 
 /**
  * Auto-submittable attempt states for deadline reconciliation.
@@ -302,7 +392,7 @@ export async function prepareReconciledAttemptMutation(
   // 5. Mint the narrow mutation evidence bound to the exact attempt identity,
   //    authoritative time snapshot, canonical effective deadline, and the exact
   //    AttemptRepository object the consumer (saveAnswer) will assert against.
-  const mutationContext = mintMutationContext(
+  const mutationContext = mintReconciledAttemptMutationContext(
     capability.attemptId,
     now,
     effectiveDeadline,

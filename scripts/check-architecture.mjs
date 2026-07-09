@@ -56,10 +56,10 @@ await forbid("packages/exam-engine/src", [
     /\bas\s+LockedEnrollmentAttemptIdentity\b/,
     "do not cast to LockedEnrollmentAttemptIdentity — mint via lockEnrollmentAndAttempt",
   ],
-  // EXAM-ANSWER-PRECONDITION-CORRECTIVE-0 — no explicit cast to the narrow
-  // opaque Attempt mutation context. Its provenance + affinity symbols are
-  // module-private (attemptMutationContext.ts); the only legitimate mint is the
-  // canonical preparation seam (prepareReconciledAttemptMutation). A cast is a
+  // EXAM-ANSWER-MINT-AUTHORITY-CORRECTIVE-0 — no explicit cast to the narrow
+  // opaque Attempt mutation context. Its provenance brand is module-private
+  // (deadlineReconciliation.ts); the only legitimate mint is the canonical
+  // preparation seam (prepareReconciledAttemptMutation). A cast is a
   // forgery bypass that would defeat the P2 repo-affinity proof. The
   // .testHelpers.ts file is exempt (test harness).
   [

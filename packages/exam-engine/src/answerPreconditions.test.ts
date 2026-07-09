@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Exam } from "@exam/domain";
 import { ValidationError } from "@exam/domain";
 import { saveAnswer } from "./answerProtocol.js";
-import type { ReconciledAttemptMutationContext } from "./attemptMutationContext.js";
+import type { ReconciledAttemptMutationContext } from "./deadlineReconciliation.js";
 import {
   makeExam,
   makeAttempt,
