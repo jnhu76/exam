@@ -6,13 +6,14 @@
 >
 > **协议优先（2026-07-03 修订）：** 模块队列在 P0 之前新增 **P-1 考试协议与后端状态模型收敛**（P3-PROTO-0/1/2）。P-1 是 P0 前端运行时的硬前置：协议矩阵与后端一致性测试未完成前，不得推进前端作答状态机（P3-FSM-0）或主观题运行时。后端是业务真相源；前端只消费后端真相字段。
 
-> **执行基线（2026-07-09）：**
+> **执行基线（2026-07-10）：**
 >
 > - P3-PROTO-0/1/2、P3-L0-1~5 已完成。
 > - P3-L0-2 的后续 corrective closure（2C/2D/2E）已完成，并建立 materialized grading workset、durable manual queue、pending-only manual completion、grading-entry-only terminal score authority。
 > - **P3-PROTO-0C — Accepted Grading Model Mirror Closure 已 CLOSED / DONE**（corrective history）：把 `exam-protocol.md` 中尚未吸收 P3-L0-2E 的旧 grading 语义镜像到已接受模型。其历史作业卡与完成标准保留为建设历史，不再作为 current gate 或 pending prerequisite。
 > - P3-FSM-0 与 P3-MOD-P0-1~4 已完成；P0 已 CLOSED。
-> - **当前活动模块是 P1，P3-MOD-P1-1 = CURRENT。** P3-MOD-P1-1 已完成 rebaseline，确认一处窄生产缺陷：grading detail 漏投影冻结 `standardAnswer` / `rubric`（两者已在冻结 QuestionSnapshot 中存在）。该缺陷是 P1-1 自身所有权的修正工作，不是未决前置。P3-MOD-P1-2 = NEXT。
+> - **P1 已 CLOSED。** P3-MOD-P1-1 修复了 grading-details 漏投影冻结 `standardAnswer` / `rubric` 的窄生产缺陷（从冻结 QuestionSnapshot 投影，不 JOIN live questions，不读 draft answers，未改变 grading authority）；P3-MOD-P1-2 用真实 text_response E2E（非 skip）证明 candidate 提交 → graded + fully_graded + 分数身份一致。权威非回归证明见 `docs/phase3/audit/p1-manual-grading-proof.md`。
+> - **当前活动模块是 P2，P3-MOD-P2-1 = CURRENT。** P3-MOD-P2-2 = NEXT。
 >
 > **Corrective ownership rule：** 后置模块暴露历史协议/依赖缺口时，回到真实 owner 做 corrective closure；闭包完成后必须返回原 Job Card。不得在后置模块增加 compatibility workaround。
 
@@ -1038,13 +1039,13 @@ git commit -m "test(P0): extend candidate happy path E2E with text_response answ
 
 ---
 
-## 模块 P1 — 人工评分闭环
+## 模块 P1 — 人工评分闭环（CLOSED）
 
 > **协议前置（已满足）：** P3-PROTO-0C 已 CLOSED / DONE。P1 不得依据 stale `reconcileScores` / `manual_grading_entries` / attempt-level queue inference 恢复旧 grading 模型。
 >
-> **当前状态：** P3-MOD-P1-1 = **CURRENT**。rebaseline 已确认一处窄生产缺陷：grading details API/UI 丢弃 frozen `standardAnswer` 与 `rubric`。该缺陷的 corrective owner = P3-MOD-P1-1 自身（非未决前置）。P3-MOD-P1-2 = NEXT。
+> **当前状态：** P1 已 **CLOSED**。P3-MOD-P1-1 与 P3-MOD-P1-2 均完成。下方作业卡保留为建设历史（目标/范围/完成标准仍记录"为何做、验收什么"），不再作为 current gate。
 
-### P3-MOD-P1-1：人工评分 API/UI 闭环修复与证明（CURRENT）
+### P3-MOD-P1-1：人工评分 API/UI 闭环修复与证明（DONE）
 
 **目标：** 在不改变 L0 grading authority 的前提下，补齐 grader 所需 frozen grading metadata，并证明 durable queue → frozen grading detail → pending-only score completion → canonical terminal grading closure 的 API/UI 闭环。
 >
@@ -1218,7 +1219,7 @@ git commit -m "fix(P1): expose frozen grading metadata in manual grading detail"
 
 ---
 
-### P3-MOD-P1-2：主观评分 E2E
+### P3-MOD-P1-2：主观评分 E2E（DONE）
 
 **目标：** 一条真实 E2E 证明：考生提交 `text_response` → pending manual work durable 入队 → Admin 打开评分详情并看到 frozen 作答/评分依据 → 完成 pending manual work → attempt 进入 `graded + fully_graded`，最终计算结果与 grading entries 一致。
 
@@ -1292,9 +1293,9 @@ git commit -m "test(P1): complete subjective grading E2E"
 
 ---
 
-## 模块 P2 — 考试命题闭环
+## 模块 P2 — 考试命题闭环（ACTIVE）
 
-### P3-MOD-P2-1：命题 UI 流程审计
+### P3-MOD-P2-1：命题 UI 流程审计（CURRENT）
 
 **目标：** 文档化从题目创建到考试发布的完整命题流程，识别任何缺口。尤其验证 text_response 题能通过 UI 创建。
 
@@ -1994,13 +1995,14 @@ git commit -m "docs(P6): Phase 3 MVP readiness closeout report"
 Corrective gate — return to protocol owner before P1（DONE — corrective history）
   └── P3-PROTO-0C  Mirror accepted grading workset protocol     ✅ DONE
 
-批次 2 — Manual Grading（P1 ACTIVE）
-  ├── P3-MOD-P1-1  Manual grading API/UI closure                ← CURRENT（窄缺陷：漏投影 frozen standardAnswer/rubric；P1-1 自身所有权，非 BLOCKED）
-  └── P3-MOD-P1-2  Subjective grading E2E                       ← NEXT
+批次 2 — Manual Grading（P1 CLOSED）
+  ├── P3-MOD-P1-1  Manual grading API/UI closure                ✅ DONE（修复 grading-details 冻结 standardAnswer/rubric 投影；权威非回归证明见 docs/phase3/audit/p1-manual-grading-proof.md）
+  └── P3-MOD-P1-2  Subjective grading E2E                       ✅ DONE（真实 text_response E2E：candidate 提交 → graded + fully_graded + 分数身份一致）
+  P1 CLOSED
 
-批次 3 — Authoring (P2)
-  ├── P3-MOD-P2-1  Authoring UI flow audit
-  ├── P3-MOD-P2-2  MVP question creation proof
+批次 3 — Authoring (P2 ACTIVE)
+  ├── P3-MOD-P2-1  Authoring UI flow audit                      ← CURRENT
+  ├── P3-MOD-P2-2  MVP question creation proof                  ← NEXT
   └── P3-MOD-P2-3  Publish-to-candidate E2E
 
 批次 4 — Result Publication (P3)
@@ -2026,9 +2028,9 @@ Corrective gate — return to protocol owner before P1（DONE — corrective his
 
 **执行纪律：**
 
-- P-1/L0 与 P0 已 CLOSED；不得因为旧卡文字重新施工。
-- P3-PROTO-0C 已 CLOSED / DONE（corrective history，不再作为 current gate）。P3-MOD-P1-1 = CURRENT；P3-MOD-P1-2 = NEXT。
+- P-1/L0、P0、P1 已 CLOSED；不得因为旧卡文字重新施工。
+- P3-PROTO-0C 已 CLOSED / DONE（corrective history，不再作为 current gate）。**P1 已 CLOSED**；P3-MOD-P2-1 = CURRENT；P3-MOD-P2-2 = NEXT。
 - P1 只证明 grading completion / score computed；candidate result release 属于 P3。
 - 模块顺序遵循 `plan.md`：P1 → P2 → P3。不得把 P3 result tasks 提前到 P2 authoring closure 之前。
-- P1/P2 当前验证 actor 可使用 Admin；Teacher route/capability switch 属于 P4。保留现有 tenant isolation，但不在这些卡中重设计 org model。
+- P2 当前验证 actor 可使用 Admin；Teacher route/capability switch 属于 P4。保留现有 tenant isolation，但不在这些卡中重设计 org model。
 - 后置 E2E 暴露历史依赖缺口时，回真实 owner corrective closure；修完返回原 RED。
