@@ -303,6 +303,7 @@ docs/                    # design documents
 - **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
 - **AI coding rules** — see `docs/code-quality.md` §17
 - **Research before toolchain changes** — Docker, pnpm, Node module resolution, CI, package manager, and build-system changes require MCP/doc search + local repo verification before editing. Do not guess.
+- **Frontend visual authority** — see the "Frontend Visual Authority" section below
 
 Every Job completion requires:
 
@@ -322,6 +323,92 @@ Every Job completion requires:
 - DB repository: `packages/db/src/repository/<entity>Repo.ts` — each repo method takes ctx as first arg
 - All user-facing strings in Chinese (zh-CN), code and comments in English
 - No comments in code unless asked
+
+---
+
+## Frontend Visual Authority
+
+**Authority documents** (read before any frontend visual work):
+
+- `docs/frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md` — accepted as-built visual-language audit.
+- `docs/frontend/P3-UI-Foundation-plan.md` — the authority for UI foundation work (authority chain, recipes, sequence, lint rules).
+
+Do **not** treat `docs/ui/*` paths as current authority — that directory no longer exists; references to it in this file and elsewhere are historical/archive only.
+
+### Authority chain
+
+```text
+semantic tokens
+    ↓
+semantic recipes
+    ↓
+authoritative components
+    ↓
+business pages
+```
+
+Tailwind remains the implementation substrate. This model makes Tailwind a substrate, not the business-facing visual language. It does **not** mean "business pages must not use Tailwind" (see the boundary below).
+
+### Component discovery rule
+
+Before creating or locally recreating a visual structure, inspect these in order:
+
+```text
+apps/web/src/components/ui          # shadcn primitives (generated, do not hand-edit)
+apps/web/src/components/shared      # authoritative shared business components
+existing semantic recipes           # (being introduced progressively; few exist yet)
+the visual authority registry       # (does not exist yet — planned in UI-VOCAB-1)
+```
+
+Distinguish **component does not exist** from **component exists but appears insufficient**. The latter triggers the insufficiency protocol below — it is **not** a license to bypass the authority. Writing local Tailwind is never, by itself, justification to bypass an existing visual authority.
+
+### Component insufficiency protocol
+
+When an existing authoritative component or recipe appears insufficient:
+
+1. identify the missing semantic, structural, interaction, or accessibility requirement;
+2. determine whether the requirement belongs to the existing visual role;
+3. extend the existing authority when the semantic role is unchanged;
+4. introduce a distinct role only when the semantics genuinely differ.
+
+Do not create a second implementation of the same visual role. Known collision groups to reconcile (not duplicate): `PageSection` / `ContentCard` / `DataTableShell` (titled content containers), the multiple "stat/KPI" presentations, `ListToolbar` / `DataToolbar`, `ConfirmDialog` / `ConfirmActionDialog`.
+
+### Tailwind boundary
+
+Business pages **may** use Tailwind for structural layout and responsive behavior. Normal structural Tailwind includes:
+
+```text
+flex / grid / block / hidden
+relative / absolute / fixed / sticky
+items-* / justify-* / grid-cols-* / col-span-*
+w-* / h-* / min-* / max-* / overflow-* / gap-* / space-* / responsive variants
+```
+
+Business pages **must not** independently compose reusable governed appearance recipes from primitive typography, surface, elevation, or domain-status utilities when a semantic recipe, variant, or authoritative component owns that role. Do not recreate, with primitive utilities, a recipe that an authority already owns.
+
+### Typography guidance
+
+- Chinese font selection is intentional and centrally owned in `apps/web/src/index.css` (`--font-sans`). Agents must **not** introduce page-local `font-family` stacks.
+- Agents must **not** invent one-off typography recipes in business pages (the forthcoming semantic typography layer — `type-page-title`, `type-body`, etc. — will own governed font-size / weight / line-height combinations; it does **not** exist yet).
+- Serif usage is restricted to explicitly approved reading roles; none are approved yet.
+- Do not claim semantic typography recipes already exist — they do not (planned in UI-RECIPE-1).
+
+### Status authority
+
+Domain status presentation must use the authoritative status mapping and components:
+
+- `apps/web/src/lib/statusMeta.ts` — the status → tone authority.
+- `apps/web/src/components/shared/StatusBadge.tsx` — the status presentation component.
+
+Distinguish **domain status** (must flow through `statusMeta` + `StatusBadge`) from **generic UI feedback** (field errors, form-submit alerts, validation messages). Destructive / error colors remain valid for genuine field-error or alert feedback — this rule does not prohibit them there.
+
+### Elevation guidance
+
+Ordinary business content must **not** invent shadow-based elevation. Shadows are reserved for visual roles that intentionally own elevation — especially overlay / floating surfaces and the sticky topbar. This is a forward authority rule: existing shadow debt is grandfathered by the lint baseline, but no **new** business-page shadow may be introduced. Do not assume all current shadow usage is already compliant.
+
+### Enforcement
+
+Deterministic enforcement of the high-confidence boundaries above is provided by the `exam-ui/*` ESLint rules (see `apps/web/src/lint/exam-ui/`). The current stage enforces only high-confidence authority bypasses (`prefer-field-error`, `prefer-inline-error-banner`, `no-business-shadow`, `no-arbitrary-typography`); broader typography and status-color enforcement arrives in UI-LINT-2 once semantic replacements exist.
 
 ---
 
@@ -359,24 +446,31 @@ Phase1.4 UI Foundation Reset is a **UI foundation stabilization reference**, not
 8. Admin Console vs Exam Runtime layout boundary unclear
 9. SVG/icon usage inconsistent
 
-### Documentation Reference
+### Documentation Reference (Historical / Archive)
 
-All UI foundation rules are defined in `docs/ui/`:
+The `docs/ui/` paths below were the Phase1.4 reference set. **That directory no longer exists** — these entries are retained as historical pointers only; archived copies may exist under `docs/archive/`. For current frontend visual authority, use the documents named in the "Frontend Visual Authority" section above:
+
+- `docs/frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md`
+- `docs/frontend/P3-UI-Foundation-plan.md`
+
+Historical Phase1.4 reference filenames (archive only, not current authority):
 
 - `docs/ui/00-ui-constitution.md` — UI constitution and invariant principles
 - `docs/ui/01-design-tokens.md` — CSS variables and Tailwind tokens
 - `docs/ui/02-layout-system.md` — Shell, sidebar, topbar, and layout rules
 - `docs/ui/03-component-boundaries.md` — Component layer boundaries
-- `docs/ui/04-state-grammar.md` — Status grammar and集中 management
+- `docs/ui/04-state-grammar.md` — Status grammar and central management
 - `docs/ui/05-page-templates.md` — Page templates (list, detail, form, exam runtime)
 - `docs/ui/06-accessibility-rules.md` — Accessibility rules
 - `docs/ui/07-ui-bug-inventory.md` — Known UI bugs
 - `docs/ui/08-migration-plan.md` — PR migration plan
 - `docs/ui/09-phase2-readiness.md` — Phase2 documentation readiness
 
-### Migration Plan
+### Migration Plan (Historical / Archive)
 
-See `docs/ui/08-migration-plan.md` for PR拆分:
+The Phase1.4 migration plan below is retained for history. It references the now-archived `docs/ui/` set; it is **not** the current UI foundation sequence. The current sequence is `docs/frontend/P3-UI-Foundation-plan.md` (UI-PLAN-0 → UI-AGENT-1 → UI-LINT-1 → …).
+
+Historical Phase1.4 PR split:
 
 - PR 1: Documentation convergence only
 - PR 2: Route refresh / title loading / ErrorBoundary / App bootstrap
