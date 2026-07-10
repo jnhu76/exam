@@ -98,13 +98,17 @@ _Avoid_: attempt state, attempt phase
 **GradingStatus**: The scoring lifecycle dimension, independent of AttemptStatus.
 _Avoid_: score status, grading phase
 
-- `pending_auto` — auto-grading queued or in progress
+- `auto_graded` — scored entirely by the auto-grading engine (set at submit freeze for pure-objective attempts)
 - `pending_manual` — manual grading needed (text_response questions exist)
 - `fully_graded` — all scoring complete
 
-**Critical rule**: Manual grading queue queries `gradingStatus = 'pending_manual'`, NOT `attemptStatus = 'grading'`. The `grading` attemptStatus is a transient auto-grading indicator; `gradingStatus` is the scoring lifecycle dimension that determines whether human intervention is needed.
+> The historical `pending_auto` value has been removed; it is not in the current enum (`packages/domain/src/enums.ts`). Pure-objective attempts are set to `auto_graded` at the submit freeze barrier.
 
-**State machine discipline**: All state changes go through集中 command functions (`submitAttempt`, `resumeAttempt`, `markDisrupted`, `completeManualGrading`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state.
+**Critical rule**: The manual grading queue's work truth source is the materialized `attempt_grading_entries` (predicate: `grading_mode='manual' AND status='pending_manual'`), NOT `gradingStatus` and NOT an `attemptStatus = 'grading'` query. `gradingStatus` describes the attempt-level scoring lifecycle/display state but cannot manufacture or rebuild queue work items; `gradingStatus = 'pending_manual'` without a matching pending entry does not appear in the queue (ghost-attempt guard). The `grading` attemptStatus is a transient auto-grading indicator only.
+
+**State machine discipline**: All state changes go through集中 command functions (`submitAttempt`, `resumeAttempt`, `markDisrupted`, `gradeQuestion`, `voidAttempt`). Each command uses a transition matrix with business guards, executed inside a database transaction with row lock or conditional update. DB is the fact source; domain state machine defines allowed transitions; API returns derived capabilities; frontend consumes derived capabilities, not raw DB state.
+
+> The historical `completeManualGrading` command does not exist in current production code; the one-way pending-only manual completion command is `gradeQuestion` (`packages/exam-engine/src/manualGrading.ts`).
 
 **Derived attempt capabilities**: API returns these alongside raw `attemptStatus`; frontend consumes these, not raw status.
 _Avoid_: computed permissions
