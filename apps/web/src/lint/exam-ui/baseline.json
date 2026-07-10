@@ -31,5 +31,9 @@
     "apps/web/src/pages/admin/SystemDiagnosticsPage.tsx::shadow-sm",
     "apps/web/src/pages/exam/ExamListPage.tsx::shadow-sm",
     "apps/web/src/pages/exam/TakeExamPage.tsx::shadow-sm"
+  ],
+  "exam-ui/no-raw-surface-recipe": [
+    "apps/web/src/components/exam/QuestionWorkspace.tsx::bg-card|border|panel-radius",
+    "apps/web/src/pages/exam/TakeExamPage.tsx::bg-card|border|panel-radius"
   ]
 }

@@ -102,6 +102,7 @@ const eslintConfig = [
       "exam-ui/no-business-shadow": "error",
       "exam-ui/no-arbitrary-typography": "error",
       "exam-ui/no-raw-typography": "error",
+      "exam-ui/no-raw-surface-recipe": "error",
     },
   },
   {
@@ -125,6 +126,7 @@ const eslintConfig = [
       "exam-ui/prefer-inline-error-banner": "error",
       "exam-ui/no-arbitrary-typography": "error",
       "exam-ui/no-raw-typography": "error",
+      "exam-ui/no-raw-surface-recipe": "error",
     },
   },
 ];

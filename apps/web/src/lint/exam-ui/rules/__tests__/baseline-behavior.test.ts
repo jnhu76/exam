@@ -150,4 +150,34 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
       rmSync(probe, { force: true });
     }
   });
+
+  it("grandfathers the existing no-raw-surface-recipe debt (QuestionWorkspace)", async () => {
+    __resetBaselineCacheForTests();
+    const results = await eslint.lintFiles([
+      "src/components/exam/QuestionWorkspace.tsx",
+    ]);
+    const surfErrors = results
+      .flatMap((r) => r.messages)
+      .filter((m) => m.ruleId === "exam-ui/no-raw-surface-recipe");
+    expect(surfErrors).toHaveLength(0);
+  });
+
+  it("reports a NEW no-raw-surface-recipe violation in a previously-clean file", async () => {
+    __resetBaselineCacheForTests();
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const probe = join(WEB_ROOT, "src/pages/__probe_surf_clean.tsx");
+    writeFileSync(
+      probe,
+      'export const X = () => <div className="rounded-lg border bg-card p-5">probe</div>;\n',
+    );
+    try {
+      const results = await eslint.lintFiles([probe]);
+      const surfErrors = results
+        .flatMap((r) => r.messages)
+        .filter((m) => m.ruleId === "exam-ui/no-raw-surface-recipe");
+      expect(surfErrors.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  });
 });

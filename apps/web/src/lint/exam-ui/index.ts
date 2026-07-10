@@ -9,6 +9,7 @@
  *   - exam-ui/no-business-shadow
  *   - exam-ui/no-arbitrary-typography
  *   - exam-ui/no-raw-typography
+ *   - exam-ui/no-raw-surface-recipe
  *
  * Scope: business / feature source under apps/web/src (pages, components/shared,
  * components/exam, components/settings, components/question). components/ui
@@ -21,6 +22,7 @@ import preferInlineErrorBanner from "./rules/prefer-inline-error-banner";
 import noBusinessShadow from "./rules/no-business-shadow";
 import noArbitraryTypography from "./rules/no-arbitrary-typography";
 import noRawTypography from "./rules/no-raw-typography";
+import noRawSurfaceRecipe from "./rules/no-raw-surface-recipe";
 
 /**
  * The rules are typed as typescript-eslint v8 `RuleModule`s, but ESLint v10's
@@ -35,6 +37,7 @@ const rules = {
   "no-business-shadow": noBusinessShadow,
   "no-arbitrary-typography": noArbitraryTypography,
   "no-raw-typography": noRawTypography,
+  "no-raw-surface-recipe": noRawSurfaceRecipe,
 } as unknown as ESLint.Plugin["rules"];
 
 const plugin: ESLint.Plugin = {
@@ -49,4 +52,5 @@ export {
   noBusinessShadow,
   noArbitraryTypography,
   noRawTypography,
+  noRawSurfaceRecipe,
 };
