@@ -16353,6 +16353,13 @@
                           "maxScore": {
                             "type": "number"
                           },
+                          "standardAnswer": {
+                            "nullable": true
+                          },
+                          "rubric": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "candidateAnswer": {
                             "nullable": true
                           },
@@ -16389,6 +16396,7 @@
                           "type",
                           "content",
                           "maxScore",
+                          "rubric",
                           "entry"
                         ],
                         "additionalProperties": false
