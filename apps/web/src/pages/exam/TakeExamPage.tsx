@@ -859,7 +859,7 @@ export function TakeExamPage() {
                   </Button>
                 )}
               </div>
-              <div className="mb-8 text-xl font-medium leading-8 text-foreground">
+              <div className="type-reading mb-8">
                 {currentQuestionView.prompt}
               </div>
               <QuestionRenderer

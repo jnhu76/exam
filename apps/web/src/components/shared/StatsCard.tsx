@@ -25,11 +25,9 @@ export function StatsCard({
           </div>
         )}
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-muted-foreground">
-            {label}
-          </p>
-          <p className="text-3xl font-bold">{value}</p>
-          {trend && <p className="text-xs text-muted-foreground">{trend}</p>}
+          <p className="type-secondary truncate">{label}</p>
+          <p className="type-metric text-3xl">{value}</p>
+          {trend && <p className="type-metadata">{trend}</p>}
         </div>
       </CardContent>
     </Card>

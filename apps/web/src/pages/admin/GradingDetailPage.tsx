@@ -209,7 +209,7 @@ export function GradingDetailPage() {
               <Label>{t("admin.gradingDetail.question.candidateAnswer")}</Label>
               <div
                 data-testid={`grading-candidate-answer-${q.questionId}`}
-                className="min-h-16 rounded-md border bg-muted/30 p-3 text-sm whitespace-pre-wrap"
+                className="type-long-response min-h-16 rounded-md border bg-muted/30 p-3"
               >
                 {formatAnswer(q.candidateAnswer)}
               </div>

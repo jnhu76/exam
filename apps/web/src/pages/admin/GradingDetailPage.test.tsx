@@ -368,7 +368,10 @@ describe("candidateAnswer rendering", () => {
     await screen.findByText(/期末考试 — 张三/);
     const answerEl = screen.getByTestId("grading-candidate-answer-q1");
     expect(answerEl).toHaveTextContent(longAnswer);
-    expect(answerEl).toHaveClass("whitespace-pre-wrap");
+    // The candidate-answer box uses the type-long-response semantic recipe
+    // (UI-RECIPE-1A), which owns white-space: pre-wrap as a CSS property
+    // rather than a primitive utility class.
+    expect(answerEl).toHaveClass("type-long-response");
   });
 
   it("renders array answer joined by Chinese comma", async () => {

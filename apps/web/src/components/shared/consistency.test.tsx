@@ -36,11 +36,22 @@ describe("UI consistency rules", () => {
   });
 
   describe("PageHeader", () => {
-    it("uses font-semibold not font-bold", () => {
+    it("uses the semantic page-title recipe (not raw font-bold/semibold)", () => {
       const { container } = render(<PageHeader title="测试" />);
       const h1 = container.querySelector("h1");
-      expect(h1?.className).toContain("font-semibold");
+      // Page title typography is owned by the type-page-title semantic recipe
+      // (UI-RECIPE-1A), not by primitive font-weight utilities.
+      expect(h1?.className).toContain("type-page-title");
       expect(h1?.className).not.toContain("font-bold");
+      expect(h1?.className).not.toContain("font-semibold");
+    });
+
+    it("renders the description through the page-description recipe", () => {
+      const { container } = render(
+        <PageHeader title="测试" description="说明文字" />,
+      );
+      const p = container.querySelector("p");
+      expect(p?.className).toContain("type-page-description");
     });
   });
 });
