@@ -32,10 +32,7 @@ export function PageSection({
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className={cn(
-        "rounded-lg border bg-card text-card-foreground",
-        className,
-      )}
+      className={cn("surface-content text-card-foreground", className)}
     >
       {(title || description || actions) && (
         <div

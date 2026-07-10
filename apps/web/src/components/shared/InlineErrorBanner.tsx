@@ -16,7 +16,7 @@ export function InlineErrorBanner({
     <div
       role="alert"
       className={cn(
-        "rounded-md border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive",
+        "surface-attention border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive",
         className,
       )}
     >

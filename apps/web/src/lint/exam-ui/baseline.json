@@ -17,7 +17,6 @@
     "apps/web/src/components/exam/ExamTimer.tsx::text-[11px]"
   ],
   "exam-ui/no-business-shadow": [
-    "apps/web/src/components/shared/StatsCard.tsx::shadow-sm",
     "apps/web/src/pages/admin/DashboardPage.tsx::shadow-sm",
     "apps/web/src/pages/admin/ExamDetailPage.tsx::shadow-sm",
     "apps/web/src/pages/admin/ProctorDashboardPage.tsx::shadow-sm",

@@ -30,7 +30,7 @@ export function DataTableShell({
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className={cn("overflow-hidden rounded-lg border bg-card", className)}
+      className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (
         <div className="flex flex-col gap-3 border-b px-5 py-4 lg:flex-row lg:items-start lg:justify-between">

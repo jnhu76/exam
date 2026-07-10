@@ -28,10 +28,7 @@ export function FormSection({
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className={cn(
-        "rounded-lg border bg-card text-card-foreground",
-        className,
-      )}
+      className={cn("surface-content text-card-foreground", className)}
     >
       <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">

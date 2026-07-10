@@ -31,8 +31,8 @@ describe("baseline signature + grandfather lookup", () => {
 
   it("accepts ruleId with or without exam-ui/ prefix", () => {
     __resetBaselineCacheForTests();
-    // StatsCard shadow-sm is in the baseline for no-business-shadow.
-    const sig = signature("apps/web/src/components/shared/StatsCard.tsx", [
+    // DashboardPage shadow-sm is in the baseline for no-business-shadow.
+    const sig = signature("apps/web/src/pages/admin/DashboardPage.tsx", [
       "shadow-sm",
     ]);
     expect(isGrandfathered("no-business-shadow", sig)).toBe(true);
@@ -49,8 +49,8 @@ describe("baseline signature + grandfather lookup", () => {
 
   it("rejects a new token set in a listed file", () => {
     __resetBaselineCacheForTests();
-    // StatsCard is listed with shadow-sm; a shadow-lg there is a NEW violation.
-    const sig = signature("apps/web/src/components/shared/StatsCard.tsx", [
+    // DashboardPage is listed with shadow-sm; a shadow-lg there is a NEW violation.
+    const sig = signature("apps/web/src/pages/admin/DashboardPage.tsx", [
       "shadow-lg",
     ]);
     expect(isGrandfathered("no-business-shadow", sig)).toBe(false);
@@ -69,15 +69,15 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     });
   });
 
-  it("grandfathers an existing shadow-sm violation (StatsCard)", async () => {
+  it("grandfathers an existing shadow-sm violation (DashboardPage)", async () => {
     __resetBaselineCacheForTests();
     const results = await eslint.lintFiles([
-      "src/components/shared/StatsCard.tsx",
+      "src/pages/admin/DashboardPage.tsx",
     ]);
-    const errors = results
+    const shadowErrors = results
       .flatMap((r) => r.messages)
-      .filter((m) => m.ruleId?.startsWith("exam-ui/"));
-    expect(errors).toHaveLength(0);
+      .filter((m) => m.ruleId === "exam-ui/no-business-shadow");
+    expect(shadowErrors).toHaveLength(0);
   });
 
   it("grandfathers the ExamTimer text-[11px] arbitrary-typography debt", async () => {
