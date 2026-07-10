@@ -53,10 +53,23 @@ function formatAnswer(answer: unknown): string {
  * answer renders as "未设置" (not set) — distinct from the candidate's
  * "未作答" (unanswered) label, because a missing reference answer is a
  * question-authoring state, not a candidate omission.
+ *
+ * standardAnswer is typed `unknown` on the wire (z.unknown()). Production
+ * objective types are flat primitives/arrays of option-id strings, but the
+ * schema admits arbitrary structures, so a non-primitive is serialized to
+ * readable JSON rather than left to `String()` (which would render
+ * `[object Object]`).
  */
 function formatStandardAnswer(answer: unknown): string {
   if (answer === undefined || answer === null || answer === "")
     return i18n.t("admin.gradingDetail.format.notSet" as never);
+  if (typeof answer === "object") {
+    try {
+      return JSON.stringify(answer, null, 2);
+    } catch {
+      return String(answer);
+    }
+  }
   return formatAnswer(answer);
 }
 

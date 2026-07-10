@@ -606,6 +606,42 @@ describe("frozen grading metadata rendering (P3-MOD-P1-1)", () => {
       "whitespace-pre-wrap",
     );
   });
+
+  it("serializes a structured (object/array) standardAnswer as readable JSON", async () => {
+    // standardAnswer is typed `z.unknown()` on the wire. Production objective
+    // types are flat primitives / arrays of option-id strings, but the schema
+    // admits arbitrary structures. A non-primitive must render as readable
+    // JSON, not `[object Object]`.
+    const structuredRef = {
+      criteria: ["逻辑清晰", "概念准确"],
+      minExamples: 2,
+    };
+    getMock.mockResolvedValue({
+      ...baseData,
+      questions: [
+        {
+          questionId: "q1",
+          type: "text_response",
+          content: "请阐述你的观点",
+          maxScore: 20,
+          standardAnswer: structuredRef,
+          rubric: "按对象化评分依据给分",
+          candidateAnswer: "我的回答",
+          entry: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const refEl = screen.getByTestId("grading-standard-answer-q1");
+    // Keys and values are present as readable JSON text.
+    expect(refEl).toHaveTextContent('"criteria"');
+    expect(refEl).toHaveTextContent("逻辑清晰");
+    expect(refEl).toHaveTextContent('"minExamples"');
+    // No `[object Object]` leakage.
+    expect(refEl).not.toHaveTextContent("[object Object]");
+  });
 });
 
 describe("validateScore", () => {
