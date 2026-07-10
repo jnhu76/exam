@@ -20,6 +20,17 @@
     "Noto Sans CJK SC", "Source Han Sans SC", -apple-system, BlinkMacSystemFont,
     "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --font-reading: var(--font-ui);
+  /*
+   * Serif authority (UI-TYPO-2). The self-hosted "Noto Serif SC" family is the
+   * project-owned CJK serif, intended for sustained Chinese reading only. It
+   * is NOT a prestige / formal / important signal and must never be applied to
+   * UI controls, status, scores, timers, or metadata. Consumers must opt into a
+   * semantic reading recipe (type-reading / type-long-response, UI-RECIPE-1A);
+   * serif is not applied by HTML tag alone. Local() prefers a system Noto Serif
+   * / Source Han Serif if installed, then falls back to the self-hosted woff2.
+   */
+  --font-serif:
+    "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -28,6 +39,7 @@
 @theme inline {
   --font-sans: var(--font-ui);
   --font-reading: var(--font-reading);
+  --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
   --color-background: var(--bg);
   --color-foreground: var(--text);

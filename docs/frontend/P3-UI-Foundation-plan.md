@@ -770,6 +770,27 @@ fallback behavior
 
 Do not globally apply serif based on HTML tag names.
 
+## Implementation authority (established)
+
+The serif role is now physically established (UI-TYPO-2 complete):
+
+```text
+semantic role:  --font-serif  (apps/web/src/index.css)
+physical asset: "Noto Serif SC", self-hosted under
+                apps/web/public/fonts/noto-serif-sc/
+provenance:     @fontsource/noto-serif-sc@5.2.8 (chinese-simplified subset), OFL 1.1
+weights:        400 (regular), 700 (bold) — no 500/600 shipped
+wiring:         apps/web/index.html loads css/{regular,bold}.css
+fallback:       local("Noto Serif SC") -> local("Source Han Serif SC") -> self-hosted woff2
+```
+
+The semantic boundary (allowed / conditional / forbidden contexts above) is the
+authority. `font.serif` is distinct from `font.reading` (the semantic sans
+reading-family role) and from `type-reading` (the complete reading recipe,
+UI-RECIPE-1A, which initially uses `font.reading`, not serif). Equating reading
+with serif is forbidden; a future or explicitly approved recipe may opt a
+surface into `font.serif`.
+
 ## Exit condition
 
 Serif has a documented semantic role and a controlled implementation authority.
