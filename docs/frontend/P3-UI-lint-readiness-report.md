@@ -297,9 +297,10 @@ coverage and are **not** activated.
 
 ---
 
-## 4. Existing lint baseline state
+## 4. Existing lint baseline state (Phase 4 debt registry)
 
-Current `apps/web/src/lint/exam-ui/baseline.json` (deterministic-debt contract):
+Current `apps/web/src/lint/exam-ui/baseline.json` (deterministic-debt contract),
+after UI-LINT-2 Phases 1–2:
 
 | Rule | Baseline entries | Debt shape |
 | --- | ---: | --- |
@@ -307,11 +308,77 @@ Current `apps/web/src/lint/exam-ui/baseline.json` (deterministic-debt contract):
 | `exam-ui/prefer-inline-error-banner` | 4 | `destructive-surface\|rounded` per file |
 | `exam-ui/no-arbitrary-typography` | 1 | `ExamTimer.tsx::text-[11px]` |
 | `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file |
+| `exam-ui/no-raw-typography` | 5 | `font-weight\|text-size` per file (section-title bypass) |
+| `exam-ui/no-raw-surface-recipe` | 2 | `bg-card\|border\|panel-radius` per file (surface-content bypass) |
 
-The baseline is **small and explicit** (18 total entries across 4 rules), each
-entry a real documented bypass. This satisfies the Phase 4 rule: "small
-explicit debt list" — no bulk file ignores. New rules added in UI-LINT-2 must
-follow the same baseline discipline.
+The baseline is **small and explicit** — 25 total entries across 6 rules, each
+entry a real file-level signature. This satisfies the Phase 4 rule: "small
+explicit debt list" — **no bulk file ignores, no thousands of ignored files.**
+The full per-entry debt registry follows. Each entry records the four required
+fields (location / reason / owner / migration plan).
+
+### 4.1 Debt registry — `exam-ui/no-raw-typography` (5 entries, added Phase 1)
+
+| Location | Reason | Owner | Migration plan |
+| --- | --- | --- | --- |
+| `components/exam/ExamTopbar.tsx` | runtime topbar title `text-lg font-semibold` (page-title role, not section-title) | UI-PILOT-1 (exam runtime) | route through `type-page-title` (topbar already has a heading role) when the exam-runtime page migrates |
+| `components/exam/QuestionHeader.tsx` | question-section title `text-base font-semibold` | UI-PILOT-1 | replace with `type-section-title` or wrap in a section component |
+| `pages/admin/DashboardPage.tsx` | `CardTitle text-lg font-semibold` | UI-MIGRATE-N | migrate titled `<Card>` block to `PageSection` (drops the bypass) |
+| `pages/exam/ExamListPage.tsx` (3 nodes) | card list section titles `text-lg font-semibold` | UI-MIGRATE-N | migrate list section to `PageSection`/`DataTableShell` |
+| `pages/exam/TakeExamPage.tsx` (2 nodes) | exam-runtime section titles `text-lg font-semibold` | UI-PILOT-1 (exam runtime) | route through `type-section-title` |
+
+### 4.2 Debt registry — `exam-ui/no-raw-surface-recipe` (2 entries, added Phase 2)
+
+| Location | Reason | Owner | Migration plan |
+| --- | --- | --- | --- |
+| `components/exam/QuestionWorkspace.tsx` | hand-rolled `rounded-lg border bg-card p-5` content surface | UI-PILOT-1 (exam runtime) | select `surface-content` (or wrap in `PageSection`/`Card`) |
+| `pages/exam/TakeExamPage.tsx` (2 nodes) | exam question area + sidebar `rounded-lg border bg-card` | UI-PILOT-1 (exam runtime) | select `surface-content` |
+
+### 4.3 Debt registry — `exam-ui/no-business-shadow` (7 entries, UI-LINT-1)
+
+| Location | Reason | Owner | Migration plan |
+| --- | --- | --- | --- |
+| `pages/admin/DashboardPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N | drop `shadow-sm` on `PageSection` migration |
+| `pages/admin/ExamDetailPage.tsx` (10 nodes) | `<Card shadow-sm>` stat cards | UI-MIGRATE-N | migrate stat cards to `StatsCard` (flat) + titled blocks to `PageSection` |
+| `pages/admin/ProctorDashboardPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N (Phase2 proctor) | drop on migration |
+| `pages/admin/ScoreListPage.tsx` (7 nodes) | `<Card shadow-sm>` stat cards | UI-MIGRATE-N | migrate to `StatsCard` |
+| `pages/admin/SystemDiagnosticsPage.tsx` (8 nodes) | `<Card shadow-sm>` stat cards | UI-MIGRATE-N | migrate to `StatsCard` |
+| `pages/exam/ExamListPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N | drop on `PageSection` migration |
+| `pages/exam/TakeExamPage.tsx` | exam question area `shadow-sm` | UI-PILOT-1 | drop — it is already `surface-content` |
+
+### 4.4 Debt registry — `exam-ui/prefer-field-error` (6 entries, UI-LINT-1)
+
+| Location | Reason | Owner | Migration plan |
+| --- | --- | --- | --- |
+| `components/exam/ExamConfigForm.tsx` | inline `<p text-destructive text-size>` | UI-MIGRATE-N | replace with `<FieldError>` |
+| `components/exam/QuestionRenderer.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
+| `components/exam/SubjectiveAnswerInput.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
+| `pages/admin/CandidateFieldsPage.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
+| `pages/admin/CandidatesPage.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
+| `pages/admin/GradingDetailPage.tsx` | inline field error | UI-PILOT-1 (pilot page) | replace with `<FieldError>` |
+
+### 4.5 Debt registry — `exam-ui/prefer-inline-error-banner` (4 entries, UI-LINT-1)
+
+| Location | Reason | Owner | Migration plan |
+| --- | --- | --- | --- |
+| `components/exam/ExamTimer.tsx` | destructive control surface | UI-PILOT-1 | evaluate vs `InlineErrorBanner` (may be a distinct control role) |
+| `pages/LoginPage.tsx` | inline destructive banner | UI-MIGRATE-N | replace with `<InlineErrorBanner>` |
+| `pages/admin/ExamDetailPage.tsx` | inline destructive banner | UI-MIGRATE-N | replace with `<InlineErrorBanner>` |
+| `pages/exam/StartExamPage.tsx` | inline destructive banner | UI-PILOT-1 | replace with `<InlineErrorBanner>` |
+
+### 4.6 Debt registry — `exam-ui/no-arbitrary-typography` (1 entry, UI-LINT-1)
+
+| Location | Reason | Owner | Migration plan |
+| --- | --- | --- | --- |
+| `components/exam/ExamTimer.tsx` | `text-[11px]` timer label | UI-PILOT-1 | route through `type-metadata` or `type-numeric` recipe |
+
+### Phase 4 verdict
+
+The baseline is compliant: 25 explicit entries, zero bulk ignores, every entry
+has a documented location / reason / owner / migration plan. Entries are removed
+as their owning migration task (UI-PILOT-1, UI-MIGRATE-N) clears each bypass —
+the `baseline.json` file shrinks as debt is paid, never grows except by explicit
+reviewed addition.
 
 ---
 
@@ -325,7 +392,7 @@ migration coverage / false-positive risk understood).
 | --- | --- | --- |
 | **Phase 1** | `exam-ui/no-raw-typography` (section-title bypass only) | ✅ **READY** — `type-section-title` recipe + 3 migrated component consumers + low false-positive for weight+size stack. Metric bypass **deferred** (blocked on `StatsCard` migration). |
 | **Phase 2** | `exam-ui/no-raw-surface-recipe` (`surface-content` recomposition) | ⚠️ **CONDITIONAL** — must first resolve the `<Card>` primitive question (Option A: Card stays primitive → lint protects pages; Option B: Card deprecated → migration required). Detection of `bg-card + border + rounded-lg (+ shadow-sm)` is well-defined; the gate is the Card decision, not the detection. |
-| **Phase 3** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role is high-false-positive (categorical `Badge` is not a status) and is **deferred or activated very narrowly**. PageSection/StatsCard sub-roles are **blocked on migration coverage**. |
+| **Phase 3** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role is **DEFERRED** (bypass is dynamic-`className`/data-flow, not statically token-detectable; categorical `Badge` is allowed and would false-positive — see `P3-UI-LINT-2-phase3-authority-bypass-decision.md`). PageSection/StatsCard sub-roles are **blocked on migration coverage**. Phase 3 activates zero new rules. |
 | **Phase 4** | Baseline cleanup | ✅ Current baseline is already small/explicit; new rules add their own grandfathered debt with the same per-entry discipline. |
 
 ---
