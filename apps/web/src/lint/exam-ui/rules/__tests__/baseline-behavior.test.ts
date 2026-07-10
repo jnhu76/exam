@@ -120,4 +120,34 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
       rmSync(probeClean, { force: true });
     }
   });
+
+  it("grandfathers the existing no-raw-typography debt (ExamTopbar section-title bypass)", async () => {
+    __resetBaselineCacheForTests();
+    const results = await eslint.lintFiles([
+      "src/components/exam/ExamTopbar.tsx",
+    ]);
+    const typErrors = results
+      .flatMap((r) => r.messages)
+      .filter((m) => m.ruleId === "exam-ui/no-raw-typography");
+    expect(typErrors).toHaveLength(0);
+  });
+
+  it("reports a NEW no-raw-typography violation in a previously-clean file", async () => {
+    __resetBaselineCacheForTests();
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const probe = join(WEB_ROOT, "src/pages/__probe_typ_clean.tsx");
+    writeFileSync(
+      probe,
+      'export const X = () => <h2 className="text-base font-semibold">probe</h2>;\n',
+    );
+    try {
+      const results = await eslint.lintFiles([probe]);
+      const typErrors = results
+        .flatMap((r) => r.messages)
+        .filter((m) => m.ruleId === "exam-ui/no-raw-typography");
+      expect(typErrors.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  });
 });

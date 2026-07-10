@@ -8,6 +8,7 @@
  *   - exam-ui/prefer-inline-error-banner
  *   - exam-ui/no-business-shadow
  *   - exam-ui/no-arbitrary-typography
+ *   - exam-ui/no-raw-typography
  *
  * Scope: business / feature source under apps/web/src (pages, components/shared,
  * components/exam, components/settings, components/question). components/ui
@@ -19,6 +20,7 @@ import preferFieldError from "./rules/prefer-field-error";
 import preferInlineErrorBanner from "./rules/prefer-inline-error-banner";
 import noBusinessShadow from "./rules/no-business-shadow";
 import noArbitraryTypography from "./rules/no-arbitrary-typography";
+import noRawTypography from "./rules/no-raw-typography";
 
 /**
  * The rules are typed as typescript-eslint v8 `RuleModule`s, but ESLint v10's
@@ -32,6 +34,7 @@ const rules = {
   "prefer-inline-error-banner": preferInlineErrorBanner,
   "no-business-shadow": noBusinessShadow,
   "no-arbitrary-typography": noArbitraryTypography,
+  "no-raw-typography": noRawTypography,
 } as unknown as ESLint.Plugin["rules"];
 
 const plugin: ESLint.Plugin = {
@@ -45,4 +48,5 @@ export {
   preferInlineErrorBanner,
   noBusinessShadow,
   noArbitraryTypography,
+  noRawTypography,
 };
