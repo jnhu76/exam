@@ -1311,6 +1311,175 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
   });
 });
 
+// ── P3-MOD-P1-1: frozen grading-metadata projection ───────────────
+//
+// The grader needs frozen standardAnswer + rubric (from QuestionSnapshot),
+// not from a live question row. These RED-first tests prove the projection
+// exists and is stable across live-question edits, without joining live
+// questions or reading draft answers.
+describe("grading-details frozen metadata projection (P3-MOD-P1-1)", () => {
+  let ctxp1: TestContext;
+
+  beforeAll(async () => {
+    ctxp1 = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(scoreRoutes, { prefix: "" });
+    });
+  });
+
+  afterAll(async () => {
+    await ctxp1.cleanup();
+  });
+
+  /**
+   * Builds a text_response snapshot with BOTH a frozen reference answer and a
+   * frozen rubric — the grader's two missing frozen bases per the rebaseline.
+   */
+  function textResponseWithRubric(id: string, score = 20): QuestionSnapshot {
+    return {
+      ...subjectiveQuestion(id, score),
+      standardAnswer: `REFERENCE_ANSWER_${id}`,
+      rubric: `RUBRIC_${id}\n第二行评分要点`,
+    };
+  }
+
+  it("projects frozen standardAnswer and rubric from the QuestionSnapshot", async () => {
+    const { attemptId } = await seedAttempt(ctxp1, {
+      questions: [textResponseWithRubric("q-frozen", 20)],
+      title: "Frozen Meta",
+    });
+    await seedGradingEntries(
+      ctxp1,
+      attemptId,
+      [textResponseWithRubric("q-frozen", 20)],
+      [],
+    );
+
+    const res = await ctxp1.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctxp1.adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().questions[0]).toMatchObject({
+      questionId: "q-frozen",
+      standardAnswer: "REFERENCE_ANSWER_q-frozen",
+      rubric: "RUBRIC_q-frozen\n第二行评分要点",
+    });
+  });
+
+  it("keeps frozen metadata even when the live question row changes", async () => {
+    // Seed a real live question row, then mutate it AFTER the attempt's
+    // QuestionSnapshot was frozen — the grading detail must keep the frozen
+    // values and never reflect the live edit.
+    const { attemptId } = await seedAttempt(ctxp1, {
+      questions: [textResponseWithRubric("q-stable", 20)],
+      title: "Stable Meta",
+    });
+    await seedGradingEntries(
+      ctxp1,
+      attemptId,
+      [textResponseWithRubric("q-stable", 20)],
+      [],
+    );
+
+    // Mutate a live questions row that shares the originalQuestionId. The
+    // grading-details projection must NOT join live questions, so this change
+    // must be invisible to the response.
+    await ctxp1.db
+      .update(schema.questions)
+      .set({
+        standardAnswer: "LIVE_EDIT_SHOULD_NOT_LEAK",
+        rubric: "LIVE_RUBRIC_EDIT_SHOULD_NOT_LEAK",
+      })
+      .where(eq(schema.questions.id, "q-stable"));
+
+    const res = await ctxp1.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctxp1.adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().questions[0]).toMatchObject({
+      questionId: "q-stable",
+      standardAnswer: "REFERENCE_ANSWER_q-stable",
+      rubric: "RUBRIC_q-stable\n第二行评分要点",
+    });
+    const serialized = JSON.stringify(res.json().questions[0]);
+    expect(serialized).not.toContain("LIVE_EDIT_SHOULD_NOT_LEAK");
+    expect(serialized).not.toContain("LIVE_RUBRIC_EDIT_SHOULD_NOT_LEAK");
+  });
+
+  it("projects null standardAnswer/rubric for a text_response without them", async () => {
+    const { attemptId } = await seedAttempt(ctxp1, {
+      questions: [subjectiveQuestion("q-null", 10)],
+      title: "Null Meta",
+    });
+    await seedGradingEntries(
+      ctxp1,
+      attemptId,
+      [subjectiveQuestion("q-null", 10)],
+      [],
+    );
+
+    const res = await ctxp1.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctxp1.adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().questions[0]).toMatchObject({
+      questionId: "q-null",
+      standardAnswer: null,
+      rubric: null,
+    });
+  });
+
+  it("renders a multiline candidate answer and rubric as frozen plain text", async () => {
+    const multilineAnswer = "第一段答案\n第二段答案\n<script>x</script>";
+    const { attemptId } = await seedAttempt(ctxp1, {
+      questions: [textResponseWithRubric("q-multi", 20)],
+      title: "Multiline",
+      answers: [
+        {
+          questionId: "q-multi",
+          answer: multilineAnswer,
+          version: 1,
+          savedAt: new Date(),
+        } satisfies AnswerRecord,
+      ],
+    });
+    await seedGradingEntries(
+      ctxp1,
+      attemptId,
+      [textResponseWithRubric("q-multi", 20)],
+      [
+        {
+          questionId: "q-multi",
+          answer: multilineAnswer,
+          version: 1,
+          savedAt: new Date(),
+        },
+      ],
+    );
+
+    const res = await ctxp1.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${attemptId}/grading-details`,
+      cookies: { "auth-token": ctxp1.adminToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const q = res.json().questions[0];
+    expect(q.candidateAnswer).toBe(multilineAnswer);
+    expect(q.rubric).toBe("RUBRIC_q-multi\n第二行评分要点");
+  });
+});
+
 // Note: the tests below were appended; the preceding "});" closed the
 // describe block, so we re-open a sibling describe for the Slice 3C
 // boundary tests to keep them grouped.

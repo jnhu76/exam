@@ -6,7 +6,7 @@ import {
   candidateApiToken,
   startExamFromList,
   answerTrueFalse,
-  answerFillBlank,
+  answerTextResponse,
   waitForSaveSaved,
   submitExam,
   adminApiToken,
@@ -14,53 +14,66 @@ import {
 } from "../lib/flow";
 
 /**
- * P2D-J4 — Manual grading end-to-end (real HTTP flow).
+ * P3-MOD-P1-2 — Subjective grading end-to-end (real HTTP + browser flow).
  *
- * Covers the full subjective-grading story through the browser:
- *   1. Admin seeds an exam with one objective (true_false) + one subjective
- *      (fill_blank, standardAnswer=null) question.
- *   2. Candidate answers both and submits.
- *   3. Admin opens the grading queue, sees the pending attempt, opens detail,
- *      sees the candidate's answer, enters score + comment, saves (finalizes).
- *   4. Candidate result reflects the reconciled objective + manual total.
- *   5. Admin re-grades over the API; candidate total updates idempotently
- *      (no double-counting).
+ * Proves the real product loop for a text_response question:
+ *   candidate starts exam
+ *     → answers a real text_response (multiline plain text) + objective
+ *     → submits
+ *     → submitted + pending_manual (authoritative take API)
+ *     → durable manual grading queue (backed by pending-manual entry;
+ *       objective work absent)
+ *     → admin opens grading detail → sees frozen candidate answer, frozen
+ *       rubric, and applicable frozen standardAnswer (P1-1 projection)
+ *     → admin completes the pending manual entry
+ *     → graded + fully_graded; queue item disappears
+ *     → final score identity (attempt total == grading-result earned sum)
  *
- * Subjective questions are created over HTTP (standardAnswer: null is now a
- * valid, type-validated input). No DB seed is used.
+ * The prior `test.skip` was justified by a Phase 2 baseline premise
+ * ("subjective answer runtime / candidate-answer visibility / manual grading
+ * workflow are not part of Phase 2 baseline"). That premise is stale: P0
+ * CLOSED shipped the text_response runtime, and P3-MOD-P1-1 landed the frozen
+ * grading-metadata projection. The skip is removed; the real flow now runs.
+ *
+ * P1 boundary (preserved): P1 proves "score becomes computed / attempt grading
+ * completes". Candidate result visibility is exercised only because the seed
+ * uses `immediate` publication — it is NOT a P1 acceptance gate.
  */
-// Phase 3 pending: subjective answer runtime, candidate-answer visibility,
-// rich-text/manual grading workflow are NOT part of the Phase 2 baseline.
-// Phase 2 closes the objective-question exam loop only. The take page does
-// not render a usable subjective-answer input, so the candidate cannot
-// answer the subjective question and the full manual-grading flow cannot
-// run. Re-enable when subjective question answering + manual grading detail
-// land in Phase 3.
-test.describe("manual grading (P2D-J4)", () => {
-  test.skip(
-    true,
-    "Phase 3 pending: subjective answer runtime / candidate-answer visibility / rich-text+manual grading workflow are not part of Phase 2 baseline",
-  );
-  test("candidate submits subjective answer → admin grades → candidate sees reconciled total", async ({
+test.describe("manual grading (P3-MOD-P1-2)", () => {
+  test("candidate submits text_response → admin grades → graded + fully_graded with score identity", async ({
     page,
     request,
   }) => {
     // Objective: true_false, score 40, correct answer true.
-    // Subjective: fill_blank (null standardAnswer), score 60.
-    // Passing line 50 so the reconciled total (40 + 50 = 90) passes.
-    const subjectiveText = `E2E essay ${Date.now()}`;
-    const seeded = await seedExam(request, "manual-grade", {
+    // Subjective: text_response, score 60, with a non-empty frozen rubric and a
+    //   non-null frozen reference answer (proves the P1-1 projection through
+    //   the real UI). Passing line 50 → reconciled total (40 + 50 = 90) passes.
+    const FROZEN_RUBRIC = "评分细则：\n1. 逻辑清晰\n2. 概念准确";
+    const FROZEN_REF = "参考答案：从光合作用的光反应与暗反应两方面论述";
+    const essayLine1 =
+      "光合作用是植物利用光能将二氧化碳和水转化为有机物的过程。";
+    const essayLine2 = "它分为光反应与暗反应两个阶段。";
+    const essay = `${essayLine1}\n${essayLine2}`;
+
+    const seeded = await seedExam(request, "p1-essay", {
       questionAnswer: true,
       questionScore: 40,
       passingScore: 50,
       totalScore: 100,
       resultPublicationMode: "immediate",
-      subjectiveQuestions: [{ score: 60, content: `简述你的理解 ____` }],
+      textResponseQuestions: [
+        {
+          score: 60,
+          content: "请论述光合作用的两个阶段",
+          standardAnswer: FROZEN_REF,
+          rubric: FROZEN_RUBRIC,
+        },
+      ],
     });
-    expect(seeded.subjectiveQuestionIds).toHaveLength(1);
-    const subjectiveQuestionId = seeded.subjectiveQuestionIds[0]!;
+    expect(seeded.textResponseQuestionIds).toHaveLength(1);
+    const essayQuestionId = seeded.textResponseQuestionIds[0]!;
 
-    // ── Candidate: answer objective, navigate to subjective, answer, submit ──
+    // ── Candidate: answer objective, navigate to text_response, answer, submit ──
     await candidateLogin(page, seeded.candidate);
     await startExamFromList(page, seeded.examId);
 
@@ -68,95 +81,165 @@ test.describe("manual grading (P2D-J4)", () => {
     await answerTrueFalse(page, true);
     await waitForSaveSaved(page);
 
-    // Navigate to Q2 (subjective fill_blank) and type the essay.
+    // Navigate to Q2 (text_response) and type the multiline essay.
     await page.getByRole("button", { name: /下一题/ }).click();
-    await answerFillBlank(page, subjectiveText);
+    await answerTextResponse(page, essay);
     await waitForSaveSaved(page);
 
     await submitExam(page);
 
-    // Capture the attemptId from the result URL for later API checks.
+    // Capture the attemptId from the result URL for API checks.
     await page.waitForURL("**/result", { timeout: 15_000 });
     const resultUrl = new URL(page.url());
     const attemptId = resultUrl.pathname.split("/").filter(Boolean)[1]!;
     expect(attemptId).toBeTruthy();
 
-    // ── Admin: grading queue → detail → grade → finalize ────────────────────
+    const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+    const candidateToken = await candidateApiToken(request, seeded.candidate);
+
+    // ── Authoritative take API: submitted + pending_manual ───────────────
+    const takeRes = await request.get(
+      `${baseURL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(takeRes.status()).toBe(200);
+    const take = await takeRes.json();
+    expect(take.attemptStatus).toBe("submitted");
+    expect(take.gradingStatus).toBe("pending_manual");
+
+    // ── Admin: grading queue shows durable pending-manual work ───────────
+    const adminToken = await adminApiToken(request);
+    const queueRes = await request.get(`${baseURL}/api/admin/grading-queue`, {
+      headers: { Cookie: `auth-token=${adminToken}` },
+    });
+    expect(queueRes.status()).toBe(200);
+    const queueBody = await queueRes.json();
+    const queueItem = queueBody.items.find(
+      (i: { attemptId: string }) => i.attemptId === attemptId,
+    );
+    expect(queueItem).toBeDefined();
+    expect(queueItem.gradingStatus).toBe("pending_manual");
+    // Only the single text_response is pending-manual work; the objective
+    // question is completed_auto and must NOT inflate the pending count.
+    expect(queueItem.pendingQuestionCount).toBe(1);
+
+    // ── Admin: grading detail shows frozen answer + rubric + reference ──
+    // This is the P1-1 projection proven through the real UI. Navigate via the
+    // queue row (same path a human admin takes).
     await loginAsAdmin(page);
     await page.goto("/admin/grading-queue");
-
-    // The submitted attempt appears in the pending queue.
     const row = page.getByTestId(`grading-queue-row-${attemptId}`);
     await row.waitFor({ state: "visible", timeout: 15_000 });
-    // The grading-queue row renders the candidate's display `name`
-    // (user.name), not the login `username` — assert against the displayed
-    // identifier, which is unique per seeded candidate.
-    await expect(row).toContainText(seeded.candidate.name);
     await row.click();
     await page.waitForURL(
       (url) => /\/admin\/grading-queue\/[^/]+$/.test(url.pathname),
       { timeout: 15_000 },
     );
 
-    // Grading detail shows the candidate's answer + score/comment inputs.
+    // Candidate answer preserves both submitted lines (whitespace-pre-wrap).
+    const answerEl = page.getByTestId(
+      `grading-candidate-answer-${essayQuestionId}`,
+    );
+    await expect(answerEl).toContainText(essayLine1);
+    await expect(answerEl).toContainText(essayLine2);
+
+    // Frozen rubric + frozen reference answer from QuestionSnapshot (P1-1).
     await expect(
-      page.getByTestId(`grading-candidate-answer-${subjectiveQuestionId}`),
-    ).toContainText(subjectiveText);
+      page.getByTestId(`grading-rubric-${essayQuestionId}`),
+    ).toContainText("评分细则");
     await expect(
-      page.getByTestId(`grading-score-input-${subjectiveQuestionId}`),
+      page.getByTestId(`grading-rubric-${essayQuestionId}`),
+    ).toContainText("概念准确");
+    await expect(
+      page.getByTestId(`grading-standard-answer-${essayQuestionId}`),
+    ).toContainText("参考答案");
+
+    // Score/comment inputs are present for the pending manual entry.
+    await expect(
+      page.getByTestId(`grading-score-input-${essayQuestionId}`),
     ).toBeVisible();
     await expect(
-      page.getByTestId(`grading-comment-input-${subjectiveQuestionId}`),
+      page.getByTestId(`grading-comment-input-${essayQuestionId}`),
     ).toBeVisible();
 
-    // Enter score (50/60) + comment and save → finalizes the last subjective.
+    // ── Admin: complete the pending manual entry (score 50/60) ──────────
+    await page.getByTestId(`grading-score-input-${essayQuestionId}`).fill("50");
     await page
-      .getByTestId(`grading-score-input-${subjectiveQuestionId}`)
-      .fill("50");
-    await page
-      .getByTestId(`grading-comment-input-${subjectiveQuestionId}`)
+      .getByTestId(`grading-comment-input-${essayQuestionId}`)
       .fill("good effort");
-    await page.getByTestId(`grading-save-btn-${subjectiveQuestionId}`).click();
-    // Use exact match: the page also renders a status label containing
-    // "评分已完成" as a substring (e.g. "手动评分已完成评分"), which would
-    // make a substring getByText match two elements and trip strict mode.
+    await page.getByTestId(`grading-save-btn-${essayQuestionId}`).click();
+    // "评分已完成" (exact) is the finalized toast — the last pending-manual
+    // entry is now completed_manual and finalizeTerminalGrading ran.
     await expect(page.getByText("评分已完成", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
 
-    // Reload detail → score + comment persist (entry saved).
+    // Reload detail → score + comment persist (terminal entry saved).
     await page.reload();
     await expect(
-      page.getByTestId(`grading-score-input-${subjectiveQuestionId}`),
+      page.getByTestId(`grading-score-input-${essayQuestionId}`),
     ).toHaveValue("50");
 
-    // ── Candidate: result reflects objective (40) + manual (50) = 90 ────────
-    const candidateToken = await candidateApiToken(request, seeded.candidate);
+    // ── Terminal: attempt graded + fully_graded; queue item gone ────────
+    const takeAfter = await request.get(
+      `${baseURL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(takeAfter.status()).toBe(200);
+    const takeAfterBody = await takeAfter.json();
+    expect(takeAfterBody.attemptStatus).toBe("graded");
+    expect(takeAfterBody.gradingStatus).toBe("fully_graded");
+
+    const queueAfter = await request.get(`${baseURL}/api/admin/grading-queue`, {
+      headers: { Cookie: `auth-token=${adminToken}` },
+    });
+    expect(queueAfter.status()).toBe(200);
+    const queueAfterBody = await queueAfter.json();
+    const queueItemAfter = queueAfterBody.items.find(
+      (i: { attemptId: string }) => i.attemptId === attemptId,
+    );
+    expect(queueItemAfter).toBeUndefined();
+
+    // ── Score identity: objective (40) + manual (50) = 90 ───────────────
     const result = await getCandidateResult(request, candidateToken, attemptId);
     expect(result.showResultImmediately).toBe(true);
     expect(result.totalScore).toBe(90);
     expect(result.passed).toBe(true); // 90 >= 50
 
-    // ── Admin cannot revise the score post-terminal (Slice 3C) ────────────
-    // Manual grading completion is one-way. The attempt is now graded +
-    // fully_graded, so the ordinary grade-question command must reject any
-    // further mutation of the completed_manual entry. Score revision is not
-    // part of the current protocol.
-    const adminToken = await adminApiToken(request);
+    // Score identity (Job Card §8): the admin result view exposes the
+    // per-question earned scores (admin bypasses the publication gate).
+    // Assert attempt.totalScore == SUM(gradingResult question earned) == 90.
+    const adminResultRes = await request.get(
+      `${baseURL}/api/scores/attempts/${attemptId}`,
+      { headers: { Cookie: `auth-token=${adminToken}` } },
+    );
+    expect(adminResultRes.status()).toBe(200);
+    const adminResult = await adminResultRes.json();
+    expect(adminResult.showResultImmediately).toBe(true);
+    expect(adminResult.totalScore).toBe(90);
+    const earnedSum = (
+      adminResult.questionResults as Array<{ score: number }>
+    ).reduce((sum, q) => sum + (q.score ?? 0), 0);
+    expect(earnedSum).toBe(90);
+
+    // ── Strict terminal: ordinary grade-question is rejected (409) ──────
+    // gradeQuestion is one-way; completed_manual / graded+fully_graded are
+    // immutable under the current protocol. Post-terminal revision is not in
+    // scope.
     const regrade = await request.post(
-      `${process.env.E2E_BASE_URL ?? "http://localhost:3000"}/api/admin/attempts/${attemptId}/grade-question`,
+      `${baseURL}/api/admin/attempts/${attemptId}/grade-question`,
       {
         headers: { Cookie: `auth-token=${adminToken}` },
         data: {
-          questionId: subjectiveQuestionId,
+          questionId: essayQuestionId,
           score: 45,
           comment: "re-grade",
         },
       },
     );
     expect(regrade.status()).toBe(409);
-    // Terminal truth persists — the candidate total stays 90 (40 + 50),
-    // NOT recomputed to 85.
+
+    // Terminal truth persists — total stays 90, not recomputed to 85.
     const resultAfterRegrade = await getCandidateResult(
       request,
       candidateToken,

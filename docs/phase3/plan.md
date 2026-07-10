@@ -10,16 +10,18 @@
 
 ## 0. 状态快照
 
-> **时效性说明（2026-07-07 同步）。** 本计划取代早先的能力优先 Phase 3 计划。模块队列与执行状态反映当前已接受的闭环结果。
+> **时效性说明（2026-07-10 同步）。** 本计划取代早先的能力优先 Phase 3 计划。模块队列与执行状态反映当前已接受的闭环结果（含 P3-L0-2C/2D/2E grading workset 纠正链、P3-FORMAL-P0-A canonical terminal grading closure、P3-PROTO-0C accepted grading model mirror、P3-MOD-P1-1/1-2 manual grading closure）。
 >
 > **协议权威：** 评分/提交/冻结/工作集等协议语义以 `docs/phase3/exam-protocol.md` 为权威真相源；本计划不重述协议细节。可执行作业卡位于 `docs/phase3/job-cards-phase3-modules.md`。本计划只回答：什么已完成、什么活跃、什么下一个。
 
 | 模块 | 状态 | 说明 |
 | ---- | ---- | ---- |
-| **P-1/L0** | **CLOSED** | P3-PROTO-0/1/2 + P3-L0-1~5 + P3-L0-2 纠正链（2C/2D/2E 物化 grading workset + 终态聚合权威）+ P3-PROTO-0C 协议镜像全部完成。 |
+| **P-1/L0** | **CLOSED** | P3-PROTO-0/1/2 + P3-L0-1~5 + P3-L0-2 纠正链（2C/2D/2E 物化 grading workset + canonical terminal grading authority）+ P3-PROTO-0C 协议镜像全部完成。 |
 | **P0** | **CLOSED** | P3-FSM-0 + P3-MOD-P0-1~4 完成。CandidateTakeSnapshot 权威、deriveTakeExamView 纯、瞬态 reducer 仅管操作态、text_response 运行时完整、提交冻结证明、原始 candidate happy-path E2E 未改一字即通过。 |
-| **P1** | **ACTIVE** | P3-MOD-P1-1 rebaseline 已完成，**已确认生产缺陷**：grading details API/UI 漏投影冻结的 standardAnswer 与 rubric，评分者缺少冻结评分依据。P3-MOD-P1-2 未开始。 |
-| P2 | QUEUED AFTER P1 | 考试命题闭环。 |
+| **P1** | **CLOSED** | P3-MOD-P1-1 + P3-MOD-P1-2 完成。P1-1 修复了 grading-details API/UI 漏投影冻结 standardAnswer/rubric 的窄生产缺陷（frozen QuestionSnapshot 投影，不 JOIN live questions）；P1-2 用真实 text_response E2E 证明 candidate 提交 → submitted+pending_manual → durable queue → grader 看到冻结作答/评分依据 → 完成 pending manual → graded+fully_graded → 分数身份一致。证据见 `docs/phase3/audit/p1-manual-grading-proof.md`。 |
+
+> **执行游标：** P-1/L0 CLOSED · P0 CLOSED · P1 CLOSED · **P2 ACTIVE · P3-MOD-P2-1 CURRENT** · P3-MOD-P2-2 NEXT。P3-PROTO-0C DONE（corrective history，不再作为 current gate 或 pending prerequisite）。
+| P2 | **ACTIVE** | 考试命题闭环。 |
 | P3 | QUEUED AFTER P2 | 结果发布闭环。 |
 | P4 | QUEUED AFTER P3 | RBAC MVP 切换——按当前计划在 MVP 流程证明之后。 |
 | P5 | AFTER P0–P4 | Email 最小接入。 |
@@ -56,10 +58,10 @@ Phase 3 执行队列现在是模块优先的。
 
 | 优先级 | 模块 | 目标 | 状态 |
 | -------- | ------ | ---- | ------ |
-| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + 物化 grading workset + 终态聚合权威 + backfill。 | **CLOSED**（含 P3-L0-2C/2D/2E 纠正链 + P3-PROTO-0C 协议镜像） |
+| **P-1/L0** | **考试协议与后端状态模型收敛（L0 升级）** | 协议矩阵 + text_response 题型 + submitted_answers 物理列 + submit freeze + CandidateTakeSnapshot + deadline reconciliation + rubric 双层 + 物化 grading workset + canonical terminal grading authority + backfill。 | **CLOSED**（含 P3-L0-2C/2D/2E 纠正链 + P3-PROTO-0C 协议镜像） |
 | **P0** | **考生作答运行时闭环** | 考生能作答所有 MVP 题型并安全提交。 | **CLOSED** |
-| **P1** | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | **ACTIVE**（P1-1 BLOCKED on grading-detail 元数据缺陷） |
-| P2 | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | QUEUED AFTER P1 |
+| **P1** | **人工评分闭环** | 教师/阅卷员能查看考生作答、为主观题打分、完成评分。 | **CLOSED**（P3-MOD-P1-1/1-2 完成；证据见 `docs/phase3/audit/p1-manual-grading-proof.md`） |
+| **P2** | **考试命题闭环** | 教师能创建题目、组装/发布考试并向考生开放。 | **ACTIVE**（P3-MOD-P2-1 CURRENT — 命题 UI 流程审计） |
 | P3 | **结果发布闘环** | 结果按策略可见；考生只看到自己的结果。 | QUEUED AFTER P2 |
 | P4 | **RBAC MVP 切换** | Admin / Teacher / Candidate 权限在 MVP 流程中被强制执行。 | QUEUED AFTER P3（按当前计划在 MVP 流程证明之后） |
 | P5 | **Email 最小接入** | 考试发布和/或结果发布的可选通知。 | AFTER P0–P4 |
@@ -93,14 +95,14 @@ Phase 3 执行队列现在是模块优先的。
 
 - exam lifecycle
 - attempt lifecycle
-- draft answers vs final answers
+- draft answers vs submitted_answers
 - save/restore protocol
 - submit/freeze protocol
 - double submit idempotency
 - save after submit rejection
 - save vs submit race
 - refresh/resume after submit
-- grading workset + terminal aggregation authority（详见 exam-protocol.md §6.6/§6.7）
+- grading workset + canonical terminal grading authority（详见 exam-protocol.md §6.6/§6.7）
 - result visibility
 - standard answer visibility
 - candidate own-result boundary
@@ -142,7 +144,7 @@ Result:
 - **`score_computed` ≠ `result_released`。** 评分完成只产生可计算的分数；是否对考生可见由发布策略与发布动作决定。
 - **`standardAnswer` 可见性 ≠ 分数可见性。** 即使分数已发布，考生能否看到标准答案仍由独立的答案可见性策略控制。
 - **考生 own-result 边界：** 考生只能看到自己的分数/结果，且仅在发布策略允许时。
-- **教师/管理员评分可见性：** 教师/管理员在评分视图中能看到考生已提交答案（`submitted_answers`），不受考生可见性策略约束。
+- **教师/管理员评分可见性：** 评分者看到冻结的提交答案真相。评分详情中的考生作答读取自物化 grading entry 的 `candidateAnswer`，其 provenance 是 submit 时从 `submitted_answers` 物化的冻结真相。评分详情**不**直接运行期读取 `submitted_answers`，也**不**读 draft `attempt.answers`，且**不** JOIN live questions 取评分元数据。不受考生可见性策略约束。
 
 ### 范围
 
@@ -169,9 +171,10 @@ Result:
 ### 完成标准
 
 ```text
-docs/phase3/exam-protocol.md 存在并覆盖全部 14 项协议；
+docs/phase3/exam-protocol.md 存在并覆盖已接受的 21 项协议范围
+（14 原有 + 7 L0 扩展）；
 后端一致性测试证明 save/submit/race/refresh/visibility 边界；
-candidate attempt API 契约包含 7 个真相字段；
+CandidateTakeSnapshot 是统一的考生 take 契约；
 任何人读完协议后不会误以为可以先做 TakeExam UI 再补协议。
 ```
 
@@ -183,7 +186,7 @@ candidate attempt API 契约包含 7 个真相字段；
 | P3-PROTO-1 ✅ DONE | Backend State Consistency Tests (L0) | 14 场景集成测试（protocol-consistency.test.ts） |
 | P3-PROTO-2 ✅ DONE | CandidateTakeSnapshot Endpoint | 统一端点 + 安全投影 + 测试 |
 | P3-L0-1 ✅ DONE | Schema Migration + rubric 双层 | text_response + submitted_answers + rubric 双层存储 |
-| P3-L0-2 ✅ DONE | Submit Freeze + 物化 grading workset + 终态聚合权威 | SubmittedAnswersSnapshot 冻结 + attempt_grading_entries 物化 + aggregateGradingEntries 终态权威（含 2C/2D/2E 纠正链；P3-FORMAL-P0-A 后 auto/manual 收敛到唯一 `finalizeTerminalGrading` closure） |
+| P3-L0-2 ✅ DONE | Submit Freeze + 物化 grading workset + canonical terminal grading authority | SubmittedAnswersSnapshot 冻结 + attempt_grading_entries 物化 + 三层权威分层：`attempt_grading_entries` = 终态分数源；`aggregateGradingEntries` = canonical 终态评分校验/聚合 seam；`finalizeTerminalGrading` = canonical 生产终态 closure（含 2C/2D/2E 纠正链；P3-FORMAL-P0-A 后 auto/manual 路径都委托给唯一 `finalizeTerminalGrading` closure，closure 内部调用 `aggregateGradingEntries`） |
 | P3-L0-3 ✅ DONE | Deadline Reconciliation | 懒触发收口 + 4 入口 + 走同一 submit 冻结屏障 |
 | P3-L0-4 ✅ DONE | Backfill Script | submitted_answers 回填脚本（dry-run + 幂等 + quarantine） |
 | P3-L0-5 ✅ DONE | Publish Validation | text_response rubric 校验 + auto 题 standardAnswer 校验 |
@@ -254,19 +257,26 @@ candidate attempt API 契约包含 7 个真相字段；
 
 ---
 
-## 5. 模块 P1 — 人工评分闭环（ACTIVE）
+## 5. 模块 P1 — 人工评分闭环（CLOSED）
 
 ### 当前状态
 
-P1 是当前活跃模块。P3-MOD-P1-1 rebaseline 已完成，**确认一处生产缺陷**：
+P1 已 **CLOSED**。P3-MOD-P1-1 与 P3-MOD-P1-2 完成：
 
 ```text
-grading details API/UI 漏投影冻结的 standardAnswer 与 rubric。
-两者在冻结 QuestionSnapshot 中已存在，但 GradingDetailsQuestionSchema
-与 grading-details 路由投影都未暴露。评分者缺少冻结评分依据。
+P3-MOD-P1-1 修复 grading-details API/UI 漏投影冻结 standardAnswer / rubric
+            的窄生产缺陷（从冻结 QuestionSnapshot 投影，不 JOIN live questions，
+            不读 draft attempt.answers，不增加 submitted_answers runtime fallback）。
+            证明见 docs/phase3/audit/p1-manual-grading-proof.md。
+P3-MOD-P1-2 用真实 text_response E2E（非 skip）证明 candidate 提交 → submitted +
+            pending_manual → durable queue → grader 看到冻结作答/评分依据 → 完成
+            pending manual → graded + fully_graded → 分数身份一致（attempt 总分 ==
+            gradingResult earned 和 == 90）。strict terminal re-grade 被拒 (409)。
 ```
 
-P1-1 不再是"测试已存在；运行它们即可"——它需要一处窄实现修正（投影冻结的 standardAnswer + rubric）。可执行作业卡详情见 `docs/phase3/job-cards-phase3-modules.md`。
+**权威非回归**：score source = `attempt_grading_entries`；aggregation seam = `aggregateGradingEntries`；terminal closure = `finalizeTerminalGrading`。未引入第二条终态路径；grading 结构性锁（12 tests）P1 前后均 GREEN。
+
+> **P1 边界（保留）：** P1 只证明评分完成 / 分数变得可计算。`score_computed ≠ result_released`——考生结果发布/答案可见性属于 P3。P1-2 E2E 因 seed 使用 immediate 发布而顺带观察 candidate 结果，但这不是 P1 验收项。
 
 ### 目标
 
@@ -300,12 +310,12 @@ P1-1 不再是"测试已存在；运行它们即可"——它需要一处窄实�
 阅卷员能打分、完成评分，结果变得可计算。
 ```
 
-### 派生 Middle Job
+### 派生 Middle Job（全部 DONE — P1 CLOSED）
 
 | ID | 作业 | 产出 |
 | -- | --- | ------ |
-| P3-MOD-P1-1 | 人工评分 API/UI 证明 | 考生作答展示 + 打分保存/收尾测试（合并了早先的渲染验证与打分保存/收尾作业） |
-| P3-MOD-P1-2 | 主观评分 E2E | 考生提交 → 阅卷员打分 → 已评分 attempt |
+| P3-MOD-P1-1 ✅ DONE | 人工评分 API/UI 闭环修复与证明 | grading-details 投影冻结 standardAnswer/rubric + API/UI 测试 + 权威非回归证明（`docs/phase3/audit/p1-manual-grading-proof.md`） |
+| P3-MOD-P1-2 ✅ DONE | 主观评分 E2E | 真实 text_response E2E：candidate 提交 → pending_manual → grader 完成评分 → graded + fully_graded + 分数身份一致 |
 
 ---
 
@@ -591,7 +601,7 @@ Large Job 不再是主执行队列。仅在模块无法安全推进、必须做�
 
 ---
 
-## 14. 近期执行计划（2026-07-07 同步）
+## 14. 近期执行计划（2026-07-10 同步）
 
 ### COMPLETED
 
@@ -599,25 +609,25 @@ Large Job 不再是主执行队列。仅在模块无法安全推进、必须做�
 P-1/L0（含 P3-PROTO-0/1/2 + P3-L0-1~5 + P3-L0-2C/2D/2E 纠正链 + P3-PROTO-0C 协议镜像）
 ↓
 P0（P3-FSM-0 + P3-MOD-P0-1~4，candidate happy-path E2E 通过）
+↓
+P1（P3-MOD-P1-1 修复 grading-details 冻结 standardAnswer/rubric 投影 + P3-MOD-P1-2 真实 text_response E2E 通过；权威非回归证明见 docs/phase3/audit/p1-manual-grading-proof.md）
 ```
 
 ### CURRENT
 
 ```text
-P3-MOD-P1-1 人工评分 API/UI Proof / Closure
-  → BLOCKED：grading details API/UI 漏投影冻结的 standardAnswer 与 rubric
-  → 需要窄实现修正（投影冻结评分元数据），不是"测试已存在；运行即可"
-  → 可执行详情见 docs/phase3/job-cards-phase3-modules.md
+P3-MOD-P2-1 命题 UI 流程审计  ← CURRENT
+  → 可执行详情见 docs/phase3/job-cards-phase3-modules.md（模块 P2）
 ```
 
 ### NEXT
 
 ```text
-P3-MOD-P1-2 主观评分 E2E
+P3-MOD-P2-2 MVP 题目创建测试
 ↓
-P1 CLOSED
+P3-MOD-P2-3 考试发布到考生 E2E
 ↓
-P2 考试命题闭环
+P2 CLOSED
 ↓
 P3 结果发布闭环
 ↓
@@ -701,23 +711,25 @@ Phase 3 的下一步是让 MVP 考试流程真正跑通：
 
 P-1/L0（协议矩阵 + text_response + submitted_answers + submit freeze
 + CandidateTakeSnapshot + deadline reconciliation + rubric + 物化 grading workset
-+ 终态聚合权威 + backfill）**已 CLOSED**。
++ canonical terminal grading authority（`attempt_grading_entries` 分数源 + `aggregateGradingEntries` 聚合 seam + `finalizeTerminalGrading` 终态 closure）+ backfill）**已 CLOSED**。
 
 P0（考生作答运行时）**已 CLOSED**：candidate happy-path E2E 通过。
+
+P1（人工评分闭环）**已 CLOSED**：P3-MOD-P1-1 修复 grading-details 冻结 standardAnswer/rubric 投影（权威非回归证明见 `docs/phase3/audit/p1-manual-grading-proof.md`）；P3-MOD-P1-2 真实 text_response E2E 通过（candidate 提交 → graded + fully_graded + 分数身份一致）。
 
 当前执行从以下开始：
 
 ```text
-P3-MOD-P1-1 人工评分 API/UI Proof / Closure
-  → BLOCKED：grading details API/UI 漏投影冻结的 standardAnswer 与 rubric
+P3-MOD-P2-1 命题 UI 流程审计  ← CURRENT
+  → 模块 P2（考试命题闭环）的第一个作业卡
 ```
 
-P1-1 修复后进入：
+P2 命题闭环之后进入：
 
 ```text
-P3-MOD-P1-2 主观评分 E2E
-→ P1 CLOSED
-→ P2 / P3 / P4 / P5 / P6
+P3-MOD-P2-2 / P3-MOD-P2-3
+→ P2 CLOSED
+→ P3 / P4 / P5 / P6
 ```
 
-只有在 P1 之后，才应按顺序推进命题、结果发布、RBAC 与邮件。
+只有在 P2 之后，才应按顺序推进结果发布、RBAC 与邮件。
