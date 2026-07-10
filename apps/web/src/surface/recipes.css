@@ -1,0 +1,81 @@
+/*
+ * Semantic surface recipes — the region-level appearance authority above
+ * primitive Tailwind surface utilities (UI-SURFACE-1).
+ *
+ * Public authority: the surface-NAME class names. Business consumers select a
+ * surface role; they must not recompose the same region-level appearance
+ * (background + border + radius + shadow) from primitive utilities once a
+ * surface role owns that combination.
+ *
+ * Implementation note: this file is imported separately (main.tsx) rather than
+ * inlined into index.css, mirroring the typography recipe layer. Tailwind v4
+ * organizes styles into cascade layers (theme, base, components, utilities)
+ * where unlayered custom CSS is overridden by utility classes. That is the
+ * intended behavior here: a surface recipe is a BASE that structural
+ * utilities (overflow-hidden, flex, min-w-0, density padding) compose onto;
+ * it is not a declaration that overrides layout. Importing as plain CSS
+ * bypasses the Tailwind content scanner so every recipe is emitted
+ * deterministically. The color CSS variables are defined as root tokens in
+ * index.css and resolve globally here.
+ *
+ * Ownership boundary:
+ *   - surface recipes own: background, border, radius, and (for overlay)
+ *     elevation.
+ *   - surface recipes do NOT own: layout, content spacing/density, typography,
+ *     component behavior, interaction state, or domain-status color. Those are
+ *     owned by components / typography recipes / statusMeta.
+ *
+ * Elevation rule (forward authority): ordinary business content must NOT own a
+ * shadow. Only surface.overlay owns elevation among these recipes. Attention
+ * surfaces demand attention by COLOR, not by elevation.
+ */
+
+/* page: the application canvas behind all content. Lowest visual layer. */
+.surface-page {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* content: primary readable content region — a titled/untitled bordered block.
+ * Background + border + radius. NO elevation (hierarchy comes from background
+ * tier + typography + spacing, not shadow). Consumers: PageSection,
+ * DataTableShell, FormSection, the toolbars, StatsCard. */
+.surface-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* subtle: a region visually subordinate to content — table headers, zebra
+ * rows, metadata strips, read-only wells. Background only; it usually lives
+ * inside a content surface and inherits that surface's border/radius. */
+.surface-subtle {
+  background: var(--surface-muted);
+}
+
+/* navigation: the persistent navigation region — a deliberately distinct dark
+ * surface set from the page canvas, signaling structural chrome. */
+.surface-navigation {
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
+  color: var(--sidebar-text);
+}
+
+/* overlay: floating elements above normal content. The main legitimate
+ * elevation owner. Background + border + radius + shadow. Consumers: shadcn
+ * Dialog/AlertDialog/Popover/DropdownMenu/Sheet/Select, ConfirmDialog. */
+.surface-overlay {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--tw-shadow-md, 0 4px 6px -1px rgb(0 0 0 / 0.1));
+}
+
+/* attention: a non-overlay region that demands attention BY COLOR, not by
+ * elevation — block error/success notices, empty/error placeholders. Radius
+ * only; NO shadow. The color variant (destructive soft fill, dashed
+ * destructive, success soft fill) is owned by the component, not by this
+ * recipe — e.g. InlineErrorBanner adds the destructive border + soft fill. */
+.surface-attention {
+  border-radius: var(--radius);
+}
