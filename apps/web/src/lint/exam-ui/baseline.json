@@ -1,0 +1,29 @@
+{
+  "exam-ui/prefer-field-error": [
+    "apps/web/src/components/exam/ExamConfigForm.tsx::text-destructive|text-size",
+    "apps/web/src/components/exam/QuestionRenderer.tsx::text-destructive|text-size",
+    "apps/web/src/components/exam/SubjectiveAnswerInput.tsx::text-destructive|text-size",
+    "apps/web/src/pages/admin/CandidateFieldsPage.tsx::text-destructive|text-size",
+    "apps/web/src/pages/admin/CandidatesPage.tsx::text-destructive|text-size",
+    "apps/web/src/pages/admin/GradingDetailPage.tsx::text-destructive|text-size"
+  ],
+  "exam-ui/prefer-inline-error-banner": [
+    "apps/web/src/components/exam/ExamTimer.tsx::destructive-surface|rounded",
+    "apps/web/src/pages/LoginPage.tsx::destructive-surface|rounded",
+    "apps/web/src/pages/admin/ExamDetailPage.tsx::destructive-surface|rounded",
+    "apps/web/src/pages/exam/StartExamPage.tsx::destructive-surface|rounded"
+  ],
+  "exam-ui/no-arbitrary-typography": [
+    "apps/web/src/components/exam/ExamTimer.tsx::text-[11px]"
+  ],
+  "exam-ui/no-business-shadow": [
+    "apps/web/src/components/shared/StatsCard.tsx::shadow-sm",
+    "apps/web/src/pages/admin/DashboardPage.tsx::shadow-sm",
+    "apps/web/src/pages/admin/ExamDetailPage.tsx::shadow-sm",
+    "apps/web/src/pages/admin/ProctorDashboardPage.tsx::shadow-sm",
+    "apps/web/src/pages/admin/ScoreListPage.tsx::shadow-sm",
+    "apps/web/src/pages/admin/SystemDiagnosticsPage.tsx::shadow-sm",
+    "apps/web/src/pages/exam/ExamListPage.tsx::shadow-sm",
+    "apps/web/src/pages/exam/TakeExamPage.tsx::shadow-sm"
+  ]
+}
