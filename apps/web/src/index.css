@@ -1,12 +1,34 @@
 @import "tailwindcss";
 
-@theme inline {
-  --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+/*
+ * Semantic font roles (UI foundation, UI-TYPO-1).
+ *
+ * font identity != typography recipe. The roles below are the semantic
+ * font-family owners; size/weight/line-height recipes live in the type-*
+ * recipe layer (UI-RECIPE-1A). Today --font-ui and --font-reading resolve to
+ * the same physical sans stack; they remain separate roles so a future
+ * reading recipe can change family, measure, or density without touching UI.
+ *
+ * Chinese glyph selection is intentional: the project-owned CJK sans family
+ * ("Noto Sans CJK SC", self-hosted via /fonts/noto-sans-cjk-sc) is placed
+ * BEFORE OS-specific CJK fonts so the same typeface renders across Windows,
+ * macOS, and Linux. OS-specific CJK fonts (PingFang SC, Microsoft YaHei) are
+ * kept only as resilient fallbacks, never as the primary selection.
+ */
+:root {
+  --font-ui:
+    "Noto Sans CJK SC", "Source Han Sans SC", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-reading: var(--font-ui);
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
+}
+
+@theme inline {
+  --font-sans: var(--font-ui);
+  --font-reading: var(--font-reading);
+  --font-mono: var(--font-mono);
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --color-card: var(--surface);
@@ -95,14 +117,23 @@ body,
 
 body {
   @apply antialiased;
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 400;
 }
 
+/*
+ * Weight authority (UI-TYPO-1). The self-hosted Noto Sans CJK SC family
+ * exposes intentional 400 (regular), 500 (medium), and 700 (bold) faces only;
+ * no 600 (semibold) face exists. Driving base h1/h2/h3 at 600 produced an
+ * ambiguous nearest-weight snap or synthetic bold. The strongest intentional
+ * weight is 700, so base heading elements anchor there. Application-level
+ * heading hierarchy is owned by the type-* recipe layer and component
+ * classes (PageHeader, CardTitle, etc.), not by this element rule.
+ */
 h1,
 h2,
 h3 {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 700;
 }
