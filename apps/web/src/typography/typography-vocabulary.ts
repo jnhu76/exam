@@ -3,12 +3,17 @@
  * typography-vocabulary.md (UI-VOCAB-1T).
  *
  * This is the source of truth for the confirmed semantic typography recipe
- * names. Future UI-LINT-2 (`exam-ui/no-raw-typography`) synchronizes its
- * allowed-recipe list against `CONFIRMED_RECIPES`. Do not add a name here
- * without first documenting its semantic purpose in typography-vocabulary.md.
+ * names. Do not add a name here without first documenting its semantic purpose
+ * in typography-vocabulary.md.
  *
  * Rejected roles (`field-error`, `status`) are intentionally absent: they are
  * component-owned authorities (FieldError, StatusBadge), not typography recipes.
+ *
+ * Note: a structural lint proxy for these recipes (`exam-ui/no-raw-typography`)
+ * was retired in UI-MIGRATE-N-W3 §12 — it could not deterministically
+ * distinguish section-title ownership from topbar/question/overlay title roles.
+ * Recipe authority is enforced by semantic migration review and the recipe
+ * authority tests (typography/recipes.test.ts), not by a structural lint proxy.
  */
 
 export type TypographyRecipeName =

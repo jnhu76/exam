@@ -121,63 +121,11 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     }
   });
 
-  it("grandfathers the existing no-raw-typography debt (ExamTopbar section-title bypass)", async () => {
-    __resetBaselineCacheForTests();
-    const results = await eslint.lintFiles([
-      "src/components/exam/ExamTopbar.tsx",
-    ]);
-    const typErrors = results
-      .flatMap((r) => r.messages)
-      .filter((m) => m.ruleId === "exam-ui/no-raw-typography");
-    expect(typErrors).toHaveLength(0);
-  });
-
-  it("reports a NEW no-raw-typography violation in a previously-clean file", async () => {
-    __resetBaselineCacheForTests();
-    const { writeFileSync, rmSync } = await import("node:fs");
-    const probe = join(WEB_ROOT, "src/pages/__probe_typ_clean.tsx");
-    writeFileSync(
-      probe,
-      'export const X = () => <h2 className="text-base font-semibold">probe</h2>;\n',
-    );
-    try {
-      const results = await eslint.lintFiles([probe]);
-      const typErrors = results
-        .flatMap((r) => r.messages)
-        .filter((m) => m.ruleId === "exam-ui/no-raw-typography");
-      expect(typErrors.length).toBeGreaterThan(0);
-    } finally {
-      rmSync(probe, { force: true });
-    }
-  });
-
-  it("grandfathers the existing no-raw-surface-recipe debt (QuestionWorkspace)", async () => {
-    __resetBaselineCacheForTests();
-    const results = await eslint.lintFiles([
-      "src/components/exam/QuestionWorkspace.tsx",
-    ]);
-    const surfErrors = results
-      .flatMap((r) => r.messages)
-      .filter((m) => m.ruleId === "exam-ui/no-raw-surface-recipe");
-    expect(surfErrors).toHaveLength(0);
-  });
-
-  it("reports a NEW no-raw-surface-recipe violation in a previously-clean file", async () => {
-    __resetBaselineCacheForTests();
-    const { writeFileSync, rmSync } = await import("node:fs");
-    const probe = join(WEB_ROOT, "src/pages/__probe_surf_clean.tsx");
-    writeFileSync(
-      probe,
-      'export const X = () => <div className="rounded-lg border bg-card p-5">probe</div>;\n',
-    );
-    try {
-      const results = await eslint.lintFiles([probe]);
-      const surfErrors = results
-        .flatMap((r) => r.messages)
-        .filter((m) => m.ruleId === "exam-ui/no-raw-surface-recipe");
-      expect(surfErrors.length).toBeGreaterThan(0);
-    } finally {
-      rmSync(probe, { force: true });
-    }
-  });
+  // The no-raw-typography and no-raw-surface-recipe grandfathering + new-violation
+  // tests were removed in UI-MIGRATE-N-W3 §14: both rules were retired (see
+  // index.ts and docs/frontend/P3-UI-MIGRATE-N-W3-typography-surface-closure.md).
+  // After the proven same-role migrations, every remaining hit was
+  // false-semantic-overlap and no sound NARROW AST boundary existed — the same
+  // unsoundness that retired prefer-field-error. The baseline arrays for those
+  // rules were removed alongside the rules.
 });

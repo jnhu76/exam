@@ -2,13 +2,6 @@
   "exam-ui/no-arbitrary-typography": [
     "apps/web/src/components/exam/ExamTimer.tsx::text-[11px]"
   ],
-  "exam-ui/no-raw-typography": [
-    "apps/web/src/components/exam/ExamTopbar.tsx::font-weight|text-size",
-    "apps/web/src/components/exam/QuestionHeader.tsx::font-weight|text-size",
-    "apps/web/src/pages/admin/DashboardPage.tsx::font-weight|text-size",
-    "apps/web/src/pages/exam/ExamListPage.tsx::font-weight|text-size",
-    "apps/web/src/pages/exam/TakeExamPage.tsx::font-weight|text-size"
-  ],
   "exam-ui/no-business-shadow": [
     "apps/web/src/pages/admin/DashboardPage.tsx::shadow-sm",
     "apps/web/src/pages/admin/ExamDetailPage.tsx::shadow-sm",
@@ -17,9 +10,5 @@
     "apps/web/src/pages/admin/SystemDiagnosticsPage.tsx::shadow-sm",
     "apps/web/src/pages/exam/ExamListPage.tsx::shadow-sm",
     "apps/web/src/pages/exam/TakeExamPage.tsx::shadow-sm"
-  ],
-  "exam-ui/no-raw-surface-recipe": [
-    "apps/web/src/components/exam/QuestionWorkspace.tsx::bg-card|border|panel-radius",
-    "apps/web/src/pages/exam/TakeExamPage.tsx::bg-card|border|panel-radius"
   ]
 }
