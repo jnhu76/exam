@@ -461,11 +461,11 @@ Only this documentation file was produced.
 
 ## 7. Verification
 
-Documentation-only. The static gate is run to prove nothing was disturbed.
+Documentation-only. The static gate verifies that all static checks pass:
 
 ```bash
 pnpm lint:eslint
 pnpm verify:static
 ```
 
-(Results recorded in the UI-LINT-2 final report.)
+(Results: exit 0 — all static checks pass.)

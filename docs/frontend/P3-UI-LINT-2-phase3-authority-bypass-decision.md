@@ -108,7 +108,7 @@ Assessment:
   distinct domain. Repaired in UI-LINT-2-CORRECTIVE-2 to
   `<StatusBadge status={`misconduct_${severity}`} />`.
 
-None of these is a duplicate of `statusMeta`, and none warrants a second
+None of the remaining distinct-domain sites is a duplicate of `statusMeta`, and none warrants a second
 wrapper authority today.
 
 ### 1.3 Genuine status-color bypasses (still data-flow-bound)
@@ -241,7 +241,7 @@ migration establishes real metric coverage.
 ## 5. Verification
 
 Phase 3 is a decision document; no rule, baseline, recipe, component, or source
-file changed. The static gate confirms nothing was disturbed:
+file changed. Verification confirms all static checks pass:
 
 ```bash
 pnpm lint:eslint
