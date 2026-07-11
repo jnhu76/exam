@@ -7,6 +7,7 @@
  *   - exam-ui/prefer-inline-error-banner
  *   - exam-ui/no-business-shadow
  *   - exam-ui/no-arbitrary-typography
+ *   - exam-ui/no-typography-authority-conflict (RECON-1 §12; exported, wired in C7)
  *
  * Retired (UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, §8): `exam-ui/prefer-field-error`
  * is no longer wired. Its structural recipe (`<p> + text-destructive + text-size`)
@@ -50,6 +51,7 @@ import type { ESLint } from "eslint";
 import preferInlineErrorBanner from "./rules/prefer-inline-error-banner";
 import noBusinessShadow from "./rules/no-business-shadow";
 import noArbitraryTypography from "./rules/no-arbitrary-typography";
+import noTypographyAuthorityConflict from "./rules/no-typography-authority-conflict";
 
 /**
  * The rules are typed as typescript-eslint v8 `RuleModule`s, but ESLint v10's
@@ -62,6 +64,7 @@ const rules = {
   "prefer-inline-error-banner": preferInlineErrorBanner,
   "no-business-shadow": noBusinessShadow,
   "no-arbitrary-typography": noArbitraryTypography,
+  "no-typography-authority-conflict": noTypographyAuthorityConflict,
 } as unknown as ESLint.Plugin["rules"];
 
 const plugin: ESLint.Plugin = {
@@ -70,4 +73,9 @@ const plugin: ESLint.Plugin = {
 };
 
 export default plugin;
-export { preferInlineErrorBanner, noBusinessShadow, noArbitraryTypography };
+export {
+  preferInlineErrorBanner,
+  noBusinessShadow,
+  noArbitraryTypography,
+  noTypographyAuthorityConflict,
+};
