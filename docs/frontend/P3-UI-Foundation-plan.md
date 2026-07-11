@@ -1021,12 +1021,19 @@ Tighten enforcement after valid semantic replacements exist.
 Introduce or activate rules such as:
 
 ```text
-exam-ui/no-raw-typography
-exam-ui/no-raw-surface-recipe
 exam-ui/no-domain-status-color
 exam-ui/no-business-shadow
 exam-ui/no-authority-bypass
 ```
+
+> **Retired (UI-MIGRATE-N-W3):** `exam-ui/no-raw-typography` and
+> `exam-ui/no-raw-surface-recipe` were introduced under UI-LINT-2 but
+> subsequently **retired** — their structural recipes could not
+> deterministically distinguish recipe ownership from distinct title/surface
+> roles that reuse the same primitive tokens. See
+> `P3-UI-MIGRATE-N-W3-typography-surface-closure.md` §12-§13. The recipe
+> authorities (`type-section-title`, `surface-content`) remain canonical;
+> ownership is enforced by semantic migration review + recipe authority tests.
 
 The exact primitive classes prohibited in business pages must be generated from or synchronized with the accepted semantic vocabulary.
 

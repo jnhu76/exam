@@ -80,6 +80,12 @@ adoption is still early** — most pages still reach for primitive `text-*` /
 
 ### 1.3 High-confidence semantic-typography bypass patterns
 
+> **Update (UI-MIGRATE-N-W3):** the `no-raw-typography` rule was **retired** —
+> see §4.7-reconciled. The analysis below is retained as the historical design
+> rationale; the per-site audit in §4.7 superseded the blanket classification by
+> proving the pattern also matches distinct TOPBAR/QUESTION/RUNTIME/OVERLAY title
+> roles that no sound AST boundary could exclude.
+
 These are the patterns a `no-raw-typography` rule would target — a primitive
 stack that reproduces a recipe's owned properties. Two bypass recipes have
 enough evidence to gate:
@@ -188,6 +194,12 @@ components are themselves early in adoption.
 | `shadow-sm` | 30 | **business-shadow debt** (already enforced forward; see below) |
 
 ### 2.3 The `surface-content` recomposition
+
+> **Update (UI-MIGRATE-N-W3):** the `no-raw-surface-recipe` rule was **retired**
+> — see §4.7-reconciled. The analysis below is retained as the historical design
+> rationale; the per-site audit in §4.7 proved the pattern also matches a
+> SIDEBAR_SURFACE that no sound AST boundary could distinguish from a content
+> region (the sidebar uses `rounded-lg`, the panel radius the detector keys on).
 
 The bypass a `no-raw-surface-recipe` rule would target is a business page that
 recomposes the `surface-content` recipe by hand:
@@ -342,14 +354,13 @@ other roles (PageSection, StatsCard) are blocked on migration coverage and are
 ## 4. Existing lint baseline state (Phase 4 debt registry)
 
 Current `apps/web/src/lint/exam-ui/baseline.json` (deterministic-debt contract),
-after UI-LINT-2 Phases 1–2 and UI-FIELD-ERROR-AUTHORITY-CLOSURE-1:
+after UI-LINT-2 Phases 1–2, UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, UI-MIGRATE-N-W2,
+and UI-MIGRATE-N-W3:
 
 | Rule | Baseline entries | Debt shape |
 | --- | ---: | --- |
 | `exam-ui/no-arbitrary-typography` | 1 | `ExamTimer.tsx::text-[11px]` |
 | `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file |
-| `exam-ui/no-raw-typography` | 5 | `font-weight\|text-size` per file (section-title bypass) |
-| `exam-ui/no-raw-surface-recipe` | 2 | `bg-card\|border\|panel-radius` per file (surface-content bypass) |
 
 > `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1
 > (§8). Its baseline array was removed; it is no longer an active deterministic
@@ -360,28 +371,29 @@ after UI-LINT-2 Phases 1–2 and UI-FIELD-ERROR-AUTHORITY-CLOSURE-1:
 > `InlineErrorBanner`, two non-owner control-state/status sites excluded by the
 > `role="alert"` detector narrowing. See §4.5-reconciled below.
 
-The baseline is **small and explicit** — 15 total entries across 4 active rules with outstanding debt,
+> `exam-ui/no-raw-typography` and `exam-ui/no-raw-surface-recipe` were
+> **retired** in UI-MIGRATE-N-W3 (§12-§13): after the proven same-role
+> migrations every remaining hit was false-semantic-overlap, and no sound
+> NARROW AST boundary could distinguish the owner role from distinct roles
+> (TOPBAR / QUESTION / RUNTIME / OVERLAY titles; SIDEBAR surface). Both
+> baseline arrays were removed alongside the rules. See §4.7-reconciled below.
+
+The baseline is **small and explicit** — 8 total entries across 2 active rules with outstanding debt,
 each entry a real file-level signature. This satisfies the Phase 4 rule: "small
 explicit debt list" — **no bulk file ignores, no thousands of ignored files.**
 The full per-entry debt registry follows. Each entry records the four required
 fields (location / reason / owner / migration plan).
 
-### 4.1 Debt registry — `exam-ui/no-raw-typography` (5 entries, added Phase 1)
+### 4.1–4.2 Reconciled — `exam-ui/no-raw-typography` and `exam-ui/no-raw-surface-recipe` (rules RETIRED in UI-MIGRATE-N-W3)
 
-| Location | Reason | Owner | Migration plan |
-| --- | --- | --- | --- |
-| `components/exam/ExamTopbar.tsx` | runtime topbar title `text-lg font-semibold` (page-title role, not section-title) | UI-PILOT-1 (exam runtime) | route through `type-page-title` (topbar already has a heading role) when the exam-runtime page migrates |
-| `components/exam/QuestionHeader.tsx` | question-section title `text-base font-semibold` | UI-PILOT-1 | replace with `type-section-title` or wrap in a section component |
-| `pages/admin/DashboardPage.tsx` | `CardTitle text-lg font-semibold` | UI-MIGRATE-N | migrate titled `<Card>` block to `PageSection` (drops the bypass) |
-| `pages/exam/ExamListPage.tsx` (3 nodes) | card list section titles `text-lg font-semibold` | UI-MIGRATE-N | migrate list section to `PageSection`/`DataTableShell` |
-| `pages/exam/TakeExamPage.tsx` (2 nodes) | exam-runtime section titles `text-lg font-semibold` | UI-PILOT-1 (exam runtime) | route through `type-section-title` |
-
-### 4.2 Debt registry — `exam-ui/no-raw-surface-recipe` (2 entries, added Phase 2)
-
-| Location | Reason | Owner | Migration plan |
-| --- | --- | --- | --- |
-| `components/exam/QuestionWorkspace.tsx` | hand-rolled `rounded-lg border bg-card p-5` content surface | UI-PILOT-1 (exam runtime) | select `surface-content` (or wrap in `PageSection`/`Card`) |
-| `pages/exam/TakeExamPage.tsx` (2 nodes) | exam question area + sidebar `rounded-lg border bg-card` | UI-PILOT-1 (exam runtime) | select `surface-content` |
+Both rules were retired in UI-MIGRATE-N-W3 (§12-§13). Their former baseline
+registries (§4.1: 5 typography entries; §4.2: 2 surface entries) are superseded
+by the per-site semantic classification in **§4.7-reconciled** below. The proven
+same-role sites were migrated; the false-semantic-overlap sites were retained as
+distinct roles. Both baseline arrays were removed alongside the rules; the
+`type-section-title` / `surface-content` recipes and the authoritative components
+remain canonical, enforced by semantic migration review + the recipe authority
+tests rather than a structural lint proxy.
 
 ### 4.3 Debt registry — `exam-ui/no-business-shadow` (7 entries, UI-LINT-1)
 
@@ -446,9 +458,49 @@ Two additional same-role sites routed from W1 (not baseline entries — they wer
 | --- | --- | --- | --- |
 | `components/exam/ExamTimer.tsx` | `text-[11px]` timer label | UI-PILOT-1 | route through `type-metadata` or `type-numeric` recipe |
 
+### 4.7 Reconciled — former `exam-ui/no-raw-typography` and `exam-ui/no-raw-surface-recipe` sites (rules RETIRED in UI-MIGRATE-N-W3)
+
+Both rules were retired in UI-MIGRATE-N-W3 (§12-§13). The per-site semantic
+audit disproved the blanket classification "raw section-title / surface-content
+recomposition → migrate to the recipe": after the proven same-role migrations,
+every remaining detector hit was a distinct role that merely reuses the same
+primitive tokens. The per-site classification that replaced the blanket debt
+registries is below.
+
+#### Typography — `exam-ui/no-raw-typography` (`text-{base,lg}` + `font-{semibold,bold}`)
+
+| Former baseline site | Semantic role (verified) | `type-section-title` owner? | Final status |
+| --- | --- | --- | --- |
+| `pages/admin/DashboardPage.tsx` — `CardTitle` 近期考试 | SECTION_TITLE (names the recent-exams content block) | YES | **MIGRATED** → `type-section-title` (authority-owned normalization 18px/600 → 16px/700) |
+| `pages/exam/ExamListPage.tsx` — 3 × section h2 (可参加/历史/即将开始) | SECTION_TITLE (page-level card-group headings) | YES | **MIGRATED** → `type-section-title` (×3) |
+| `components/exam/ExamTopbar.tsx` — h1 exam title | TOPBAR_TITLE (runtime chrome / current-exam identity) | NO | **RETAINED** — distinct role; layout/runtime title authority gap |
+| `components/exam/QuestionHeader.tsx` — h2 第N题 | QUESTION_TITLE (repeated domain work-item title) | NO | **RETAINED** — heading level does not decide typography role |
+| `pages/exam/TakeExamPage.tsx:699` — runtime status div | RUNTIME_STATUS_TITLE (答题中/已结束) | NO | **RETAINED** — distinct role |
+| `pages/exam/TakeExamPage.tsx:811` — overlay title div | OVERLAY_DEADLINE_TITLE (时间到/自动交卷中) | NO | **RETAINED** — distinct role |
+
+No sound NARROW AST boundary could distinguish SECTION_TITLE ownership from
+TOPBAR / QUESTION / RUNTIME / OVERLAY title roles: element types appear in both
+owner and non-owner shapes (PageSection and QuestionHeader both use `<h2>`), and
+no `role`/`aria` landmark owns the distinction (contrast
+`prefer-inline-error-banner`, which narrows soundly on the authority-owned
+`role="alert"`). This is the same unsoundness that retired `prefer-field-error`.
+
+#### Surface — `exam-ui/no-raw-surface-recipe` (`bg-card` + `border` + `rounded-lg`/`rounded`)
+
+| Former baseline site | Semantic role (verified) | `surface-content` owner? | Final status |
+| --- | --- | --- | --- |
+| `components/exam/QuestionWorkspace.tsx:27` — question content surface | QUESTION_CONTENT_SURFACE (token-equivalent to surface-content) | YES | **MIGRATED** → `surface-content` (preserves `p-5 text-card-foreground`) |
+| `pages/exam/TakeExamPage.tsx:798` — take-question-section | QUESTION_CONTENT_SURFACE (token-equivalent; `shadow-sm` is separate W4 debt) | YES | **MIGRATED** → `surface-content` (preserves `relative p-5 shadow-sm md:p-8`) |
+| `pages/exam/TakeExamPage.tsx:735` — QuestionNavigator aside | SIDEBAR_SURFACE (sticky navigation control shell) | NO | **RETAINED** — distinct role; the detector already narrowed on panel radius (excluding `rounded-md` controls), but the sidebar uses `rounded-lg` and cannot be distinguished from a content region by AST |
+
+Recipe/component ownership is now enforced by semantic migration review against
+`P3-UI-component-authority.md` and the recipe authority tests
+(`typography/recipes.test.ts`, `surface/recipes.test.ts`), not by a structural
+lint proxy. See `P3-UI-MIGRATE-N-W3-typography-surface-closure.md`.
+
 ### Phase 4 verdict
 
-The baseline is compliant: 25 explicit entries, zero bulk ignores, every entry
+The baseline is compliant: 8 explicit entries, zero bulk ignores, every entry
 has a documented location / reason / owner / migration plan. Entries are removed
 as their owning migration task (UI-PILOT-1, UI-MIGRATE-N) clears each bypass —
 the `baseline.json` file shrinks as debt is paid, never grows except by explicit
@@ -471,8 +523,8 @@ migration coverage / false-positive risk understood).
 
 | Phase (UI-LINT-2 stage) | Rule | Status |
 | --- | --- | --- |
-| **Phase 1 (UI-LINT-2)** | `exam-ui/no-raw-typography` (section-title bypass only) | ✅ **ACTIVE (error)** — `type-section-title` recipe + 3 migrated component consumers + low false-positive for weight+size stack. Metric bypass **deferred** (blocked on `StatsCard` migration). |
-| **Phase 2 (UI-LINT-2)** | `exam-ui/no-raw-surface-recipe` (`surface-content` recomposition) | ✅ **ACTIVE (error)** — Card decision RESOLVED (Option A: `<Card>` stays a low-level primitive, never flagged). Rule targets the hand-rolled `bg-card` + `border` + panel-radius recomposition in governed business/layout scope only (see §2.5a). |
+| **Phase 1 (UI-LINT-2)** | `exam-ui/no-raw-typography` (section-title bypass only) | ❌ **RETIRED (UI-MIGRATE-N-W3 §12)** — after the proven SECTION_TITLE migrations, 4/4 remaining hits were TOPBAR/QUESTION/RUNTIME/OVERLAY title roles (false-semantic-overlap); no sound NARROW AST boundary distinguished the owner role from those distinct roles. Recipe/component authority retained; enforced by semantic migration review + recipe authority tests. |
+| **Phase 2 (UI-LINT-2)** | `exam-ui/no-raw-surface-recipe` (`surface-content` recomposition) | ❌ **RETIRED (UI-MIGRATE-N-W3 §13)** — after the proven PAGE_CONTENT_SECTION migrations, 1/1 remaining hit was a SIDEBAR_SURFACE (false-semantic-overlap); the detector already narrowed on panel radius (excluding `rounded-md` controls) but could not distinguish a `rounded-lg` sidebar from a content region by AST. Recipe/component authority retained. |
 | **Phase 3 (UI-LINT-2)** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role: see the semantic-ownership boundary in `P3-UI-LINT-2-phase3-authority-bypass-decision.md` — two same-domain duplicates (ProctorDashboard misconduct severity, ExamMonitoring attempt-status label) were repaired in UI-LINT-2-CORRECTIVE-2; the remaining audited sites are **not** `statusMeta` bypasses (distinct semantic domains reusing the `StatusTone` vocabulary), so no migration is owed there. Deterministic lint enforcement of genuine status-color bypasses remains data-flow-bound and deferred. PageSection/StatsCard sub-roles are **blocked on migration coverage**. Phase 3 activates zero new rules. |
 | **Phase 4 (UI-LINT-2)** | Baseline cleanup | ✅ Current baseline is already small/explicit; new rules add their own grandfathered debt with the same per-entry discipline. |
 

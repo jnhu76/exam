@@ -389,9 +389,8 @@ Business pages **must not** independently compose reusable governed appearance r
 ### Typography guidance
 
 - Chinese font selection is intentional and centrally owned in `apps/web/src/index.css` (`--font-sans`). Agents must **not** introduce page-local `font-family` stacks.
-- Agents must **not** invent one-off typography recipes in business pages (the forthcoming semantic typography layer — `type-page-title`, `type-body`, etc. — will own governed font-size / weight / line-height combinations; it does **not** exist yet).
+- Agents must **not** invent one-off typography recipes in business pages. The semantic typography recipe layer (`apps/web/src/typography/recipes.css`) exists and owns governed font-size / weight / line-height combinations per role (`type-page-title`, `type-section-title`, `type-body`, `type-metric`, etc.). Select a recipe by name; do not recompose a role it owns from primitive text / font / leading / tracking utilities.
 - Serif usage is restricted to explicitly approved reading roles; none are approved yet.
-- Do not claim semantic typography recipes already exist — they do not (planned in UI-RECIPE-1).
 
 ### Status authority
 
@@ -415,8 +414,6 @@ Deterministic enforcement of the high-confidence boundaries above is provided by
 - `exam-ui/prefer-inline-error-banner` — a `<div role="alert">` carrying a rounded utility + multiple destructive-surface utilities must use `InlineErrorBanner` (narrowed in UI-MIGRATE-N-W2 to require `role="alert"`, which excludes destructive control-state/status surfaces that merely reuse the color).
 - `exam-ui/no-business-shadow` — no new `shadow-*` in ordinary business content (debt grandfathered by baseline).
 - `exam-ui/no-arbitrary-typography` — no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]`.
-- `exam-ui/no-raw-typography` — business pages must not recompose the **`type-section-title`** recipe (`text-base`/`text-lg` + `font-semibold`/`font-bold`) from primitive utilities; use `type-section-title` or a section component (`PageSection` / `FormSection` / `DataTableShell`). Other typography recipes (`type-metric`, `type-body`, …) are **not** enforced yet — gated on migration coverage.
-- `exam-ui/no-raw-surface-recipe` — business pages must not recompose the **`surface-content`** recipe (`bg-card` + `border` + `rounded-lg`/`rounded`) from primitive utilities; use `surface-content`, an authoritative content component (`PageSection` / `DataTableShell` / `FormSection`), or the shadcn `<Card>` primitive. Other surface recipes are not enforced by this rule.
 
 **Deferred enforcement** (semantic roles that still lack migration coverage or deterministic static detection):
 
@@ -424,8 +421,9 @@ Deterministic enforcement of the high-confidence boundaries above is provided by
 - Component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) — authority exists, migration coverage does not. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
 - Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. See `docs/frontend/P3-UI-LINT-2-phase3-authority-bypass-decision.md` for the semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary).
 - Field-error authority (`FieldError`) — authority exists and is the canonical owner of "form field validation error", but the former `exam-ui/prefer-field-error` structural lint rule was **retired** in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8): its recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles (4/4 remaining hits were false-semantic-overlap). All known same-role bypasses have been migrated; ownership is now enforced by semantic migration review + `FieldError.test.tsx`, not a structural lint proxy. Do **not** re-introduce a structural field-error lint rule without a proven deterministic ownership detector.
+- `type-section-title` / `surface-content` recipe recomposition — authority exists and is canonical, but the structural lint proxies (`exam-ui/no-raw-typography`, `exam-ui/no-raw-surface-recipe`) were **retired** in UI-MIGRATE-N-W3 (§12-§13): after the proven same-role migrations every remaining hit was false-semantic-overlap (TOPBAR / QUESTION / RUNTIME / OVERLAY titles; SIDEBAR surface), and no sound NARROW AST boundary could distinguish the owner role from those distinct roles. All known same-role bypasses have been migrated; recipe/component ownership is enforced by semantic migration review + the recipe authority tests, not a structural lint proxy. Do **not** re-introduce these structural recipe lint rules without a proven deterministic ownership detector.
 
-Do **not** claim that all typography or all surface recipes are enforced — only the two narrow recipes above are gated today. Do **not** claim `FieldError` ownership is deterministically lint-enforced — it is not (the rule was retired). The wired ESLint config is the implementation fact; these docs must match it.
+Do **not** claim that all typography or all surface recipes are lint-enforced — they are not. The wired ESLint config is the implementation fact; these docs must match it.
 
 ---
 

@@ -304,16 +304,22 @@ active/deferred split.)
 | `exam-ui/prefer-inline-error-banner` | a `<div role="alert">` with rounded + destructive-surface utilities must use `InlineErrorBanner` (narrowed to `role="alert"` in UI-MIGRATE-N-W2; baseline cleared 4→0) |
 | `exam-ui/no-business-shadow` | no new `shadow-*` in ordinary business content (debt grandfathered by baseline) |
 | `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` |
-| `exam-ui/no-raw-typography` | business pages must not recompose the **`type-section-title`** recipe (`text-base`/`text-lg` + `font-semibold`/`font-bold`); use `type-section-title` or `PageSection` / `FormSection` / `DataTableShell` |
-| `exam-ui/no-raw-surface-recipe` | business pages must not recompose the **`surface-content`** recipe (`bg-card` + `border` + `rounded-lg`/`rounded`); use `surface-content`, an authoritative content component, or the shadcn `<Card>` primitive |
 
-Each active rule's *current* detection scope is narrow and documented in its
-rule-header comment. `no-raw-typography` today detects **only** the
-section-title bypass; metric / body / secondary typography recipes are not
-enforced yet. `no-raw-surface-recipe` today detects **only** the hand-rolled
-`bg-card` + `border` + panel-radius recomposition; `<Card>` is never flagged
-(it is the accepted low-level primitive — see the Card decision in the lint
-readiness report).
+### Retired enforcement
+
+| Rule | Retired in | Reason |
+| --- | --- | --- |
+| `exam-ui/prefer-field-error` | UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 §8 | structural recipe could not distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles |
+| `exam-ui/no-raw-typography` | UI-MIGRATE-N-W3 §12 | structural recipe could not distinguish SECTION_TITLE ownership from TOPBAR / QUESTION / RUNTIME / OVERLAY title roles (4/4 remaining hits false-semantic-overlap; no sound NARROW AST boundary) |
+| `exam-ui/no-raw-surface-recipe` | UI-MIGRATE-N-W3 §13 | structural recipe could not distinguish PAGE_CONTENT_SECTION ownership from a SIDEBAR_SURFACE (1/1 remaining hit false-semantic-overlap; the sidebar's `rounded-lg` could not be excluded by AST) |
+
+Retired rules are removed from the plugin, the eslint config, and the baseline.
+Their recipe/component authorities (`type-section-title`, `surface-content`,
+`FieldError`) remain canonical — ownership is enforced by semantic migration
+review and the recipe/component authority tests, not by a structural lint proxy.
+Do **not** re-introduce a structural recipe lint rule without a proven
+deterministic ownership detector (contrast `prefer-inline-error-banner`, which
+narrows soundly on the authority-owned `role="alert"`).
 
 ### Deferred enforcement
 
