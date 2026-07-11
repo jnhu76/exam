@@ -1,10 +1,4 @@
 {
-  "exam-ui/prefer-inline-error-banner": [
-    "apps/web/src/components/exam/ExamTimer.tsx::destructive-surface|rounded",
-    "apps/web/src/pages/LoginPage.tsx::destructive-surface|rounded",
-    "apps/web/src/pages/admin/ExamDetailPage.tsx::destructive-surface|rounded",
-    "apps/web/src/pages/exam/StartExamPage.tsx::destructive-surface|rounded"
-  ],
   "exam-ui/no-arbitrary-typography": [
     "apps/web/src/components/exam/ExamTimer.tsx::text-[11px]"
   ],
