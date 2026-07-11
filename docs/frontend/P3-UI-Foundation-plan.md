@@ -585,7 +585,7 @@ enforced by semantic migration review + `FieldError.test.tsx`.
 
 ### `exam-ui/prefer-inline-error-banner`
 
-Detect the known destructive inline-banner recipe already owned by `InlineErrorBanner`.
+Detect the known destructive inline-banner recipe already owned by `InlineErrorBanner`. Narrowed in UI-MIGRATE-N-W2 to require a static `role="alert"` attribute on the matched `<div>` (in addition to `rounded-*` + ≥2 destructive-surface families), which excludes destructive control-state/status surfaces (e.g. timer chips, multi-role status messages) that reuse the color without the banner's a11y contract. Baseline cleared (4 → 0).
 
 ### `exam-ui/no-business-shadow`
 

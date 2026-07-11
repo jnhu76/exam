@@ -200,7 +200,10 @@ hand-roll tone maps with `<Badge className={...}>` for a domain status.
 ### Do NOT recreate field errors or inline banners
 
 Use `FieldError` (per-field) and `InlineErrorBanner` (block-level / submit).
-`InlineErrorBanner` is enforced today by `exam-ui/prefer-inline-error-banner`.
+`InlineErrorBanner` is enforced today by `exam-ui/prefer-inline-error-banner`,
+narrowed in UI-MIGRATE-N-W2 to require `role="alert"` on the matched `<div>`
+(so destructive control-state/status surfaces that merely reuse the color are
+not flagged).
 `FieldError` ownership is enforced by semantic migration review + the authority
 component tests (`FieldError.test.tsx`): the former `exam-ui/prefer-field-error`
 rule was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 because its structural
@@ -298,7 +301,7 @@ active/deferred split.)
 
 | Rule | Enforced semantic role (today) |
 | --- | --- |
-| `exam-ui/prefer-inline-error-banner` | block-level destructive error banners must use `InlineErrorBanner` |
+| `exam-ui/prefer-inline-error-banner` | a `<div role="alert">` with rounded + destructive-surface utilities must use `InlineErrorBanner` (narrowed to `role="alert"` in UI-MIGRATE-N-W2; baseline cleared 4→0) |
 | `exam-ui/no-business-shadow` | no new `shadow-*` in ordinary business content (debt grandfathered by baseline) |
 | `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` |
 | `exam-ui/no-raw-typography` | business pages must not recompose the **`type-section-title`** recipe (`text-base`/`text-lg` + `font-semibold`/`font-bold`); use `type-section-title` or `PageSection` / `FormSection` / `DataTableShell` |

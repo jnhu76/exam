@@ -165,12 +165,17 @@ reuse; bypassing them is the drift the audit documented.
 - **Anatomy:** `<div role=alert>` → destructive border + `bg-destructive-soft`
   + destructive text.
 - **Owned behavior / a11y:** `role=alert`; destructive surface recipe.
-- **Consumers:** `CandidateFieldsPage`, `ExamCreatePage`, `ExamEditPage`,
-  `QuestionEditPage`, `SettingsPage`.
-- **Known bypasses:** `ExamDetailPage:528` inlines an equivalent recipe
-  (`rounded-md border border-destructive bg-destructive/10 px-4 py-3 text-sm
-  text-destructive`) instead of using this component. Target of the active
-  `exam-ui/prefer-inline-error-banner` lint rule.
+- **Consumers:** `CandidateFieldsPage` (page banner + dialog-local),
+  `CandidatesPage` (dialog-local), `ExamCreatePage`, `ExamDetailPage`,
+  `ExamEditPage`, `LoginPage`, `QuestionEditPage`, `SettingsPage`.
+- **Known bypasses:** none remaining. The former `ExamDetailPage:528`,
+  `LoginPage`, `CandidateFieldsPage` dialog-local, and `CandidatesPage`
+  dialog-local sites were migrated to `InlineErrorBanner` in
+  UI-MIGRATE-N-W2. The destructive control-state surfaces (`ExamTimer`
+  low-time chip, `StartExamPage` multi-role `inlineMessage`) are distinct
+  roles, not bypasses; they are excluded from the lint by the `role="alert"`
+  narrowing. Enforced by the active `exam-ui/prefer-inline-error-banner`
+  lint rule (narrowed to require `role="alert"`).
 - **Distinction from `FieldError`:** `FieldError` is a per-field inline error
   (small, under one control); `InlineErrorBanner` is a block-level banner for
   form-wide / submit errors. Different anatomy, different a11y scope — both

@@ -412,7 +412,7 @@ Deterministic enforcement of the high-confidence boundaries above is provided by
 
 **Active enforcement** (rules wired as errors today):
 
-- `exam-ui/prefer-inline-error-banner` — block-level destructive error banners must use `InlineErrorBanner`.
+- `exam-ui/prefer-inline-error-banner` — a `<div role="alert">` carrying a rounded utility + multiple destructive-surface utilities must use `InlineErrorBanner` (narrowed in UI-MIGRATE-N-W2 to require `role="alert"`, which excludes destructive control-state/status surfaces that merely reuse the color).
 - `exam-ui/no-business-shadow` — no new `shadow-*` in ordinary business content (debt grandfathered by baseline).
 - `exam-ui/no-arbitrary-typography` — no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]`.
 - `exam-ui/no-raw-typography` — business pages must not recompose the **`type-section-title`** recipe (`text-base`/`text-lg` + `font-semibold`/`font-bold`) from primitive utilities; use `type-section-title` or a section component (`PageSection` / `FormSection` / `DataTableShell`). Other typography recipes (`type-metric`, `type-body`, …) are **not** enforced yet — gated on migration coverage.

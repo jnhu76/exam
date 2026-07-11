@@ -312,7 +312,7 @@ migration ramp-up — their bypass rules are gated on UI-PILOT-1 / UI-MIGRATE-N.
 | --- | --- | --- | --- | --- |
 | domain status | `StatusBadge` + `statusMeta` | `<Badge className="bg-…">` / `<span>` for a value that **is** a `statusMeta` key (a lifecycle/diagnostic status) | 0 remaining audited `statusMeta` bypasses — two previously-cited sites were same-domain duplicates and have been **repaired** in UI-LINT-2-CORRECTIVE-2: `ProctorDashboardPage` misconduct severity (now `<StatusBadge status={`misconduct_${severity}`} />`) and `ExamMonitoringPage` attempt-status label (now derived via `getStatusMeta`). The remaining cited sites (`AttemptDetailPage` event-tone, `ExamMonitoringPage` online/warning) map **non-status** domains (audit action / online-state / warning-level) and are NOT `statusMeta` bypasses; see `P3-UI-LINT-2-phase3-authority-bypass-decision.md` §1 | **DEFERRED** — genuine status-color bypasses are dynamic-`className`/data-flow (not statically token-detectable) and collide with categorical `<Badge>` (question type/tags, explicitly NOT a status). Enforced by review and migration. |
 | field error | `FieldError` | `<p text-{sm,xs} text-destructive>` | 0 unmigrated same-role debt | **RETIRED** — `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8). Its structural recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR (4/4 remaining hits were false-semantic-overlap). FieldError remains the canonical authority; ownership is enforced by semantic migration review, not a structural lint proxy. |
-| inline error banner | `InlineErrorBanner` | `<div rounded + destructive-surface>` | 4 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-inline-error-banner`) |
+| inline error banner | `InlineErrorBanner` | `<div role="alert" rounded + destructive-surface>` | 0 remaining (4 baseline entries cleared in UI-MIGRATE-N-W2) | **ACTIVE** (`exam-ui/prefer-inline-error-banner`), **NARROWED** in UI-MIGRATE-N-W2 to require `role="alert"` — excludes destructive control-state/status surfaces (timer chip, multi-role status). 2 same-role sites migrated; 2 non-owner sites excluded by the role narrowing. |
 | confirmation dialog | `ConfirmDialog` | — | 0 bypasses | not gated (no bypass evidence) |
 | content container | `PageSection` | `<Card shadow-sm><CardHeader><CardTitle text-base font-semibold>` | ≥8 pages | **NO** — blocked on `PageSection` migration coverage (2 consumers; UI-PILOT-1) |
 | metric | `StatsCard` | `<p text-2xl font-bold>` | 20 occurrences across 5 pages | **NO** — blocked on `StatsCard` migration (1 consumer; UI-MIGRATE-N) |
@@ -346,7 +346,6 @@ after UI-LINT-2 Phases 1–2 and UI-FIELD-ERROR-AUTHORITY-CLOSURE-1:
 
 | Rule | Baseline entries | Debt shape |
 | --- | ---: | --- |
-| `exam-ui/prefer-inline-error-banner` | 4 | `destructive-surface\|rounded` per file |
 | `exam-ui/no-arbitrary-typography` | 1 | `ExamTimer.tsx::text-[11px]` |
 | `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file |
 | `exam-ui/no-raw-typography` | 5 | `font-weight\|text-size` per file (section-title bypass) |
@@ -356,7 +355,12 @@ after UI-LINT-2 Phases 1–2 and UI-FIELD-ERROR-AUTHORITY-CLOSURE-1:
 > (§8). Its baseline array was removed; it is no longer an active deterministic
 > rule. See §4.4-reconciled below for the per-site semantic classification.
 
-The baseline is **small and explicit** — 19 total entries across 5 active rules,
+> `exam-ui/prefer-inline-error-banner` remains active but its baseline array
+> was **cleared (4 → 0)** in UI-MIGRATE-N-W2: two same-role sites migrated to
+> `InlineErrorBanner`, two non-owner control-state/status sites excluded by the
+> `role="alert"` detector narrowing. See §4.5-reconciled below.
+
+The baseline is **small and explicit** — 15 total entries across 4 active rules with outstanding debt,
 each entry a real file-level signature. This satisfies the Phase 4 rule: "small
 explicit debt list" — **no bulk file ignores, no thousands of ignored files.**
 The full per-entry debt registry follows. Each entry records the four required
@@ -425,14 +429,16 @@ FieldError ownership is now enforced by semantic migration review against
 `P3-UI-component-authority.md` §2 and the authority component tests
 (`FieldError.test.tsx`), not by a structural lint proxy.
 
-### 4.5 Debt registry — `exam-ui/prefer-inline-error-banner` (4 entries, UI-LINT-1)
+### 4.5 Reconciled — `exam-ui/prefer-inline-error-banner` (rule ACTIVE, baseline CLEARED 4 → 0 in UI-MIGRATE-N-W2)
 
-| Location | Reason | Owner | Migration plan |
+| Location | Reason | Owner | Outcome |
 | --- | --- | --- | --- |
-| `components/exam/ExamTimer.tsx` | destructive control surface | UI-PILOT-1 | evaluate vs `InlineErrorBanner` (may be a distinct control role) |
-| `pages/LoginPage.tsx` | inline destructive banner | UI-MIGRATE-N | replace with `<InlineErrorBanner>` |
-| `pages/admin/ExamDetailPage.tsx` | inline destructive banner | UI-MIGRATE-N | replace with `<InlineErrorBanner>` |
-| `pages/exam/StartExamPage.tsx` | inline destructive banner | UI-PILOT-1 | replace with `<InlineErrorBanner>` |
+| `components/exam/ExamTimer.tsx` | destructive **control state** (low-time chip), not an operation error | UI-PILOT-1 | **RETAINED** — distinct role; baseline entry removed via `role="alert"` detector narrowing (no `role` attr) |
+| `pages/LoginPage.tsx` | inline operation error (auth submit) | UI-MIGRATE-N-W2 | **MIGRATED** to `<InlineErrorBanner>`; baseline entry removed (earned) |
+| `pages/admin/ExamDetailPage.tsx` | inline operation error (publish failure) | UI-MIGRATE-N-W2 | **MIGRATED** to `<InlineErrorBanner>`; baseline entry removed (earned) |
+| `pages/exam/StartExamPage.tsx` | multi-role **status surface** (active-attempt/max-attempts/retake/start-error), not a single operation-error role | UI-PILOT-1 | **RETAINED** — distinct role; baseline entry removed via `role="alert"` detector narrowing (no `role` attr) |
+
+Two additional same-role sites routed from W1 (not baseline entries — they were `<p>`-shaped and did not match the detector) were also migrated: `CandidateFieldsPage.tsx` dialog-local `mutationError` and `CandidatesPage.tsx` dialog-local `saveError`. The detector was narrowed in UI-MIGRATE-N-W2 to require a static `role="alert"` attribute on the matched `<div>`; this is the sound deterministic boundary that excludes the two non-owner control-state/status surfaces while retaining every genuine `InlineErrorBanner`-anatomy bypass. See `P3-UI-MIGRATE-N-W2-inline-error-closure.md`.
 
 ### 4.6 Debt registry — `exam-ui/no-arbitrary-typography` (1 entry, UI-LINT-1)
 
