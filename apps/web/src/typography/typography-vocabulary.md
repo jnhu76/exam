@@ -74,9 +74,19 @@
 
 ## Synchronization with ESLint
 
-This vocabulary is the source for future `UI-LINT-2` (`exam-ui/no-raw-typography`).
-The primitive classes each recipe owns (e.g. `page-title` owns `text-2xl` +
-`font-bold` + weight + leading) are recorded in the recipe implementation
-(`src/typography/recipes.css`, UI-RECIPE-1A). When a recipe exists, its
-primitive classes become restricted in business pages; until then, only
-arbitrary values are gated (`exam-ui/no-arbitrary-typography`, active today).
+The structural lint proxy `exam-ui/no-raw-typography` was **retired** in
+UI-MIGRATE-N-W3: it could not deterministically distinguish `section-title`
+ownership from topbar/question/overlay title roles (no sound NARROW AST
+boundary existed). It is **not** an active rule and this vocabulary is no
+longer described as the source for it. Recipe authority is enforced by
+semantic migration review and the recipe authority tests
+(`typography/recipes.test.ts`), not by a structural lint proxy.
+
+`exam-ui/no-arbitrary-typography` remains the active **global token-policy**
+rule (confirmed KEEP in UI-MIGRATE-N-W4A). It forbids the arbitrary-value
+bracket form (`text-[…]` / `leading-[…]` / `tracking-[…]`, including under
+responsive/state/stacked variant prefixes) regardless of semantic role; the
+semantic role itself is owned by these recipes. The primitive classes each
+recipe owns (e.g. `page-title` owns `text-2xl` + `font-bold` + weight +
+leading) are recorded in the recipe implementation
+(`src/typography/recipes.css`, UI-RECIPE-1A).
