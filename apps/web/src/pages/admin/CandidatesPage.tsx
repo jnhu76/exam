@@ -13,6 +13,7 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import {
@@ -623,7 +624,7 @@ export function CandidatesPage() {
               </Field>
             ))}
           </FieldGroup>
-          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+          {saveError && <InlineErrorBanner>{saveError}</InlineErrorBanner>}
           <DialogFooter>
             <Button
               variant="outline"

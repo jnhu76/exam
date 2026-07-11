@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/shared/FieldError";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 /**
@@ -89,14 +90,7 @@ export function LoginPage() {
                 />
                 <FieldError>{fieldErrors.password}</FieldError>
               </Field>
-              {error && (
-                <div
-                  role="alert"
-                  className="text-sm text-destructive bg-destructive/10 p-2 rounded"
-                >
-                  {error}
-                </div>
-              )}
+              {error && <InlineErrorBanner>{error}</InlineErrorBanner>}
               <Button
                 type="submit"
                 className="w-full"

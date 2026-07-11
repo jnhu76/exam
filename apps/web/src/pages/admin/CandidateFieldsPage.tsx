@@ -418,9 +418,7 @@ export function CandidateFieldsPage() {
             </label>
           </FieldGroup>
           {mutationError && (
-            <p role="alert" className="text-sm text-destructive">
-              {mutationError}
-            </p>
+            <InlineErrorBanner>{mutationError}</InlineErrorBanner>
           )}
           <DialogFooter>
             <Button

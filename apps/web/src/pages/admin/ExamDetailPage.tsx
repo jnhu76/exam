@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -522,14 +523,7 @@ export function ExamDetailPage() {
         }
       />
 
-      {publishError && (
-        <div
-          role="alert"
-          className="rounded-md border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        >
-          {publishError}
-        </div>
-      )}
+      {publishError && <InlineErrorBanner>{publishError}</InlineErrorBanner>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="shadow-sm">
