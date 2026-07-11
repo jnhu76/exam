@@ -13,3 +13,4 @@ coverage/
 .claude/skills/
 apps/api/public/
 .claude/
+.zcode/
