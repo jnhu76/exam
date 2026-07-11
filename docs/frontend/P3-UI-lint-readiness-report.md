@@ -311,7 +311,7 @@ migration ramp-up — their bypass rules are gated on UI-PILOT-1 / UI-MIGRATE-N.
 | Role | Authority | Bypass pattern | Bypass count | Phase 3 gate? |
 | --- | --- | --- | --- | --- |
 | domain status | `StatusBadge` + `statusMeta` | `<Badge className="bg-…">` / `<span>` for a value that **is** a `statusMeta` key (a lifecycle/diagnostic status) | 0 remaining audited `statusMeta` bypasses — two previously-cited sites were same-domain duplicates and have been **repaired** in UI-LINT-2-CORRECTIVE-2: `ProctorDashboardPage` misconduct severity (now `<StatusBadge status={`misconduct_${severity}`} />`) and `ExamMonitoringPage` attempt-status label (now derived via `getStatusMeta`). The remaining cited sites (`AttemptDetailPage` event-tone, `ExamMonitoringPage` online/warning) map **non-status** domains (audit action / online-state / warning-level) and are NOT `statusMeta` bypasses; see `P3-UI-LINT-2-phase3-authority-bypass-decision.md` §1 | **DEFERRED** — genuine status-color bypasses are dynamic-`className`/data-flow (not statically token-detectable) and collide with categorical `<Badge>` (question type/tags, explicitly NOT a status). Enforced by review and migration. |
-| field error | `FieldError` | `<p text-{sm,xs} text-destructive>` | 6 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-field-error`) |
+| field error | `FieldError` | `<p text-{sm,xs} text-destructive>` | 0 unmigrated same-role debt | **RETIRED** — `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8). Its structural recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR (4/4 remaining hits were false-semantic-overlap). FieldError remains the canonical authority; ownership is enforced by semantic migration review, not a structural lint proxy. |
 | inline error banner | `InlineErrorBanner` | `<div rounded + destructive-surface>` | 4 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-inline-error-banner`) |
 | confirmation dialog | `ConfirmDialog` | — | 0 bypasses | not gated (no bypass evidence) |
 | content container | `PageSection` | `<Card shadow-sm><CardHeader><CardTitle text-base font-semibold>` | ≥8 pages | **NO** — blocked on `PageSection` migration coverage (2 consumers; UI-PILOT-1) |
@@ -342,19 +342,22 @@ other roles (PageSection, StatsCard) are blocked on migration coverage and are
 ## 4. Existing lint baseline state (Phase 4 debt registry)
 
 Current `apps/web/src/lint/exam-ui/baseline.json` (deterministic-debt contract),
-after UI-LINT-2 Phases 1–2:
+after UI-LINT-2 Phases 1–2 and UI-FIELD-ERROR-AUTHORITY-CLOSURE-1:
 
 | Rule | Baseline entries | Debt shape |
 | --- | ---: | --- |
-| `exam-ui/prefer-field-error` | 6 | `text-destructive\|text-size` per file |
 | `exam-ui/prefer-inline-error-banner` | 4 | `destructive-surface\|rounded` per file |
 | `exam-ui/no-arbitrary-typography` | 1 | `ExamTimer.tsx::text-[11px]` |
 | `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file |
 | `exam-ui/no-raw-typography` | 5 | `font-weight\|text-size` per file (section-title bypass) |
 | `exam-ui/no-raw-surface-recipe` | 2 | `bg-card\|border\|panel-radius` per file (surface-content bypass) |
 
-The baseline is **small and explicit** — 25 total entries across 6 rules, each
-entry a real file-level signature. This satisfies the Phase 4 rule: "small
+> `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1
+> (§8). Its baseline array was removed; it is no longer an active deterministic
+> rule. See §4.4-reconciled below for the per-site semantic classification.
+
+The baseline is **small and explicit** — 19 total entries across 5 active rules,
+each entry a real file-level signature. This satisfies the Phase 4 rule: "small
 explicit debt list" — **no bulk file ignores, no thousands of ignored files.**
 The full per-entry debt registry follows. Each entry records the four required
 fields (location / reason / owner / migration plan).
@@ -388,16 +391,39 @@ fields (location / reason / owner / migration plan).
 | `pages/exam/ExamListPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N | drop on `PageSection` migration |
 | `pages/exam/TakeExamPage.tsx` | exam question area `shadow-sm` | UI-PILOT-1 | drop — it is already `surface-content` |
 
-### 4.4 Debt registry — `exam-ui/prefer-field-error` (6 entries, UI-LINT-1)
+### 4.4 Reconciled — former `exam-ui/prefer-field-error` sites (rule RETIRED)
 
-| Location | Reason | Owner | Migration plan |
+`exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1
+(§8/§9). The original blanket classification "inline field error → replace with
+`FieldError`" was disproven by the seven-site semantic audit: the structural
+recipe (`<p> + text-destructive + text-size`) matched four distinct non-FieldError
+semantic roles. The per-site classification that replaced the blanket debt
+registry is below. Only the same-role sites migrate to `FieldError`; the others
+are routed to their correct owners.
+
+| Former baseline site | Semantic role (verified) | FieldError owner? | Final status |
 | --- | --- | --- | --- |
-| `components/exam/ExamConfigForm.tsx` | inline `<p text-destructive text-size>` | UI-MIGRATE-N | replace with `<FieldError>` |
-| `components/exam/QuestionRenderer.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
-| `components/exam/SubjectiveAnswerInput.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
-| `pages/admin/CandidateFieldsPage.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
-| `pages/admin/CandidatesPage.tsx` | inline field error | UI-MIGRATE-N | replace with `<FieldError>` |
-| `pages/admin/GradingDetailPage.tsx` | inline field error | UI-PILOT-1 (pilot page) | replace with `<FieldError>` |
+| `components/exam/ExamConfigForm.tsx` — `timeError` | FIELD_CONTROL_VALIDATION | YES | migrated → `<FieldError>` (UI-MIGRATE-N-W1) |
+| `components/exam/ExamConfigForm.tsx` — `scoreError` | FIELD_CONTROL_VALIDATION | YES | migrated → `<FieldError>` (UI-MIGRATE-N-W1) |
+| `components/exam/ExamConfigForm.tsx` — `showWarning` | DOMAIN_WARNING (manual-total ≠ computed-sum advisory; no `role="alert"`) | NO | retained — distinct domain-warning role, no authority today |
+| `components/exam/QuestionRenderer.tsx` — unsupportedType | CONTROL_STATE_FEEDBACK (default switch case, no owning control) | NO | retained — distinct unsupported-type role, no authority today |
+| `components/exam/SubjectiveAnswerInput.tsx` — `error` | FIELD_CONTROL_VALIDATION | YES | migrated → `<FieldError id={helpId}>` (CLOSURE-1 §7; required the `id` API extension) |
+| `pages/admin/CandidateFieldsPage.tsx` — `mutationError` | INLINE_OPERATION_ERROR (dialog save/delete API failure) | NO | routed to UI-MIGRATE-N-W2 (InlineErrorBanner wave) |
+| `pages/admin/CandidatesPage.tsx` — `saveError` | INLINE_OPERATION_ERROR (dialog save API failure) | NO | routed to UI-MIGRATE-N-W2 (InlineErrorBanner wave) |
+| `pages/admin/GradingDetailPage.tsx` — validation error | FIELD_CONTROL_VALIDATION | YES | migrated → `<FieldError>` (UI-PILOT-1) |
+
+Three distinct non-FieldError categories that the lint recipe falsely conflated
+with field-error debt:
+
+```text
+true FieldError same-role debt            → migrate to FieldError (done)
+lint recipe false-semantic-overlap        → NOT FieldError debt; correct owner per role
+authority API blocked same-role debt      → FieldError id extension unblocked it (done)
+```
+
+FieldError ownership is now enforced by semantic migration review against
+`P3-UI-component-authority.md` §2 and the authority component tests
+(`FieldError.test.tsx`), not by a structural lint proxy.
 
 ### 4.5 Debt registry — `exam-ui/prefer-inline-error-banner` (4 entries, UI-LINT-1)
 

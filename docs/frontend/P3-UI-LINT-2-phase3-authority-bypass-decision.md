@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | Status (domain lifecycle) | `StatusBadge` + `statusMeta` | **DEFERRED (deterministic lint)** | genuine status-color bypasses are dynamic-`className` / data-flow, not statically token-detectable; categorical `<Badge>` is explicitly allowed and would false-positive. Enforced by review and migration. |
 | Audit-action / monitoring tone maps | — (distinct semantic domains) | **NOT A `statusMeta` BYPASS** | see §1: the audited sites that remain distinct map **different input domains** (audit actions, online-state, warning-level) that merely reuse the `StatusTone` *vocabulary*. They are not owned by `statusMeta`. No migration is owed. (The misconduct-severity and ExamMonitoring AttemptStatus-label sites were same-domain duplicates and have been repaired — see §1.1.) |
-| Error — field | `FieldError` | **ALREADY ACTIVE** (`exam-ui/prefer-field-error`, UI-LINT-1) | no new rule needed |
+| Error — field | `FieldError` | **RETIRED (deterministic lint)** | `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8): its structural recipe could not distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles (4/4 remaining hits were false-semantic-overlap). All known same-role bypasses have been migrated; ownership is now enforced by semantic migration review + authority component tests, not a structural lint proxy. |
 | Error — inline banner | `InlineErrorBanner` | **ALREADY ACTIVE** (`exam-ui/prefer-inline-error-banner`, UI-LINT-1) | no new rule needed |
 | Sections | `PageSection` / `FormSection` | **DEFERRED** | 38+ `<CardHeader>` bypasses; `PageSection` has only 2 consumers — migration blocked on UI-PILOT-1/UI-MIGRATE-N. |
 | Metrics | `StatsCard` | **DEFERRED** | 20 metric bypasses; `StatsCard` has only 1 consumer (`shared.test.tsx`) — migration blocked on UI-MIGRATE-N. |
@@ -162,13 +162,21 @@ be statically enforced today?" separately.
 
 ---
 
-## 2. Error sub-roles — ALREADY ACTIVE
+## 2. Error sub-roles
 
-### Field error — `FieldError`
+### Field error — `FieldError` (deterministic lint RETIRED)
 
-`exam-ui/prefer-field-error` (UI-LINT-1) already detects the
-`<p text-{sm,xs} text-destructive>` recipe and points to `FieldError`. Current
-baseline: 6 grandfathered files. **No new rule.**
+`exam-ui/prefer-field-error` (UI-LINT-1) was **retired** in
+UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8/§9). Its structural recipe
+(`<p> + text-destructive + text-size`) could not deterministically distinguish
+FieldError ownership from DOMAIN_WARNING, CONTROL_STATE_FEEDBACK, or
+INLINE_OPERATION_ERROR — 4/4 remaining hits were false-semantic-overlap and no
+sound NARROW detector existed. All known same-role bypasses
+(`GradingDetailPage`, `ExamConfigForm` time/score, `SubjectiveAnswerInput`) have
+been migrated to `FieldError`. The non-owner sites (DOMAIN_WARNING /
+CONTROL_STATE_FEEDBACK / 2× INLINE_OPERATION_ERROR) are routed to their correct
+roles. `FieldError` remains the canonical authority; ownership is enforced by
+semantic migration review + `FieldError.test.tsx`, not a structural lint proxy.
 
 ### Inline error banner — `InlineErrorBanner`
 

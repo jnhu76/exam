@@ -200,8 +200,12 @@ hand-roll tone maps with `<Badge className={...}>` for a domain status.
 ### Do NOT recreate field errors or inline banners
 
 Use `FieldError` (per-field) and `InlineErrorBanner` (block-level / submit).
-Enforced today by `exam-ui/prefer-field-error` and
-`exam-ui/prefer-inline-error-banner`.
+`InlineErrorBanner` is enforced today by `exam-ui/prefer-inline-error-banner`.
+`FieldError` ownership is enforced by semantic migration review + the authority
+component tests (`FieldError.test.tsx`): the former `exam-ui/prefer-field-error`
+rule was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 because its structural
+recipe could not distinguish FieldError ownership from other destructive-`<p>`
+roles (DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR).
 
 ---
 
@@ -294,7 +298,6 @@ active/deferred split.)
 
 | Rule | Enforced semantic role (today) |
 | --- | --- |
-| `exam-ui/prefer-field-error` | field-validation errors must use `FieldError` |
 | `exam-ui/prefer-inline-error-banner` | block-level destructive error banners must use `InlineErrorBanner` |
 | `exam-ui/no-business-shadow` | no new `shadow-*` in ordinary business content (debt grandfathered by baseline) |
 | `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` |

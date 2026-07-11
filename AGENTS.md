@@ -412,7 +412,6 @@ Deterministic enforcement of the high-confidence boundaries above is provided by
 
 **Active enforcement** (rules wired as errors today):
 
-- `exam-ui/prefer-field-error` — field-validation errors must use `FieldError`.
 - `exam-ui/prefer-inline-error-banner` — block-level destructive error banners must use `InlineErrorBanner`.
 - `exam-ui/no-business-shadow` — no new `shadow-*` in ordinary business content (debt grandfathered by baseline).
 - `exam-ui/no-arbitrary-typography` — no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]`.
@@ -424,8 +423,9 @@ Deterministic enforcement of the high-confidence boundaries above is provided by
 - Broader typography recipes (`type-metric`, `type-body`, `type-secondary`, …) — authority exists, migration coverage does not (`StatsCard` has one consumer; ~20 metric bypasses unmigrated). Blocked on UI-PILOT-1 / UI-MIGRATE-N.
 - Component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) — authority exists, migration coverage does not. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
 - Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. See `docs/frontend/P3-UI-LINT-2-phase3-authority-bypass-decision.md` for the semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary).
+- Field-error authority (`FieldError`) — authority exists and is the canonical owner of "form field validation error", but the former `exam-ui/prefer-field-error` structural lint rule was **retired** in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8): its recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles (4/4 remaining hits were false-semantic-overlap). All known same-role bypasses have been migrated; ownership is now enforced by semantic migration review + `FieldError.test.tsx`, not a structural lint proxy. Do **not** re-introduce a structural field-error lint rule without a proven deterministic ownership detector.
 
-Do **not** claim that all typography or all surface recipes are enforced — only the two narrow recipes above are gated today. The wired ESLint config is the implementation fact; these docs must match it.
+Do **not** claim that all typography or all surface recipes are enforced — only the two narrow recipes above are gated today. Do **not** claim `FieldError` ownership is deterministically lint-enforced — it is not (the rule was retired). The wired ESLint config is the implementation fact; these docs must match it.
 
 ---
 

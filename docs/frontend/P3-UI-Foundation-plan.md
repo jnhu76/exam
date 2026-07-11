@@ -572,11 +572,16 @@ The exact rule scope must be derived from actual AST patterns and existing usage
 
 Do not introduce a broad false-positive rule.
 
-### `exam-ui/prefer-field-error`
+### `exam-ui/prefer-field-error` (RETIRED)
 
-Detect known inline field-error recipes already owned by `FieldError`.
-
-Report the authority replacement.
+Retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8). The original intent was to
+detect inline field-error recipes owned by `FieldError`, but the structural
+recipe (`<p> + text-destructive + text-size`) matched four distinct non-FieldError
+semantic roles (DOMAIN_WARNING, CONTROL_STATE_FEEDBACK, INLINE_OPERATION_ERROR)
+and no deterministic NARROW detector could separate them. All known same-role
+bypasses have been migrated to `FieldError`; the rule, its test, and its
+baseline array were removed. `FieldError` remains the canonical authority,
+enforced by semantic migration review + `FieldError.test.tsx`.
 
 ### `exam-ui/prefer-inline-error-banner`
 

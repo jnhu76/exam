@@ -147,7 +147,14 @@ reuse; bypassing them is the drift the audit documented.
 - **Known bypasses (field-error drift):** `GradingDetailPage:236`
   (`text-sm text-destructive`), `CandidateFieldsPage`, `QuestionRenderer`,
   `SubjectiveAnswerInput`, `ExamDetailPage`, parts of `ExamConfigForm`.
-  This is the target of the active `exam-ui/prefer-field-error` lint rule.
+  Note: the former `exam-ui/prefer-field-error` lint rule was **retired** in
+  UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8) — its structural recipe could not
+  deterministically distinguish FieldError ownership from DOMAIN_WARNING /
+  CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles. The same-role bypasses
+  (`GradingDetailPage`, `ExamConfigForm` time/score, `SubjectiveAnswerInput`)
+  have been migrated to `FieldError`; the non-owner sites are routed to their
+  correct roles. FieldError ownership is now enforced by semantic migration
+  review + the authority component tests, not by a structural lint proxy.
 - **Decision rationale:** distinct role, has an accessibility contract the
   bypass recipes lack (`role=alert`). KEEP.
 
@@ -462,8 +469,12 @@ are **not** executed here.
    `<Card shadow-sm><CardHeader><CardTitle text-base>` blocks to `PageSection`
    (content) or `DataTableShell` (tables). Keep the body-treatment distinction.
    Drop the per-Card `shadow-sm`.
-3. **Field-error adoption.** Migrate the `text-sm/text-xs text-destructive`
-   bypass sites to `FieldError`. Enforced today by `exam-ui/prefer-field-error`.
+3. **Field-error adoption.** Migrate the same-role `text-sm/text-xs
+   text-destructive` bypass sites to `FieldError`. The former
+   `exam-ui/prefer-field-error` lint rule was retired in
+   UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (its structural recipe could not
+   deterministically distinguish FieldError ownership from other destructive-`<p>`
+   roles); same-role adoption is now enforced by semantic migration review.
 4. **Inline-error-banner adoption.** Migrate `ExamDetailPage`'s inline banner
    (and any like it) to `InlineErrorBanner`. Enforced today by
    `exam-ui/prefer-inline-error-banner`.
