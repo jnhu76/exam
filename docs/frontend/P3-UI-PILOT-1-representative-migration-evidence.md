@@ -89,7 +89,7 @@ Pre-migration: 28/28 green. Post-migration: 28/28 green.
 
 | Old structure | Role | Authority | Why valid |
 | --- | --- | --- | --- |
-| `<p className="text-sm text-destructive">{validationErrors[q.questionId]}</p>` (gated by `&&`) | field/control validation failure | `<FieldError>` | Input domain = `validationErrors[questionId]` (a per-score-control validation result); decision dimension = save rejection. `FieldError` owns exactly the field-validation-failure role. `<FieldError>` swallows falsy children (returns `null`), which is behaviorally equivalent to the old `&&` gate — the error node is absent when there is no error and present (as a `<p role="alert">`) when there is. Layout placement is unchanged (same position in the score field block). |
+| `<p className="text-sm text-destructive">{validationErrors[q.questionId]}</p>` (gated by `&&`) | field/control validation failure | `<FieldError>` | Input domain = `validationErrors[questionId]` (a per-score-control validation result); decision dimension = save rejection. `FieldError` owns exactly the field-validation-failure role. The conditional rendering behavior is equivalent to the old `&&` gate: no validation message produces no node; a validation message produces the field-error node. The migration intentionally adopts FieldError's canonical visual and accessibility contract, including `role="alert"`, `text-xs`, and `mt-1`. These are authority-owned normalization deltas, not grading business-state changes. Layout placement is unchanged (same position in the score field block). |
 
 This was the **only** migration applied. No other authority substitution was made.
 
