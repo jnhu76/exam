@@ -1,25 +1,31 @@
 /**
  * exam-ui/no-arbitrary-typography
  *
- * Prevent new arbitrary typography values in business pages and feature
- * components. Arbitrary typography values bypass the forthcoming semantic
- * typography layer by pinning exact px/rem/line-height/letter-spacing values
- * inline (e.g. text-[11px], leading-[1.6], tracking-[-0.02em]).
+ * Global token policy: business pages must not introduce arbitrary typography
+ * VALUES. Arbitrary values bypass the semantic typography layer by pinning
+ * exact px/rem/line-height/letter-spacing values inline (e.g. text-[11px],
+ * leading-[1.6], tracking-[-0.02em]). This is a syntax/token policy, not a
+ * semantic-role proxy: the forbidden shape is the arbitrary-value bracket
+ * form, regardless of the semantic role the element carries.
  *
  * Detection (AST, not broad text grep): collects className tokens and flags
- * any matching the arbitrary-value forms:
+ * any matching the arbitrary-value forms, after stripping responsive/state
+ * variant prefixes so the policy holds under variants too:
  *
  *   text-[...]      (arbitrary font-size / arbitrary text color in brackets)
  *   leading-[...]
  *   tracking-[...]
+ *   md:text-[...]   (responsive variant — still an arbitrary value)
+ *   hover:leading-[...]
  *
- * NOT banned yet (deliberately): all other text-*, font-*, leading-* named
- * utilities. Semantic typography recipes do not exist yet (planned
- * UI-RECIPE-1), so we only gate the arbitrary escape hatch.
+ * NOT banned (deliberately): all other text-*, font-*, leading-* named
+ * utilities. Semantic typography recipes own the role layer; this rule only
+ * gates the arbitrary escape hatch.
  *
- * Existing debt is grandfathered by baseline. Today the only business-code
- * occurrence is ExamTimer.tsx (text-[11px]); components/ui occurrences are
- * excluded by config scope.
+ * Existing debt is grandfathered by baseline. After UI-MIGRATE-N-W4A the
+ * ExamTimer text-[11px] baseline entry was removed (the node migrated to the
+ * type-metadata recipe), so the baseline array for this rule is empty.
+ * components/ui occurrences are excluded by config scope.
  *
  * Diagnostic-only: no autofix.
  */
@@ -32,10 +38,29 @@ import {
 
 const ARBITRARY_PREFIXES = ["text", "leading", "tracking"] as const;
 
+/**
+ * Strip Tailwind variant prefixes (responsive `sm:`/`md:`/`lg:`…, state
+ * `hover:`/`focus:`/`active:`…, and stacked variants like `group-hover:`) so
+ * the global token policy is enforced regardless of variant. The policy forbids
+ * arbitrary typography VALUES; a `md:text-[11px]` is still an arbitrary
+ * font-size, so it must be detected.
+ */
+function stripVariants(token: string): string {
+  let rest = token;
+  // A variant prefix is `name:` possibly with a trailing value group; we only
+  // need to peel colon-terminated segments until a known utility prefix remains.
+  while (true) {
+    const colon = rest.indexOf(":");
+    if (colon <= 0) return rest;
+    rest = rest.slice(colon + 1);
+  }
+}
+
 /** True if a token is an arbitrary-value utility for one of the prefixes. */
 function isArbitraryTypography(token: string): boolean {
+  const stripped = stripVariants(token);
   for (const prefix of ARBITRARY_PREFIXES) {
-    if (token.startsWith(prefix + "-[") && token.endsWith("]")) {
+    if (stripped.startsWith(prefix + "-[") && stripped.endsWith("]")) {
       return true;
     }
   }

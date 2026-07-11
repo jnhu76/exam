@@ -80,7 +80,13 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     expect(shadowErrors).toHaveLength(0);
   });
 
-  it("grandfathers the ExamTimer text-[11px] arbitrary-typography debt", async () => {
+  it("ExamTimer is free of arbitrary-typography violations (W4A closure)", async () => {
+    // UI-MIGRATE-N-W4A migrated the ExamTimer label from text-[11px] to the
+    // type-metadata recipe and removed the baseline entry. The file is now
+    // clean under exam-ui/no-arbitrary-typography unconditionally — no
+    // grandfathering is involved. This test pins that closure: a regression
+    // that reintroduces an arbitrary typography value here would surface as a
+    // real error (no baseline shields it anymore).
     __resetBaselineCacheForTests();
     const results = await eslint.lintFiles([
       "src/components/exam/ExamTimer.tsx",
@@ -118,6 +124,35 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
       expect(shadowErrors.length).toBeGreaterThan(0);
     } finally {
       rmSync(probeClean, { force: true });
+    }
+  });
+
+  // UI-MIGRATE-N-W4A: the ExamTimer text-[11px] baseline entry was removed after
+  // the node migrated to the type-metadata recipe. This probe proves the removal
+  // is EARNED — a reintroduced arbitrary typography value in ExamTimer is now a
+  // real, unshielded error (nothing in the baseline grandfather list protects
+  // it anymore).
+  it("reports a reintroduced arbitrary-typography value in ExamTimer (W4A)", async () => {
+    __resetBaselineCacheForTests();
+    const { readFileSync, writeFileSync } = await import("node:fs");
+    const timerPath = join(WEB_ROOT, "src/components/exam/ExamTimer.tsx");
+    const original = readFileSync(timerPath, "utf8");
+    try {
+      // Reintroduce the exact retired arbitrary value.
+      writeFileSync(
+        timerPath,
+        original.replace(
+          "type-metadata leading-none",
+          "text-[11px] font-medium leading-none",
+        ),
+      );
+      const results = await eslint.lintFiles([timerPath]);
+      const typErrors = results
+        .flatMap((r) => r.messages)
+        .filter((m) => m.ruleId === "exam-ui/no-arbitrary-typography");
+      expect(typErrors.length).toBeGreaterThan(0);
+    } finally {
+      writeFileSync(timerPath, original);
     }
   });
 
