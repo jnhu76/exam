@@ -32,7 +32,7 @@ export function FormSection({
     >
       <div className="flex flex-col gap-3 border-b px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 id={titleId} className="text-base font-semibold">
+          <h2 id={titleId} className="type-section-title">
             {title}
           </h2>
           {description && (

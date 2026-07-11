@@ -37,7 +37,7 @@ export function DataTableShell({
           {(title || description) && (
             <div className="min-w-0">
               {title && (
-                <h2 id={titleId} className="text-base font-semibold">
+                <h2 id={titleId} className="type-section-title">
                   {title}
                 </h2>
               )}
