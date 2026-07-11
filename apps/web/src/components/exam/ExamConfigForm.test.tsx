@@ -237,6 +237,68 @@ describe("ExamConfigForm fields", () => {
     expect(screen.getByText(/及格分不能超过总分/)).toBeInTheDocument();
   });
 
+  it("clears the time validation error once closeAt is after openAt", () => {
+    const { rerender } = render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          openAt: "2026-06-01T11:00",
+          closeAt: "2026-06-01T09:00",
+        }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/结束时间必须晚于开始时间/)).toBeInTheDocument();
+
+    rerender(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          openAt: "2026-06-01T09:00",
+          closeAt: "2026-06-01T11:00",
+        }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.queryByText(/结束时间必须晚于开始时间/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears the score validation error once passingScore is within total", () => {
+    const { rerender } = render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          passingScore: 120,
+          totalScore: 100,
+        }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/及格分不能超过总分/)).toBeInTheDocument();
+
+    rerender(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{
+          ...baseConfig,
+          passingScore: 60,
+          totalScore: 100,
+        }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/及格分不能超过总分/)).not.toBeInTheDocument();
+  });
+
   it("does not expose Phase 2 runtime controls", () => {
     render(
       <ExamConfigForm
