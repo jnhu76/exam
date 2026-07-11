@@ -4,12 +4,20 @@
  * Namespace: `exam-ui/*`. Registered as a local plugin in apps/web/eslint.config.ts.
  *
  * Rules:
- *   - exam-ui/prefer-field-error
  *   - exam-ui/prefer-inline-error-banner
  *   - exam-ui/no-business-shadow
  *   - exam-ui/no-arbitrary-typography
  *   - exam-ui/no-raw-typography
  *   - exam-ui/no-raw-surface-recipe
+ *
+ * Retired (UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, §8): `exam-ui/prefer-field-error`
+ * is no longer wired. Its structural recipe (`<p> + text-destructive + text-size`)
+ * could not deterministically distinguish FieldError ownership from DOMAIN_WARNING,
+ * CONTROL_STATE_FEEDBACK, or INLINE_OPERATION_ERROR roles (4/4 remaining hits
+ * were false-semantic-overlap; no sound NARROW detector existed). FieldError
+ * remains the canonical semantic authority for "form field validation error";
+ * its ownership is enforced by semantic migration review and the authority
+ * component tests, not by a structural lint proxy.
  *
  * Scope: business / feature source under apps/web/src (pages, components/shared,
  * components/exam, components/settings, components/question). components/ui
@@ -17,7 +25,6 @@
  * excluded in the flat config.
  */
 import type { ESLint } from "eslint";
-import preferFieldError from "./rules/prefer-field-error";
 import preferInlineErrorBanner from "./rules/prefer-inline-error-banner";
 import noBusinessShadow from "./rules/no-business-shadow";
 import noArbitraryTypography from "./rules/no-arbitrary-typography";
@@ -32,7 +39,6 @@ import noRawSurfaceRecipe from "./rules/no-raw-surface-recipe";
  * We assert the rules bag to the plugin type to avoid spurious type errors.
  */
 const rules = {
-  "prefer-field-error": preferFieldError,
   "prefer-inline-error-banner": preferInlineErrorBanner,
   "no-business-shadow": noBusinessShadow,
   "no-arbitrary-typography": noArbitraryTypography,
@@ -47,7 +53,6 @@ const plugin: ESLint.Plugin = {
 
 export default plugin;
 export {
-  preferFieldError,
   preferInlineErrorBanner,
   noBusinessShadow,
   noArbitraryTypography,

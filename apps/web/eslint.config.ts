@@ -97,7 +97,6 @@ const eslintConfig = [
       ...compatibilityPlugins,
     },
     rules: {
-      "exam-ui/prefer-field-error": "error",
       "exam-ui/prefer-inline-error-banner": "error",
       "exam-ui/no-business-shadow": "error",
       "exam-ui/no-arbitrary-typography": "error",
@@ -122,7 +121,6 @@ const eslintConfig = [
     rules: {
       // Layout owns the sticky topbar (shadow-xs). Shadows are allowed here;
       // the other visual-authority rules still apply.
-      "exam-ui/prefer-field-error": "error",
       "exam-ui/prefer-inline-error-banner": "error",
       "exam-ui/no-arbitrary-typography": "error",
       "exam-ui/no-raw-typography": "error",
