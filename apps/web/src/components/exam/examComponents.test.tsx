@@ -98,6 +98,95 @@ describe("ExamTimer", () => {
     });
     expect(onTimeout).toHaveBeenCalledOnce();
   });
+
+  // Characterization (UI-MIGRATE-N-W4A): the timer renders a compact remaining-
+  // time label and a zero-padded MM:SS numeric value. The arbitrary text-[11px]
+  // on the label is being migrated to the type-metadata recipe; these tests pin
+  // the durable content/structure invariants, not the old arbitrary class.
+  it("renders the remaining-time label alongside the MM:SS value", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    // The label ("剩余时间") is present as a distinct element.
+    expect(screen.getByText("剩余时间")).toBeInTheDocument();
+    // The numeric value is zero-padded to 30:00 (30 min exactly).
+    expect(screen.getByText("30:00")).toBeInTheDocument();
+  });
+
+  it("keeps the timer value zero-padded to two digits per field", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:05:03Z" onTimeout={() => {}} />,
+    );
+
+    expect(screen.getByText("05:03")).toBeInTheDocument();
+  });
+
+  it("keeps the label visually distinct from the numeric value", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const label = screen.getByText("剩余时间");
+    const value = screen.getByText("30:00");
+    // The label and value are separate elements, preserving numeric/label
+    // hierarchy: the label is the compact secondary text, the value is the
+    // prominent numeric.
+    expect(label.tagName).toBe("DIV");
+    expect(value.tagName).toBe("SPAN");
+    // The numeric value owns the tabular-nums numeric role (its defining
+    // property); the label does not. This is the durable role distinction that
+    // survives the label's typography-recipe migration.
+    expect(value.className).toContain("tabular-nums");
+    expect(label.className).not.toContain("tabular-nums");
+  });
+
+  it("activates the low-time state at the 300s threshold", () => {
+    vi.useFakeTimers();
+    // 300s remaining = exactly at the low-time boundary (remaining <= 300).
+    vi.setSystemTime(new Date("2026-06-01T00:25:00Z"));
+    const { container } = render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    // Low-time state paints the wrapper with the destructive surface utilities.
+    expect(wrapper!.className).toContain("destructive");
+  });
+
+  it("does not activate the low-time state above the threshold", () => {
+    vi.useFakeTimers();
+    // 301s remaining > 300s threshold → not low.
+    vi.setSystemTime(new Date("2026-06-01T00:24:59Z"));
+    const { container } = render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper!.className).not.toContain("destructive");
+  });
+
+  it("updates the remaining-time value each second", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:00:10Z" onTimeout={() => {}} />,
+    );
+
+    expect(screen.getByText("00:10")).toBeInTheDocument();
+    await act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getByText("00:07")).toBeInTheDocument();
+  });
 });
 
 describe("ExamTopbar", () => {
