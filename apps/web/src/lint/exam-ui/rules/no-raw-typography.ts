@@ -5,6 +5,9 @@
  * typography recipe that an authority already owns, when a valid replacement
  * exists AND has migrated authoritative consumers.
  *
+ * ("Phase 1 (UI-LINT-2)" = the first UI-LINT-2 activation stage; NOT a product
+ * roadmap phase.)
+ *
  * Phase 1 scope (this rule, today): the **section-title** bypass only.
  *
  *   text-{base,lg}  +  font-{semibold,bold}

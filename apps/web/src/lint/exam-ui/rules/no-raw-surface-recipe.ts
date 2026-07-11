@@ -5,6 +5,9 @@
  * `surface-content` recipe that the surface authority already owns, when a
  * valid replacement exists AND has migrated authoritative consumers.
  *
+ * ("Phase 2 (UI-LINT-2)" = the second UI-LINT-2 activation stage; NOT a product
+ * roadmap phase.)
+ *
  * Phase 2 scope (this rule, today): the **surface-content** bypass only.
  *
  *   bg-card  +  border (default)  +  rounded-lg / rounded (panel radius)

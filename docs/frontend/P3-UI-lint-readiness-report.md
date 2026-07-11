@@ -206,13 +206,12 @@ src/components/exam/ExamTimer.tsx        (1)
 
 These overlap with `border` + `rounded-lg` recomposition. The component
 authority is clear: `PageSection` owns this surface for arbitrary content,
-`DataTableShell` for tables. **But:** the shadcn `Card` primitive (in
-`components/ui`, excluded from lint) carries `rounded-xl bg-card text-card-foreground`
-by default, and is used in 18 business files (`<Card>` usage counts: 40/32/26/…
-across admin/exam pages). The unresolved question is whether `<Card>` is a
-legitimate primitive the lint must allow (Option A) or a deprecated surface
-that must migrate to `PageSection` (Option B). **This must be resolved before
-activating the rule.** See Phase 2 plan.
+`DataTableShell` for tables. The shadcn `Card` primitive (in `components/ui`,
+excluded from lint) carries `rounded-xl bg-card text-card-foreground` by
+default, and is used in many business files. **The Card question is RESOLVED
+(Option A):** see §2.5 — `<Card>` is a legitimate low-level `components/ui`
+primitive, not a bypass. The rule targets only the hand-rolled recomposition in
+business/layout scope, never `<Card>` itself.
 
 ### 2.4 Elevation — `no-business-shadow` is already active
 
@@ -239,9 +238,43 @@ exam-ui/no-business-shadow baseline (7 files):
 
 | Recipe | Recipe exists | Authoritative consumer exists | Migration coverage | Phase 2 gate? |
 | --- | --- | --- | --- | --- |
-| `surface-content` | ✅ | ✅ `PageSection`/`DataTableShell`/`FormSection`/toolbars/`StatsCard` | ❌ components migrated, but **only 2 page-level consumers** (`AttemptDetailPage` in-flight) | **CONDITIONAL** — gated on resolving the `<Card>` question (Option A/B) |
+| `surface-content` | ✅ | ✅ `PageSection`/`DataTableShell`/`FormSection`/toolbars/`StatsCard` | ❌ components migrated, but **only 2 page-level consumers** (`AttemptDetailPage` in-flight) | ✅ **GATED (narrow)** — Card decision RESOLVED (Option A); rule active on the hand-rolled recomposition only (see §2.5a) |
 | `surface-attention` | ✅ | ✅ `InlineErrorBanner`/`ErrorState`/`EmptyState` | partial | not gated in Phase 2 (covered by component rules in Phase 3) |
 | `surface-overlay` / `surface-navigation` / `surface-page` / `surface-subtle` | ✅ | ✅ (layout/shadcn) | ✅ (centralized) | not gated (no business recomposition risk) |
+
+#### 2.5a Card decision — RESOLVED (Option A)
+
+The previously-open Card question is now **RESOLVED**:
+
+```text
+Option A: <Card> is a legitimate low-level components/ui primitive.
+```
+
+- `<Card>` is **never** flagged by `exam-ui/no-raw-surface-recipe`. Its
+  `bg-card` / `border` / `rounded-xl` classes live in the generated shadcn
+  primitive `components/ui/card.tsx`, which is excluded from exam-ui lint scope
+  by the flat-config `ignores` (and by `components/ui` being the generated
+  layer agents must not hand-edit). Business pages may freely use `<Card>` as a
+  low-level content primitive.
+- The rule targets the **hand-rolled recomposition** in governed business/layout
+  scope — a `className` expression containing `bg-card` + `border` + a panel
+  radius (`rounded-lg` / base `rounded`) on the same element. That stack
+  reproduces `surface-content` outside the owning component, and is detectable
+  because all three primitives appear in one literal/template `className`.
+- Control radii (`rounded-md` / `rounded-sm`) are deliberately excluded so a
+  control block such as `ExamTimer` is not a false positive.
+
+Why `components/ui` is outside the business reconstruction rule's enforcement
+target: `components/ui` is the generated shadcn primitive layer. The visual
+authority model treats it as the lowest building block (it is where
+`surface-overlay` / `Card` / `Button` live), not as business consumer code. The
+`exam-ui/*` rules apply to `src/pages`, `src/components/{shared,exam,settings,question}`,
+and (minus the shadow rule) `src/components/layout` — never `src/components/ui`.
+
+The stale "must be resolved before activating the rule" / "CONDITIONAL — gated
+on resolving the `<Card>` question" language that appeared here and in §2.3 has
+been corrected: the rule is active (error severity in `eslint.config.ts`), and
+the Card decision is closed.
 
 ---
 
@@ -276,7 +309,7 @@ migration ramp-up — their bypass rules are gated on UI-PILOT-1 / UI-MIGRATE-N.
 
 | Role | Authority | Bypass pattern | Bypass count | Phase 3 gate? |
 | --- | --- | --- | --- | --- |
-| domain status | `StatusBadge` + `statusMeta` | `<Badge className="bg-…">` for domain state | `AttemptDetailPage` event-tone map; categorical `Badge` (question type/tags) is NOT a bypass | **CONDITIONAL** — status-color rule, but must distinguish domain status from categorical labels (high false-positive risk). Gated narrowly. |
+| domain status | `StatusBadge` + `statusMeta` | `<Badge className="bg-…">` / `<span>` for a value that **is** a `statusMeta` key (a lifecycle/diagnostic status) | 0 audited `statusMeta` bypasses — the three previously-cited sites (`AttemptDetailPage` event-tone, `ExamMonitoringPage` online/warning, `ProctorDashboardPage` severity) map **non-status** domains (audit action / online-state / warning-level / severity) and are NOT `statusMeta` bypasses; see `P3-UI-LINT-2-phase3-authority-bypass-decision.md` §1 | **DEFERRED** — genuine status-color bypasses are dynamic-`className`/data-flow (not statically token-detectable) and collide with categorical `<Badge>` (question type/tags, explicitly NOT a status). Enforced by review and migration. |
 | field error | `FieldError` | `<p text-{sm,xs} text-destructive>` | 6 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-field-error`) |
 | inline error banner | `InlineErrorBanner` | `<div rounded + destructive-surface>` | 4 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-inline-error-banner`) |
 | confirmation dialog | `ConfirmDialog` | — | 0 bypasses | not gated (no bypass evidence) |
@@ -286,14 +319,18 @@ migration ramp-up — their bypass rules are gated on UI-PILOT-1 / UI-MIGRATE-N.
 
 ### 3.3 Component-bypass readiness verdict
 
-Only the **status-color** role has both a strong authority (`statusMeta` +
-`StatusBadge`) and a documented bypass (`AttemptDetailPage` event-tone). But it
-is also the highest-false-positive role: categorical `<Badge>` (question type,
-tags) is explicitly **not** a status and must be allowed. A status-color rule
-therefore requires element/context heuristics that are **not high-confidence
-enough** for deterministic lint today. **Phase 3 activates it narrowly or
-defers it.** The other roles (PageSection, StatsCard) are blocked on migration
-coverage and are **not** activated.
+The **status-color** role has a strong authority (`statusMeta` + `StatusBadge`),
+but the semantic-ownership audit (`P3-UI-LINT-2-phase3-authority-bypass-decision.md`
+§1) found **zero** `statusMeta` bypasses at the previously-cited sites: each
+maps a distinct non-status input domain (audit action, online-state,
+warning-level, misconduct severity) that merely reuses the `StatusTone` color
+vocabulary. They are legitimate local presentation policy, not bypasses owed to
+`statusMeta`. A genuine status-color bypass (a hand-rolled color for a value
+that *is* a `statusMeta` key) remains possible, but enforcing it by lint is
+data-flow-bound and collides with categorical `<Badge>` (question type/tags),
+so it is enforced by review and migration, not by a deterministic rule. The
+other roles (PageSection, StatsCard) are blocked on migration coverage and are
+**not** activated.
 
 ---
 
@@ -388,12 +425,19 @@ Derived from the readiness verdicts above. Each phase activates a rule **only**
 when the four prerequisites hold (authority exists / replacement exists /
 migration coverage / false-positive risk understood).
 
-| Phase | Rule | Gate status |
+> **Terminology note:** "Phase 1 / 2 / 3 / 4" in this section and in the rule
+> header comments (`Phase 1 (UI-LINT-2)`, `Phase 2 (UI-LINT-2)`) refer to
+> **UI-LINT-2 implementation stages** — the staged activation of individual
+> `exam-ui/*` rules inside the UI-LINT-2 work item. They are NOT product phase
+> labels (Phase 1 / Phase 2 of the exam-platform roadmap). A rule marked
+> "Phase 1 (UI-LINT-2)" means "the first UI-LINT-2 activation stage".
+
+| Phase (UI-LINT-2 stage) | Rule | Status |
 | --- | --- | --- |
-| **Phase 1** | `exam-ui/no-raw-typography` (section-title bypass only) | ✅ **READY** — `type-section-title` recipe + 3 migrated component consumers + low false-positive for weight+size stack. Metric bypass **deferred** (blocked on `StatsCard` migration). |
-| **Phase 2** | `exam-ui/no-raw-surface-recipe` (`surface-content` recomposition) | ⚠️ **CONDITIONAL** — must first resolve the `<Card>` primitive question (Option A: Card stays primitive → lint protects pages; Option B: Card deprecated → migration required). Detection of `bg-card + border + rounded-lg (+ shadow-sm)` is well-defined; the gate is the Card decision, not the detection. |
-| **Phase 3** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role is **DEFERRED** (bypass is dynamic-`className`/data-flow, not statically token-detectable; categorical `Badge` is allowed and would false-positive — see `P3-UI-LINT-2-phase3-authority-bypass-decision.md`). PageSection/StatsCard sub-roles are **blocked on migration coverage**. Phase 3 activates zero new rules. |
-| **Phase 4** | Baseline cleanup | ✅ Current baseline is already small/explicit; new rules add their own grandfathered debt with the same per-entry discipline. |
+| **Phase 1 (UI-LINT-2)** | `exam-ui/no-raw-typography` (section-title bypass only) | ✅ **ACTIVE (error)** — `type-section-title` recipe + 3 migrated component consumers + low false-positive for weight+size stack. Metric bypass **deferred** (blocked on `StatsCard` migration). |
+| **Phase 2 (UI-LINT-2)** | `exam-ui/no-raw-surface-recipe` (`surface-content` recomposition) | ✅ **ACTIVE (error)** — Card decision RESOLVED (Option A: `<Card>` stays a low-level primitive, never flagged). Rule targets the hand-rolled `bg-card` + `border` + panel-radius recomposition in governed business/layout scope only (see §2.5a). |
+| **Phase 3 (UI-LINT-2)** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role: see the semantic-ownership boundary in `P3-UI-LINT-2-phase3-authority-bypass-decision.md` — the audited sites are **not** `statusMeta` bypasses (distinct semantic domains reusing the `StatusTone` vocabulary), so no migration is owed there; deterministic lint enforcement of genuine status-color bypasses remains data-flow-bound and deferred. PageSection/StatsCard sub-roles are **blocked on migration coverage**. Phase 3 activates zero new rules. |
+| **Phase 4 (UI-LINT-2)** | Baseline cleanup | ✅ Current baseline is already small/explicit; new rules add their own grandfathered debt with the same per-entry discipline. |
 
 ---
 

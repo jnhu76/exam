@@ -408,7 +408,24 @@ Ordinary business content must **not** invent shadow-based elevation. Shadows ar
 
 ### Enforcement
 
-Deterministic enforcement of the high-confidence boundaries above is provided by the `exam-ui/*` ESLint rules (see `apps/web/src/lint/exam-ui/`). The current stage enforces only high-confidence authority bypasses (`prefer-field-error`, `prefer-inline-error-banner`, `no-business-shadow`, `no-arbitrary-typography`); broader typography and status-color enforcement arrives in UI-LINT-2 once semantic replacements exist.
+Deterministic enforcement of the high-confidence boundaries above is provided by the `exam-ui/*` ESLint rules (see `apps/web/src/lint/exam-ui/`), wired as errors in `apps/web/eslint.config.ts` for business / feature / layout source.
+
+**Active enforcement** (rules wired as errors today):
+
+- `exam-ui/prefer-field-error` — field-validation errors must use `FieldError`.
+- `exam-ui/prefer-inline-error-banner` — block-level destructive error banners must use `InlineErrorBanner`.
+- `exam-ui/no-business-shadow` — no new `shadow-*` in ordinary business content (debt grandfathered by baseline).
+- `exam-ui/no-arbitrary-typography` — no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]`.
+- `exam-ui/no-raw-typography` — business pages must not recompose the **`type-section-title`** recipe (`text-base`/`text-lg` + `font-semibold`/`font-bold`) from primitive utilities; use `type-section-title` or a section component (`PageSection` / `FormSection` / `DataTableShell`). Other typography recipes (`type-metric`, `type-body`, …) are **not** enforced yet — gated on migration coverage.
+- `exam-ui/no-raw-surface-recipe` — business pages must not recompose the **`surface-content`** recipe (`bg-card` + `border` + `rounded-lg`/`rounded`) from primitive utilities; use `surface-content`, an authoritative content component (`PageSection` / `DataTableShell` / `FormSection`), or the shadcn `<Card>` primitive. Other surface recipes are not enforced by this rule.
+
+**Deferred enforcement** (semantic roles that still lack migration coverage or deterministic static detection):
+
+- Broader typography recipes (`type-metric`, `type-body`, `type-secondary`, …) — authority exists, migration coverage does not (`StatsCard` has one consumer; ~20 metric bypasses unmigrated). Blocked on UI-PILOT-1 / UI-MIGRATE-N.
+- Component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) — authority exists, migration coverage does not. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
+- Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. See `docs/frontend/P3-UI-LINT-2-phase3-authority-bypass-decision.md` for the semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary).
+
+Do **not** claim that all typography or all surface recipes are enforced — only the two narrow recipes above are gated today. The wired ESLint config is the implementation fact; these docs must match it.
 
 ---
 

@@ -80,6 +80,33 @@ authority. If it does not, see §5 (escalation).
 | Controlled search input | `SearchInput` | |
 | Form field layout | `FieldGroup` / `Field` / `FieldRow` / `FieldStack` / `FormStack` | spacing/layout primitives. |
 
+### PageSection vs FormSection — decision rule
+
+Both render a titled bordered block over `surface-content`, so they look
+alike. The distinction is **semantic, not visual**. Walk this rule before
+picking one:
+
+```text
+Is this primarily a content / read-only region?
+    → use PageSection
+    (statistics, details, information blocks, read-only summaries)
+
+Is this primarily an editable form grouping?
+    → use FormSection
+    (settings forms, configuration forms, grouped input controls)
+```
+
+- **`PageSection`** owns a *readable content region* — arbitrary view-oriented
+  grouping (statistics, detail blocks, read-only information). Its body is
+  padded arbitrary content (`density.default`).
+- **`FormSection`** owns an *editable grouped-controls region* — form
+  semantics and field organization. Its body is a form/grid
+  (`density.default`, `grid gap-4`).
+
+Do not create variants. Do not rename. Do not merge. If a block mixes the two,
+choose by the **dominant** content: a read-only summary with one inline control
+is a `PageSection`; a form with a read-only helper note is a `FormSection`.
+
 ### Typography
 
 ```text
@@ -256,19 +283,45 @@ the role → owner table above
 
 ---
 
-## 7. Future lint (not yet active)
+## 7. Lint enforcement (current state)
 
-The following rules are **documented candidates**, activated only after
-migration coverage exists (UI-LINT-2). Do not assume they are enforced today
-beyond what `AGENTS.md` lists as active.
+The `exam-ui/*` rules are wired as errors in `apps/web/eslint.config.ts` for
+business / feature / layout source. The wired config is the implementation fact;
+this section must match it. (See `AGENTS.md` → "Enforcement" for the canonical
+active/deferred split.)
 
-| Candidate rule | Would enforce | Prerequisite |
-| --- | --- | --- |
-| `exam-ui/no-raw-typography` | reject recomposing a `type-*` recipe from primitive text/font utilities in business pages | migration coverage of typography recipes |
-| `exam-ui/no-raw-surface-recipe` | reject raw `bg-card` + `border` + `rounded-lg` (+ shadow) recomposition when `surface-content` exists | surface recipes exist (now landed) + migration coverage |
-| `exam-ui/no-business-shadow` | **already active** — ordinary content cannot introduce shadow | existing; debt grandfathered by baseline |
-| `exam-ui/no-authority-bypass` | reject bypassing an authoritative component for a role it owns | per-role migration coverage |
+### Active enforcement
+
+| Rule | Enforced semantic role (today) |
+| --- | --- |
+| `exam-ui/prefer-field-error` | field-validation errors must use `FieldError` |
+| `exam-ui/prefer-inline-error-banner` | block-level destructive error banners must use `InlineErrorBanner` |
+| `exam-ui/no-business-shadow` | no new `shadow-*` in ordinary business content (debt grandfathered by baseline) |
+| `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` |
+| `exam-ui/no-raw-typography` | business pages must not recompose the **`type-section-title`** recipe (`text-base`/`text-lg` + `font-semibold`/`font-bold`); use `type-section-title` or `PageSection` / `FormSection` / `DataTableShell` |
+| `exam-ui/no-raw-surface-recipe` | business pages must not recompose the **`surface-content`** recipe (`bg-card` + `border` + `rounded-lg`/`rounded`); use `surface-content`, an authoritative content component, or the shadcn `<Card>` primitive |
+
+Each active rule's *current* detection scope is narrow and documented in its
+rule-header comment. `no-raw-typography` today detects **only** the
+section-title bypass; metric / body / secondary typography recipes are not
+enforced yet. `no-raw-surface-recipe` today detects **only** the hand-rolled
+`bg-card` + `border` + panel-radius recomposition; `<Card>` is never flagged
+(it is the accepted low-level primitive — see the Card decision in the lint
+readiness report).
+
+### Deferred enforcement
+
+Rules/roles **not** enforced today, and why:
+
+| Role | Reason deferred |
+| --- | --- |
+| broader typography (`type-metric`, `type-body`, `type-secondary`, …) | authority exists, migration coverage does not (blocked on UI-PILOT-1 / UI-MIGRATE-N) |
+| component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) | authority exists, migration coverage does not (blocked on UI-PILOT-1 / UI-MIGRATE-N) |
+| domain-status-color authority | authority exists (`statusMeta` + `StatusBadge`), but the bypass is dynamic-`className` / data-flow, not statically token-detectable without false positives against categorical `<Badge>` labels; enforced by review and migration. The semantic-ownership boundary (which domains `statusMeta` owns vs. which merely reuse the `StatusTone` vocabulary) is recorded in `P3-UI-LINT-2-phase3-authority-bypass-decision.md` |
+| `exam-ui/no-authority-bypass` (umbrella) | not implemented; per-role migration coverage not yet sufficient |
 
 Principle (from the foundation plan): **do not prohibit a primitive utility
-unless a semantic authority exists.** Prohibitions arrive in UI-LINT-2, gated on
-valid semantic replacements.
+unless a semantic authority exists.** Prohibitions arrive gated on valid
+semantic replacements. Deferred enforcement is split into "authority exists /
+migration incomplete" vs. "authority exists / deterministic static detection
+unavailable" — these are different reasons and must not be conflated.
