@@ -387,6 +387,27 @@ retained DOMAIN_WARNING site; the other four files contain non-field-error
 roles. PASS requires every removal to be earned and every retained entry to be
 semantically explained — both hold. The seven other invariants are all YES.
 
+### L.1 Invariant-model clarification (UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 §2)
+
+The invariant name `FIELD_ERROR_BASELINE_REMOVALS_EARNED: NO` above is
+ambiguous on its face: "removals earned" can mean either (a) "did any removal
+occur" or (b) "were all removals that occurred earned." The two readings carry
+opposite PASS/BLOCKED implications. This subsection clarifies the semantics
+**without changing the W1 verdict** (W1 remains PASS). The single invariant is
+equivalent to the three unambiguous facts below, verified against the W1 commit
+range (`3b85ac9..521bd1a`):
+
+```text
+ANY_FIELD_ERROR_BASELINE_ENTRY_REMOVED:     NO   (git-proven: baseline.json untouched across W1)
+ALL_BASELINE_REMOVALS_EARNED:               YES  (vacuous — zero removals, zero unearned)
+ALL_RETAINED_ENTRIES_SEMANTICALLY_EXPLAINED: YES (5/5 explained in §F)
+```
+
+So the original `NO` expresses reading (a) — "no removal occurred" — which is
+benign. It does **not** express reading (b) — "an unearned removal occurred" —
+which would have blocked. Future waves should use the three-valued form above
+rather than the conflated single name.
+
 ---
 
 ## M. Next wave
