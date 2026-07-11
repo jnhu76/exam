@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldError } from "@/components/shared/FieldError";
 import { ArrowLeft } from "lucide-react";
 
 /**
@@ -232,11 +233,7 @@ export function GradingDetailPage() {
                   }))
                 }
               />
-              {validationErrors[q.questionId] && (
-                <p className="text-sm text-destructive">
-                  {validationErrors[q.questionId]}
-                </p>
-              )}
+              <FieldError>{validationErrors[q.questionId]}</FieldError>
             </div>
             <div className="space-y-2">
               <Label htmlFor={`comment-${q.questionId}`}>

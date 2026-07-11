@@ -4,8 +4,7 @@
     "apps/web/src/components/exam/QuestionRenderer.tsx::text-destructive|text-size",
     "apps/web/src/components/exam/SubjectiveAnswerInput.tsx::text-destructive|text-size",
     "apps/web/src/pages/admin/CandidateFieldsPage.tsx::text-destructive|text-size",
-    "apps/web/src/pages/admin/CandidatesPage.tsx::text-destructive|text-size",
-    "apps/web/src/pages/admin/GradingDetailPage.tsx::text-destructive|text-size"
+    "apps/web/src/pages/admin/CandidatesPage.tsx::text-destructive|text-size"
   ],
   "exam-ui/prefer-inline-error-banner": [
     "apps/web/src/components/exam/ExamTimer.tsx::destructive-surface|rounded",
