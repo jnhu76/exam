@@ -253,6 +253,38 @@ describe("SubjectiveAnswerInput", () => {
       `${secondInput.id}-help`,
     );
   });
+
+  it("omits aria-describedby and renders no error node when there is no error", () => {
+    const { container } = render(
+      <SubjectiveAnswerInput value="" onChange={() => {}} />,
+    );
+
+    const textarea = screen.getByLabelText("主观题答案");
+    // No error → no programmatic association, and no orphan error node.
+    expect(textarea).not.toHaveAttribute("aria-describedby");
+    expect(textarea).not.toHaveAttribute("aria-invalid");
+    expect(container.querySelector("p")).not.toBeInTheDocument();
+  });
+
+  it("preserves the aria-describedby → error node id association in the error state", () => {
+    const { container } = render(
+      <SubjectiveAnswerInput
+        value=""
+        onChange={() => {}}
+        error="答案不能为空"
+      />,
+    );
+
+    const textarea = screen.getByLabelText("主观题答案");
+    const describedById = textarea.getAttribute("aria-describedby");
+    expect(describedById).toBeTruthy();
+    // The referenced id must resolve to the concrete error node.
+    expect(container.querySelector(`#${describedById}`)).toBeInTheDocument();
+    expect(container.querySelector(`#${describedById}`)).toHaveTextContent(
+      "答案不能为空",
+    );
+    expect(textarea).toHaveAttribute("aria-invalid", "true");
+  });
 });
 
 describe("RuntimeActionBar", () => {
