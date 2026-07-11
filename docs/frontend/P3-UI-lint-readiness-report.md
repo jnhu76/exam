@@ -42,7 +42,7 @@ Recipe inventory from `apps/web/src/typography/recipes.css` (11 recipes):
 
 | Recipe | Business-consumer occurrences | Primary consumer |
 | --- | ---: | --- |
-| `type-section-title` | 3 | `PageSection`, `FormSection`, `DataTableShell` (in-flight migration) |
+| `type-section-title` | 3 | `PageSection`, `FormSection`, `DataTableShell` (committed canonical-recipe migration) |
 | `type-page-title` | 3 | `PageHeader` (+ consistency tests) |
 | `type-long-response` | 3 | `GradingDetailPage`, `CoursePage` |
 | `type-secondary` | 2 | `StatsCard`, `PageSection` description |
@@ -87,8 +87,9 @@ enough evidence to gate:
 #### (a) Section-title bypass — `text-{base,lg} font-semibold`
 
 The exact pattern `text-base font-semibold` was the section-title recipe before
-it became `type-section-title`. It is mid-migration in the authoritative
-components (uncommitted in `PageSection`/`FormSection`/`DataTableShell`) but
+it became `type-section-title`. The authoritative components
+(`PageSection`/`FormSection`/`DataTableShell`) are committed to
+`type-section-title` (UI-LINT-2-CORRECTIVE-2), but the primitive stack is
 still present in **business pages**:
 
 ```text
@@ -309,7 +310,7 @@ migration ramp-up — their bypass rules are gated on UI-PILOT-1 / UI-MIGRATE-N.
 
 | Role | Authority | Bypass pattern | Bypass count | Phase 3 gate? |
 | --- | --- | --- | --- | --- |
-| domain status | `StatusBadge` + `statusMeta` | `<Badge className="bg-…">` / `<span>` for a value that **is** a `statusMeta` key (a lifecycle/diagnostic status) | 0 audited `statusMeta` bypasses — the three previously-cited sites (`AttemptDetailPage` event-tone, `ExamMonitoringPage` online/warning, `ProctorDashboardPage` severity) map **non-status** domains (audit action / online-state / warning-level / severity) and are NOT `statusMeta` bypasses; see `P3-UI-LINT-2-phase3-authority-bypass-decision.md` §1 | **DEFERRED** — genuine status-color bypasses are dynamic-`className`/data-flow (not statically token-detectable) and collide with categorical `<Badge>` (question type/tags, explicitly NOT a status). Enforced by review and migration. |
+| domain status | `StatusBadge` + `statusMeta` | `<Badge className="bg-…">` / `<span>` for a value that **is** a `statusMeta` key (a lifecycle/diagnostic status) | 0 remaining audited `statusMeta` bypasses — two previously-cited sites were same-domain duplicates and have been **repaired** in UI-LINT-2-CORRECTIVE-2: `ProctorDashboardPage` misconduct severity (now `<StatusBadge status={`misconduct_${severity}`} />`) and `ExamMonitoringPage` attempt-status label (now derived via `getStatusMeta`). The remaining cited sites (`AttemptDetailPage` event-tone, `ExamMonitoringPage` online/warning) map **non-status** domains (audit action / online-state / warning-level) and are NOT `statusMeta` bypasses; see `P3-UI-LINT-2-phase3-authority-bypass-decision.md` §1 | **DEFERRED** — genuine status-color bypasses are dynamic-`className`/data-flow (not statically token-detectable) and collide with categorical `<Badge>` (question type/tags, explicitly NOT a status). Enforced by review and migration. |
 | field error | `FieldError` | `<p text-{sm,xs} text-destructive>` | 6 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-field-error`) |
 | inline error banner | `InlineErrorBanner` | `<div rounded + destructive-surface>` | 4 files (grandfathered) | **ALREADY ACTIVE** (`exam-ui/prefer-inline-error-banner`) |
 | confirmation dialog | `ConfirmDialog` | — | 0 bypasses | not gated (no bypass evidence) |
@@ -319,12 +320,16 @@ migration ramp-up — their bypass rules are gated on UI-PILOT-1 / UI-MIGRATE-N.
 
 ### 3.3 Component-bypass readiness verdict
 
-The **status-color** role has a strong authority (`statusMeta` + `StatusBadge`),
-but the semantic-ownership audit (`P3-UI-LINT-2-phase3-authority-bypass-decision.md`
-§1) found **zero** `statusMeta` bypasses at the previously-cited sites: each
-maps a distinct non-status input domain (audit action, online-state,
-warning-level, misconduct severity) that merely reuses the `StatusTone` color
-vocabulary. They are legitimate local presentation policy, not bypasses owed to
+The **status-color** role has a strong authority (`statusMeta` + `StatusBadge`).
+The semantic-ownership audit (`P3-UI-LINT-2-phase3-authority-bypass-decision.md`
+§1) originally classified all previously-cited sites as distinct non-status
+domains; UI-LINT-2-CORRECTIVE-2 corrected two of them as same-domain
+duplicates and repaired them: `ProctorDashboardPage` misconduct severity
+(`misconduct_warning`/`misconduct_serious` are `statusMeta` keys) and
+`ExamMonitoringPage` attempt-status label (`statusMeta` owns the `labelKey`).
+The remaining cited sites map distinct non-status input domains (audit action,
+online-state, warning-level) that merely reuse the `StatusTone` color
+vocabulary — legitimate local presentation policy, not bypasses owed to
 `statusMeta`. A genuine status-color bypass (a hand-rolled color for a value
 that *is* a `statusMeta` key) remains possible, but enforcing it by lint is
 data-flow-bound and collides with categorical `<Badge>` (question type/tags),
@@ -436,7 +441,7 @@ migration coverage / false-positive risk understood).
 | --- | --- | --- |
 | **Phase 1 (UI-LINT-2)** | `exam-ui/no-raw-typography` (section-title bypass only) | ✅ **ACTIVE (error)** — `type-section-title` recipe + 3 migrated component consumers + low false-positive for weight+size stack. Metric bypass **deferred** (blocked on `StatsCard` migration). |
 | **Phase 2 (UI-LINT-2)** | `exam-ui/no-raw-surface-recipe` (`surface-content` recomposition) | ✅ **ACTIVE (error)** — Card decision RESOLVED (Option A: `<Card>` stays a low-level primitive, never flagged). Rule targets the hand-rolled `bg-card` + `border` + panel-radius recomposition in governed business/layout scope only (see §2.5a). |
-| **Phase 3 (UI-LINT-2)** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role: see the semantic-ownership boundary in `P3-UI-LINT-2-phase3-authority-bypass-decision.md` — the audited sites are **not** `statusMeta` bypasses (distinct semantic domains reusing the `StatusTone` vocabulary), so no migration is owed there; deterministic lint enforcement of genuine status-color bypasses remains data-flow-bound and deferred. PageSection/StatsCard sub-roles are **blocked on migration coverage**. Phase 3 activates zero new rules. |
+| **Phase 3 (UI-LINT-2)** | `exam-ui/no-authority-bypass` | ⚠️ **PARTIAL** — field-error and inline-error-banner sub-roles are **already active** (UI-LINT-1). Status-color sub-role: see the semantic-ownership boundary in `P3-UI-LINT-2-phase3-authority-bypass-decision.md` — two same-domain duplicates (ProctorDashboard misconduct severity, ExamMonitoring attempt-status label) were repaired in UI-LINT-2-CORRECTIVE-2; the remaining audited sites are **not** `statusMeta` bypasses (distinct semantic domains reusing the `StatusTone` vocabulary), so no migration is owed there. Deterministic lint enforcement of genuine status-color bypasses remains data-flow-bound and deferred. PageSection/StatsCard sub-roles are **blocked on migration coverage**. Phase 3 activates zero new rules. |
 | **Phase 4 (UI-LINT-2)** | Baseline cleanup | ✅ Current baseline is already small/explicit; new rules add their own grandfathered debt with the same per-entry discipline. |
 
 ---

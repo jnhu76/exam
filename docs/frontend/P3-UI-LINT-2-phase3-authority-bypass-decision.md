@@ -20,7 +20,7 @@
 | Sub-role | Authority | Decision | Reason |
 | --- | --- | --- | --- |
 | Status (domain lifecycle) | `StatusBadge` + `statusMeta` | **DEFERRED (deterministic lint)** | genuine status-color bypasses are dynamic-`className` / data-flow, not statically token-detectable; categorical `<Badge>` is explicitly allowed and would false-positive. Enforced by review and migration. |
-| Audit-action / monitoring / severity tone maps | — (distinct semantic domains) | **NOT A `statusMeta` BYPASS** | see §1: the three audited sites map **different input domains** (audit actions, online-state, warning-level, misconduct severity) that merely reuse the `StatusTone` *vocabulary*. They are not owned by `statusMeta`. No migration is owed. |
+| Audit-action / monitoring tone maps | — (distinct semantic domains) | **NOT A `statusMeta` BYPASS** | see §1: the audited sites that remain distinct map **different input domains** (audit actions, online-state, warning-level) that merely reuse the `StatusTone` *vocabulary*. They are not owned by `statusMeta`. No migration is owed. (The misconduct-severity and ExamMonitoring AttemptStatus-label sites were same-domain duplicates and have been repaired — see §1.1.) |
 | Error — field | `FieldError` | **ALREADY ACTIVE** (`exam-ui/prefer-field-error`, UI-LINT-1) | no new rule needed |
 | Error — inline banner | `InlineErrorBanner` | **ALREADY ACTIVE** (`exam-ui/prefer-inline-error-banner`, UI-LINT-1) | no new rule needed |
 | Sections | `PageSection` / `FormSection` | **DEFERRED** | 38+ `<CardHeader>` bypasses; `PageSection` has only 2 consumers — migration blocked on UI-PILOT-1/UI-MIGRATE-N. |
@@ -29,9 +29,11 @@
 **Phase 3 activates zero new rules.** This is the correct outcome under the
 brief's "only after migration evidence" + "do not over-enforce" constraints.
 The two error sub-roles are already enforced; the status-color sub-role's
-deterministic lint is deferred (data-flow bound); the audited tone-map sites
-are **not bypasses at all** (distinct semantic domains); the remaining
-component sub-roles are blocked on migration coverage.
+deterministic lint is deferred (data-flow bound); two same-domain duplicates
+(misconduct severity, ExamMonitoring attempt-status label) were repaired in
+UI-LINT-2-CORRECTIVE-2; the remaining audited tone-map sites are **not
+bypasses at all** (distinct semantic domains); the remaining component
+sub-roles are blocked on migration coverage.
 
 ---
 
@@ -64,18 +66,20 @@ and monitoring-condition maps belonged to `statusMeta`.)
 | `AttemptDetailPage` `EVENT_META` + `eventToneClass` | **audit actions** (`attempt.start`, `attempt.saveAnswer`, `attempt.disrupted`, `attempt.restore`, `attempt.submit`, `attempt.autoSubmit`, `attempt.forceSubmit`, `attempt.extendTime`, `attempt.misconductFlagged`, `grading.score_entered`, `grading.finalized`) | `action → {labelKey, tone, icon}` then `EventTone → bg-*-soft text-*` | **NO** | An audit *action* is not a status. The component itself documents this (L96-97): "Audit *actions* are a distinct vocabulary from lifecycle *statuses*, so this lives here rather than in statusMeta.ts." `statusMeta` has no action keys. |
 | `ExamMonitoringPage` `ONLINE_COLOR` | **connectivity classification** (`OnlineStateEnum`: `online`/`stale`/`offline`), heartbeat-freshness-derived | `onlineState → bg-success/warning/destructive` | **NO** | `OnlineState` is a server-derived connectivity classification, not a domain status. `statusMeta` has `connected`/`degraded`/`offline` keys but those model *system connection diagnostics* (a different domain); `OnlineState` models per-attempt heartbeat freshness. Different input domain. |
 | `ExamMonitoringPage` `WARNING_COLOR` | **monitoring signal** (`WarningLevelEnum`: `normal`/`warning`/`critical`) | `warningLevel → bg-*/10 text-*` | **NO** | Per the contract (`proctorMonitoring.ts`): `WarningLevel` is "a monitoring signal, NOT a cheating verdict". It is a derived health hint, not a lifecycle status. `statusMeta` has no `normal`/`critical`-as-monitoring keys. |
-| `ProctorDashboardPage` misconduct `<Badge variant>` | **misconduct severity** (`MisconductSeverityEnum`: `warning`/`serious`) | `severity → variant destructive/secondary` | **NO** | Severity is a severity enum, not a status. Note the page *does* route the candidate's **status** through `StatusBadge` correctly (`<StatusBadge status={candidate.status} />`). Only the severity chip uses `<Badge>`. |
+| `ProctorDashboardPage` misconduct severity (REPAIRED) | **misconduct severity** (`MisconductSeverityEnum`: `warning`/`serious`) — same input domain `statusMeta` owns via `misconduct_warning`/`misconduct_serious` | was: `severity → variant destructive/secondary` (a **drift**: `warning → secondary`, canonical is `warning → warning tone`); now: `<StatusBadge status={`misconduct_${severity}`} />` | **YES** (corrected) | `statusMeta` owns the `MisconductSeverityEnum → presentation` decision (`misconduct_warning`/`misconduct_serious` keys), and `AttemptDetailPage` already routes the exact same domain through `StatusBadge`. The earlier draft classified this as a distinct "severity" domain — that was wrong: the severity *is* the status key suffix, and an active canonical consumer already existed. Repaired in UI-LINT-2-CORRECTIVE-2. |
+| `ExamMonitoringPage` attempt-status label (REPAIRED) | **AttemptStatus** (`in_progress`/`disrupted`/`submitted`/`grading`/`graded`/`voided`) — same input domain `statusMeta` owns via its `labelKey` metadata | was: page-local `STATUS_LABEL_KEY` map (`status → admin.examMonitoring.statusLabels.*`); now: `t(statusLabelKey(getStatusMeta(a.status).labelKey))` | **YES** (corrected) | `statusMeta` owns the `AttemptStatus → labelKey` decision. The page rendered plain text (not a Badge), but the *label metadata* was a same-domain duplicate. Repaired in UI-LINT-2-CORRECTIVE-2 by routing the label key through the canonical owner while preserving the plain-text surface. |
 
-**Verdict:** none of the audited sites is a `statusMeta` bypass. Each maps a
-**distinct input semantic domain** (audit action / online-state / warning-level
-/ misconduct severity) that `statusMeta` does not own. The fact that all four
-reuse the `StatusTone` color vocabulary is correct and expected — a shared
-color palette is not a shared authority.
+**Verdict:** of the audited sites, the misconduct-severity and ExamMonitoring
+attempt-status-label sites **were** same-domain `statusMeta` duplicates and
+have been repaired (UI-LINT-2-CORRECTIVE-2). The remaining sites (audit action
+/ online-state / warning-level) map **distinct input semantic domains** that
+`statusMeta` does not own. They reuse the `StatusTone` color vocabulary, which
+is correct and expected — a shared color palette is not a shared authority.
 
 ### 1.2 Are these ungoverned authority candidates?
 
-No migration is owed to `statusMeta` (different input domain). The remaining
-question is whether each map is:
+For the remaining distinct-domain sites, no migration is owed to `statusMeta`
+(different input domain). The remaining question is whether each map is:
 
 - **legitimate local presentation policy**, or
 - an **ungoverned authority candidate** (a new domain → presentation mapping
@@ -96,9 +100,13 @@ Assessment:
   so the *vocabulary* is centralized; only the *color* mapping is local. If a
   second monitoring consumer appears, the color mapping is an authority
   candidate (a monitoring-presentation registry). Today it is not a bypass.
-- `ProctorDashboardPage` severity `<Badge>`: **legitimate local presentation
-  policy.** Single consumer; severity → destructive/secondary is a one-line
-  chip variant, not a registry-worthy mapping.
+- `ProctorDashboardPage` severity `<Badge>`: **was a same-domain duplicate
+  (REPAIRED).** `statusMeta` owns `misconduct_warning`/`misconduct_serious` and
+  `AttemptDetailPage` already routed the same `MisconductSeverityEnum` through
+  `StatusBadge`. The page-local `severity → variant` mapping was an authority
+  drift (`warning → secondary` vs canonical `warning → warning tone`), not a
+  distinct domain. Repaired in UI-LINT-2-CORRECTIVE-2 to
+  `<StatusBadge status={`misconduct_${severity}`} />`.
 
 None of these is a duplicate of `statusMeta`, and none warrants a second
 wrapper authority today.
@@ -129,11 +137,16 @@ lint, because:
 
 **Two separate facts, not to be conflated:**
 
-1. **Authority ownership:** `statusMeta` owns the *status* domain. The three
-   audited sites map *non-status* domains (audit action, online-state,
-   warning-level, severity) and are **not** `statusMeta` bypasses. No migration
-   is owed. (Corrected from the original draft, which misclassified them as
-   bypasses based on shared `StatusTone` keys.)
+1. **Authority ownership:** `statusMeta` owns the *status* domain, including
+   the misconduct-severity presentation (`misconduct_warning`/
+   `misconduct_serious`) and the AttemptStatus label metadata. Two audited
+   sites — `ProctorDashboardPage` misconduct severity and `ExamMonitoringPage`
+   attempt-status label — were same-domain duplicates and have been repaired
+   (UI-LINT-2-CORRECTIVE-2). The remaining audited sites map *non-status*
+   domains (audit action, online-state, warning-level) and are **not**
+   `statusMeta` bypasses; no migration is owed there. (Corrected from the
+   original draft, which misclassified all four as distinct domains based on
+   shared `StatusTone` keys.)
 2. **Deterministic static detection:** even for genuine status-color bypasses,
    a deterministic lint rule cannot enforce the authority without unacceptable
    false positives (data-flow / dynamic-`className`; categorical-`Badge`
@@ -246,3 +259,16 @@ This document did **not**:
 - change any test or test coverage.
 
 Only this documentation file was produced.
+
+> **UI-LINT-2-CORRECTIVE-2 update:** the original Phase 3 document classified
+> the `ProctorDashboardPage` misconduct-severity chip and the
+> `ExamMonitoringPage` attempt-status label as distinct local domains. An
+> adversarial clean-HEAD review found both were same-domain `statusMeta`
+> duplicates (misconduct severity → `misconduct_warning`/`misconduct_serious`;
+> AttemptStatus → `labelKey`). Both have been repaired at the source
+> (`ProctorDashboardPage` now routes `<StatusBadge status={`misconduct_${severity}`} />`;
+> `ExamMonitoringPage` now derives the label via
+> `t(statusLabelKey(getStatusMeta(a.status).labelKey))`), with ownership-sensitive
+> tests. This section's "no source file changed" claim held for the original
+> Phase 3 decision; UI-LINT-2-CORRECTIVE-2 is a separate later corrective that
+> did change those two pages and their tests.
