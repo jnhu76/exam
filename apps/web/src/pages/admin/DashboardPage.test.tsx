@@ -187,6 +187,21 @@ describe("DashboardPage", () => {
       const viewButtons = screen.getAllByRole("button", { name: /查看考试/ });
       expect(viewButtons).toHaveLength(3);
     });
+
+    // Characterization (UI-MIGRATE-N-W3): the "近期考试" heading names the
+    // recent-exams content section. It must remain present and continue to
+    // label the table block after the section-title typography migration.
+    // Asserts the durable role, not the raw typography class.
+    it("keeps the 近期考试 section title naming the recent-exams block", async () => {
+      apiGet.mockResolvedValue(mockDashboardData);
+      renderPage();
+      const title = await screen.findByText("近期考试");
+      expect(title).toBeInTheDocument();
+      // The title sits inside the Card that owns the recent-exams table.
+      const card = title.closest("[data-slot='card']");
+      expect(card).toBeInTheDocument();
+      expect(card).toHaveTextContent("期中考试");
+    });
   });
 
   describe("empty state", () => {

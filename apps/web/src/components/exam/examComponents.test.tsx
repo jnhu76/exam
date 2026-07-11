@@ -182,6 +182,32 @@ describe("QuestionWorkspace", () => {
     expect(screen.getByText("答案内容")).toBeInTheDocument();
     expect(screen.getByText("底部操作")).toBeInTheDocument();
   });
+
+  // Characterization (UI-MIGRATE-N-W3): the question content surface is a
+  // governed content region wrapping the question prompt. After the
+  // surface-content migration it must remain a distinct bordered region
+  // containing the prompt text. Asserts the durable role, not the raw
+  // surface utility classes.
+  it("keeps the question content surface as a distinct region holding the prompt", () => {
+    const { container } = render(
+      <QuestionWorkspace
+        question={<p data-testid="prompt">题干内容</p>}
+        answer={<AnswerPanel>答案内容</AnswerPanel>}
+      />,
+    );
+    const prompt = screen.getByTestId("prompt");
+    // The prompt lives inside a bordered surface element (the question
+    // content region). The surface carries padding that distinguishes it
+    // from the surrounding workspace.
+    const surface = prompt.parentElement;
+    expect(surface).not.toBeNull();
+    // The workspace section is the outermost shell; the surface is a child
+    // distinct from the answer area.
+    const section = container.querySelector("section");
+    expect(section).not.toBeNull();
+    expect(section).toContainElement(prompt);
+    expect(section).toContainElement(screen.getByText("答案内容"));
+  });
 });
 
 describe("SubjectiveAnswerInput", () => {

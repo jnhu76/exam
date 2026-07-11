@@ -175,6 +175,55 @@ describe("ExamListPage", () => {
     expect(await screen.findByText("暂无可参加的考试")).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W3): each section heading introduces a
+  // page-level group of exam cards and must remain present as a heading
+  // tied to its card group after the section-title typography migration.
+  // Asserts the durable role, not the raw typography class.
+  it("keeps the 可参加的考试 heading as a section title over its card group", async () => {
+    getMock.mockResolvedValue([makeExam({})]);
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const heading = await screen.findByRole("heading", {
+      name: "可参加的考试",
+    });
+    expect(heading.tagName).toBe("H2");
+    const section = heading.closest("section");
+    expect(section).toBeInTheDocument();
+    expect(section).toHaveTextContent("Test Exam");
+  });
+
+  it("keeps the 历史考试 heading as a section title over its card group", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        examId: "exam-exhaust",
+        availabilityStatus: "max_attempts_exhausted",
+        primaryAction: "view_result",
+        attemptsUsed: 3,
+        maxAttempts: 3,
+        latestAttemptId: "att-2",
+        bestScore: 90,
+      }),
+    ]);
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const heading = await screen.findByRole("heading", {
+      name: "历史考试",
+    });
+    expect(heading.tagName).toBe("H2");
+    const section = heading.closest("section");
+    expect(section).toBeInTheDocument();
+  });
+
   it("shows error state on load failure", async () => {
     getMock.mockRejectedValue(new Error("Network error"));
 

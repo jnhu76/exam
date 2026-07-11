@@ -795,7 +795,7 @@ export function TakeExamPage() {
             )}
 
             <section
-              className="relative rounded-lg border bg-card p-5 shadow-sm md:p-8"
+              className="relative surface-content p-5 shadow-sm md:p-8"
               data-testid="take-question-section"
             >
               {view.isLocked && (
