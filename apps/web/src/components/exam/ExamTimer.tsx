@@ -36,7 +36,7 @@ export function ExamTimer({
     <div
       className={`rounded-md border px-3 py-1.5 text-right ${isLow ? "border-destructive/30 bg-destructive/10 text-destructive" : "border-border bg-card text-foreground"}`}
     >
-      <div className="text-[11px] font-medium leading-none text-muted-foreground">
+      <div className="type-metadata leading-none">
         {t("candidateRuntime.timer.remaining")}
       </div>
       <span className="font-mono text-xl font-bold leading-tight tabular-nums">
