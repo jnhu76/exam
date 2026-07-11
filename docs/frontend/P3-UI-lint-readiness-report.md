@@ -239,7 +239,7 @@ exam-ui/no-business-shadow baseline (7 files):
 
 | Recipe | Recipe exists | Authoritative consumer exists | Migration coverage | Phase 2 gate? |
 | --- | --- | --- | --- | --- |
-| `surface-content` | ✅ | ✅ `PageSection`/`DataTableShell`/`FormSection`/toolbars/`StatsCard` | ❌ components migrated, but **only 2 page-level consumers** (`AttemptDetailPage` in-flight) | ✅ **GATED (narrow)** — Card decision RESOLVED (Option A); rule active on the hand-rolled recomposition only (see §2.5a) |
+| `surface-content` | ✅ | ✅ `PageSection`/`DataTableShell`/`FormSection`/toolbars/`StatsCard` | ❌ components migrated, but **only 1 page-level consumer** (committed `AttemptDetailPage` result-summary section; plus `shared.test.tsx`) | ✅ **GATED (narrow)** — Card decision RESOLVED (Option A); rule active on the hand-rolled recomposition only (see §2.5a) |
 | `surface-attention` | ✅ | ✅ `InlineErrorBanner`/`ErrorState`/`EmptyState` | partial | not gated in Phase 2 (covered by component rules in Phase 3) |
 | `surface-overlay` / `surface-navigation` / `surface-page` / `surface-subtle` | ✅ | ✅ (layout/shadcn) | ✅ (centralized) | not gated (no business recomposition risk) |
 

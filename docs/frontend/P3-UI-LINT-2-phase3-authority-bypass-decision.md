@@ -191,8 +191,9 @@ containers with arbitrary content).
 ### Why no rule is activated
 
 The authority (`PageSection`) exists, but **migration coverage does not**:
-`PageSection` has only **2 business consumers** (`AttemptDetailPage` in-flight +
-`shared.test.tsx`). Activating a "use PageSection instead of `<Card>`" rule
+`PageSection` has only **2 consumers** (committed `AttemptDetailPage`
+result-summary section + `shared.test.tsx`). A single page-level consumer
+plus a test is still insufficient coverage. Activating a "use PageSection instead of `<Card>`" rule
 would create 38+ violations with no migrated target — the pages have not been
 migrated yet, and `<Card>` is a legitimate low-level primitive (the shadcn
 `Card` carries `rounded-xl border bg-card ... shadow-sm` and is used in 48
