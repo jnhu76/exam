@@ -12,7 +12,6 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -473,19 +472,17 @@ export function ProctorDashboardPage() {
                   </div>
                 )}
                 {candidate.misconduct && (
-                  <Badge
-                    variant={
-                      candidate.misconduct.severity === "serious"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                    className="w-fit"
-                  >
-                    {t("admin.proctorDashboard.card.misconductPrefix")}：{" "}
-                    {candidate.misconduct.severity === "serious"
-                      ? t("admin.proctorDashboard.card.severitySerious")
-                      : t("admin.proctorDashboard.card.severityWarning")}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge
+                      status={`misconduct_${candidate.misconduct.severity}`}
+                      className="w-fit"
+                    />
+                    {candidate.misconduct.notes && (
+                      <span className="text-muted-foreground">
+                        {candidate.misconduct.notes}
+                      </span>
+                    )}
+                  </div>
                 )}
                 {isLive && candidate.attemptId && (
                   <div className="flex flex-wrap gap-2 mt-1">

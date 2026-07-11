@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
+import * as statusMetaModule from "@/lib/statusMeta";
 import { ExamMonitoringPage } from "./ExamMonitoringPage";
 
 vi.mock("@/lib/api", () => ({
@@ -13,6 +14,14 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+
+// Ownership-sensitive spy on the canonical status-meta accessor. The page must
+// derive its attempt-status label from `getStatusMeta` (the statusMeta owner),
+// NOT from a page-local `AttemptStatus → labelKey` map. A reintroduced local
+// map would never call this accessor, so the call assertion below fails. The
+// spy preserves the real implementation so sibling tests' rendered text is
+// unaffected.
+const getStatusMetaSpy = vi.spyOn(statusMetaModule, "getStatusMeta");
 
 const getMock = vi.mocked(api.get);
 const warnMock = vi.mocked(logger.warn);
@@ -126,4 +135,23 @@ describe("ExamMonitoringPage", () => {
 
   // Empty state and timeline dialog tests are deferred to a follow-up PR
   // to avoid timer-interference from the 15s polling interval across tests.
+
+  it("derives attempt-status label metadata from the canonical statusMeta owner", async () => {
+    // The page must consult the canonical `getStatusMeta` accessor for the
+    // AttemptStatus → labelKey decision. A reintroduced page-local
+    // `STATUS_LABEL_KEY` map would bypass this accessor entirely, so the call
+    // assertion below fails if the bypass returns. The spy keeps the real
+    // implementation so the rendered label is unchanged.
+    getMock.mockResolvedValueOnce({
+      items: [makeAttempt({ status: "in_progress" })],
+      total: 1,
+    });
+
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("考试监控")).toBeInTheDocument();
+    });
+
+    expect(getStatusMetaSpy).toHaveBeenCalledWith("in_progress");
+  });
 });

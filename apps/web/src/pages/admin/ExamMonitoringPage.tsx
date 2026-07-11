@@ -8,6 +8,8 @@ import type {
 } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
+import { getStatusMeta } from "@/lib/statusMeta";
+import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -69,15 +71,6 @@ const WARNING_COLOR: Record<string, string> = {
   normal: "bg-success/10 text-success",
   warning: "bg-warning/10 text-warning",
   critical: "bg-destructive/10 text-destructive",
-};
-
-const STATUS_LABEL_KEY: Record<string, string> = {
-  in_progress: "admin.examMonitoring.statusLabels.in_progress",
-  disrupted: "admin.examMonitoring.statusLabels.disrupted",
-  submitted: "admin.examMonitoring.statusLabels.submitted",
-  grading: "admin.examMonitoring.statusLabels.grading",
-  graded: "admin.examMonitoring.statusLabels.graded",
-  voided: "admin.examMonitoring.statusLabels.voided",
 };
 
 export function ExamMonitoringPage() {
@@ -256,15 +249,7 @@ export function ExamMonitoringPage() {
                       </span>
                     </div>
                   </Td>
-                  <Td>
-                    {STATUS_LABEL_KEY[a.status]
-                      ? t(
-                          STATUS_LABEL_KEY[
-                            a.status
-                          ] as "admin.examMonitoring.statusLabels.in_progress",
-                        )
-                      : a.status}
-                  </Td>
+                  <Td>{t(statusLabelKey(getStatusMeta(a.status).labelKey))}</Td>
                   <Td>
                     <Badge
                       variant="secondary"
