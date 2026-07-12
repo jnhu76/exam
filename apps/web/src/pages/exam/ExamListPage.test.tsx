@@ -175,6 +175,79 @@ describe("ExamListPage", () => {
     expect(await screen.findByText("暂无可参加的考试")).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W3): each section heading introduces a
+  // page-level group of exam cards and must remain present as a heading
+  // tied to its card group after the section-title typography migration.
+  // Asserts the durable role, not the raw typography class.
+  it("keeps the 可参加的考试 heading as a section title over its card group", async () => {
+    getMock.mockResolvedValue([makeExam({})]);
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const heading = await screen.findByRole("heading", {
+      name: "可参加的考试",
+    });
+    expect(heading.tagName).toBe("H2");
+    const section = heading.closest("section");
+    expect(section).toBeInTheDocument();
+    expect(section).toHaveTextContent("Test Exam");
+  });
+
+  it("keeps the 历史考试 heading as a section title over its card group", async () => {
+    getMock.mockResolvedValue([
+      makeExam({
+        examId: "exam-exhaust",
+        availabilityStatus: "max_attempts_exhausted",
+        primaryAction: "view_result",
+        attemptsUsed: 3,
+        maxAttempts: 3,
+        latestAttemptId: "att-2",
+        bestScore: 90,
+      }),
+    ]);
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const heading = await screen.findByRole("heading", {
+      name: "历史考试",
+    });
+    expect(heading.tagName).toBe("H2");
+    const section = heading.closest("section");
+    expect(section).toBeInTheDocument();
+  });
+
+  // Characterization (UI-MIGRATE-N-W4B): the exam card is a Card-primitive
+  // container that owns its elevation. After the business `shadow-sm` is
+  // removed (the Card primitive already supplies it), the card must remain a
+  // single `data-slot="card"` region holding the title, metadata, and primary
+  // action. Asserts the durable container role, not the raw shadow token.
+  it("keeps each exam card as a Card region holding title, metadata, and action", async () => {
+    getMock.mockResolvedValue([makeExam({})]);
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("exam-card-exam-1");
+    const card = screen.getByTestId("exam-card-exam-1");
+    // The exam card renders as the Card primitive container.
+    expect(card).toHaveAttribute("data-slot", "card");
+    // The card region still holds the exam title, its meta, and the action.
+    expect(card).toHaveTextContent("Test Exam");
+    expect(card).toHaveTextContent("60");
+    expect(card).toHaveTextContent("开始考试");
+  });
+
   it("shows error state on load failure", async () => {
     getMock.mockRejectedValue(new Error("Network error"));
 

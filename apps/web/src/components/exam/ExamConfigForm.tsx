@@ -186,9 +186,7 @@ export function ExamConfigForm({
               </Field>
             </div>
             {timeError && (
-              <p role="alert" className="text-xs text-destructive">
-                {t("admin.forms.exam.timeInvalid")}
-              </p>
+              <FieldError>{t("admin.forms.exam.timeInvalid")}</FieldError>
             )}
             <Field>
               <Label>{t("admin.forms.exam.duration")}</Label>
@@ -324,12 +322,12 @@ export function ExamConfigForm({
               </Field>
             </div>
             {scoreError && (
-              <p role="alert" className="text-xs text-destructive">
+              <FieldError>
                 {t("admin.forms.exam.passingScoreExceeds", {
                   passing: data.passingScore,
                   total: data.totalScore,
                 })}
-              </p>
+              </FieldError>
             )}
           </FieldGroup>
         </CardContent>

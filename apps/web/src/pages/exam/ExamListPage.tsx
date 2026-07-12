@@ -111,7 +111,7 @@ function ExamCard({
   }
 
   return (
-    <Card className="shadow-sm" data-testid={`exam-card-${exam.examId}`}>
+    <Card data-testid={`exam-card-${exam.examId}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{exam.title}</CardTitle>
@@ -234,7 +234,7 @@ export function ExamListPage() {
     <div className="mx-auto max-w-4xl flex flex-col gap-6 p-6">
       {canTake.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">
+          <h2 className="type-section-title">
             {t("examList.sections.canTake")}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -252,7 +252,7 @@ export function ExamListPage() {
 
       {others.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">
+          <h2 className="type-section-title">
             {t("examList.sections.history")}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -270,7 +270,7 @@ export function ExamListPage() {
 
       {upcoming.length > 0 && (
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">
+          <h2 className="type-section-title">
             {t("examList.sections.upcoming")}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">

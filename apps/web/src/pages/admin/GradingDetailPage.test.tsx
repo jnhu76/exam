@@ -141,6 +141,60 @@ describe("GradingDetailPage", () => {
     expect(postMock).not.toHaveBeenCalled();
   });
 
+  it("clears the field validation error after a subsequent valid save", async () => {
+    // Characterization: the validation error is routed through the score
+    // control's field-error role, and is cleared from that control once a
+    // valid save succeeds (handleSave deletes the error key on the success
+    // path). Protects observable behavior, not the primitive class stack.
+    postMock.mockResolvedValue(mockGradeResponse);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const scoreInputs = screen.getAllByRole("spinbutton");
+    const firstInput = scoreInputs[0]!;
+    const saveButtons = () => screen.getAllByText("保存");
+
+    // Trigger a validation failure on q1.
+    await user.clear(firstInput);
+    await user.type(firstInput, "15");
+    await user.click(saveButtons()[0]!);
+    expect(screen.getByText("分数不能超过满分 (10)")).toBeInTheDocument();
+
+    // Correct the score and save successfully.
+    await user.clear(firstInput);
+    await user.type(firstInput, "8");
+    await user.click(saveButtons()[0]!);
+    await vi.waitFor(() => {
+      expect(postMock).toHaveBeenCalled();
+    });
+
+    // The field-error feedback for q1 is gone.
+    expect(screen.queryByText("分数不能超过满分 (10)")).not.toBeInTheDocument();
+  });
+
+  it("scopes the score validation error to its own question", async () => {
+    // Characterization: a validation failure on one question's score control
+    // must not surface as field-error feedback on a different question's
+    // score control. Protects per-question error ownership across any DOM
+    // restructuring of the score blocks.
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(/期末考试 — 张三/);
+
+    const scoreInputs = screen.getAllByRole("spinbutton");
+    const firstInput = scoreInputs[0]!;
+    await user.clear(firstInput);
+    await user.type(firstInput, "15");
+
+    const saveButtons = screen.getAllByText("保存");
+    await user.click(saveButtons[0]!);
+
+    // q1 (maxScore 10) over-max → exactly one field-error text node present.
+    const errors = screen.getAllByText("分数不能超过满分 (10)");
+    expect(errors).toHaveLength(1);
+  });
+
   it("submits score on save", async () => {
     postMock.mockResolvedValue(mockGradeResponse);
     const user = userEvent.setup();
@@ -368,7 +422,10 @@ describe("candidateAnswer rendering", () => {
     await screen.findByText(/期末考试 — 张三/);
     const answerEl = screen.getByTestId("grading-candidate-answer-q1");
     expect(answerEl).toHaveTextContent(longAnswer);
-    expect(answerEl).toHaveClass("whitespace-pre-wrap");
+    // The candidate-answer box uses the type-long-response semantic recipe
+    // (UI-RECIPE-1A), which owns white-space: pre-wrap as a CSS property
+    // rather than a primitive utility class.
+    expect(answerEl).toHaveClass("type-long-response");
   });
 
   it("renders array answer joined by Chinese comma", async () => {

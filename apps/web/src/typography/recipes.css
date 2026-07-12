@@ -1,0 +1,125 @@
+/*
+ * Semantic typography recipes — the first appearance abstraction above
+ * primitive Tailwind typography utilities (UI-RECIPE-1A).
+ *
+ * Public authority: the type-NAME class names. Business consumers use the
+ * recipe name; they must not recompose the same role from primitive text,
+ * font, leading, tracking, or text-color utilities once a recipe owns it.
+ *
+ * Implementation note: this file is imported separately (main.tsx) rather than
+ * inlined into index.css. The tailwindcss vite plugin processes index.css and
+ * its content scanner mishandles certain recipe class names (for example it
+ * resolves the page-title token as a Tailwind page variant and drops the
+ * rule). A plain CSS import bypasses that scanner, so every recipe is emitted
+ * deterministically. The font-family and color CSS variables are defined as
+ * root tokens in index.css and resolve globally here.
+ *
+ * Chinese-aware decisions:
+ *   - UI densities (body, secondary, metadata) use a CJK-snug line height
+ *     (about 1.4 to 1.5), looser than the Tailwind text-sm default of 1.25
+ *     which is too dense for Chinese. (Audit defect CJK-LINE-HEIGHT.)
+ *   - reading uses about 1.7 line height; sustained Chinese needs the box.
+ *   - long-response uses about 1.625 with pre-wrap.
+ *   - metric and numeric own tabular-nums for numeric alignment.
+ *
+ * Recipes do NOT encode domain status colors; status is a separate authority
+ * (statusMeta.ts plus StatusBadge). Field errors are owned by the FieldError
+ * component, not a type-NAME recipe.
+ */
+
+/* page-title: the single title of a page. Strongest non-numeric hierarchy. */
+.type-page-title {
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* page-description: subtitle/lede directly under a page or section title. */
+.type-page-description {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* section-title: title of a content section / card / panel. */
+.type-section-title {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* body: default running UI text. */
+.type-body {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+/* secondary: de-emphasized running text (descriptive, not a factual record). */
+.type-secondary {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* metadata: compact supporting factual info (timestamps, IDs, record facts). */
+.type-metadata {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* reading: sustained reading of a long Chinese passage / long question stem. */
+.type-reading {
+  font-family: var(--font-reading);
+  font-size: 1.25rem;
+  line-height: 2rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* long-response: read-only long candidate/source text, may wrap many lines. */
+.type-long-response {
+  font-family: var(--font-reading);
+  font-size: 0.875rem;
+  line-height: 1.625rem;
+  font-weight: 400;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* metric: a KPI/stat numeric value. Owns weight + tabular-nums; layout owns size. */
+.type-metric {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* numeric: tabular numeric alignment for tables/timers/counts (not the metric). */
+.type-numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* code: monospaced code / log / JSON dump presentation. */
+.type-code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  font-weight: 400;
+  white-space: pre;
+  overflow-x: auto;
+}

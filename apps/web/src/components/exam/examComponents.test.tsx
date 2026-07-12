@@ -98,6 +98,98 @@ describe("ExamTimer", () => {
     });
     expect(onTimeout).toHaveBeenCalledOnce();
   });
+
+  // Characterization (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §14): the timer renders a
+  // compact remaining-time label and a zero-padded MM:SS numeric value. The
+  // label uses the type-metadata recipe; the value uses a mono tabular-numeric
+  // stack. These tests pin the durable content/structure/role invariants, not
+  // the old arbitrary text-[11px] class (retired in W4A) nor the dead
+  // leading-none companion (removed in RECON-1 — type-metadata owns line-height
+  // under cascade policy A, so leading-none was ineffective and contradictory).
+  it("renders the remaining-time label alongside the MM:SS value", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    // The label ("剩余时间") is present as a distinct element.
+    expect(screen.getByText("剩余时间")).toBeInTheDocument();
+    // The numeric value is zero-padded to 30:00 (30 min exactly).
+    expect(screen.getByText("30:00")).toBeInTheDocument();
+  });
+
+  it("keeps the timer value zero-padded to two digits per field", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:05:03Z" onTimeout={() => {}} />,
+    );
+
+    expect(screen.getByText("05:03")).toBeInTheDocument();
+  });
+
+  it("keeps the label visually distinct from the numeric value", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const label = screen.getByText("剩余时间");
+    const value = screen.getByText("30:00");
+    // The label and value are separate elements, preserving numeric/label
+    // hierarchy: the label is the compact secondary text, the value is the
+    // prominent numeric.
+    expect(label.tagName).toBe("DIV");
+    expect(value.tagName).toBe("SPAN");
+    // The numeric value owns the tabular-nums numeric role (its defining
+    // property); the label does not. This is the durable role distinction that
+    // survives the label's typography-recipe migration.
+    expect(value.className).toContain("tabular-nums");
+    expect(label.className).not.toContain("tabular-nums");
+  });
+
+  it("activates the low-time state at the 300s threshold", () => {
+    vi.useFakeTimers();
+    // 300s remaining = exactly at the low-time boundary (remaining <= 300).
+    vi.setSystemTime(new Date("2026-06-01T00:25:00Z"));
+    const { container } = render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    // Low-time state paints the wrapper with the destructive surface utilities.
+    expect(wrapper!.className).toContain("destructive");
+  });
+
+  it("does not activate the low-time state above the threshold", () => {
+    vi.useFakeTimers();
+    // 301s remaining > 300s threshold → not low.
+    vi.setSystemTime(new Date("2026-06-01T00:24:59Z"));
+    const { container } = render(
+      <ExamTimer deadlineAt="2026-06-01T00:30:00Z" onTimeout={() => {}} />,
+    );
+
+    const wrapper = container.firstElementChild;
+    expect(wrapper).not.toBeNull();
+    expect(wrapper!.className).not.toContain("destructive");
+  });
+
+  it("updates the remaining-time value each second", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+    render(
+      <ExamTimer deadlineAt="2026-06-01T00:00:10Z" onTimeout={() => {}} />,
+    );
+
+    expect(screen.getByText("00:10")).toBeInTheDocument();
+    await act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getByText("00:07")).toBeInTheDocument();
+  });
 });
 
 describe("ExamTopbar", () => {
@@ -182,6 +274,32 @@ describe("QuestionWorkspace", () => {
     expect(screen.getByText("答案内容")).toBeInTheDocument();
     expect(screen.getByText("底部操作")).toBeInTheDocument();
   });
+
+  // Characterization (UI-MIGRATE-N-W3): the question content surface is a
+  // governed content region wrapping the question prompt. After the
+  // surface-content migration it must remain a distinct bordered region
+  // containing the prompt text. Asserts the durable role, not the raw
+  // surface utility classes.
+  it("keeps the question content surface as a distinct region holding the prompt", () => {
+    const { container } = render(
+      <QuestionWorkspace
+        question={<p data-testid="prompt">题干内容</p>}
+        answer={<AnswerPanel>答案内容</AnswerPanel>}
+      />,
+    );
+    const prompt = screen.getByTestId("prompt");
+    // The prompt lives inside a bordered surface element (the question
+    // content region). The surface carries padding that distinguishes it
+    // from the surrounding workspace.
+    const surface = prompt.parentElement;
+    expect(surface).not.toBeNull();
+    // The workspace section is the outermost shell; the surface is a child
+    // distinct from the answer area.
+    const section = container.querySelector("section");
+    expect(section).not.toBeNull();
+    expect(section).toContainElement(prompt);
+    expect(section).toContainElement(screen.getByText("答案内容"));
+  });
 });
 
 describe("SubjectiveAnswerInput", () => {
@@ -252,6 +370,38 @@ describe("SubjectiveAnswerInput", () => {
       "aria-describedby",
       `${secondInput.id}-help`,
     );
+  });
+
+  it("omits aria-describedby and renders no error node when there is no error", () => {
+    const { container } = render(
+      <SubjectiveAnswerInput value="" onChange={() => {}} />,
+    );
+
+    const textarea = screen.getByLabelText("主观题答案");
+    // No error → no programmatic association, and no orphan error node.
+    expect(textarea).not.toHaveAttribute("aria-describedby");
+    expect(textarea).not.toHaveAttribute("aria-invalid");
+    expect(container.querySelector("p")).not.toBeInTheDocument();
+  });
+
+  it("preserves the aria-describedby → error node id association in the error state", () => {
+    const { container } = render(
+      <SubjectiveAnswerInput
+        value=""
+        onChange={() => {}}
+        error="答案不能为空"
+      />,
+    );
+
+    const textarea = screen.getByLabelText("主观题答案");
+    const describedById = textarea.getAttribute("aria-describedby");
+    expect(describedById).toBeTruthy();
+    // The referenced id must resolve to the concrete error node.
+    expect(container.querySelector(`#${describedById}`)).toBeInTheDocument();
+    expect(container.querySelector(`#${describedById}`)).toHaveTextContent(
+      "答案不能为空",
+    );
+    expect(textarea).toHaveAttribute("aria-invalid", "true");
   });
 });
 

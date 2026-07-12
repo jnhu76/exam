@@ -1,6 +1,7 @@
 import { type ChangeEvent, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldError } from "@/components/shared/FieldError";
 import { cn } from "@/lib/utils";
 
 /** Props for the SubjectiveAnswerInput component. */
@@ -68,11 +69,7 @@ export function SubjectiveAnswerInput({
         aria-describedby={error ? helpId : undefined}
         className="min-h-48 resize-y"
       />
-      {error && (
-        <p id={helpId} className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <FieldError id={helpId}>{error}</FieldError>}
     </div>
   );
 }

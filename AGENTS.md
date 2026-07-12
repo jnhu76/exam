@@ -303,6 +303,7 @@ docs/                    # design documents
 - **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
 - **AI coding rules** — see `docs/code-quality.md` §17
 - **Research before toolchain changes** — Docker, pnpm, Node module resolution, CI, package manager, and build-system changes require MCP/doc search + local repo verification before editing. Do not guess.
+- **Frontend visual authority** — see the "Frontend Visual Authority" section below
 
 Every Job completion requires:
 
@@ -322,6 +323,109 @@ Every Job completion requires:
 - DB repository: `packages/db/src/repository/<entity>Repo.ts` — each repo method takes ctx as first arg
 - All user-facing strings in Chinese (zh-CN), code and comments in English
 - No comments in code unless asked
+
+---
+
+## Frontend Visual Authority
+
+**Authority documents** (read before any frontend visual work):
+
+- `docs/frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md` — accepted as-built visual-language audit.
+- `docs/frontend/P3-UI-Foundation-plan.md` — the authority for UI foundation work (authority chain, recipes, sequence, lint rules).
+
+Do **not** treat `docs/ui/*` paths as current authority — that directory no longer exists; references to it in this file and elsewhere are historical/archive only.
+
+### Authority chain
+
+```text
+semantic tokens
+    ↓
+semantic recipes
+    ↓
+authoritative components
+    ↓
+business pages
+```
+
+Tailwind remains the implementation substrate. This model makes Tailwind a substrate, not the business-facing visual language. It does **not** mean "business pages must not use Tailwind" (see the boundary below).
+
+### Component discovery rule
+
+Before creating or locally recreating a visual structure, inspect these in order:
+
+```text
+apps/web/src/components/ui          # shadcn primitives (generated, do not hand-edit)
+apps/web/src/components/shared      # authoritative shared business components
+existing semantic recipes           # (being introduced progressively; few exist yet)
+the visual authority registry       # (does not exist yet — planned in UI-VOCAB-1)
+```
+
+Distinguish **component does not exist** from **component exists but appears insufficient**. The latter triggers the insufficiency protocol below — it is **not** a license to bypass the authority. Writing local Tailwind is never, by itself, justification to bypass an existing visual authority.
+
+### Component insufficiency protocol
+
+When an existing authoritative component or recipe appears insufficient:
+
+1. identify the missing semantic, structural, interaction, or accessibility requirement;
+2. determine whether the requirement belongs to the existing visual role;
+3. extend the existing authority when the semantic role is unchanged;
+4. introduce a distinct role only when the semantics genuinely differ.
+
+Do not create a second implementation of the same visual role. Known collision groups to reconcile (not duplicate): `PageSection` / `ContentCard` / `DataTableShell` (titled content containers), the multiple "stat/KPI" presentations, `ListToolbar` / `DataToolbar`, `ConfirmDialog` / `ConfirmActionDialog`.
+
+### Tailwind boundary
+
+Business pages **may** use Tailwind for structural layout and responsive behavior. Normal structural Tailwind includes:
+
+```text
+flex / grid / block / hidden
+relative / absolute / fixed / sticky
+items-* / justify-* / grid-cols-* / col-span-*
+w-* / h-* / min-* / max-* / overflow-* / gap-* / space-* / responsive variants
+```
+
+Business pages **must not** independently compose reusable governed appearance recipes from primitive typography, surface, elevation, or domain-status utilities when a semantic recipe, variant, or authoritative component owns that role. Do not recreate, with primitive utilities, a recipe that an authority already owns.
+
+### Typography guidance
+
+- Chinese font selection is intentional and centrally owned in `apps/web/src/index.css` (`--font-sans`). Agents must **not** introduce page-local `font-family` stacks.
+- Agents must **not** invent one-off typography recipes in business pages. The semantic typography recipe layer (`apps/web/src/typography/recipes.css`) exists and owns governed font-size / weight / line-height combinations per role (`type-page-title`, `type-section-title`, `type-body`, `type-metric`, etc.). Select a recipe by name; do not recompose a role it owns from primitive text / font / leading / tracking utilities.
+- Serif usage is restricted to explicitly approved reading roles; none are approved yet.
+
+### Status authority
+
+Domain status presentation must use the authoritative status mapping and components:
+
+- `apps/web/src/lib/statusMeta.ts` — the status → tone authority.
+- `apps/web/src/components/shared/StatusBadge.tsx` — the status presentation component.
+
+Distinguish **domain status** (must flow through `statusMeta` + `StatusBadge`) from **generic UI feedback** (field errors, form-submit alerts, validation messages). Destructive / error colors remain valid for genuine field-error or alert feedback — this rule does not prohibit them there.
+
+### Elevation guidance
+
+Ordinary business content must **not** invent shadow-based elevation. Shadows are reserved for visual roles that intentionally own elevation — especially overlay / floating surfaces and the sticky topbar. This is a forward authority rule. The former business-shadow debt is **closed** (UI-MIGRATE-N-W4B): the `exam-ui/no-business-shadow` baseline is now empty, and any business-page `shadow-*` utility is a real, unshielded error. Elevation in ordinary content must come from an authoritative component primitive (e.g. the `Card` primitive, which owns `shadow-sm`) or be absent when the surface is flat (e.g. `surface-content`). Do not add `shadow-*` to business pages, and do not assume all current shadow usage is already compliant — `components/ui` (generated primitives) and `components/layout` (sticky topbar) are the only exempt scopes.
+
+### Enforcement
+
+Deterministic enforcement of the high-confidence boundaries above is provided by the `exam-ui/*` ESLint rules (see `apps/web/src/lint/exam-ui/`), wired as errors in `apps/web/eslint.config.ts` for business / feature / layout source.
+
+**Active enforcement** (rules wired as errors today):
+
+- `exam-ui/prefer-inline-error-banner` — a `<div role="alert">` carrying a rounded utility + multiple destructive-surface utilities must use `InlineErrorBanner` (narrowed in UI-MIGRATE-N-W2 to require `role="alert"`, which excludes destructive control-state/status surfaces that merely reuse the color).
+- `exam-ui/no-business-shadow` — no `shadow-*` in ordinary business content. The business-shadow baseline is **empty** (UI-MIGRATE-N-W4B closed all 7 registered signatures: 28 redundant Card `shadow-sm` removed via the Card primitive authority, 1 TakeExam `shadow-sm` removed via the flat `surface-content` contract). The detector is variant-aware (W4B): it matches `shadow-sm`, `shadow-md/lg/xl/2xl`, variant-prefixed forms (`hover:shadow-md`, `md:shadow-lg`, `data-[state=open]:shadow-lg`, `group-hover:shadow-lg`), and the arbitrary-bracket form (`shadow-[0_2px_8px_…]`) via the shared bracket-aware candidate parser (RECON-1). `drop-shadow-*` (a CSS filter, not elevation) is NOT matched.
+- `exam-ui/no-arbitrary-typography` — no new arbitrary typography values: `text-[…]` (font-size, excl. color), `leading-[…]`, `tracking-[…]`, `font-[…]` (weight/family), arbitrary-property forms (`[font-size:…]`, `[line-height:…]`, …), slash line-height modifiers, under all variant forms. Built on a shared bracket-aware Tailwind candidate parser (RECON-1). Text-color arbitrary values are OUT of policy here (color/token authority); ambiguous `var(--x)`/`calc()` are review-only.
+- `exam-ui/no-arbitrary-inline-typography` — no one-off typography via inline `style={{fontSize/lineHeight/letterSpacing/fontWeight/fontFamily/…}}` (static literal values; dynamic is review-only). De-dups against the conflict rule.
+- `exam-ui/no-typography-authority-conflict` — when a `type-*` recipe is selected on a JSX node, a sibling self-target utility (or inline-style key) that touches a recipe-OWNED property is a conflict (RECON-1). Semantic-free: the recipe class IS the declaration; no role inference. Cascade policy A (proven): unlayered recipes WIN over layered utilities, so a self-target owned-property utility is dead (or, with `!`, authority-piercing). Descendant/pseudo-element variants do not conflict; color participates (most recipes own `color`).
+
+**Deferred enforcement** (semantic roles that still lack migration coverage or deterministic static detection):
+
+- Broader typography recipes (`type-metric`, `type-body`, `type-secondary`, …) — authority exists, migration coverage does not (`StatsCard` has one consumer; ~20 metric bypasses unmigrated). Blocked on UI-PILOT-1 / UI-MIGRATE-N.
+- Component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) — authority exists, migration coverage does not. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
+- Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. See `docs/frontend/P3-UI-LINT-2-phase3-authority-bypass-decision.md` for the semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary).
+- Field-error authority (`FieldError`) — authority exists and is the canonical owner of "form field validation error", but the former `exam-ui/prefer-field-error` structural lint rule was **retired** in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8): its recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles (4/4 remaining hits were false-semantic-overlap). All known same-role bypasses have been migrated; ownership is now enforced by semantic migration review + `FieldError.test.tsx`, not a structural lint proxy. Do **not** re-introduce a structural field-error lint rule without a proven deterministic ownership detector.
+- `type-section-title` / `surface-content` recipe recomposition — authority exists and is canonical, but the structural lint proxies (`exam-ui/no-raw-typography`, `exam-ui/no-raw-surface-recipe`) were **retired** in UI-MIGRATE-N-W3 (§12-§13): after the proven same-role migrations every remaining hit was false-semantic-overlap (TOPBAR / QUESTION / RUNTIME / OVERLAY titles; SIDEBAR surface), and no sound NARROW AST boundary could distinguish the owner role from those distinct roles. All known same-role bypasses have been migrated; recipe/component ownership is enforced by semantic migration review + the recipe authority tests, not a structural lint proxy. Do **not** re-introduce these structural recipe lint rules without a proven deterministic ownership detector. (Note: RECON-1 added `exam-ui/no-typography-authority-conflict`, which is a DIFFERENT, sound rule — it fires only when a `type-*` recipe IS explicitly selected, so there is no role-inference surface. It does not replace the retired raw-node proxies, which remain retired.)
+
+Do **not** claim that all typography or all surface recipes are lint-enforced — they are not. The wired ESLint config is the implementation fact; these docs must match it.
 
 ---
 
@@ -359,24 +463,31 @@ Phase1.4 UI Foundation Reset is a **UI foundation stabilization reference**, not
 8. Admin Console vs Exam Runtime layout boundary unclear
 9. SVG/icon usage inconsistent
 
-### Documentation Reference
+### Documentation Reference (Historical / Archive)
 
-All UI foundation rules are defined in `docs/ui/`:
+The `docs/ui/` paths below were the Phase1.4 reference set. **That directory no longer exists** — these entries are retained as historical pointers only; archived copies may exist under `docs/archive/`. For current frontend visual authority, use the documents named in the "Frontend Visual Authority" section above:
+
+- `docs/frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md`
+- `docs/frontend/P3-UI-Foundation-plan.md`
+
+Historical Phase1.4 reference filenames (archive only, not current authority):
 
 - `docs/ui/00-ui-constitution.md` — UI constitution and invariant principles
 - `docs/ui/01-design-tokens.md` — CSS variables and Tailwind tokens
 - `docs/ui/02-layout-system.md` — Shell, sidebar, topbar, and layout rules
 - `docs/ui/03-component-boundaries.md` — Component layer boundaries
-- `docs/ui/04-state-grammar.md` — Status grammar and集中 management
+- `docs/ui/04-state-grammar.md` — Status grammar and central management
 - `docs/ui/05-page-templates.md` — Page templates (list, detail, form, exam runtime)
 - `docs/ui/06-accessibility-rules.md` — Accessibility rules
 - `docs/ui/07-ui-bug-inventory.md` — Known UI bugs
 - `docs/ui/08-migration-plan.md` — PR migration plan
 - `docs/ui/09-phase2-readiness.md` — Phase2 documentation readiness
 
-### Migration Plan
+### Migration Plan (Historical / Archive)
 
-See `docs/ui/08-migration-plan.md` for PR拆分:
+The Phase1.4 migration plan below is retained for history. It references the now-archived `docs/ui/` set; it is **not** the current UI foundation sequence. The current sequence is `docs/frontend/P3-UI-Foundation-plan.md` (UI-PLAN-0 → UI-AGENT-1 → UI-LINT-1 → …).
+
+Historical Phase1.4 PR split:
 
 - PR 1: Documentation convergence only
 - PR 2: Route refresh / title loading / ErrorBoundary / App bootstrap

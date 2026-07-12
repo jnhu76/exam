@@ -176,6 +176,39 @@ describe("P3-FSM-0 authoritative snapshot read path", () => {
     ).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W3): the question content surface
+  // (take-question-section) is a governed content region wrapping the
+  // question prompt and the answer controls. After the surface-content
+  // migration it must remain a distinct region holding the prompt and
+  // keeping the answer controls reachable. Asserts the durable role, not
+  // the raw surface utility classes.
+  it("keeps the question content surface region holding the prompt and answer controls", async () => {
+    installTakeRoute(buildSnapshot());
+    renderPage();
+    const section = await screen.findByTestId("take-question-section");
+    expect(section).toBeInTheDocument();
+    // The prompt renders inside the question content surface.
+    expect(section).toHaveTextContent("选择一项");
+    // The answer radio controls remain reachable within the surface.
+    const radio = await within(section).findByRole("radio", { name: "A" });
+    expect(radio).toBeInTheDocument();
+  });
+
+  // Characterization (UI-MIGRATE-N-W4B): the question content surface selects
+  // the flat `surface-content` recipe. W4B removes the business `shadow-sm`
+  // that contradicted this flat-surface contract; the section must keep the
+  // `surface-content` class (the durable flat-surface authority), the prompt,
+  // and its relative positioning. Asserts the durable surface role, not the
+  // removed shadow token.
+  it("keeps the question section on the flat surface-content recipe after the shadow removal", async () => {
+    installTakeRoute(buildSnapshot());
+    renderPage();
+    const section = await screen.findByTestId("take-question-section");
+    expect(section.className).toContain("surface-content");
+    expect(section.className).toContain("relative");
+    expect(section).toHaveTextContent("选择一项");
+  });
+
   it("locked authoritative snapshot → question control disabled, no save API call", async () => {
     const snap = buildSnapshot({
       attemptStatus: "submitted",

@@ -114,9 +114,9 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <Card className="shadow-sm">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-lg font-semibold">
+          <CardTitle className="type-section-title">
             {t("admin.dashboard.recent.title")}
           </CardTitle>
         </CardHeader>

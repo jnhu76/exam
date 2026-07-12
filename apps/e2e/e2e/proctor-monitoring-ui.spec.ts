@@ -48,7 +48,7 @@ test.describe("Proctor Monitoring UI E2E", () => {
       timeout: 15_000,
     });
 
-    await expect(page.getByText("考试中")).toBeVisible();
+    await expect(page.getByText("答题中")).toBeVisible();
   });
 
   test("monitoring page shows online status badge for active candidate", async ({

@@ -795,7 +795,7 @@ export function TakeExamPage() {
             )}
 
             <section
-              className="relative rounded-lg border bg-card p-5 shadow-sm md:p-8"
+              className="relative surface-content p-5 md:p-8"
               data-testid="take-question-section"
             >
               {view.isLocked && (
@@ -859,7 +859,7 @@ export function TakeExamPage() {
                   </Button>
                 )}
               </div>
-              <div className="mb-8 text-xl font-medium leading-8 text-foreground">
+              <div className="type-reading mb-8">
                 {currentQuestionView.prompt}
               </div>
               <QuestionRenderer

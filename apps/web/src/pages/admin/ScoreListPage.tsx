@@ -182,7 +182,7 @@ export function ScoreListPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.scoreList.stats.average")}
@@ -194,7 +194,7 @@ export function ScoreListPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.scoreList.stats.max")}
@@ -204,7 +204,7 @@ export function ScoreListPage() {
             <p className="text-2xl font-bold">{scores.stats.maxScore}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.scoreList.stats.min")}
@@ -214,7 +214,7 @@ export function ScoreListPage() {
             <p className="text-2xl font-bold">{scores.stats.minScore}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.scoreList.stats.passRate")}
@@ -226,7 +226,7 @@ export function ScoreListPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.scoreList.stats.totalGraded")}
@@ -239,7 +239,7 @@ export function ScoreListPage() {
       </div>
 
       {/* Filters */}
-      <Card className="shadow-sm">
+      <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <Tabs
@@ -268,7 +268,7 @@ export function ScoreListPage() {
       </Card>
 
       {/* Scores Table */}
-      <Card className="shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">
             {t("admin.scoreList.listTitle")}

@@ -32,7 +32,7 @@ export function ListToolbar({
       role="toolbar"
       aria-label={label}
       className={cn(
-        "flex flex-col gap-3 rounded-lg border bg-card p-3 lg:flex-row lg:items-center lg:justify-between",
+        "surface-content flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between",
         className,
       )}
     >

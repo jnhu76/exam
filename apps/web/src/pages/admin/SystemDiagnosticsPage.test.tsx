@@ -123,6 +123,21 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByText("5")).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W4B): the diagnostic info/metric cards are
+  // Card-primitive containers that own their elevation. After the business
+  // `shadow-sm` is removed (the Card primitive already supplies it), each card
+  // title must still sit inside a `data-slot="card"` region holding its value.
+  // Asserts the durable container role, not the raw shadow token.
+  it("keeps each diagnostic card title inside a Card region holding its value", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce(diag());
+    renderPage();
+    const dbLabel = await screen.findByText("数据库状态");
+    const card = dbLabel.closest("[data-slot='card']");
+    expect(card).toBeInTheDocument();
+    expect(card).toHaveTextContent("5ms");
+  });
+
   it("renders DB status card with latency and Redis connected status", async () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());

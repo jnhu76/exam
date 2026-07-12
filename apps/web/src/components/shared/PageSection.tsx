@@ -32,10 +32,7 @@ export function PageSection({
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      className={cn(
-        "rounded-lg border bg-card text-card-foreground",
-        className,
-      )}
+      className={cn("surface-content text-card-foreground", className)}
     >
       {(title || description || actions) && (
         <div
@@ -46,7 +43,7 @@ export function PageSection({
         >
           <div className="min-w-0">
             {title && (
-              <h2 id={titleId} className="text-base font-semibold">
+              <h2 id={titleId} className="type-section-title">
                 {title}
               </h2>
             )}

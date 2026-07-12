@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PageSection } from "@/components/shared/PageSection";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Play,
@@ -706,53 +707,46 @@ export function AttemptDetailPage() {
         }
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("admin.attemptDetail.result.summaryTitle")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                {t("admin.attemptDetail.result.totalScore")}
-              </p>
-              <p className="text-3xl font-bold tabular-nums">
-                {result.totalScore}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">
-                {t("admin.attemptDetail.result.earnedScore")}
-              </p>
-              <p
-                data-testid="earned-score"
-                className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
-              >
-                {earnedScore}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">
-                {t("admin.attemptDetail.result.passingLine")}
-              </p>
-              <p className="text-3xl font-bold tabular-nums">
-                {result.passingScore}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">
-                {t("admin.attemptDetail.result.status")}
-              </p>
-              <StatusBadge
-                status={result.passed ? "passed" : "not_passed"}
-                className="mt-1"
-              />
-            </div>
+      <PageSection title={t("admin.attemptDetail.result.summaryTitle")}>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.attemptDetail.result.totalScore")}
+            </p>
+            <p className="text-3xl font-bold tabular-nums">
+              {result.totalScore}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.attemptDetail.result.earnedScore")}
+            </p>
+            <p
+              data-testid="earned-score"
+              className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
+            >
+              {earnedScore}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.attemptDetail.result.passingLine")}
+            </p>
+            <p className="text-3xl font-bold tabular-nums">
+              {result.passingScore}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {t("admin.attemptDetail.result.status")}
+            </p>
+            <StatusBadge
+              status={result.passed ? "passed" : "not_passed"}
+              className="mt-1"
+            />
+          </div>
+        </div>
+      </PageSection>
 
       <Card>
         <CardHeader>

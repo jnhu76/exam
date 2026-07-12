@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -522,17 +523,10 @@ export function ExamDetailPage() {
         }
       />
 
-      {publishError && (
-        <div
-          role="alert"
-          className="rounded-md border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive"
-        >
-          {publishError}
-        </div>
-      )}
+      {publishError && <InlineErrorBanner>{publishError}</InlineErrorBanner>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.examDetail.stats.status")}
@@ -542,7 +536,7 @@ export function ExamDetailPage() {
             <StatusBadge status={exam.status} />
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.examDetail.stats.duration")}
@@ -556,7 +550,7 @@ export function ExamDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.examDetail.stats.passingScore")}
@@ -568,7 +562,7 @@ export function ExamDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="shadow-sm">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">
               {t("admin.examDetail.stats.questionCount")}
@@ -580,7 +574,7 @@ export function ExamDetailPage() {
         </Card>
       </div>
 
-      <Card className="shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">
             {t("admin.examDetail.config.title")}
@@ -628,7 +622,7 @@ export function ExamDetailPage() {
 
         <TabsContent value="enrollment" className="flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
                   {t("admin.examDetail.stats.participantCount")}
@@ -640,7 +634,7 @@ export function ExamDetailPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
                   {t("admin.examDetail.stats.completedCount")}
@@ -652,7 +646,7 @@ export function ExamDetailPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-muted-foreground">
                   {t("admin.examDetail.stats.passedCount")}
@@ -664,7 +658,7 @@ export function ExamDetailPage() {
             </Card>
           </div>
 
-          <Card className="shadow-sm">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">
                 {t("admin.examDetail.enrollment.title")}
@@ -756,7 +750,7 @@ export function ExamDetailPage() {
         </TabsContent>
 
         <TabsContent value="scores">
-          <Card className="shadow-sm">
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">
                 {t("admin.examDetail.scoresTab.title")}

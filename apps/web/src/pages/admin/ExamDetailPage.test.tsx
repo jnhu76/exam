@@ -94,6 +94,22 @@ describe("ExamDetailPage", () => {
       expect(screen.getByText("timed_window")).toBeInTheDocument();
     });
 
+    // Characterization (UI-MIGRATE-N-W4B): the detail stat + config cards are
+    // Card-primitive containers that own their elevation. After the business
+    // `shadow-sm` is removed (the Card primitive already supplies it), each
+    // card title must still sit inside a `data-slot="card"` region holding its
+    // value. Asserts the durable container role, not the raw shadow token.
+    it("keeps stat and config card titles inside Card regions holding their values", async () => {
+      renderPage();
+      const statusLabel = await screen.findByText("状态");
+      const statCard = statusLabel.closest("[data-slot='card']");
+      expect(statCard).toBeInTheDocument();
+      const configLabel = await screen.findByText("考试配置");
+      const configCard = configLabel.closest("[data-slot='card']");
+      expect(configCard).toBeInTheDocument();
+      expect(configCard).toHaveTextContent("timed_window");
+    });
+
     it("renders Phase 1 tabs without audit placeholder", async () => {
       renderPage();
       expect(
