@@ -1,0 +1,2160 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Quiet Graphite — Design Preview (Corrective-1)</title>
+    <!--
+  Standalone visual specimen for the Quiet Graphite authority (DESIGN.md v1.1).
+  Corrective-1: weights 400/500/700 only (no 600); no 13px; no 11px Chinese; stable 1px focus
+  border on EVERY control; static .is-* state specimens mirror pseudo-classes; all 41 color roles
+  shown & grouped; ZEBRA table (no !important, clean source order); no FAB; controls flat.
+  Loads the repo's self-hosted Noto Sans CJK SC (same as the live app). Not imported by any app file.
+  Open directly via file:// — relative font path from docs/frontend/.
+-->
+    <link
+      rel="stylesheet"
+      href="../../apps/web/public/fonts/noto-sans-cjk-sc/css/regular.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../apps/web/public/fonts/noto-sans-cjk-sc/css/medium.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../../apps/web/public/fonts/noto-sans-cjk-sc/css/bold.css"
+    />
+
+    <style>
+      /* ============ QUIET GRAPHITE tokens (mirror DESIGN.md exactly) ============ */
+      :root {
+        --canvas: #faf9f7;
+        --surface: #ffffff;
+        --surface-subtle: #f4f2ef;
+        --surface-raised: #ffffff;
+        --ink: #1f1d1b;
+        --ink-secondary: #3d3a36;
+        --ink-muted: #6b6760;
+        --ink-disabled: #8a857b;
+        --hairline: #e6e2dc;
+        --hairline-strong: #d3cec5;
+        --primary: #4f46e5;
+        --primary-hover: #4338ca;
+        --primary-active: #3730a3;
+        --primary-soft: #eef0fb;
+        --on-primary: #ffffff;
+        --link: #1d6fdb;
+        --link-hover: #1559b8;
+        --focus: #4f46e5;
+        --selection: #eef0fb;
+        --row-hover: #efe9df;
+        --row-selected: #e8e1d3;
+        --disabled-surface: #f4f2ef;
+        --sidebar-canvas: #26241f;
+        --sidebar-surface: #2e2c26;
+        --sidebar-hover: #38352e;
+        --sidebar-active: #4a4538;
+        --sidebar-ink: #ece9e3;
+        --sidebar-muted: #a8a299;
+        --sidebar-hairline: #3a372f;
+        --neutral: #6b6760;
+        --neutral-soft: #f1ede7;
+        --informational: #155bbf;
+        --informational-soft: #e3edfb;
+        --positive: #047857;
+        --positive-soft: #dcf5e9;
+        --caution: #b54708;
+        --caution-soft: #fdefd9;
+        --destructive: #b23a17;
+        --destructive-soft: #fbddcf;
+        --destructive-solid: #c2410c;
+        --on-destructive: #ffffff;
+        --r-base: 8px;
+        --r-chip: 6px;
+        --sh-overlay:
+          0 4px 6px -1px rgb(31 29 27 / 0.1), 0 2px 4px -2px rgb(31 29 27 / 0.1);
+        --sh-overlay-lg: 0 16px 48px rgb(31 29 27 / 0.12);
+        --focus-ring: 0 0 0 3px rgb(79 70 229 / 0.25);
+        --font-ui:
+          "Noto Sans CJK SC", "Source Han Sans SC", -apple-system,
+          BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei",
+          system-ui, sans-serif;
+        --font-mono:
+          ui-monospace, SFMono-Regular, Menaco, Consolas, "Liberation Mono",
+          "Courier New", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--canvas);
+        color: var(--ink);
+      }
+      body {
+        font-family: var(--font-ui);
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 22px;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      ::selection {
+        background: var(--selection);
+      }
+
+      /* ---------- preview chrome (12px / 14px only — no 11px, no 13px, no 600) ---------- */
+      .preview-wrap {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 24px 96px;
+      }
+      .preview-h1 {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 32px;
+        letter-spacing: -0.01em;
+        margin: 0 0 4px;
+      } /* page-title */
+      .preview-sub {
+        font-size: 14px;
+        color: var(--ink-muted);
+        margin: 0 0 8px;
+        line-height: 22px;
+      } /* page-description */
+      .preview-meta {
+        font-size: 12px;
+        color: var(--ink-muted);
+        margin: 0 0 24px;
+        line-height: 18px;
+      } /* metadata */
+      .preview-note {
+        background: var(--informational-soft);
+        color: var(--informational);
+        border-radius: var(--r-base);
+        padding: 12px 16px;
+        font-size: 14px;
+        line-height: 22px;
+        margin-bottom: 32px;
+      }
+      section.block {
+        margin-bottom: 40px;
+      }
+      .block-title {
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 24px;
+        margin: 0 0 4px;
+      } /* section-title */
+      .block-desc {
+        font-size: 14px;
+        color: var(--ink-muted);
+        margin: 0 0 16px;
+        line-height: 22px;
+      } /* secondary */
+      .group-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 8px;
+      } /* table-header style */
+      .anno {
+        font-size: 12px;
+        color: var(--ink-muted);
+        line-height: 18px;
+        margin-top: 8px;
+      } /* metadata — annotations */
+
+      /* generic surfaces (FLAT) */
+      .surface {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: var(--r-base);
+      }
+      .pad {
+        padding: 20px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      /* ---------- swatches (all 41 roles, grouped) ---------- */
+      .sw-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+      }
+      .sw {
+        border-radius: var(--r-base);
+        border: 1px solid var(--hairline);
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .sw-chip {
+        height: 56px;
+      }
+      .sw-meta {
+        padding: 8px 10px;
+      }
+      .sw-name {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--ink);
+        line-height: 16px;
+      }
+      .sw-val {
+        font-size: 12px;
+        color: var(--ink-muted);
+        font-family: var(--font-mono);
+      }
+      .sw-use {
+        font-size: 12px;
+        color: var(--ink-muted);
+        margin-top: 2px;
+        line-height: 16px;
+      }
+
+      /* ladder */
+      .ladder {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .ladder-col {
+        border-radius: var(--r-base);
+        overflow: hidden;
+        border: 1px solid var(--hairline);
+      }
+      .ladder-head {
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .ladder-head.light {
+        background: var(--surface-subtle);
+        color: var(--ink-muted);
+      }
+      .ladder-head.dark {
+        background: var(--sidebar-canvas);
+        color: var(--sidebar-muted);
+        border-bottom: 1px solid var(--sidebar-hairline);
+      }
+      .rung {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        font-size: 12px;
+      }
+      .rung .name {
+        font-weight: 500;
+      }
+      .rung .val {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        opacity: 0.85;
+      }
+
+      /* ---------- typography rows ---------- */
+      .type-row {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 16px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--hairline);
+        align-items: baseline;
+      }
+      .type-row:last-child {
+        border-bottom: 0;
+      }
+      .type-label {
+        font-size: 12px;
+        color: var(--ink-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .t-page-title {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 32px;
+        letter-spacing: -0.01em;
+      }
+      .t-page-desc {
+        font-size: 14px;
+        color: var(--ink-muted);
+        line-height: 22px;
+      }
+      .t-section-title {
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 24px;
+      }
+      .t-body {
+        font-size: 14px;
+        line-height: 22px;
+      }
+      .t-secondary {
+        font-size: 14px;
+        color: var(--ink-muted);
+        line-height: 22px;
+      }
+      .t-metadata {
+        font-size: 12px;
+        color: var(--ink-muted);
+        line-height: 18px;
+      }
+      .t-table-header {
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+      }
+      .t-label {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .t-button {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .t-badge {
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .t-metric {
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .t-timer {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        font-variant-numeric: tabular-nums;
+      }
+      .t-code {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--ink-secondary);
+      }
+      .t-topbar {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .t-sb-group {
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--sidebar-muted);
+      }
+
+      /* ---------- buttons (36px; FLAT; indigo focus on EVERY variant; focus = color only, width stable 1px) ---------- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        height: 36px;
+        padding: 0 16px;
+        border-radius: var(--r-base);
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--ink);
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow: none;
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: var(--on-primary);
+      }
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--ink);
+        border-color: var(--hairline);
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--ink);
+      }
+      .btn-destructive {
+        background: var(--destructive-solid);
+        color: var(--on-destructive);
+      }
+      .btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+      }
+      /* hover/active/focus — focus NEVER changes border width (1px throughout) */
+      .btn-primary:hover,
+      .btn-primary.is-hover {
+        background: var(--primary-hover);
+      }
+      .btn-primary:active,
+      .btn-primary.is-active {
+        background: var(--primary-active);
+      }
+      .btn-secondary:hover,
+      .btn-secondary.is-hover {
+        background: var(--surface-subtle);
+      }
+      .btn-ghost:hover,
+      .btn-ghost.is-hover {
+        background: var(--surface-subtle);
+      }
+      /* focus for ALL controls: indigo 1px border (color change only) + ring. width stays 1px. */
+      .btn:focus-visible,
+      .btn.is-focus {
+        outline: none;
+        border-color: var(--focus);
+        box-shadow: var(--focus-ring);
+      }
+      .btn-secondary:focus-visible,
+      .btn-secondary.is-focus,
+      .btn-ghost:focus-visible,
+      .btn-ghost.is-focus {
+        border-color: var(--focus);
+        box-shadow: var(--focus-ring);
+      }
+      .btn-primary:focus-visible,
+      .btn-primary.is-focus,
+      .btn-destructive:focus-visible,
+      .btn-destructive.is-focus {
+        /* indigo border is same as bg on primary; show the ring as the focus signal */
+        box-shadow: var(--focus-ring);
+      }
+      .btn[disabled],
+      .btn.is-disabled {
+        background: var(--disabled-surface);
+        color: var(
+          --ink-muted
+        ); /* disabled TEXT = ink-muted (AA 5.03:1), NOT ink-disabled */
+        cursor: not-allowed;
+        box-shadow: none;
+        border-color: transparent;
+      }
+      .ic {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* ---------- inputs (36px; FLAT; focus = color only, width stays 1px) ---------- */
+      .input,
+      .select {
+        height: 36px;
+        width: 100%;
+        max-width: 280px;
+        background: var(--surface);
+        border: 1px solid var(--hairline-strong);
+        border-radius: var(--r-base);
+        padding: 0 12px;
+        font-size: 14px;
+        line-height: 20px;
+        font-family: inherit;
+        color: var(--ink);
+        box-shadow: none;
+      }
+      .input::placeholder {
+        color: var(--ink-muted);
+      }
+      .input:focus,
+      .select:focus,
+      .input.is-focus,
+      .select.is-focus {
+        outline: none;
+        border-color: var(--focus); /* color change only — width stays 1px */
+        box-shadow: var(--focus-ring);
+      }
+      .input.invalid,
+      .input.is-invalid {
+        border-color: var(--destructive);
+      }
+      .input.invalid.is-focus,
+      .input.is-invalid.is-focus {
+        border-color: var(
+          --destructive
+        ); /* validation border stays destructive */
+        box-shadow: var(
+          --focus-ring
+        ); /* + indigo focus ring — distinguishable */
+      }
+      .input[disabled],
+      .input.is-disabled {
+        background: var(--disabled-surface);
+        color: var(--ink-muted); /* disabled text = ink-muted */
+        cursor: not-allowed;
+      }
+      .textarea {
+        min-height: 80px;
+        padding: 8px 12px;
+        line-height: 22px;
+        max-width: 320px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-width: 320px;
+      }
+      .field-label {
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 20px;
+      } /* label */
+      .field-help {
+        font-size: 12px;
+        color: var(--ink-muted);
+        line-height: 18px;
+      } /* help-text */
+      .field-error {
+        font-size: 12px;
+        color: var(--destructive);
+        line-height: 18px;
+      }
+      .check-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      .switch {
+        display: inline-block;
+        width: 36px;
+        height: 20px;
+        border-radius: 999px;
+        position: relative;
+        flex: none;
+      }
+      .switch.on {
+        background: var(--primary);
+      }
+      .switch.off {
+        background: var(--hairline-strong);
+      }
+      .switch .knob {
+        position: absolute;
+        top: 2px;
+        width: 16px;
+        height: 16px;
+        background: #fff;
+        border-radius: 50%;
+      }
+      .switch.on .knob {
+        right: 2px;
+      }
+      .switch.off .knob {
+        left: 2px;
+      }
+
+      /* ---------- status badges (6px chip) ---------- */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: var(--r-chip);
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 16px;
+        white-space: nowrap;
+      }
+      .b-neutral {
+        background: var(--neutral-soft);
+        color: var(--neutral);
+      }
+      .b-info {
+        background: var(--informational-soft);
+        color: var(--informational);
+      }
+      .b-positive {
+        background: var(--positive-soft);
+        color: var(--positive);
+      }
+      .b-caution {
+        background: var(--caution-soft);
+        color: var(--caution);
+      }
+      .b-destr-soft {
+        background: var(--destructive-soft);
+        color: var(--destructive);
+      }
+      .b-destr-solid {
+        background: var(--destructive-solid);
+        color: var(--on-destructive);
+      }
+      .badge .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.85;
+      }
+
+      /* ---------- TABLE: ZEBRA, no per-row borders, clean source order (no !important) ---------- */
+      table.dt {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        line-height: 20px;
+      }
+      table.dt thead th {
+        background: var(--surface-subtle); /* header band */
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted);
+        text-align: left;
+        padding: 10px 12px;
+        height: 40px;
+        border: none;
+      }
+      table.dt thead th.num {
+        text-align: right;
+      }
+      table.dt tbody td {
+        padding: 10px 12px;
+        height: 44px;
+        color: var(--ink);
+        border: none;
+        background: var(--surface);
+      }
+      /* zebra: even rows */
+      table.dt tbody tr:nth-child(even) td {
+        background: var(--surface-subtle);
+      }
+      /* hover — applies on top of zebra (cleaner specificity than !important) */
+      table.dt tbody tr:hover td,
+      table.dt tbody tr.is-hover td {
+        background: var(--row-hover);
+      }
+      /* selected — LAST among row rules so it wins by source order (no !important) */
+      table.dt tbody tr.is-selected td,
+      table.dt tbody tr.is-selected:hover td {
+        background: var(--row-selected);
+        color: var(--ink);
+      }
+      table.dt td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      table.dt td.act {
+        text-align: right;
+      }
+      .cell-title {
+        font-weight: 500;
+      }
+
+      /* ---------- empty / loading / error ---------- */
+      .empty {
+        border: 1px dashed var(--hairline);
+        border-radius: var(--r-base);
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--ink-muted);
+      }
+      .skeleton {
+        background: linear-gradient(
+          90deg,
+          var(--surface-subtle) 0%,
+          var(--surface) 50%,
+          var(--surface-subtle) 100%
+        );
+        border-radius: var(--r-base);
+      }
+      .err-banner {
+        background: var(--destructive-soft);
+        border: 1px solid var(--destructive);
+        border-radius: var(--r-base);
+        padding: 12px 16px;
+        color: var(--destructive);
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-size: 14px;
+        line-height: 22px;
+      }
+
+      /* ---------- dialog / popover (the only elevated surfaces) ---------- */
+      .dialog {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: var(--r-base);
+        box-shadow: var(--sh-overlay-lg);
+        max-width: 440px;
+      }
+      .dialog-head {
+        padding: 20px 20px 8px;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 24px;
+      }
+      .dialog-body {
+        padding: 0 20px 16px;
+        font-size: 14px;
+        color: var(--ink-muted);
+        line-height: 22px;
+      }
+      .dialog-foot {
+        padding: 12px 20px;
+        border-top: 1px solid var(--hairline);
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .popover {
+        background: var(--surface);
+        border: 1px solid var(--hairline);
+        border-radius: var(--r-base);
+        box-shadow: var(--sh-overlay);
+        padding: 12px;
+        max-width: 240px;
+        font-size: 14px;
+        line-height: 22px;
+      }
+
+      /* ---------- sidebar specimen (graphite; group label 12px/500) ---------- */
+      .sidebar-spec {
+        width: 232px;
+        background: var(--sidebar-canvas);
+        border-radius: var(--r-base);
+        padding: 12px 8px;
+        color: var(--sidebar-ink);
+      }
+      .sb-brand {
+        font-size: 14px;
+        font-weight: 700;
+        padding: 8px 12px 12px;
+        border-bottom: 1px solid var(--sidebar-hairline);
+        color: var(--sidebar-ink);
+      }
+      .sb-group {
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--sidebar-muted);
+        padding: 12px 12px 4px;
+      }
+      .sb-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 40px;
+        padding: 0 12px;
+        border-radius: var(--r-base);
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--sidebar-muted);
+      }
+      .sb-item:hover,
+      .sb-item.is-hover {
+        background: var(--sidebar-hover);
+        color: var(--sidebar-ink);
+      }
+      .sb-item.active,
+      .sb-item.is-active {
+        background: var(--sidebar-active);
+        color: var(--sidebar-ink);
+        font-weight: 500;
+      }
+      .sb-item.is-focus {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+      .sidebar-spec.collapsed {
+        width: 56px;
+      }
+      .sidebar-spec.collapsed .sb-item span,
+      .sidebar-spec.collapsed .sb-group,
+      .sidebar-spec.collapsed .sb-brand {
+        display: none;
+      }
+      .sidebar-spec.collapsed .sb-item {
+        justify-content: center;
+      }
+
+      .narrow-frame {
+        width: 420px;
+        max-width: 100%;
+        border: 1px solid var(--hairline);
+        border-radius: var(--r-base);
+        padding: 16px;
+        background: var(--canvas);
+      }
+
+      .footer-note {
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--hairline);
+        font-size: 12px;
+        color: var(--ink-muted);
+        line-height: 18px;
+      }
+      code.inline {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        background: var(--surface-subtle);
+        padding: 1px 5px;
+        border-radius: 4px;
+        color: var(--ink-secondary);
+      }
+      .state-tag {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--ink-muted);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-wrap">
+      <h1 class="preview-h1">Quiet Graphite · 设计预览</h1>
+      <p class="preview-sub">
+        EXAM frontend visual design authority — DESIGN.md v1.1 (Corrective-1)
+      </p>
+      <p class="preview-meta">
+        Standalone specimen · 41 color roles · weights 400/500/700 only · focus
+        border width stable at 1px on every control · controls flat · ZEBRA
+        table (no !important) · no FAB
+      </p>
+      <div class="preview-note">
+        This is a specimen to <strong>expose weaknesses</strong>, not a
+        marketing hero. All values mirror DESIGN.md exactly. Fonts load from the
+        repo's self-hosted Noto Sans CJK SC. Every state below has a permanent
+        static specimen (the <code class="inline">.is-*</code> classes) that
+        mirrors its pseudo-class — a static screenshot is sufficient to inspect
+        every state.
+      </div>
+
+      <!-- 1. COLOR ROLES — all 41, grouped -->
+      <section class="block">
+        <h2 class="block-title">
+          1 · 全部色彩角色 All 41 color roles (grouped)
+        </h2>
+        <p class="block-desc">
+          Every DESIGN.md color role shown with exact value + use + text
+          permission. Count = 41 (matches evidence report &amp; DESIGN.md
+          front-matter).
+        </p>
+
+        <p class="group-label">Surfaces</p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="
+                background: var(--canvas);
+                border-bottom: 1px solid var(--hairline);
+              "
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">canvas</div>
+              <div class="sw-val">#faf9f7</div>
+              <div class="sw-use">app bg · no text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="
+                background: var(--surface);
+                border-bottom: 1px solid var(--hairline);
+              "
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">surface</div>
+              <div class="sw-val">#ffffff</div>
+              <div class="sw-use">cards · no text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--surface-subtle)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">surface-subtle</div>
+              <div class="sw-val">#f4f2ef</div>
+              <div class="sw-use">zebra/header</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="
+                background: var(--surface-raised);
+                border-bottom: 1px solid var(--hairline);
+              "
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">surface-raised</div>
+              <div class="sw-val">#ffffff</div>
+              <div class="sw-use">= surface (shadow only)</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">Text / ink</p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--ink)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">ink</div>
+              <div class="sw-val">#1f1d1b</div>
+              <div class="sw-use">primary text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--ink-secondary)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">ink-secondary</div>
+              <div class="sw-val">#3d3a36</div>
+              <div class="sw-use">section title</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--ink-muted)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">ink-muted</div>
+              <div class="sw-val">#6b6760</div>
+              <div class="sw-use">muted + disabled TEXT</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--ink-disabled)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">ink-disabled</div>
+              <div class="sw-val">#8a857b</div>
+              <div class="sw-use">NON-TEXT only</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">Borders</p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--hairline)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">hairline</div>
+              <div class="sw-val">#e6e2dc</div>
+              <div class="sw-use">1px default</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--hairline-strong)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">hairline-strong</div>
+              <div class="sw-val">#d3cec5</div>
+              <div class="sw-use">input/2px</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">
+          Primary states (indigo — scarce)
+        </p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--primary)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">primary</div>
+              <div class="sw-val">#4f46e5</div>
+              <div class="sw-use">actions+focus ONLY</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--primary-hover)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">primary-hover</div>
+              <div class="sw-val">#4338ca</div>
+              <div class="sw-use">btn hover</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--primary-active)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">primary-active</div>
+              <div class="sw-val">#3730a3</div>
+              <div class="sw-use">btn active</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--primary-soft)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">primary-soft</div>
+              <div class="sw-val">#eef0fb</div>
+              <div class="sw-use">primary chip bg</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">
+          Link states (distinct blue)
+        </p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--link)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">link</div>
+              <div class="sw-val">#1d6fdb</div>
+              <div class="sw-use">links (≠ indigo)</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--link-hover)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">link-hover</div>
+              <div class="sw-val">#1559b8</div>
+              <div class="sw-use">link hover</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">Interaction states</p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--focus)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">focus</div>
+              <div class="sw-val">#4f46e5</div>
+              <div class="sw-use">border+ring color</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--selection)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">selection</div>
+              <div class="sw-val">#eef0fb</div>
+              <div class="sw-use">::selection bg</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--row-hover)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">row-hover</div>
+              <div class="sw-val">#efe9df</div>
+              <div class="sw-use">table hover</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--row-selected)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">row-selected</div>
+              <div class="sw-val">#e8e1d3</div>
+              <div class="sw-use">table selected</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--disabled-surface)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">disabled-surface</div>
+              <div class="sw-val">#f4f2ef</div>
+              <div class="sw-use">disabled bg</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">
+          Sidebar states (graphite)
+        </p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--sidebar-canvas)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-canvas</div>
+              <div class="sw-val">#26241f</div>
+              <div class="sw-use">graphite bg</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--sidebar-surface)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-surface</div>
+              <div class="sw-val">#2e2c26</div>
+              <div class="sw-use">elevated side</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--sidebar-hover)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-hover</div>
+              <div class="sw-val">#38352e</div>
+              <div class="sw-use">nav hover</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--sidebar-active)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-active</div>
+              <div class="sw-val">#4a4538</div>
+              <div class="sw-use">nav active (bronze)</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--sidebar-ink)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-ink</div>
+              <div class="sw-val">#ece9e3</div>
+              <div class="sw-use">side text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--sidebar-muted)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-muted</div>
+              <div class="sw-val">#a8a299</div>
+              <div class="sw-use">side muted</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--sidebar-hairline)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">sidebar-hairline</div>
+              <div class="sw-val">#3a372f</div>
+              <div class="sw-use">side divider</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">Status foregrounds</p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--neutral)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">neutral</div>
+              <div class="sw-val">#6b6760</div>
+              <div class="sw-use">NEUTRAL text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--informational)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">informational</div>
+              <div class="sw-val">#155bbf</div>
+              <div class="sw-use">INFO text (blue)</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--positive)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">positive</div>
+              <div class="sw-val">#047857</div>
+              <div class="sw-use">POSITIVE text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--caution)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">caution</div>
+              <div class="sw-val">#b54708</div>
+              <div class="sw-use">CAUTION text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--destructive)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">destructive</div>
+              <div class="sw-val">#b23a17</div>
+              <div class="sw-use">DESTRUCTIVE text</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--destructive-solid)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">destructive-solid</div>
+              <div class="sw-val">#c2410c</div>
+              <div class="sw-use">SOLID bg (allowlist)</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">
+          Status backgrounds (soft)
+        </p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--neutral-soft)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">neutral-soft</div>
+              <div class="sw-val">#f1ede7</div>
+              <div class="sw-use">NEUTRAL chip</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--informational-soft)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">informational-soft</div>
+              <div class="sw-val">#e3edfb</div>
+              <div class="sw-use">INFO chip</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--positive-soft)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">positive-soft</div>
+              <div class="sw-val">#dcf5e9</div>
+              <div class="sw-use">POSITIVE chip</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--caution-soft)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">caution-soft</div>
+              <div class="sw-val">#fdefd9</div>
+              <div class="sw-use">CAUTION chip</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--destructive-soft)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">destructive-soft</div>
+              <div class="sw-val">#fbddcf</div>
+              <div class="sw-use">DESTRUCTIVE chip</div>
+            </div>
+          </div>
+        </div>
+
+        <p class="group-label" style="margin-top: 16px">On-color foregrounds</p>
+        <div class="sw-grid">
+          <div class="sw">
+            <div class="sw-chip" style="background: var(--on-primary)"></div>
+            <div class="sw-meta">
+              <div class="sw-name">on-primary</div>
+              <div class="sw-val">#ffffff</div>
+              <div class="sw-use">text on primary</div>
+            </div>
+          </div>
+          <div class="sw">
+            <div
+              class="sw-chip"
+              style="background: var(--on-destructive)"
+            ></div>
+            <div class="sw-meta">
+              <div class="sw-name">on-destructive</div>
+              <div class="sw-val">#ffffff</div>
+              <div class="sw-use">text on solid</div>
+            </div>
+          </div>
+        </div>
+        <p class="anno">
+          Total roles shown: 41 (matches DESIGN.md front-matter &amp; evidence
+          report).
+        </p>
+      </section>
+
+      <!-- 2. LADDER -->
+      <section class="block">
+        <h2 class="block-title">
+          2 · 中性阶梯 vs 石墨侧栏 Neutral ladder vs graphite sidebar
+        </h2>
+        <p class="block-desc">
+          Proof of temperature harmony — both ladders are the SAME warm family
+          (hue 36–43°). The cyan-slate sidebar is retired.
+        </p>
+        <div class="ladder">
+          <div class="ladder-col">
+            <div class="ladder-head light">Warm-neutral content ladder</div>
+            <div class="rung" style="background: var(--canvas)">
+              <span class="name" style="color: var(--ink)">canvas</span
+              ><span class="val" style="color: var(--ink-muted)">#faf9f7</span>
+            </div>
+            <div class="rung" style="background: var(--surface-subtle)">
+              <span class="name" style="color: var(--ink)">surface-subtle</span
+              ><span class="val" style="color: var(--ink-muted)">#f4f2ef</span>
+            </div>
+            <div class="rung" style="background: var(--hairline)">
+              <span class="name" style="color: var(--ink)">hairline</span
+              ><span class="val" style="color: var(--ink-muted)">#e6e2dc</span>
+            </div>
+            <div class="rung" style="background: var(--ink-disabled)">
+              <span class="name" style="color: #fff">ink-disabled</span
+              ><span class="val" style="color: #fff; opacity: 0.85"
+                >#8a857b</span
+              >
+            </div>
+            <div class="rung" style="background: var(--ink-muted)">
+              <span class="name" style="color: #fff">ink-muted</span
+              ><span class="val" style="color: #fff; opacity: 0.85"
+                >#6b6760</span
+              >
+            </div>
+            <div class="rung" style="background: var(--ink-secondary)">
+              <span class="name" style="color: #fff">ink-secondary</span
+              ><span class="val" style="color: #fff; opacity: 0.85"
+                >#3d3a36</span
+              >
+            </div>
+            <div class="rung" style="background: var(--ink)">
+              <span class="name" style="color: #fff">ink</span
+              ><span class="val" style="color: #fff; opacity: 0.85"
+                >#1f1d1b</span
+              >
+            </div>
+          </div>
+          <div class="ladder-col">
+            <div class="ladder-head dark">
+              Graphite sidebar ladder (same family)
+            </div>
+            <div class="rung" style="background: var(--sidebar-canvas)">
+              <span class="name" style="color: var(--sidebar-ink)"
+                >sidebar-canvas</span
+              ><span class="val" style="color: var(--sidebar-muted)"
+                >#26241f</span
+              >
+            </div>
+            <div class="rung" style="background: var(--sidebar-surface)">
+              <span class="name" style="color: var(--sidebar-ink)"
+                >sidebar-surface</span
+              ><span class="val" style="color: var(--sidebar-muted)"
+                >#2e2c26</span
+              >
+            </div>
+            <div class="rung" style="background: var(--sidebar-hover)">
+              <span class="name" style="color: var(--sidebar-ink)"
+                >sidebar-hover</span
+              ><span class="val" style="color: var(--sidebar-muted)"
+                >#38352e</span
+              >
+            </div>
+            <div class="rung" style="background: var(--sidebar-active)">
+              <span class="name" style="color: var(--sidebar-ink)"
+                >sidebar-active</span
+              ><span class="val" style="color: var(--sidebar-muted)"
+                >#4a4538</span
+              >
+            </div>
+            <div class="rung" style="background: var(--sidebar-muted)">
+              <span class="name" style="color: var(--sidebar-canvas)"
+                >sidebar-muted</span
+              ><span
+                class="val"
+                style="color: var(--sidebar-canvas); opacity: 0.85"
+                >#a8a299</span
+              >
+            </div>
+            <div class="rung" style="background: var(--sidebar-ink)">
+              <span class="name" style="color: var(--sidebar-canvas)"
+                >sidebar-ink</span
+              ><span
+                class="val"
+                style="color: var(--sidebar-canvas); opacity: 0.85"
+                >#ece9e3</span
+              >
+            </div>
+            <div class="rung" style="background: var(--sidebar-hairline)">
+              <span class="name" style="color: var(--sidebar-ink)"
+                >sidebar-hairline</span
+              ><span class="val" style="color: var(--sidebar-muted)"
+                >#3a372f</span
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. TYPOGRAPHY -->
+      <section class="block">
+        <h2 class="block-title">
+          3 · 字体层级 Typography (weights 400 / 500 / 700 only)
+        </h2>
+        <p class="block-desc">
+          No 600 weight. No 13px size. Chinese floor = 12px.
+          <code class="inline">text-transform:uppercase</code> affects Latin
+          only.
+        </p>
+        <div class="surface pad">
+          <div class="type-row">
+            <span class="type-label">page-title</span
+            ><span class="t-page-title">考试管理 Exams · 考试列表</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">page-description</span
+            ><span class="t-page-desc"
+              >查看和管理全部考试。View and manage all exams.</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">section-title</span
+            ><span class="t-section-title">最近考试 Recent exams</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">body (14px)</span
+            ><span class="t-body"
+              >本系统为内网部署的考试平台。The platform runs on-premise.</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">secondary (14px)</span
+            ><span class="t-secondary"
+              >次要说明文字：描述性内容。Descriptive, non-record.</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">metadata (12px)</span
+            ><span class="t-metadata"
+              >2026-07-12 · ID 3a85e7f2 · created by admin</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">table-header (12/500)</span
+            ><span class="t-table-header"
+              >状态 STATUS · 参与人数 PARTICIPANTS</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">label (14/500)</span
+            ><span class="t-label">考试标题 Exam title</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">help-text (12px)</span
+            ><span class="field-help"
+              >3–80 个字符，支持中英文混合。3–80 chars.</span
+            >
+          </div>
+          <div class="type-row">
+            <span class="type-label">button (14/500)</span
+            ><span class="t-button">创建考试 Create exam</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">badge (12/500)</span
+            ><span class="t-badge">已发布 Published</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">metric (30/700)</span
+            ><span class="t-metric">1,284</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">timer (16/700)</span
+            ><span class="t-timer">01:23:45</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">topbar-title (14/500)</span
+            ><span class="t-topbar">考试列表 · INK (not muted)</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">sidebar-group-label (12/500)</span
+            ><span class="t-sb-group">概览 OVERVIEW · 题库 QUESTION BANK</span>
+          </div>
+          <div class="type-row">
+            <span class="type-label">code (mono 12)</span
+            ><span class="t-code"
+              >SELECT * FROM exams WHERE status='published';</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. NUMERIC -->
+      <section class="block">
+        <h2 class="block-title">4 · 数字样本 Numeric (tabular-nums)</h2>
+        <div class="surface pad">
+          <div class="row">
+            <div class="col">
+              <span class="type-label">分数</span
+              ><span class="t-metric" style="font-size: 22px">87 / 100</span>
+            </div>
+            <div class="col">
+              <span class="type-label">百分比</span
+              ><span class="t-metric" style="font-size: 22px">87.0%</span>
+            </div>
+            <div class="col">
+              <span class="type-label">时长</span
+              ><span class="t-metric" style="font-size: 22px">120 分钟</span>
+            </div>
+            <div class="col">
+              <span class="type-label">日期</span
+              ><span class="t-metric" style="font-size: 18px">2026-07-12</span>
+            </div>
+            <div class="col">
+              <span class="type-label">倒计时</span
+              ><span class="t-timer" style="color: var(--caution)"
+                >01:23:45</span
+              >
+            </div>
+            <div class="col">
+              <span class="type-label">计数</span
+              ><span class="t-metric" style="font-size: 22px">1,024</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. BUTTONS — all states, static + pseudo -->
+      <section class="block">
+        <h2 class="block-title">
+          5 · 按钮状态 Buttons — every state (static + pseudo)
+        </h2>
+        <p class="block-desc">
+          All buttons 36px, flat. Focus = indigo 1px border (color only, width
+          stable) + ring — on every variant incl. destructive.
+        </p>
+        <div class="surface pad">
+          <div class="state-tag">default</div>
+          <div class="row" style="margin-bottom: 16px">
+            <button class="btn btn-primary">创建考试 Create</button>
+            <button class="btn btn-secondary">导入 Import</button>
+            <button class="btn btn-ghost">取消 Cancel</button>
+            <button class="btn btn-destructive">删除 Delete</button>
+            <button class="btn btn-secondary btn-icon" aria-label="view">
+              <svg class="ic" viewBox="0 0 24 24">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <div class="state-tag">hover (.is-hover)</div>
+          <div class="row" style="margin-bottom: 16px">
+            <button class="btn btn-primary is-hover">创建考试</button>
+            <button class="btn btn-secondary is-hover">导入</button>
+            <button class="btn btn-ghost is-hover">取消</button>
+          </div>
+          <div class="state-tag">active (.is-active)</div>
+          <div class="row" style="margin-bottom: 16px">
+            <button class="btn btn-primary is-active">创建考试</button>
+          </div>
+          <div class="state-tag">
+            focus (.is-focus) — indigo ring, border width still 1px
+          </div>
+          <div class="row" style="margin-bottom: 16px">
+            <button class="btn btn-primary is-focus">创建考试</button>
+            <button class="btn btn-secondary is-focus">导入</button>
+            <button class="btn btn-ghost is-focus">取消</button>
+            <button class="btn btn-destructive is-focus">
+              删除 (indigo focus)
+            </button>
+            <button
+              class="btn btn-secondary btn-icon is-focus"
+              aria-label="view"
+            >
+              <svg class="ic" viewBox="0 0 24 24">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <div class="state-tag">
+            disabled (.is-disabled) — text = ink-muted (AA), bg =
+            disabled-surface
+          </div>
+          <div class="row">
+            <button class="btn btn-primary is-disabled">禁用 Disabled</button>
+            <button class="btn btn-secondary is-disabled">禁用</button>
+            <button class="btn btn-destructive is-disabled">禁用</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. INPUTS — all states -->
+      <section class="block">
+        <h2 class="block-title">
+          6 · 表单控件 Inputs — every state (static + pseudo)
+        </h2>
+        <p class="block-desc">
+          36px, flat. Focus = indigo border color (width stays 1px) + ring.
+          Invalid = destructive 1px border; focused-invalid = destructive border
+          + indigo ring (distinguishable).
+        </p>
+        <div class="surface pad">
+          <div class="row" style="align-items: flex-start">
+            <div class="field">
+              <span class="state-tag">default</span>
+              <label class="field-label" for="f1">考试标题 Exam title</label>
+              <input
+                class="input"
+                id="f1"
+                placeholder="请输入考试标题"
+                value="2026 安全培训考核"
+              />
+              <span class="field-help">3–80 字符</span>
+            </div>
+            <div class="field">
+              <span class="state-tag">focus (.is-focus)</span>
+              <label class="field-label">已聚焦 Focused</label>
+              <input
+                class="input is-focus"
+                value="聚焦态，边框颜色变化，宽度不变"
+              />
+              <span class="field-help"
+                >border 1px → indigo; width unchanged</span
+              >
+            </div>
+            <div class="field">
+              <span class="state-tag">invalid (.is-invalid)</span>
+              <label class="field-label">邮箱 Email</label>
+              <input class="input is-invalid" value="not-an-email" />
+              <span class="field-error">请输入有效邮箱。Invalid email.</span>
+            </div>
+            <div class="field">
+              <span class="state-tag">invalid + focus</span>
+              <label class="field-label">聚焦的错误字段</label>
+              <input class="input is-invalid is-focus" value="not-an-email" />
+              <span class="field-help">destructive border + indigo ring</span>
+            </div>
+            <div class="field">
+              <span class="state-tag">disabled (.is-disabled)</span>
+              <label class="field-label">只读字段</label>
+              <input class="input is-disabled" value="禁用值" />
+              <span class="field-help">text = ink-muted (AA 5.03:1)</span>
+            </div>
+          </div>
+          <div class="row" style="margin-top: 16px; gap: 24px">
+            <label class="check-row"
+              ><input type="checkbox" checked /> 允许重考</label
+            >
+            <label class="check-row"><input type="checkbox" /> 启用排队</label>
+            <label class="check-row"
+              ><input type="radio" name="r" checked /> 自动判分</label
+            >
+            <label class="check-row"
+              ><input type="radio" name="r" /> 人工判分</label
+            >
+            <span class="check-row"
+              >公开 <span class="switch on"><span class="knob"></span></span
+            ></span>
+            <span class="check-row"
+              >关闭 <span class="switch off"><span class="knob"></span></span
+            ></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. SURFACE HIERARCHY (flat) -->
+      <section class="block">
+        <h2 class="block-title">7 · 卡片层级 Surface hierarchy (all flat)</h2>
+        <p class="block-desc">
+          No shadows on content or controls. StatsCard and content card share
+          one metaphor.
+        </p>
+        <div class="row" style="margin-bottom: 12px">
+          <div class="surface pad" style="flex: 1; min-width: 180px">
+            <span class="t-secondary">题库总数</span>
+            <div class="t-metric">1,284</div>
+            <span class="t-metadata">+24 本周</span>
+          </div>
+          <div class="surface pad" style="flex: 1; min-width: 180px">
+            <span class="t-secondary">进行中</span>
+            <div class="t-metric">7</div>
+            <span class="t-metadata">2 待发布</span>
+          </div>
+          <div class="surface pad" style="flex: 1; min-width: 180px">
+            <span class="t-secondary">今日考试</span>
+            <div class="t-metric">3</div>
+            <span class="t-metadata">212 考生</span>
+          </div>
+        </div>
+        <div class="surface">
+          <div
+            style="padding: 16px 20px; border-bottom: 1px solid var(--hairline)"
+            class="t-section-title"
+          >
+            考生总数
+          </div>
+          <div class="pad">
+            <span class="t-body">内容区 — 与统计卡同一平面，无阴影。</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. TABLE — zebra, no per-row borders, all states -->
+      <section class="block">
+        <h2 class="block-title">
+          8 · 数据表 Table (ZEBRA · no per-row borders · all row states)
+        </h2>
+        <p class="block-desc">
+          Header = subtle band + 12/500 UPPER. Zebra even rows. Hover =
+          row-hover (both parities change). Selected = row-selected (overrides
+          zebra+hover by source order, no !important).
+        </p>
+        <div class="surface" style="overflow: hidden">
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>标题 Title</th>
+                <th>状态 Status</th>
+                <th>时间窗 Window</th>
+                <th class="num">时长(min)</th>
+                <th class="num">人数</th>
+                <th class="num">及格</th>
+                <th class="num">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="cell-title">2026 安全培训考核 (odd, default)</td>
+                <td>
+                  <span class="badge b-positive"
+                    ><span class="dot"></span>进行中</span
+                  >
+                </td>
+                <td style="font-variant-numeric: tabular-nums">
+                  2026-07-12 – 07-13
+                </td>
+                <td class="num">120</td>
+                <td class="num">212</td>
+                <td class="num">80</td>
+                <td class="act">
+                  <button class="btn btn-ghost btn-icon">
+                    <svg class="ic" viewBox="0 0 24 24">
+                      <path
+                        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"
+                      />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+              <tr class="is-hover">
+                <td class="cell-title">期末·科目A (even zebra + .is-hover)</td>
+                <td>
+                  <span class="badge b-info"
+                    ><span class="dot"></span>已发布</span
+                  >
+                </td>
+                <td style="font-variant-numeric: tabular-nums">2026-07-20</td>
+                <td class="num">90</td>
+                <td class="num">128</td>
+                <td class="num">60</td>
+                <td class="act">
+                  <button class="btn btn-ghost btn-icon">
+                    <svg class="ic" viewBox="0 0 24 24">
+                      <path
+                        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"
+                      />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+              <tr class="is-selected">
+                <td class="cell-title">
+                  入职培训测试 (.is-selected, text=ink)
+                </td>
+                <td>
+                  <span class="badge b-caution"
+                    ><span class="dot"></span>待判分</span
+                  >
+                </td>
+                <td style="font-variant-numeric: tabular-nums">2026-07-10</td>
+                <td class="num">60</td>
+                <td class="num">45</td>
+                <td class="num">42</td>
+                <td class="act">
+                  <button class="btn btn-ghost btn-icon">
+                    <svg class="ic" viewBox="0 0 24 24">
+                      <path
+                        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"
+                      />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td class="cell-title">草稿示例 (even zebra, no hover)</td>
+                <td>
+                  <span class="badge b-neutral"
+                    ><span class="dot"></span>草稿</span
+                  >
+                </td>
+                <td style="font-variant-numeric: tabular-nums">—</td>
+                <td class="num">—</td>
+                <td class="num">0</td>
+                <td class="num">—</td>
+                <td class="act">
+                  <button class="btn btn-ghost btn-icon is-disabled" disabled>
+                    <svg class="ic" viewBox="0 0 24 24">
+                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td class="cell-title">
+                  已作废 (critical → SOLID destructive)
+                </td>
+                <td>
+                  <span class="badge b-destr-solid"
+                    ><span class="dot"></span>已作废</span
+                  >
+                </td>
+                <td style="font-variant-numeric: tabular-nums">2026-06-01</td>
+                <td class="num">45</td>
+                <td class="num">0</td>
+                <td class="num">—</td>
+                <td class="act">
+                  <button class="btn btn-ghost btn-icon">
+                    <svg class="ic" viewBox="0 0 24 24">
+                      <path
+                        d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"
+                      />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="anno">
+          Rows shown: odd-default, even-zebra+hover, odd-selected (text→ink),
+          even-zebra, odd-with-solid-destructive. Selected overrides zebra &amp;
+          hover via source order — no <code class="inline">!important</code>.
+        </p>
+      </section>
+
+      <!-- 9. STATUS TIERS -->
+      <section class="block">
+        <h2 class="block-title">
+          9 · 五级状态 Five status tiers (+ solid destructive allowlist)
+        </h2>
+        <p class="block-desc">
+          Soft default. SOLID only for critical / misconduct_serious /
+          infraUnavailable-blocking (DESIGN.md §8.3). secondary black-on-white
+          retired.
+        </p>
+        <div class="surface pad">
+          <div class="row" style="gap: 16px">
+            <div class="col">
+              <span class="type-label">neutral</span
+              ><span class="badge b-neutral"
+                ><span class="dot"></span>草稿 Draft</span
+              >
+            </div>
+            <div class="col">
+              <span class="type-label">informational</span
+              ><span class="badge b-info"
+                ><span class="dot"></span>已发布 Published</span
+              >
+            </div>
+            <div class="col">
+              <span class="type-label">positive</span
+              ><span class="badge b-positive"
+                ><span class="dot"></span>已完成 Completed</span
+              >
+            </div>
+            <div class="col">
+              <span class="type-label">caution</span
+              ><span class="badge b-caution"
+                ><span class="dot"></span>待判分 Pending</span
+              >
+            </div>
+            <div class="col">
+              <span class="type-label">destructive (soft)</span
+              ><span class="badge b-destr-soft"
+                ><span class="dot"></span>失败 Failed</span
+              >
+            </div>
+            <div class="col">
+              <span class="type-label">destructive (SOLID)</span
+              ><span class="badge b-destr-solid"
+                ><span class="dot"></span>严重违纪</span
+              >
+            </div>
+          </div>
+          <p class="anno">
+            Completed/submitted now use informational/positive — no longer
+            outrank success. Informational is BLUE, not indigo.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10. DIALOG / POPOVER -->
+      <section class="block">
+        <h2 class="block-title">
+          10 · 对话框 / 浮层 Dialog &amp; popover (only elevated surfaces)
+        </h2>
+        <div class="row" style="align-items: flex-start">
+          <div class="dialog">
+            <div class="dialog-head">确认删除考试？</div>
+            <div class="dialog-body">
+              此操作不可撤销，相关考试数据将被永久移除。This action cannot be
+              undone.
+            </div>
+            <div class="dialog-foot">
+              <button class="btn btn-ghost">取消 Cancel</button>
+              <button class="btn btn-destructive">删除 Delete</button>
+            </div>
+          </div>
+          <div class="popover">
+            <strong style="color: var(--ink)">筛选 Filter</strong>
+            <div style="margin-top: 6px; color: var(--ink-muted)">
+              按状态筛选考试列表。
+            </div>
+            <div style="margin-top: 8px; display: flex; gap: 6px">
+              <span class="badge b-positive">进行中</span
+              ><span class="badge b-info">已发布</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 11. EMPTY / LOADING / ERROR -->
+      <section class="block">
+        <h2 class="block-title">
+          11 · 空 / 加载 / 错误 Empty · loading · error
+        </h2>
+        <div class="row" style="align-items: flex-start">
+          <div class="empty" style="flex: 1; min-width: 200px">
+            <svg
+              class="ic"
+              style="width: 32px; height: 32px; color: var(--ink-muted)"
+              viewBox="0 0 24 24"
+            >
+              <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+              <path
+                d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+              />
+            </svg>
+            <div class="t-section-title" style="margin: 8px 0 4px">
+              暂无考试
+            </div>
+            <div class="t-secondary">No exams yet.</div>
+            <button class="btn btn-primary" style="margin-top: 12px">
+              创建考试
+            </button>
+          </div>
+          <div class="surface pad" style="flex: 1; min-width: 200px">
+            <span class="type-label">加载中 Loading</span>
+            <div
+              class="skeleton"
+              style="height: 16px; width: 60%; margin-top: 8px"
+            ></div>
+            <div
+              class="skeleton"
+              style="height: 24px; width: 40%; margin-top: 8px"
+            ></div>
+            <div
+              class="skeleton"
+              style="height: 40px; width: 100%; margin-top: 12px"
+            ></div>
+          </div>
+          <div style="flex: 1; min-width: 200px">
+            <span class="type-label">错误 Error</span>
+            <div class="err-banner" style="margin-top: 8px">
+              <svg class="ic" style="margin-top: 2px" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+              <div>
+                <strong>加载失败</strong>
+                <div>无法连接服务器。Failed to load.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 12. SIDEBAR (expanded + collapsed; group label 12/500) -->
+      <section class="block">
+        <h2 class="block-title">
+          12 · 侧边栏 Sidebar (expanded &amp; collapsed; group label 12px/500)
+        </h2>
+        <p class="block-desc">
+          Graphite · warm · same family as canvas. Active = graphite-bronze (not
+          indigo). Focus = indigo ring.
+        </p>
+        <div
+          class="row"
+          style="
+            align-items: flex-start;
+            background: var(--canvas);
+            padding: 16px;
+            border: 1px solid var(--hairline);
+            border-radius: var(--r-base);
+          "
+        >
+          <div class="sidebar-spec">
+            <div class="sb-brand">考试平台</div>
+            <div class="sb-group">概览 OVERVIEW</div>
+            <a class="sb-item active"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" /></svg
+              ><span>仪表盘 Dashboard</span></a
+            >
+            <div class="sb-group">题库 QUESTION BANK</div>
+            <a class="sb-item is-hover"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path
+                  d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+                /></svg
+              ><span>题目 Questions (hover)</span></a
+            >
+            <a class="sb-item is-focus"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" /></svg
+              ><span>导入 Import (focus)</span></a
+            >
+            <div class="sb-group">考试 EXAMS</div>
+            <a class="sb-item"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <path d="M9 11l3 3L22 4" />
+                <path
+                  d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"
+                /></svg
+              ><span>考试列表</span></a
+            >
+          </div>
+          <div class="sidebar-spec collapsed">
+            <div class="sb-brand">考</div>
+            <a class="sb-item active"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" /></svg
+            ></a>
+            <a class="sb-item"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path
+                  d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+                /></svg
+            ></a>
+            <a class="sb-item"
+              ><svg class="ic" viewBox="0 0 24 24">
+                <path d="M12 5v14M5 12h14" /></svg
+            ></a>
+          </div>
+        </div>
+      </section>
+
+      <!-- 13. NARROW / MOBILE (no FAB) -->
+      <section class="block">
+        <h2 class="block-title">
+          13 · 窄屏 / 移动 Narrow &amp; mobile (existing controls only, no FAB)
+        </h2>
+        <p class="block-desc">
+          Demonstrates page gutters, stacked header/actions, card stacking,
+          table responsive representation, sidebar collapse, existing control
+          sizes, status hierarchy. No new product interaction.
+        </p>
+        <div class="row">
+          <div class="narrow-frame">
+            <div style="display: flex; flex-direction: column; gap: 12px">
+              <div>
+                <div class="t-page-title" style="font-size: 20px">
+                  考试 Exams
+                </div>
+                <div class="t-page-desc" style="margin-top: 2px">
+                  已发布 5 场
+                </div>
+              </div>
+              <button class="btn btn-primary" style="width: 100%">
+                创建考试 Create
+              </button>
+              <div class="surface" style="padding: 12px">
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <div>
+                    <div class="cell-title">2026 安全培训</div>
+                    <div class="t-metadata">07-12 · 120 分钟</div>
+                  </div>
+                  <span class="badge b-positive">进行中</span>
+                </div>
+              </div>
+              <div class="surface" style="padding: 12px">
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                  "
+                >
+                  <div>
+                    <div class="cell-title">期末·科目A</div>
+                    <div class="t-metadata">07-20 · 90 分钟</div>
+                  </div>
+                  <span class="badge b-info">已发布</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="flex: 1; min-width: 240px" class="t-secondary">
+            Mobile scope: page gutters · stacked header/actions · card stacking
+            · table collapses to priority columns (title, status) · sidebar
+            collapses to 56px · existing 36px controls · status hierarchy
+            preserved. No floating action button, no new interaction.
+          </div>
+        </div>
+      </section>
+
+      <div class="footer-note">
+        Quiet Graphite · DESIGN.md v1.1 (Corrective-1) specimen. Preview only —
+        no production code imports it. Open at 1440 / 1000 / 420 px. Every state
+        has a permanent static specimen; a screenshot is sufficient. If a pair
+        looks muddy or two tiers look identical, report it as a DESIGN.md
+        defect.
+      </div>
+    </div>
+  </body>
+</html>
