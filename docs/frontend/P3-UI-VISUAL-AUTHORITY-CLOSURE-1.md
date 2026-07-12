@@ -489,9 +489,9 @@ Required wording:
 
 | Hash | Message | Files changed |
 | ---- | ------- | ------------- |
-| `TBD` | test(ui-lint): lock final visual authority boundaries | `apps/web/src/lint/exam-ui/rules/__tests__/no-business-shadow.test.ts` (+3 test cases) |
-| `TBD` | docs(ui): reconcile final visual authority truth | `docs/frontend/P3-UI-agent-construction-guide.md`, `docs/frontend/P3-UI-lint-readiness-report.md`, `docs/frontend/P3-UI-surface-vocabulary.md` (stale references corrected) |
-| `TBD` | docs(ui): record visual authority closure | `docs/frontend/P3-UI-VISUAL-AUTHORITY-CLOSURE-1.md` (new) |
+| `c8f7c4d` | test(ui-lint): lock final visual authority boundaries | `apps/web/src/lint/exam-ui/rules/__tests__/no-business-shadow.test.ts` (+3 test cases) |
+| `b24ecd4` | docs(ui): reconcile final visual authority truth | `docs/frontend/P3-UI-agent-construction-guide.md`, `docs/frontend/P3-UI-lint-readiness-report.md`, `docs/frontend/P3-UI-surface-vocabulary.md` (stale references corrected) |
+| `505251c` | docs(ui): record visual authority closure | `docs/frontend/P3-UI-VISUAL-AUTHORITY-CLOSURE-1.md` (new) |
 
 ### Files modified
 
@@ -561,8 +561,8 @@ Focused test runs:
 | `density-vocabulary.test.ts` | 3 | PASS |
 
 ```text
-FINAL_CLOSURE_HEAD:          <hash>
-DETACHED_VERIFICATION_HEAD:  <hash>
+FINAL_CLOSURE_HEAD:          505251c9262968edf2088645bb5eb1d701b39231
+DETACHED_VERIFICATION_HEAD:  505251c9262968edf2088645bb5eb1d701b39231
 HEADS_IDENTICAL:             YES
 ```
 
