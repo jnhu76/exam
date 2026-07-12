@@ -334,7 +334,7 @@ jobs:
           echo "SPA fallback verified: /login returns HTML"
 
       - name: Run E2E tests (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
-        run: pnpm --filter @exam/e2e test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         env:
           # Triggers blob reporter in playwright.config.ts (→ merge-reports).
           E2E_SHARD_TOTAL: ${{ matrix.shardTotal }}
