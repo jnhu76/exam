@@ -111,7 +111,7 @@ function ExamCard({
   }
 
   return (
-    <Card className="shadow-sm" data-testid={`exam-card-${exam.examId}`}>
+    <Card data-testid={`exam-card-${exam.examId}`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{exam.title}</CardTitle>

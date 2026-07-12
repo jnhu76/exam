@@ -255,7 +255,7 @@ export function SystemDiagnosticsPage() {
       {diag && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Server className="size-4" aria-hidden="true" />
@@ -274,7 +274,7 @@ export function SystemDiagnosticsPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Database className="size-4" aria-hidden="true" />
@@ -299,7 +299,7 @@ export function SystemDiagnosticsPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Activity className="size-4" aria-hidden="true" />
@@ -324,7 +324,7 @@ export function SystemDiagnosticsPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Timer className="size-4" aria-hidden="true" />
@@ -354,7 +354,7 @@ export function SystemDiagnosticsPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Timer className="size-4" aria-hidden="true" />
@@ -385,7 +385,7 @@ export function SystemDiagnosticsPage() {
               stable status/worker/outbox counts from the contract — never
               SMTP host/user/password, recipient addresses, or email body. */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Mail className="size-4" aria-hidden="true" />
@@ -420,7 +420,7 @@ export function SystemDiagnosticsPage() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Mail className="size-4" aria-hidden="true" />
@@ -479,7 +479,7 @@ function MetricCard({
   const meta = getStatusMeta(status);
   const MetricIcon = meta.icon;
   return (
-    <Card className="shadow-sm">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           {icon}

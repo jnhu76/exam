@@ -441,7 +441,7 @@ export function ProctorDashboardPage() {
             candidate.status === "in_progress" ||
             candidate.status === "disrupted";
           return (
-            <Card key={candidate.candidateId} className="shadow-sm">
+            <Card key={candidate.candidateId}>
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium truncate">
