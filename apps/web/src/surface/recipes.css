@@ -9,14 +9,20 @@
  *
  * Implementation note: this file is imported separately (main.tsx) rather than
  * inlined into index.css, mirroring the typography recipe layer. Tailwind v4
- * organizes styles into cascade layers (theme, base, components, utilities)
- * where unlayered custom CSS is overridden by utility classes. That is the
- * intended behavior here: a surface recipe is a BASE that structural
- * utilities (overflow-hidden, flex, min-w-0, density padding) compose onto;
- * it is not a declaration that overrides layout. Importing as plain CSS
- * bypasses the Tailwind content scanner so every recipe is emitted
- * deterministically. The color CSS variables are defined as root tokens in
- * index.css and resolve globally here.
+ * organizes its styles into cascade layers (theme, base, components,
+ * utilities). Per the CSS Cascade specification, UNLAYERED styles WIN over all
+ * layered styles regardless of source order — so these unlayered surface
+ * recipes take precedence over any layered Tailwind utility.
+ *
+ * Cascade policy (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §7, proven against the
+ * compiled CSS): a surface recipe's owned properties (background, border,
+ * radius, and — for overlay — elevation) CANNOT be overridden by business
+ * utilities. That is the intended authority behavior here: a surface recipe is
+ * the region-level appearance authority; structural utilities (overflow-hidden,
+ * flex, min-w-0, density padding) compose only the properties the recipe does
+ * NOT own. Importing as plain CSS bypasses the Tailwind content scanner so
+ * every recipe is emitted deterministically. The color CSS variables are
+ * defined as root tokens in index.css and resolve globally here.
  *
  * Ownership boundary:
  *   - surface recipes own: background, border, radius, and (for overlay)

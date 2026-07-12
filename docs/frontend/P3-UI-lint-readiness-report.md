@@ -355,12 +355,14 @@ other roles (PageSection, StatsCard) are blocked on migration coverage and are
 
 Current `apps/web/src/lint/exam-ui/baseline.json` (deterministic-debt contract),
 after UI-LINT-2 Phases 1–2, UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, UI-MIGRATE-N-W2,
-and UI-MIGRATE-N-W3:
+UI-MIGRATE-N-W3, UI-MIGRATE-N-W4A, and UI-TYPOGRAPHY-AUTHORITY-RECON-1:
 
 | Rule | Baseline entries | Debt shape |
 | --- | ---: | --- |
-| `exam-ui/no-arbitrary-typography` | 1 | `ExamTimer.tsx::text-[11px]` |
-| `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file |
+| `exam-ui/no-arbitrary-typography` | 0 | (cleared in W4A; rule rebuilt in RECON-1) |
+| `exam-ui/no-arbitrary-inline-typography` | 0 | NEW in RECON-1 (zero debt) |
+| `exam-ui/no-typography-authority-conflict` | 0 | NEW in RECON-1 (zero debt) |
+| `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file (untouched) |
 
 > `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1
 > (§8). Its baseline array was removed; it is no longer an active deterministic

@@ -1,5 +1,16 @@
 # UI-MIGRATE-N-W4A — Arbitrary Typography Closure
 
+> **SUPERSEDED by `P3-UI-TYPOGRAPHY-AUTHORITY-RECON-1.md`** (UI-TYPOGRAPHY-AUTHORITY-RECON-1).
+> This document remains the historical W4A record. The RECON-1 reconstruction
+> superseded the narrow W4A corrective: it rebuilt the bracket-aware Tailwind
+> candidate parser (replacing W4A's `stripVariants`), established a canonical
+> machine-readable recipe registry, proved cascade policy A (unlayered recipes
+> win over layered utilities), removed the ExamTimer `leading-none` companion
+> (dead under policy A), and added the deterministic
+> `exam-ui/no-typography-authority-conflict` rule. The ExamTimer `leading-none`
+> retained by W4A is now removed; the conflict-closure reasoning below is
+> preserved as the historical basis for the migration.
+
 > Accepted gates:
 >
 > ```text

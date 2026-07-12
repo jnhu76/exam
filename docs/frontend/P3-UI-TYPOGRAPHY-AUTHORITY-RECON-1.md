@@ -285,11 +285,206 @@ structure; the classifier decides; policy is never guessed.
   property (e.g. `type-numeric` size) is reported by the inline companion. One
   accurate diagnostic per node.
 
-## 11–24. *(completed in C8)*
+## 11. Active-rule compatibility audit (completed in C8)
 
-The implementation evidence, consumer audit (§13), ExamTimer resolution (§14),
-arbitrary-typography enforcement matrix (§15), text-color boundary (§16),
-baseline truth (§19), documentation reconciliation (§20), test-count provenance
-(§22), verification (§22), changed files and commits (§T), final invariants
-(§23), and final report (§24) are appended in Commit 8 after implementation
-completes.
+| Rule | Parser dependency | Behavior before | Behavior after | Intended? |
+| --- | --- | --- | --- | --- |
+| prefer-inline-error-banner | none (role=alert + destructive families) | unchanged | unchanged | yes — uses flat `collectClassNameTokens` (correct: any single match is a violation) |
+| no-business-shadow | none (shadow family) | unchanged | unchanged | yes — uses flat `collectClassNameTokens` (correct) |
+| no-arbitrary-typography | `parseTailwindCandidate` + `propertiesTouchedBy` (C6) | destructive `stripVariants` (corrupted bracket colons) | bracket-aware; covers all typography routes incl. `[font-size:…]`, slash modifiers, `font-[450]`, all variants; color OUT; unknown review-only | yes — policy expansion is the intended closure |
+
+The InlineErrorBanner semantic narrowing (`role="alert"`) and the elevation/
+shadow policy (7-entry baseline) are UNCHANGED. No baseline debt was migrated.
+
+## 12. Recipe-conflict enforcement (completed in C4/C7)
+
+`exam-ui/no-typography-authority-conflict` — deterministic, semantic-free.
+Fires when a JSX node selects a `type-*` recipe AND, on the same co-occurrence
+path, another self-target utility (or static inline-style key) touches one of
+that recipe's `ownedProperties`. Variant TARGET filtering: descendant
+(`[&>span]:`) / pseudo-element (`before:`) utilities do NOT conflict; only
+`target=self` does. `!` important pierces authority → conflict. Multiple
+`type-*` on one path → `MULTIPLE_TYPE_RECIPES_ON_SAME_PATH`. Color participates
+(most recipes own `color`). Wired as error in C7 with zero baseline.
+
+## 13. Current `type-*` consumer audit (completed in C5)
+
+Full audit ran the conflict rule across the entire business/layout scope via
+the ESLint Linter API. Exactly ONE conflict found and closed:
+
+| File/site | Recipe | Companion utilities | Conflict? | Action |
+| --- | --- | --- | --- | --- |
+| `components/exam/ExamTimer.tsx:39` | type-metadata | leading-none | YES (line-height owned; dead under cascade A) | **removed** leading-none |
+| `components/shared/StatsCard.tsx` | type-metric + text-3xl | text-3xl | no (size+line-height layout-owned) | valid |
+| `components/shared/StatsCard.tsx` | type-secondary / type-metadata | truncate | no (touches no owned prop) | valid |
+| `components/shared/PageHeader.tsx` | type-page-title / type-page-description | mt-1 | no (structural) | valid |
+| `components/shared/PageSection/DataTableShell/FormSection` | type-section-title | (none) | no | valid |
+| `pages/admin/DashboardPage.tsx` | type-section-title | (on CardTitle) | no | valid |
+| `pages/exam/ExamListPage.tsx` (×3) | type-section-title | (none) | no | valid |
+| `pages/admin/GradingDetailPage.tsx` | type-long-response | min-h-16 + border + bg + p-3 | no (min-height layout-owned) | valid |
+| `pages/exam/TakeExamPage.tsx` | type-reading | mb-8 | no (structural) | valid |
+
+No raw node was migrated to a recipe (forbidden by scope).
+
+## 14. ExamTimer resolution (completed in C5)
+
+```text
+TYPE_METADATA_OWNS_LINE_HEIGHT: YES
+LEADING_NONE_EFFECTIVE:          NO  (cascade policy A: unlayered recipe wins)
+LEADING_NONE_ALLOWED_BY_POLICY:  NO
+```
+
+Resolution: remove `leading-none`. The label is now pure `type-metadata`
+(line-height 1.125rem per recipe). Timer arithmetic, threshold (300s), cadence
+(1s), callbacks, and the displayed MM:SS value are UNCHANGED. No new recipe
+variant invented from one consumer (forbidden).
+
+```diff
+-      <div className="type-metadata leading-none">
++      <div className="type-metadata">
+```
+
+## 15. Arbitrary-typography enforcement matrix (completed in C6)
+
+| Route | Decision |
+| --- | --- |
+| `text-[11px]`, `text-[length:11px]` | ENFORCED (font-size) |
+| `leading-[1.7]`, `lh-[1.4]` | ENFORCED (line-height) |
+| `tracking-[0.02em]` | ENFORCED (letter-spacing) |
+| `font-[450]` | ENFORCED (font-weight) |
+| `font-[family-name:Inter]` | ENFORCED (font-family) |
+| `[font-size:11px]`, `[line-height:1.7]`, `[letter-spacing:..]`, `[font-weight:..]`, `[font-family:..]` | ENFORCED (arbitrary property) |
+| `text-[11px]/[13px]` (slash modifier) | ENFORCED |
+| all variant forms (`md:`, `hover:`, `group-hover:`, `data-[state=open]:`, `[&>span]:`) | ENFORCED |
+| important `!`, negative `-` | ENFORCED |
+| `text-[color:var(--x)]`, `text-[#fff]`, `text-[rgb(..)]`, `[color:red]` | OUT OF POLICY (color/token authority) |
+| `text-[var(--x)]`, `text-[calc(..)]`, bare numbers | REVIEW-ONLY (requires type hint) |
+| static `style={{fontSize:11, …}}` | ENFORCED (companion rule `no-arbitrary-inline-typography`) |
+| dynamic `style={{fontSize:size}}`, `style={x}` | REVIEW-ONLY |
+
+## 16. Text-color boundary (completed in C6)
+
+```text
+TEXT_COLOR_POLICY: B — EXCLUDED FROM no-arbitrary-typography; OWNED BY COLOR/TOKEN POLICY
+```
+
+Text-color arbitrary values are NOT typography. They are not reported by
+`no-arbitrary-typography` (left to the future color/token authority). However,
+on a node that selects a `type-*` recipe, a text-color utility DOES touch the
+recipe-owned `color` property → reported by `no-typography-authority-conflict`.
+The two questions (global arbitrary ban vs recipe ownership) are kept separate.
+
+## 19. Baseline truth (completed in C7)
+
+| Rule | Before | After |
+| --- | ---: | ---: |
+| no-arbitrary-typography | 0 | 0 |
+| no-arbitrary-inline-typography | absent | 0 |
+| no-typography-authority-conflict | absent | 0 |
+| no-business-shadow | 7 | 7 (byte-identical) |
+
+Proven by 3 baseline-behavior tests.
+
+## 20. Documentation reconciliation (completed in C8)
+
+- This document completed (§11–§24).
+- `AGENTS.md` Active enforcement: added `no-arbitrary-inline-typography` and
+  `no-typography-authority-conflict`; expanded `no-arbitrary-typography`
+  description; added cascade-policy-A note; clarified the retired-raw-proxy
+  vs new-conflict-rule distinction.
+- `typography-vocabulary.md`: GENERATED registry block; long-response
+  min-height corrected (layout-owned); Synchronization section rewritten.
+- `typography-vocabulary.ts`: derives from `recipeRegistry.ts` (no ownership data).
+- `surface/recipes.css` cascade comment: corrected the BACKWARDS statement
+  ("unlayered custom CSS is overridden by utility classes" → unlayered recipes
+  WIN over layered utilities).
+- `P3-UI-MIGRATE-N-W4A-*.md`: supersession note added.
+
+## 22. Test-count and test-file provenance (completed in C8)
+
+| Test file | Before | After | Delta |
+| --- | ---: | ---: | --- |
+| `candidateParser.test.ts` | absent | 32 | NEW |
+| `cssPropertyResolver.test.ts` | absent | 31 | NEW |
+| `classExpressionAnalyzer.test.ts` | absent | 12 | NEW |
+| `classNameExtractor.test.ts` | absent | 14 | NEW |
+| `recipeRegistry.test.ts` | absent | 14 | NEW |
+| `no-typography-authority-conflict.test.ts` | absent | 28 | NEW |
+| `no-arbitrary-inline-typography.test.ts` | absent | 18 | NEW |
+| `no-arbitrary-typography.test.ts` | 19 | 44 | +25 |
+| `baseline-behavior.test.ts` | 9 | 12 | +3 |
+| **web total** | **784** | **961** | **+177** |
+
+All +177 attributed: 121 NEW substrate/registry/conflict/inline tests, +25
+arbitrary-typography route expansion, +3 baseline proofs, +28 conflict rule
+(−1 net reconciliation in the ExamTimer characterization block was textual
+only). Test files: 77 → 84 (+7).
+
+## 22. Verification (completed in C8)
+
+Detached-worktree clean verification at the final committed HEAD:
+`pnpm install --frozen-lockfile` + `pnpm build` green; `pnpm lint:eslint`,
+`pnpm --filter @exam/web test`, `pnpm verify:static` all exit 0. (See §S.)
+
+## T. Changed files and commits
+
+```text
+88bd2fc  docs(ui): define typography property, cascade, and syntax policy
+1c2433b  refactor(ui-lint): add tested parser and expression analyzer (substrate)
+86f13d5  feat(ui): establish canonical typography recipe registry
+5242e04  feat(ui-lint): implement typography authority conflict rule (exported)
+010db00  refactor(ui): close ExamTimer recipe conflict (remove dead leading-none)
+bdec20b  feat(ui-lint): complete arbitrary typography policy enforcement
+3abbf8a  feat(ui-lint): activate typography authority conflict gate
+<final>  docs(ui): record typography authority reconstruction
+```
+
+## 23. Final invariants
+
+```text
+OFFICIAL_TAILWIND_SYNTAX_RESEARCH_COMPLETED: YES
+ONE_SHARED_CANDIDATE_PARSER_USED: YES
+BRACKET_AND_VARIANT_GRAMMAR_PRESERVED: YES
+ARBITRARY_TYPOGRAPHY_POLICY_CATEGORIES_EXPLICIT: YES
+ALL_STATIC_POLICY_SYNTAX_ROUTES_CLASSIFIED: YES
+TYPOGRAPHY_RECIPE_OWNERSHIP_MACHINE_READABLE: YES
+TYPOGRAPHY_REGISTRY_MATCHES_CSS: YES
+TYPOGRAPHY_CASCADE_POLICY_PROVEN: YES       (Policy A, compiled-CSS verified)
+RECIPE_CONFLICT_ENFORCEMENT_ACTIVE: YES
+ALL_CURRENT_TYPE_RECIPE_CONSUMERS_AUDITED: YES
+ALL_CURRENT_RECIPE_CONFLICTS_CLOSED: YES
+EXAM_TIMER_TYPOGRAPHY_CONTRADICTION_CLOSED: YES
+EXAM_TIMER_BEHAVIOR_UNCHANGED: YES
+NO_ARBITRARY_TYPOGRAPHY_POLICY_WEAKENING: YES
+NO_SHADOW_DEBT_TOUCHED: YES
+NO_NEW_BASELINE_ENTRY_ADDED: YES
+DOCUMENTATION_MATCHES_IMPLEMENTATION: YES
+TEST_COUNT_DELTA_FULLY_ATTRIBUTED: YES
+TEST_FILE_DELTA_FULLY_ATTRIBUTED: YES
+FINAL_VERIFICATION_BELONGS_TO_FINAL_COMMITTED_HEAD: YES
+```
+
+## 24. Final report
+
+### A. Verdict
+
+```text
+UI-TYPOGRAPHY-AUTHORITY-RECON-1: PASS
+```
+
+### B–P. (see §2, §3, §5, §6, §8, §10, §7, §12, §13, §14, §15, §16, §19 above)
+
+### J. Cascade policy
+
+```text
+TYPOGRAPHY_CASCADE_POLICY: A — RECIPES OWN AND WIN
+```
+
+### V. Next gate
+
+```text
+UI-MIGRATE-N-W4B:
+READY FOR ELEVATION AUTHORITY AUDIT
+```
+
+W4B is NOT begun. Pending a separate adversarial review of this reconstruction.
