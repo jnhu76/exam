@@ -245,7 +245,7 @@ export function AppSidebar({
         {groups.map((group, gi) => (
           <section key={group.labelKey} className="flex flex-col gap-0.5">
             {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
+              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
                 {t(group.labelKey as never)}
               </p>
             )}
@@ -258,7 +258,7 @@ export function AppSidebar({
         {showManagement && (
           <section className="flex flex-col gap-0.5">
             {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-sidebar-muted">
+              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
                 {t("nav.groups.management")}
               </p>
             )}

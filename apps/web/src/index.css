@@ -85,35 +85,46 @@
   --color-sidebar-border: var(--sidebar-border);
 }
 
+/*
+ * Quiet Graphite token values (UI-VISUAL-REFINE-1-WAVE-1).
+ *
+ * Authority: DESIGN.md §Token (v1.1, CLOSED). These are the operational color
+ * values; the semantic NAMES above (in @theme inline) are unchanged, so every
+ * recipe, primitive, and page picks up the new direction by reference. One
+ * warm-neutral temperature model across canvas / surface / hairline / ink AND
+ * the graphite sidebar (hue 36–43°). Indigo is the scarce accent (primary
+ * actions + focus only); links and informational use the distinct --info blue.
+ * Every ordinary-text pair meets WCAG AA (>=4.5); see DESIGN.md §Validation.
+ */
 :root {
-  --bg: #f7f8fb;
+  --bg: #faf9f7;
   --surface: #ffffff;
-  --surface-muted: #f9fafb;
-  --text: #111827;
-  --text-muted: #6b7280;
-  --text-subtle: #9ca3af;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-soft: #eff6ff;
-  --sidebar-bg: #102a43;
-  --sidebar-active: #1f4e79;
-  --sidebar-active-soft: #edf5fa;
-  --sidebar-hover: rgb(255 255 255 / 8%);
-  --sidebar-text: #d9e2ec;
-  --sidebar-muted: #9fb3c8;
-  --sidebar-border: #1b3a57;
-  --danger: #b42318;
-  --danger-hover: #912018;
-  --danger-soft: #fef3f2;
-  --danger-border: #fecdca;
+  --surface-muted: #f4f2ef;
+  --text: #1f1d1b;
+  --text-muted: #6b6760;
+  --text-subtle: #8a857b;
+  --border: #e6e2dc;
+  --border-strong: #d3cec5;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-soft: #eef0fb;
+  --sidebar-bg: #26241f;
+  --sidebar-active: #4a4538;
+  --sidebar-active-soft: #3a372f;
+  --sidebar-hover: #38352e;
+  --sidebar-text: #ece9e3;
+  --sidebar-muted: #a8a299;
+  --sidebar-border: #3a372f;
+  --danger: #b23a17;
+  --danger-hover: #c2410c;
+  --danger-soft: #fbddcf;
+  --danger-border: #f3c3ad;
   --success: #047857;
-  --success-soft: #ecfdf5;
+  --success-soft: #dcf5e9;
   --warning: #b54708;
-  --warning-soft: #fffbeb;
-  --info: #175cd3;
-  --info-soft: #eff6ff;
+  --warning-soft: #fdefd9;
+  --info: #155bbf;
+  --info-soft: #e3edfb;
   --radius: 0.5rem;
 }
 

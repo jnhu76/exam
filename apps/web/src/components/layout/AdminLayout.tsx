@@ -55,9 +55,9 @@ export function AdminLayout() {
       />
       <div className="min-w-0 flex-1">
         <header className="flex h-14 items-center border-b bg-card px-6">
-          <h2 className="text-sm font-medium text-muted-foreground">
+          <div className="text-sm font-medium text-foreground">
             {topbarTitle}
-          </h2>
+          </div>
         </header>
         <main className="p-6 lg:p-8">
           <Outlet />
