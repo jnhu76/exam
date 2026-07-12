@@ -381,11 +381,11 @@ UI-MIGRATE-N-W3, UI-MIGRATE-N-W4A, and UI-TYPOGRAPHY-AUTHORITY-RECON-1:
 > (TOPBAR / QUESTION / RUNTIME / OVERLAY titles; SIDEBAR surface). Both
 > baseline arrays were removed alongside the rules. See §4.7-reconciled below.
 
-The baseline is **small and explicit** — 8 total entries across 2 active rules with outstanding debt,
-each entry a real file-level signature. This satisfies the Phase 4 rule: "small
-explicit debt list" — **no bulk file ignores, no thousands of ignored files.**
-The full per-entry debt registry follows. Each entry records the four required
-fields (location / reason / owner / migration plan).
+The baseline is **empty** — zero entries across all active rules (all historical
+debt cleared in UI-MIGRATE-N-W4B). The baseline infrastructure still correctly
+reports any reintroduced violation (proven by the isolated-fixture probe in
+`baseline-behavior.test.ts`). The Phase 4 contract is satisfied: "zero existing
+debt" — no bulk file ignores, no entries at all.
 
 ### 4.1–4.2 Reconciled — `exam-ui/no-raw-typography` and `exam-ui/no-raw-surface-recipe` (rules RETIRED in UI-MIGRATE-N-W3)
 

@@ -309,7 +309,9 @@ active/deferred split.)
 | --- | --- |
 | `exam-ui/prefer-inline-error-banner` | a `<div role="alert">` with rounded + destructive-surface utilities must use `InlineErrorBanner` (narrowed to `role="alert"` in UI-MIGRATE-N-W2; baseline cleared 4→0) |
 | `exam-ui/no-business-shadow` | no `shadow-*` in ordinary business content (baseline empty; cleared 7→0 in UI-MIGRATE-N-W4B; detector variant-aware — catches `hover:shadow-md`, `data-[state=open]:shadow-lg`, `shadow-[…]`) |
-| `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` |
+| `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` / `font-[…]` / `[font-size:…]` / `[line-height:…]` / `[letter-spacing:…]` / `[font-weight:…]` / `[font-family:…]` / slash line-height modifier in business pages (UI-TYPOGRAPHY-AUTHORITY-RECON-1; built on shared bracket-aware candidate parser) |
+| `exam-ui/no-arbitrary-inline-typography` | no static one-off typography via inline `style={{fontSize / lineHeight / letterSpacing / fontWeight / fontFamily / font}}` in business pages (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §15; de-deplicates against recipe conflict rule) |
+| `exam-ui/no-typography-authority-conflict` | when a `type-*` recipe is selected on a JSX node, a sibling self-target utility (or inline-style key) that touches a recipe-owned property is an authority conflict (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §12; semantic-free: the recipe class IS the declaration; no role inference) |
 
 ### Retired enforcement
 

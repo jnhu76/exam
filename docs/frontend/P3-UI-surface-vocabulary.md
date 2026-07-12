@@ -520,7 +520,7 @@ This task does **not** implement new lint. It records the future boundaries so
 
 | Future rule | Would enforce | Prerequisite |
 | --- | --- | --- |
-| `exam-ui/no-business-shadow` | **already active** — business pages cannot introduce elevation (shadow-*). Overlay/topbar excluded. | Existing; debt grandfathered by `baseline.json`. |
+| `exam-ui/no-business-shadow` | **already active** — business pages cannot introduce elevation (shadow-*). Overlay/topbar excluded. | Active; baseline cleared in UI-MIGRATE-N-W4B (zero debt; detector variant-aware). |
 | ~~`exam-ui/no-raw-surface-recipe`~~ | ~~reject raw `bg-card` + `border` + `rounded-lg` + (shadow) recomposition in business pages when `surface.content` exists.~~ | **Retired (UI-MIGRATE-N-W3 §13)** — proven same-role sites migrated; the remaining hit (a SIDEBAR_SURFACE) was false-semantic-overlap that no sound AST boundary could exclude. `surface-content` authority retained, enforced by migration review + recipe authority tests. |
 | `exam-ui/no-raw-surface` | reject raw bg/border/shadow combinations that recreate a governed surface role. | Requires the surface recipes from §8. |
 
