@@ -95,5 +95,25 @@ ruleTester().run("no-business-shadow", rule, {
       code: '<Card className={cn("rounded-lg", "hover:shadow-md")}>x</Card>',
       errors: [{ messageId: "noBusinessShadow" }],
     },
+    // L. shadow-none — an explicit raw elevation override is still a raw shadow
+    //    utility (UI-VISUAL-AUTHORITY-CLOSURE-1 §23.W.1). Business consumers
+    //    must use an authoritative component variant, surface role, or future
+    //    flattening authority instead of raw shadow-none. No such flattening
+    //    authority exists today — StatsCard avoids Card entirely.
+    {
+      code: '<div className="shadow-none">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // M. important shadow form — the `!` modifier does not escape the policy.
+    {
+      code: '<div className="shadow-sm!">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // N. descendant/pseudo-element variant with shadow — a shadow on a
+    //    generated/descendant box is still a raw shadow utility.
+    {
+      code: '<div className="[&>span]:shadow-sm">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
   ],
 });
