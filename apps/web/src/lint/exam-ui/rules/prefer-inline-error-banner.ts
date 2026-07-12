@@ -49,15 +49,6 @@ function isRounded(token: string): boolean {
   return /^rounded(?:-(?:none|sm|md|lg|xl|2xl|3xl|full))?$/.test(token);
 }
 
-/** Destructive surface/text utility families that make up the banner recipe. */
-function isDestructiveSurface(token: string): boolean {
-  return (
-    /^border-destructive(\/\d+)?$/.test(token) ||
-    /^bg-destructive(\/\d+|-soft)?$/.test(token) ||
-    /^text-destructive(\/\d+)?$/.test(token)
-  );
-}
-
 /**
  * Returns true iff the element carries a STATIC `role="alert"` attribute.
  * A dynamic role expression (e.g. `role={x}`) is treated as not-an-alert so

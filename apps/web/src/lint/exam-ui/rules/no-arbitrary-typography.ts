@@ -77,8 +77,16 @@ import {
 function isArbitraryTypographyToken(token: string): boolean {
   const c = parseTailwindCandidate(token);
   if (!c.ok) return false;
-  // Only arbitrary-value or arbitrary-property forms are policy targets.
-  if (c.arbitraryValue === undefined && !c.arbitraryProperty) return false;
+  // Only arbitrary-value, arbitrary-property, or arbitrary-slash-modifier forms
+  // are policy targets. A named utility with an arbitrary slash modifier
+  // (e.g. text-sm/[17px]) still touches typography properties via the base's
+  // semantic role + the modifier's override — both are inside policy scope.
+  if (
+    c.arbitraryValue === undefined &&
+    !c.arbitraryProperty &&
+    !c.modifier?.startsWith("[")
+  )
+    return false;
   const touched = propertiesTouchedBy(c);
   for (const prop of touched) {
     if (NO_ARBITRARY_TYPOGRAPHY_POLICY_CATEGORIES.has(prop)) return true;

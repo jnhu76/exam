@@ -103,7 +103,7 @@ function indexOfTopLevel(s: string, sep: string, start = 0): number {
       return i;
     }
   }
-  return depth === 0 ? -1 : -1; // unbalanced dangling opener
+  return -1; // unbalanced dangling opener
 }
 
 /** True if the bracket/parenthesis structure of `s` is balanced. */
