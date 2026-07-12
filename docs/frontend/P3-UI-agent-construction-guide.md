@@ -180,7 +180,13 @@ relevant authority) instead.
 
 Shadows are reserved for `surface-overlay` (dialogs/popovers/dropdowns/sheets)
 and the sticky topbar. Ordinary content, metrics, banners, and placeholders
-must NOT carry a `shadow-*` utility. Enforced today by `exam-ui/no-business-shadow`.
+must NOT carry a `shadow-*` utility. Elevation in ordinary content must come
+from an authoritative component primitive (e.g. the `Card` primitive, which
+owns `shadow-sm`) or be absent when the surface is flat (`surface-content`).
+Enforced by `exam-ui/no-business-shadow` — the baseline is **empty**
+(UI-MIGRATE-N-W4B closed all registered debt; the detector is variant-aware,
+so `hover:shadow-md`, `data-[state=open]:shadow-lg`, and `shadow-[…]` are
+caught too).
 
 ### Do NOT invent page-local typography
 
@@ -302,7 +308,7 @@ active/deferred split.)
 | Rule | Enforced semantic role (today) |
 | --- | --- |
 | `exam-ui/prefer-inline-error-banner` | a `<div role="alert">` with rounded + destructive-surface utilities must use `InlineErrorBanner` (narrowed to `role="alert"` in UI-MIGRATE-N-W2; baseline cleared 4→0) |
-| `exam-ui/no-business-shadow` | no new `shadow-*` in ordinary business content (debt grandfathered by baseline) |
+| `exam-ui/no-business-shadow` | no `shadow-*` in ordinary business content (baseline empty; cleared 7→0 in UI-MIGRATE-N-W4B; detector variant-aware — catches `hover:shadow-md`, `data-[state=open]:shadow-lg`, `shadow-[…]`) |
 | `exam-ui/no-arbitrary-typography` | no new arbitrary `text-[…]` / `leading-[…]` / `tracking-[…]` |
 
 ### Retired enforcement

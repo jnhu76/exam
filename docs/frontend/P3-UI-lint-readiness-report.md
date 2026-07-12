@@ -191,7 +191,7 @@ components are themselves early in adoption.
 | `rounded-md` | 22 | control radius — legitimate primitive |
 | `rounded-lg` | 17 | panel radius — **surface-content component** |
 | `rounded` (base) | 6 | legitimate primitive |
-| `shadow-sm` | 30 | **business-shadow debt** (already enforced forward; see below) |
+| `shadow-sm` | 30 | **business-shadow debt — CLEARED in UI-MIGRATE-N-W4B** (see §4.3); the 29 business-authored occurrences were removed, the `Card` primitive still owns `shadow-sm` by default |
 
 ### 2.3 The `surface-content` recomposition
 
@@ -226,16 +226,18 @@ default, and is used in many business files. **The Card question is RESOLVED
 primitive, not a bypass. The rule targets only the hand-rolled recomposition in
 business/layout scope, never `<Card>` itself.
 
-### 2.4 Elevation — `no-business-shadow` is already active
+### 2.4 Elevation — `no-business-shadow` is active and debt-free
 
-The `exam-ui/no-business-shadow` rule (UI-LINT-1) is **already enforcing** the
-forward elevation rule: no new `shadow-*` in business content. The current debt
-is fully grandfathered in `baseline.json`:
+The `exam-ui/no-business-shadow` rule (UI-LINT-1) enforces the forward
+elevation rule: no `shadow-*` in business content. The former 7-file debt was
+**fully closed in UI-MIGRATE-N-W4B** — the baseline is empty, the detector is
+variant-aware, and the repo passes full ESLint with zero shadow errors. See
+§4.3 for the per-site closure paths and
+`docs/frontend/P3-UI-MIGRATE-N-W4B-elevation-authority-closure.md` for the
+full evidence.
 
 ```text
-exam-ui/no-business-shadow baseline (7 files):
-  DashboardPage, ExamDetailPage, ProctorDashboardPage, ScoreListPage,
-  SystemDiagnosticsPage, ExamListPage, TakeExamPage
+exam-ui/no-business-shadow baseline: EMPTY (UI-MIGRATE-N-W4B)
 ```
 
 > **`StatsCard` note (verified):** the component-authority doc (EXTEND) lists
@@ -244,8 +246,7 @@ exam-ui/no-business-shadow baseline (7 files):
 > remaining `shadow-sm` text in `StatsCard.tsx` is an explanatory comment
 > documenting *why* it stays flat ("carries a default shadow-sm … a metric and
 > a shadow are orthogonal concerns"). No `className` on `StatsCard` carries a
-> shadow utility, so it is correctly absent from the baseline. The 7-file
-> baseline above is the complete current business-shadow debt.
+> shadow utility, so it is correctly absent from the baseline.
 
 ### 2.5 Surface readiness verdict
 
@@ -362,7 +363,7 @@ UI-MIGRATE-N-W3, UI-MIGRATE-N-W4A, and UI-TYPOGRAPHY-AUTHORITY-RECON-1:
 | `exam-ui/no-arbitrary-typography` | 0 | (cleared in W4A; rule rebuilt in RECON-1) |
 | `exam-ui/no-arbitrary-inline-typography` | 0 | NEW in RECON-1 (zero debt) |
 | `exam-ui/no-typography-authority-conflict` | 0 | NEW in RECON-1 (zero debt) |
-| `exam-ui/no-business-shadow` | 7 | `shadow-sm` per file (untouched) |
+| `exam-ui/no-business-shadow` | 0 | CLEARED in UI-MIGRATE-N-W4B; detector now variant-aware |
 
 > `exam-ui/prefer-field-error` was retired in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1
 > (§8). Its baseline array was removed; it is no longer an active deterministic
@@ -397,17 +398,33 @@ distinct roles. Both baseline arrays were removed alongside the rules; the
 remain canonical, enforced by semantic migration review + the recipe authority
 tests rather than a structural lint proxy.
 
-### 4.3 Debt registry — `exam-ui/no-business-shadow` (7 entries, UI-LINT-1)
+### 4.3 Debt registry — `exam-ui/no-business-shadow` (CLEARED in UI-MIGRATE-N-W4B)
 
-| Location | Reason | Owner | Migration plan |
-| --- | --- | --- | --- |
-| `pages/admin/DashboardPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N | drop `shadow-sm` on `PageSection` migration |
-| `pages/admin/ExamDetailPage.tsx` (10 nodes) | `<Card shadow-sm>` stat cards | UI-MIGRATE-N | migrate stat cards to `StatsCard` (flat) + titled blocks to `PageSection` |
-| `pages/admin/ProctorDashboardPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N (Phase2 proctor) | drop on migration |
-| `pages/admin/ScoreListPage.tsx` (7 nodes) | `<Card shadow-sm>` stat cards | UI-MIGRATE-N | migrate to `StatsCard` |
-| `pages/admin/SystemDiagnosticsPage.tsx` (8 nodes) | `<Card shadow-sm>` stat cards | UI-MIGRATE-N | migrate to `StatsCard` |
-| `pages/exam/ExamListPage.tsx` | `<Card shadow-sm>` | UI-MIGRATE-N | drop on `PageSection` migration |
-| `pages/exam/TakeExamPage.tsx` | exam question area `shadow-sm` | UI-PILOT-1 | drop — it is already `surface-content` |
+The 7 registered signatures (29 AST nodes) were all closed in
+UI-MIGRATE-N-W4B. The baseline key is removed; the repo passes full ESLint
+with zero `no-business-shadow` errors. The detector is now variant-aware
+(`hover:shadow-md`, `data-[state=open]:shadow-lg`, `shadow-[…]` are detected
+via the shared bracket-aware candidate parser). See
+`docs/frontend/P3-UI-MIGRATE-N-W4B-elevation-authority-closure.md`.
+
+| Location | Nodes | W4B closure path | Visual delta |
+| --- | ---: | --- | --- |
+| `pages/admin/DashboardPage.tsx` | 1 | Card primitive authority — remove redundant business `shadow-sm` | STRICT TOKEN EQUIVALENCE |
+| `pages/admin/ExamDetailPage.tsx` | 10 | Card primitive authority | STRICT TOKEN EQUIVALENCE |
+| `pages/admin/ProctorDashboardPage.tsx` | 1 | Card primitive authority | STRICT TOKEN EQUIVALENCE |
+| `pages/admin/ScoreListPage.tsx` | 7 | Card primitive authority | STRICT TOKEN EQUIVALENCE |
+| `pages/admin/SystemDiagnosticsPage.tsx` | 8 | Card primitive authority | STRICT TOKEN EQUIVALENCE |
+| `pages/exam/ExamListPage.tsx` | 1 | Card primitive authority | STRICT TOKEN EQUIVALENCE |
+| `pages/exam/TakeExamPage.tsx` | 1 | flat `surface-content` contract — remove `shadow-sm` that contradicted the flat-surface role | ELEVATION REMOVAL |
+
+> **Scope note (not W4B):** W4B closed the *business-authored* `shadow-sm`
+> only. The `Card` primitive itself still carries `shadow-sm` by default
+> (`components/ui/card.tsx`, excluded from lint as generated primitive scope);
+> reconciling whether `Card` stays shadowed or goes flat as the content-surface
+> primitive is separate forward debt (surface-vocabulary §4.3). The broader
+> `PageSection` / `StatsCard` component migrations (centralizing content-surface
+> selection) also remain deferred to UI-PILOT-1 / UI-MIGRATE-N — W4B did not
+> conflate them with the elevation-authority closure.
 
 ### 4.4 Reconciled — former `exam-ui/prefer-field-error` sites (rule RETIRED)
 
@@ -492,7 +509,7 @@ no `role`/`aria` landmark owns the distinction (contrast
 | Former baseline site | Semantic role (verified) | `surface-content` owner? | Final status |
 | --- | --- | --- | --- |
 | `components/exam/QuestionWorkspace.tsx:27` — question content surface | QUESTION_CONTENT_SURFACE (token-equivalent to surface-content) | YES | **MIGRATED** → `surface-content` (preserves `p-5 text-card-foreground`) |
-| `pages/exam/TakeExamPage.tsx:798` — take-question-section | QUESTION_CONTENT_SURFACE (token-equivalent; `shadow-sm` is separate W4 debt) | YES | **MIGRATED** → `surface-content` (preserves `relative p-5 shadow-sm md:p-8`) |
+| `pages/exam/TakeExamPage.tsx:798` — take-question-section | QUESTION_CONTENT_SURFACE (token-equivalent to surface-content) | YES | **MIGRATED** → `surface-content`; the `shadow-sm` that contradicted the flat-surface contract was removed in UI-MIGRATE-N-W4B (now `relative surface-content p-5 md:p-8`) |
 | `pages/exam/TakeExamPage.tsx:735` — QuestionNavigator aside | SIDEBAR_SURFACE (sticky navigation control shell) | NO | **RETAINED** — distinct role; the detector already narrowed on panel radius (excluding `rounded-md` controls), but the sidebar uses `rounded-lg` and cannot be distinguished from a content region by AST |
 
 Recipe/component ownership is now enforced by semantic migration review against

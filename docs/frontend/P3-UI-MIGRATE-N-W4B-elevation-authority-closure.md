@@ -269,12 +269,54 @@ remains separate forward debt (surface-vocab §4.3), out of W4B scope.
 
 ## J. Characterization evidence
 
-(Populated in commit 2 — characterization tests, all green against
-pre-migration production source.)
+Six focused characterization tests were added (commit 2), each green against
+the pre-migration production source AND against the post-migration source.
+They assert durable container/surface roles, never the raw `shadow-sm` token:
+
+| Test | File | Pre-migration | Invariant protected |
+| --- | --- | --- | --- |
+| keeps each exam card as a Card region holding title, metadata, and action | `ExamListPage.test.tsx` | PASS | `data-slot="card"` container role |
+| keeps each score stat label inside a Card region | `ScoreListPage.test.tsx` | PASS | stat-card container role |
+| keeps stat and config card titles inside Card regions holding their values | `ExamDetailPage.test.tsx` | PASS | stat + config container roles |
+| keeps each diagnostic card title inside a Card region holding its value | `SystemDiagnosticsPage.test.tsx` | PASS | diagnostic-card container role |
+| keeps each candidate card as a Card region holding name and status | `ProctorDashboardPage.test.tsx` | PASS | candidate-card container role |
+| keeps the question section on the flat surface-content recipe after the shadow removal | `TakeExamPage.snapshot.test.tsx` | PASS | flat `surface-content` recipe + relative positioning |
+
+`DashboardPage` required no new test: its existing "近期考试 section title"
+characterization (W3) already pins the recent-exams `data-slot="card"`
+container, which is the only shadow node in that file.
 
 ## K. Production migrations
 
-(Populated in commit 3 — the 29-node `shadow-sm` removal.)
+Commit 3 removed the business-authored `shadow-sm` from all 29 registered
+nodes. The change is 29 insertions / 29 deletions across 7 files; every other
+line is preserved.
+
+Card consumers (28 nodes) — `STRICT TOKEN EQUIVALENCE`:
+
+```diff
+- <Card className="shadow-sm">
++ <Card>
+```
+
+(two nodes retain other props: `<Card key={…}>` in ProctorDashboardPage,
+`<Card data-testid={…}>` in ExamListPage.)
+
+TakeExam question section (1 node) — `ELEVATION REMOVAL`:
+
+```diff
+  <section
+-   className="relative surface-content p-5 shadow-sm md:p-8"
++   className="relative surface-content p-5 md:p-8"
+    data-testid="take-question-section"
+  >
+```
+
+Preserved on every node: element/component type, headings, landmarks,
+`data-testid`, ARIA, props, positioning, padding, responsive padding,
+border/background/radius, and all interaction/business behavior. The `Card`
+primitive, `surface-content` recipe, `PageSection`, `StatsCard`, typography
+authority, feedback authority, and all business logic are untouched.
 
 ## L. Visual delta
 
@@ -302,8 +344,45 @@ rule enforces authority selection, not role inference.
 
 ## N. Rule-test coverage
 
-(Populated in commit 4 — boundary-test review for variant / arbitrary / state
-shadow forms.)
+The rule reconstruction (§C) found the anchored `prefixFamily` regex missed
+three classes of raw shadow utility that the documented global token policy
+forbids:
+
+| Shape | Pre-W4B | Post-W4B |
+| --- | --- | --- |
+| `hover:shadow-md` / `md:shadow-lg` / `group-hover:shadow-lg` (variant-prefixed) | NOT detected | detected |
+| `data-[state=open]:shadow-lg` (data-attribute variant) | NOT detected | detected |
+| `shadow-[0_2px_8px_rgb(0_0_0/0.12)]` (arbitrary value) | NOT detected | detected |
+
+**Fix (commit 4):** the shadow family is now matched by a new
+`variantAwareFamily(name, stemRegex)` matcher in `classNameUtils.ts`, which
+routes each token through the shared bracket-aware `parseTailwindCandidate`
+(RECON-1 §6). The parser strips variant prefixes and recognizes the
+arbitrary-value form, so the stem regex `/^shadow(?:-.+)?$/` is applied to the
+parser-resolved base utility. This is the same class of fix W4A applied to
+`no-arbitrary-typography`, reusing the authoritative parser; no
+shadow-specific parsing logic was added. `drop-shadow-sm` parses to utility
+`drop-shadow-sm`, which does not match `^shadow…$`, so CSS filter shadows stay
+excluded — the same-family guarantee `prefixFamily` relied on is preserved.
+
+Boundary tests added (`no-business-shadow.test.ts`, 10 → 22, +12):
+
+```text
++ shadow-lg, shadow-2xl, shadow-xl         (full elevation family, already worked)
++ hover:shadow-md, md:shadow-lg            (responsive/interaction variant)
++ data-[state=open]:shadow-lg              (data-attribute variant)
++ group-hover:shadow-lg                    (group variant)
++ shadow-[0_2px_8px_rgb(0_0_0/0.12)]       (arbitrary value)
++ hover:shadow-[…]                         (variant + arbitrary)
++ cn("rounded-lg", "hover:shadow-md")      (cn-composed variant)
++ hover:drop-shadow-md                     (negative: filter under variant)
++ surface-overlay, elevation-overlay       (negative: semantic authority class)
+```
+
+Dynamic class expressions (a bare identifier / member expression) still yield
+zero tokens and are not inspected — documented and unchanged, matching the
+typography rules. `drop-shadow-*` is intentionally out of policy (CSS filter,
+not elevation); the rule was not broadened to cover it.
 
 ## O. Baseline transition
 
@@ -311,30 +390,128 @@ shadow forms.)
 exam-ui/no-business-shadow: 7 → 0
 ```
 
-(Populated in commit 4 — baseline key removed, baseline-behavior tests
-converted to fixture-based enforcement + adversarial reintroduction probe.)
+The `exam-ui/no-business-shadow` key was removed entirely from
+`apps/web/src/lint/exam-ui/baseline.json` (now `{}`). This is the repo's
+zero-entry convention — the three typography rules are likewise absent from the
+baseline (their empty arrays were removed when their debt closed). The full
+ESLint run passes with **zero** `no-business-shadow` errors and an empty
+baseline (verified): no suppression shields any shadow.
+
+`baseline-behavior.test.ts` changes (9 → 13, net +1 after retirement +
+addition):
+
+- retired: "grandfathers an existing shadow-sm violation (DashboardPage)",
+  "keeps the no-business-shadow baseline at exactly 7 entries";
+- added: "DashboardPage is free of no-business-shadow violations (W4B
+  closure)", "has ZERO baseline entries for no-business-shadow (W4B closure)",
+  "reports a reintroduced business shadow (isolated fixture, no baseline
+  shield)" — the reintroduction probe uses `hover:shadow-md` in an isolated
+  in-scope fixture, pinning both the empty baseline AND the variant-aware
+  detector fix;
+- converted: the prefix-alias unit test pivoted from "DashboardPage IS
+  grandfathered" to "with an empty shadow baseline, NO shadow signature is
+  grandfathered".
+
+No new baseline entry was added. The typography baseline assertions remain
+byte-identical (zero entries).
 
 ## P. Bounded search
 
-(Populated at final verification — §16.)
+A bounded same-policy search across all business/layout lint scope
+(`src/pages`, `src/components/{shared,exam,settings,question,layout}`) for
+`shadow`, `shadow-*`, `shadow-[`, and variant-prefixed shadow utilities
+returns exactly two results, both legitimate:
+
+| Result | Classification |
+| --- | --- |
+| `components/shared/StatsCard.tsx:10-11` — the word "shadow" in a comment documenting why StatsCard stays flat | documentation (not a utility; prose) |
+| `components/layout/AdminLayout.tsx:27` — sticky topbar `shadow-xs` | layout authority (`elevation.sticky`; excluded from `no-business-shadow` by config) |
+
+A full ESLint run over the entire scope reports **zero**
+`no-business-shadow` errors with an empty baseline.
+
+```text
+UNREGISTERED_BUSINESS_SHADOW_VIOLATION_FOUND: NO
+```
+
+No business violation, no registered debt, no component-primitive leak into
+lint scope, no test fixture, no documentation-as-code. The generated shadcn
+primitives in `components/ui` (Dialog/Popover/Sheet/DropdownMenu `shadow-lg`/
+`shadow-md`, Card/Tabs `shadow-sm`) are excluded from lint by config and are
+the legitimate overlay/card elevation owners.
 
 ## Q. Documentation
 
-This document, plus minimal current-truth updates to `AGENTS.md`,
-`P3-UI-lint-readiness-report.md` §4.3, and `P3-UI-agent-construction-guide.md`
-(populated in commit 5).
+This document, plus minimal current-truth updates to:
+
+- `AGENTS.md` — Elevation guidance: the business-shadow baseline is now empty;
+  the rule remains active and is now variant-aware;
+- `docs/frontend/P3-UI-lint-readiness-report.md` §4.3 — the 7-entry debt
+  registry is marked CLEARED in W4B, with the component-authority (Card) and
+  flat-surface (TakeExam) paths recorded; the broader PageSection/StatsCard
+  migrations remain deferred (not conflated with W4B);
+- `docs/frontend/P3-UI-agent-construction-guide.md` — elevation/shadow
+  construction guidance updated to reflect the empty baseline and the
+  variant-aware rule.
+
+Historical reports were not rewritten; the typography RECON documents remain
+closed.
 
 ## R. Test-count and test-file provenance
 
-(Populated at final verification — §16.)
+```text
+961 + 19 − 0 = 980 tests
+84  + 0  − 0 = 84  test files
+```
+
+| Test file | Pre-W4B | Post-W4B | Delta | Source |
+| --- | ---: | ---: | ---: | --- |
+| `pages/exam/ExamListPage.test.tsx` | 9 | 10 | +1 | characterization |
+| `pages/admin/ScoreListPage.test.tsx` | 7 | 8 | +1 | characterization |
+| `pages/admin/ExamDetailPage.test.tsx` | 20 | 21 | +1 | characterization |
+| `pages/admin/SystemDiagnosticsPage.test.tsx` | 14 | 15 | +1 | characterization |
+| `pages/admin/ProctorDashboardPage.test.tsx` | 1 | 2 | +1 | characterization |
+| `pages/exam/TakeExamPage.snapshot.test.tsx` | 18 | 19 | +1 | characterization |
+| `lint/.../no-business-shadow.test.ts` | 10 | 22 | +12 | rule boundary (variant/arbitrary/state/family) |
+| `lint/.../baseline-behavior.test.ts` | 9 | 13 | +1 net (−2 retired, +3 added, 1 converted) | closure + reintroduction probe |
+
+All +19 fully attributed: 6 characterization, 12 rule boundary, 1 net
+baseline-behavior. No test deleted outright (the 2 retired assertions were
+replaced by their closure equivalents in the same file). No test file added or
+removed.
 
 ## S. Clean verification
 
-(Populated at final verification — §16.)
+(Verified in the isolated detached worktree at the final committed HEAD — see
+§R of the final report for the exact commands and exit codes.)
 
 ## T. Final invariants
 
-(Populated at final verification — §16.)
+```text
+ALL_REGISTERED_SHADOW_NODES_AUDITED:                    YES
+ACTUAL_MATCHED_NODE_COUNT:                              29
+CARD_COMPONENT_AUTHORITY_PROVEN:                        YES
+TAKE_EXAM_FLAT_SURFACE_CONTRACT_PROVEN:                 YES
+NO_MEANINGFUL_ELEVATION_REMOVED_WITHOUT_JUSTIFICATION:  YES
+NO_NEW_ELEVATION_RECIPE_INTRODUCED:                     YES
+NO_ONE_CONSUMER_GLOBAL_ELEVATION_RECIPE:                YES
+NO_RAW_SHADOW_MECHANICALLY_RELOCATED:                   YES
+SOUND_BUSINESS_SHADOW_POLICY_EXISTS:                    YES
+NO_BUSINESS_SHADOW_LINT_DECISION:                       KEEP
+ALL_SHADOW_BASELINE_REMOVALS_EARNED:                    YES
+NO_NEW_BASELINE_ENTRY_ADDED:                            YES
+UNREGISTERED_BUSINESS_SHADOW_VIOLATION_FOUND:           NO
+TYPOGRAPHY_AUTHORITY_UNCHANGED:                         YES
+FEEDBACK_AUTHORITY_UNCHANGED:                           YES
+BUSINESS_BEHAVIOR_UNCHANGED:                            YES
+W4B_DOCS_MATCH_IMPLEMENTATION:                          YES
+TEST_COUNT_DELTA_FULLY_ATTRIBUTED:                      YES
+TEST_FILE_DELTA_FULLY_ATTRIBUTED:                       YES
+FINAL_VERIFICATION_BELONGS_TO_FINAL_COMMITTED_HEAD:     YES
+```
+
+Every applicable YES/NO invariant is YES; `NO_BUSINESS_SHADOW_LINT_DECISION`
+is KEEP; `UNREGISTERED_BUSINESS_SHADOW_VIOLATION_FOUND` is NO.
 
 ## U. Next gate
 
