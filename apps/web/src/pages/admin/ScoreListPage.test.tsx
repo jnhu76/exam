@@ -158,6 +158,19 @@ describe("ScoreListPage", () => {
     expect(await screen.findByText("暂无成绩")).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W4B): the score stat cards are Card-primitive
+  // containers that own their elevation. After the business `shadow-sm` is
+  // removed (the Card primitive already supplies it), each stat label must still
+  // sit inside a `data-slot="card"` region. Asserts the durable container role,
+  // not the raw shadow token.
+  it("keeps each score stat label inside a Card region", async () => {
+    renderPage();
+    const avg = await screen.findByText("平均分");
+    const card = avg.closest("[data-slot='card']");
+    expect(card).toBeInTheDocument();
+    expect(card).toHaveTextContent("85");
+  });
+
   it("shows a visible error state (no white screen) when data is null", async () => {
     // Simulate a malformed/null response body. Previously `if (!scores) return null`
     // produced a white screen; now it renders a retryable ErrorState.

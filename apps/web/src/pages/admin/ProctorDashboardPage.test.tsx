@@ -102,4 +102,24 @@ describe("ProctorDashboardPage", () => {
       "misconduct_warning",
     ]);
   });
+
+  // Characterization (UI-MIGRATE-N-W4B): each candidate card is a Card-primitive
+  // container that owns its elevation. After the business `shadow-sm` is removed
+  // (the Card primitive already supplies it), the candidate name and status must
+  // still sit inside a `data-slot="card"` region. Asserts the durable container
+  // role, not the raw shadow token.
+  it("keeps each candidate card as a Card region holding name and status", async () => {
+    apiGet.mockResolvedValueOnce({
+      candidates: [makeCandidate()],
+      total: 1,
+    });
+    renderPage();
+    const name = await screen.findByText("张三");
+    const card = name.closest("[data-slot='card']");
+    expect(card).toBeInTheDocument();
+    // The candidate attempt status routes through StatusBadge inside the card.
+    expect(
+      card?.querySelector("[data-testid='status-badge']"),
+    ).toBeInTheDocument();
+  });
 });

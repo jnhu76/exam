@@ -224,6 +224,30 @@ describe("ExamListPage", () => {
     expect(section).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W4B): the exam card is a Card-primitive
+  // container that owns its elevation. After the business `shadow-sm` is
+  // removed (the Card primitive already supplies it), the card must remain a
+  // single `data-slot="card"` region holding the title, metadata, and primary
+  // action. Asserts the durable container role, not the raw shadow token.
+  it("keeps each exam card as a Card region holding title, metadata, and action", async () => {
+    getMock.mockResolvedValue([makeExam({})]);
+    render(
+      <MemoryRouter initialEntries={["/exam/list"]}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamListPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("exam-card-exam-1");
+    const card = screen.getByTestId("exam-card-exam-1");
+    // The exam card renders as the Card primitive container.
+    expect(card).toHaveAttribute("data-slot", "card");
+    // The card region still holds the exam title, its meta, and the action.
+    expect(card).toHaveTextContent("Test Exam");
+    expect(card).toHaveTextContent("60");
+    expect(card).toHaveTextContent("开始考试");
+  });
+
   it("shows error state on load failure", async () => {
     getMock.mockRejectedValue(new Error("Network error"));
 

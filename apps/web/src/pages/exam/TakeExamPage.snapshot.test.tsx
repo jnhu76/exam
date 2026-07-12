@@ -194,6 +194,21 @@ describe("P3-FSM-0 authoritative snapshot read path", () => {
     expect(radio).toBeInTheDocument();
   });
 
+  // Characterization (UI-MIGRATE-N-W4B): the question content surface selects
+  // the flat `surface-content` recipe. W4B removes the business `shadow-sm`
+  // that contradicted this flat-surface contract; the section must keep the
+  // `surface-content` class (the durable flat-surface authority), the prompt,
+  // and its relative positioning. Asserts the durable surface role, not the
+  // removed shadow token.
+  it("keeps the question section on the flat surface-content recipe after the shadow removal", async () => {
+    installTakeRoute(buildSnapshot());
+    renderPage();
+    const section = await screen.findByTestId("take-question-section");
+    expect(section.className).toContain("surface-content");
+    expect(section.className).toContain("relative");
+    expect(section).toHaveTextContent("选择一项");
+  });
+
   it("locked authoritative snapshot → question control disabled, no save API call", async () => {
     const snap = buildSnapshot({
       attemptStatus: "submitted",
