@@ -153,6 +153,63 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     }
   });
 
+  // UI-TYPOGRAPHY-AUTHORITY-RECON-1 §19 — baseline truth. The three typography
+  // rules (no-arbitrary-typography, no-arbitrary-inline-typography,
+  // no-typography-authority-conflict) all have ZERO baseline entries: every
+  // current conflict was closed in C5, and no debt was concealed. The shadow
+  // baseline is byte-identical (7 entries, untouched).
+  it("has ZERO baseline entries for all three typography rules", async () => {
+    const baseline = (await import("../../baseline.json")).default as Record<
+      string,
+      unknown
+    >;
+    expect(baseline["exam-ui/no-arbitrary-typography"] ?? []).toHaveLength(0);
+    expect(
+      baseline["exam-ui/no-arbitrary-inline-typography"] ?? [],
+    ).toHaveLength(0);
+    expect(
+      baseline["exam-ui/no-typography-authority-conflict"] ?? [],
+    ).toHaveLength(0);
+  });
+
+  it("keeps the no-business-shadow baseline at exactly 7 entries (byte-identical)", async () => {
+    const baseline = (await import("../../baseline.json")).default as Record<
+      string,
+      string[]
+    >;
+    const shadow = baseline["exam-ui/no-business-shadow"];
+    expect(shadow).toHaveLength(7);
+    // The 7 grandfathered files (UI-LINT-1 debt, untouched by RECON-1).
+    expect(shadow).toEqual([
+      "apps/web/src/pages/admin/DashboardPage.tsx::shadow-sm",
+      "apps/web/src/pages/admin/ExamDetailPage.tsx::shadow-sm",
+      "apps/web/src/pages/admin/ProctorDashboardPage.tsx::shadow-sm",
+      "apps/web/src/pages/admin/ScoreListPage.tsx::shadow-sm",
+      "apps/web/src/pages/admin/SystemDiagnosticsPage.tsx::shadow-sm",
+      "apps/web/src/pages/exam/ExamListPage.tsx::shadow-sm",
+      "apps/web/src/pages/exam/TakeExamPage.tsx::shadow-sm",
+    ]);
+  });
+
+  it("reports a NEW recipe-authority-conflict (no baseline shields it)", async () => {
+    __resetBaselineCacheForTests();
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const probe = join(WEB_ROOT, "src/pages/__probe_recipe_conflict.tsx");
+    writeFileSync(
+      probe,
+      'export const X = () => <div className="type-metadata leading-none">probe</div>;\n',
+    );
+    try {
+      const results = await eslint.lintFiles([probe]);
+      const conflictErrors = results
+        .flatMap((r) => r.messages)
+        .filter((m) => m.ruleId === "exam-ui/no-typography-authority-conflict");
+      expect(conflictErrors.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(probe, { force: true });
+    }
+  });
+
   // The no-raw-typography and no-raw-surface-recipe grandfathering + new-violation
   // tests were removed in UI-MIGRATE-N-W3 §14: both rules were retired (see
   // index.ts and docs/frontend/P3-UI-MIGRATE-N-W3-typography-surface-closure.md).
