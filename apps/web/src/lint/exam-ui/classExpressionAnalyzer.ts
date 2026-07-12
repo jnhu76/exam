@@ -133,9 +133,11 @@ function walk(expr: TSESTree.Node): WalkResult {
       if (alt.kind === "unknown") partially = true;
       else alts.push(...alt.alternatives);
       // Deduplicate identical paths.
+      const deduped = dedupe(alts);
+      if (deduped.length > MAX_ALTERNATIVES) return { kind: "unknown" };
       return {
         kind: partially ? "partially-known" : "known",
-        alternatives: dedupe(alts),
+        alternatives: deduped,
       };
     }
     case "ChainExpression":
@@ -212,11 +214,13 @@ function mergeAll(parts: WalkResult[]): WalkResult {
     // partially-known (those known tokens still co-occur); otherwise unknown.
     if (filtered.length === 0) return { kind: "unknown" };
     const merged = cartesian(filtered.map((p) => p.alternatives));
+    if (merged.length > MAX_ALTERNATIVES) return { kind: "unknown" };
     return { kind: "partially-known", alternatives: merged };
   }
   // No unknown parts, but a partial part makes the whole merge partial.
   const hasPartial = parts.some((p) => p.kind === "partially-known");
   const merged = cartesian(filtered.map((p) => p.alternatives));
+  if (merged.length > MAX_ALTERNATIVES) return { kind: "unknown" };
   return {
     kind: hasPartial ? "partially-known" : "known",
     alternatives: merged,

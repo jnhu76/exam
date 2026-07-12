@@ -124,6 +124,23 @@ function isBalanced(s: string): boolean {
   return depth === 0;
 }
 
+/** Check for a descendant/child combinator at the top level (outside parens/brackets). */
+function hasTopLevelCombinator(s: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charAt(i);
+    if (ch === "\\") {
+      i++;
+      continue;
+    }
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (depth === 0 && /[ >+~]/.test(ch)) return true;
+    else if (depth === 0 && ch === "_" && i > 0) return true;
+  }
+  return false;
+}
+
 /** Classify a single variant prefix (without trailing colon) into a target. */
 function variantTarget(variant: string): CandidateTarget {
   // Arbitrary descendant variants wrap a selector that targets a child/descendant:
@@ -135,7 +152,9 @@ function variantTarget(variant: string): CandidateTarget {
     // A combinator (>, +, ~) or a descendant space targets a descendant/child —
     // NOT the recipe-owning element itself. Inside a Tailwind arbitrary variant,
     // `_` is the whitespace escape (so `[&_p]` ⇒ `& p` ⇒ descendant).
-    if (/[ >+~_]/.test(inner)) return "descendant";
+    // Check only top-level combinators — spaces inside parentheses (e.g.
+    // `:has(.foo .bar)`) are selector arguments, not descendant combinators.
+    if (hasTopLevelCombinator(inner)) return "descendant";
     return "self";
   }
   // Pseudo-element generators target a generated box, not the element's own text.
