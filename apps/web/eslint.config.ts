@@ -100,6 +100,7 @@ const eslintConfig = [
       "exam-ui/prefer-inline-error-banner": "error",
       "exam-ui/no-business-shadow": "error",
       "exam-ui/no-arbitrary-typography": "error",
+      "exam-ui/no-arbitrary-inline-typography": "error",
     },
   },
   {
@@ -121,6 +122,7 @@ const eslintConfig = [
       // the other visual-authority rules still apply.
       "exam-ui/prefer-inline-error-banner": "error",
       "exam-ui/no-arbitrary-typography": "error",
+      "exam-ui/no-arbitrary-inline-typography": "error",
     },
   },
 ];

@@ -3,29 +3,49 @@
  *
  * Global token policy: business pages must not introduce arbitrary typography
  * VALUES. Arbitrary values bypass the semantic typography layer by pinning
- * exact px/rem/line-height/letter-spacing values inline (e.g. text-[11px],
- * leading-[1.6], tracking-[-0.02em]). This is a syntax/token policy, not a
- * semantic-role proxy: the forbidden shape is the arbitrary-value bracket
- * form, regardless of the semantic role the element carries.
+ * exact px/rem/line-height/letter-spacing/font-weight/font-family values inline.
  *
- * Detection (AST, not broad text grep): collects className tokens and flags
- * any matching the arbitrary-value forms, after stripping responsive/state
- * variant prefixes so the policy holds under variants too:
+ * (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §5, §6, §15, §16): the rule is now built on
+ * the shared bracket-aware `parseTailwindCandidate` + `classifyArbitraryValue`,
+ * replacing the destructive `stripVariants()` (which corrupted colons inside
+ * `[...]`). The exact policy categories are explicit:
  *
- *   text-[...]      (arbitrary font-size / arbitrary text color in brackets)
- *   leading-[...]
- *   tracking-[...]
- *   md:text-[...]   (responsive variant — still an arbitrary value)
- *   hover:leading-[...]
+ *   ENFORCED (typography): font-size, line-height, letter-spacing, font-weight,
+ *     font-family. Covered routes now include:
+ *       text-[11px], text-[length:11px]   (font-size)
+ *       leading-[1.7], lh-[1.7]           (line-height)
+ *       tracking-[0.02em]                 (letter-spacing)
+ *       font-[450]                        (font-weight)
+ *       font-[family-name:Inter]          (font-family)
+ *       [font-size:11px]                  (arbitrary property)
+ *       [line-height:1.7], [letter-spacing:..], [font-weight:..], [font-family:..]
+ *       text-[11px]/[13px]                (slash line-height modifier)
+ *     under any self/descendant/pseudo variant prefix (md:, hover:, group-hover:,
+ *     data-[state=open]:, [&>span]:, …) and with the important/negative modifiers.
  *
- * NOT banned (deliberately): all other text-*, font-*, leading-* named
- * utilities. Semantic typography recipes own the role layer; this rule only
- * gates the arbitrary escape hatch.
+ *   OUT OF POLICY (color): text-[color:var(--x)], text-[#fff], text-[rgb(..)].
+ *     Text color is NOT typography; it is owned by the future color/token
+ *     authority. These are deliberately NOT reported here. (Note: a color
+ *     utility on a node that also selects a type-* recipe IS a recipe-authority
+ *     conflict, reported by `no-typography-authority-conflict` — that is a
+ *     different question from the global arbitrary-value ban.)
  *
- * Existing debt is grandfathered by baseline. After UI-MIGRATE-N-W4A the
- * ExamTimer text-[11px] baseline entry was removed (the node migrated to the
- * type-metadata recipe), so the baseline array for this rule is empty.
- * components/ui occurrences are excluded by config scope.
+ *   REVIEW-ONLY (unknown): text-[var(--x)], text-[calc(..)], bare numbers.
+ *     Without a data-type hint these cannot be deterministically resolved to a
+ *     typography category vs color; reporting them would guess policy. They are
+ *     documented but NOT lint-enforced.
+ *
+ * Detection (AST, not broad text grep): collects className tokens and parses
+ * each with `parseTailwindCandidate`; flags those whose classifier returns
+ * `typography`.
+ *
+ * NOT banned: all named text / font / leading / tracking utilities, and the
+ * semantic type-* recipes. Semantic typography recipes own the role layer; this
+ * rule only gates the arbitrary escape hatch.
+ *
+ * Existing debt is grandfathered by baseline; the baseline array for this rule
+ * is empty (the former ExamTimer text-[11px] entry was removed in W4A).
+ * components/ui is excluded by config scope.
  *
  * Diagnostic-only: no autofix.
  */
@@ -35,34 +55,33 @@ import {
   findClassNameAttribute,
   type ClassNameToken,
 } from "../classNameUtils";
-
-const ARBITRARY_PREFIXES = ["text", "leading", "tracking"] as const;
+import { parseTailwindCandidate } from "../tailwindCandidate";
+import {
+  propertiesTouchedBy,
+  NO_ARBITRARY_TYPOGRAPHY_POLICY_CATEGORIES,
+} from "../cssPropertyResolver";
 
 /**
- * Strip Tailwind variant prefixes (responsive `sm:`/`md:`/`lg:`…, state
- * `hover:`/`focus:`/`active:`…, and stacked variants like `group-hover:`) so
- * the global token policy is enforced regardless of variant. The policy forbids
- * arbitrary typography VALUES; a `md:text-[11px]` is still an arbitrary
- * font-size, so it must be detected.
+ * True if a parsed candidate is an arbitrary-value/property form that resolves
+ * to a TYPOGRAPHY category (font-size / line-height / letter-spacing /
+ * font-weight / font-family).
+ *
+ * The detection delegates to `propertiesTouchedBy` (prefix-aware: `leading-[1.6]`
+ * → line-height, `font-[450]` → font-weight, `text-[length:11px]` → font-size)
+ * and intersects with the typography policy categories. This correctly handles
+ * prefix-disambiguated forms that the value-only classifier must leave UNKNOWN
+ * (e.g. `leading-[1.6]` is unambiguously line-height by prefix, while a bare
+ * `text-[1.6]` is ambiguous without a hint). Color routes (`text-[color:...]`,
+ * `text-[#fff]`) resolve to `{color}` and are OUT of policy here.
  */
-function stripVariants(token: string): string {
-  let rest = token;
-  // A variant prefix is `name:` possibly with a trailing value group; we only
-  // need to peel colon-terminated segments until a known utility prefix remains.
-  while (true) {
-    const colon = rest.indexOf(":");
-    if (colon <= 0) return rest;
-    rest = rest.slice(colon + 1);
-  }
-}
-
-/** True if a token is an arbitrary-value utility for one of the prefixes. */
-function isArbitraryTypography(token: string): boolean {
-  const stripped = stripVariants(token);
-  for (const prefix of ARBITRARY_PREFIXES) {
-    if (stripped.startsWith(prefix + "-[") && stripped.endsWith("]")) {
-      return true;
-    }
+function isArbitraryTypographyToken(token: string): boolean {
+  const c = parseTailwindCandidate(token);
+  if (!c.ok) return false;
+  // Only arbitrary-value or arbitrary-property forms are policy targets.
+  if (c.arbitraryValue === undefined && !c.arbitraryProperty) return false;
+  const touched = propertiesTouchedBy(c);
+  for (const prop of touched) {
+    if (NO_ARBITRARY_TYPOGRAPHY_POLICY_CATEGORIES.has(prop)) return true;
   }
   return false;
 }
@@ -73,12 +92,12 @@ export default createRule({
     type: "problem",
     docs: {
       description:
-        "Business pages must not use arbitrary typography values (text-[...], leading-[...], tracking-[...]); await the semantic typography layer.",
+        "Business pages must not use arbitrary typography values (text-[...], leading-[...], tracking-[...], font-[...], [font-size:...], slash modifiers); use the semantic typography recipe layer.",
     },
     schema: [],
     messages: {
       noArbitraryTypography:
-        "Arbitrary typography value {{ token }} is not allowed in business pages. Use the forthcoming semantic typography recipe (UI-RECIPE-1) or, for a specialized runtime component, add a reviewed baseline entry.",
+        "Arbitrary typography value {{ token }} is not allowed in business pages. Use the semantic typography recipe (type-*) or, for a specialized runtime component, add a reviewed baseline entry.",
     },
   },
   defaultOptions: [],
@@ -93,7 +112,7 @@ export default createRule({
 
         const hits = tokens
           .map((t) => t.value)
-          .filter((v) => isArbitraryTypography(v));
+          .filter((v) => isArbitraryTypographyToken(v));
         if (hits.length === 0) return;
 
         maybeSuppress(
