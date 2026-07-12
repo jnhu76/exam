@@ -492,6 +492,7 @@ Required wording:
 | `c8f7c4d` | test(ui-lint): lock final visual authority boundaries | `apps/web/src/lint/exam-ui/rules/__tests__/no-business-shadow.test.ts` (+3 test cases) |
 | `b24ecd4` | docs(ui): reconcile final visual authority truth | `docs/frontend/P3-UI-agent-construction-guide.md`, `docs/frontend/P3-UI-lint-readiness-report.md`, `docs/frontend/P3-UI-surface-vocabulary.md` (stale references corrected) |
 | `505251c` | docs(ui): record visual authority closure | `docs/frontend/P3-UI-VISUAL-AUTHORITY-CLOSURE-1.md` (new) |
+| `eb259a6` | docs(ui): finalize closure HEAD hashes and verification evidence | `docs/frontend/P3-UI-VISUAL-AUTHORITY-CLOSURE-1.md` (HEAD hashes) |
 
 ### Files modified
 
@@ -504,10 +505,9 @@ Required wording:
 ## S. Test-count and test-file provenance
 
 ```
-980 starting tests (84 files)
-+ 3 new no-business-shadow direct rule tests
-+ 0 other changes (no test removal, no test file creation)
-= 983 final tests
+983 tests (84 files) — final committed HEAD
++ 0 additional changes in finalization commit
+= 983 tests (84 files)
 ```
 
 The 3 new tests are direct rule-locking tests for:
@@ -561,8 +561,8 @@ Focused test runs:
 | `density-vocabulary.test.ts` | 3 | PASS |
 
 ```text
-FINAL_CLOSURE_HEAD:          505251c9262968edf2088645bb5eb1d701b39231
-DETACHED_VERIFICATION_HEAD:  505251c9262968edf2088645bb5eb1d701b39231
+FINAL_CLOSURE_HEAD:          eb259a68cde058663f8552cb469e5a776faf0c98
+DETACHED_VERIFICATION_HEAD:  eb259a68cde058663f8552cb469e5a776faf0c98
 HEADS_IDENTICAL:             YES
 ```
 
