@@ -745,6 +745,7 @@ const zhCN = {
       empty: "暂无审计日志",
       emptyDescription: "系统操作将自动记录在此",
       loadFailed: "加载审计日志失败",
+      ipAddress: "IP: {{address}}",
       clearFilter: "清空筛选",
       startDate: "开始日期",
       endDate: "结束日期",
@@ -1335,6 +1336,7 @@ const zhCN = {
         emptyTitle: "暂无时间线事件",
         emptyDescription: "该尝试的操作记录将显示在此",
         actorPrefix: "操作者",
+        ipAddress: "IP: {{address}}",
       },
       errors: {
         loadFailed: "加载尝试详情失败",

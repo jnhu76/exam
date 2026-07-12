@@ -338,7 +338,7 @@ export function AuditLogPage() {
                   </pre>
                   {item.ipAddress && (
                     <p className="mt-2 text-xs text-muted-foreground">
-                      IP: {item.ipAddress}
+                      {t("admin.audit.ipAddress", { address: item.ipAddress })}
                     </p>
                   )}
                 </div>

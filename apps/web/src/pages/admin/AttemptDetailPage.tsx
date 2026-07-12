@@ -390,7 +390,9 @@ function TimelineSection({
                       </pre>
                       {event.ipAddress && (
                         <p className="text-xs text-muted-foreground">
-                          IP: {event.ipAddress}
+                          {t("admin.attemptDetail.timeline.ipAddress", {
+                            address: event.ipAddress,
+                          })}
                         </p>
                       )}
                     </div>
