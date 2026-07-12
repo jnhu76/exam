@@ -127,32 +127,29 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     }
   });
 
-  // UI-MIGRATE-N-W4A: the ExamTimer text-[11px] baseline entry was removed after
-  // the node migrated to the type-metadata recipe. This probe proves the removal
-  // is EARNED — a reintroduced arbitrary typography value in ExamTimer is now a
-  // real, unshielded error (nothing in the baseline grandfather list protects
-  // it anymore).
-  it("reports a reintroduced arbitrary-typography value in ExamTimer (W4A)", async () => {
+  // UI-TYPOGRAPHY-AUTHORITY-RECON-1 §13/§19: the no-arbitrary-typography
+  // baseline is empty (the former ExamTimer text-[11px] entry was removed in
+  // W4A). This proves a reintroduced arbitrary-typography value is a REAL,
+  // UNSHIELDED error — using an ISOLATED fixture inside the business scope glob
+  // (so it is actually linted) whose filename is NOT in the baseline. Unlike the
+  // prior W4A probe this does NOT rewrite the real ExamTimer.tsx, so a future
+  // legitimate className change there cannot break this test.
+  it("reports a reintroduced arbitrary-typography value (isolated fixture, no baseline shield)", async () => {
     __resetBaselineCacheForTests();
-    const { readFileSync, writeFileSync } = await import("node:fs");
-    const timerPath = join(WEB_ROOT, "src/components/exam/ExamTimer.tsx");
-    const original = readFileSync(timerPath, "utf8");
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const probe = join(WEB_ROOT, "src/pages/__probe_arbitrary_typography.tsx");
+    writeFileSync(
+      probe,
+      'export const X = () => <div className="text-[11px] font-medium">probe</div>;\n',
+    );
     try {
-      // Reintroduce the exact retired arbitrary value.
-      writeFileSync(
-        timerPath,
-        original.replace(
-          "type-metadata leading-none",
-          "text-[11px] font-medium leading-none",
-        ),
-      );
-      const results = await eslint.lintFiles([timerPath]);
+      const results = await eslint.lintFiles([probe]);
       const typErrors = results
         .flatMap((r) => r.messages)
         .filter((m) => m.ruleId === "exam-ui/no-arbitrary-typography");
       expect(typErrors.length).toBeGreaterThan(0);
     } finally {
-      writeFileSync(timerPath, original);
+      rmSync(probe, { force: true });
     }
   });
 

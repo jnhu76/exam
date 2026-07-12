@@ -99,10 +99,13 @@ describe("ExamTimer", () => {
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 
-  // Characterization (UI-MIGRATE-N-W4A): the timer renders a compact remaining-
-  // time label and a zero-padded MM:SS numeric value. The arbitrary text-[11px]
-  // on the label is being migrated to the type-metadata recipe; these tests pin
-  // the durable content/structure invariants, not the old arbitrary class.
+  // Characterization (UI-TYPOGRAPHY-AUTHORITY-RECON-1 §14): the timer renders a
+  // compact remaining-time label and a zero-padded MM:SS numeric value. The
+  // label uses the type-metadata recipe; the value uses a mono tabular-numeric
+  // stack. These tests pin the durable content/structure/role invariants, not
+  // the old arbitrary text-[11px] class (retired in W4A) nor the dead
+  // leading-none companion (removed in RECON-1 — type-metadata owns line-height
+  // under cascade policy A, so leading-none was ineffective and contradictory).
   it("renders the remaining-time label alongside the MM:SS value", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
