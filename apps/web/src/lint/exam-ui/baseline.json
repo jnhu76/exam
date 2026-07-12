@@ -1,11 +1,1 @@
-{
-  "exam-ui/no-business-shadow": [
-    "apps/web/src/pages/admin/DashboardPage.tsx::shadow-sm",
-    "apps/web/src/pages/admin/ExamDetailPage.tsx::shadow-sm",
-    "apps/web/src/pages/admin/ProctorDashboardPage.tsx::shadow-sm",
-    "apps/web/src/pages/admin/ScoreListPage.tsx::shadow-sm",
-    "apps/web/src/pages/admin/SystemDiagnosticsPage.tsx::shadow-sm",
-    "apps/web/src/pages/exam/ExamListPage.tsx::shadow-sm",
-    "apps/web/src/pages/exam/TakeExamPage.tsx::shadow-sm"
-  ]
-}
+{}

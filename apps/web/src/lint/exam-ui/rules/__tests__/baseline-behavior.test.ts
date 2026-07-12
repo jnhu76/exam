@@ -29,14 +29,18 @@ describe("baseline signature + grandfather lookup", () => {
     expect(a).toBe("apps/web/src/pages/x.tsx::shadow-sm");
   });
 
-  it("accepts ruleId with or without exam-ui/ prefix", () => {
+  // UI-MIGRATE-N-W4B: the no-business-shadow baseline is now empty (the 7
+  // registered signatures were all closed). With an empty baseline, NOTHING
+  // is grandfathered — a reintroduced shadow is a real, unshielded error.
+  // This is the post-W4B contract; the pre-W4B positive-path test (which
+  // asserted DashboardPage::shadow-sm WAS grandfathered) is retired here.
+  it("with an empty shadow baseline, no shadow signature is grandfathered", () => {
     __resetBaselineCacheForTests();
-    // DashboardPage shadow-sm is in the baseline for no-business-shadow.
     const sig = signature("apps/web/src/pages/admin/DashboardPage.tsx", [
       "shadow-sm",
     ]);
-    expect(isGrandfathered("no-business-shadow", sig)).toBe(true);
-    expect(isGrandfathered("exam-ui/no-business-shadow", sig)).toBe(true);
+    expect(isGrandfathered("no-business-shadow", sig)).toBe(false);
+    expect(isGrandfathered("exam-ui/no-business-shadow", sig)).toBe(false);
   });
 
   it("rejects a new file not in the baseline", () => {
@@ -49,7 +53,7 @@ describe("baseline signature + grandfather lookup", () => {
 
   it("rejects a new token set in a listed file", () => {
     __resetBaselineCacheForTests();
-    // DashboardPage is listed with shadow-sm; a shadow-lg there is a NEW violation.
+    // No file is listed anymore (empty baseline); any shadow signature is new.
     const sig = signature("apps/web/src/pages/admin/DashboardPage.tsx", [
       "shadow-lg",
     ]);
@@ -69,7 +73,13 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     });
   });
 
-  it("grandfathers an existing shadow-sm violation (DashboardPage)", async () => {
+  // UI-MIGRATE-N-W4B: DashboardPage's business shadow-sm was removed (the Card
+  // primitive already owns it) and the baseline entry was deleted. The file is
+  // now clean under exam-ui/no-business-shadow unconditionally — no
+  // grandfathering is involved. This test pins that closure: a regression that
+  // reintroduces a business shadow here would surface as a real error (no
+  // baseline shields it anymore). Mirrors the W4A ExamTimer closure pattern.
+  it("DashboardPage is free of no-business-shadow violations (W4B closure)", async () => {
     __resetBaselineCacheForTests();
     const results = await eslint.lintFiles([
       "src/pages/admin/DashboardPage.tsx",
@@ -172,23 +182,43 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
     ).toHaveLength(0);
   });
 
-  it("keeps the no-business-shadow baseline at exactly 7 entries (byte-identical)", async () => {
+  // UI-MIGRATE-N-W4B: the no-business-shadow baseline is now empty (the 7
+  // file signatures were all closed — 28 redundant Card shadows removed via
+  // the Card primitive authority, 1 TakeExam shadow removed via the flat
+  // surface-content contract). This test pins the closure: the baseline key
+  // is absent (the repo's zero-entry convention, matching the typography
+  // rules), so a reintroduced business shadow is a REAL, UNSHIELDED error.
+  it("has ZERO baseline entries for no-business-shadow (W4B closure)", async () => {
     const baseline = (await import("../../baseline.json")).default as Record<
       string,
-      string[]
+      unknown
     >;
-    const shadow = baseline["exam-ui/no-business-shadow"];
-    expect(shadow).toHaveLength(7);
-    // The 7 grandfathered files (UI-LINT-1 debt, untouched by RECON-1).
-    expect(shadow).toEqual([
-      "apps/web/src/pages/admin/DashboardPage.tsx::shadow-sm",
-      "apps/web/src/pages/admin/ExamDetailPage.tsx::shadow-sm",
-      "apps/web/src/pages/admin/ProctorDashboardPage.tsx::shadow-sm",
-      "apps/web/src/pages/admin/ScoreListPage.tsx::shadow-sm",
-      "apps/web/src/pages/admin/SystemDiagnosticsPage.tsx::shadow-sm",
-      "apps/web/src/pages/exam/ExamListPage.tsx::shadow-sm",
-      "apps/web/src/pages/exam/TakeExamPage.tsx::shadow-sm",
-    ]);
+    expect(baseline["exam-ui/no-business-shadow"] ?? []).toHaveLength(0);
+  });
+
+  // UI-MIGRATE-N-W4B §N — adversarial reintroduction probe. Proves a
+  // reintroduced business shadow in a previously-clean file is reported as a
+  // real, unshielded error (no baseline protects it anymore). Uses an ISOLATED
+  // fixture inside the business scope glob (so it is actually linted) whose
+  // filename is NOT in any baseline. The variant-prefixed form
+  // (hover:shadow-md) is used to also pin the W4B variant-aware detector fix.
+  it("reports a reintroduced business shadow (isolated fixture, no baseline shield)", async () => {
+    __resetBaselineCacheForTests();
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const probe = join(WEB_ROOT, "src/pages/__probe_shadow_reintro.tsx");
+    writeFileSync(
+      probe,
+      'export const X = () => <div className="hover:shadow-md">probe</div>;\n',
+    );
+    try {
+      const results = await eslint.lintFiles([probe]);
+      const shadowErrors = results
+        .flatMap((r) => r.messages)
+        .filter((m) => m.ruleId === "exam-ui/no-business-shadow");
+      expect(shadowErrors.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(probe, { force: true });
+    }
   });
 
   it("reports a NEW recipe-authority-conflict (no baseline shields it)", async () => {

@@ -8,8 +8,11 @@
  * no NEW business-page shadow may land.
  *
  * Detection: any Tailwind `shadow-*` utility in a className expression in
- * business / feature scopes. The matched token set (e.g. ["shadow-sm"]) is
- * the baseline signature, so a new shadow-sm in a previously-clean file fails
+ * business / feature scopes — matched variant-aware (UI-MIGRATE-N-W4B §M), so
+ * `shadow-sm`, `hover:shadow-md`, `data-[state=open]:shadow-lg`, and
+ * `shadow-[0_2px_8px_…]` are all detected. `drop-shadow-*` (a CSS filter, not
+ * elevation) is NOT matched. The matched token set (e.g. ["shadow-sm"]) is the
+ * baseline signature, so a new shadow-sm in a previously-clean file fails
  * while the existing occurrences stay green.
  *
  * Exclusions (enforced by config `files` glob AND by path here):
@@ -23,11 +26,21 @@ import {
   collectClassNameTokens,
   findClassNameAttribute,
   findUtilities,
-  prefixFamily,
+  variantAwareFamily,
   type ClassNameToken,
 } from "../classNameUtils";
 
-const SHADOW_FAMILY = prefixFamily("shadow", "shadow");
+/**
+ * The shadow utility family, matched variant-aware (UI-MIGRATE-N-W4B §M).
+ *
+ * The stem regex anchors the parser-resolved base utility (after variant
+ * prefix / arbitrary-value extraction), so `hover:shadow-md`,
+ * `data-[state=open]:shadow-lg`, and `shadow-[0_2px_8px_…]` are detected as
+ * raw shadow utilities — the same global token policy that forbids `shadow-sm`
+ * forbids them. `drop-shadow-sm` parses to utility `drop-shadow-sm`, which does
+ * not match `^shadow…$`, so CSS filter shadows stay excluded.
+ */
+const SHADOW_FAMILY = variantAwareFamily("shadow", /^shadow(?:-.+)?$/);
 
 export default createRule({
   name: "no-business-shadow",

@@ -12,6 +12,12 @@ ruleTester().run("no-business-shadow", rule, {
     // 4. Unrelated "shadow" substring inside another token must NOT match.
     '<div className="drop-shadow-sm">x</div>',
     //    (drop-shadow-* is a filter utility, not the elevation shadow family)
+    // 5. drop-shadow under a variant prefix is still a filter, not elevation.
+    '<div className="hover:drop-shadow-md">x</div>',
+    // 6. A semantic surface/elevation authority class is NOT a raw shadow
+    //    utility and must not be flagged (the authority path, not a violation).
+    '<div className="surface-overlay">x</div>',
+    '<div className="elevation-overlay">x</div>',
   ],
   invalid: [
     // A. shadow-sm in a business element.
@@ -43,6 +49,50 @@ ruleTester().run("no-business-shadow", rule, {
     //    grandfathered only in components/layout via config).
     {
       code: '<div className="shadow-xs">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // G. shadow-lg / shadow-xl / shadow-2xl / shadow-inner / shadow-none — the
+    //    full elevation family is forbidden in business scope, not just sm/md.
+    {
+      code: '<div className="shadow-lg">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    {
+      code: '<div className="shadow-2xl">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // H. variant-prefixed shadows — the global token policy forbids raw shadow
+    //    utilities regardless of variant prefix (UI-MIGRATE-N-W4B §M).
+    {
+      code: '<div className="hover:shadow-md">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    {
+      code: '<div className="md:shadow-lg">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    {
+      code: '<div className="data-[state=open]:shadow-lg">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    {
+      code: '<div className="group-hover:shadow-lg">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // I. arbitrary-bracket shadow value — a raw shadow utility in arbitrary
+    //    form is still a raw shadow utility.
+    {
+      code: '<div className="shadow-[0_2px_8px_rgb(0_0_0/0.12)]">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // J. variant-prefixed arbitrary shadow.
+    {
+      code: '<div className="hover:shadow-[0_2px_8px_rgb(0_0_0/0.12)]">x</div>',
+      errors: [{ messageId: "noBusinessShadow" }],
+    },
+    // K. variant-prefixed shadow inside cn() composition.
+    {
+      code: '<Card className={cn("rounded-lg", "hover:shadow-md")}>x</Card>',
       errors: [{ messageId: "noBusinessShadow" }],
     },
   ],

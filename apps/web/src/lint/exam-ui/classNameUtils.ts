@@ -17,6 +17,7 @@
  */
 import type { TSESTree } from "@typescript-eslint/utils";
 import type { RuleContext } from "@typescript-eslint/utils/ts-eslint";
+import { parseTailwindCandidate } from "./tailwindCandidate";
 
 export type ClassNameToken = {
   /** The matched utility substring (e.g. "shadow-sm", "text-destructive"). */
@@ -48,6 +49,46 @@ export function prefixFamily(name: string, prefix: string): UtilityFamily {
   return {
     name,
     match: (tok) => (re.test(tok) ? tok : null),
+  };
+}
+
+/**
+ * Build a variant-aware family matcher that detects a Tailwind utility family
+ * UNDER any variant prefix AND in arbitrary-value form (UI-MIGRATE-N-W4B §M).
+ *
+ * `prefixFamily` matches only a bare token like `shadow-sm`; it misses
+ * `hover:shadow-md`, `data-[state=open]:shadow-lg`, and `shadow-[0_2px_8px_…]`
+ * because the anchored regex sees the variant prefix / bracket content as part
+ * of the token. This matcher routes the token through the shared bracket-aware
+ * `parseTailwindCandidate` (RECON-1 §6) and matches the family against the
+ * parser-resolved base utility stem, so variant prefixes are stripped and the
+ * arbitrary-value form (`utility-[...]`) is recognized.
+ *
+ * `stemRegex` is anchored against the parser's `utility` field (the stem after
+ * variant/important/negative/arbitrary-value extraction). For the shadow family
+ * it is `/^shadow(?:-.+)?$/`. A token like `drop-shadow-sm` parses to utility
+ * `drop-shadow-sm`, which does NOT match `^shadow…$`, so filter shadows stay
+ * excluded — the parser preserves the same-family guarantee that `prefixFamily`
+ * relied on.
+ *
+ * Used by `exam-ui/no-business-shadow` (W4B). The typography rules already use
+ * the parser directly for their own richer property classification.
+ */
+export function variantAwareFamily(
+  name: string,
+  stemRegex: RegExp,
+): UtilityFamily {
+  return {
+    name,
+    match: (tok) => {
+      const parsed = parseTailwindCandidate(tok);
+      if (!parsed.ok) return null;
+      // Arbitrary-property whole-token form (e.g. `[font-size:11px]`) has an
+      // empty utility and is never a utility-family member.
+      if (!parsed.utility) return null;
+      if (!stemRegex.test(parsed.utility)) return null;
+      return tok;
+    },
   };
 }
 
