@@ -5,6 +5,8 @@ import {
   LoaderCircle,
   TriangleAlert,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 
 /** Visual save-status states for the answer save indicator. */
 export type SaveState = "idle" | "saving" | "saved" | "error";
@@ -26,7 +28,7 @@ const stateClassMap: Record<SaveState, string> = {
 };
 
 /** Icon mapping for each save state. */
-const stateIconMap: Record<SaveState, typeof CircleCheck> = {
+const stateIconMap: Record<SaveState, LucideIcon> = {
   idle: CircleDashed,
   saving: LoaderCircle,
   saved: CircleCheck,
@@ -53,9 +55,10 @@ export function SaveIndicator({
     <span
       className={`inline-flex min-w-28 items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${stateClassMap[resolved]}`}
     >
-      <Icon
-        className={`size-4 ${resolved === "saving" ? "animate-spin" : ""}`}
-        aria-hidden="true"
+      <AppIcon
+        icon={Icon}
+        size="inline"
+        className={resolved === "saving" ? "animate-spin" : undefined}
       />
       {t(stateKeyMap[resolved] as never)}
     </span>

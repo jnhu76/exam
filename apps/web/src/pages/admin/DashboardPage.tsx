@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { DashboardResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { StatsCard } from "@/components/shared/StatsCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -81,22 +82,22 @@ export function DashboardPage() {
         <StatsCard
           label={t("admin.dashboard.stats.totalQuestions")}
           value={data?.totalQuestions ?? 0}
-          icon={<BookOpen className="size-5" />}
+          icon={<AppIcon icon={BookOpen} size="metric" />}
         />
         <StatsCard
           label={t("admin.dashboard.stats.activeExams")}
           value={data?.activeExams ?? 0}
-          icon={<Activity className="size-5" />}
+          icon={<AppIcon icon={Activity} size="metric" />}
         />
         <StatsCard
           label={t("admin.dashboard.stats.totalCandidates")}
           value={data?.totalCandidates ?? 0}
-          icon={<Users className="size-5" />}
+          icon={<AppIcon icon={Users} size="metric" />}
         />
         <StatsCard
           label={t("admin.dashboard.stats.todayExams")}
           value={data?.todayExams ?? 0}
-          icon={<CalendarCheck className="size-5" />}
+          icon={<AppIcon icon={CalendarCheck} size="metric" />}
         />
       </div>
 
