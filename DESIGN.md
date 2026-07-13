@@ -542,6 +542,30 @@ The table above is the complete, deterministic mapping.
 
 ## 9. Layout and responsive behavior
 
+**Responsive shell (deterministic).** The application shell adapts at one
+breakpoint — `lg` (1024px). Below it the persistent sidebar is removed from the
+document flow and navigation moves into a modal drawer.
+
+- **Desktop — `lg` and above (`>=1024px`):** persistent sidebar in normal flow
+  (expanded 232px; existing user-controlled collapse to 56px stays). Mobile
+  drawer is not rendered. Main fills the remaining width.
+- **Tablet & mobile — below `lg` (`<1024px`):** persistent sidebar is **absent
+  from normal flow**. Navigation lives in a left-opening modal drawer (`Sheet`,
+  `side="left"`, `width = min(18rem, 100vw - 3rem)`). A topbar menu trigger is
+  visible; the drawer is closed by default after navigation and reload.
+- **Main-content containment:** every shell main owner is
+  `width:100% / min-width:0 / max-width:100%`. No shell-level
+  `overflow-x:auto` shortcut. Local scrollable regions (tables, code blocks)
+  own their own `overflow-x:auto` + `max-width:100%`.
+- **Document overflow:** `document.documentElement.scrollWidth` must be
+  `<= clientWidth + 1` at every supported viewport. A table wrapper MAY have
+  `scrollWidth > clientWidth`; the document root may NOT.
+- **Mobile topbar trigger:** ≥36×36, visible Indigo focus ring,
+  `aria-expanded` / `aria-controls`, accessible name.
+- **Mobile page gutter:** 16px below `lg` (24px at `md+` per "Outer gutters").
+
+**Widths and composition.**
+
 - **Sidebar widths:** expanded 232px; collapsed 56px.
 - **Page max-width by surface type:**
   - reading/form pages (exam edit, question edit, settings): `max-w` 880–960px.
@@ -549,7 +573,7 @@ The table above is the complete, deterministic mapping.
     **full-width**.
   - exam runtime: centered `max-w` ~1100px; timer fixed top-right.
   - diagnostic/monitoring (system diagnostics, proctor): full-width status-card grid.
-- **Outer gutters:** 24px (32px `lg+`).
+- **Outer gutters:** 24px (32px `lg+`); 16px below `lg` (see Responsive shell).
 - **Toolbar/table composition:** toolbar INSIDE DataTableShell header (no double border).
 - **Page-header stacking:** stacks <`sm`; title+status left, actions right at `sm+`.
 - **Table column priority:** per-table map; critical (title/status/actions) always visible.
@@ -557,6 +581,10 @@ The table above is the complete, deterministic mapping.
   (**No FAB.** No new product interaction behavior is invented by the preview.)
 - **Dialog sizing:** sm max-w-xs, default max-w-lg; full-width minus 32px on mobile.
 - **Touch targets:** ≥36×36 everywhere.
+
+**Shared navigation authority.** Desktop sidebar and mobile drawer render the
+SAME navigation source (entries, groups, active-route logic, labels, icons,
+role visibility, user identity/logout). Do not maintain two nav arrays.
 
 ## 10. Do and do not
 
