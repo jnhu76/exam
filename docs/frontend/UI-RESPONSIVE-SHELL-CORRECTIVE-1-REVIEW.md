@@ -84,6 +84,41 @@ choice and matches the brief's preferred tablet behavior (full-width, drawer
 nav). A compact persistent rail at `md` was considered and rejected as
 unnecessary complexity for no benefit.
 
+## H. Human visual review (post-PASS) — found a regression; FIX-2
+
+A human visual review of the PASSed implementation found that the single-`lg`
+model produces a **regression at 1024px**: at 1024 the expanded 232px sidebar
+starves `<main>` to 792px — *narrower than the 1000px full-width state*
+(main=1000). Concrete symptoms at 1024px: dashboard metric labels truncated
+("考试进行中" → "考试进…"); exam-list action column pushed against / beyond the
+container edge. 1000px (drawer, 2×2 cards) looked better than 1024px.
+
+Verdict: 420 drawer PASS; 768–1000 drawer PASS; exam runtime PASS;
+**1024–1279 desktop shell FAIL — breakpoint corrective required.**
+
+### FIX-2 — three-state shell (resolved)
+
+Replaced the two-state shell with a deterministic **three-state** shell across
+two breakpoints (`lg`=1024, `xl`=1280), reusing the existing 56px collapsed
+sidebar as the compact rail:
+
+| Viewport | State | Sidebar | mainW |
+| --- | --- | --- | --- |
+| `<lg` (<1024) | mobile/tablet drawer | `display:none` | viewport |
+| `lg … <xl` (1024–1279) | compact desktop | 56px rail | viewport − 56 |
+| `>=xl` (≥1280) | full desktop | 232px (user-collapsible) | viewport − 232 |
+
+Verified at the boundary: 1023→drawer (main 1023), 1024→rail (main 968),
+1279→rail (main 1223), 1280→expanded (main 1048). 1000→1024 now narrows main
+by only ~32px (was 208px). Dashboard main@1024 has **0 clipped leaf elements**
+(was truncated); exam-list@1024 has **8 action buttons, last at right=943
+within the 1024 viewport** (was clipped). No document overflow at any tested
+viewport. 994 web tests pass; all static gates + build clean.
+
+The user-controlled collapse (232→56) now lives only at `xl+` (the band where
+232px is affordable); in the compact band the sidebar IS the rail, so no
+expand control is shown there.
+
 ## F. Severity summary
 
 - P0: none

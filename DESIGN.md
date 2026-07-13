@@ -542,17 +542,28 @@ The table above is the complete, deterministic mapping.
 
 ## 9. Layout and responsive behavior
 
-**Responsive shell (deterministic).** The application shell adapts at one
-breakpoint — `lg` (1024px). Below it the persistent sidebar is removed from the
-document flow and navigation moves into a modal drawer.
+**Responsive shell (deterministic, three-state).** The admin shell has three
+deterministic states across two breakpoints — `lg` (1024px) and `xl` (1280px).
+A single breakpoint (`lg` only) produced a regression at 1024px where the
+expanded 232px sidebar starved main content (792px) worse than the 1000px
+full-width state; the three-state model removes that regression.
 
-- **Desktop — `lg` and above (`>=1024px`):** persistent sidebar in normal flow
-  (expanded 232px; existing user-controlled collapse to 56px stays). Mobile
-  drawer is not rendered. Main fills the remaining width.
-- **Tablet & mobile — below `lg` (`<1024px`):** persistent sidebar is **absent
-  from normal flow**. Navigation lives in a left-opening modal drawer (`Sheet`,
-  `side="left"`, `width = min(18rem, 100vw - 3rem)`). A topbar menu trigger is
-  visible; the drawer is closed by default after navigation and reload.
+- **Mobile/tablet — below `lg` (`<1024px`):** persistent sidebar is **absent
+  from normal flow** (`display:none`, removed from the tab order). Navigation
+  lives in a left-opening modal drawer (`Sheet`, `side="left"`,
+  `width = min(18rem, 100vw - 3rem)`). A topbar menu trigger is visible; the
+  drawer is closed by default after navigation and reload. Main = 100% width.
+- **Compact desktop — `lg` to below `xl` (`1024px … 1279px`):** persistent
+  **56px icon rail** (`collapsed` mode) in normal flow; NO user-controlled
+  expand here. Main = viewport − 56px.
+- **Full desktop — `xl` and above (`>=1280px`):** persistent **232px sidebar**
+  in normal flow; the user-controlled collapse (232→56) is available only here.
+  Main = viewport − 232px (or − 56 when user-collapsed).
+
+Width is driven by the existing `AppSidebar` `collapsed` prop (`w-14` vs
+`w-[232px]`); visibility below `lg` is CSS (`hidden lg:flex`). The `xl` state
+is selected via `matchMedia` so the rail/expanded switch is deterministic.
+
 - **Main-content containment:** every shell main owner is
   `width:100% / min-width:0 / max-width:100%`. No shell-level
   `overflow-x:auto` shortcut. Local scrollable regions (tables, code blocks)
@@ -566,7 +577,7 @@ document flow and navigation moves into a modal drawer.
 
 **Widths and composition.**
 
-- **Sidebar widths:** expanded 232px; collapsed 56px.
+- **Sidebar widths:** expanded 232px; collapsed rail 56px.
 - **Page max-width by surface type:**
   - reading/form pages (exam edit, question edit, settings): `max-w` 880–960px.
   - data-table pages (exam list, scores, questions, users, candidates, grading queue, audit):

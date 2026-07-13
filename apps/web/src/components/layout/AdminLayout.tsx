@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { AppSidebar, SidebarContent } from "./AppSidebar";
 import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -17,20 +18,34 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
 
 /**
- * Shell layout for the admin console. Renders a collapsible sidebar
- * (persistent at the lg breakpoint and above), a top bar with the current page
- * title and a mobile menu trigger (below lg), and an <Outlet> for child routes.
- * Below lg the same navigation authority is surfaced through a left-opening
- * drawer (DESIGN.md §9 Responsive shell). Redirects unauthenticated or
- * candidate-role users to /login.
+ * Three-state responsive admin shell (DESIGN.md §9):
+ *
+ *   <lg            mobile/tablet — sidebar removed from flow (CSS hidden),
+ *                 navigation in a left Sheet drawer; menu trigger in topbar.
+ *   lg … <xl       compact desktop — persistent 56px icon rail (collapsed).
+ *   >=xl           full desktop — persistent 232px sidebar; the user-controlled
+ *                 collapse (232→56) is available only here.
+ *
+ * Width is driven by the existing AppSidebar `collapsed` prop (w-14 vs
+ * w-[232px]); visibility below lg is CSS (`hidden lg:flex`). The shell always
+ * renders <AppSidebar> (test-visible) and selects `collapsed` from the xl
+ * breakpoint. The mobile drawer reuses the same SidebarContent authority.
+ * Redirects unauthenticated or candidate-role users to /login.
  */
 export function AdminLayout() {
   const { t } = useTranslation();
   const { user, logout, isLoading } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  // User-controlled collapse only applies at xl+ (full-desktop band). Below xl
+  // the sidebar is the compact rail by design, so userCollapsed is ignored.
+  const [userCollapsed, setUserCollapsed] = useState(false);
+  const isXl = useMediaQuery("(min-width: 80rem)");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  // In the compact band (lg … <xl) the sidebar is always the 56px rail.
+  // At xl+ it reflects the user's collapse preference.
+  const sidebarCollapsed = isXl ? userCollapsed : true;
 
   // Close the mobile drawer after route navigation.
   useEffect(() => {
@@ -85,8 +100,10 @@ export function AdminLayout() {
     >
       <AppSidebar
         user={user}
-        collapsed={collapsed}
-        onCollapse={() => setCollapsed((value) => !value)}
+        collapsed={sidebarCollapsed}
+        onCollapse={
+          isXl ? () => setUserCollapsed((value) => !value) : undefined
+        }
         onLogout={() => void logout()}
       />
       <div className="min-w-0 flex-1">
