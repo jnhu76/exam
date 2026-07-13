@@ -124,7 +124,7 @@ export function DashboardPage() {
         <CardContent>
           {!data?.recentExams || data.recentExams.length === 0 ? (
             <EmptyState
-              icon={<ClipboardList className="size-10" />}
+              icon={<AppIcon icon={ClipboardList} size="state" />}
               title={t("admin.dashboard.recent.emptyTitle")}
               description={t("admin.dashboard.recent.emptyDescription")}
               action={
