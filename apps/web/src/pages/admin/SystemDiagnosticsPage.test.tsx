@@ -121,6 +121,9 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("20")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="kpi"]'),
+    ).toHaveLength(3);
   });
 
   // Characterization (UI-MIGRATE-N-W4B): the diagnostic info/metric cards are
@@ -167,6 +170,9 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByText("已中断")).toBeInTheDocument();
     expect(screen.getByText("自动提交")).toBeInTheDocument();
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="scanner"]'),
+    ).toHaveLength(2);
   });
 
   it("renders server info with version", async () => {
@@ -328,6 +334,9 @@ describe("SystemDiagnosticsPage", () => {
     // when everything is disabled — assert presence, not uniqueness.
     expect(screen.getAllByText("已禁用").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("未启用")).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="disabled"]'),
+    ).toHaveLength(2);
   });
 
   it("does not expose SMTP secrets, recipients, or raw email body in diagnostics", async () => {

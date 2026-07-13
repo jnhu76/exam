@@ -20,6 +20,7 @@ import {
 } from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { StatsCard } from "@/components/shared/StatsCard";
 import {
   Activity,
   CircleAlert,
@@ -263,6 +264,7 @@ export function SystemDiagnosticsPage() {
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <DiagCard
+              role="information"
               icon={<AppIcon icon={Server} size="inline" />}
               title={t("diagnostics.cards.serverInfo")}
             >
@@ -277,6 +279,7 @@ export function SystemDiagnosticsPage() {
             </DiagCard>
 
             <DiagCard
+              role="information"
               icon={<AppIcon icon={Database} size="inline" />}
               title={t("diagnostics.cards.databaseStatus")}
             >
@@ -297,6 +300,7 @@ export function SystemDiagnosticsPage() {
             </DiagCard>
 
             <DiagCard
+              role="information"
               icon={<AppIcon icon={SlidersHorizontal} size="inline" />}
               title={t("diagnostics.cards.runtimeConfig")}
             >
@@ -317,6 +321,7 @@ export function SystemDiagnosticsPage() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <DiagCard
+              role="scanner"
               icon={<AppIcon icon={HeartPulse} size="inline" />}
               title={t("diagnostics.cards.heartbeatScanner")}
             >
@@ -342,6 +347,7 @@ export function SystemDiagnosticsPage() {
             </DiagCard>
 
             <DiagCard
+              role="scanner"
               icon={<AppIcon icon={Timer} size="inline" />}
               title={t("diagnostics.cards.deadlineScanner")}
             >
@@ -365,6 +371,7 @@ export function SystemDiagnosticsPage() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <DiagCard
+              role={diag.emailStatus.enabled ? "information" : "disabled"}
               icon={<AppIcon icon={Mail} size="inline" />}
               title={t("diagnostics.cards.emailInfrastructure")}
             >
@@ -393,6 +400,7 @@ export function SystemDiagnosticsPage() {
             </DiagCard>
 
             <DiagCard
+              role={diag.emailStatus.enabled ? "information" : "disabled"}
               icon={<AppIcon icon={Send} size="inline" />}
               title={t("diagnostics.cards.emailOutbox")}
             >
@@ -443,44 +451,57 @@ function MetricCard({
   const meta = getStatusMeta(status);
   const MetricIcon = meta.icon;
   return (
-    <div className="surface-content overflow-hidden">
-      <div className="px-5 pb-2 pt-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          {icon}
-          {title}
-        </div>
-      </div>
-      <div className="px-5 pb-4">
-        <div className="flex items-baseline gap-1">
-          <p className="text-3xl font-bold tabular-nums">{value}</p>
-          <span className="text-sm text-muted-foreground">{unit}</span>
-        </div>
-        <p
-          className={cn(
-            "mt-1 flex items-center gap-1 text-xs font-medium",
-            getToneTextColor(meta.tone),
-          )}
-        >
-          <AppIcon icon={MetricIcon} size="badge" />
-          {t(statusLabelKey(meta.labelKey))}
-        </p>
-      </div>
+    <div data-diagnostic-role="kpi">
+      <StatsCard
+        label={title}
+        value={value}
+        suffix={unit}
+        icon={icon}
+        supporting={
+          <p
+            className={cn(
+              "type-metadata flex items-center gap-1",
+              getToneTextColor(meta.tone),
+            )}
+          >
+            <AppIcon icon={MetricIcon} size="badge" />
+            {t(statusLabelKey(meta.labelKey))}
+          </p>
+        }
+      />
     </div>
   );
 }
 
 function DiagCard({
+  role,
   icon,
   title,
   children,
 }: {
+  role: "information" | "scanner" | "disabled";
   icon: React.ReactNode;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <div data-slot="card" className="surface-content overflow-hidden">
-      <div className="border-b px-5 py-3">
+    <div
+      data-slot="card"
+      data-diagnostic-role={role}
+      className={cn(
+        "surface-content overflow-hidden",
+        role === "disabled" && "border-border-row bg-surface-subtle",
+      )}
+    >
+      <div
+        data-slot="diagnostic-card-header"
+        className={cn(
+          "border-b border-border-row px-5 py-3",
+          role === "scanner" &&
+            "border-border-header bg-surface-subtle text-text-secondary",
+          role === "disabled" && "text-text-muted",
+        )}
+      >
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           {icon}
           {title}
