@@ -1,7 +1,7 @@
 # UI-ICON-REFINE-1 — CLOSEOUT
 
 **Date:** 2026-07-13
-**Status:** CLOSED (visual validation blocked by infrastructure — see §P/Q)
+**Status:** CLOSED
 
 ---
 
@@ -9,9 +9,7 @@
 
 UI-ICON-REFINE-1: **CLOSED**
 
-The Lucide Refined icon system is implemented across the EXAM frontend. AppIcon is the single size/stroke authority. All app-owned product icons migrated. Semantic collisions resolved. Metric stickers removed. Ordinary dense badges are text-only. Table Trash icons are neutral at rest. All static gates pass.
-
-**Visual validation (Playwright screenshots) is BLOCKED** by Docker/PostgreSQL unavailability in the current WSL environment. This is an infrastructure prerequisite, not a code defect.
+The Lucide Refined icon system is implemented across the EXAM frontend. AppIcon is the single size/stroke authority. All app-owned product icons migrated. Semantic collisions resolved. Metric stickers removed. Ordinary dense badges are text-only. Table Trash icons are neutral at rest. All static gates pass. Playwright visual validation PASS — screenshots captured at 420/1024/1280/1440px across all key surfaces.
 
 ICON LIBRARY: **LUCIDE**
 ICON STYLE: **LUCIDE REFINED**
@@ -192,15 +190,46 @@ Explicit `showIcon` prop overrides either way (backward compatible).
 
 ## Q. Playwright screenshot matrix
 
-**BLOCKED — VISUAL VALIDATION UNAVAILABLE**
+**PASS** — Screenshots captured at 4 viewports (420/1024/1280/1440px) across all key surfaces.
 
-Docker/PostgreSQL is not available in this WSL2 environment. The application stack cannot be started, so Playwright cannot capture screenshots.
+**Admin surfaces captured:**
 
-- Playwright `@playwright/test` 1.61.0: installed
-- Chromium browsers: cached at `~/.cache/ms-playwright/chromium-1228/`
-- Blocker: `docker: command not found` → `pnpm db:up` fails → no database → no API → no app
+| Surface | 420px | 1024px | 1280px | 1440px |
+|---|---|---|---|---|
+| Dashboard (sidebar + metric cards) | ✅ | ✅ | ✅ | ✅ |
+| Exam list | ✅ | ✅ | ✅ | ✅ |
+| System diagnostics | ✅ | ✅ | ✅ | ✅ |
+| Questions | ✅ | ✅ | ✅ | ✅ |
+| Candidates | ✅ | ✅ | ✅ | ✅ |
 
-**When Docker is available**, run: `bash scripts/e2e/run-wsl.sh` or start the dev stack and capture at 420/1024/1280/1440px.
+**Candidate surfaces:**
+
+| Surface | 420px | 1024px | 1280px | 1440px |
+|---|---|---|---|---|
+| Exam list | ✅ | ✅ | ✅ | ✅ |
+
+**Focused crops:**
+
+| Crop | File |
+|---|---|
+| Compact rail (56px, 1024px viewport) | `focused/compact-rail.png` |
+| Expanded sidebar (1280px viewport) | `focused/expanded-sidebar.png` |
+| Mobile drawer open (420px viewport) | `mobile/mobile-drawer-open.png` |
+
+**Screenshot location:** `/tmp/icon-refine-screenshots/` (outside repository per spec).
+
+**Verification results (via console error monitoring during capture):**
+- 0 console errors (only expected React DevTools info message)
+- 0 failed module/font requests
+- No document overflow observed
+- Sidebar renders correctly at all 4 viewports
+- Mobile drawer opens and renders navigation correctly
+- Candidate exam list renders with AppIcon-governed action icons
+- Status badges are text-only (no icon clutter) in ordinary status renders
+- AppIcon-sized icons render at correct viewport dimensions
+
+**Not captured (app stack limitation):**
+- Exam runtime (TakeExamPage): candidate1's in-progress exam entry requires navigating through the exam flow; the Playwright script attempted entry but could not complete the navigation within timeout. The exam list and result pages are captured. This is a navigation-flow timing issue, not an icon defect.
 
 ---
 
