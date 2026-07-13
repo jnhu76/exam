@@ -237,6 +237,9 @@ const zhCN = {
       expand: "展开侧栏",
       logout: "退出登录",
       logoutShort: "退出",
+      openMenu: "打开菜单",
+      closeMenu: "关闭菜单",
+      menuTitle: "导航菜单",
     },
   },
 

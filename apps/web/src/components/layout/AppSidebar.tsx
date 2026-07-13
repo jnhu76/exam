@@ -51,7 +51,8 @@ interface NavGroup {
 }
 
 /** Sidebar navigation group definitions (overview, question bank, exams).
- * Labels are i18n keys resolved at render via `t()`; no hardcoded copy. */
+ * Labels are i18n keys resolved at render via `t()`; no hardcoded copy.
+ * Shared by the desktop sidebar and the mobile navigation drawer. */
 const groups: NavGroup[] = [
   {
     labelKey: "nav.groups.overview",
@@ -108,7 +109,8 @@ const groups: NavGroup[] = [
 ];
 
 /** Sidebar navigation items visible only to Admin-role users.
- * Labels are i18n keys resolved at render via `t()`. */
+ * Labels are i18n keys resolved at render via `t()`.
+ * Shared by the desktop sidebar and the mobile navigation drawer. */
 const managementItems: NavItem[] = [
   {
     labelKey: "nav.items.users",
@@ -147,13 +149,16 @@ const managementItems: NavItem[] = [
   },
 ];
 
-/** A single navigation link in the sidebar with icon and active state styling. */
+/** A single navigation link with icon and active state styling.
+ * Shared by the desktop sidebar and the mobile navigation drawer. */
 function SidebarLink({
   collapsed,
   item,
+  onNavigate,
 }: {
   collapsed: boolean;
   item: NavItem;
+  onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
   const Icon = item.icon;
@@ -163,6 +168,7 @@ function SidebarLink({
       to={item.to}
       end={item.end}
       title={collapsed ? label : undefined}
+      onClick={onNavigate}
       className={({ isActive }) =>
         cn(
           "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
@@ -176,9 +182,112 @@ function SidebarLink({
   );
 }
 
+/** Shared navigation content: brand, nav groups, role-gated management items,
+ * user identity, and logout. Rendered inside BOTH the desktop sidebar aside
+ * (with the collapse control) and the mobile navigation drawer. This is the
+ * single navigation authority — desktop and mobile must not maintain separate
+ * nav arrays (DESIGN.md §9 Shared navigation authority). */
+export function SidebarContent({
+  user,
+  collapsed,
+  onLogout,
+  onNavigate,
+}: {
+  user: MeResponse;
+  collapsed: boolean;
+  onLogout: () => void;
+  onNavigate?: () => void;
+}) {
+  const { t } = useTranslation();
+  const showManagement = user.role === Role.Admin;
+  const management = managementItems;
+  const initials = user.name.slice(0, 2);
+
+  return (
+    <>
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
+        {groups.map((group, gi) => (
+          <section key={group.labelKey} className="flex flex-col gap-0.5">
+            {!collapsed && (
+              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
+                {t(group.labelKey as never)}
+              </p>
+            )}
+            {gi > 0 && collapsed && <Separator className="my-2" />}
+            {group.items.map((item) => (
+              <SidebarLink
+                key={item.to}
+                collapsed={collapsed}
+                item={item}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </section>
+        ))}
+        {showManagement && (
+          <section className="flex flex-col gap-0.5">
+            {!collapsed && (
+              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
+                {t("nav.groups.management")}
+              </p>
+            )}
+            {collapsed && <Separator className="my-2" />}
+            {management.map((item) => (
+              <SidebarLink
+                key={item.to}
+                collapsed={collapsed}
+                item={item}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </section>
+        )}
+      </nav>
+
+      <Separator className="bg-sidebar-border" />
+
+      <div className="p-2">
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            collapsed ? "justify-center" : "px-1",
+          )}
+        >
+          <Avatar className="size-8">
+            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          {!collapsed && (
+            <span className="flex-1 truncate text-sm text-sidebar-text">
+              {user.name}
+            </span>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="mt-1 w-full justify-center text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
+          aria-label={t("nav.actions.logout")}
+          onClick={onLogout}
+        >
+          <LogOut className="size-4" aria-hidden="true" />
+          {!collapsed && (
+            <span className="ml-2">{t("nav.actions.logoutShort")}</span>
+          )}
+        </Button>
+      </div>
+    </>
+  );
+}
+
 /**
  * Collapsible admin sidebar with grouped navigation links,
  * user avatar, and logout button. Shows management items only for Admin role.
+ * Rendered only at the `lg` breakpoint and above (persistent desktop sidebar);
+ * below `lg` the same navigation authority is surfaced through the mobile
+ * navigation drawer in AdminLayout.
  */
 export function AppSidebar({
   user,
@@ -187,16 +296,12 @@ export function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   const { t } = useTranslation();
-  const showManagement = user.role === Role.Admin;
-  const management = managementItems;
-
-  const initials = user.name.slice(0, 2);
 
   return (
     <aside
       data-testid="app-sidebar"
       className={cn(
-        "flex min-h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width]",
+        "hidden min-h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] lg:flex",
         collapsed ? "w-14" : "w-[232px]",
       )}
     >
@@ -241,69 +346,7 @@ export function AppSidebar({
         )}
       </div>
 
-      <nav className="flex-1 flex flex-col gap-1 overflow-y-auto px-2 py-2">
-        {groups.map((group, gi) => (
-          <section key={group.labelKey} className="flex flex-col gap-0.5">
-            {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
-                {t(group.labelKey as never)}
-              </p>
-            )}
-            {gi > 0 && collapsed && <Separator className="my-2" />}
-            {group.items.map((item) => (
-              <SidebarLink key={item.to} collapsed={collapsed} item={item} />
-            ))}
-          </section>
-        ))}
-        {showManagement && (
-          <section className="flex flex-col gap-0.5">
-            {!collapsed && (
-              <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
-                {t("nav.groups.management")}
-              </p>
-            )}
-            {collapsed && <Separator className="my-2" />}
-            {management.map((item) => (
-              <SidebarLink key={item.to} collapsed={collapsed} item={item} />
-            ))}
-          </section>
-        )}
-      </nav>
-
-      <Separator className="bg-sidebar-border" />
-
-      <div className="p-2">
-        <div
-          className={cn(
-            "flex items-center gap-2",
-            collapsed ? "justify-center" : "px-1",
-          )}
-        >
-          <Avatar className="size-8">
-            <AvatarFallback className="bg-sidebar-accent text-xs text-sidebar-foreground">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          {!collapsed && (
-            <span className="flex-1 truncate text-sm text-sidebar-text">
-              {user.name}
-            </span>
-          )}
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="mt-1 w-full justify-center text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-foreground"
-          aria-label={t("nav.actions.logout")}
-          onClick={onLogout}
-        >
-          <LogOut className="size-4" aria-hidden="true" />
-          {!collapsed && (
-            <span className="ml-2">{t("nav.actions.logoutShort")}</span>
-          )}
-        </Button>
-      </div>
+      <SidebarContent user={user} collapsed={collapsed} onLogout={onLogout} />
     </aside>
   );
 }
