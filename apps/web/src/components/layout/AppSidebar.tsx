@@ -4,24 +4,27 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
-  ClipboardCheck,
   ClipboardList,
   FileUp,
   Gauge,
   GraduationCap,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Monitor,
   ScrollText,
   Settings,
   Tags,
   Upload,
-  UserRoundCog,
+  UserRoundCheck,
   Users,
+  UsersRound,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -40,7 +43,7 @@ interface AppSidebarProps {
 interface NavItem {
   labelKey: string;
   to: string;
-  icon: typeof BookOpen;
+  icon: LucideIcon;
   end?: boolean;
 }
 
@@ -97,7 +100,7 @@ const groups: NavGroup[] = [
       {
         labelKey: "nav.items.gradingQueue",
         to: routes.admin.gradingQueue,
-        icon: ClipboardCheck,
+        icon: ListChecks,
       },
       {
         labelKey: "nav.items.results",
@@ -115,12 +118,12 @@ const managementItems: NavItem[] = [
   {
     labelKey: "nav.items.users",
     to: routes.admin.users,
-    icon: UserRoundCog,
+    icon: UsersRound,
   },
   {
     labelKey: "nav.items.candidates",
     to: routes.admin.candidates,
-    icon: Users,
+    icon: UserRoundCheck,
   },
   {
     labelKey: "nav.items.importLogs",
@@ -176,7 +179,7 @@ function SidebarLink({
         )
       }
     >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
+      <AppIcon icon={Icon} size="nav" />
       {!collapsed && <span>{label}</span>}
     </NavLink>
   );
@@ -272,7 +275,7 @@ export function SidebarContent({
           aria-label={t("nav.actions.logout")}
           onClick={onLogout}
         >
-          <LogOut className="size-4" aria-hidden="true" />
+          <AppIcon icon={LogOut} size="nav" />
           {!collapsed && (
             <span className="ml-2">{t("nav.actions.logoutShort")}</span>
           )}
@@ -328,7 +331,7 @@ export function AppSidebar({
             aria-label={t("nav.actions.collapse")}
             onClick={onCollapse}
           >
-            <ChevronLeft className="size-4" aria-hidden="true" />
+            <AppIcon icon={ChevronLeft} size="nav" />
           </Button>
         )}
         {onCollapse && collapsed && (
@@ -341,7 +344,7 @@ export function AppSidebar({
             aria-label={t("nav.actions.expand")}
             onClick={onCollapse}
           >
-            <ChevronRight className="size-4" aria-hidden="true" />
+            <AppIcon icon={ChevronRight} size="nav" />
           </Button>
         )}
       </div>

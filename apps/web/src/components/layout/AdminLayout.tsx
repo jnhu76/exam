@@ -4,6 +4,7 @@ import { Navigate, Outlet, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { AppSidebar, SidebarContent } from "./AppSidebar";
 import { BrandHeader } from "./BrandHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { useAuth } from "@/hooks/useAuth";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { Button } from "@/components/ui/button";
@@ -121,7 +122,7 @@ export function AdminLayout() {
             aria-haspopup="dialog"
             onClick={() => setMobileNavOpen(true)}
           >
-            <Menu className="size-5" aria-hidden="true" />
+            <AppIcon icon={Menu} size="metric" />
           </Button>
           <div className="min-w-0 text-sm font-medium text-foreground">
             {topbarTitle}
@@ -156,7 +157,7 @@ export function AdminLayout() {
               aria-label={t("nav.actions.closeMenu")}
               onClick={() => setMobileNavOpen(false)}
             >
-              <X className="size-4" aria-hidden="true" />
+              <AppIcon icon={X} size="metric" />
             </Button>
           </div>
           <Separator className="bg-sidebar-border" />
