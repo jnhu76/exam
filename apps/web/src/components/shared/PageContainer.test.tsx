@@ -11,6 +11,7 @@ describe("PageContainer", () => {
 
   it.each([
     ["admin-standard", "max-w-7xl"],
+    ["admin-sparse", "max-w-5xl"],
     ["admin-wide", "max-w-screen-2xl"],
     ["form", "max-w-4xl"],
     ["auth", "max-w-md"],

@@ -1,6 +1,8 @@
 import { useId, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
+export type DataTableMinWidth = "compact" | "standard" | "wide";
+
 /**
  * Standard shell for data table pages, providing an optional title, description,
  * toolbar slot, content area, and footer within a bordered card container.
@@ -13,6 +15,7 @@ export function DataTableShell({
   footer,
   className,
   contentClassName,
+  minTableWidth = "standard",
 }: {
   title?: string;
   description?: string;
@@ -21,6 +24,7 @@ export function DataTableShell({
   footer?: ReactNode;
   className?: string;
   contentClassName?: string;
+  minTableWidth?: DataTableMinWidth;
 }) {
   const shellId = useId();
   const titleId = title ? `${shellId}-title` : undefined;
@@ -31,6 +35,7 @@ export function DataTableShell({
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       data-slot="admin-table-shell"
+      data-table-min-width={minTableWidth}
       className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (
@@ -55,7 +60,13 @@ export function DataTableShell({
           {toolbar && <div className="shrink-0">{toolbar}</div>}
         </div>
       )}
-      <div className={cn("min-w-0", contentClassName)}>{children}</div>
+      <div
+        data-slot="table-scroll-region"
+        data-overflow-owner="local"
+        className={cn("min-w-0 overflow-x-auto", contentClassName)}
+      >
+        {children}
+      </div>
       {footer && (
         <div className="border-t bg-surface-subtle px-4 py-3">{footer}</div>
       )}

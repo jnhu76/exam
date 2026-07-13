@@ -100,4 +100,37 @@ describe("ExamPage", () => {
       screen.queryByRole("toolbar", { name: "考试列表工具栏" }),
     ).not.toBeInTheDocument();
   });
+
+  it("declares atomic duration, score, date and action columns", async () => {
+    renderPage();
+
+    const duration = await screen.findAllByText("60分钟");
+    const score = await screen.findAllByText("60/100");
+    const deleteButtons = await screen.findAllByRole("button", {
+      name: "删除考试",
+    });
+
+    expect(duration[0]?.closest("td")).toHaveAttribute(
+      "data-column-role",
+      "duration",
+    );
+    expect(duration[0]?.closest("td")).toHaveAttribute(
+      "data-column-wrap",
+      "atomic",
+    );
+    expect(score[0]?.closest("td")).toHaveAttribute(
+      "data-column-role",
+      "score",
+    );
+    expect(
+      document.querySelector('col[data-column-role="date-range"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('col[data-column-role="actions"]'),
+    ).toBeInTheDocument();
+    expect(deleteButtons[0]).toHaveAttribute(
+      "data-row-action-tone",
+      "destructive",
+    );
+  });
 });

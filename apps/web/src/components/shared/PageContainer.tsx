@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 export type PageContainerRole =
   | "admin-standard"
+  | "admin-sparse"
   | "admin-wide"
   | "form"
   | "auth"
@@ -10,6 +11,7 @@ export type PageContainerRole =
 
 const roleClasses: Record<PageContainerRole, string> = {
   "admin-standard": "max-w-7xl",
+  "admin-sparse": "max-w-5xl",
   "admin-wide": "max-w-screen-2xl",
   form: "max-w-4xl",
   auth: "max-w-md",

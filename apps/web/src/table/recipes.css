@@ -1,0 +1,143 @@
+/*
+ * Semantic data-table recipes. DataTableContract owns column allocation and
+ * wrap policy; DataTableShell owns the local scroll and interaction surface.
+ */
+
+[data-slot="data-table-columns"] [data-column-role="primary-text"] {
+  width: auto;
+}
+
+[data-slot="admin-table-shell"][data-table-min-width="compact"]
+  [data-slot="table"] {
+  min-width: 45rem;
+}
+
+[data-slot="admin-table-shell"][data-table-min-width="standard"]
+  [data-slot="table"] {
+  min-width: 61.25rem;
+}
+
+[data-slot="admin-table-shell"][data-table-min-width="wide"]
+  [data-slot="table"] {
+  min-width: 75rem;
+}
+
+[data-column-role="primary-text"] {
+  min-width: 13.75rem;
+}
+
+[data-column-role="secondary-text"] {
+  min-width: 10rem;
+}
+
+[data-column-role="long-text"] {
+  min-width: 18rem;
+}
+
+[data-column-role="description"] {
+  min-width: 16rem;
+}
+
+[data-column-role="status"] {
+  width: 6rem;
+  min-width: 6rem;
+}
+
+[data-column-role="date"] {
+  width: 9.5rem;
+  min-width: 9.5rem;
+}
+
+[data-column-role="date-range"] {
+  width: 14rem;
+  min-width: 14rem;
+}
+
+[data-column-role="duration"] {
+  width: 5.5rem;
+  min-width: 5.5rem;
+}
+
+[data-column-role="number"] {
+  width: 4.5rem;
+  min-width: 4.5rem;
+}
+
+[data-column-role="score"] {
+  width: 5.5rem;
+  min-width: 5.5rem;
+}
+
+[data-column-role="short-id"] {
+  width: 9rem;
+  min-width: 9rem;
+}
+
+[data-column-role="type"] {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+
+[data-column-role="tag-list"] {
+  min-width: 11rem;
+}
+
+[data-column-role="actions"] {
+  width: 6.5rem;
+  min-width: 6.5rem;
+}
+
+[data-slot="table-head"][data-column-wrap="atomic"],
+[data-slot="table-cell"][data-column-wrap="atomic"] {
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+[data-slot="table-head"][data-column-role="number"],
+[data-slot="table-cell"][data-column-role="number"],
+[data-slot="table-head"][data-column-role="score"],
+[data-slot="table-cell"][data-column-role="score"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="table-head"][data-column-role="duration"],
+[data-slot="table-cell"][data-column-role="duration"],
+[data-slot="table-head"][data-column-role="date"],
+[data-slot="table-cell"][data-column-role="date"],
+[data-slot="table-head"][data-column-role="date-range"],
+[data-slot="table-cell"][data-column-role="date-range"] {
+  font-variant-numeric: tabular-nums;
+}
+
+[data-slot="table-head"][data-column-role="actions"],
+[data-slot="table-cell"][data-column-role="actions"] {
+  padding-inline: 0.75rem;
+  text-align: right;
+}
+
+[data-slot="row-actions"] [data-slot="button"] {
+  border-radius: 0.375rem;
+}
+
+[data-slot="row-actions"] [data-slot="button"]:hover,
+[data-slot="row-actions"] [data-slot="button"]:focus-visible {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+[data-slot="row-actions"]
+  [data-slot="button"][data-row-action-tone="destructive"]:hover,
+[data-slot="row-actions"]
+  [data-slot="button"][data-row-action-tone="destructive"]:focus-visible {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@media (pointer: coarse) {
+  [data-slot="row-actions"] [data-slot="button"] {
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+}

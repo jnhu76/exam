@@ -279,7 +279,14 @@ describe("RowActions", () => {
       </RowActions>,
     );
 
-    expect(screen.getByRole("group", { name: "行操作" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "行操作" })).toHaveAttribute(
+      "data-slot",
+      "row-actions",
+    );
+    expect(screen.getByRole("group", { name: "行操作" })).toHaveAttribute(
+      "data-action-target",
+      "responsive",
+    );
     expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
@@ -454,6 +461,9 @@ describe("StatsCard", () => {
       "data-slot",
       "stats-card-icon",
     );
+    expect(
+      screen.getByText("12").closest('[data-slot="stats-card"]'),
+    ).toHaveAttribute("data-depth", "micro");
   });
 });
 
@@ -694,5 +704,23 @@ describe("DataTableShell", () => {
 
     expect(shell).toHaveClass("surface-content", "overflow-hidden");
     expect(header).toHaveClass("bg-surface-subtle", "border-b");
+  });
+
+  it("owns local overflow and a governed minimum table width", () => {
+    render(
+      <DataTableShell minTableWidth="wide">
+        <table aria-label="宽表格" />
+      </DataTableShell>,
+    );
+
+    const shell = screen
+      .getByRole("table", { name: "宽表格" })
+      .closest('[data-slot="admin-table-shell"]');
+    const scrollRegion = screen
+      .getByRole("table", { name: "宽表格" })
+      .closest('[data-slot="table-scroll-region"]');
+
+    expect(shell).toHaveAttribute("data-table-min-width", "wide");
+    expect(scrollRegion).toHaveAttribute("data-overflow-owner", "local");
   });
 });

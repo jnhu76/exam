@@ -11,6 +11,12 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -18,14 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 
 /** Row shape returned by the exams list API. */
@@ -130,28 +129,44 @@ export function ExamPage() {
               }
             >
               <Table>
+                <DataTableColumns
+                  columns={[
+                    { role: "primary-text" },
+                    { role: "status" },
+                    { role: "date-range" },
+                    { role: "duration" },
+                    { role: "number", key: "question-count" },
+                    { role: "number", key: "participant-count" },
+                    { role: "score" },
+                    { role: "actions" },
+                  ]}
+                />
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("admin.exams.columns.title")}</TableHead>
-                    <TableHead className="w-20">
+                    <DataTableHead role="primary-text">
+                      {t("admin.exams.columns.title")}
+                    </DataTableHead>
+                    <DataTableHead role="status">
                       {t("admin.exams.columns.status")}
-                    </TableHead>
-                    <TableHead>{t("admin.exams.columns.timeWindow")}</TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="date-range">
+                      {t("admin.exams.columns.timeWindow")}
+                    </DataTableHead>
+                    <DataTableHead role="duration">
                       {t("admin.exams.columns.duration")}
-                    </TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="number">
                       {t("admin.exams.columns.questionCount")}
-                    </TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="number">
                       {t("admin.exams.columns.participants")}
-                    </TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="score">
                       {t("admin.exams.columns.passingScore")}
-                    </TableHead>
-                    <TableHead className="w-32">
+                    </DataTableHead>
+                    <DataTableHead role="actions">
                       {t("admin.exams.columns.actions")}
-                    </TableHead>
+                    </DataTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -162,6 +177,7 @@ export function ExamPage() {
                         size="icon"
                         aria-label={t("admin.exams.deleteLabel")}
                         disabled={!exam.canDelete}
+                        data-row-action-tone="destructive"
                       >
                         <AppIcon icon={Trash2} size="inline" />
                       </Button>
@@ -169,28 +185,38 @@ export function ExamPage() {
 
                     return (
                       <TableRow key={exam.id}>
-                        <TableCell className="font-medium">
+                        <DataTableCell
+                          role="primary-text"
+                          className="font-medium"
+                        >
                           {exam.title}
-                        </TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="status">
                           <StatusBadge status={exam.status} />
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        </DataTableCell>
+                        <DataTableCell
+                          role="date-range"
+                          className="text-sm text-muted-foreground"
+                        >
                           {new Date(exam.openAt).toLocaleDateString()} -{" "}
                           {new Date(exam.closeAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="duration">
                           {t("admin.exams.duration", {
                             min: exam.durationMinutes,
                           })}
-                        </TableCell>
-                        <TableCell>{exam.questionIds.length}</TableCell>
-                        <TableCell>{exam.participantCount}</TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="number">
+                          {exam.questionIds.length}
+                        </DataTableCell>
+                        <DataTableCell role="number">
+                          {exam.participantCount}
+                        </DataTableCell>
+                        <DataTableCell role="score">
                           {exam.passingScore}/{exam.totalScore}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
+                        </DataTableCell>
+                        <DataTableCell role="actions">
+                          <RowActions>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -228,8 +254,8 @@ export function ExamPage() {
                                 </TooltipContent>
                               </Tooltip>
                             )}
-                          </div>
-                        </TableCell>
+                          </RowActions>
+                        </DataTableCell>
                       </TableRow>
                     );
                   })}
