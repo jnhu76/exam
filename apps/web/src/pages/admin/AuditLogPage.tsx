@@ -8,16 +8,14 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { DataToolbar } from "@/components/shared/DataToolbar";
 import { DatePicker } from "@/components/shared/DatePicker";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -289,13 +287,32 @@ export function AuditLogPage() {
         <>
           <DataTableShell>
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "date" },
+                  { role: "secondary-text" },
+                  { role: "type", key: "action" },
+                  { role: "type", key: "target" },
+                  { role: "short-id" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("admin.audit.columns.time")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.actor")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.action")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.target")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.detail")}</TableHead>
+                  <DataTableHead role="date">
+                    {t("admin.audit.columns.time")}
+                  </DataTableHead>
+                  <DataTableHead role="secondary-text">
+                    {t("admin.audit.columns.actor")}
+                  </DataTableHead>
+                  <DataTableHead role="type">
+                    {t("admin.audit.columns.action")}
+                  </DataTableHead>
+                  <DataTableHead role="type">
+                    {t("admin.audit.columns.target")}
+                  </DataTableHead>
+                  <DataTableHead role="short-id">
+                    {t("admin.audit.columns.detail")}
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -307,21 +324,30 @@ export function AuditLogPage() {
                       setExpandedId(expandedId === item.id ? null : item.id)
                     }
                   >
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    <DataTableCell
+                      role="date"
+                      className="text-sm text-muted-foreground"
+                    >
                       {new Date(item.createdAt).toLocaleString("zh-CN")}
-                    </TableCell>
-                    <TableCell className="font-medium">
+                    </DataTableCell>
+                    <DataTableCell
+                      role="secondary-text"
+                      className="font-medium"
+                    >
                       {item.actorName ?? item.actorId}
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="type">
                       <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
                         {item.action}
                       </span>
-                    </TableCell>
-                    <TableCell>{item.targetType}</TableCell>
-                    <TableCell className="max-w-[120px] truncate text-sm text-muted-foreground">
+                    </DataTableCell>
+                    <DataTableCell role="type">{item.targetType}</DataTableCell>
+                    <DataTableCell
+                      role="short-id"
+                      className="truncate text-sm text-muted-foreground"
+                    >
                       {item.targetId}
-                    </TableCell>
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>

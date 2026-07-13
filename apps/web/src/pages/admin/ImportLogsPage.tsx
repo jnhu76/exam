@@ -8,15 +8,13 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DataTableShell } from "@/components/shared/DataTableShell";
-import { DataToolbar } from "@/components/shared/DataToolbar";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { DataToolbar } from "@/components/shared/DataToolbar";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -163,15 +161,40 @@ export function ImportLogsPage() {
       </DataToolbar>
       <DataTableShell>
         <Table>
+          <DataTableColumns
+            columns={[
+              { role: "date" },
+              { role: "type" },
+              { role: "status" },
+              { role: "number", key: "total" },
+              { role: "number", key: "created" },
+              { role: "number", key: "updated" },
+              { role: "number", key: "errors" },
+            ]}
+          />
           <TableHeader>
             <TableRow>
-              <TableHead>{t("admin.importLogs.columns.time")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.type")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.status")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.total")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.created")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.updated")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.errors")}</TableHead>
+              <DataTableHead role="date">
+                {t("admin.importLogs.columns.time")}
+              </DataTableHead>
+              <DataTableHead role="type">
+                {t("admin.importLogs.columns.type")}
+              </DataTableHead>
+              <DataTableHead role="status">
+                {t("admin.importLogs.columns.status")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.total")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.created")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.updated")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.errors")}
+              </DataTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -183,27 +206,30 @@ export function ImportLogsPage() {
                   setExpandedId(expandedId === item.id ? null : item.id)
                 }
               >
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                <DataTableCell
+                  role="date"
+                  className="text-sm text-muted-foreground"
+                >
                   {new Date(item.createdAt).toLocaleString("zh-CN")}
-                </TableCell>
-                <TableCell>
+                </DataTableCell>
+                <DataTableCell role="type">
                   {t(
                     (TYPE_LABELS[item.type] ??
                       "admin.importLogs.typeFilters.all") as "admin.importLogs.typeLabels.candidate",
                   )}
-                </TableCell>
-                <TableCell>
+                </DataTableCell>
+                <DataTableCell role="status">
                   <Badge variant={STATUS_CONFIG[item.status]?.variant}>
                     {t(
                       (STATUS_CONFIG[item.status]?.labelKey ??
                         "admin.importLogs.statusConfig.completed") as "admin.importLogs.statusConfig.completed",
                     )}
                   </Badge>
-                </TableCell>
-                <TableCell>{item.total}</TableCell>
-                <TableCell>{item.createdCount}</TableCell>
-                <TableCell>{item.updatedCount}</TableCell>
-                <TableCell>{item.errors}</TableCell>
+                </DataTableCell>
+                <DataTableCell role="number">{item.total}</DataTableCell>
+                <DataTableCell role="number">{item.createdCount}</DataTableCell>
+                <DataTableCell role="number">{item.updatedCount}</DataTableCell>
+                <DataTableCell role="number">{item.errors}</DataTableCell>
               </TableRow>
             ))}
           </TableBody>

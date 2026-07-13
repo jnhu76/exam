@@ -10,13 +10,11 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Pagination,
   PaginationContent,
@@ -105,13 +103,32 @@ export function GradingQueuePage() {
       />
       <DataTableShell>
         <Table>
+          <DataTableColumns
+            columns={[
+              { role: "primary-text" },
+              { role: "secondary-text" },
+              { role: "date" },
+              { role: "number" },
+              { role: "status" },
+            ]}
+          />
           <TableHeader>
             <TableRow>
-              <TableHead>{t("admin.grading.columns.candidate")}</TableHead>
-              <TableHead>{t("admin.grading.columns.exam")}</TableHead>
-              <TableHead>{t("admin.grading.columns.submittedAt")}</TableHead>
-              <TableHead>{t("admin.grading.columns.pendingCount")}</TableHead>
-              <TableHead>{t("admin.grading.columns.status")}</TableHead>
+              <DataTableHead role="primary-text">
+                {t("admin.grading.columns.candidate")}
+              </DataTableHead>
+              <DataTableHead role="secondary-text">
+                {t("admin.grading.columns.exam")}
+              </DataTableHead>
+              <DataTableHead role="date">
+                {t("admin.grading.columns.submittedAt")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.grading.columns.pendingCount")}
+              </DataTableHead>
+              <DataTableHead role="status">
+                {t("admin.grading.columns.status")}
+              </DataTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -124,19 +141,23 @@ export function GradingQueuePage() {
                   navigate(`/admin/grading-queue/${item.attemptId}`)
                 }
               >
-                <TableCell className="font-medium">
+                <DataTableCell role="primary-text" className="font-medium">
                   {item.candidateName}
-                </TableCell>
-                <TableCell>{item.examTitle}</TableCell>
-                <TableCell>
+                </DataTableCell>
+                <DataTableCell role="secondary-text">
+                  {item.examTitle}
+                </DataTableCell>
+                <DataTableCell role="date">
                   {item.submittedAt
                     ? new Date(item.submittedAt).toLocaleString("zh-CN")
                     : "-"}
-                </TableCell>
-                <TableCell>{item.pendingQuestionCount}</TableCell>
-                <TableCell>
+                </DataTableCell>
+                <DataTableCell role="number">
+                  {item.pendingQuestionCount}
+                </DataTableCell>
+                <DataTableCell role="status">
                   <StatusBadge status={item.gradingStatus} />
-                </TableCell>
+                </DataTableCell>
               </TableRow>
             ))}
           </TableBody>

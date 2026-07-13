@@ -12,17 +12,15 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { DataToolbar } from "@/components/shared/DataToolbar";
 import { RowActions } from "@/components/shared/RowActions";
 import { StatsCard } from "@/components/shared/StatsCard";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Pagination,
@@ -289,45 +287,63 @@ export function ScoreListPage() {
           />
         ) : (
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "primary-text" },
+                { role: "secondary-text" },
+                { role: "score" },
+                { role: "status" },
+                { role: "date" },
+                { role: "actions" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead>
+                <DataTableHead role="primary-text">
                   {t("admin.scoreList.columns.candidateName")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="secondary-text">
                   {t("admin.scoreList.columns.candidateInfo")}
-                </TableHead>
-                <TableHead>{t("admin.scoreList.columns.score")}</TableHead>
-                <TableHead>{t("admin.scoreList.columns.status")}</TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="score">
+                  {t("admin.scoreList.columns.score")}
+                </DataTableHead>
+                <DataTableHead role="status">
+                  {t("admin.scoreList.columns.status")}
+                </DataTableHead>
+                <DataTableHead role="date">
                   {t("admin.scoreList.columns.submittedAt")}
-                </TableHead>
-                <TableHead>{t("admin.scoreList.columns.actions")}</TableHead>
+                </DataTableHead>
+                <DataTableHead role="actions">
+                  {t("admin.scoreList.columns.actions")}
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {scores.items.map((item) => (
                 <TableRow key={item.attemptId}>
-                  <TableCell className="font-medium">
+                  <DataTableCell role="primary-text" className="font-medium">
                     {item.candidateName}
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="secondary-text">
                     {Object.values(item.candidateFields)
                       .map(String)
                       .join(" / ") || "-"}
-                  </TableCell>
-                  <TableCell className="font-bold">{item.score}</TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="score" className="font-bold">
+                    {item.score}
+                  </DataTableCell>
+                  <DataTableCell role="status">
                     <StatusBadge
                       status={item.passed ? "passed" : "not_passed"}
                     />
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="date">
                     {item.submittedAt
                       ? new Date(item.submittedAt).toLocaleString()
                       : "-"}
-                  </TableCell>
-                  <TableCell className="text-right">
+                  </DataTableCell>
+                  <DataTableCell role="actions">
                     <RowActions>
                       <Button
                         variant="ghost"
@@ -339,7 +355,7 @@ export function ScoreListPage() {
                         {t("admin.scoreList.actions.viewDetail")}
                       </Button>
                     </RowActions>
-                  </TableCell>
+                  </DataTableCell>
                 </TableRow>
               ))}
             </TableBody>

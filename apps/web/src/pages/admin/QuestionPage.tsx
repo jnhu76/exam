@@ -13,6 +13,11 @@ import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,14 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   BookOpen,
   FileUp,
@@ -358,44 +356,59 @@ export function QuestionPage() {
         <>
           <DataTableShell>
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "type" },
+                  { role: "long-text" },
+                  { role: "secondary-text" },
+                  { role: "score" },
+                  { role: "number" },
+                  { role: "tag-list" },
+                  { role: "actions" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-16">
+                  <DataTableHead role="type">
                     {t("admin.questions.columns.type")}
-                  </TableHead>
-                  <TableHead>{t("admin.questions.columns.content")}</TableHead>
-                  <TableHead>{t("admin.questions.columns.course")}</TableHead>
-                  <TableHead className="w-16">
+                  </DataTableHead>
+                  <DataTableHead role="long-text">
+                    {t("admin.questions.columns.content")}
+                  </DataTableHead>
+                  <DataTableHead role="secondary-text">
+                    {t("admin.questions.columns.course")}
+                  </DataTableHead>
+                  <DataTableHead role="score">
                     {t("admin.questions.columns.score")}
-                  </TableHead>
-                  <TableHead className="w-16">
+                  </DataTableHead>
+                  <DataTableHead role="number">
                     {t("admin.questions.columns.difficulty")}
-                  </TableHead>
-                  <TableHead>{t("admin.questions.columns.tags")}</TableHead>
-                  <TableHead className="w-24">
+                  </DataTableHead>
+                  <DataTableHead role="tag-list">
+                    {t("admin.questions.columns.tags")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
                     {t("admin.questions.columns.actions")}
-                  </TableHead>
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map((q) => (
                   <TableRow key={q.id}>
-                    <TableCell>
+                    <DataTableCell role="type">
                       <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
                         {getTypeLabel(q.type, t) ?? q.type}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[300px] truncate">
+                    </DataTableCell>
+                    <DataTableCell role="long-text" className="truncate">
                       {q.content}
-                    </TableCell>
-                    <TableCell>{courseMap.get(q.courseId) ?? "-"}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {q.score}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {q.difficulty}
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="secondary-text">
+                      {courseMap.get(q.courseId) ?? "-"}
+                    </DataTableCell>
+                    <DataTableCell role="score">{q.score}</DataTableCell>
+                    <DataTableCell role="number">{q.difficulty}</DataTableCell>
+                    <DataTableCell role="tag-list">
                       <div className="flex flex-wrap gap-1">
                         {q.tags.map((tag) => (
                           <Badge
@@ -407,8 +420,8 @@ export function QuestionPage() {
                           </Badge>
                         ))}
                       </div>
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="actions">
                       <RowActions>
                         <Button
                           variant="ghost"
@@ -426,6 +439,7 @@ export function QuestionPage() {
                               variant="ghost"
                               size="icon"
                               aria-label={t("admin.questions.deleteLabel")}
+                              data-row-action-tone="destructive"
                             >
                               <AppIcon icon={Trash2} size="inline" />
                             </Button>
@@ -438,7 +452,7 @@ export function QuestionPage() {
                           onConfirm={() => void handleDelete(q.id)}
                         />
                       </RowActions>
-                    </TableCell>
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>

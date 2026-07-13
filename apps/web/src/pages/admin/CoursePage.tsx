@@ -12,6 +12,11 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { ListToolbar } from "@/components/shared/ListToolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,14 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -239,33 +237,47 @@ export function CoursePage() {
             }
           />
         ) : (
-          <DataTableShell>
+          <DataTableShell minTableWidth="compact">
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "primary-text" },
+                  { role: "short-id" },
+                  { role: "description" },
+                  { role: "actions" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("admin.courses.columns.name")}</TableHead>
-                  <TableHead>{t("admin.courses.columns.code")}</TableHead>
-                  <TableHead>
+                  <DataTableHead role="primary-text">
+                    {t("admin.courses.columns.name")}
+                  </DataTableHead>
+                  <DataTableHead role="short-id">
+                    {t("admin.courses.columns.code")}
+                  </DataTableHead>
+                  <DataTableHead role="description">
                     {t("admin.courses.columns.description")}
-                  </TableHead>
-                  <TableHead className="w-24">
+                  </DataTableHead>
+                  <DataTableHead role="actions">
                     {t("admin.courses.columns.actions")}
-                  </TableHead>
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCourses.map((course) => (
                   <TableRow key={course.id}>
-                    <TableCell className="font-medium">{course.name}</TableCell>
-                    <TableCell>{course.code}</TableCell>
-                    <TableCell className="max-w-[360px]">
+                    <DataTableCell role="primary-text" className="font-medium">
+                      {course.name}
+                    </DataTableCell>
+                    <DataTableCell role="short-id">{course.code}</DataTableCell>
+                    <DataTableCell role="description">
                       {course.description ? (
                         <TruncatedCell text={course.description} />
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="actions">
                       <RowActions>
                         <Button
                           variant="ghost"
@@ -281,6 +293,7 @@ export function CoursePage() {
                               variant="ghost"
                               size="icon"
                               aria-label={t("admin.courses.deleteLabel")}
+                              data-row-action-tone="destructive"
                             >
                               <AppIcon icon={Trash2} size="inline" />
                             </Button>
@@ -294,7 +307,7 @@ export function CoursePage() {
                           onConfirm={() => void handleDelete(course.id)}
                         />
                       </RowActions>
-                    </TableCell>
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>

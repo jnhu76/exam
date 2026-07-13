@@ -97,11 +97,13 @@ export function AdminLayout() {
   const containerRole =
     location.pathname === "/admin/system"
       ? "admin-wide"
-      : /^\/admin\/(settings|candidate-fields|questions\/(new|import|[^/]+\/edit)|exams\/(new|[^/]+\/edit))$/.test(
-            location.pathname,
-          )
-        ? "form"
-        : "admin-standard";
+      : location.pathname === "/admin/users"
+        ? "admin-sparse"
+        : /^\/admin\/(settings|candidate-fields|questions\/(new|import|[^/]+\/edit)|exams\/(new|[^/]+\/edit))$/.test(
+              location.pathname,
+            )
+          ? "form"
+          : "admin-standard";
 
   return (
     <div

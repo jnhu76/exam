@@ -12,6 +12,11 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -30,14 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ArrowDown,
   ArrowUp,
@@ -252,27 +250,40 @@ export function CandidateFieldsPage() {
       ) : (
         <DataTableShell>
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "short-id" },
+                { role: "primary-text" },
+                { role: "type", key: "field-type" },
+                { role: "type", key: "required" },
+                { role: "type", key: "unique" },
+                { role: "number" },
+                { role: "actions" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead>
+                <DataTableHead role="short-id">
                   {t("admin.candidateFields.columns.fieldName")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="primary-text">
                   {t("admin.candidateFields.columns.label")}
-                </TableHead>
-                <TableHead>{t("admin.candidateFields.columns.type")}</TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="type">
+                  {t("admin.candidateFields.columns.type")}
+                </DataTableHead>
+                <DataTableHead role="type">
                   {t("admin.candidateFields.columns.required")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="type">
                   {t("admin.candidateFields.columns.unique")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="number">
                   {t("admin.candidateFields.columns.sortOrder")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="actions">
                   {t("admin.candidateFields.columns.actions")}
-                </TableHead>
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -285,25 +296,27 @@ export function CandidateFieldsPage() {
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => void drop(field)}
                 >
-                  <TableCell>{field.name}</TableCell>
-                  <TableCell>{field.label}</TableCell>
-                  <TableCell>
+                  <DataTableCell role="short-id">{field.name}</DataTableCell>
+                  <DataTableCell role="primary-text">
+                    {field.label}
+                  </DataTableCell>
+                  <DataTableCell role="type">
                     {t(
                       `admin.candidateFields.typeLabels.${field.fieldType}` as any,
                     )}
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="type">
                     {t(
                       `admin.candidateFields.requiredLabels.${field.required}` as any,
                     )}
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="type">
                     {t(
                       `admin.candidateFields.requiredLabels.${field.unique}` as any,
                     )}
-                  </TableCell>
-                  <TableCell>{field.sortOrder}</TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="number">{field.sortOrder}</DataTableCell>
+                  <DataTableCell role="actions">
                     <RowActions>
                       <Button
                         size="icon"
@@ -337,6 +350,7 @@ export function CandidateFieldsPage() {
                             size="icon"
                             variant="ghost"
                             aria-label={t("admin.candidateFields.deleteLabel")}
+                            data-row-action-tone="destructive"
                           >
                             <AppIcon icon={Trash2} size="inline" />
                           </Button>
@@ -350,7 +364,7 @@ export function CandidateFieldsPage() {
                         onConfirm={() => void remove(field.id)}
                       />
                     </RowActions>
-                  </TableCell>
+                  </DataTableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -13,13 +13,12 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { RowActions } from "@/components/shared/RowActions";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ClipboardList,
   Eye,
@@ -116,7 +115,10 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <DataTableShell title={t("admin.dashboard.recent.title")}>
+      <DataTableShell
+        title={t("admin.dashboard.recent.title")}
+        minTableWidth="compact"
+      >
         <div className="min-w-0">
           {!data?.recentExams || data.recentExams.length === 0 ? (
             <div className="p-6">
@@ -133,42 +135,57 @@ export function DashboardPage() {
             </div>
           ) : (
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "primary-text" },
+                  { role: "status" },
+                  { role: "number" },
+                  { role: "actions" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <DataTableHead role="primary-text">
                     {t("admin.dashboard.recent.columns.title")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="status">
                     {t("admin.dashboard.recent.columns.status")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="number">
                     {t("admin.dashboard.recent.columns.participantCount")}
-                  </TableHead>
-                  <TableHead className="w-16">
+                  </DataTableHead>
+                  <DataTableHead role="actions">
                     {t("admin.dashboard.recent.columns.actions")}
-                  </TableHead>
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.recentExams.map((exam) => (
                   <TableRow key={exam.id}>
-                    <TableCell className="font-medium">{exam.title}</TableCell>
-                    <TableCell>
+                    <DataTableCell role="primary-text" className="font-medium">
+                      {exam.title}
+                    </DataTableCell>
+                    <DataTableCell role="status">
                       <StatusBadge status={exam.status} />
-                    </TableCell>
-                    <TableCell>{exam.participantCount}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t("admin.dashboard.recent.viewExamLabel", {
-                          title: exam.title,
-                        })}
-                        onClick={() => navigate(`/admin/exams/${exam.id}`)}
-                      >
-                        <Eye />
-                      </Button>
-                    </TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="number">
+                      {exam.participantCount}
+                    </DataTableCell>
+                    <DataTableCell role="actions">
+                      <RowActions>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t(
+                            "admin.dashboard.recent.viewExamLabel",
+                            { title: exam.title },
+                          )}
+                          onClick={() => navigate(`/admin/exams/${exam.id}`)}
+                        >
+                          <Eye />
+                        </Button>
+                      </RowActions>
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>

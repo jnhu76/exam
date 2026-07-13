@@ -28,18 +28,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
 
@@ -195,34 +193,53 @@ export function UsersPage() {
           description={t("admin.users.emptyDescription")}
         />
       ) : (
-        <DataTableShell>
+        <DataTableShell minTableWidth="compact">
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "short-id" },
+                { role: "primary-text" },
+                { role: "type" },
+                { role: "status" },
+                { role: "actions" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead>{t("admin.users.columns.username")}</TableHead>
-                <TableHead>{t("admin.users.columns.name")}</TableHead>
-                <TableHead>{t("admin.users.columns.role")}</TableHead>
-                <TableHead>{t("admin.users.columns.status")}</TableHead>
-                <TableHead>{t("admin.users.columns.actions")}</TableHead>
+                <DataTableHead role="short-id">
+                  {t("admin.users.columns.username")}
+                </DataTableHead>
+                <DataTableHead role="primary-text">
+                  {t("admin.users.columns.name")}
+                </DataTableHead>
+                <DataTableHead role="type">
+                  {t("admin.users.columns.role")}
+                </DataTableHead>
+                <DataTableHead role="status">
+                  {t("admin.users.columns.status")}
+                </DataTableHead>
+                <DataTableHead role="actions">
+                  {t("admin.users.columns.actions")}
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell>
+                  <DataTableCell role="short-id">{user.username}</DataTableCell>
+                  <DataTableCell role="primary-text">{user.name}</DataTableCell>
+                  <DataTableCell role="type">
                     <Badge variant="outline">
                       {t(`admin.users.roleLabels.${user.role}` as any) ??
                         user.role}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="status">
                     <StatusBadge
                       status={user.isActive ? "active" : "inactive"}
                     />
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="actions">
                     <RowActions>
                       <Button
                         size="icon"
@@ -261,7 +278,7 @@ export function UsersPage() {
                         onConfirm={() => void toggle(user)}
                       />
                     </RowActions>
-                  </TableCell>
+                  </DataTableCell>
                 </TableRow>
               ))}
             </TableBody>

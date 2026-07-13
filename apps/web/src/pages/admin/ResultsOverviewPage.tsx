@@ -10,16 +10,14 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -93,7 +91,10 @@ export function ResultsOverviewPage() {
       <div className="flex flex-col gap-6">
         <PageHeader title={t("admin.resultsOverview.title")} />
 
-        <DataTableShell title={t("admin.resultsOverview.cardTitle")}>
+        <DataTableShell
+          title={t("admin.resultsOverview.cardTitle")}
+          minTableWidth="compact"
+        >
           {exams.length === 0 ? (
             <EmptyState
               icon={<AppIcon icon={Gauge} size="hero" />}
@@ -102,23 +103,32 @@ export function ResultsOverviewPage() {
             />
           ) : (
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "primary-text" },
+                  { role: "status" },
+                  { role: "date" },
+                  { role: "number" },
+                  { role: "actions" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <DataTableHead role="primary-text">
                     {t("admin.resultsOverview.columns.title")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="status">
                     {t("admin.resultsOverview.columns.status")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="date">
                     {t("admin.resultsOverview.columns.time")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="number">
                     {t("admin.resultsOverview.columns.gradedCount")}
-                  </TableHead>
-                  <TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="actions">
                     {t("admin.resultsOverview.columns.actions")}
-                  </TableHead>
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -140,19 +150,24 @@ export function ResultsOverviewPage() {
                   );
                   return (
                     <TableRow key={exam.id}>
-                      <TableCell className="font-medium">
+                      <DataTableCell
+                        role="primary-text"
+                        className="font-medium"
+                      >
                         {exam.title}
-                      </TableCell>
-                      <TableCell>
+                      </DataTableCell>
+                      <DataTableCell role="status">
                         <StatusBadge status={exam.status} />
-                      </TableCell>
-                      <TableCell>
+                      </DataTableCell>
+                      <DataTableCell role="date">
                         {exam.openAt
                           ? new Date(exam.openAt).toLocaleString()
                           : "-"}
-                      </TableCell>
-                      <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
-                      <TableCell className="text-right">
+                      </DataTableCell>
+                      <DataTableCell role="number">
+                        {exam.gradedAttemptCount ?? 0}
+                      </DataTableCell>
+                      <DataTableCell role="actions">
                         <RowActions>
                           {canView ? (
                             viewButton
@@ -165,7 +180,7 @@ export function ResultsOverviewPage() {
                             </Tooltip>
                           )}
                         </RowActions>
-                      </TableCell>
+                      </DataTableCell>
                     </TableRow>
                   );
                 })}

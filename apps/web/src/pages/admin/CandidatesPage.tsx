@@ -31,19 +31,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus, Search, Upload, Users, KeyRound } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
@@ -453,37 +451,61 @@ export function CandidatesPage() {
         />
       ) : (
         <>
-          <DataTableShell>
+          <DataTableShell minTableWidth="wide">
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "short-id" },
+                  { role: "primary-text" },
+                  ...fields.map((field) => ({
+                    role: "secondary-text" as const,
+                    key: field.id,
+                  })),
+                  { role: "status" },
+                  { role: "actions" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>
+                  <DataTableHead role="short-id">
                     {t("admin.candidates.columns.username")}
-                  </TableHead>
-                  <TableHead>{t("admin.candidates.columns.name")}</TableHead>
+                  </DataTableHead>
+                  <DataTableHead role="primary-text">
+                    {t("admin.candidates.columns.name")}
+                  </DataTableHead>
                   {fields.map((field) => (
-                    <TableHead key={field.id}>{field.label}</TableHead>
+                    <DataTableHead role="secondary-text" key={field.id}>
+                      {field.label}
+                    </DataTableHead>
                   ))}
-                  <TableHead>{t("admin.candidates.columns.status")}</TableHead>
-                  <TableHead>{t("admin.candidates.columns.actions")}</TableHead>
+                  <DataTableHead role="status">
+                    {t("admin.candidates.columns.status")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
+                    {t("admin.candidates.columns.actions")}
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCandidates.map((candidate) => (
                   <TableRow key={candidate.id}>
-                    <TableCell>{candidate.username}</TableCell>
-                    <TableCell>{candidate.name}</TableCell>
+                    <DataTableCell role="short-id">
+                      {candidate.username}
+                    </DataTableCell>
+                    <DataTableCell role="primary-text">
+                      {candidate.name}
+                    </DataTableCell>
                     {fields.map((field) => (
-                      <TableCell key={field.id}>
+                      <DataTableCell role="secondary-text" key={field.id}>
                         {String(candidate.fields[field.name] ?? "-")}
-                      </TableCell>
+                      </DataTableCell>
                     ))}
-                    <TableCell>
+                    <DataTableCell role="status">
                       <StatusBadge
                         status={candidate.isActive ? "active" : "inactive"}
                       />
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="actions">
                       <RowActions>
                         <Button
                           size="icon"
@@ -531,7 +553,7 @@ export function CandidatesPage() {
                           onConfirm={() => void toggle(candidate)}
                         />
                       </RowActions>
-                    </TableCell>
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>
