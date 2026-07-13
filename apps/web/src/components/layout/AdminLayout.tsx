@@ -7,7 +7,12 @@ import { BrandHeader } from "./BrandHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
 
@@ -123,6 +128,9 @@ export function AdminLayout() {
             <SheetTitle className="sr-only">
               {t("nav.actions.menuTitle")}
             </SheetTitle>
+            <SheetDescription className="sr-only">
+              {t("nav.actions.menuDescription")}
+            </SheetDescription>
             <Button
               type="button"
               variant="ghost"

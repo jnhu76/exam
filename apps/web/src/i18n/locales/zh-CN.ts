@@ -240,6 +240,7 @@ const zhCN = {
       openMenu: "打开菜单",
       closeMenu: "关闭菜单",
       menuTitle: "导航菜单",
+      menuDescription: "选择一个页面进行导航。",
     },
   },
 
