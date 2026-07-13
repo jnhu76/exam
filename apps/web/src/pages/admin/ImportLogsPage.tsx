@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import {
   Table,
@@ -110,7 +111,7 @@ export function ImportLogsPage() {
           description={t("admin.importLogs.description")}
         />
         <EmptyState
-          icon={<Upload className="size-8" />}
+          icon={<AppIcon icon={Upload} size="state" />}
           title={t("admin.importLogs.empty")}
           description={t("admin.importLogs.emptyDescription")}
         />
@@ -153,7 +154,7 @@ export function ImportLogsPage() {
             onClick={clearFilters}
             className="text-muted-foreground"
           >
-            <X className="mr-1 size-4" />
+            <AppIcon icon={X} size="inline" className="mr-1" />
             {t("admin.importLogs.clearFilter")}
           </Button>
         )}

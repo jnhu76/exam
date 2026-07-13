@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -277,7 +278,7 @@ export function ScoreListPage() {
         <CardContent>
           {scores.items.length === 0 ? (
             <EmptyState
-              icon={<FileText className="size-12" />}
+              icon={<AppIcon icon={FileText} size="hero" />}
               title={t("admin.scoreList.empty.title")}
               description={t("admin.scoreList.empty.description")}
             />

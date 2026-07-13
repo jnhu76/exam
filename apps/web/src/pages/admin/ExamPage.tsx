@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataToolbar } from "@/components/shared/DataToolbar";
@@ -104,7 +105,7 @@ export function ExamPage() {
           title={t("admin.exams.title")}
           actions={
             <Button onClick={() => void navigate("/admin/exams/new")}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.exams.createBtn")}
             </Button>
           }
@@ -112,7 +113,7 @@ export function ExamPage() {
 
         {exams.length === 0 ? (
           <EmptyState
-            icon={<ClipboardList className="size-8" />}
+            icon={<AppIcon icon={ClipboardList} size="state" />}
             title={t("admin.exams.empty")}
             description={t("admin.exams.emptyDescription")}
           />
@@ -160,7 +161,7 @@ export function ExamPage() {
                         aria-label={t("admin.exams.deleteLabel")}
                         disabled={!exam.canDelete}
                       >
-                        <Trash2 className="text-destructive" />
+                        <AppIcon icon={Trash2} size="inline" />
                       </Button>
                     );
 
@@ -196,7 +197,7 @@ export function ExamPage() {
                               }
                               aria-label={t("admin.exams.viewDetail")}
                             >
-                              <Eye />
+                              <AppIcon icon={Eye} size="inline" />
                             </Button>
                             {exam.canDelete ? (
                               <ConfirmDialog

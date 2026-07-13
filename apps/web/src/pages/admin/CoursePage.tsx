@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -193,7 +194,7 @@ export function CoursePage() {
           title={t("admin.courses.title")}
           actions={
             <Button onClick={openCreate}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.courses.createBtn")}
             </Button>
           }
@@ -213,13 +214,13 @@ export function CoursePage() {
 
         {courses.length === 0 ? (
           <EmptyState
-            icon={<BookOpen className="size-8" />}
+            icon={<AppIcon icon={BookOpen} size="state" />}
             title={t("admin.courses.empty")}
             description={t("admin.courses.emptyDescription")}
           />
         ) : filteredCourses.length === 0 ? (
           <EmptyState
-            icon={<Search className="size-8" />}
+            icon={<AppIcon icon={Search} size="state" />}
             title={t("admin.courses.noMatch")}
             description={t("admin.courses.noMatchDescription", { q: search })}
             action={
@@ -260,7 +261,7 @@ export function CoursePage() {
                         onClick={() => openEdit(course)}
                         aria-label={t("admin.courses.editLabel")}
                       >
-                        <Pencil />
+                        <AppIcon icon={Pencil} size="inline" />
                       </Button>
                       <ConfirmDialog
                         trigger={
@@ -269,7 +270,7 @@ export function CoursePage() {
                             size="icon"
                             aria-label={t("admin.courses.deleteLabel")}
                           >
-                            <Trash2 className="text-destructive" />
+                            <AppIcon icon={Trash2} size="inline" />
                           </Button>
                         }
                         title={t("admin.common.confirm")}

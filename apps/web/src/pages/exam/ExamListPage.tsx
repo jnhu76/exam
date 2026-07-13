@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -86,12 +87,12 @@ function ExamCard({
   const actionIcon = (() => {
     switch (exam.primaryAction) {
       case "start":
-        return <Play className="mr-1 size-3" />;
+        return <AppIcon icon={Play} size="badge" className="mr-1" />;
       case "resume":
-        return <RotateCcw className="mr-1 size-3" />;
+        return <AppIcon icon={RotateCcw} size="badge" className="mr-1" />;
       case "view_result":
       case "view_history":
-        return <Eye className="mr-1 size-3" />;
+        return <AppIcon icon={Eye} size="badge" className="mr-1" />;
       default:
         return undefined;
     }
@@ -118,7 +119,7 @@ function ExamCard({
           <div className="flex items-center gap-2 shrink-0">
             {exam.bestScore != null && (
               <Badge variant="default" data-testid="exam-best-score">
-                <Trophy className="mr-1 size-3" />
+                <AppIcon icon={Trophy} size="badge" className="mr-1" />
                 {exam.bestScore}
               </Badge>
             )}
@@ -135,7 +136,7 @@ function ExamCard({
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
-            <Clock className="size-3.5" />
+            <AppIcon icon={Clock} size="badge" />
             {t("examList.meta.duration", { minutes: exam.durationMinutes })}
           </span>
           <span>
@@ -288,7 +289,7 @@ export function ExamListPage() {
 
       {exams.length === 0 && (
         <EmptyState
-          icon={<ClipboardList className="size-8" />}
+          icon={<AppIcon icon={ClipboardList} size="state" />}
           title={t("examList.empty.title")}
           description={t("examList.empty.description")}
         />

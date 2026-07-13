@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 import { getStatusMeta } from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -29,13 +30,9 @@ import {
   RefreshCw,
   Monitor,
   User,
-  Timer,
-  EyeOff,
-  WifiOff,
-  XCircle,
-  AlertTriangle,
-  AlertCircle,
+  TriangleAlert,
   Activity,
+  type LucideIcon,
 } from "lucide-react";
 
 const POLL_INTERVAL_MS = 15_000;
@@ -58,13 +55,10 @@ const WARNING_LABEL_KEY: Record<string, string> = {
   critical: "admin.examMonitoring.warningLabels.critical",
 };
 
-const WARNING_ICON: Record<
-  string,
-  React.ComponentType<{ className?: string }>
-> = {
+const WARNING_ICON: Record<string, LucideIcon> = {
   normal: Activity,
-  warning: AlertTriangle,
-  critical: AlertCircle,
+  warning: TriangleAlert,
+  critical: CircleAlert,
 };
 
 const WARNING_COLOR: Record<string, string> = {
@@ -183,7 +177,7 @@ export function ExamMonitoringPage() {
     <div className="flex flex-col gap-6">
       {staleWarning && (
         <Alert variant="default">
-          <CircleAlert />
+          <AppIcon icon={CircleAlert} size="inline" />
           <AlertDescription>{staleWarning}</AlertDescription>
         </Alert>
       )}
@@ -206,14 +200,14 @@ export function ExamMonitoringPage() {
               loadAttempts();
             }}
           >
-            <RefreshCw />
+            <AppIcon icon={RefreshCw} size="inline" />
           </Button>
         </div>
       </div>
 
       {attempts.length === 0 ? (
         <EmptyState
-          icon={<Monitor className="size-8" />}
+          icon={<AppIcon icon={Monitor} size="state" />}
           title={t("admin.examMonitoring.emptyTitle")}
           description={t("admin.examMonitoring.emptyDescription")}
         />
@@ -243,7 +237,11 @@ export function ExamMonitoringPage() {
                 >
                   <Td>
                     <div className="flex items-center gap-2">
-                      <User className="size-3.5 text-muted-foreground shrink-0" />
+                      <AppIcon
+                        icon={User}
+                        size="badge"
+                        className="text-muted-foreground shrink-0"
+                      />
                       <span className="truncate max-w-32">
                         {a.candidateName}
                       </span>
@@ -288,7 +286,9 @@ export function ExamMonitoringPage() {
                       <span className="flex items-center gap-1">
                         {(() => {
                           const Icon = WARNING_ICON[a.warningLevel];
-                          return Icon ? <Icon className="size-3" /> : null;
+                          return Icon ? (
+                            <AppIcon icon={Icon} size="badge" />
+                          ) : null;
                         })()}
                         {t(
                           WARNING_LABEL_KEY[
@@ -336,7 +336,7 @@ export function ExamMonitoringPage() {
             </div>
           ) : timelineError ? (
             <Alert variant="destructive">
-              <CircleAlert />
+              <AppIcon icon={CircleAlert} size="inline" />
               <AlertDescription>{timelineError}</AlertDescription>
             </Alert>
           ) : timeline && timeline.items.length > 0 ? (

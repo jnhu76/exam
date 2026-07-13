@@ -12,6 +12,7 @@ import { ListToolbar } from "@/components/shared/ListToolbar";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,7 +39,6 @@ import {
   Plus,
   RotateCcw,
   Trash2,
-  X,
 } from "lucide-react";
 import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 
@@ -199,11 +199,11 @@ export function QuestionPage() {
               variant="outline"
               onClick={() => void navigate("/admin/questions/import")}
             >
-              <FileUp data-icon="inline-start" />
+              <AppIcon icon={FileUp} size="inline" />
               {t("admin.questions.importBtn")}
             </Button>
             <Button onClick={() => void navigate("/admin/questions/new")}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.questions.createBtn")}
             </Button>
           </div>
@@ -317,7 +317,11 @@ export function QuestionPage() {
                 className="inline-flex items-center gap-2 text-sm text-muted-foreground"
                 aria-live="polite"
               >
-                <LoaderCircle className="size-4 animate-spin" />
+                <AppIcon
+                  icon={LoaderCircle}
+                  size="inline"
+                  className="animate-spin"
+                />
                 {t("admin.common.loading")}
               </span>
             )}
@@ -328,7 +332,7 @@ export function QuestionPage() {
                 onClick={clearFilters}
                 aria-label={t("admin.common.clearFilter")}
               >
-                <RotateCcw data-icon="inline-start" />
+                <AppIcon icon={RotateCcw} size="inline" />
                 {t("admin.questions.clearFilter")}
               </Button>
             )}
@@ -338,7 +342,7 @@ export function QuestionPage() {
 
       {filtered.length === 0 ? (
         <EmptyState
-          icon={<BookOpen className="size-8" />}
+          icon={<AppIcon icon={BookOpen} size="state" />}
           title={
             hasActiveFilter
               ? t("admin.questions.noMatch")
@@ -412,7 +416,7 @@ export function QuestionPage() {
                         }
                         aria-label={t("admin.questions.editLabel")}
                       >
-                        <Pencil />
+                        <AppIcon icon={Pencil} size="inline" />
                       </Button>
                       <ConfirmDialog
                         trigger={
@@ -421,7 +425,7 @@ export function QuestionPage() {
                             size="icon"
                             aria-label={t("admin.questions.deleteLabel")}
                           >
-                            <Trash2 className="text-destructive" />
+                            <AppIcon icon={Trash2} size="inline" />
                           </Button>
                         }
                         title={t("admin.questions.confirmDelete")}

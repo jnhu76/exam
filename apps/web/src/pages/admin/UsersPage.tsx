@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -180,14 +181,14 @@ export function UsersPage() {
         title={t("admin.users.title")}
         actions={
           <Button onClick={() => open()}>
-            <Plus data-icon="inline-start" />
+            <AppIcon icon={Plus} size="inline" />
             {t("admin.users.createBtn")}
           </Button>
         }
       />
       {users.length === 0 ? (
         <EmptyState
-          icon={<Users className="size-8" />}
+          icon={<AppIcon icon={Users} size="state" />}
           title={t("admin.users.empty")}
           description={t("admin.users.emptyDescription")}
         />
@@ -226,7 +227,7 @@ export function UsersPage() {
                       onClick={() => open(user)}
                       aria-label={t("admin.users.editLabel")}
                     >
-                      <Pencil />
+                      <AppIcon icon={Pencil} size="inline" />
                     </Button>
                     <ConfirmDialog
                       trigger={

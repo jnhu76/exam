@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,7 +101,7 @@ export function ResultsOverviewPage() {
           <CardContent>
             {exams.length === 0 ? (
               <EmptyState
-                icon={<Gauge className="size-12" />}
+                icon={<AppIcon icon={Gauge} size="hero" />}
                 title={t("admin.resultsOverview.empty.title")}
                 description={t("admin.resultsOverview.empty.description")}
               />
@@ -138,7 +139,7 @@ export function ResultsOverviewPage() {
                           void navigate(routes.admin.examScores(exam.id))
                         }
                       >
-                        <Eye data-icon="inline-start" />
+                        <AppIcon icon={Eye} size="inline" />
                         {t("admin.resultsOverview.actions.viewScores")}
                       </Button>
                     );

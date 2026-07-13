@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Table,
@@ -23,7 +24,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ClipboardCheck } from "lucide-react";
+import { ListChecks } from "lucide-react";
 
 interface GradingQueueItem {
   attemptId: string;
@@ -85,7 +86,7 @@ export function GradingQueuePage() {
           description={t("admin.grading.description")}
         />
         <EmptyState
-          icon={<ClipboardCheck className="size-8" />}
+          icon={<AppIcon icon={ListChecks} size="state" />}
           title={t("admin.grading.empty")}
           description={t("admin.grading.emptyDescription")}
         />

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FileUpload } from "@/components/shared/FileUpload";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { CircleCheck, CircleAlert, CircleX } from "lucide-react";
 import { getTypeLabelKey } from "@/lib/constants";
 
 /** Minimal course representation used to populate the course selector. */
@@ -321,16 +322,28 @@ export function QuestionImportPage() {
         <div className="flex flex-col gap-4">
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1">
-              <CheckCircle2 className="size-4 text-success" />
+              <AppIcon
+                icon={CircleCheck}
+                size="inline"
+                className="text-success"
+              />
               {t("admin.questionImport.result.valid")}：{importResult.valid}
             </span>
             <span className="flex items-center gap-1">
-              <AlertCircle className="size-4 text-warning" />
+              <AppIcon
+                icon={CircleAlert}
+                size="inline"
+                className="text-warning"
+              />
               {t("admin.questionImport.result.warnings")}：
               {importResult.warnings}
             </span>
             <span className="flex items-center gap-1">
-              <XCircle className="size-4 text-destructive" />
+              <AppIcon
+                icon={CircleX}
+                size="inline"
+                className="text-destructive"
+              />
               {t("admin.questionImport.result.errors")}：{importResult.errors}
             </span>
           </div>
@@ -355,13 +368,25 @@ export function QuestionImportPage() {
                   <TableCell>{d.row}</TableCell>
                   <TableCell>
                     {d.status === "valid" && (
-                      <CheckCircle2 className="size-4 text-success" />
+                      <AppIcon
+                        icon={CircleCheck}
+                        size="inline"
+                        className="text-success"
+                      />
                     )}
                     {d.status === "warning" && (
-                      <AlertCircle className="size-4 text-warning" />
+                      <AppIcon
+                        icon={CircleAlert}
+                        size="inline"
+                        className="text-warning"
+                      />
                     )}
                     {d.status === "error" && (
-                      <XCircle className="size-4 text-destructive" />
+                      <AppIcon
+                        icon={CircleX}
+                        size="inline"
+                        className="text-destructive"
+                      />
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">

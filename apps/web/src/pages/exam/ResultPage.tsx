@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CircleCheck, CircleX } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
 import type { AttemptResultResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
@@ -169,14 +170,20 @@ export function ResultPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {question.correct ? (
-                              <CheckCircle2
-                                aria-label={t("candidateResult.aria.correct")}
-                                className="size-4 text-success"
+                              <AppIcon
+                                icon={CircleCheck}
+                                decorative={false}
+                                label={t("candidateResult.aria.correct")}
+                                size="inline"
+                                className="text-success"
                               />
                             ) : (
-                              <XCircle
-                                aria-label={t("candidateResult.aria.incorrect")}
-                                className="size-4 text-destructive"
+                              <AppIcon
+                                icon={CircleX}
+                                decorative={false}
+                                label={t("candidateResult.aria.incorrect")}
+                                size="inline"
+                                className="text-destructive"
                               />
                             )}
                             <AnswerText
@@ -219,7 +226,11 @@ export function ResultPage() {
       ) : (
         <Card>
           <CardContent className="py-10 text-center">
-            <CheckCircle2 className="mx-auto mb-3 size-10 text-success" />
+            <AppIcon
+              icon={CircleCheck}
+              size="state"
+              className="mx-auto mb-3 text-success"
+            />
             <p
               className="text-lg font-medium"
               data-testid="result-status-message"

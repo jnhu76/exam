@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
@@ -664,14 +665,14 @@ export function ExamDetailPage() {
                 {t("admin.examDetail.enrollment.title")}
               </CardTitle>
               <Button size="sm" onClick={handleOpenAddDialog}>
-                <Plus data-icon="inline-start" />
+                <AppIcon icon={Plus} size="inline" />
                 {t("admin.examDetail.enrollment.addCandidate")}
               </Button>
             </CardHeader>
             <CardContent>
               {enrollments.length === 0 ? (
                 <EmptyState
-                  icon={<Users className="size-8" />}
+                  icon={<AppIcon icon={Users} size="state" />}
                   title={t("admin.examDetail.enrollment.emptyTitle")}
                   description={t(
                     "admin.examDetail.enrollment.emptyDescription",
@@ -725,7 +726,7 @@ export function ExamDetailPage() {
                                     "admin.examDetail.confirm.removeCandidate",
                                   )}
                                 >
-                                  <Trash2 className="text-destructive" />
+                                  <AppIcon icon={Trash2} size="inline" />
                                 </Button>
                               }
                               title={t("admin.examDetail.confirm.removeTitle")}

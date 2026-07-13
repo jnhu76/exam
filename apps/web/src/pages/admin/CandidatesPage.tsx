@@ -10,6 +10,7 @@ import {
 } from "@/lib/candidateImport";
 import type { CandidateFieldConfig } from "@/lib/candidateImport";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -385,7 +386,7 @@ export function CandidatesPage() {
         actions={
           <div className="flex gap-2">
             <Button onClick={() => open()}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.candidates.createBtn")}
             </Button>
             <Button
@@ -396,7 +397,7 @@ export function CandidatesPage() {
                 setCsv("");
               }}
             >
-              <Upload data-icon="inline-start" />
+              <AppIcon icon={Upload} size="inline" />
               {t("admin.candidates.importBtn")}
             </Button>
           </div>
@@ -413,7 +414,7 @@ export function CandidatesPage() {
       />
       {filteredCandidates.length === 0 && search ? (
         <EmptyState
-          icon={<Search className="size-8" />}
+          icon={<AppIcon icon={Search} size="state" />}
           title={t("admin.candidates.noMatch")}
           description={t("admin.candidates.noMatchDescription", { q: search })}
           action={
@@ -424,7 +425,7 @@ export function CandidatesPage() {
         />
       ) : filteredCandidates.length === 0 ? (
         <EmptyState
-          icon={<Users className="size-8" />}
+          icon={<AppIcon icon={Users} size="state" />}
           title={t("admin.candidates.empty")}
           description={t("admin.candidates.emptyDescription")}
           action={
@@ -482,7 +483,7 @@ export function CandidatesPage() {
                         onClick={() => open(candidate)}
                         aria-label={t("admin.candidates.editLabel")}
                       >
-                        <Pencil />
+                        <AppIcon icon={Pencil} size="inline" />
                       </Button>
                       <Button
                         size="icon"
@@ -491,7 +492,7 @@ export function CandidatesPage() {
                         aria-label={t("admin.candidates.resetPassword")}
                         data-testid={`candidate-reset-password-${candidate.id}`}
                       >
-                        <KeyRound />
+                        <AppIcon icon={KeyRound} size="inline" />
                       </Button>
                       <ConfirmDialog
                         trigger={

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -227,7 +228,7 @@ export function ProctorDashboardPage() {
                 void loadStatus();
               }}
             >
-              <RefreshCw data-icon="inline-start" />
+              <AppIcon icon={RefreshCw} size="inline" />
               {t("admin.proctorDashboard.actions.refresh")}
             </Button>
             <Button
@@ -238,7 +239,7 @@ export function ProctorDashboardPage() {
                 examId && void navigate(routes.admin.examProctorMonitor(examId))
               }
             >
-              <MonitorPlay data-icon="inline-start" />
+              <AppIcon icon={MonitorPlay} size="inline" />
               {t("admin.proctorDashboard.actions.monitor")}
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>
@@ -278,7 +279,7 @@ export function ProctorDashboardPage() {
         {!hasAnyCandidates && (
           <div className="mt-4">
             <EmptyState
-              icon={<Users className="size-8" />}
+              icon={<AppIcon icon={Users} size="state" />}
               title={t("admin.proctorDashboard.empty.title")}
               description={t("admin.proctorDashboard.empty.description")}
             />
@@ -427,7 +428,7 @@ export function ProctorDashboardPage() {
     if (items.length === 0) {
       return (
         <EmptyState
-          icon={<Users className="size-8" />}
+          icon={<AppIcon icon={Users} size="state" />}
           title={t("admin.proctorDashboard.empty.filteredTitle")}
           description={t("admin.proctorDashboard.empty.filteredDescription")}
         />

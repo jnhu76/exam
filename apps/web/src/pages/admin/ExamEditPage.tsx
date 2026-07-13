@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { Button } from "@/components/ui/button";
@@ -293,7 +294,7 @@ export function ExamEditPage() {
 
           {selectedQuestions.length === 0 ? (
             <EmptyState
-              icon={<BookOpen className="size-8" />}
+              icon={<AppIcon icon={BookOpen} size="state" />}
               title={t("admin.examEdit.noQuestionsTitle")}
               description={t("admin.examEdit.noQuestionsDescription")}
             />
@@ -334,7 +335,7 @@ export function ExamEditPage() {
                         onClick={() => removeQuestion(q.id)}
                         aria-label={t("admin.examEdit.ariaDeleteQuestion")}
                       >
-                        <Trash2 />
+                        <AppIcon icon={Trash2} size="inline" />
                       </Button>
                     </TableCell>
                   </TableRow>

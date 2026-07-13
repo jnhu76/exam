@@ -7,6 +7,7 @@ import type {
 import { api } from "@/lib/api";
 import { logger } from "@/lib/logger";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -24,10 +25,13 @@ import {
   Activity,
   CircleAlert,
   Database,
-  HardDrive,
+  HeartPulse,
+  MemoryStick,
   Mail,
   RefreshCw,
+  Send,
   Server,
+  SlidersHorizontal,
   Timer,
 } from "lucide-react";
 
@@ -194,7 +198,7 @@ export function SystemDiagnosticsPage() {
     <div className="flex flex-col gap-6">
       {Object.values(staleWarnings).map((message) => (
         <Alert key={message} variant="default">
-          <CircleAlert />
+          <AppIcon icon={CircleAlert} size="inline" />
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ))}
@@ -214,7 +218,7 @@ export function SystemDiagnosticsPage() {
               getToneTextColor(statusView.tone),
             )}
           >
-            <StatusIcon className="size-3.5" aria-hidden="true" />
+            <AppIcon icon={StatusIcon} size="badge" />
             {t(statusLabelKey(statusView.labelKey))}
           </span>
           <Button
@@ -223,7 +227,7 @@ export function SystemDiagnosticsPage() {
             aria-label={t("diagnostics.actions.refresh")}
             onClick={handleRefresh}
           >
-            <RefreshCw />
+            <AppIcon icon={RefreshCw} size="inline" />
           </Button>
         </div>
       </div>
@@ -234,21 +238,21 @@ export function SystemDiagnosticsPage() {
           value={health?.cpu ?? 0}
           unit="%"
           status={getStatusLevel(health?.cpu ?? 0)}
-          icon={<Activity className="size-5" />}
+          icon={<AppIcon icon={Activity} size="metric" />}
         />
         <MetricCard
           title={t("diagnostics.metrics.memoryUsage")}
           value={health?.memory ?? 0}
           unit="%"
           status={getStatusLevel(health?.memory ?? 0)}
-          icon={<HardDrive className="size-5" />}
+          icon={<AppIcon icon={MemoryStick} size="metric" />}
         />
         <MetricCard
           title={t("diagnostics.metrics.dbResponseTime")}
           value={health?.dbResponseMs ?? 0}
           unit="ms"
           status={getDbStatusLevel(health?.dbResponseMs ?? 0)}
-          icon={<Database className="size-5" />}
+          icon={<AppIcon icon={Database} size="metric" />}
         />
       </div>
 
@@ -258,7 +262,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Server className="size-4" aria-hidden="true" />
+                  <AppIcon icon={Server} size="inline" />
                   {t("diagnostics.cards.serverInfo")}
                 </CardTitle>
               </CardHeader>
@@ -277,7 +281,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Database className="size-4" aria-hidden="true" />
+                  <AppIcon icon={Database} size="inline" />
                   {t("diagnostics.cards.databaseStatus")}
                 </CardTitle>
               </CardHeader>
@@ -302,7 +306,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Activity className="size-4" aria-hidden="true" />
+                  <AppIcon icon={SlidersHorizontal} size="inline" />
                   {t("diagnostics.cards.runtimeConfig")}
                 </CardTitle>
               </CardHeader>
@@ -327,7 +331,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Timer className="size-4" aria-hidden="true" />
+                  <AppIcon icon={HeartPulse} size="inline" />
                   {t("diagnostics.cards.heartbeatScanner")}
                 </CardTitle>
               </CardHeader>
@@ -357,7 +361,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Timer className="size-4" aria-hidden="true" />
+                  <AppIcon icon={Timer} size="inline" />
                   {t("diagnostics.cards.deadlineScanner")}
                 </CardTitle>
               </CardHeader>
@@ -388,7 +392,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Mail className="size-4" aria-hidden="true" />
+                  <AppIcon icon={Mail} size="inline" />
                   {t("diagnostics.cards.emailInfrastructure")}
                 </CardTitle>
               </CardHeader>
@@ -423,7 +427,7 @@ export function SystemDiagnosticsPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Mail className="size-4" aria-hidden="true" />
+                  <AppIcon icon={Send} size="inline" />
                   {t("diagnostics.cards.emailOutbox")}
                 </CardTitle>
               </CardHeader>
@@ -497,7 +501,7 @@ function MetricCard({
             getToneTextColor(meta.tone),
           )}
         >
-          <MetricIcon className="size-3" aria-hidden="true" />
+          <AppIcon icon={MetricIcon} size="badge" />
           {t(statusLabelKey(meta.labelKey))}
         </p>
       </CardContent>

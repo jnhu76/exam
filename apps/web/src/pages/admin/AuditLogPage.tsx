@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DatePicker } from "@/components/shared/DatePicker";
 import {
@@ -271,14 +272,14 @@ export function AuditLogPage() {
             onClick={clearFilters}
             className="text-muted-foreground"
           >
-            <X className="mr-1 size-4" />
+            <AppIcon icon={X} size="inline" className="mr-1" />
             {t("admin.audit.clearFilter")}
           </Button>
         )}
       </div>
       {items.length === 0 ? (
         <EmptyState
-          icon={<ScrollText className="size-8" />}
+          icon={<AppIcon icon={ScrollText} size="state" />}
           title={t("admin.audit.empty")}
           description={t("admin.audit.emptyDescription")}
         />

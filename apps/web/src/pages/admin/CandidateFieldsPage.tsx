@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -230,11 +231,11 @@ export function CandidateFieldsPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => void download()}>
-              <Download data-icon="inline-start" />
+              <AppIcon icon={Download} size="inline" />
               {t("admin.candidateFields.downloadTemplate")}
             </Button>
             <Button onClick={() => dialog()}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.candidateFields.addField")}
             </Button>
           </div>
@@ -243,7 +244,7 @@ export function CandidateFieldsPage() {
       {mutationError && <InlineErrorBanner>{mutationError}</InlineErrorBanner>}
       {fields.length === 0 ? (
         <EmptyState
-          icon={<Tags className="size-8" />}
+          icon={<AppIcon icon={Tags} size="state" />}
           title={t("admin.candidateFields.empty")}
           description={t("admin.candidateFields.emptyDescription")}
         />
@@ -305,7 +306,7 @@ export function CandidateFieldsPage() {
                       onClick={() => void move(field, -1)}
                       aria-label={t("admin.candidateFields.moveUp")}
                     >
-                      <ArrowUp />
+                      <AppIcon icon={ArrowUp} size="inline" />
                     </Button>
                     <Button
                       size="icon"
@@ -314,7 +315,7 @@ export function CandidateFieldsPage() {
                       onClick={() => void move(field, 1)}
                       aria-label={t("admin.candidateFields.moveDown")}
                     >
-                      <ArrowDown />
+                      <AppIcon icon={ArrowDown} size="inline" />
                     </Button>
                     <Button
                       size="icon"
@@ -322,7 +323,7 @@ export function CandidateFieldsPage() {
                       onClick={() => dialog(field)}
                       aria-label={t("admin.candidateFields.editLabel")}
                     >
-                      <Pencil />
+                      <AppIcon icon={Pencil} size="inline" />
                     </Button>
                     <ConfirmDialog
                       trigger={
@@ -331,7 +332,7 @@ export function CandidateFieldsPage() {
                           variant="ghost"
                           aria-label={t("admin.candidateFields.deleteLabel")}
                         >
-                          <Trash2 className="text-destructive" />
+                          <AppIcon icon={Trash2} size="inline" />
                         </Button>
                       }
                       title={t("admin.candidateFields.confirmDelete")}

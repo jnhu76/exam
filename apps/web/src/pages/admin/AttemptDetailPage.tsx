@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -25,7 +26,7 @@ import {
   Timer,
   Flag,
   FileCheck2,
-  CheckCircle2,
+  CircleCheck,
   HelpCircle,
   Download,
   FileJson,
@@ -150,7 +151,7 @@ const EVENT_META: Record<string, EventMeta> = {
   "grading.finalized": {
     labelKey: "admin.attemptDetail.events.finalized",
     tone: "success",
-    icon: CheckCircle2,
+    icon: CircleCheck,
   },
 };
 
@@ -279,7 +280,7 @@ function ExportButtons({ attemptId }: ExportButtonsProps) {
           )
         }
       >
-        <Download className="size-4" aria-hidden="true" />
+        <AppIcon icon={Download} size="inline" />
         {t("admin.attemptDetail.actions.exportCsv")}
       </Button>
       <Button
@@ -292,7 +293,7 @@ function ExportButtons({ attemptId }: ExportButtonsProps) {
           )
         }
       >
-        <FileJson className="size-4" aria-hidden="true" />
+        <AppIcon icon={FileJson} size="inline" />
         {t("admin.attemptDetail.actions.exportJson")}
       </Button>
     </>
@@ -339,7 +340,7 @@ function TimelineSection({
           />
         ) : !events || events.length === 0 ? (
           <EmptyState
-            icon={<Clock className="size-8" />}
+            icon={<AppIcon icon={Clock} size="state" />}
             title={t("admin.attemptDetail.timeline.emptyTitle")}
             description={t("admin.attemptDetail.timeline.emptyDescription")}
           />
@@ -363,7 +364,7 @@ function TimelineSection({
                     aria-expanded={isExpanded}
                   >
                     <span className="text-muted-foreground" aria-hidden="true">
-                      <Icon className="size-4" />
+                      <AppIcon icon={Icon} size="inline" />
                     </span>
                     <span className="flex-1 min-w-0">
                       <span className="flex flex-wrap items-center gap-2">

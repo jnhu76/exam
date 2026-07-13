@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -212,7 +213,7 @@ export function GradingDetailPage() {
             variant="ghost"
             onClick={() => navigate("/admin/grading-queue")}
           >
-            <ArrowLeft className="mr-2 size-4" />
+            <AppIcon icon={ArrowLeft} size="inline" className="mr-2" />
             {t("admin.gradingDetail.actions.backToQueue")}
           </Button>
         }

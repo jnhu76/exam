@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { Separator } from "@/components/ui/separator";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { QuestionNavigator } from "@/components/exam/QuestionNavigator";
 import { ExamTimer } from "@/components/exam/ExamTimer";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
@@ -770,7 +771,7 @@ export function TakeExamPage() {
                     className="border-destructive/30 bg-destructive/10"
                     data-testid="save-rejection-alert"
                   >
-                    <display.Icon aria-hidden="true" />
+                    <AppIcon icon={display.Icon} size="inline" />
                     <AlertTitle>{t(display.titleKey as never)}</AlertTitle>
                     <AlertDescription>
                       {t(display.descriptionKey as never)}
@@ -784,7 +785,7 @@ export function TakeExamPage() {
                 variant="destructive"
                 className="border-destructive/30 bg-destructive/10"
               >
-                <WifiOff aria-hidden="true" />
+                <AppIcon icon={WifiOff} size="inline" />
                 <AlertTitle>
                   {t("candidateRuntime.connection.abnormal")}
                 </AlertTitle>
@@ -804,9 +805,10 @@ export function TakeExamPage() {
                   data-testid="deadline-overlay"
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
-                    <TimerOff
-                      className="size-12 text-destructive"
-                      aria-hidden="true"
+                    <AppIcon
+                      icon={TimerOff}
+                      size="state"
+                      className="text-destructive"
                     />
                     <div className="text-lg font-semibold text-foreground">
                       {autoSubmitFailed
@@ -845,8 +847,13 @@ export function TakeExamPage() {
                 </div>
                 {!view.isLocked && (
                   <Button variant="outline" size="sm" onClick={toggleFlag}>
+                    {/* Deliberate raw Lucide render: AppIcon does not support the
+                        fill toggle needed for flagged/unflagged visual state.
+                        Governed to match inline role (16px/1.75px). */}
                     <Flag
-                      data-icon="inline-start"
+                      size={16}
+                      strokeWidth={1.75}
+                      absoluteStrokeWidth
                       fill={
                         questionStates[currentIndex] === "flagged"
                           ? "currentColor"
@@ -896,12 +903,17 @@ export function TakeExamPage() {
                 onClick={handlePrev}
                 disabled={currentIndex === 0}
               >
-                <ChevronLeft data-icon="inline-start" />
+                <AppIcon icon={ChevronLeft} size="inline" />
                 {t("candidateRuntime.actions.previous")}
               </Button>
               <Button variant="outline" size="sm" onClick={toggleFlag}>
+                {/* Deliberate raw Lucide render: AppIcon does not support the
+                    fill toggle needed for flagged/unflagged visual state.
+                    Governed to match inline role (16px/1.75px). */}
                 <Flag
-                  data-icon="inline-start"
+                  size={16}
+                  strokeWidth={1.75}
+                  absoluteStrokeWidth
                   fill={
                     questionStates[currentIndex] === "flagged"
                       ? "currentColor"
@@ -923,7 +935,7 @@ export function TakeExamPage() {
               ) : (
                 <Button variant="outline" size="sm" onClick={handleNext}>
                   {t("candidateRuntime.actions.next")}
-                  <ChevronRight data-icon="inline-end" />
+                  <AppIcon icon={ChevronRight} size="inline" />
                 </Button>
               )}
             </div>
