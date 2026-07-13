@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 /**
  * Three-state responsive admin shell (DESIGN.md §9):
@@ -93,6 +94,14 @@ export function AdminLayout() {
   }
 
   const topbarTitle = getPageTitle(location.pathname);
+  const containerRole =
+    location.pathname === "/admin/system"
+      ? "admin-wide"
+      : /^\/admin\/(settings|candidate-fields|questions\/(new|import|[^/]+\/edit)|exams\/(new|[^/]+\/edit))$/.test(
+            location.pathname,
+          )
+        ? "form"
+        : "admin-standard";
 
   return (
     <div
@@ -129,7 +138,9 @@ export function AdminLayout() {
           </div>
         </header>
         <main className="p-4 lg:p-8">
-          <Outlet />
+          <PageContainer role={containerRole}>
+            <Outlet />
+          </PageContainer>
         </main>
       </div>
 

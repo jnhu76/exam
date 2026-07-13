@@ -30,10 +30,11 @@ export function DataTableShell({
     <section
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      data-slot="admin-table-shell"
       className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (
-        <div className="flex flex-col gap-3 border-b px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-3 border-b bg-surface-subtle px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
           {(title || description) && (
             <div className="min-w-0">
               {title && (
@@ -44,10 +45,7 @@ export function DataTableShell({
               {description && (
                 <p
                   id={descriptionId}
-                  className={cn(
-                    "text-sm text-muted-foreground",
-                    title && "mt-1",
-                  )}
+                  className={cn("type-secondary", title && "mt-1")}
                 >
                   {description}
                 </p>
@@ -58,7 +56,9 @@ export function DataTableShell({
         </div>
       )}
       <div className={cn("min-w-0", contentClassName)}>{children}</div>
-      {footer && <div className="border-t px-5 py-4">{footer}</div>}
+      {footer && (
+        <div className="border-t bg-surface-subtle px-4 py-3">{footer}</div>
+      )}
     </section>
   );
 }

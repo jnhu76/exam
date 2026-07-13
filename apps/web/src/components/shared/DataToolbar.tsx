@@ -27,7 +27,7 @@ export function DataToolbar({
       role="toolbar"
       aria-label={label}
       className={cn(
-        "surface-content flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
@@ -36,9 +36,7 @@ export function DataToolbar({
       </div>
       {(summary || actions) && (
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
-          {summary && (
-            <div className="text-sm text-muted-foreground">{summary}</div>
-          )}
+          {summary && <div className="type-secondary">{summary}</div>}
           {actions}
         </div>
       )}

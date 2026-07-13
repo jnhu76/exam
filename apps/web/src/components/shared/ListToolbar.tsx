@@ -32,7 +32,7 @@ export function ListToolbar({
       role="toolbar"
       aria-label={label}
       className={cn(
-        "surface-content flex flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between",
+        "flex flex-col gap-3 rounded-lg border border-border bg-card p-3 lg:flex-row lg:items-center lg:justify-between",
         className,
       )}
     >
@@ -46,9 +46,7 @@ export function ListToolbar({
       </div>
       {(summary != null || actions != null) && (
         <div className="flex shrink-0 items-center justify-between gap-2 lg:justify-end">
-          {summary != null && (
-            <div className="text-sm text-muted-foreground">{summary}</div>
-          )}
+          {summary != null && <div className="type-secondary">{summary}</div>}
           {actions != null && (
             <div className="flex items-center gap-2">{actions}</div>
           )}

@@ -439,6 +439,22 @@ describe("StatsCard", () => {
     render(<StatsCard label="分数" value={90} />);
     expect(screen.queryByText(/\+/)).not.toBeInTheDocument();
   });
+
+  it("owns the metric hierarchy and icon anchor", () => {
+    render(
+      <StatsCard
+        label="考试总数"
+        value={12}
+        icon={<span aria-hidden="true">图</span>}
+      />,
+    );
+
+    expect(screen.getByText("12")).toHaveClass("type-metric");
+    expect(screen.getByText("图").parentElement).toHaveAttribute(
+      "data-slot",
+      "stats-card-icon",
+    );
+  });
 });
 
 describe("ConnectionIndicator", () => {
@@ -660,5 +676,23 @@ describe("DataTableShell", () => {
 
     expect(screen.getByRole("button", { name: "刷新" })).toBeInTheDocument();
     expect(screen.getByText("第 1 页")).toBeInTheDocument();
+  });
+
+  it("owns a distinct header surface around the list title", () => {
+    render(
+      <DataTableShell title="考生列表">
+        <table aria-label="考生数据" />
+      </DataTableShell>,
+    );
+
+    const shell = screen
+      .getByRole("heading", { name: "考生列表" })
+      .closest('[data-slot="admin-table-shell"]');
+    const header = screen.getByRole("heading", {
+      name: "考生列表",
+    }).parentElement?.parentElement;
+
+    expect(shell).toHaveClass("surface-content", "overflow-hidden");
+    expect(header).toHaveClass("bg-surface-subtle", "border-b");
   });
 });
