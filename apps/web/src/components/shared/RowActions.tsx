@@ -26,7 +26,7 @@ export function RowActions({
       aria-label={resolvedAriaLabel}
       data-slot="row-actions"
       data-action-target="responsive"
-      className={cn("flex items-center justify-end gap-1.5", className)}
+      className={cn("flex items-center justify-end gap-1", className)}
       {...props}
     >
       {leading}

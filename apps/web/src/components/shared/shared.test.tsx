@@ -317,9 +317,7 @@ describe("RowActions", () => {
       "data-action-target",
       "responsive",
     );
-    expect(screen.getByRole("group", { name: "行操作" })).toHaveClass(
-      "gap-1.5",
-    );
+    expect(screen.getByRole("group", { name: "行操作" })).toHaveClass("gap-1");
     expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "删除" })).toBeInTheDocument();
