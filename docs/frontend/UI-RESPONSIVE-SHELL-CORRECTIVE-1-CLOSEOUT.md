@@ -25,9 +25,9 @@ desktop sidebar. No icon, color, typography, status, or Wave-2 work was done.
 | `f533116` | `docs(ui): audit responsive shell failure and plan corrective` |
 | `9f82382` | `fix(ui): repair responsive application shell` |
 | `747f658` | `fix(ui): resolve responsive shell review findings (FIX-1)` |
-| _(pending)_ | `fix(ui): three-state responsive shell (FIX-2)` |
+| `1ba4e3d` | `fix(ui): three-state responsive shell (FIX-2)` |
 
-Final HEAD: _pending FIX-2 commit_ on `feat/ui-visual-fixes`.
+Final HEAD: `1ba4e3d` on `feat/ui-visual-fixes`.
 
 ## C. Files changed
 
