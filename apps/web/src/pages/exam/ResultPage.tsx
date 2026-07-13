@@ -197,7 +197,7 @@ export function ResultPage() {
                                 decorative={false}
                                 label={t("candidateResult.aria.incorrect")}
                                 size="inline"
-                                className="text-destructive"
+                                className="text-muted-foreground"
                               />
                             )}
                             <AnswerText

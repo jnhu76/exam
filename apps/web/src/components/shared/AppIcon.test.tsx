@@ -13,9 +13,9 @@ import { Button } from "@/components/ui/button";
  * scales with the CSS-rendered box. These tests assert the SVG attribute, not
  * the painted pixel — the attribute is the authoritative contract.
  *
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: All roles now use 2px physical stroke for
- * crisp icon clarity at small sizes. badge/inline are 16px (aliased), nav/metric
- * are 20px (no more 14px or 18px authorities).
+ * UI-PRODUCT-FINISH-CLOSURE-1: small roles (badge/inline = 16px) use a 1.5px
+ * physical stroke so detail-heavy glyphs stay crisp; larger roles stay 2px.
+ * badge/inline are 16px (aliased), nav/metric are 20px.
  */
 describe("AppIcon", () => {
   it("renders inline size with correct numeric width/height and stroke", () => {
@@ -23,8 +23,8 @@ describe("AppIcon", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("width")).toBe("16");
     expect(svg.getAttribute("height")).toBe("16");
-    // 2 * 24 / 16 = 3
-    expect(svg.getAttribute("stroke-width")).toBe("3");
+    // 1.5 * 24 / 16 = 2.25
+    expect(svg.getAttribute("stroke-width")).toBe("2.25");
     expect(svg.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -58,13 +58,13 @@ describe("AppIcon", () => {
     expect(svg.getAttribute("class") ?? "").toContain("size-5");
   });
 
-  it("renders badge size (16px) with 2px physical stroke", () => {
+  it("renders badge size (16px) with 1.5px physical stroke", () => {
     const { container } = render(<AppIcon icon={Eye} size="badge" />);
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("width")).toBe("16");
     expect(svg.getAttribute("height")).toBe("16");
-    // 2 * 24 / 16 = 3
-    expect(svg.getAttribute("stroke-width")).toBe("3");
+    // 1.5 * 24 / 16 = 2.25
+    expect(svg.getAttribute("stroke-width")).toBe("2.25");
     expect(svg.getAttribute("class") ?? "").toContain("size-4");
   });
 

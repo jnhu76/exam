@@ -33,6 +33,7 @@ import {
   Flag,
   FileCheck2,
   CircleCheck,
+  X,
   HelpCircle,
   Download,
   FileJson,
@@ -814,7 +815,14 @@ export function AttemptDetailPage() {
                     </Badge>
                   </DataTableCell>
                   <DataTableCell role="long-text">
-                    <Badge variant={q.correct ? "default" : "destructive"}>
+                    <Badge variant={q.correct ? "success" : "secondary"}>
+                      {!q.correct && (
+                        <AppIcon
+                          icon={X}
+                          size="inline"
+                          className="text-muted-foreground"
+                        />
+                      )}
                       {formatAnswer(q.candidateAnswer)}
                     </Badge>
                   </DataTableCell>

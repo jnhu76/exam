@@ -106,21 +106,23 @@
 }
 
 :root {
-  --bg: #f7f8fa;
+  /* Canvas / surfaces — one cool-blue-grey axis (216° hue), clear layer steps.
+   * Canvas is deliberately darker than surface so white cards visibly float. */
+  --bg: #eef1f6;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-subtle: #fafbfc;
-  --surface-soft: #f6f8fa;
+  --surface-subtle: #f4f6fa;
+  --surface-soft: #eef1f6;
   --surface-muted: var(--surface-subtle);
-  --surface-hover: #f7faff;
-  --surface-selected: #eef4ff;
-  --text: #182230;
-  --text-secondary: #344054;
-  --text-muted: #667085;
-  --text-subtle: #98a2b3;
+  --surface-hover: #f1f5fb;
+  --surface-selected: #e6eefb;
+  --text: #111827;
+  --text-secondary: #374151;
+  --text-muted: #627287;
+  --text-subtle: #94a3b8;
   --border-raised: #d7dde5;
   --border-shell: #dde2e8;
-  --border-control: #cfd7e2;
+  --border-control: #cdd6e2;
   --border-divider: #edf0f3;
   --border-header: var(--border-raised);
   --border-row: var(--border-divider);
@@ -129,46 +131,50 @@
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --primary-active: #1e40af;
-  --primary-soft: #eff4ff;
-  --primary-soft-strong: #dbe7ff;
-  --primary-focus: #84adff;
-  --table-header: #f5f7fa;
+  --primary-soft: #eaf1ff;
+  --primary-soft-strong: #d3e2ff;
+  --primary-focus: #7aa7ff;
+  --table-header: #f4f6fa;
   --table-row-hover: #f1f5fb;
-  --table-row-focus: #e8f0ff;
-  --table-row-selected: #eef4ff;
-  --action-hover: #e9edf3;
-  --sidebar-bg: #15171b;
-  --sidebar-active: #191d22;
-  --sidebar-active-soft: #191d22;
-  --sidebar-hover: #202329;
+  --table-row-focus: #e6eefb;
+  --table-row-selected: #e6eefb;
+  --action-hover: #eef2f7;
+  /* Sidebar — dark neutral, ascending lightness (hover < active, fixed). */
+  --sidebar-bg: #181b21;
+  --sidebar-active: #262a32;
+  --sidebar-active-soft: #262a32;
+  --sidebar-hover: #20242b;
   --sidebar-text: #f5f7fa;
   --sidebar-muted: #aeb6c2;
   --sidebar-border: #2b2f36;
-  --danger: #d92d20;
-  --danger-hover: #991b1b;
-  --danger-soft: #ffe9e7;
-  --danger-border: #fecdd3;
-  --success: #087a55;
-  --success-soft: #ecfdf5;
-  --warning: #9a5b00;
-  --warning-soft: #fff8e8;
-  --info: #2458d6;
-  --info-soft: #edf4ff;
-  --status-neutral-bg: #f8fafc;
+  /* Semantic colors — perceptually uniform, mid-high lightness (L≈52-60%)
+   * so they read bright and modern, not muddy. soft tints use one formula
+   * (main hue @ ~92% L bg / main text). Koi-UI-informed lightness strategy. */
+  --danger: #dc2f45;
+  --danger-hover: #c41e33;
+  --danger-soft: #fdecef;
+  --danger-border: #f4c8cf;
+  --success: #12936a;
+  --success-soft: #e9f8f1;
+  --warning: #c4770a;
+  --warning-soft: #fdf3e3;
+  --info: #0e6dd9;
+  --info-soft: #e8f1fd;
+  --status-neutral-bg: #f4f6fa;
   --status-neutral-text: #475467;
-  --status-neutral-border: #e4e7ec;
-  --status-info-bg: #eff4ff;
-  --status-info-text: #1d4ed8;
-  --status-info-border: #dbe7ff;
-  --status-positive-bg: #ecfdf5;
-  --status-positive-text: #087a55;
-  --status-positive-border: #c8efdf;
-  --status-caution-bg: #fff8e8;
-  --status-caution-text: #9a5b00;
-  --status-caution-border: #f1dda8;
-  --status-destructive-bg: #fff1f2;
-  --status-destructive-text: #b42318;
-  --status-destructive-border: #fecdd3;
+  --status-neutral-border: #e4e8ee;
+  --status-info-bg: #e8f1fd;
+  --status-info-text: #0e6dd9;
+  --status-info-border: #cfe0fa;
+  --status-positive-bg: #e9f8f1;
+  --status-positive-text: #12936a;
+  --status-positive-border: #bbe9d6;
+  --status-caution-bg: #fdf3e3;
+  --status-caution-text: #c4770a;
+  --status-caution-border: #f0dab2;
+  --status-destructive-bg: #fdecef;
+  --status-destructive-text: #c41e33;
+  --status-destructive-border: #f4c8cf;
   --radius: 0.5rem;
 }
 

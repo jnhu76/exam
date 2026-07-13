@@ -8,15 +8,18 @@ const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
 const indexCss = readFileSync(join(here, "../index.css"), "utf8");
 
 describe("table and color visual-finish authority", () => {
-  it("publishes the final neutral and restrained product-blue token system", () => {
+  it("publishes the refined perceptually-uniform product-blue token system", () => {
+    // UI-PRODUCT-FINISH-CLOSURE-1: tokens were refined for perceptual
+    // uniformity and clear canvas/surface layer separation. These are the
+    // current authoritative values and MUST stay in sync with index.css.
     expect(indexCss).toContain("--primary: #2563eb");
-    expect(indexCss).toContain("--primary-soft-strong: #dbe7ff");
-    expect(indexCss).toContain("--primary-focus: #84adff");
-    expect(indexCss).toContain("--bg: #f7f8fa");
-    expect(indexCss).toContain("--text: #182230");
+    expect(indexCss).toContain("--primary-soft-strong: #d3e2ff");
+    expect(indexCss).toContain("--primary-focus: #7aa7ff");
+    expect(indexCss).toContain("--bg: #eef1f6");
+    expect(indexCss).toContain("--text: #111827");
     expect(indexCss).toContain("--border-raised: #d7dde5");
     expect(indexCss).toContain("--border-shell: #dde2e8");
-    expect(indexCss).toContain("--border-control: #cfd7e2");
+    expect(indexCss).toContain("--border-control: #cdd6e2");
     expect(indexCss).toContain("--border-divider: #edf0f3");
   });
 

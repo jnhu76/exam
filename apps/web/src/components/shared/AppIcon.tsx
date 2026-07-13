@@ -33,8 +33,10 @@ const SIZE_CONFIG: Record<
   AppIconSize,
   { px: number; stroke: number; cssClass: string }
 > = {
-  badge: { px: 16, stroke: 2, cssClass: "size-4" },
-  inline: { px: 16, stroke: 2, cssClass: "size-4" },
+  // Small roles (badge/inline = 16px) use a lighter physical stroke (1.5px) so
+  // detail-heavy glyphs like Trash2 stay crisp instead of clogging corners.
+  badge: { px: 16, stroke: 1.5, cssClass: "size-4" },
+  inline: { px: 16, stroke: 1.5, cssClass: "size-4" },
   nav: { px: 20, stroke: 2, cssClass: "size-5" },
   metric: { px: 20, stroke: 2, cssClass: "size-5" },
   large: { px: 24, stroke: 2, cssClass: "size-6" },
