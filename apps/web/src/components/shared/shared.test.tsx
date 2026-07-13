@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ConnectionIndicator } from "./ConnectionIndicator";
@@ -260,6 +260,10 @@ describe("ListToolbar", () => {
     expect(screen.getByRole("button", { name: "筛选" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建" })).toBeInTheDocument();
     expect(screen.getByText("共 2 条")).toBeInTheDocument();
+    expect(screen.getByRole("toolbar")).toHaveAttribute(
+      "data-toolbar-appearance",
+      "quiet",
+    );
   });
 
   it("renders legitimate falsy ReactNode slots", () => {
@@ -290,6 +294,7 @@ describe("TagBadge", () => {
       "data-tag-geometry",
       "compact",
     );
+    expect(screen.getByText("safety")).toHaveClass("font-normal");
   });
 });
 
@@ -311,6 +316,9 @@ describe("RowActions", () => {
     expect(screen.getByRole("group", { name: "行操作" })).toHaveAttribute(
       "data-action-target",
       "responsive",
+    );
+    expect(screen.getByRole("group", { name: "行操作" })).toHaveClass(
+      "gap-1.5",
     );
     expect(screen.getByRole("button", { name: "查看" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "编辑" })).toBeInTheDocument();
@@ -489,6 +497,9 @@ describe("StatsCard", () => {
     expect(
       screen.getByText("12").closest('[data-slot="stats-card"]'),
     ).toHaveAttribute("data-depth", "micro");
+    expect(
+      screen.getByText("12").closest('[data-slot="stats-card"]'),
+    ).toHaveClass("surface-raised");
     expect(screen.getByText("图").parentElement).toHaveAttribute(
       "data-anchor-tone",
       "primary-soft",
@@ -660,6 +671,10 @@ describe("DataToolbar", () => {
     expect(screen.getByLabelText("关键词")).toBeInTheDocument();
     expect(screen.getByText("共 3 条")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导入" })).toBeInTheDocument();
+    expect(screen.getByRole("toolbar")).toHaveAttribute(
+      "data-toolbar-appearance",
+      "quiet",
+    );
   });
 
   it("supports custom accessible label", () => {
@@ -676,6 +691,23 @@ describe("DataToolbar", () => {
 });
 
 describe("DataTableShell", () => {
+  function setScrollMetrics(
+    element: HTMLElement,
+    metrics: { clientWidth: number; scrollWidth: number; scrollLeft: number },
+  ) {
+    Object.defineProperties(element, {
+      clientWidth: { configurable: true, get: () => metrics.clientWidth },
+      scrollWidth: { configurable: true, get: () => metrics.scrollWidth },
+      scrollLeft: {
+        configurable: true,
+        get: () => metrics.scrollLeft,
+        set: (value: number) => {
+          metrics.scrollLeft = value;
+        },
+      },
+    });
+  }
+
   it("renders table content inside shell", () => {
     render(
       <DataTableShell title="考试列表" description="展示当前考试">
@@ -732,7 +764,11 @@ describe("DataTableShell", () => {
     }).parentElement?.parentElement;
 
     expect(shell).toHaveClass("surface-content", "overflow-hidden");
-    expect(header).toHaveClass("bg-surface-subtle", "border-b");
+    expect(header).toHaveClass(
+      "bg-surface",
+      "border-b",
+      "border-border-divider",
+    );
   });
 
   it("owns local overflow and a governed minimum table width", () => {
@@ -751,5 +787,100 @@ describe("DataTableShell", () => {
 
     expect(shell).toHaveAttribute("data-table-min-width", "wide");
     expect(scrollRegion).toHaveAttribute("data-overflow-owner", "local");
+  });
+
+  it("shows no affordance when content does not overflow", () => {
+    render(
+      <DataTableShell>
+        <table aria-label="窄表格" />
+      </DataTableShell>,
+    );
+    const region = screen
+      .getByRole("table", { name: "窄表格" })
+      .closest('[data-slot="table-scroll-region"]') as HTMLElement;
+    setScrollMetrics(region, {
+      clientWidth: 800,
+      scrollWidth: 800,
+      scrollLeft: 0,
+    });
+    act(() => window.dispatchEvent(new Event("resize")));
+
+    expect(region).toHaveAttribute("data-overflowing", "false");
+    expect(screen.queryByText("左右滑动查看更多")).not.toBeInTheDocument();
+  });
+
+  it("tracks start, middle, and end scroll affordance states", () => {
+    render(
+      <DataTableShell>
+        <table aria-label="可滚动表格" />
+      </DataTableShell>,
+    );
+    const region = screen
+      .getByRole("table", { name: "可滚动表格" })
+      .closest('[data-slot="table-scroll-region"]') as HTMLElement;
+    const metrics = { clientWidth: 500, scrollWidth: 900, scrollLeft: 0 };
+    setScrollMetrics(region, metrics);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(region).toHaveAttribute("data-overflowing", "true");
+    expect(region).toHaveAttribute("data-scroll-start", "true");
+    expect(region).toHaveAttribute("data-scroll-end", "false");
+
+    metrics.scrollLeft = 180;
+    fireEvent.scroll(region);
+    expect(region).toHaveAttribute("data-scroll-start", "false");
+    expect(region).toHaveAttribute("data-scroll-end", "false");
+
+    metrics.scrollLeft = 400;
+    fireEvent.scroll(region);
+    expect(region).toHaveAttribute("data-scroll-start", "false");
+    expect(region).toHaveAttribute("data-scroll-end", "true");
+  });
+
+  it("removes the affordance when resizing from overflowing to fitting", () => {
+    render(
+      <DataTableShell>
+        <table aria-label="响应式表格" />
+      </DataTableShell>,
+    );
+    const region = screen
+      .getByRole("table", { name: "响应式表格" })
+      .closest('[data-slot="table-scroll-region"]') as HTMLElement;
+    const metrics = { clientWidth: 500, scrollWidth: 900, scrollLeft: 0 };
+    setScrollMetrics(region, metrics);
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(region).toHaveAttribute("data-overflowing", "true");
+
+    metrics.clientWidth = 900;
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(region).toHaveAttribute("data-overflowing", "false");
+  });
+
+  it("renders a non-interactive narrow-viewport hint only for overflow", () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 420,
+    });
+    render(
+      <DataTableShell>
+        <table aria-label="触摸表格" />
+      </DataTableShell>,
+    );
+    const region = screen
+      .getByRole("table", { name: "触摸表格" })
+      .closest('[data-slot="table-scroll-region"]') as HTMLElement;
+    setScrollMetrics(region, {
+      clientWidth: 420,
+      scrollWidth: 900,
+      scrollLeft: 0,
+    });
+    act(() => window.dispatchEvent(new Event("resize")));
+
+    expect(screen.getByText("左右滑动查看更多")).toHaveClass(
+      "pointer-events-none",
+    );
+    expect(region).toHaveClass("overflow-x-auto");
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      document.documentElement.clientWidth,
+    );
   });
 });

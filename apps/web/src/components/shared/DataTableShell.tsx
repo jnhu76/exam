@@ -1,4 +1,12 @@
-import { useId, type ReactNode } from "react";
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export type DataTableMinWidth = "compact" | "standard" | "wide";
@@ -26,9 +34,46 @@ export function DataTableShell({
   contentClassName?: string;
   minTableWidth?: DataTableMinWidth;
 }) {
+  const { t } = useTranslation();
   const shellId = useId();
   const titleId = title ? `${shellId}-title` : undefined;
   const descriptionId = description ? `${shellId}-description` : undefined;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState({
+    overflowing: false,
+    atStart: true,
+    atEnd: true,
+    narrow: false,
+  });
+  const updateOverflow = useCallback(() => {
+    const region = scrollRef.current;
+    if (!region) return;
+    const maxScroll = Math.max(0, region.scrollWidth - region.clientWidth);
+    const overflowing = maxScroll > 1;
+    setOverflow({
+      overflowing,
+      atStart: !overflowing || region.scrollLeft <= 1,
+      atEnd: !overflowing || region.scrollLeft >= maxScroll - 1,
+      narrow: window.innerWidth < 640,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    const region = scrollRef.current;
+    if (!region) return;
+    updateOverflow();
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(updateOverflow);
+    observer?.observe(region);
+    if (region.firstElementChild) observer?.observe(region.firstElementChild);
+    window.addEventListener("resize", updateOverflow);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateOverflow);
+    };
+  }, [children, updateOverflow]);
 
   return (
     <section
@@ -39,7 +84,10 @@ export function DataTableShell({
       className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (
-        <div className="flex flex-col gap-3 border-b bg-surface-subtle px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+        <div
+          data-slot="data-table-title-band"
+          className="flex flex-col gap-3 border-b border-border-divider bg-surface px-4 py-3 lg:flex-row lg:items-start lg:justify-between"
+        >
           {(title || description) && (
             <div className="min-w-0">
               {title && (
@@ -60,12 +108,33 @@ export function DataTableShell({
           {toolbar && <div className="shrink-0">{toolbar}</div>}
         </div>
       )}
-      <div
-        data-slot="table-scroll-region"
-        data-overflow-owner="local"
-        className={cn("min-w-0 overflow-x-auto", contentClassName)}
-      >
-        {children}
+      <div data-slot="table-scroll-frame" className="relative min-w-0">
+        <div
+          ref={scrollRef}
+          data-slot="table-scroll-region"
+          data-overflow-owner="local"
+          data-overflowing={String(overflow.overflowing)}
+          data-scroll-start={String(overflow.atStart)}
+          data-scroll-end={String(overflow.atEnd)}
+          className={cn("min-w-0 overflow-x-auto", contentClassName)}
+          onScroll={updateOverflow}
+        >
+          {children}
+        </div>
+        {overflow.overflowing && !overflow.atStart && (
+          <span data-slot="table-scroll-fade-left" aria-hidden="true" />
+        )}
+        {overflow.overflowing && !overflow.atEnd && (
+          <span data-slot="table-scroll-fade-right" aria-hidden="true" />
+        )}
+        {overflow.overflowing && overflow.narrow && overflow.atStart && (
+          <div
+            data-slot="table-scroll-hint"
+            className="pointer-events-none flex h-6 items-center justify-end border-t border-border-divider bg-surface-soft px-3 text-xs text-text-muted"
+          >
+            {t("common.table.scrollHint")}
+          </div>
+        )}
       </div>
       {footer && (
         <div className="border-t bg-surface-subtle px-4 py-3">{footer}</div>

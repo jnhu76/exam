@@ -175,6 +175,37 @@ describe("SystemDiagnosticsPage", () => {
     ).toHaveLength(2);
   });
 
+  it("emits distinct information, scanner, disabled, and raised metric roles", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      emailStatus: {
+        status: "disabled" as const,
+        enabled: false,
+        worker: { status: "disabled" as const },
+        outbox: { pending: 0, sent: 0, failed: 0 },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("服务器信息")).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="information"]'),
+    ).toHaveLength(3);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="scanner"]'),
+    ).toHaveLength(2);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="disabled"]'),
+    ).toHaveLength(2);
+    for (const metric of document.querySelectorAll(
+      '[data-diagnostic-role="kpi"]',
+    )) {
+      expect(metric.querySelector('[data-slot="stats-card"]')).toHaveClass(
+        "surface-raised",
+      );
+    }
+  });
+
   it("renders server info with version", async () => {
     getMock.mockResolvedValueOnce(health());
     getMock.mockResolvedValueOnce(diag());

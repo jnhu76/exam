@@ -165,6 +165,7 @@ const zhCN = {
       next: "下一页",
       pageLabel: "第 {{page}} 页",
       paginationLabel: "表格分页",
+      scrollHint: "左右滑动查看更多",
     },
     /** DatePicker default placeholder. */
     date: {
