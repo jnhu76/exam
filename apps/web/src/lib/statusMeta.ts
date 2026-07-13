@@ -196,6 +196,16 @@ export const statusMeta = {
     tone: "muted",
     icon: HelpCircle,
   },
+  active: {
+    labelKey: "status.account.active",
+    tone: "success",
+    icon: CheckCircle2,
+  },
+  inactive: {
+    labelKey: "status.account.inactive",
+    tone: "muted",
+    icon: Ban,
+  },
   unknown: {
     labelKey: "status.fallback.unknown",
     tone: "muted",

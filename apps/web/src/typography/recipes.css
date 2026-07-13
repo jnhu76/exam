@@ -25,9 +25,14 @@
  * Recipes do NOT encode domain status colors; status is a separate authority
  * (statusMeta.ts plus StatusBadge). Field errors are owned by the FieldError
  * component, not a type-NAME recipe.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Updated token references from warm Quiet
+ * Graphite (--text, --text-muted) to crisp cool-neutral (--ink values via
+ * --text, --text-muted). Page title bumped to 24px; metric explicitly sized
+ * at 28px per the admin clarity target.
  */
 
-/* page-title: the single title of a page. Strongest non-numeric hierarchy. */
+/* page-title: 24px / 700 / ink. Strongest non-numeric hierarchy. */
 .type-page-title {
   font-family: var(--font-ui);
   font-size: 1.5rem;
@@ -46,7 +51,7 @@
   color: var(--text-muted);
 }
 
-/* section-title: title of a content section / card / panel. */
+/* section-title: 16px / 700 / ink. Title of a content section / card / panel. */
 .type-section-title {
   font-family: var(--font-ui);
   font-size: 1rem;
@@ -55,7 +60,7 @@
   color: var(--text);
 }
 
-/* body: default running UI text. */
+/* body: 14px / 400. Default running UI text. */
 .type-body {
   font-family: var(--font-ui);
   font-size: 0.875rem;
@@ -64,7 +69,7 @@
   color: var(--text);
 }
 
-/* secondary: de-emphasized running text (descriptive, not a factual record). */
+/* secondary: 14px / 400. De-emphasized running text (descriptive, not factual). */
 .type-secondary {
   font-family: var(--font-ui);
   font-size: 0.875rem;
@@ -73,7 +78,7 @@
   color: var(--text-muted);
 }
 
-/* metadata: compact supporting factual info (timestamps, IDs, record facts). */
+/* metadata: 12px / 400 / ink-muted. Compact supporting factual info. */
 .type-metadata {
   font-family: var(--font-ui);
   font-size: 0.75rem;
@@ -101,9 +106,11 @@
   white-space: pre-wrap;
 }
 
-/* metric: a KPI/stat numeric value. Owns weight + tabular-nums; layout owns size. */
+/* metric: 28px / 700 / tabular-nums. A KPI/stat numeric value. */
 .type-metric {
   font-family: var(--font-ui);
+  font-size: 1.75rem;
+  line-height: 2.125rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);

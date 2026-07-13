@@ -33,7 +33,7 @@
 | `metadata` | Compact supporting factual information: timestamps, identifiers, secondary record facts, operational context. NOT "small gray text" — requires the factual-record meaning. | family `font.ui`, size `xs`, weight `400`/`500`, color muted, leading `snug`; optional `tabular-nums` for numeric facts | `AttemptDetail` timestamps/actor/IP; `AuditLog`/`SystemDiagnostics` facts; `StatsCard` trend |
 | `reading` | Sustained reading of a long Chinese passage (exam instruction, long question stem). Higher line-box than UI body. | family `font.reading`, size `xl`, weight `500`, color primary text, leading `loose` (~1.7 for CJK) | `TakeExamPage` question stem (`text-xl font-medium leading-8`) |
 | `long-response` | Read-only long candidate/source text that may wrap many lines; preserves whitespace. | family `font.reading`, size `sm`, weight `400`, color primary text, leading `relaxed`, `white-space: pre-wrap`; `min-height` OWNED BY LAYOUT (RECON-1 §8 resolved contradiction) | `GradingDetailPage` candidate-answer box; `CoursePage` long descriptions |
-| `metric` | A KPI/stat numeric value; the prominent number of a stat card. | family `font.ui`, weight `700`, color primary text, `font-variant-numeric: tabular-nums`; size OWNED BY LAYOUT (consumers use `2xl`/`3xl`/`5xl`) | `StatsCard` value; `ExamDetail`/`ScoreList`/`SystemDiagnostics`/`AttemptDetail` stat numbers; `ResultPage` total score |
+| `metric` | A KPI/stat numeric value; the prominent number of a stat card. | family `font.ui`, size `28px/34px`, weight `700`, color primary text, `font-variant-numeric: tabular-nums` | `StatsCard` value; `ExamDetail`/`ScoreList`/`SystemDiagnostics`/`AttemptDetail` stat numbers; `ResultPage` total score |
 | `numeric` | Tabular numeric alignment for tables/timers/counts (not the prominent metric). | `font-variant-numeric: tabular-nums`; optional weight; size/family OWNED BY LAYOUT | `ExamTimer`/`ExamTopbar` time; `ExamMonitoring`/`SystemDiagnostics` table cells; score table columns |
 | `code` | Monospaced code / log / JSON dump presentation. | family `font.mono`, size `xs`, weight `400`, `white-space: pre`, `overflow-x: auto` | JSON/log `<pre>` in `ImportLogs`/`AuditLog`/`AttemptDetail`/`ErrorBoundary`; `ExamTimer`/`ExamTopbar` time uses `font.mono` |
 
@@ -123,7 +123,7 @@ authority). Ambiguous forms (`text-[var(--x)]`) are review-only.
 | `metadata` | font-family, font-size, line-height, font-weight, color | — |
 | `reading` | font-family, font-size, line-height, font-weight, color | — |
 | `long-response` | font-family, font-size, line-height, font-weight, color, white-space | min-height |
-| `metric` | font-family, font-weight, color, font-variant-numeric | font-size, line-height |
+| `metric` | font-family, font-size, line-height, font-weight, color, font-variant-numeric | — |
 | `numeric` | font-variant-numeric | font-size, line-height, font-family, font-weight |
 | `code` | font-family, font-size, line-height, font-weight, white-space, overflow-x | — |
 <!-- END GENERATED RECIPE REGISTRY -->

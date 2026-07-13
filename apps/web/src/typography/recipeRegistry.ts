@@ -163,12 +163,13 @@ export const RECIPE_REGISTRY: readonly RecipeAuthority[] = [
     purpose: "A KPI/stat numeric value; the prominent number of a stat card.",
     ownedProperties: [
       "font-family",
+      "font-size",
+      "line-height",
       "font-weight",
       "color",
       "font-variant-numeric",
     ],
-    // Size + line-height are layout-owned: consumers use 2xl/3xl/5xl scale.
-    layoutOwnedProperties: ["font-size", "line-height"],
+    layoutOwnedProperties: [],
   },
   {
     name: "numeric",

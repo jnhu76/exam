@@ -46,6 +46,14 @@ describe("StatusBadge", () => {
     const { container } = render(<StatusBadge status="published" />);
     const badge = container.firstElementChild as HTMLElement;
     expect(badge.getAttribute("data-status-tone")).toBe("primary");
-    expect(badge.className).toContain("bg-primary-soft");
+    expect(badge.className).toContain("bg-primary");
+  });
+
+  it("uses the compact rectangular status geometry", () => {
+    const { container } = render(<StatusBadge status="published" />);
+    const badge = container.firstElementChild as HTMLElement;
+
+    expect(badge).toHaveClass("h-6", "rounded-md", "px-2");
+    expect(badge).not.toHaveClass("rounded-full");
   });
 });

@@ -61,6 +61,10 @@ const zhCN = {
       disabled: "已禁用",
       unknown: "未知",
     },
+    account: {
+      active: "已启用",
+      inactive: "已停用",
+    },
     result: {
       passed: "及格",
       not_passed: "不及格",
@@ -642,6 +646,7 @@ const zhCN = {
       searchPlaceholder: "搜索课程名称、代码或描述...",
       searchLabel: "搜索课程",
       clearSearchLabel: "清除课程搜索",
+      count: "共 {{count}} 门课程",
       columns: {
         name: "课程名称",
         code: "课程代码",
@@ -1518,6 +1523,7 @@ const zhCN = {
         totalGraded: "已评分",
       },
       filters: {
+        label: "成绩筛选",
         all: "全部",
         passed: "及格",
         failed: "不及格",

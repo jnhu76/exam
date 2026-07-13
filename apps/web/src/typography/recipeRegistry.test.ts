@@ -181,11 +181,11 @@ describe("recipe registry ↔ recipes.css drift (bidirectional)", () => {
     ).toBe(true);
   });
 
-  it("type-metric layout-owns size + line-height (so text-3xl is a valid companion)", () => {
+  it("type-metric owns its 28px size and line-height", () => {
     const metric = getRecipeAuthority("metric");
-    expect(metric!.layoutOwnedProperties).toContain("font-size");
-    expect(metric!.layoutOwnedProperties).toContain("line-height");
-    expect(metric!.ownedProperties).not.toContain("font-size");
+    expect(metric!.ownedProperties).toContain("font-size");
+    expect(metric!.ownedProperties).toContain("line-height");
+    expect(metric!.layoutOwnedProperties).not.toContain("font-size");
   });
 });
 

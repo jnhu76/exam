@@ -33,11 +33,11 @@ const SIZE_CONFIG: Record<
   AppIconSize,
   { px: number; stroke: number; cssClass: string }
 > = {
-  badge: { px: 14, stroke: 1.75, cssClass: "size-3.5" },
-  inline: { px: 16, stroke: 1.75, cssClass: "size-4" },
-  nav: { px: 18, stroke: 1.75, cssClass: "size-[18px]" },
-  metric: { px: 20, stroke: 1.75, cssClass: "size-5" },
-  large: { px: 24, stroke: 1.75, cssClass: "size-6" },
+  badge: { px: 16, stroke: 2, cssClass: "size-4" },
+  inline: { px: 16, stroke: 2, cssClass: "size-4" },
+  nav: { px: 20, stroke: 2, cssClass: "size-5" },
+  metric: { px: 20, stroke: 2, cssClass: "size-5" },
+  large: { px: 24, stroke: 2, cssClass: "size-6" },
   state: { px: 32, stroke: 2, cssClass: "size-8" },
   hero: { px: 40, stroke: 2, cssClass: "size-10" },
 };

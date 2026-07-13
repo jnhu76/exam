@@ -12,6 +12,10 @@ import { Button } from "@/components/ui/button";
  * rendered `stroke-width` attribute is the post-formula value, which then
  * scales with the CSS-rendered box. These tests assert the SVG attribute, not
  * the painted pixel — the attribute is the authoritative contract.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: All roles now use 2px physical stroke for
+ * crisp icon clarity at small sizes. badge/inline are 16px (aliased), nav/metric
+ * are 20px (no more 14px or 18px authorities).
  */
 describe("AppIcon", () => {
   it("renders inline size with correct numeric width/height and stroke", () => {
@@ -19,25 +23,25 @@ describe("AppIcon", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("width")).toBe("16");
     expect(svg.getAttribute("height")).toBe("16");
-    // 1.75 * 24 / 16 = 2.625
-    expect(svg.getAttribute("stroke-width")).toBe("2.625");
+    // 2 * 24 / 16 = 3
+    expect(svg.getAttribute("stroke-width")).toBe("3");
     expect(svg.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("renders nav size (18px) without being collapsed by Button parent", () => {
+  it("renders nav size (20px) without being collapsed by Button parent", () => {
     const { container } = render(
       <Button>
         <AppIcon icon={Eye} size="nav" />
       </Button>,
     );
     const svg = container.querySelector("svg")!;
-    expect(svg.getAttribute("width")).toBe("18");
-    expect(svg.getAttribute("height")).toBe("18");
-    // 1.75 * 24 / 18 = 2.333...
-    expect(svg.getAttribute("stroke-width")).toBe("2.3333333333333335");
+    expect(svg.getAttribute("width")).toBe("20");
+    expect(svg.getAttribute("height")).toBe("20");
+    // 2 * 24 / 20 = 2.4
+    expect(svg.getAttribute("stroke-width")).toBe("2.4");
     // The generated CSS class must be present so Button's
     // `[&_svg:not([class*='size-'])]:size-4` cannot override it.
-    expect(svg.getAttribute("class") ?? "").toContain("size-[18px]");
+    expect(svg.getAttribute("class") ?? "").toContain("size-5");
   });
 
   it("renders metric size (20px) inside Button without collapse", () => {
@@ -49,19 +53,19 @@ describe("AppIcon", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("width")).toBe("20");
     expect(svg.getAttribute("height")).toBe("20");
-    // 1.75 * 24 / 20 = 2.1
-    expect(svg.getAttribute("stroke-width")).toBe("2.1");
+    // 2 * 24 / 20 = 2.4
+    expect(svg.getAttribute("stroke-width")).toBe("2.4");
     expect(svg.getAttribute("class") ?? "").toContain("size-5");
   });
 
-  it("renders badge size (14px)", () => {
+  it("renders badge size (16px) with 2px physical stroke", () => {
     const { container } = render(<AppIcon icon={Eye} size="badge" />);
     const svg = container.querySelector("svg")!;
-    expect(svg.getAttribute("width")).toBe("14");
-    expect(svg.getAttribute("height")).toBe("14");
-    // 1.75 * 24 / 14 = 3
+    expect(svg.getAttribute("width")).toBe("16");
+    expect(svg.getAttribute("height")).toBe("16");
+    // 2 * 24 / 16 = 3
     expect(svg.getAttribute("stroke-width")).toBe("3");
-    expect(svg.getAttribute("class") ?? "").toContain("size-3.5");
+    expect(svg.getAttribute("class") ?? "").toContain("size-4");
   });
 
   it("renders large size (24px)", () => {
@@ -69,8 +73,8 @@ describe("AppIcon", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("width")).toBe("24");
     expect(svg.getAttribute("height")).toBe("24");
-    // 1.75 * 24 / 24 = 1.75
-    expect(svg.getAttribute("stroke-width")).toBe("1.75");
+    // 2 * 24 / 24 = 2
+    expect(svg.getAttribute("stroke-width")).toBe("2");
   });
 
   it("renders state size (32px) with 2px physical stroke", () => {

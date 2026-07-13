@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 
 describe("Button", () => {
-  it("uses shared primary color for the default variant", () => {
-    render(<Button>主要操作</Button>);
+  it("uses primary color for the primary variant", () => {
+    render(<Button variant="primary">主要操作</Button>);
 
     expect(screen.getByRole("button", { name: "主要操作" })).toHaveClass(
       "bg-primary",
@@ -21,14 +21,26 @@ describe("Button", () => {
     );
   });
 
-  it("distinguishes secondary buttons from outline buttons", () => {
-    render(<Button variant="secondary">次要操作</Button>);
+  it("uses the solid primary treatment by default", () => {
+    render(<Button>默认按钮</Button>);
 
-    expect(screen.getByRole("button", { name: "次要操作" })).toHaveClass(
-      "bg-muted",
+    expect(screen.getByRole("button", { name: "默认按钮" })).toHaveClass(
+      "bg-primary",
     );
-    expect(screen.getByRole("button", { name: "次要操作" })).not.toHaveClass(
-      "border",
+    expect(screen.getByRole("button", { name: "默认按钮" })).toHaveClass(
+      "text-primary-foreground",
+    );
+  });
+
+  it("keeps icon actions at a 36px target and large mobile actions at 44px", () => {
+    const { rerender } = render(<Button size="icon">图标操作</Button>);
+    expect(screen.getByRole("button", { name: "图标操作" })).toHaveClass(
+      "size-9",
+    );
+
+    rerender(<Button size="icon-lg">移动操作</Button>);
+    expect(screen.getByRole("button", { name: "移动操作" })).toHaveClass(
+      "size-11",
     );
   });
 
