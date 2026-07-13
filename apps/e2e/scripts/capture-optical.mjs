@@ -8,7 +8,13 @@ const outputRoot =
 const widths = (process.env.OPTICAL_WIDTHS ?? "1024,1280,1440,1920")
   .split(",")
   .map(Number);
-const routes = [
+const routeFilter = new Set(
+  (process.env.OPTICAL_ROUTES ?? "")
+    .split(",")
+    .map((route) => route.trim())
+    .filter(Boolean),
+);
+const allRoutes = [
   ["dashboard", "/admin/dashboard"],
   ["exams", "/admin/exams"],
   ["questions", "/admin/questions"],
@@ -17,6 +23,9 @@ const routes = [
   ["users", "/admin/users"],
   ["system", "/admin/system"],
 ];
+const routes = routeFilter.size
+  ? allRoutes.filter(([name]) => routeFilter.has(name))
+  : allRoutes;
 
 async function login(page) {
   await page.goto(`${baseURL}/login`);
