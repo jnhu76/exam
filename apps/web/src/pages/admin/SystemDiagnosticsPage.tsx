@@ -53,9 +53,21 @@ function getDbStatusLevel(ms: number): HealthStatus {
   return "ok";
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  emphasis = "default",
+}: {
+  label: string;
+  value: string;
+  emphasis?: "default" | "timestamp" | "signal";
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-2 py-1.5">
+    <div
+      data-slot="diagnostic-data-row"
+      data-emphasis={emphasis}
+      className="flex items-baseline justify-between gap-2 py-1.5"
+    >
       <span className="text-sm text-muted-foreground">{label}</span>
       <span className="text-sm font-medium tabular-nums">{value}</span>
     </div>
@@ -333,6 +345,7 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.lastScan")}
+                emphasis="timestamp"
                 value={
                   diag.heartbeatStatus.lastScanAt
                     ? formatDateTime(diag.heartbeatStatus.lastScanAt)
@@ -341,6 +354,7 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.disruptedCount")}
+                emphasis="signal"
                 value={`${diag.heartbeatStatus.disruptedCount}`}
               />
             </DiagCard>
@@ -356,6 +370,7 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.lastScan")}
+                emphasis="timestamp"
                 value={
                   diag.deadlineScannerStatus.lastScanAt
                     ? formatDateTime(diag.deadlineScannerStatus.lastScanAt)
@@ -364,6 +379,7 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.autoSubmitCount")}
+                emphasis="signal"
                 value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
               />
             </DiagCard>
@@ -507,7 +523,9 @@ function DiagCard({
           {title}
         </div>
       </div>
-      <div className="px-5 py-3">{children}</div>
+      <div data-slot="diagnostic-card-body" className="px-5 py-3">
+        {children}
+      </div>
     </div>
   );
 }

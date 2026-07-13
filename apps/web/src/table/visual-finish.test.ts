@@ -53,5 +53,7 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toContain('[data-slot="table-scroll-fade-left"]');
     expect(tableCss).toContain('[data-slot="table-scroll-fade-right"]');
     expect(tableCss).toContain("pointer-events: none");
+    expect(tableCss).toContain("width: 0.5rem");
+    expect(tableCss).toContain("var(--text-muted) 4%");
   });
 });

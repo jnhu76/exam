@@ -264,6 +264,14 @@ describe("ListToolbar", () => {
       "data-toolbar-appearance",
       "quiet",
     );
+    expect(screen.getByLabelText("关键词").parentElement).toHaveAttribute(
+      "data-slot",
+      "toolbar-search",
+    );
+    expect(
+      screen.getByRole("button", { name: "筛选" }).parentElement,
+    ).toHaveAttribute("data-slot", "toolbar-filters");
+    expect(screen.getByRole("toolbar")).not.toHaveClass("surface-content");
   });
 
   it("renders legitimate falsy ReactNode slots", () => {
@@ -502,6 +510,9 @@ describe("StatsCard", () => {
       "data-anchor-tone",
       "primary-soft",
     );
+    expect(
+      screen.getByText("12").closest('[data-slot="stats-card-content"]'),
+    ).toHaveAttribute("data-slot", "stats-card-content");
   });
 });
 
@@ -673,6 +684,7 @@ describe("DataToolbar", () => {
       "data-toolbar-appearance",
       "quiet",
     );
+    expect(screen.getByRole("toolbar")).not.toHaveClass("surface-content");
   });
 
   it("supports custom accessible label", () => {
@@ -804,7 +816,7 @@ describe("DataTableShell", () => {
     act(() => window.dispatchEvent(new Event("resize")));
 
     expect(region).toHaveAttribute("data-overflowing", "false");
-    expect(screen.queryByText("左右滑动查看更多")).not.toBeInTheDocument();
+    expect(screen.queryByText(/滑动查看更多/)).not.toBeInTheDocument();
   });
 
   it("tracks start, middle, and end scroll affordance states", () => {
@@ -822,16 +834,34 @@ describe("DataTableShell", () => {
     expect(region).toHaveAttribute("data-overflowing", "true");
     expect(region).toHaveAttribute("data-scroll-start", "true");
     expect(region).toHaveAttribute("data-scroll-end", "false");
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-left"]'),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-right"]'),
+    ).toBeInTheDocument();
 
     metrics.scrollLeft = 180;
     fireEvent.scroll(region);
     expect(region).toHaveAttribute("data-scroll-start", "false");
     expect(region).toHaveAttribute("data-scroll-end", "false");
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-left"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-right"]'),
+    ).toBeInTheDocument();
 
     metrics.scrollLeft = 400;
     fireEvent.scroll(region);
     expect(region).toHaveAttribute("data-scroll-start", "false");
     expect(region).toHaveAttribute("data-scroll-end", "true");
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-left"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-slot="table-scroll-fade-right"]'),
+    ).not.toBeInTheDocument();
   });
 
   it("removes the affordance when resizing from overflowing to fitting", () => {
@@ -866,15 +896,34 @@ describe("DataTableShell", () => {
     const region = screen
       .getByRole("table", { name: "触摸表格" })
       .closest('[data-slot="table-scroll-region"]') as HTMLElement;
-    setScrollMetrics(region, {
+    const metrics = {
       clientWidth: 420,
       scrollWidth: 900,
       scrollLeft: 0,
-    });
+    };
+    setScrollMetrics(region, metrics);
     act(() => window.dispatchEvent(new Event("resize")));
 
-    expect(screen.getByText("左右滑动查看更多")).toHaveClass(
+    expect(screen.getByText("向右滑动查看更多")).toHaveClass(
       "pointer-events-none",
+    );
+    expect(screen.getByText("向右滑动查看更多")).toHaveAttribute(
+      "data-scroll-direction",
+      "right",
+    );
+
+    metrics.scrollLeft = 240;
+    fireEvent.scroll(region);
+    expect(screen.getByText("左右滑动查看更多")).toHaveAttribute(
+      "data-scroll-direction",
+      "both",
+    );
+
+    metrics.scrollLeft = 480;
+    fireEvent.scroll(region);
+    expect(screen.getByText("向左滑动查看更多")).toHaveAttribute(
+      "data-scroll-direction",
+      "left",
     );
     expect(region).toHaveClass("overflow-x-auto");
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(

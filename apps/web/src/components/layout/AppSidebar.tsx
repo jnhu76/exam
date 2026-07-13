@@ -175,7 +175,7 @@ function SidebarLink({
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          "flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
+          "flex min-h-10 items-center gap-3 rounded-md px-3 text-sm text-sidebar-muted transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground",
           isActive && "bg-sidebar-accent font-medium text-sidebar-foreground",
         )
       }

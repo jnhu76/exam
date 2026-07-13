@@ -127,12 +127,28 @@ export function DataTableShell({
         {overflow.overflowing && !overflow.atEnd && (
           <span data-slot="table-scroll-fade-right" aria-hidden="true" />
         )}
-        {overflow.overflowing && overflow.narrow && overflow.atStart && (
+        {overflow.overflowing && overflow.narrow && (
           <div
             data-slot="table-scroll-hint"
-            className="pointer-events-none flex h-6 items-center justify-end border-t border-border-divider bg-surface-soft px-3 text-xs text-text-muted"
+            data-scroll-direction={
+              overflow.atStart ? "right" : overflow.atEnd ? "left" : "both"
+            }
+            className={cn(
+              "pointer-events-none flex h-6 items-center border-t border-border-divider bg-surface-soft px-3 text-xs text-text-muted",
+              overflow.atStart
+                ? "justify-end"
+                : overflow.atEnd
+                  ? "justify-start"
+                  : "justify-center",
+            )}
           >
-            {t("common.table.scrollHint")}
+            {t(
+              overflow.atStart
+                ? "common.table.scrollHintRight"
+                : overflow.atEnd
+                  ? "common.table.scrollHintLeft"
+                  : "common.table.scrollHintBoth",
+            )}
           </div>
         )}
       </div>

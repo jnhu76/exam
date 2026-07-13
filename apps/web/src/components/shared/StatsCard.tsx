@@ -22,17 +22,17 @@ export function StatsCard({
       data-depth="micro"
       className="surface-raised p-4"
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         {icon && (
           <div
             data-slot="stats-card-icon"
             data-anchor-tone="primary-soft"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-primary-soft-strong bg-primary-soft text-primary"
+            className="flex shrink-0 items-center text-primary"
           >
             {icon}
           </div>
         )}
-        <div className="min-w-0">
+        <div data-slot="stats-card-content" className="min-w-0 flex-1">
           <p className="type-secondary truncate">{label}</p>
           <div className="flex items-baseline gap-1">
             <p data-slot="stats-card-value" className="type-metric">

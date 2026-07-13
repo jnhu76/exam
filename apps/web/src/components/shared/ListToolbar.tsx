@@ -35,15 +35,22 @@ export function ListToolbar({
       aria-label={label}
       data-toolbar-appearance={appearance}
       className={cn(
-        "surface-content flex min-h-14 flex-col gap-3 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between",
+        "flex min-h-14 flex-col gap-3 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between",
         appearance === "quiet" && "px-3 py-2",
         className,
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center">
-        {search != null && <div className="min-w-0 flex-1">{search}</div>}
+        {search != null && (
+          <div data-slot="toolbar-search" className="min-w-0 flex-1">
+            {search}
+          </div>
+        )}
         {filters != null && (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div
+            data-slot="toolbar-filters"
+            className="flex min-w-0 flex-wrap items-center gap-2"
+          >
             {filters}
           </div>
         )}

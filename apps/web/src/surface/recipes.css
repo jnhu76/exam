@@ -54,12 +54,12 @@
 
 .surface-raised {
   background: var(--surface-raised);
-  border: 1px solid var(--border-raised);
+  border: 1px solid color-mix(in srgb, var(--border-raised) 52%, var(--surface));
   border-radius: 0.625rem;
   box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.05),
-    0 2px 5px rgb(16 24 40 / 0.025),
-    inset 0 1px 0 rgb(255 255 255 / 0.9);
+    0 1px 3px rgb(16 24 40 / 0.1),
+    0 6px 14px -6px rgb(16 24 40 / 0.2),
+    inset 0 1px 0 rgb(255 255 255 / 0.96);
 }
 
 .surface-instrument {
@@ -107,21 +107,35 @@
 
 [data-slot="stats-card"][data-depth="micro"] {
   box-shadow:
-    0 1px 2px rgb(16 24 40 / 0.05),
-    0 2px 5px rgb(16 24 40 / 0.025),
-    inset 0 1px 0 rgb(255 255 255 / 0.9);
+    0 1px 3px rgb(16 24 40 / 0.1),
+    0 6px 14px -6px rgb(16 24 40 / 0.2),
+    inset 0 1px 0 rgb(255 255 255 / 0.96);
+}
+
+[data-slot="stats-card"] [data-slot="stats-card-icon"] {
+  width: 2.25rem;
+  height: 2rem;
+  background: transparent;
+  border-right: 1px solid var(--border-divider);
+  border-radius: 0;
+  box-shadow: none;
+  justify-content: flex-start;
+}
+
+[data-slot="stats-card"] [data-slot="stats-card-content"] {
+  display: grid;
+  row-gap: 0;
 }
 
 [data-diagnostic-role="information"] {
-  background: var(--surface);
-  border: 1px solid var(--border-shell);
-  border-radius: var(--radius);
+  background: var(--surface-soft);
+  border: 0;
+  border-radius: 0.375rem;
 }
 
 [data-diagnostic-role="scanner"] {
   background: var(--surface);
-  border: 1px solid var(--border-raised);
-  border-top: 2px solid var(--border-control);
+  border: 1px solid var(--border-shell);
   border-radius: var(--radius);
 }
 
@@ -136,6 +150,74 @@
 }
 
 [data-diagnostic-role="information"] [data-slot="diagnostic-card-header"] {
-  border-bottom-color: transparent;
+  border-bottom: 0;
   padding-bottom: 0;
+}
+
+[data-diagnostic-role="information"] [data-slot="diagnostic-card-body"] {
+  padding-top: 0.375rem;
+}
+
+[data-diagnostic-role="information"] [data-slot="diagnostic-data-row"] {
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-divider) 78%, transparent);
+}
+
+[data-diagnostic-role="information"]
+  [data-slot="diagnostic-data-row"]:last-child {
+  border-bottom: 0;
+}
+
+[data-diagnostic-role="scanner"] [data-slot="diagnostic-card-header"] {
+  background: var(--surface-soft);
+  border-bottom: 0;
+}
+
+[data-diagnostic-role="scanner"] [data-slot="diagnostic-card-body"] {
+  position: relative;
+  padding-left: 2rem;
+}
+
+[data-diagnostic-role="scanner"] [data-slot="diagnostic-card-body"]::before {
+  position: absolute;
+  top: 1.125rem;
+  bottom: 1.125rem;
+  left: 1.125rem;
+  width: 1px;
+  background: var(--border-divider);
+  content: "";
+}
+
+[data-diagnostic-role="scanner"] [data-slot="diagnostic-data-row"] {
+  position: relative;
+}
+
+[data-diagnostic-role="scanner"] [data-slot="diagnostic-data-row"]::before {
+  position: absolute;
+  top: 0.75rem;
+  left: -1.0625rem;
+  width: 0.3125rem;
+  height: 0.3125rem;
+  border-radius: 999px;
+  background: var(--text-subtle);
+  box-shadow: 0 0 0 2px var(--surface);
+  content: "";
+}
+
+[data-diagnostic-role="scanner"]
+  [data-slot="diagnostic-data-row"][data-emphasis="timestamp"] {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-diagnostic-role="scanner"]
+  [data-slot="diagnostic-data-row"][data-emphasis="timestamp"]::before {
+  background: var(--primary);
+}
+
+[data-diagnostic-role="scanner"]
+  [data-slot="diagnostic-data-row"][data-emphasis="signal"] {
+  border-top: 1px solid var(--border-divider);
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
 }

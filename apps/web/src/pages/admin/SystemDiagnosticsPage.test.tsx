@@ -173,6 +173,16 @@ describe("SystemDiagnosticsPage", () => {
     expect(
       document.querySelectorAll('[data-diagnostic-role="scanner"]'),
     ).toHaveLength(2);
+    expect(
+      document.querySelectorAll(
+        '[data-diagnostic-role="scanner"] [data-emphasis="timestamp"]',
+      ),
+    ).toHaveLength(2);
+    expect(
+      document.querySelectorAll(
+        '[data-diagnostic-role="scanner"] [data-emphasis="signal"]',
+      ),
+    ).toHaveLength(2);
   });
 
   it("emits distinct information, scanner, disabled, and raised metric roles", async () => {
