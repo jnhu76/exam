@@ -11,6 +11,10 @@
   border-color: var(--border-shell);
 }
 
+[data-slot="admin-table-shell"] [data-slot="table-container"] {
+  overflow-x: visible;
+}
+
 [data-slot="table-header"] {
   background: var(--table-header);
 }

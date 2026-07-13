@@ -25,6 +25,12 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toContain("var(--border-row)");
   });
 
+  it("leaves DataTableShell as the single local overflow owner", () => {
+    expect(tableCss).toMatch(
+      /\[data-slot="admin-table-shell"\]\s+\[data-slot="table-container"\][\s\S]*?overflow-x:\s*visible/,
+    );
+  });
+
   it("defines restrained row hover, focus, and selected states", () => {
     expect(tableCss).toContain("var(--table-row-hover)");
     expect(tableCss).toContain("var(--table-row-focus)");
