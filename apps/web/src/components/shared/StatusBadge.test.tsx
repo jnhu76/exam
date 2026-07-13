@@ -13,11 +13,39 @@ describe("StatusBadge", () => {
     expect(screen.getByText("未知")).toBeInTheDocument();
   });
 
-  it("can render without the status icon", () => {
-    const { container } = render(
-      <StatusBadge status="open" showIcon={false} />,
-    );
-    expect(screen.getByText("开放中")).toBeInTheDocument();
+  it("defaults to text-only for ordinary statuses (published has no icon)", () => {
+    const { container } = render(<StatusBadge status="published" />);
+    expect(screen.getByText("已发布")).toBeInTheDocument();
     expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("shows an icon by default for allowlisted live/urgent statuses (critical)", () => {
+    const { container } = render(<StatusBadge status="critical" />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("shows an icon by default for misconduct_serious", () => {
+    const { container } = render(<StatusBadge status="misconduct_serious" />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("explicit showIcon={true} forces an icon on an ordinary status", () => {
+    const { container } = render(<StatusBadge status="open" showIcon={true} />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("explicit showIcon={false} hides an icon on an allowlisted status", () => {
+    const { container } = render(
+      <StatusBadge status="critical" showIcon={false} />,
+    );
+    expect(screen.queryByText("严重")).toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("preserves tone and label semantics (published stays primary tone)", () => {
+    const { container } = render(<StatusBadge status="published" />);
+    const badge = container.firstElementChild as HTMLElement;
+    expect(badge.getAttribute("data-status-tone")).toBe("primary");
+    expect(badge.className).toContain("bg-primary-soft");
   });
 });

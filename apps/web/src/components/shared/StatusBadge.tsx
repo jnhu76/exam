@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { getStatusMeta, type StatusTone } from "@/lib/statusMeta";
 import { statusLabelKey } from "@/lib/statusMetaUtils";
 import { cn } from "@/lib/utils";
@@ -18,11 +19,16 @@ const toneClasses: Record<StatusTone, string> = {
  * Inline badge that displays a status label with a color-coded background
  * and optional icon, resolved from the status metadata lookup. The label
  * text is i18n-resolved via `t(meta.labelKey)` (statusMeta stores no copy).
+ *
+ * Default icon visibility follows `statusMeta[status].iconPolicy`:
+ * ordinary/dense statuses render text-only; only urgency/destructive/live
+ * statuses (iconPolicy "show") render an icon by default. An explicit
+ * `showIcon` prop overrides this either way (backward compatibility).
  */
 export function StatusBadge({
   status,
   className,
-  showIcon = true,
+  showIcon,
 }: {
   status: string;
   className?: string;
@@ -30,7 +36,7 @@ export function StatusBadge({
 }) {
   const { t } = useTranslation();
   const meta = getStatusMeta(status);
-  const Icon = meta.icon;
+  const shouldShowIcon = showIcon ?? meta.iconPolicy === "show";
 
   return (
     <span
@@ -41,7 +47,7 @@ export function StatusBadge({
         className,
       )}
     >
-      {showIcon && <Icon className="size-3.5" aria-hidden="true" />}
+      {shouldShowIcon && <AppIcon icon={meta.icon} size="badge" />}
       {t(statusLabelKey(meta.labelKey))}
     </span>
   );
