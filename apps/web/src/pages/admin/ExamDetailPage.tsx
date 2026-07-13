@@ -12,18 +12,17 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -680,67 +679,88 @@ export function ExamDetailPage() {
                 />
               ) : (
                 <Table>
+                  <DataTableColumns
+                    columns={[
+                      { role: "short-id" },
+                      { role: "primary-text" },
+                      { role: "status" },
+                      { role: "number" },
+                      { role: "score" },
+                      { role: "actions" },
+                    ]}
+                  />
                   <TableHeader>
                     <TableRow>
-                      <TableHead>
+                      <DataTableHead role="short-id">
                         {t("admin.examDetail.enrollment.columns.identity")}
-                      </TableHead>
-                      <TableHead>
+                      </DataTableHead>
+                      <DataTableHead role="primary-text">
                         {t("admin.examDetail.enrollment.columns.name")}
-                      </TableHead>
-                      <TableHead>
+                      </DataTableHead>
+                      <DataTableHead role="status">
                         {t("admin.examDetail.enrollment.columns.status")}
-                      </TableHead>
-                      <TableHead>
+                      </DataTableHead>
+                      <DataTableHead role="number">
                         {t("admin.examDetail.enrollment.columns.attemptCount")}
-                      </TableHead>
-                      <TableHead>
+                      </DataTableHead>
+                      <DataTableHead role="score">
                         {t("admin.examDetail.enrollment.columns.score")}
-                      </TableHead>
-                      <TableHead className="w-16">
+                      </DataTableHead>
+                      <DataTableHead role="actions">
                         {t("admin.examDetail.enrollment.columns.actions")}
-                      </TableHead>
+                      </DataTableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {enrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
-                        <TableCell>
+                        <DataTableCell role="short-id">
                           {enrollment.candidateIdentity ??
                             enrollment.candidateId.slice(0, 8)}
-                        </TableCell>
-                        <TableCell>{enrollment.candidateDisplayName}</TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="primary-text">
+                          {enrollment.candidateDisplayName}
+                        </DataTableCell>
+                        <DataTableCell role="status">
                           <StatusBadge status={enrollment.status} />
-                        </TableCell>
-                        <TableCell>{enrollment.attemptCount}</TableCell>
-                        <TableCell>{enrollment.finalScore ?? "-"}</TableCell>
-                        <TableCell>
-                          {enrollment.status === "assigned" && (
-                            <ConfirmDialog
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={t(
-                                    "admin.examDetail.confirm.removeCandidate",
-                                  )}
-                                >
-                                  <AppIcon icon={Trash2} size="inline" />
-                                </Button>
-                              }
-                              title={t("admin.examDetail.confirm.removeTitle")}
-                              description={t(
-                                "admin.examDetail.confirm.removeDescription",
-                                { name: enrollment.candidateDisplayName },
-                              )}
-                              destructive
-                              onConfirm={() =>
-                                void handleRemoveEnrollment(enrollment.id)
-                              }
-                            />
-                          )}
-                        </TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="number">
+                          {enrollment.attemptCount}
+                        </DataTableCell>
+                        <DataTableCell role="score">
+                          {enrollment.finalScore ?? "-"}
+                        </DataTableCell>
+                        <DataTableCell role="actions">
+                          <RowActions>
+                            {enrollment.status === "assigned" && (
+                              <ConfirmDialog
+                                trigger={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={t(
+                                      "admin.examDetail.confirm.removeCandidate",
+                                    )}
+                                    data-row-action-tone="destructive"
+                                  >
+                                    <AppIcon icon={Trash2} size="inline" />
+                                  </Button>
+                                }
+                                title={t(
+                                  "admin.examDetail.confirm.removeTitle",
+                                )}
+                                description={t(
+                                  "admin.examDetail.confirm.removeDescription",
+                                  { name: enrollment.candidateDisplayName },
+                                )}
+                                destructive
+                                onConfirm={() =>
+                                  void handleRemoveEnrollment(enrollment.id)
+                                }
+                              />
+                            )}
+                          </RowActions>
+                        </DataTableCell>
                       </TableRow>
                     ))}
                   </TableBody>

@@ -15,6 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PageSection } from "@/components/shared/PageSection";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Play,
@@ -49,14 +54,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { getTypeLabelKey } from "@/lib/constants";
 import type {
   AttemptTimelineEvent,
@@ -757,57 +755,74 @@ export function AttemptDetailPage() {
         </CardHeader>
         <CardContent>
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "number" },
+                { role: "long-text", key: "question" },
+                { role: "type" },
+                { role: "long-text", key: "candidate-answer" },
+                { role: "long-text", key: "standard-answer" },
+                { role: "score", key: "earned-score" },
+                { role: "score", key: "max-score" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">
+                <DataTableHead role="number">
                   {t("admin.attemptDetail.result.columns.number")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.attemptDetail.result.columns.content")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="type">
                   {t("admin.attemptDetail.result.columns.type")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.attemptDetail.result.columns.candidateAnswer")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.attemptDetail.result.columns.standardAnswer")}
-                </TableHead>
-                <TableHead className="text-right">
+                </DataTableHead>
+                <DataTableHead role="score">
                   {t("admin.attemptDetail.result.columns.score")}
-                </TableHead>
-                <TableHead className="text-right">
+                </DataTableHead>
+                <DataTableHead role="score">
                   {t("admin.attemptDetail.result.columns.maxScore")}
-                </TableHead>
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedQuestions.map((q) => (
                 <TableRow key={q.questionId}>
-                  <TableCell className="font-medium">{q.order}</TableCell>
-                  <TableCell className="max-w-md truncate" title={q.content}>
+                  <DataTableCell role="number" className="font-medium">
+                    {q.order}
+                  </DataTableCell>
+                  <DataTableCell
+                    role="long-text"
+                    className="truncate"
+                    title={q.content}
+                  >
                     {q.content}
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="type">
                     <Badge variant="outline">
                       {(getTypeLabelKey(q.type)
                         ? t(getTypeLabelKey(q.type) as never)
                         : undefined) ?? q.type}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="long-text">
                     <Badge variant={q.correct ? "default" : "destructive"}>
                       {formatAnswer(q.candidateAnswer)}
                     </Badge>
-                  </TableCell>
-                  <TableCell>{formatAnswer(q.standardAnswer)}</TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
+                  </DataTableCell>
+                  <DataTableCell role="long-text">
+                    {formatAnswer(q.standardAnswer)}
+                  </DataTableCell>
+                  <DataTableCell role="score" className="font-bold">
                     {q.score}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {q.maxScore}
-                  </TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="score">{q.maxScore}</DataTableCell>
                 </TableRow>
               ))}
             </TableBody>
