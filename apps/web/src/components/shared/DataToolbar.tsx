@@ -26,8 +26,9 @@ export function DataToolbar({
     <div
       role="toolbar"
       aria-label={label}
+      data-toolbar-appearance="quiet"
       className={cn(
-        "flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between",
+        "surface-content flex min-h-14 flex-col gap-3 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >

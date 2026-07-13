@@ -25,7 +25,7 @@ export function ListToolbar({
   summary,
   className,
   "aria-label": ariaLabel,
-  appearance = "default",
+  appearance = "quiet",
 }: ListToolbarProps) {
   const { t } = useTranslation();
   const label = ariaLabel ?? t("common.toolbar.listLabel");
@@ -35,9 +35,8 @@ export function ListToolbar({
       aria-label={label}
       data-toolbar-appearance={appearance}
       className={cn(
-        "flex flex-col gap-3 rounded-lg border border-border bg-card p-3 lg:flex-row lg:items-center lg:justify-between",
-        appearance === "quiet" &&
-          "rounded-md border-border-row bg-surface px-3 py-2",
+        "surface-content flex min-h-14 flex-col gap-3 px-3 py-2.5 lg:flex-row lg:items-center lg:justify-between",
+        appearance === "quiet" && "px-3 py-2",
         className,
       )}
     >

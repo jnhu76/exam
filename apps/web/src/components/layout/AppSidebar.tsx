@@ -168,6 +168,7 @@ function SidebarLink({
   const label = t(item.labelKey as never);
   return (
     <NavLink
+      data-slot="sidebar-nav-item"
       to={item.to}
       end={item.end}
       title={collapsed ? label : undefined}
