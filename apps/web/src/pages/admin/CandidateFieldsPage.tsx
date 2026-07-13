@@ -11,6 +11,7 @@ import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { RowActions } from "@/components/shared/RowActions";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -249,106 +250,112 @@ export function CandidateFieldsPage() {
           description={t("admin.candidateFields.emptyDescription")}
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                {t("admin.candidateFields.columns.fieldName")}
-              </TableHead>
-              <TableHead>{t("admin.candidateFields.columns.label")}</TableHead>
-              <TableHead>{t("admin.candidateFields.columns.type")}</TableHead>
-              <TableHead>
-                {t("admin.candidateFields.columns.required")}
-              </TableHead>
-              <TableHead>{t("admin.candidateFields.columns.unique")}</TableHead>
-              <TableHead>
-                {t("admin.candidateFields.columns.sortOrder")}
-              </TableHead>
-              <TableHead>
-                {t("admin.candidateFields.columns.actions")}
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fields.map((field, index) => (
-              <TableRow
-                key={field.id}
-                draggable
-                onDragStart={() => setDraggingId(field.id)}
-                onDragEnd={() => setDraggingId(null)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => void drop(field)}
-              >
-                <TableCell>{field.name}</TableCell>
-                <TableCell>{field.label}</TableCell>
-                <TableCell>
-                  {t(
-                    `admin.candidateFields.typeLabels.${field.fieldType}` as any,
-                  )}
-                </TableCell>
-                <TableCell>
-                  {t(
-                    `admin.candidateFields.requiredLabels.${field.required}` as any,
-                  )}
-                </TableCell>
-                <TableCell>
-                  {t(
-                    `admin.candidateFields.requiredLabels.${field.unique}` as any,
-                  )}
-                </TableCell>
-                <TableCell>{field.sortOrder}</TableCell>
-                <TableCell>
-                  <RowActions>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={index === 0}
-                      onClick={() => void move(field, -1)}
-                      aria-label={t("admin.candidateFields.moveUp")}
-                    >
-                      <AppIcon icon={ArrowUp} size="inline" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      disabled={index === fields.length - 1}
-                      onClick={() => void move(field, 1)}
-                      aria-label={t("admin.candidateFields.moveDown")}
-                    >
-                      <AppIcon icon={ArrowDown} size="inline" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => dialog(field)}
-                      aria-label={t("admin.candidateFields.editLabel")}
-                    >
-                      <AppIcon icon={Pencil} size="inline" />
-                    </Button>
-                    <ConfirmDialog
-                      trigger={
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label={t("admin.candidateFields.deleteLabel")}
-                        >
-                          <AppIcon icon={Trash2} size="inline" />
-                        </Button>
-                      }
-                      title={t("admin.candidateFields.confirmDelete")}
-                      description={t(
-                        "admin.candidateFields.confirmDeleteDescription",
-                        { label: field.label },
-                      )}
-                      destructive
-                      onConfirm={() => void remove(field.id)}
-                    />
-                  </RowActions>
-                </TableCell>
+        <DataTableShell>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  {t("admin.candidateFields.columns.fieldName")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.candidateFields.columns.label")}
+                </TableHead>
+                <TableHead>{t("admin.candidateFields.columns.type")}</TableHead>
+                <TableHead>
+                  {t("admin.candidateFields.columns.required")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.candidateFields.columns.unique")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.candidateFields.columns.sortOrder")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.candidateFields.columns.actions")}
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {fields.map((field, index) => (
+                <TableRow
+                  key={field.id}
+                  draggable
+                  onDragStart={() => setDraggingId(field.id)}
+                  onDragEnd={() => setDraggingId(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => void drop(field)}
+                >
+                  <TableCell>{field.name}</TableCell>
+                  <TableCell>{field.label}</TableCell>
+                  <TableCell>
+                    {t(
+                      `admin.candidateFields.typeLabels.${field.fieldType}` as any,
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {t(
+                      `admin.candidateFields.requiredLabels.${field.required}` as any,
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {t(
+                      `admin.candidateFields.requiredLabels.${field.unique}` as any,
+                    )}
+                  </TableCell>
+                  <TableCell>{field.sortOrder}</TableCell>
+                  <TableCell>
+                    <RowActions>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={index === 0}
+                        onClick={() => void move(field, -1)}
+                        aria-label={t("admin.candidateFields.moveUp")}
+                      >
+                        <AppIcon icon={ArrowUp} size="inline" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        disabled={index === fields.length - 1}
+                        onClick={() => void move(field, 1)}
+                        aria-label={t("admin.candidateFields.moveDown")}
+                      >
+                        <AppIcon icon={ArrowDown} size="inline" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => dialog(field)}
+                        aria-label={t("admin.candidateFields.editLabel")}
+                      >
+                        <AppIcon icon={Pencil} size="inline" />
+                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            aria-label={t("admin.candidateFields.deleteLabel")}
+                          >
+                            <AppIcon icon={Trash2} size="inline" />
+                          </Button>
+                        }
+                        title={t("admin.candidateFields.confirmDelete")}
+                        description={t(
+                          "admin.candidateFields.confirmDeleteDescription",
+                          { label: field.label },
+                        )}
+                        destructive
+                        onConfirm={() => void remove(field.id)}
+                      />
+                    </RowActions>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DataTableShell>
       )}
       <Dialog open={open} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>

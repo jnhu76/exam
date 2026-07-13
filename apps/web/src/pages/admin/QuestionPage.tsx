@@ -12,6 +12,7 @@ import { ListToolbar } from "@/components/shared/ListToolbar";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,6 @@ import {
 } from "lucide-react";
 import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 
-/** Row shape returned by the questions list API. */
 /** A question record for the admin question list table. */
 interface QuestionRow {
   id: string;
@@ -54,7 +54,6 @@ interface QuestionRow {
   tags: string[];
 }
 
-/** Minimal course representation used to populate the course filter. */
 /** A course record used for course name lookup in the question table. */
 interface CourseRow {
   id: string;
@@ -62,7 +61,6 @@ interface CourseRow {
   code: string;
 }
 
-/** Generic paginated API response wrapper. */
 /** Generic paginated API response wrapper. */
 interface PaginatedResponse<T> {
   items: T[];
@@ -72,10 +70,12 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-/** Admin page for browsing, filtering, and managing the question bank. */
 /**
  * Admin question management page with server-side filtering by course, type,
  * difficulty, and tags, plus client-side search and pagination.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Structured filter toolbar, admin table,
+ * numeric alignment, clear action column.
  */
 export function QuestionPage() {
   const { t } = useTranslation();
@@ -94,7 +94,6 @@ export function QuestionPage() {
   const [pageSize] = useState(20);
   const [total, setTotal] = useState(0);
 
-  /** Fetches courses once on mount for the filter dropdown. */
   const loadCourses = useCallback(async () => {
     try {
       const cData = await api.get<PaginatedResponse<CourseRow>>("/api/courses");
@@ -104,7 +103,6 @@ export function QuestionPage() {
     }
   }, []);
 
-  /** Fetches questions with the current filter and pagination parameters. */
   const loadQuestions = useCallback(async () => {
     setIsTableLoading(true);
     setError(null);
@@ -148,7 +146,6 @@ export function QuestionPage() {
     void loadQuestions();
   }, [loadQuestions, isInitialLoading]);
 
-  /** Deletes a question by id and refreshes the table. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/questions/${id}`);
@@ -158,17 +155,14 @@ export function QuestionPage() {
     }
   }
 
-  /** Client-side content search applied to the current page of results. */
   const filtered = questions.filter((q) => {
     if (search && !q.content.toLowerCase().includes(search.toLowerCase()))
       return false;
     return true;
   });
 
-  /** Maps course ids to names for display in the table. */
   const courseMap = new Map(courses.map((c) => [c.id, c.name]));
 
-  /** Resets all filter, search, and pagination state to defaults. */
   function clearFilters() {
     setFilterCourse("all");
     setFilterType("all");
@@ -178,7 +172,6 @@ export function QuestionPage() {
     setPage(1);
   }
 
-  /** Whether any filter or search criterion is currently active. */
   const hasActiveFilter =
     filterCourse !== "all" ||
     filterType !== "all" ||
@@ -363,84 +356,94 @@ export function QuestionPage() {
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-16">
-                  {t("admin.questions.columns.type")}
-                </TableHead>
-                <TableHead>{t("admin.questions.columns.content")}</TableHead>
-                <TableHead>{t("admin.questions.columns.course")}</TableHead>
-                <TableHead className="w-16">
-                  {t("admin.questions.columns.score")}
-                </TableHead>
-                <TableHead className="w-16">
-                  {t("admin.questions.columns.difficulty")}
-                </TableHead>
-                <TableHead>{t("admin.questions.columns.tags")}</TableHead>
-                <TableHead className="w-24">
-                  {t("admin.questions.columns.actions")}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((q) => (
-                <TableRow key={q.id}>
-                  <TableCell>
-                    <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
-                      {getTypeLabel(q.type, t) ?? q.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[300px] truncate">
-                    {q.content}
-                  </TableCell>
-                  <TableCell>{courseMap.get(q.courseId) ?? "-"}</TableCell>
-                  <TableCell>{q.score}</TableCell>
-                  <TableCell>{q.difficulty}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {q.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          void navigate(`/admin/questions/${q.id}/edit`)
-                        }
-                        aria-label={t("admin.questions.editLabel")}
-                      >
-                        <AppIcon icon={Pencil} size="inline" />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("admin.questions.deleteLabel")}
-                          >
-                            <AppIcon icon={Trash2} size="inline" />
-                          </Button>
-                        }
-                        title={t("admin.questions.confirmDelete")}
-                        description={t(
-                          "admin.questions.confirmDeleteDescription",
-                        )}
-                        destructive
-                        onConfirm={() => void handleDelete(q.id)}
-                      />
-                    </RowActions>
-                  </TableCell>
+          <DataTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-16">
+                    {t("admin.questions.columns.type")}
+                  </TableHead>
+                  <TableHead>{t("admin.questions.columns.content")}</TableHead>
+                  <TableHead>{t("admin.questions.columns.course")}</TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.questions.columns.score")}
+                  </TableHead>
+                  <TableHead className="w-16">
+                    {t("admin.questions.columns.difficulty")}
+                  </TableHead>
+                  <TableHead>{t("admin.questions.columns.tags")}</TableHead>
+                  <TableHead className="w-24">
+                    {t("admin.questions.columns.actions")}
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((q) => (
+                  <TableRow key={q.id}>
+                    <TableCell>
+                      <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
+                        {getTypeLabel(q.type, t) ?? q.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[300px] truncate">
+                      {q.content}
+                    </TableCell>
+                    <TableCell>{courseMap.get(q.courseId) ?? "-"}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {q.score}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {q.difficulty}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {q.tags.map((tag) => (
+                          <Badge
+                            key={tag}
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <RowActions>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            void navigate(`/admin/questions/${q.id}/edit`)
+                          }
+                          aria-label={t("admin.questions.editLabel")}
+                        >
+                          <AppIcon icon={Pencil} size="inline" />
+                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("admin.questions.deleteLabel")}
+                            >
+                              <AppIcon icon={Trash2} size="inline" />
+                            </Button>
+                          }
+                          title={t("admin.questions.confirmDelete")}
+                          description={t(
+                            "admin.questions.confirmDeleteDescription",
+                          )}
+                          destructive
+                          onConfirm={() => void handleDelete(q.id)}
+                        />
+                      </RowActions>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataTableShell>
           <DataTablePagination
             page={page}
             pageSize={pageSize}

@@ -9,6 +9,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -18,7 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -92,72 +93,67 @@ export function ResultsOverviewPage() {
       <div className="flex flex-col gap-6">
         <PageHeader title={t("admin.resultsOverview.title")} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("admin.resultsOverview.cardTitle")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {exams.length === 0 ? (
-              <EmptyState
-                icon={<AppIcon icon={Gauge} size="hero" />}
-                title={t("admin.resultsOverview.empty.title")}
-                description={t("admin.resultsOverview.empty.description")}
-              />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.title")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.status")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.time")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.gradedCount")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.actions")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {exams.map((exam) => {
-                    const canView = gradable(exam);
-                    const reason = gradableReason(exam);
-                    const viewButton = (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={!canView}
-                        onClick={() =>
-                          void navigate(routes.admin.examScores(exam.id))
-                        }
-                      >
-                        <AppIcon icon={Eye} size="inline" />
-                        {t("admin.resultsOverview.actions.viewScores")}
-                      </Button>
-                    );
-                    return (
-                      <TableRow key={exam.id}>
-                        <TableCell className="font-medium">
-                          {exam.title}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={exam.status} />
-                        </TableCell>
-                        <TableCell>
-                          {exam.openAt
-                            ? new Date(exam.openAt).toLocaleString()
-                            : "-"}
-                        </TableCell>
-                        <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
-                        <TableCell>
+        <DataTableShell title={t("admin.resultsOverview.cardTitle")}>
+          {exams.length === 0 ? (
+            <EmptyState
+              icon={<AppIcon icon={Gauge} size="hero" />}
+              title={t("admin.resultsOverview.empty.title")}
+              description={t("admin.resultsOverview.empty.description")}
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    {t("admin.resultsOverview.columns.title")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.resultsOverview.columns.status")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.resultsOverview.columns.time")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.resultsOverview.columns.gradedCount")}
+                  </TableHead>
+                  <TableHead>
+                    {t("admin.resultsOverview.columns.actions")}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {exams.map((exam) => {
+                  const canView = gradable(exam);
+                  const reason = gradableReason(exam);
+                  const viewButton = (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canView}
+                      onClick={() =>
+                        void navigate(routes.admin.examScores(exam.id))
+                      }
+                    >
+                      <AppIcon icon={Eye} size="inline" />
+                      {t("admin.resultsOverview.actions.viewScores")}
+                    </Button>
+                  );
+                  return (
+                    <TableRow key={exam.id}>
+                      <TableCell className="font-medium">
+                        {exam.title}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={exam.status} />
+                      </TableCell>
+                      <TableCell>
+                        {exam.openAt
+                          ? new Date(exam.openAt).toLocaleString()
+                          : "-"}
+                      </TableCell>
+                      <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
+                      <TableCell className="text-right">
+                        <RowActions>
                           {canView ? (
                             viewButton
                           ) : (
@@ -168,15 +164,15 @@ export function ResultsOverviewPage() {
                               <TooltipContent>{reason}</TooltipContent>
                             </Tooltip>
                           )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                        </RowActions>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </DataTableShell>
       </div>
     </TooltipProvider>
   );

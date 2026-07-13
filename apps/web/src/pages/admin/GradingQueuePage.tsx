@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   Table,
   TableBody,
@@ -102,7 +103,7 @@ export function GradingQueuePage() {
         title={t("admin.grading.title")}
         description={t("admin.grading.description")}
       />
-      <div className="overflow-hidden rounded-md border">
+      <DataTableShell>
         <Table>
           <TableHeader>
             <TableRow>
@@ -140,7 +141,7 @@ export function GradingQueuePage() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </DataTableShell>
       {totalPages > 1 && (
         <Pagination>
           <PaginationContent>

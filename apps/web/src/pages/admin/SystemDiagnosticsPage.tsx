@@ -11,7 +11,6 @@ import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatDuration } from "@/lib/utils";
 import {
@@ -65,6 +64,13 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * System diagnostics page showing health metrics and infrastructure cards.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Monitoring cards resemble instruments with
+ * white surface, clear 1px border, 8px radius, compact layout, 20px/2px icons,
+ * clear numeric hierarchy.
+ */
 export function SystemDiagnosticsPage() {
   const { t } = useTranslation();
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
@@ -105,8 +111,6 @@ export function SystemDiagnosticsPage() {
       setHealth(await api.get<SystemHealthResponse>("/api/system/health"));
       clearStaleWarning("health");
       setLastRefreshedAt(Date.now());
-      // Routine successful refreshes are debug-level (S3): health polls every
-      // 10s and diag every 30s, so info would flood the client_events table.
       logger.debug("system_diagnostics.refreshed", { source: "health" });
     } catch (err) {
       if (!initialLoadDone.current) {
@@ -133,7 +137,6 @@ export function SystemDiagnosticsPage() {
       };
       clearStaleWarning("diagnostics");
       setLastRefreshedAt(Date.now());
-      // See loadHealth: routine refresh is debug, not info (S3).
       logger.debug("system_diagnostics.refreshed", { source: "diagnostics" });
     } catch (err) {
       if (!initialLoadDone.current) {
@@ -259,206 +262,163 @@ export function SystemDiagnosticsPage() {
       {diag && (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={Server} size="inline" />
-                  {t("diagnostics.cards.serverInfo")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label={t("diagnostics.labels.version")}
-                  value={diag.version}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.uptime")}
-                  value={formatDuration(liveUptime * 1000)}
-                />
-              </CardContent>
-            </Card>
+            <DiagCard
+              icon={<AppIcon icon={Server} size="inline" />}
+              title={t("diagnostics.cards.serverInfo")}
+            >
+              <InfoRow
+                label={t("diagnostics.labels.version")}
+                value={diag.version}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.uptime")}
+                value={formatDuration(liveUptime * 1000)}
+              />
+            </DiagCard>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={Database} size="inline" />
-                  {t("diagnostics.cards.databaseStatus")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label={t("diagnostics.labels.latency")}
-                  value={`${diag.dbLatency}ms`}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.redis")}
-                  value={
-                    diag.redisStatus.connected
-                      ? t("diagnostics.labels.redisConnected", {
-                          latencyMs: diag.redisStatus.latencyMs ?? 0,
-                        })
-                      : t("diagnostics.labels.redisDisconnected")
-                  }
-                />
-              </CardContent>
-            </Card>
+            <DiagCard
+              icon={<AppIcon icon={Database} size="inline" />}
+              title={t("diagnostics.cards.databaseStatus")}
+            >
+              <InfoRow
+                label={t("diagnostics.labels.latency")}
+                value={`${diag.dbLatency}ms`}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.redis")}
+                value={
+                  diag.redisStatus.connected
+                    ? t("diagnostics.labels.redisConnected", {
+                        latencyMs: diag.redisStatus.latencyMs ?? 0,
+                      })
+                    : t("diagnostics.labels.redisDisconnected")
+                }
+              />
+            </DiagCard>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={SlidersHorizontal} size="inline" />
-                  {t("diagnostics.cards.runtimeConfig")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label={t("diagnostics.labels.heartbeatInterval")}
-                  value={formatDuration(diag.config.heartbeatInterval)}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.heartbeatTimeout")}
-                  value={formatDuration(diag.config.heartbeatTimeout)}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.deadlineScanInterval")}
-                  value={formatDuration(diag.config.deadlineScanInterval)}
-                />
-              </CardContent>
-            </Card>
+            <DiagCard
+              icon={<AppIcon icon={SlidersHorizontal} size="inline" />}
+              title={t("diagnostics.cards.runtimeConfig")}
+            >
+              <InfoRow
+                label={t("diagnostics.labels.heartbeatInterval")}
+                value={formatDuration(diag.config.heartbeatInterval)}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.heartbeatTimeout")}
+                value={formatDuration(diag.config.heartbeatTimeout)}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.deadlineScanInterval")}
+                value={formatDuration(diag.config.deadlineScanInterval)}
+              />
+            </DiagCard>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={HeartPulse} size="inline" />
-                  {t("diagnostics.cards.heartbeatScanner")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label={t("diagnostics.labels.scanInterval")}
-                  value={formatDuration(diag.heartbeatStatus.interval)}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.timeout")}
-                  value={formatDuration(diag.heartbeatStatus.timeout)}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.lastScan")}
-                  value={formatLastScan(
-                    diag.heartbeatStatus.lastScanAt,
-                    t("diagnostics.labels.lastScanNever"),
-                  )}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.disruptedCount")}
-                  value={`${diag.heartbeatStatus.disruptedCount}`}
-                />
-              </CardContent>
-            </Card>
+            <DiagCard
+              icon={<AppIcon icon={HeartPulse} size="inline" />}
+              title={t("diagnostics.cards.heartbeatScanner")}
+            >
+              <InfoRow
+                label={t("diagnostics.labels.scanInterval")}
+                value={formatDuration(diag.heartbeatStatus.interval)}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.timeout")}
+                value={formatDuration(diag.heartbeatStatus.timeout)}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.lastScan")}
+                value={formatLastScan(
+                  diag.heartbeatStatus.lastScanAt,
+                  t("diagnostics.labels.lastScanNever"),
+                )}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.disruptedCount")}
+                value={`${diag.heartbeatStatus.disruptedCount}`}
+              />
+            </DiagCard>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={Timer} size="inline" />
-                  {t("diagnostics.cards.deadlineScanner")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label={t("diagnostics.labels.scanInterval")}
-                  value={formatDuration(diag.deadlineScannerStatus.interval)}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.lastScan")}
-                  value={formatLastScan(
-                    diag.deadlineScannerStatus.lastScanAt,
-                    t("diagnostics.labels.lastScanNever"),
-                  )}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.autoSubmitCount")}
-                  value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
-                />
-              </CardContent>
-            </Card>
+            <DiagCard
+              icon={<AppIcon icon={Timer} size="inline" />}
+              title={t("diagnostics.cards.deadlineScanner")}
+            >
+              <InfoRow
+                label={t("diagnostics.labels.scanInterval")}
+                value={formatDuration(diag.deadlineScannerStatus.interval)}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.lastScan")}
+                value={formatLastScan(
+                  diag.deadlineScannerStatus.lastScanAt,
+                  t("diagnostics.labels.lastScanNever"),
+                )}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.autoSubmitCount")}
+                value={`${diag.deadlineScannerStatus.autoSubmitCount}`}
+              />
+            </DiagCard>
           </div>
 
-          {/* P3-M5B: email infrastructure + outbox status. Renders only the
-              stable status/worker/outbox counts from the contract — never
-              SMTP host/user/password, recipient addresses, or email body. */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={Mail} size="inline" />
-                  {t("diagnostics.cards.emailInfrastructure")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="text-sm text-muted-foreground">
-                    {t("diagnostics.labels.emailStatus")}
-                  </span>
-                  <StatusBadge
-                    status={infraStatusKey(diag.emailStatus.status)}
-                  />
-                </div>
-                <InfoRow
-                  label={t("diagnostics.labels.emailEnabled")}
-                  value={
-                    diag.emailStatus.enabled
-                      ? t("diagnostics.labels.emailEnabled")
-                      : t("diagnostics.labels.emailDisabled")
-                  }
+            <DiagCard
+              icon={<AppIcon icon={Mail} size="inline" />}
+              title={t("diagnostics.cards.emailInfrastructure")}
+            >
+              <div className="flex items-center justify-between gap-2 py-1.5">
+                <span className="text-sm text-muted-foreground">
+                  {t("diagnostics.labels.emailStatus")}
+                </span>
+                <StatusBadge status={infraStatusKey(diag.emailStatus.status)} />
+              </div>
+              <InfoRow
+                label={t("diagnostics.labels.emailEnabled")}
+                value={
+                  diag.emailStatus.enabled
+                    ? t("diagnostics.labels.emailEnabled")
+                    : t("diagnostics.labels.emailDisabled")
+                }
+              />
+              <div className="flex items-center justify-between gap-2 py-1.5">
+                <span className="text-sm text-muted-foreground">
+                  {t("diagnostics.labels.emailWorker")}
+                </span>
+                <StatusBadge
+                  status={infraStatusKey(diag.emailStatus.worker.status)}
                 />
-                <div className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="text-sm text-muted-foreground">
-                    {t("diagnostics.labels.emailWorker")}
-                  </span>
-                  <StatusBadge
-                    status={infraStatusKey(diag.emailStatus.worker.status)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </DiagCard>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <AppIcon icon={Send} size="inline" />
-                  {t("diagnostics.cards.emailOutbox")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <InfoRow
-                  label={t("diagnostics.labels.outboxPending")}
-                  value={`${diag.emailStatus.outbox.pending}`}
-                />
-                <InfoRow
-                  label={t("diagnostics.labels.outboxSent")}
-                  value={`${diag.emailStatus.outbox.sent}`}
-                />
-                {/* Failed count is visually emphasized when > 0 (warning tone),
-                    but no new design system is introduced — reuse tone text
-                    color helpers already used elsewhere on this page. */}
-                <div className="flex items-baseline justify-between gap-2 py-1.5">
-                  <span className="text-sm text-muted-foreground">
-                    {t("diagnostics.labels.outboxFailed")}
-                  </span>
-                  <span
-                    className={cn(
-                      "text-sm font-medium tabular-nums",
-                      diag.emailStatus.outbox.failed > 0 &&
-                        getToneTextColor("warning"),
-                    )}
-                  >
-                    {diag.emailStatus.outbox.failed}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+            <DiagCard
+              icon={<AppIcon icon={Send} size="inline" />}
+              title={t("diagnostics.cards.emailOutbox")}
+            >
+              <InfoRow
+                label={t("diagnostics.labels.outboxPending")}
+                value={`${diag.emailStatus.outbox.pending}`}
+              />
+              <InfoRow
+                label={t("diagnostics.labels.outboxSent")}
+                value={`${diag.emailStatus.outbox.sent}`}
+              />
+              <div className="flex items-baseline justify-between gap-2 py-1.5">
+                <span className="text-sm text-muted-foreground">
+                  {t("diagnostics.labels.outboxFailed")}
+                </span>
+                <span
+                  className={cn(
+                    "text-sm font-medium tabular-nums",
+                    diag.emailStatus.outbox.failed > 0 &&
+                      getToneTextColor("warning"),
+                  )}
+                >
+                  {diag.emailStatus.outbox.failed}
+                </span>
+              </div>
+            </DiagCard>
           </div>
         </>
       )}
@@ -483,16 +443,16 @@ function MetricCard({
   const meta = getStatusMeta(status);
   const MetricIcon = meta.icon;
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+    <div className="surface-content overflow-hidden">
+      <div className="px-5 pb-2 pt-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           {icon}
           {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+        </div>
+      </div>
+      <div className="px-5 pb-4">
         <div className="flex items-baseline gap-1">
-          <p className="text-3xl font-bold">{value}</p>
+          <p className="text-3xl font-bold tabular-nums">{value}</p>
           <span className="text-sm text-muted-foreground">{unit}</span>
         </div>
         <p
@@ -504,8 +464,30 @@ function MetricCard({
           <AppIcon icon={MetricIcon} size="badge" />
           {t(statusLabelKey(meta.labelKey))}
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
+  );
+}
+
+function DiagCard({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div data-slot="card" className="surface-content overflow-hidden">
+      <div className="border-b px-5 py-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          {icon}
+          {title}
+        </div>
+      </div>
+      <div className="px-5 py-3">{children}</div>
+    </div>
   );
 }
 
@@ -518,7 +500,7 @@ function CombinedSkeleton() {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2 rounded-lg border p-6">
+          <div key={i} className="surface-content flex flex-col gap-2 p-5">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-8 w-16" />
             <Skeleton className="h-3 w-12" />
@@ -527,7 +509,7 @@ function CombinedSkeleton() {
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2 rounded-lg border p-6">
+          <div key={i} className="surface-content flex flex-col gap-2 p-5">
             <Skeleton className="h-4 w-20" />
             <Skeleton className="h-5 w-16" />
             <Skeleton className="h-5 w-24" />
@@ -536,7 +518,7 @@ function CombinedSkeleton() {
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {Array.from({ length: 2 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2 rounded-lg border p-6">
+          <div key={i} className="surface-content flex flex-col gap-2 p-5">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-5 w-16" />
             <Skeleton className="h-5 w-20" />

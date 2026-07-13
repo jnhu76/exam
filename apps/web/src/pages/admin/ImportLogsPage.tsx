@@ -7,6 +7,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import {
   Table,
   TableBody,
@@ -125,7 +127,7 @@ export function ImportLogsPage() {
         title={t("admin.importLogs.title")}
         description={t("admin.importLogs.description")}
       />
-      <div className="flex flex-wrap items-center gap-3">
+      <DataToolbar>
         <Select
           value={typeFilter}
           onValueChange={(v) => {
@@ -158,8 +160,8 @@ export function ImportLogsPage() {
             {t("admin.importLogs.clearFilter")}
           </Button>
         )}
-      </div>
-      <div className="overflow-hidden rounded-md border">
+      </DataToolbar>
+      <DataTableShell>
         <Table>
           <TableHeader>
             <TableRow>
@@ -206,7 +208,7 @@ export function ImportLogsPage() {
             ))}
           </TableBody>
         </Table>
-      </div>
+      </DataTableShell>
       {expandedId &&
         (() => {
           const item = items.find((i) => i.id === expandedId);

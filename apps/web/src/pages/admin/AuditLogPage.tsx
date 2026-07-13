@@ -7,6 +7,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
 import { DatePicker } from "@/components/shared/DatePicker";
 import {
   Table,
@@ -210,7 +212,7 @@ export function AuditLogPage() {
         title={t("admin.audit.title")}
         description={t("admin.audit.description")}
       />
-      <div className="flex flex-wrap items-center gap-3">
+      <DataToolbar>
         <Select
           value={actionFilter}
           onValueChange={(v) => {
@@ -276,7 +278,7 @@ export function AuditLogPage() {
             {t("admin.audit.clearFilter")}
           </Button>
         )}
-      </div>
+      </DataToolbar>
       {items.length === 0 ? (
         <EmptyState
           icon={<AppIcon icon={ScrollText} size="state" />}
@@ -285,7 +287,7 @@ export function AuditLogPage() {
         />
       ) : (
         <>
-          <div className="overflow-hidden rounded-md border">
+          <DataTableShell>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -324,7 +326,7 @@ export function AuditLogPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </DataTableShell>
           {expandedId &&
             (() => {
               const item = items.find((i) => i.id === expandedId);

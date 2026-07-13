@@ -11,6 +11,8 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import { ListToolbar } from "@/components/shared/ListToolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -201,14 +203,21 @@ export function CoursePage() {
         />
 
         {courses.length > 0 && (
-          <SearchInput
-            aria-label={t("admin.courses.searchLabel")}
-            placeholder={t("admin.courses.searchPlaceholder")}
-            value={search}
-            onChange={setSearch}
-            onClear={() => setSearch("")}
-            clearLabel={t("admin.courses.clearSearchLabel")}
-            containerClassName="max-w-md"
+          <ListToolbar
+            search={
+              <SearchInput
+                aria-label={t("admin.courses.searchLabel")}
+                placeholder={t("admin.courses.searchPlaceholder")}
+                value={search}
+                onChange={setSearch}
+                onClear={() => setSearch("")}
+                clearLabel={t("admin.courses.clearSearchLabel")}
+                containerClassName="max-w-md"
+              />
+            }
+            summary={t("admin.courses.count", {
+              count: filteredCourses.length,
+            })}
           />
         )}
 
@@ -230,63 +239,67 @@ export function CoursePage() {
             }
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("admin.courses.columns.name")}</TableHead>
-                <TableHead>{t("admin.courses.columns.code")}</TableHead>
-                <TableHead>{t("admin.courses.columns.description")}</TableHead>
-                <TableHead className="w-24">
-                  {t("admin.courses.columns.actions")}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCourses.map((course) => (
-                <TableRow key={course.id}>
-                  <TableCell className="font-medium">{course.name}</TableCell>
-                  <TableCell>{course.code}</TableCell>
-                  <TableCell className="max-w-[360px]">
-                    {course.description ? (
-                      <TruncatedCell text={course.description} />
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(course)}
-                        aria-label={t("admin.courses.editLabel")}
-                      >
-                        <AppIcon icon={Pencil} size="inline" />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("admin.courses.deleteLabel")}
-                          >
-                            <AppIcon icon={Trash2} size="inline" />
-                          </Button>
-                        }
-                        title={t("admin.common.confirm")}
-                        description={t("admin.courses.enableDisable", {
-                          action: t("admin.common.delete"),
-                          name: course.name,
-                        })}
-                        destructive
-                        onConfirm={() => void handleDelete(course.id)}
-                      />
-                    </RowActions>
-                  </TableCell>
+          <DataTableShell>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("admin.courses.columns.name")}</TableHead>
+                  <TableHead>{t("admin.courses.columns.code")}</TableHead>
+                  <TableHead>
+                    {t("admin.courses.columns.description")}
+                  </TableHead>
+                  <TableHead className="w-24">
+                    {t("admin.courses.columns.actions")}
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredCourses.map((course) => (
+                  <TableRow key={course.id}>
+                    <TableCell className="font-medium">{course.name}</TableCell>
+                    <TableCell>{course.code}</TableCell>
+                    <TableCell className="max-w-[360px]">
+                      {course.description ? (
+                        <TruncatedCell text={course.description} />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <RowActions>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(course)}
+                          aria-label={t("admin.courses.editLabel")}
+                        >
+                          <AppIcon icon={Pencil} size="inline" />
+                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("admin.courses.deleteLabel")}
+                            >
+                              <AppIcon icon={Trash2} size="inline" />
+                            </Button>
+                          }
+                          title={t("admin.common.confirm")}
+                          description={t("admin.courses.enableDisable", {
+                            action: t("admin.common.delete"),
+                            name: course.name,
+                          })}
+                          destructive
+                          onConfirm={() => void handleDelete(course.id)}
+                        />
+                      </RowActions>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataTableShell>
         )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

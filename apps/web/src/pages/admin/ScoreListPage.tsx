@@ -11,7 +11,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataToolbar } from "@/components/shared/DataToolbar";
+import { RowActions } from "@/components/shared/RowActions";
+import { StatsCard } from "@/components/shared/StatsCard";
 import {
   Table,
   TableBody,
@@ -181,216 +184,168 @@ export function ScoreListPage() {
         }
       />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.scoreList.stats.average")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {scores.stats.averageScore.toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.scoreList.stats.max")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{scores.stats.maxScore}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.scoreList.stats.min")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{scores.stats.minScore}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.scoreList.stats.passRate")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">
-              {(scores.stats.passRate * 100).toFixed(1)}%
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
-              {t("admin.scoreList.stats.totalGraded")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{scores.stats.totalGraded}</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <StatsCard
+          label={t("admin.scoreList.stats.average")}
+          value={scores.stats.averageScore.toFixed(2)}
+        />
+        <StatsCard
+          label={t("admin.scoreList.stats.max")}
+          value={scores.stats.maxScore}
+        />
+        <StatsCard
+          label={t("admin.scoreList.stats.min")}
+          value={scores.stats.minScore}
+        />
+        <StatsCard
+          label={t("admin.scoreList.stats.passRate")}
+          value={`${(scores.stats.passRate * 100).toFixed(1)}%`}
+        />
+        <StatsCard
+          label={t("admin.scoreList.stats.totalGraded")}
+          value={scores.stats.totalGraded}
+        />
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <Tabs
-              defaultValue={passFilter}
-              onValueChange={(v) => {
-                const newParams = new URLSearchParams(searchParams);
-                newParams.set("passFilter", v);
-                newParams.delete("page");
-                setSearchParams(newParams);
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value="all">
-                  {t("admin.scoreList.filters.all")}
-                </TabsTrigger>
-                <TabsTrigger value="passed">
-                  {t("admin.scoreList.filters.passed")}
-                </TabsTrigger>
-                <TabsTrigger value="failed">
-                  {t("admin.scoreList.filters.failed")}
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </CardContent>
-      </Card>
+      <DataToolbar aria-label={t("admin.scoreList.filters.label")}>
+        <Tabs
+          value={passFilter}
+          onValueChange={(v) => {
+            const newParams = new URLSearchParams(searchParams);
+            newParams.set("passFilter", v);
+            newParams.delete("page");
+            setSearchParams(newParams);
+          }}
+        >
+          <TabsList>
+            <TabsTrigger value="all">
+              {t("admin.scoreList.filters.all")}
+            </TabsTrigger>
+            <TabsTrigger value="passed">
+              {t("admin.scoreList.filters.passed")}
+            </TabsTrigger>
+            <TabsTrigger value="failed">
+              {t("admin.scoreList.filters.failed")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </DataToolbar>
 
-      {/* Scores Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("admin.scoreList.listTitle")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {scores.items.length === 0 ? (
-            <EmptyState
-              icon={<AppIcon icon={FileText} size="hero" />}
-              title={t("admin.scoreList.empty.title")}
-              description={t("admin.scoreList.empty.description")}
-            />
-          ) : (
-            <div className="flex flex-col gap-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      {t("admin.scoreList.columns.candidateName")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.scoreList.columns.candidateInfo")}
-                    </TableHead>
-                    <TableHead>{t("admin.scoreList.columns.score")}</TableHead>
-                    <TableHead>{t("admin.scoreList.columns.status")}</TableHead>
-                    <TableHead>
-                      {t("admin.scoreList.columns.submittedAt")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.scoreList.columns.actions")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {scores.items.map((item) => (
-                    <TableRow key={item.attemptId}>
-                      <TableCell className="font-medium">
-                        {item.candidateName}
-                      </TableCell>
-                      <TableCell>
-                        {Object.values(item.candidateFields)
-                          .map(String)
-                          .join(" / ") || "-"}
-                      </TableCell>
-                      <TableCell className="font-bold">{item.score}</TableCell>
-                      <TableCell>
-                        <StatusBadge
-                          status={item.passed ? "passed" : "not_passed"}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {item.submittedAt
-                          ? new Date(item.submittedAt).toLocaleString()
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            void navigate(`/admin/attempts/${item.attemptId}`)
-                          }
-                        >
-                          {t("admin.scoreList.actions.viewDetail")}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              {/* Pagination */}
-              {scores.total > scores.pageSize && (
-                <Pagination>
-                  <PaginationContent>
-                    {page > 1 && (
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => {
-                            const newParams = new URLSearchParams(searchParams);
-                            newParams.set("page", String(page - 1));
-                            setSearchParams(newParams);
-                          }}
-                        />
-                      </PaginationItem>
-                    )}
-                    {Array.from(
-                      { length: Math.ceil(scores.total / scores.pageSize) },
-                      (_, i) => i + 1,
-                    ).map((p) => (
-                      <PaginationItem key={p}>
-                        <PaginationLink
-                          isActive={p === page}
-                          onClick={() => {
-                            const newParams = new URLSearchParams(searchParams);
-                            newParams.set("page", String(p));
-                            setSearchParams(newParams);
-                          }}
-                        >
-                          {p}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    {page < Math.ceil(scores.total / scores.pageSize) && (
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => {
-                            const newParams = new URLSearchParams(searchParams);
-                            newParams.set("page", String(page + 1));
-                            setSearchParams(newParams);
-                          }}
-                        />
-                      </PaginationItem>
-                    )}
-                  </PaginationContent>
-                </Pagination>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <DataTableShell
+        title={t("admin.scoreList.listTitle")}
+        footer={
+          scores.total > scores.pageSize ? (
+            <Pagination>
+              <PaginationContent>
+                {page > 1 && (
+                  <PaginationItem>
+                    <PaginationPrevious
+                      onClick={() => {
+                        const newParams = new URLSearchParams(searchParams);
+                        newParams.set("page", String(page - 1));
+                        setSearchParams(newParams);
+                      }}
+                    />
+                  </PaginationItem>
+                )}
+                {Array.from(
+                  { length: Math.ceil(scores.total / scores.pageSize) },
+                  (_, i) => i + 1,
+                ).map((p) => (
+                  <PaginationItem key={p}>
+                    <PaginationLink
+                      isActive={p === page}
+                      onClick={() => {
+                        const newParams = new URLSearchParams(searchParams);
+                        newParams.set("page", String(p));
+                        setSearchParams(newParams);
+                      }}
+                    >
+                      {p}
+                    </PaginationLink>
+                  </PaginationItem>
+                ))}
+                {page < Math.ceil(scores.total / scores.pageSize) && (
+                  <PaginationItem>
+                    <PaginationNext
+                      onClick={() => {
+                        const newParams = new URLSearchParams(searchParams);
+                        newParams.set("page", String(page + 1));
+                        setSearchParams(newParams);
+                      }}
+                    />
+                  </PaginationItem>
+                )}
+              </PaginationContent>
+            </Pagination>
+          ) : undefined
+        }
+      >
+        {scores.items.length === 0 ? (
+          <EmptyState
+            icon={<AppIcon icon={FileText} size="hero" />}
+            title={t("admin.scoreList.empty.title")}
+            description={t("admin.scoreList.empty.description")}
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  {t("admin.scoreList.columns.candidateName")}
+                </TableHead>
+                <TableHead>
+                  {t("admin.scoreList.columns.candidateInfo")}
+                </TableHead>
+                <TableHead>{t("admin.scoreList.columns.score")}</TableHead>
+                <TableHead>{t("admin.scoreList.columns.status")}</TableHead>
+                <TableHead>
+                  {t("admin.scoreList.columns.submittedAt")}
+                </TableHead>
+                <TableHead>{t("admin.scoreList.columns.actions")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scores.items.map((item) => (
+                <TableRow key={item.attemptId}>
+                  <TableCell className="font-medium">
+                    {item.candidateName}
+                  </TableCell>
+                  <TableCell>
+                    {Object.values(item.candidateFields)
+                      .map(String)
+                      .join(" / ") || "-"}
+                  </TableCell>
+                  <TableCell className="font-bold">{item.score}</TableCell>
+                  <TableCell>
+                    <StatusBadge
+                      status={item.passed ? "passed" : "not_passed"}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    {item.submittedAt
+                      ? new Date(item.submittedAt).toLocaleString()
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RowActions>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          void navigate(`/admin/attempts/${item.attemptId}`)
+                        }
+                      >
+                        {t("admin.scoreList.actions.viewDetail")}
+                      </Button>
+                    </RowActions>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </DataTableShell>
     </div>
   );
 }
