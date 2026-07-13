@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -98,6 +99,7 @@ interface EnrollmentItem {
  */
 export function ExamDetailPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [exam, setExam] = useState<ExamDetail | null>(null);
@@ -601,11 +603,11 @@ export function ExamDetailPage() {
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.startTime")}
             </span>
-            <span>{new Date(exam.openAt).toLocaleString()}</span>
+            <span>{formatDateTime(exam.openAt)}</span>
             <span className="text-muted-foreground">
               {t("admin.examDetail.config.endTime")}
             </span>
-            <span>{new Date(exam.closeAt).toLocaleString()}</span>
+            <span>{formatDateTime(exam.closeAt)}</span>
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -59,6 +60,7 @@ interface PaginatedResponse<T> {
  */
 export function ExamPage() {
   const { t } = useTranslation();
+  const { formatDateRange } = useProductDateTime();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -198,8 +200,7 @@ export function ExamPage() {
                           role="date-range"
                           className="text-sm text-muted-foreground"
                         >
-                          {new Date(exam.openAt).toLocaleDateString()} -{" "}
-                          {new Date(exam.closeAt).toLocaleDateString()}
+                          {formatDateRange(exam.openAt, exam.closeAt)}
                         </DataTableCell>
                         <DataTableCell role="duration">
                           {t("admin.exams.duration", {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -45,6 +46,7 @@ interface GradingQueueResponse {
 
 export function GradingQueuePage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const navigate = useNavigate();
   const [data, setData] = useState<GradingQueueResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -148,9 +150,7 @@ export function GradingQueuePage() {
                   {item.examTitle}
                 </DataTableCell>
                 <DataTableCell role="date">
-                  {item.submittedAt
-                    ? new Date(item.submittedAt).toLocaleString("zh-CN")
-                    : "-"}
+                  {item.submittedAt ? formatDateTime(item.submittedAt) : "-"}
                 </DataTableCell>
                 <DataTableCell role="number">
                   {item.pendingQuestionCount}

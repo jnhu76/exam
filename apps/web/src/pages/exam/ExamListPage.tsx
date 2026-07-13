@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { AppIcon } from "@/components/shared/AppIcon";
@@ -19,16 +20,6 @@ import {
   Eye,
 } from "lucide-react";
 import type { CandidateExamSummary } from "@exam/contracts";
-
-/** Formats an ISO datetime string to a localized zh-CN short date-time display. */
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 /** Maps an exam availability status to its i18n key (under `availability.`).
  * The Chinese text is resolved at render via `t()`; no hardcoded copy here. */
@@ -69,6 +60,7 @@ function ExamCard({
   onResult: (attemptId: string) => void;
 }) {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const actionLabel = (() => {
     switch (exam.primaryAction) {
       case "start":
@@ -156,7 +148,8 @@ function ExamCard({
           </span>
         </div>
         <div className="text-sm text-muted-foreground">
-          {formatTime(exam.windowStartAt)} — {formatTime(exam.windowEndAt)}
+          {formatDateTime(exam.windowStartAt)} —{" "}
+          {formatDateTime(exam.windowEndAt)}
         </div>
         <div className="flex justify-end">
           {actionLabel && (

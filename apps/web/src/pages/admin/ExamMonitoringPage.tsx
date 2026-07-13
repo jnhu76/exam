@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import type {
   ProctorAttemptListResponse,
   ProctorAttemptStatus,
@@ -69,6 +70,7 @@ const WARNING_COLOR: Record<string, string> = {
 
 export function ExamMonitoringPage() {
   const { t } = useTranslation();
+  const { formatTime } = useProductDateTime();
   const { id: examId } = useParams<{ id: string }>();
   const [attempts, setAttempts] = useState<ProctorAttemptStatus[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -187,7 +189,7 @@ export function ExamMonitoringPage() {
           {lastRefreshedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
               {t("admin.examMonitoring.lastRefreshed", {
-                time: new Date(lastRefreshedAt).toLocaleTimeString(),
+                time: formatTime(lastRefreshedAt),
               })}
             </span>
           )}
@@ -347,7 +349,7 @@ export function ExamMonitoringPage() {
                   className="flex items-start gap-3 rounded-md border p-2 text-xs"
                 >
                   <span className="text-muted-foreground shrink-0 w-16 tabular-nums">
-                    {new Date(ev.occurredAt).toLocaleTimeString()}
+                    {formatTime(ev.occurredAt)}
                   </span>
                   <EventBadge level={ev.level} kind={ev.kind} />
                   <span className="font-medium">{ev.name}</span>

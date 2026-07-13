@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { toast } from "sonner";
@@ -81,6 +82,7 @@ function groupByStatus(candidates: CandidateStatusItem[]): StatusGroups {
  */
 export function ProctorDashboardPage() {
   const { t } = useTranslation();
+  const { formatTime } = useProductDateTime();
   const { id: examId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<CandidateStatusResponse | null>(null);
@@ -457,9 +459,7 @@ export function ProctorDashboardPage() {
                     <span className="text-muted-foreground">
                       {t("admin.proctorDashboard.card.deadline")}
                     </span>
-                    <span>
-                      {new Date(candidate.deadlineAt).toLocaleTimeString()}
-                    </span>
+                    <span>{formatTime(candidate.deadlineAt)}</span>
                   </div>
                 )}
                 {candidate.lastActivityAt && (
@@ -467,9 +467,7 @@ export function ProctorDashboardPage() {
                     <span className="text-muted-foreground">
                       {t("admin.proctorDashboard.card.lastActivity")}
                     </span>
-                    <span>
-                      {new Date(candidate.lastActivityAt).toLocaleTimeString()}
-                    </span>
+                    <span>{formatTime(candidate.lastActivityAt)}</span>
                   </div>
                 )}
                 {candidate.misconduct && (

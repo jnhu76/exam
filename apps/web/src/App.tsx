@@ -11,6 +11,7 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { BrandProvider, useBranding } from "@/components/layout/BrandProvider";
 import { ExamLayout } from "@/components/layout/ExamLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { DateTimeProvider } from "@/contexts/DateTimeContext";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { getDocumentTitle } from "@/lib/pageMeta";
 import { LoginPage } from "@/pages/LoginPage";
@@ -120,9 +121,11 @@ export default function App() {
       <BrowserRouter>
         <BrandProvider loadRemote>
           <AuthProvider restoreSession>
-            <AppTitle />
-            <AppRoutes />
-            <Toaster />
+            <DateTimeProvider>
+              <AppTitle />
+              <AppRoutes />
+              <Toaster />
+            </DateTimeProvider>
           </AuthProvider>
         </BrandProvider>
       </BrowserRouter>

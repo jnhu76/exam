@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -60,6 +61,7 @@ const STATUS_CONFIG: Record<
 
 export function ImportLogsPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const [data, setData] = useState<ImportLogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,7 +212,7 @@ export function ImportLogsPage() {
                   role="date"
                   className="text-sm text-muted-foreground"
                 >
-                  {new Date(item.createdAt).toLocaleString("zh-CN")}
+                  {formatDateTime(item.createdAt)}
                 </DataTableCell>
                 <DataTableCell role="type">
                   {t(

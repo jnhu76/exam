@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
@@ -321,6 +322,7 @@ function TimelineSection({
   onToggleEvent,
 }: TimelineSectionProps) {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   return (
     <Card>
       <CardHeader>
@@ -373,7 +375,7 @@ function TimelineSection({
                           {label}
                         </Badge>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(event.createdAt).toLocaleString("zh-CN")}
+                          {formatDateTime(event.createdAt)}
                         </span>
                       </span>
                       <span className="mt-0.5 block text-xs text-muted-foreground truncate">

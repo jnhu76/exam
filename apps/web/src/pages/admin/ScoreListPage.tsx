@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ interface ScoreListResponse {
 /** Admin page for viewing per-candidate scores, stats, and pass/fail filters for a specific exam. */
 export function ScoreListPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -339,9 +341,7 @@ export function ScoreListPage() {
                     />
                   </DataTableCell>
                   <DataTableCell role="date">
-                    {item.submittedAt
-                      ? new Date(item.submittedAt).toLocaleString()
-                      : "-"}
+                    {item.submittedAt ? formatDateTime(item.submittedAt) : "-"}
                   </DataTableCell>
                   <DataTableCell role="actions">
                     <RowActions>

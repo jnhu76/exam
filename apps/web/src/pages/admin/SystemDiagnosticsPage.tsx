@@ -12,7 +12,8 @@ import { ErrorState } from "@/components/shared/ErrorState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn, formatDuration } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import {
   getStatusMeta,
   getToneTextColor,
@@ -52,10 +53,6 @@ function getDbStatusLevel(ms: number): HealthStatus {
   return "ok";
 }
 
-function formatLastScan(lastScanAt: string | null, fallback: string): string {
-  return lastScanAt ? new Date(lastScanAt).toLocaleString() : fallback;
-}
-
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2 py-1.5">
@@ -74,6 +71,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
  */
 export function SystemDiagnosticsPage() {
   const { t } = useTranslation();
+  const { formatDateTime, formatDuration, formatTime } = useProductDateTime();
   const [health, setHealth] = useState<SystemHealthResponse | null>(null);
   const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -212,7 +210,7 @@ export function SystemDiagnosticsPage() {
           {lastRefreshedAt !== null && (
             <span className="text-xs text-muted-foreground tabular-nums">
               {t("diagnostics.header.lastRefreshed", {
-                time: new Date(lastRefreshedAt).toLocaleTimeString(),
+                time: formatTime(lastRefreshedAt),
               })}
             </span>
           )}
@@ -335,10 +333,11 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.lastScan")}
-                value={formatLastScan(
-                  diag.heartbeatStatus.lastScanAt,
-                  t("diagnostics.labels.lastScanNever"),
-                )}
+                value={
+                  diag.heartbeatStatus.lastScanAt
+                    ? formatDateTime(diag.heartbeatStatus.lastScanAt)
+                    : t("diagnostics.labels.lastScanNever")
+                }
               />
               <InfoRow
                 label={t("diagnostics.labels.disruptedCount")}
@@ -357,10 +356,11 @@ export function SystemDiagnosticsPage() {
               />
               <InfoRow
                 label={t("diagnostics.labels.lastScan")}
-                value={formatLastScan(
-                  diag.deadlineScannerStatus.lastScanAt,
-                  t("diagnostics.labels.lastScanNever"),
-                )}
+                value={
+                  diag.deadlineScannerStatus.lastScanAt
+                    ? formatDateTime(diag.deadlineScannerStatus.lastScanAt)
+                    : t("diagnostics.labels.lastScanNever")
+                }
               />
               <InfoRow
                 label={t("diagnostics.labels.autoSubmitCount")}

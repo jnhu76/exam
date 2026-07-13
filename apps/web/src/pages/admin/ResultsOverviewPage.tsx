@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -43,6 +44,7 @@ interface ExamRow {
 /** Admin page for browsing published/closed exams and navigating to their score lists. */
 export function ResultsOverviewPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -160,9 +162,7 @@ export function ResultsOverviewPage() {
                         <StatusBadge status={exam.status} />
                       </DataTableCell>
                       <DataTableCell role="date">
-                        {exam.openAt
-                          ? new Date(exam.openAt).toLocaleString()
-                          : "-"}
+                        {exam.openAt ? formatDateTime(exam.openAt) : "-"}
                       </DataTableCell>
                       <DataTableCell role="number">
                         {exam.gradedAttemptCount ?? 0}
