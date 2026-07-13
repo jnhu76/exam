@@ -91,12 +91,13 @@ describe("ExamPage", () => {
   it("renders through the shared list-page template", async () => {
     renderPage();
 
+    const heading = await screen.findByRole("heading", { name: "考试列表" });
+    const shell = heading.closest('[data-slot="admin-table-shell"]');
+
+    expect(shell).toBeInTheDocument();
+    expect(shell).toHaveTextContent("共 2 场考试");
     expect(
-      await screen.findByRole("toolbar", { name: "考试列表工具栏" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "考试列表" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("共 2 场考试")).toBeInTheDocument();
+      screen.queryByRole("toolbar", { name: "考试列表工具栏" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -10,7 +10,6 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { DataToolbar } from "@/components/shared/DataToolbar";
 import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +53,11 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-/** Admin page for listing, viewing, and deleting exams. */
+/**
+ * Admin page for listing, viewing, and deleting exams.
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Removed empty count strip. Count moved into
+ * toolbar summary. Admin table with distinct header, clear boundaries.
+ */
 export function ExamPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -62,7 +65,6 @@ export function ExamPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /** Fetches the exam list from the API and updates local state. */
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -80,7 +82,6 @@ export function ExamPage() {
     loadExams();
   }, [loadExams]);
 
-  /** Deletes an exam by id and refreshes the list. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/exams/${id}`);
@@ -119,13 +120,14 @@ export function ExamPage() {
           />
         ) : (
           <>
-            <DataToolbar
-              aria-label={t("admin.exams.toolbarLabel")}
-              summary={t("admin.exams.summary", { count: exams.length })}
-            />
             <DataTableShell
               title={t("admin.exams.listTitle")}
               description={t("admin.exams.listDescription")}
+              toolbar={
+                <span className="type-secondary">
+                  {t("admin.exams.summary", { count: exams.length })}
+                </span>
+              }
             >
               <Table>
                 <TableHeader>

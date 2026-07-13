@@ -9,9 +9,9 @@ import { StatsCard } from "@/components/shared/StatsCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
   Table,
   TableBody,
@@ -31,10 +31,12 @@ import {
   Upload,
 } from "lucide-react";
 
-/** Admin dashboard page displaying stats cards, quick actions, and recent exams. */
 /**
  * Admin dashboard page showing summary statistics (question count, active exams,
  * candidate count, today's exams), quick-action buttons, and a table of recent exams.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Stats cards with icon containers, admin table
+ * with distinct header, clear boundaries, cool-neutral palette.
  */
 export function DashboardPage() {
   const { t } = useTranslation();
@@ -43,7 +45,6 @@ export function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /** Fetches dashboard summary data from the system API. */
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -115,24 +116,21 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="type-section-title">
-            {t("admin.dashboard.recent.title")}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <DataTableShell title={t("admin.dashboard.recent.title")}>
+        <div className="min-w-0">
           {!data?.recentExams || data.recentExams.length === 0 ? (
-            <EmptyState
-              icon={<AppIcon icon={ClipboardList} size="state" />}
-              title={t("admin.dashboard.recent.emptyTitle")}
-              description={t("admin.dashboard.recent.emptyDescription")}
-              action={
-                <Button onClick={() => navigate("/admin/exams/new")}>
-                  {t("admin.dashboard.actions.createExam")}
-                </Button>
-              }
-            />
+            <div className="p-6">
+              <EmptyState
+                icon={<AppIcon icon={ClipboardList} size="state" />}
+                title={t("admin.dashboard.recent.emptyTitle")}
+                description={t("admin.dashboard.recent.emptyDescription")}
+                action={
+                  <Button onClick={() => navigate("/admin/exams/new")}>
+                    {t("admin.dashboard.actions.createExam")}
+                  </Button>
+                }
+              />
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -176,27 +174,25 @@ export function DashboardPage() {
               </TableBody>
             </Table>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </DataTableShell>
     </div>
   );
 }
 
-/** Skeleton placeholder shown while the dashboard data is loading. */
-/** Placeholder skeleton shown while the dashboard data is loading. */
 function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <Skeleton className="h-8 w-32" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-2 rounded-lg border p-6">
+          <div key={i} className="surface-content flex flex-col gap-2 p-5">
             <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-7 w-16" />
           </div>
         ))}
       </div>
-      <div className="flex flex-col gap-4">
+      <div className="surface-content flex flex-col gap-4 p-4">
         <Skeleton className="h-6 w-24" />
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
