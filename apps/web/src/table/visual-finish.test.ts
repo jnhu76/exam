@@ -8,15 +8,16 @@ const tableCss = readFileSync(join(here, "recipes.css"), "utf8");
 const indexCss = readFileSync(join(here, "../index.css"), "utf8");
 
 describe("table and color visual-finish authority", () => {
-  it("publishes the cobalt and cool-neutral token system", () => {
-    expect(indexCss).toContain("--primary: #2e6afd");
-    expect(indexCss).toContain("--primary-soft-strong: #dce8ff");
-    expect(indexCss).toContain("--primary-focus: #7aa2ff");
-    expect(indexCss).toContain("--bg: #f4f7fb");
-    expect(indexCss).toContain("--text: #162033");
-    expect(indexCss).toContain("--border-shell: #d6e0eb");
-    expect(indexCss).toContain("--border-header: #c9d5e3");
-    expect(indexCss).toContain("--border-row: #e6ecf3");
+  it("publishes the final neutral and restrained product-blue token system", () => {
+    expect(indexCss).toContain("--primary: #2563eb");
+    expect(indexCss).toContain("--primary-soft-strong: #dbe7ff");
+    expect(indexCss).toContain("--primary-focus: #84adff");
+    expect(indexCss).toContain("--bg: #f7f8fa");
+    expect(indexCss).toContain("--text: #182230");
+    expect(indexCss).toContain("--border-raised: #d7dde5");
+    expect(indexCss).toContain("--border-shell: #dde2e8");
+    expect(indexCss).toContain("--border-control: #cfd7e2");
+    expect(indexCss).toContain("--border-divider: #edf0f3");
   });
 
   it("gives table lines three distinct semantic boundaries", () => {
@@ -35,16 +36,22 @@ describe("table and color visual-finish authority", () => {
     expect(tableCss).toContain("var(--table-row-hover)");
     expect(tableCss).toContain("var(--table-row-focus)");
     expect(tableCss).toContain("var(--table-row-selected)");
-    expect(tableCss).toContain("background-color 120ms ease");
-    expect(tableCss).toContain("box-shadow 120ms ease");
+    expect(tableCss).toContain("background-color 120ms ease-out");
+    expect(tableCss).toContain("color 120ms ease-out");
   });
 
   it("owns desktop and direct-touch row-action geometry", () => {
     expect(tableCss).toMatch(
-      /\[data-slot="row-actions"\][\s\S]*?width:\s*2\.25rem/,
+      /\[data-slot="row-actions"\][\s\S]*?width:\s*2rem/,
     );
     expect(tableCss).toMatch(
       /@media \(pointer: coarse\)[\s\S]*?width:\s*2\.75rem/,
     );
+  });
+
+  it("defines non-interactive state-aware scroll affordances", () => {
+    expect(tableCss).toContain('[data-slot="table-scroll-fade-left"]');
+    expect(tableCss).toContain('[data-slot="table-scroll-fade-right"]');
+    expect(tableCss).toContain("pointer-events: none");
   });
 });
