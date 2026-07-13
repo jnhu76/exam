@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { TagBadge } from "@/components/shared/TagBadge";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   BookOpen,
@@ -202,6 +203,7 @@ export function QuestionPage() {
       />
 
       <ListToolbar
+        appearance="quiet"
         aria-label={t("admin.questions.filterToolbar")}
         filters={
           <>
@@ -411,13 +413,7 @@ export function QuestionPage() {
                     <DataTableCell role="tag-list">
                       <div className="flex flex-wrap gap-1">
                         {q.tags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {tag}
-                          </Badge>
+                          <TagBadge key={tag}>{tag}</TagBadge>
                         ))}
                       </div>
                     </DataTableCell>

@@ -10,6 +10,7 @@ type ListToolbarProps = {
   summary?: ReactNode;
   className?: string;
   "aria-label"?: string;
+  appearance?: "default" | "quiet";
 };
 
 /**
@@ -24,6 +25,7 @@ export function ListToolbar({
   summary,
   className,
   "aria-label": ariaLabel,
+  appearance = "default",
 }: ListToolbarProps) {
   const { t } = useTranslation();
   const label = ariaLabel ?? t("common.toolbar.listLabel");
@@ -31,8 +33,11 @@ export function ListToolbar({
     <div
       role="toolbar"
       aria-label={label}
+      data-toolbar-appearance={appearance}
       className={cn(
         "flex flex-col gap-3 rounded-lg border border-border bg-card p-3 lg:flex-row lg:items-center lg:justify-between",
+        appearance === "quiet" &&
+          "rounded-md border-border-row bg-surface px-3 py-2",
         className,
       )}
     >

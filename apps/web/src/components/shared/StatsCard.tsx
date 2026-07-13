@@ -6,11 +6,15 @@ export function StatsCard({
   value,
   icon,
   trend,
+  supporting,
+  suffix,
 }: {
   label: string;
   value: number | string;
   icon?: ReactNode;
   trend?: string;
+  supporting?: ReactNode;
+  suffix?: ReactNode;
 }) {
   return (
     <div
@@ -22,17 +26,22 @@ export function StatsCard({
         {icon && (
           <div
             data-slot="stats-card-icon"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary-soft text-primary"
+            data-anchor-tone="primary-soft"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-primary-soft-strong bg-primary-soft text-primary"
           >
             {icon}
           </div>
         )}
         <div className="min-w-0">
           <p className="type-secondary truncate">{label}</p>
-          <p data-slot="stats-card-value" className="type-metric">
-            {value}
-          </p>
+          <div className="flex items-baseline gap-1">
+            <p data-slot="stats-card-value" className="type-metric">
+              {value}
+            </p>
+            {suffix && <span className="type-secondary">{suffix}</span>}
+          </div>
           {trend && <p className="type-metadata mt-1">{trend}</p>}
+          {supporting && <div className="mt-1">{supporting}</div>}
         </div>
       </div>
     </div>

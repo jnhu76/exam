@@ -78,6 +78,14 @@ describe("QuestionPage", () => {
 
     expect(await screen.findByText("题目管理")).toBeInTheDocument();
     expect(await screen.findByText("题目一内容")).toBeInTheDocument();
+    expect(screen.getByRole("toolbar")).toHaveAttribute(
+      "data-toolbar-appearance",
+      "quiet",
+    );
+    expect(screen.getByText("tag1")).toHaveAttribute(
+      "data-tag-tone",
+      "neutral",
+    );
 
     const pendingQuestions = new Promise(() => {});
     apiGet.mockImplementationOnce(() => pendingQuestions);

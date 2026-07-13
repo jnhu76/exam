@@ -21,6 +21,7 @@ import { RowActions } from "./RowActions";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
 import { SearchInput } from "./SearchInput";
 import { StatsCard } from "./StatsCard";
+import { TagBadge } from "./TagBadge";
 
 describe("PageHeader", () => {
   it("renders title", () => {
@@ -266,6 +267,30 @@ describe("ListToolbar", () => {
 
     expect(screen.getAllByText("0")).toHaveLength(4);
   });
+
+  it("exposes the quiet appearance role for filter-heavy pages", () => {
+    render(<ListToolbar appearance="quiet" search="搜索" />);
+
+    expect(screen.getByRole("toolbar")).toHaveAttribute(
+      "data-toolbar-appearance",
+      "quiet",
+    );
+  });
+});
+
+describe("TagBadge", () => {
+  it("owns secondary tag semantics and compact geometry", () => {
+    render(<TagBadge>safety</TagBadge>);
+
+    expect(screen.getByText("safety")).toHaveAttribute(
+      "data-tag-tone",
+      "neutral",
+    );
+    expect(screen.getByText("safety")).toHaveAttribute(
+      "data-tag-geometry",
+      "compact",
+    );
+  });
 });
 
 describe("RowActions", () => {
@@ -464,6 +489,10 @@ describe("StatsCard", () => {
     expect(
       screen.getByText("12").closest('[data-slot="stats-card"]'),
     ).toHaveAttribute("data-depth", "micro");
+    expect(screen.getByText("图").parentElement).toHaveAttribute(
+      "data-anchor-tone",
+      "primary-soft",
+    );
   });
 });
 
