@@ -69,7 +69,7 @@ function InfoRow({
       className="flex items-baseline justify-between gap-2 py-1.5"
     >
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium tabular-nums">{value}</span>
+      <span className="text-sm tabular-nums text-foreground">{value}</span>
     </div>
   );
 }
@@ -228,7 +228,7 @@ export function SystemDiagnosticsPage() {
           )}
           <span
             className={cn(
-              "flex items-center gap-1 text-sm font-medium",
+              "flex items-center gap-1 text-sm text-foreground",
               getToneTextColor(statusView.tone),
             )}
           >
@@ -438,7 +438,7 @@ export function SystemDiagnosticsPage() {
                 </span>
                 <span
                   className={cn(
-                    "text-sm font-medium tabular-nums",
+                    "text-sm tabular-nums text-foreground",
                     diag.emailStatus.outbox.failed > 0 &&
                       getToneTextColor("warning"),
                   )}
