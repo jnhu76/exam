@@ -371,10 +371,9 @@ describe("SystemDiagnosticsPage", () => {
     });
     renderPage();
     expect(await screen.findByText("邮件基础设施")).toBeInTheDocument();
-    // "已禁用" appears on both the email status badge and the worker badge
-    // when everything is disabled — assert presence, not uniqueness.
-    expect(screen.getAllByText("已禁用").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("未启用")).toBeInTheDocument();
+    // "已禁用" appears on the email status badge, the email-enabled badge,
+    // and the worker badge when everything is disabled — assert presence.
+    expect(screen.getAllByText("已禁用").length).toBeGreaterThanOrEqual(2);
     expect(
       document.querySelectorAll('[data-diagnostic-role="disabled"]'),
     ).toHaveLength(2);

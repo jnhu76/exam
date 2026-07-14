@@ -397,14 +397,18 @@ export function SystemDiagnosticsPage() {
                 </span>
                 <StatusBadge status={infraStatusKey(diag.emailStatus.status)} />
               </div>
-              <InfoRow
-                label={t("diagnostics.labels.emailEnabled")}
-                value={
-                  diag.emailStatus.enabled
-                    ? t("diagnostics.labels.emailEnabled")
-                    : t("diagnostics.labels.emailDisabled")
-                }
-              />
+              <div className="flex items-center justify-between gap-2 py-1.5">
+                <span className="text-sm text-muted-foreground">
+                  {t("diagnostics.labels.emailEnabled")}
+                </span>
+                <StatusBadge
+                  status={
+                    diag.emailStatus.enabled
+                      ? "infraAvailable"
+                      : "infraDisabled"
+                  }
+                />
+              </div>
               <div className="flex items-center justify-between gap-2 py-1.5">
                 <span className="text-sm text-muted-foreground">
                   {t("diagnostics.labels.emailWorker")}

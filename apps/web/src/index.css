@@ -42,7 +42,6 @@
   --font-serif: var(--font-serif-stack);
   --font-mono: var(--font-mono-stack);
   --color-background: var(--bg);
-  --color-base: var(--bg);
   --color-foreground: var(--text);
   --color-card: var(--surface);
   --color-surface: var(--surface);
