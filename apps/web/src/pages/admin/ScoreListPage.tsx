@@ -324,7 +324,7 @@ export function ScoreListPage() {
             <TableBody>
               {scores.items.map((item) => (
                 <TableRow key={item.attemptId}>
-                  <DataTableCell role="primary-text" className="font-medium">
+                  <DataTableCell role="primary-text">
                     {item.candidateName}
                   </DataTableCell>
                   <DataTableCell role="secondary-text">
@@ -332,7 +332,7 @@ export function ScoreListPage() {
                       .map(String)
                       .join(" / ") || "-"}
                   </DataTableCell>
-                  <DataTableCell role="score" className="font-bold">
+                  <DataTableCell role="score" className="font-medium">
                     {item.score}
                   </DataTableCell>
                   <DataTableCell role="status">

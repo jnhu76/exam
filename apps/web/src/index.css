@@ -105,17 +105,17 @@
 }
 
 :root {
-  /* Canvas / surfaces — Radix slate scale (cool-neutral, perceptually uniform).
-   * Canvas (slate1) is near-white so cards float on a ~1% lightness step; main
-   * reads white without greying. Table headers use slate3 inside bordered
-   * tables so they are clearly distinct from canvas+rows. Source: radix-ui/colors. */
-  --bg: #fcfcfd;
+  /* Canvas / surfaces — pure neutral white canvas (#ffffff) with subtle
+   * grey tints for table headers and hovers. White cards sit on the same
+   * white canvas, separated by 1px borders; header/hover use #f7f7f7 so
+   * they are clearly distinct without reading dark. */
+  --bg: #ffffff;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-subtle: #f9f9fb;
-  --surface-soft: #f0f0f3;
+  --surface-subtle: #f7f7f7;
+  --surface-soft: #f7f7f7;
   --surface-muted: var(--surface-subtle);
-  --surface-hover: #f0f0f3;
+  --surface-hover: #f7f7f7;
   --surface-selected: #eaf2fd;
   --text: #111827;
   --text-secondary: #374151;
@@ -135,11 +135,11 @@
   --primary-soft: #eaf1ff;
   --primary-soft-strong: #d3e2ff;
   --primary-focus: #7aa7ff;
-  --table-header: #f0f0f3;
-  --table-row-hover: #f4f4f8;
+  --table-header: #f7f7f7;
+  --table-row-hover: #f7f7f7;
   --table-row-focus: #e6eefb;
   --table-row-selected: #eaf2fd;
-  --action-hover: #f0f0f3;
+  --action-hover: #f7f7f7;
   /* Sidebar — dark neutral, ascending lightness (hover < active, fixed). */
   --sidebar-bg: #181b21;
   --sidebar-active: #262a32;
@@ -194,6 +194,11 @@ body {
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 400;
+  /* UI-PRODUCT-FINISH-CLOSURE-1: forbid synthetic bold/italic. The self-hosted
+   * Noto Sans CJK SC has only 400/500/700; any 600 (or other missing weight)
+   * would be synthesized by the browser into a fuzzy fake bold. none forces the
+   * engine to pick the nearest real face instead of blurring. */
+  font-synthesis: none;
 }
 
 /*
@@ -204,10 +209,31 @@ body {
  * weight is 700, so base heading elements anchor there. Application-level
  * heading hierarchy is owned by the type-* recipe layer and component
  * classes (PageHeader, CardTitle, etc.), not by this element rule.
+ * UI-PRODUCT-FINISH-CLOSURE-1: headings use 500 (medium) — CJK 700 reads
+ * heavy/clunky at UI sizes; 500 is the loaded weight that stays crisp.
  */
 h1,
 h2,
 h3 {
   color: var(--text);
-  font-weight: 700;
+  font-weight: 500;
+}
+
+/*
+ * UI-PRODUCT-FINISH-CLOSURE-1 — icon optical weight.
+ * shadcn primitives (select/checkbox/dropdown/dialog/sheet/pagination/calendar)
+ * render internal Lucide icons at default stroke 2 with no absoluteStrokeWidth.
+ * At 16px (size-4) that reads heavy next to the refined AppIcon inline (1.5).
+ * CSS stroke-width overrides Lucide's presentation-attribute stroke-width, so we
+ * thin these ungoverned small icons to match the governed system. Targets only
+ * 16px svgs inside primitive data-slots; larger icons (state/hero) are untouched.
+ */
+[data-slot="select-trigger"] svg,
+[data-slot="select-content"] svg,
+[data-slot="checkbox-indicator"] svg,
+[data-slot="dropdown-menu-content"] svg,
+[data-slot="dialog-close"] svg,
+[data-slot="sheet-close"] svg,
+[data-slot="pagination"] svg {
+  stroke-width: 1.5;
 }

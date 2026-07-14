@@ -143,7 +143,7 @@ export function GradingQueuePage() {
                   navigate(`/admin/grading-queue/${item.attemptId}`)
                 }
               >
-                <DataTableCell role="primary-text" className="font-medium">
+                <DataTableCell role="primary-text">
                   {item.candidateName}
                 </DataTableCell>
                 <DataTableCell role="secondary-text">

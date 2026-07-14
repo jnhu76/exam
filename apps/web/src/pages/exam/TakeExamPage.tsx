@@ -697,7 +697,7 @@ export function TakeExamPage() {
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-lg font-semibold">
+            <div className="text-lg font-medium">
               {view.isLocked
                 ? t("candidateRuntime.status.ended")
                 : t("candidateRuntime.status.inProgress")}
@@ -734,7 +734,7 @@ export function TakeExamPage() {
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start">
         <aside className="rounded-lg border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
-          <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground xl:block">
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground xl:block">
             <span>{t("candidateRuntime.navigator.questionId")}</span>
             <span className="xl:hidden">
               {t("candidateRuntime.navigator.progress", {
@@ -810,7 +810,7 @@ export function TakeExamPage() {
                       size="state"
                       className="text-destructive"
                     />
-                    <div className="text-lg font-semibold text-foreground">
+                    <div className="text-lg font-medium text-foreground">
                       {autoSubmitFailed
                         ? t("candidateRuntime.deadline.autoSubmitTitle")
                         : t("candidateRuntime.deadline.timeUp")}
@@ -839,7 +839,7 @@ export function TakeExamPage() {
                       total: snapshot.questions.length,
                     })}
                   </div>
-                  <div className="text-sm font-medium text-muted-foreground">
+                  <div className="text-sm text-muted-foreground">
                     {t("candidateRuntime.question.score", {
                       score: currentQuestionView.maxScore,
                     })}
@@ -852,7 +852,7 @@ export function TakeExamPage() {
                         Governed to match inline role (16px/1.75px). */}
                     <Flag
                       size={16}
-                      strokeWidth={1.75}
+                      strokeWidth={1.5}
                       absoluteStrokeWidth
                       fill={
                         questionStates[currentIndex] === "flagged"
@@ -912,7 +912,7 @@ export function TakeExamPage() {
                     Governed to match inline role (16px/1.75px). */}
                 <Flag
                   size={16}
-                  strokeWidth={1.75}
+                  strokeWidth={1.5}
                   absoluteStrokeWidth
                   fill={
                     questionStates[currentIndex] === "flagged"

@@ -32,10 +32,10 @@ export function ExamTopbar({
       )}
     >
       <div className="min-w-0">
-        <div className="text-xs font-medium text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           {t("candidateRuntime.header.currentExam")}
         </div>
-        <h1 className="truncate text-lg font-semibold text-foreground">
+        <h1 className="truncate text-lg font-medium text-foreground">
           {title}
         </h1>
       </div>

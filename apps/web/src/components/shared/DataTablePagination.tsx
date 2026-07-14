@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppIcon } from "@/components/shared/AppIcon";
 import {
   Pagination,
   PaginationContent,
@@ -73,7 +74,7 @@ export function DataTablePagination({
               disabled={currentPage <= 1}
               onClick={() => onPageChange(currentPage - 1)}
             >
-              <ChevronLeftIcon data-icon="inline-start" aria-hidden="true" />
+              <AppIcon icon={ChevronLeftIcon} size="inline" />
               {t("common.table.prev")}
             </Button>
           </PaginationItem>
@@ -101,7 +102,7 @@ export function DataTablePagination({
               onClick={() => onPageChange(currentPage + 1)}
             >
               {t("common.table.next")}
-              <ChevronRightIcon data-icon="inline-end" aria-hidden="true" />
+              <AppIcon icon={ChevronRightIcon} size="inline" />
             </Button>
           </PaginationItem>
         </PaginationContent>

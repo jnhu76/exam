@@ -103,14 +103,14 @@ export function DashboardPage() {
 
       <div className="flex gap-3">
         <Button onClick={() => navigate("/admin/exams/new")}>
-          <PlusCircle data-icon="inline-start" />
+          <AppIcon icon={PlusCircle} size="inline" />
           {t("admin.dashboard.actions.createExam")}
         </Button>
         <Button
           variant="outline"
           onClick={() => navigate("/admin/questions/import")}
         >
-          <Upload data-icon="inline-start" />
+          <AppIcon icon={Upload} size="inline" />
           {t("admin.dashboard.actions.importQuestions")}
         </Button>
       </div>
@@ -162,7 +162,7 @@ export function DashboardPage() {
               <TableBody>
                 {data.recentExams.map((exam) => (
                   <TableRow key={exam.id}>
-                    <DataTableCell role="primary-text" className="font-medium">
+                    <DataTableCell role="primary-text">
                       {exam.title}
                     </DataTableCell>
                     <DataTableCell role="status">
@@ -182,7 +182,7 @@ export function DashboardPage() {
                           )}
                           onClick={() => navigate(`/admin/exams/${exam.id}`)}
                         >
-                          <Eye />
+                          <AppIcon icon={Eye} size="inline" />
                         </Button>
                       </RowActions>
                     </DataTableCell>

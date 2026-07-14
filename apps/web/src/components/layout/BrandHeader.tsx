@@ -29,7 +29,7 @@ export function BrandHeader({
       <BrandMark />
       <span
         className={cn(
-          "truncate text-sm font-semibold text-foreground",
+          "truncate text-sm font-medium text-foreground",
           compact && "sr-only",
           textClassName,
         )}

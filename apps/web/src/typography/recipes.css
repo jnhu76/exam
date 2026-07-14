@@ -32,12 +32,13 @@
  * at 28px per the admin clarity target.
  */
 
-/* page-title: 24px / 700 / ink. Strongest non-numeric hierarchy. */
+/* page-title: 24px / 500 / ink. Strongest non-numeric hierarchy.
+ * 500 (medium) instead of 700 — CJK bold reads heavy/clunky at UI sizes. */
 .type-page-title {
   font-family: var(--font-ui);
   font-size: 1.5rem;
   line-height: 2rem;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -51,12 +52,12 @@
   color: var(--text-muted);
 }
 
-/* section-title: 16px / 700 / ink. Title of a content section / card / panel. */
+/* section-title: 16px / 500 / ink. Title of a content section / card / panel. */
 .type-section-title {
   font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.5rem;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text);
 }
 

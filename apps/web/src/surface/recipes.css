@@ -168,11 +168,6 @@
   border-bottom: 0;
 }
 
-[data-diagnostic-role="scanner"] [data-slot="diagnostic-card-header"] {
-  background: var(--surface-soft);
-  border-bottom: 0;
-}
-
 [data-diagnostic-role="scanner"] [data-slot="diagnostic-card-body"] {
   position: relative;
   padding-left: 2rem;

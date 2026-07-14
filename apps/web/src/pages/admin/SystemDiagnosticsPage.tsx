@@ -514,12 +514,10 @@ function DiagCard({
         data-slot="diagnostic-card-header"
         className={cn(
           "border-b border-border-row px-5 py-3",
-          role === "scanner" &&
-            "border-border-header bg-surface-subtle text-text-secondary",
           role === "disabled" && "text-text-muted",
         )}
       >
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {icon}
           {title}
         </div>

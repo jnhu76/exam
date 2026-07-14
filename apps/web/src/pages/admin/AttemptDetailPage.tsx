@@ -797,9 +797,7 @@ export function AttemptDetailPage() {
             <TableBody>
               {sortedQuestions.map((q) => (
                 <TableRow key={q.questionId}>
-                  <DataTableCell role="number" className="font-medium">
-                    {q.order}
-                  </DataTableCell>
+                  <DataTableCell role="number">{q.order}</DataTableCell>
                   <DataTableCell
                     role="long-text"
                     className="truncate"
@@ -829,7 +827,7 @@ export function AttemptDetailPage() {
                   <DataTableCell role="long-text">
                     {formatAnswer(q.standardAnswer)}
                   </DataTableCell>
-                  <DataTableCell role="score" className="font-bold">
+                  <DataTableCell role="score" className="font-medium">
                     {q.score}
                   </DataTableCell>
                   <DataTableCell role="score">{q.maxScore}</DataTableCell>

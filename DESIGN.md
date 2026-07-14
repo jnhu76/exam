@@ -66,13 +66,16 @@ surfaces are white. A card must never look dirtier than the page behind it.
 ## Typography
 
 The UI family is self-hosted `Noto Sans CJK SC`. Only intentional weights 400,
-500, and 700 are allowed. Weight 600 is forbidden because no 600 face is loaded.
+500, and 700 are allowed. Weight 600 is forbidden because no 600 face is loaded;
+`font-synthesis: none` is set on `body` so missing weights never produce fuzzy
+synthetic bold. CJK 700 reads heavy/clunky at UI sizes, so titles use 500
+(medium); 700 is reserved for large numeric metrics only.
 
 | Role | Contract |
 | --- | --- |
-| page title | 24/32, 700 |
+| page title | 24/32, 500 |
 | page description | 14/22, 400, muted |
-| section title | 16/24, 700 |
+| section title | 16/24, 500 |
 | body | 14/22, 400 |
 | emphasized cell | 14/22, 500 |
 | table header | 14/20, 500, muted |

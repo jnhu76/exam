@@ -162,7 +162,7 @@ export function StartExamPage() {
 
   return (
     <div className="mx-auto max-w-2xl flex flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">{exam.title}</h1>
+      <h1 className="type-page-title">{exam.title}</h1>
 
       <Card>
         <CardHeader>

@@ -230,7 +230,7 @@ export function QuestionForm({
                 size="sm"
                 onClick={addOption}
               >
-                <Plus className="size-3" />
+                <AppIcon icon={Plus} size="inline" />
                 {t("admin.forms.question.addOption")}
               </Button>
             )}

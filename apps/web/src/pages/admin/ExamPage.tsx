@@ -187,10 +187,7 @@ export function ExamPage() {
 
                     return (
                       <TableRow key={exam.id}>
-                        <DataTableCell
-                          role="primary-text"
-                          className="font-medium"
-                        >
+                        <DataTableCell role="primary-text">
                           {exam.title}
                         </DataTableCell>
                         <DataTableCell role="status">

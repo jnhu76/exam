@@ -92,7 +92,7 @@ export function ResultPage() {
 
   return (
     <div className="mx-auto max-w-5xl flex flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">{result.examTitle}</h1>
+      <h1 className="type-page-title">{result.examTitle}</h1>
 
       {result.showResultImmediately ? (
         <>

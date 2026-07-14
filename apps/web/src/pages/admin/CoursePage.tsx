@@ -266,7 +266,7 @@ export function CoursePage() {
               <TableBody>
                 {filteredCourses.map((course) => (
                   <TableRow key={course.id}>
-                    <DataTableCell role="primary-text" className="font-medium">
+                    <DataTableCell role="primary-text">
                       {course.name}
                     </DataTableCell>
                     <DataTableCell role="short-id">{course.code}</DataTableCell>
