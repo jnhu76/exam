@@ -545,7 +545,7 @@ export function ExamDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="type-metric">
               {t("admin.examDetail.stats.durationValue", {
                 minutes: exam.durationMinutes,
               })}
@@ -559,7 +559,7 @@ export function ExamDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">
+            <p className="type-metric">
               {exam.passingScore}/{exam.totalScore}
             </p>
           </CardContent>
@@ -571,7 +571,7 @@ export function ExamDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{exam.questionIds.length}</p>
+            <p className="type-metric">{exam.questionIds.length}</p>
           </CardContent>
         </Card>
       </div>
@@ -631,9 +631,7 @@ export function ExamDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">
-                  {exam.stats.participantCount}
-                </p>
+                <p className="type-metric">{exam.stats.participantCount}</p>
               </CardContent>
             </Card>
             <Card>
@@ -643,9 +641,7 @@ export function ExamDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">
-                  {exam.stats.completedCount}
-                </p>
+                <p className="type-metric">{exam.stats.completedCount}</p>
               </CardContent>
             </Card>
             <Card>
@@ -655,7 +651,7 @@ export function ExamDetailPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">{exam.stats.passedCount}</p>
+                <p className="type-metric">{exam.stats.passedCount}</p>
               </CardContent>
             </Card>
           </div>

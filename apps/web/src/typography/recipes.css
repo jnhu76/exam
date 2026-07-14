@@ -117,6 +117,20 @@
   color: var(--text);
 }
 
+/* metric-hero: 48px / 700 / tabular-nums. The single largest numeric emphasis
+ * on a screen — a final exam score shown to a candidate. Distinct from
+ * type-metric (28px) by deliberate scale; both own weight 700 + tabular-nums
+ * so numeric alignment is consistent. Introduced in UI-TOKEN-TABLE-FOUNDATION-1
+ * to replace an ad-hoc text-5xl font-bold at ResultPage. */
+.type-metric-hero {
+  font-family: var(--font-ui);
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
 /* numeric: tabular numeric alignment for tables/timers/counts (not the metric). */
 .type-numeric {
   font-variant-numeric: tabular-nums;

@@ -7,7 +7,7 @@ import {
 
 describe("typography vocabulary (UI-VOCAB-1T)", () => {
   it("exposes every confirmed recipe declared in typography-vocabulary.md", () => {
-    // The 11 CONFIRMED roles from the authority document.
+    // The CONFIRMED roles from the authority document.
     expect(CONFIRMED_RECIPES).toEqual([
       "page-title",
       "page-description",
@@ -18,6 +18,7 @@ describe("typography vocabulary (UI-VOCAB-1T)", () => {
       "reading",
       "long-response",
       "metric",
+      "metric-hero",
       "numeric",
       "code",
     ]);

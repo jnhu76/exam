@@ -140,14 +140,18 @@
   --table-row-focus: #e6eefb;
   --table-row-selected: #eaf2fd;
   --action-hover: #f7f7f7;
-  /* Sidebar — dark neutral, ascending lightness (hover < active, fixed). */
-  --sidebar-bg: #181b21;
-  --sidebar-active: #262a32;
-  --sidebar-active-soft: #262a32;
-  --sidebar-hover: #20242b;
-  --sidebar-text: #f5f7fa;
-  --sidebar-muted: #aeb6c2;
-  --sidebar-border: #2b2f36;
+  /* Sidebar — light neutral chrome (UI-TOKEN-TABLE-FOUNDATION-1). The nav is a
+   * quiet light surface, distinct from the canvas by a 1px border + a faint
+   * subtle tint, not by a dark fill. Text/active/hover follow the same neutral
+   * ladder as the rest of the UI; the active item signals via a primary-soft
+   * fill + primary left-accent, matching the selected-row treatment. */
+  --sidebar-bg: #fbfbfc;
+  --sidebar-active: var(--primary-soft);
+  --sidebar-active-soft: var(--primary-soft);
+  --sidebar-hover: #f4f5f7;
+  --sidebar-text: var(--text);
+  --sidebar-muted: var(--text-muted);
+  --sidebar-border: var(--border-shell);
   /* Semantic colors — perceptually uniform, mid-high lightness (L≈52-60%)
    * so they read bright and modern, not muddy. soft tints use one formula
    * (main hue @ ~92% L bg / main text). Koi-UI-informed lightness strategy. */

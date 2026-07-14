@@ -39,7 +39,7 @@ export function ExamTimer({
       <div className="type-metadata">
         {t("candidateRuntime.timer.remaining")}
       </div>
-      <span className="font-mono text-xl font-bold leading-tight tabular-nums">
+      <span className="type-numeric font-mono text-xl font-medium leading-tight">
         {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
       </span>
     </div>

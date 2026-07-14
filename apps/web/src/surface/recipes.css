@@ -76,8 +76,9 @@
   background: var(--surface-muted);
 }
 
-/* navigation: the persistent navigation region — a deliberately distinct dark
- * surface set from the page canvas, signaling structural chrome. */
+/* navigation: the persistent navigation region — a quiet light chrome surface,
+ * distinct from the canvas by a 1px border + faint subtle tint, not a dark
+ * fill (UI-TOKEN-TABLE-FOUNDATION-1 light-nav pivot). */
 .surface-navigation {
   background: var(--sidebar-bg);
   border-color: var(--sidebar-border);

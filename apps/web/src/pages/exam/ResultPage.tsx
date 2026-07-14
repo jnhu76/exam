@@ -101,10 +101,7 @@ export function ResultPage() {
               <CardTitle>{t("candidateResult.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-center">
-              <p
-                className="text-5xl font-bold"
-                data-testid="result-total-score"
-              >
+              <p className="type-metric-hero" data-testid="result-total-score">
                 {result.totalScore}
               </p>
               <p className="text-sm text-muted-foreground">

@@ -66,15 +66,13 @@
 }
 
 [data-slot="sidebar-nav-item"][aria-current="page"] {
-  background: transparent;
+  background: var(--sidebar-active);
   color: var(--sidebar-text);
-  box-shadow:
-    inset 2px 0 0 var(--primary-focus),
-    inset 0 1px 0 rgb(255 255 255 / 0.035);
+  box-shadow: inset 2px 0 0 var(--primary);
 }
 
 [data-slot="sidebar-nav-item"][aria-current="page"] svg {
-  color: var(--primary-focus);
+  color: var(--primary);
 }
 
 [data-slot="row-actions"] [data-row-action-tone="destructive"]:hover {

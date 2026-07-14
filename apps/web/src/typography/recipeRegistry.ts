@@ -172,6 +172,20 @@ export const RECIPE_REGISTRY: readonly RecipeAuthority[] = [
     layoutOwnedProperties: [],
   },
   {
+    name: "metric-hero",
+    purpose:
+      "The single largest numeric emphasis on a screen — a final exam score shown to a candidate.",
+    ownedProperties: [
+      "font-family",
+      "font-size",
+      "line-height",
+      "font-weight",
+      "color",
+      "font-variant-numeric",
+    ],
+    layoutOwnedProperties: [],
+  },
+  {
     name: "numeric",
     purpose:
       "Tabular numeric alignment for tables/timers/counts (not the metric).",

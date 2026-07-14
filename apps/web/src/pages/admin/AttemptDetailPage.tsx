@@ -715,28 +715,25 @@ export function AttemptDetailPage() {
             <p className="text-sm text-muted-foreground">
               {t("admin.attemptDetail.result.totalScore")}
             </p>
-            <p className="text-3xl font-bold tabular-nums">
-              {result.totalScore}
-            </p>
+            <p className="type-metric">{result.totalScore}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">
               {t("admin.attemptDetail.result.earnedScore")}
             </p>
-            <p
-              data-testid="earned-score"
-              className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
-            >
-              {earnedScore}
+            <p data-testid="earned-score" className="type-metric">
+              <span
+                className={result.passed ? "text-success" : "text-destructive"}
+              >
+                {earnedScore}
+              </span>
             </p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">
               {t("admin.attemptDetail.result.passingLine")}
             </p>
-            <p className="text-3xl font-bold tabular-nums">
-              {result.passingScore}
-            </p>
+            <p className="type-metric">{result.passingScore}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">

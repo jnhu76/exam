@@ -28,8 +28,8 @@ const RECIPES_CSS = readFileSync(join(HERE, "recipes.css"), "utf8");
 const VOCAB_MD = readFileSync(join(HERE, "typography-vocabulary.md"), "utf8");
 
 describe("recipe registry — internal well-formedness", () => {
-  it("has exactly 11 recipes", () => {
-    expect(RECIPE_REGISTRY).toHaveLength(11);
+  it("has exactly 12 recipes", () => {
+    expect(RECIPE_REGISTRY).toHaveLength(12);
   });
 
   it("recipe names are unique and in canonical order", () => {
@@ -43,6 +43,7 @@ describe("recipe registry — internal well-formedness", () => {
       "reading",
       "long-response",
       "metric",
+      "metric-hero",
       "numeric",
       "code",
     ]);
