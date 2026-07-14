@@ -30,16 +30,16 @@ recompose an appearance role already owned by a recipe or component.
 
 All tokens live in `apps/web/src/index.css` `:root`. This table is the
 document-of-record and MUST stay in sync with that file. Canvas and surfaces
-share one cool-blue-grey axis (≈216° hue); semantic colors are perceptually
-uniform at mid-high lightness (L≈52-60%) so they read bright and modern.
+follow the Radix UI slate scale (cool-neutral, perceptually uniform); semantic
+colors are perceptually uniform at mid-high lightness (L≈52-60%).
 
 | Role | Value | Use |
 | --- | --- | --- |
-| canvas | `#eef1f6` | application page behind business content |
+| canvas | `#fcfcfd` | application page behind business content |
 | surface | `#ffffff` | cards, table shells, forms, toolbars |
-| surface-subtle | `#f4f6fa` | table headers, metadata strips |
-| surface-hover | `#f1f5fb` | neutral hover state |
-| surface-selected | `#e6eefb` | selected/info anchor |
+| surface-subtle | `#f9f9fb` | table headers, metadata strips |
+| surface-hover | `#f0f0f3` | neutral hover state |
+| surface-selected | `#eaf2fd` | selected/info anchor |
 | text | `#111827` | primary text |
 | text-secondary | `#374151` | emphasized secondary text |
 | text-muted | `#627287` | descriptions and metadata; ≥4.5:1 on canvas |

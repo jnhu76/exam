@@ -508,10 +508,7 @@ function DiagCard({
     <div
       data-slot="card"
       data-diagnostic-role={role}
-      className={cn(
-        "surface-content overflow-hidden",
-        role === "disabled" && "border-border-row bg-surface-subtle",
-      )}
+      className={cn("surface-content overflow-hidden")}
     >
       <div
         data-slot="diagnostic-card-header"

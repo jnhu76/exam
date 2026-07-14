@@ -105,16 +105,18 @@
 }
 
 :root {
-  /* Canvas / surfaces — one cool-blue-grey axis (216° hue), clear layer steps.
-   * Canvas is deliberately darker than surface so white cards visibly float. */
-  --bg: #eef1f6;
+  /* Canvas / surfaces — Radix slate scale (cool-neutral, perceptually uniform).
+   * Canvas (slate1) is near-white so cards float on a ~1% lightness step; main
+   * reads white without greying. Table headers use slate3 inside bordered
+   * tables so they are clearly distinct from canvas+rows. Source: radix-ui/colors. */
+  --bg: #fcfcfd;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-subtle: #f4f6fa;
-  --surface-soft: #eef1f6;
+  --surface-subtle: #f9f9fb;
+  --surface-soft: #f0f0f3;
   --surface-muted: var(--surface-subtle);
-  --surface-hover: #f1f5fb;
-  --surface-selected: #e6eefb;
+  --surface-hover: #f0f0f3;
+  --surface-selected: #eaf2fd;
   --text: #111827;
   --text-secondary: #374151;
   --text-muted: #627287;
@@ -133,11 +135,11 @@
   --primary-soft: #eaf1ff;
   --primary-soft-strong: #d3e2ff;
   --primary-focus: #7aa7ff;
-  --table-header: #f4f6fa;
-  --table-row-hover: #f1f5fb;
+  --table-header: #f0f0f3;
+  --table-row-hover: #f4f4f8;
   --table-row-focus: #e6eefb;
-  --table-row-selected: #e6eefb;
-  --action-hover: #eef2f7;
+  --table-row-selected: #eaf2fd;
+  --action-hover: #f0f0f3;
   /* Sidebar — dark neutral, ascending lightness (hover < active, fixed). */
   --sidebar-bg: #181b21;
   --sidebar-active: #262a32;
