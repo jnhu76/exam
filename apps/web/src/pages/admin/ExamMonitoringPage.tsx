@@ -352,7 +352,7 @@ export function ExamMonitoringPage() {
                     {formatTime(ev.occurredAt)}
                   </span>
                   <EventBadge level={ev.level} kind={ev.kind} />
-                  <span className="font-medium">{ev.name}</span>
+                  <span>{ev.name}</span>
                   {ev.route && (
                     <span className="text-muted-foreground truncate max-w-32">
                       {ev.route}

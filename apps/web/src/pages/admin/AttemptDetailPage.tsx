@@ -827,9 +827,7 @@ export function AttemptDetailPage() {
                   <DataTableCell role="long-text">
                     {formatAnswer(q.standardAnswer)}
                   </DataTableCell>
-                  <DataTableCell role="score" className="font-medium">
-                    {q.score}
-                  </DataTableCell>
+                  <DataTableCell role="score">{q.score}</DataTableCell>
                   <DataTableCell role="score">{q.maxScore}</DataTableCell>
                 </TableRow>
               ))}

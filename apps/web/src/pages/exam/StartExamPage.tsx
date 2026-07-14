@@ -176,7 +176,7 @@ export function StartExamPage() {
               <AppIcon icon={Clock} size="inline" />
               <span>{t("startExam.info.duration")}</span>
             </div>
-            <span className="font-medium">
+            <span className="text-foreground">
               {t("startExam.info.durationValue", {
                 minutes: exam.durationMinutes,
               })}
@@ -186,7 +186,7 @@ export function StartExamPage() {
               <AppIcon icon={FileText} size="inline" />
               <span>{t("startExam.info.questionCount")}</span>
             </div>
-            <span className="font-medium">
+            <span className="text-foreground">
               {t("startExam.info.questionCountValue", {
                 count: exam.questionCount,
               })}
@@ -196,7 +196,7 @@ export function StartExamPage() {
               <AppIcon icon={Shield} size="inline" />
               <span>{t("startExam.info.passingScore")}</span>
             </div>
-            <span className="font-medium">
+            <span className="text-foreground">
               {exam.passingScore}/{exam.totalScore}
             </span>
           </div>

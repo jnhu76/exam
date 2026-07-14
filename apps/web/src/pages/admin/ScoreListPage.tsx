@@ -332,9 +332,7 @@ export function ScoreListPage() {
                       .map(String)
                       .join(" / ") || "-"}
                   </DataTableCell>
-                  <DataTableCell role="score" className="font-medium">
-                    {item.score}
-                  </DataTableCell>
+                  <DataTableCell role="score">{item.score}</DataTableCell>
                   <DataTableCell role="status">
                     <StatusBadge
                       status={item.passed ? "passed" : "not_passed"}

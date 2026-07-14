@@ -334,7 +334,7 @@ export function AuditLogPage() {
                     </DataTableCell>
                     <DataTableCell
                       role="secondary-text"
-                      className="font-medium"
+                      className="text-foreground"
                     >
                       {item.actorName ?? item.actorId}
                     </DataTableCell>
