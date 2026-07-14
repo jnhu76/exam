@@ -211,7 +211,7 @@ describe("SystemDiagnosticsPage", () => {
       '[data-diagnostic-role="kpi"]',
     )) {
       expect(metric.querySelector('[data-slot="stats-card"]')).toHaveClass(
-        "surface-raised",
+        "surface-content",
       );
     }
   });

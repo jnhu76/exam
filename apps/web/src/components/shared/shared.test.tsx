@@ -502,10 +502,10 @@ describe("StatsCard", () => {
     );
     expect(
       screen.getByText("12").closest('[data-slot="stats-card"]'),
-    ).toHaveAttribute("data-depth", "micro");
+    ).toHaveAttribute("data-depth", "flat");
     expect(
       screen.getByText("12").closest('[data-slot="stats-card"]'),
-    ).toHaveClass("surface-raised");
+    ).toHaveClass("surface-content");
     expect(screen.getByText("图").parentElement).toHaveAttribute(
       "data-anchor-tone",
       "primary-soft",

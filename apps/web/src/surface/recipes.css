@@ -105,13 +105,6 @@
   border-radius: var(--radius);
 }
 
-[data-slot="stats-card"][data-depth="micro"] {
-  box-shadow:
-    0 1px 3px rgb(16 24 40 / 0.1),
-    0 6px 14px -6px rgb(16 24 40 / 0.2),
-    inset 0 1px 0 rgb(255 255 255 / 0.96);
-}
-
 [data-slot="stats-card"] [data-slot="stats-card-icon"] {
   width: 2.25rem;
   height: 2rem;

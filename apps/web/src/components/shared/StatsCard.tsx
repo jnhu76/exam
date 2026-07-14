@@ -19,8 +19,8 @@ export function StatsCard({
   return (
     <div
       data-slot="stats-card"
-      data-depth="micro"
-      className="surface-raised p-4"
+      data-depth="flat"
+      className="surface-content p-4"
     >
       <div className="flex items-center gap-2.5">
         {icon && (
