@@ -215,6 +215,88 @@ describe("question routes", () => {
     expect(body.items.every((q: any) => q.type === "single_choice")).toBe(true);
   });
 
+  it("GET /api/questions filters by server-side content search (case-insensitive, substring)", async () => {
+    // Seed a known question so the search assertion does not depend on the
+    // execution order of other tests in this file.
+    const needle = "Photosynthesis produces OXYGEN and glucose.";
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "single_choice",
+        content: needle,
+        options: [
+          { id: "a", content: "A" },
+          { id: "b", content: "B", isCorrect: true },
+        ],
+        standardAnswer: "b",
+        score: 5,
+        difficulty: 2,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+
+    // Lowercase substring of the mixed-case content.
+    const lower = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=produces+oxygen`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(lower.statusCode).toBe(200);
+    const lowerBody = lower.json();
+    expect(lowerBody.items.length).toBeGreaterThan(0);
+    expect(lowerBody.total).toBe(lowerBody.items.length);
+    expect(
+      lowerBody.items.every((q: any) =>
+        q.content.toLowerCase().includes("produces oxygen"),
+      ),
+    ).toBe(true);
+
+    // Same term in UPPER must match the same rows (case-insensitivity).
+    const upper = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=PRODUCES+OXYGEN`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(upper.statusCode).toBe(200);
+    expect(upper.json().total).toBe(lowerBody.total);
+
+    // A search term that matches nothing returns an empty page, total 0.
+    // NB: the term uses ILIKE metacharacters (_) deliberately — they must be
+    // treated as literals, NOT single-char wildcards, or this would match the
+    // seeded row above (each _ absorbing one char).
+    const none = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=__no_such_content_zzz__`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(none.statusCode).toBe(200);
+    expect(none.json().total).toBe(0);
+    expect(none.json().items).toEqual([]);
+  });
+
+  it("GET /api/questions treats empty/whitespace search as no-op", async () => {
+    const base = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const empty = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const ws = await ctx.app.inject({
+      method: "GET",
+      url: `/api/questions?courseId=${courseId}&search=%20%20`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(base.json().total).toBe(empty.json().total);
+    expect(base.json().total).toBe(ws.json().total);
+  });
+
   it("GET /api/questions/:id returns single question", async () => {
     const listRes = await ctx.app.inject({
       method: "GET",
