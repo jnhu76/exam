@@ -248,7 +248,7 @@ export function CandidateFieldsPage() {
           description={t("admin.candidateFields.emptyDescription")}
         />
       ) : (
-        <DataTableShell>
+        <DataTableShell actionsDensity="wide">
           <Table>
             <DataTableColumns
               columns={[

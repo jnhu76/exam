@@ -83,3 +83,29 @@ export function DataTableCell({
     />
   );
 }
+
+/**
+ * A cell that spans the full table width, for empty-state / loading rows
+ * that do not belong to any single column role. Carries the contract's
+ * data-slot so it stays within the DataTable visual authority, and marks
+ * itself with data-column-role="span" / data-column-wrap="flexible" so the
+ * table recipes do not apply a column width or atomic nowrap to it.
+ *
+ * Use only for the special "no rows" / "loading" row inside a DataTableShell
+ * table body; never use it as a regular data cell.
+ */
+export function DataTableSpanCell({
+  colSpan,
+  ...props
+}: Omit<ComponentProps<typeof TableCell>, "data-column-role"> & {
+  colSpan: number;
+}) {
+  return (
+    <TableCell
+      data-column-role="span"
+      data-column-wrap="flexible"
+      colSpan={colSpan}
+      {...props}
+    />
+  );
+}

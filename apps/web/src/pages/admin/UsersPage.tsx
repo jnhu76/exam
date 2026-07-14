@@ -193,7 +193,7 @@ export function UsersPage() {
           description={t("admin.users.emptyDescription")}
         />
       ) : (
-        <DataTableShell minTableWidth="compact">
+        <DataTableShell minTableWidth="compact" actionsDensity="normal">
           <Table>
             <DataTableColumns
               columns={[

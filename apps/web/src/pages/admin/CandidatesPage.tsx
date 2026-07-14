@@ -451,7 +451,7 @@ export function CandidatesPage() {
         />
       ) : (
         <>
-          <DataTableShell minTableWidth="standard">
+          <DataTableShell minTableWidth="standard" actionsDensity="wide">
             <Table>
               <DataTableColumns
                 columns={[

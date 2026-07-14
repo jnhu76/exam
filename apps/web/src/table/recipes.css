@@ -3,6 +3,28 @@
  * wrap policy; DataTableShell owns the local scroll and interaction surface.
  */
 
+/*
+ * Fixed layout + collapsed borders, scoped to admin shells ONLY.
+ *
+ * Why scoped: a global `table { table-layout: fixed }` would also hit the
+ * react-day-picker month grid (calendar.tsx), Dialog question-picker tables
+ * (max-w-2xl, too narrow for the long-text 18rem), and Card-bound answer
+ * detail tables (candidate-facing ResultPage/AttemptDetailPage). Those rely
+ * on auto layout to fit their containers. Restricting fixed layout to the
+ * admin shell keeps the colgroup widths authoritative here while leaving
+ * every other <table> untouched.
+ *
+ * Fixed layout makes the <col> widths in DataTableColumns authoritative
+ * (auto layout ignores them when content is wider — the root cause of the
+ * candidate-fields horizontal scroll and the users header/body misalign).
+ * border-collapse makes header and body share column edges so th/td stay
+ * aligned row-to-row.
+ */
+[data-slot="admin-table-shell"] [data-slot="table"] {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
 [data-slot="data-table-columns"] [data-column-role="primary-text"] {
   width: auto;
 }
@@ -88,18 +110,22 @@
 }
 
 [data-column-role="primary-text"] {
+  width: auto;
   min-width: 13.75rem;
 }
 
 [data-column-role="secondary-text"] {
+  width: 10rem;
   min-width: 10rem;
 }
 
 [data-column-role="long-text"] {
+  width: 18rem;
   min-width: 18rem;
 }
 
 [data-column-role="description"] {
+  width: 16rem;
   min-width: 16rem;
 }
 
@@ -144,12 +170,36 @@
 }
 
 [data-column-role="tag-list"] {
+  width: 11rem;
   min-width: 11rem;
 }
 
+/*
+ * Actions column — three density tiers chosen per page by the number/type
+ * of row-action buttons. Under fixed layout the col width is strict, so a
+ * column that is too narrow for its buttons would clip them; the page picks
+ * the tier that fits its worst-case action set.
+ *
+ *   narrow (default): 1-2 icon buttons                  — 6.5rem
+ *   normal:           1 icon + 1 short text button       — 9rem
+ *   wide:             4 icon, or 2 icon + 1 text button  — 11rem
+ *
+ * The density is set on the shell root via data-actions-density and cascades
+ * to the col/cell selectors below.
+ */
 [data-column-role="actions"] {
   width: 6.5rem;
   min-width: 6.5rem;
+}
+
+[data-actions-density="normal"] [data-column-role="actions"] {
+  width: 9rem;
+  min-width: 9rem;
+}
+
+[data-actions-density="wide"] [data-column-role="actions"] {
+  width: 11rem;
+  min-width: 11rem;
 }
 
 [data-slot="table-head"][data-column-wrap="atomic"],

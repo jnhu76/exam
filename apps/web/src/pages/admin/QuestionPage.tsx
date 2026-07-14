@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ListToolbar } from "@/components/shared/ListToolbar";
 import { SearchInput } from "@/components/shared/SearchInput";
@@ -17,6 +16,7 @@ import {
   DataTableCell,
   DataTableColumns,
   DataTableHead,
+  DataTableSpanCell,
 } from "@/components/shared/DataTableContract";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
@@ -333,135 +333,164 @@ export function QuestionPage() {
         }
       />
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={<AppIcon icon={BookOpen} size="state" />}
-          title={
-            hasActiveFilter
-              ? t("admin.questions.noMatch")
-              : t("admin.questions.empty")
-          }
-          description={
-            hasActiveFilter
-              ? t("admin.questions.noMatchDescription")
-              : t("admin.questions.emptyDescription")
-          }
-          action={
-            hasActiveFilter ? (
-              <Button variant="outline" onClick={clearFilters}>
-                {t("admin.questions.clearFilter")}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <>
-          <DataTableShell>
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "type" },
-                  { role: "long-text" },
-                  { role: "secondary-text" },
-                  { role: "score" },
-                  { role: "number" },
-                  { role: "tag-list" },
-                  { role: "actions" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="type">
-                    {t("admin.questions.columns.type")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.questions.columns.content")}
-                  </DataTableHead>
-                  <DataTableHead role="secondary-text">
-                    {t("admin.questions.columns.course")}
-                  </DataTableHead>
-                  <DataTableHead role="score">
-                    {t("admin.questions.columns.score")}
-                  </DataTableHead>
-                  <DataTableHead role="number">
-                    {t("admin.questions.columns.difficulty")}
-                  </DataTableHead>
-                  <DataTableHead role="tag-list">
-                    {t("admin.questions.columns.tags")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.questions.columns.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((q) => (
-                  <TableRow key={q.id}>
-                    <DataTableCell role="type">
-                      <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
-                        {getTypeLabel(q.type, t) ?? q.type}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="long-text" className="truncate">
-                      {q.content}
-                    </DataTableCell>
-                    <DataTableCell role="secondary-text">
-                      {courseMap.get(q.courseId) ?? "-"}
-                    </DataTableCell>
-                    <DataTableCell role="score">{q.score}</DataTableCell>
-                    <DataTableCell role="number">{q.difficulty}</DataTableCell>
-                    <DataTableCell role="tag-list">
-                      <div className="flex flex-wrap gap-1">
-                        {q.tags.map((tag) => (
-                          <TagBadge key={tag}>{tag}</TagBadge>
-                        ))}
-                      </div>
-                    </DataTableCell>
-                    <DataTableCell role="actions">
-                      <RowActions>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() =>
-                            void navigate(`/admin/questions/${q.id}/edit`)
-                          }
-                          aria-label={t("admin.questions.editLabel")}
-                        >
-                          <AppIcon icon={Pencil} size="inline" />
-                        </Button>
-                        <ConfirmDialog
-                          trigger={
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("admin.questions.deleteLabel")}
-                              data-row-action-tone="destructive"
-                            >
-                              <AppIcon icon={Trash2} size="inline" />
-                            </Button>
-                          }
-                          title={t("admin.questions.confirmDelete")}
-                          description={t(
-                            "admin.questions.confirmDeleteDescription",
-                          )}
-                          destructive
-                          onConfirm={() => void handleDelete(q.id)}
-                        />
-                      </RowActions>
-                    </DataTableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </DataTableShell>
-          <DataTablePagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={setPage}
+      {/*
+        Shell + pagination render UNCONDITIONALLY. Previously the shell and
+        the standalone EmptyState swapped in/out on filter changes, which
+        threw the whole block's height between ~8rem (empty card) and the
+        full table height — visible as a "the table jumps when I change a
+        filter" jitter. Keeping the shell (with its header + column widths)
+        always mounted stabilizes the layout; only the body content swaps.
+      */}
+      <DataTableShell>
+        <Table>
+          <DataTableColumns
+            columns={[
+              { role: "type" },
+              { role: "long-text" },
+              { role: "secondary-text" },
+              { role: "score" },
+              { role: "number" },
+              { role: "tag-list" },
+              { role: "actions" },
+            ]}
           />
-        </>
-      )}
+          <TableHeader>
+            <TableRow>
+              <DataTableHead role="type">
+                {t("admin.questions.columns.type")}
+              </DataTableHead>
+              <DataTableHead role="long-text">
+                {t("admin.questions.columns.content")}
+              </DataTableHead>
+              <DataTableHead role="secondary-text">
+                {t("admin.questions.columns.course")}
+              </DataTableHead>
+              <DataTableHead role="score">
+                {t("admin.questions.columns.score")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.questions.columns.difficulty")}
+              </DataTableHead>
+              <DataTableHead role="tag-list">
+                {t("admin.questions.columns.tags")}
+              </DataTableHead>
+              <DataTableHead role="actions">
+                {t("admin.questions.columns.actions")}
+              </DataTableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isTableLoading ? (
+              <TableRow aria-hidden="true">
+                <DataTableSpanCell colSpan={7} className="h-32 p-0">
+                  {/*
+                    Body skeleton: no text here. The toolbar already shows a
+                    live loading indicator (aria-live polite + spinner +
+                    label), so duplicating the "loading" string here would
+                    both repeat it and add a second live region. This row
+                    only holds height so the shell does not collapse while
+                    the request is in flight (the original jitter cause).
+                  */}
+                </DataTableSpanCell>
+              </TableRow>
+            ) : filtered.length === 0 ? (
+              <TableRow>
+                <DataTableSpanCell colSpan={7} className="h-32">
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <div className="text-muted-foreground" aria-hidden="true">
+                      <AppIcon icon={BookOpen} size="state" />
+                    </div>
+                    <div>
+                      <p className="font-medium">
+                        {hasActiveFilter
+                          ? t("admin.questions.noMatch")
+                          : t("admin.questions.empty")}
+                      </p>
+                      <p className="text-sm text-text-muted">
+                        {hasActiveFilter
+                          ? t("admin.questions.noMatchDescription")
+                          : t("admin.questions.emptyDescription")}
+                      </p>
+                    </div>
+                    {hasActiveFilter ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearFilters}
+                      >
+                        {t("admin.questions.clearFilter")}
+                      </Button>
+                    ) : null}
+                  </div>
+                </DataTableSpanCell>
+              </TableRow>
+            ) : (
+              filtered.map((q) => (
+                <TableRow key={q.id}>
+                  <DataTableCell role="type">
+                    <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
+                      {getTypeLabel(q.type, t) ?? q.type}
+                    </Badge>
+                  </DataTableCell>
+                  <DataTableCell role="long-text" className="truncate">
+                    {q.content}
+                  </DataTableCell>
+                  <DataTableCell role="secondary-text">
+                    {courseMap.get(q.courseId) ?? "-"}
+                  </DataTableCell>
+                  <DataTableCell role="score">{q.score}</DataTableCell>
+                  <DataTableCell role="number">{q.difficulty}</DataTableCell>
+                  <DataTableCell role="tag-list">
+                    <div className="flex flex-wrap gap-1">
+                      {q.tags.map((tag) => (
+                        <TagBadge key={tag}>{tag}</TagBadge>
+                      ))}
+                    </div>
+                  </DataTableCell>
+                  <DataTableCell role="actions">
+                    <RowActions>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() =>
+                          void navigate(`/admin/questions/${q.id}/edit`)
+                        }
+                        aria-label={t("admin.questions.editLabel")}
+                      >
+                        <AppIcon icon={Pencil} size="inline" />
+                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t("admin.questions.deleteLabel")}
+                            data-row-action-tone="destructive"
+                          >
+                            <AppIcon icon={Trash2} size="inline" />
+                          </Button>
+                        }
+                        title={t("admin.questions.confirmDelete")}
+                        description={t(
+                          "admin.questions.confirmDeleteDescription",
+                        )}
+                        destructive
+                        onConfirm={() => void handleDelete(q.id)}
+                      />
+                    </RowActions>
+                  </DataTableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </DataTableShell>
+      <DataTablePagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

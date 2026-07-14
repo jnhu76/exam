@@ -12,6 +12,16 @@ import { cn } from "@/lib/utils";
 export type DataTableMinWidth = "compact" | "standard" | "wide";
 
 /**
+ * Actions column density tier. Under the shell's fixed table layout the
+ * actions column width is strict, so a page picks the tier that fits its
+ * worst-case row-action set:
+ *   - "narrow" (default): 1-2 icon buttons (6.5rem)
+ *   - "normal": 1 icon + 1 short text button, e.g. enable/disable (9rem)
+ *   - "wide": 4 icon buttons, or 2 icon + 1 text button (11rem)
+ */
+export type ActionsDensity = "narrow" | "normal" | "wide";
+
+/**
  * Standard shell for data table pages, providing an optional title, description,
  * toolbar slot, content area, and footer within a bordered card container.
  */
@@ -24,6 +34,7 @@ export function DataTableShell({
   className,
   contentClassName,
   minTableWidth = "standard",
+  actionsDensity = "narrow",
 }: {
   title?: string;
   description?: string;
@@ -33,6 +44,7 @@ export function DataTableShell({
   className?: string;
   contentClassName?: string;
   minTableWidth?: DataTableMinWidth;
+  actionsDensity?: ActionsDensity;
 }) {
   const { t } = useTranslation();
   const shellId = useId();
@@ -81,6 +93,7 @@ export function DataTableShell({
       aria-describedby={descriptionId}
       data-slot="admin-table-shell"
       data-table-min-width={minTableWidth}
+      data-actions-density={actionsDensity}
       className={cn("surface-content overflow-hidden", className)}
     >
       {(title || description || toolbar) && (

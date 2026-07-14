@@ -35,6 +35,47 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
+  it("enforces fixed layout + collapsed borders inside the admin shell only", () => {
+    // Fixed layout makes <col> widths authoritative (root cause fix for
+    // candidate-fields horizontal scroll + users header/body misalign).
+    // Scoped to the admin shell so calendar, Dialog, and Card tables keep
+    // auto layout.
+    expect(tableCss).toMatch(
+      /\[data-slot="admin-table-shell"\]\s+\[data-slot="table"\][\s\S]*?table-layout:\s*fixed/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-slot="admin-table-shell"\]\s+\[data-slot="table"\][\s\S]*?border-collapse:\s*collapse/,
+    );
+  });
+
+  it("provides three actions-column density tiers", () => {
+    // Pages pick the tier that fits their worst-case action set under the
+    // strict fixed-layout column width.
+    expect(tableCss).toMatch(
+      /\[data-column-role="actions"\]\s+\{[^}]*width:\s*6\.5rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-actions-density="normal"\]\s+\[data-column-role="actions"\]\s+\{[^}]*width:\s*9rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-actions-density="wide"\]\s+\[data-column-role="actions"\]\s+\{[^}]*width:\s*11rem/,
+    );
+  });
+
+  it("declares explicit widths on flexible columns for fixed layout", () => {
+    // Fixed layout honors <col> width (not min-width), so flexible columns
+    // need an explicit width or they share remaining space evenly.
+    expect(tableCss).toMatch(
+      /\[data-column-role="secondary-text"\]\s+\{[^}]*width:\s*10rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-column-role="long-text"\]\s+\{[^}]*width:\s*18rem/,
+    );
+    expect(tableCss).toMatch(
+      /\[data-column-role="tag-list"\]\s+\{[^}]*width:\s*11rem/,
+    );
+  });
+
   it("defines restrained row hover, focus, and selected states", () => {
     expect(tableCss).toContain("var(--table-row-hover)");
     expect(tableCss).toContain("var(--table-row-focus)");
