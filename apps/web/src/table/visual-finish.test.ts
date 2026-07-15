@@ -75,10 +75,9 @@ describe("table and color visual-finish authority", () => {
   });
 
   it("provides three actions-column density tiers", () => {
-    // Pages pick the tier that fits their worst-case action set under the
-    // strict fixed-layout column width. Widths are tightened (UI-TABLE-KOI-
-    // COMPACT-1) so fixed columns consume less and the primary-text column
-    // can stretch to fill the container.
+    // Actions is a LOCKED column (fixed width = min-width) so it stays compact
+    // and never compresses below its density tier. Pages pick the tier that
+    // fits their worst-case row-action button set.
     expect(tableCss).toMatch(
       /\[data-column-role="actions"\]\s+\{[^}]*width:\s*6rem/,
     );
@@ -90,23 +89,28 @@ describe("table and color visual-finish authority", () => {
     );
   });
 
-  it("declares explicit widths on all columns for fixed layout", () => {
-    // Fixed layout honors <col> width (not min-width). Every column carries an
-    // explicit width so no single column can greedily absorb the container and
-    // starve its siblings (the "primary-text eats 750px, everything wraps"
-    // defect). Under collapse, a width:100% table distributes its width
-    // proportionally across these fixed widths.
+  it("splits columns into flexible (auto) and locked (fixed-width) tiers", () => {
+    // UI-TABLE-COLUMN-PRIORITY-1: flexible columns (text/content) carry
+    // width:auto so under fixed layout they split the container's remaining
+    // space (after locked columns take their fixed width). Locked columns
+    // (atomic/metadata) carry a fixed width = min-width so they stay compact
+    // and never wrap. This mirrors TanStack's size/minSize model.
+    // Flexible (auto):
     expect(tableCss).toMatch(
-      /\[data-column-role="primary-text"\]\s+\{[^}]*width:\s*16rem/,
+      /\[data-column-role="primary-text"\]\s+\{[^}]*width:\s*auto/,
     );
     expect(tableCss).toMatch(
-      /\[data-column-role="secondary-text"\]\s+\{[^}]*width:\s*11rem/,
+      /\[data-column-role="long-text"\]\s+\{[^}]*width:\s*auto/,
     );
     expect(tableCss).toMatch(
-      /\[data-column-role="long-text"\]\s+\{[^}]*width:\s*18rem/,
+      /\[data-column-role="secondary-text"\]\s+\{[^}]*width:\s*auto/,
+    );
+    // Locked (fixed width):
+    expect(tableCss).toMatch(
+      /\[data-column-role="number"\]\s+\{[^}]*width:\s*4\.5rem/,
     );
     expect(tableCss).toMatch(
-      /\[data-column-role="tag-list"\]\s+\{[^}]*width:\s*10rem/,
+      /\[data-column-role="type"\]\s+\{[^}]*width:\s*5\.5rem/,
     );
   });
 

@@ -332,7 +332,10 @@ export function AuditLogPage() {
                     >
                       {formatDateTime(item.createdAt)}
                     </DataTableCell>
-                    <DataTableCell role="short-id" className="text-foreground">
+                    <DataTableCell
+                      role="short-id"
+                      className="truncate text-foreground"
+                    >
                       {item.actorName ?? item.actorId}
                     </DataTableCell>
                     <DataTableCell role="type">

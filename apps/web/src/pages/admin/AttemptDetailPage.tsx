@@ -798,7 +798,7 @@ export function AttemptDetailPage() {
               <TableBody>
                 {sortedQuestions.map((q) => (
                   <TableRow key={q.questionId}>
-                    <DataTableCell role="number">{q.order}</DataTableCell>
+                    <DataTableCell role="number">{q.order + 1}</DataTableCell>
                     <DataTableCell
                       role="long-text"
                       className="truncate"

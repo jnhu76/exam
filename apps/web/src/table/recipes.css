@@ -124,35 +124,50 @@
  * column evenly, narrow containers scroll internally. The one auto-width
  * column that previously absorbed all slack is removed; pages that need a
  * large flexible text column use the long-text / description roles instead.
+ *
+ * Two-tier column sizing (UI-TABLE-COLUMN-PRIORITY-1):
+ *   - FLEXIBLE (text/content) columns: primary-text, long-text,
+ *     secondary-text, description, tag-list. These carry width:auto so under
+ *     fixed layout they SPLIT the container's remaining space (after locked
+ *     columns take their min-width). Wide containers make these columns
+ *     larger (content is the visual focus); narrow containers shrink them
+ *     down to their min-width. Multiple auto columns split evenly — this is
+ *     what stops any one column from monopolizing the table.
+ *   - LOCKED (atomic/metadata) columns: status, date, date-range, duration,
+ *     number, score, short-id, type, actions. These carry fixed width =
+ *     min-width (both set to the same value), so they do not grow with the
+ *     container and never compress — they stay compact and never wrap.
+ *     This mirrors TanStack Table's size/minSize model: locked = size+minSize
+ *     match, flexible = the columns that absorb slack.
  */
 [data-column-role="primary-text"] {
-  width: 16rem;
+  width: auto;
   min-width: 12rem;
 }
 
 [data-column-role="secondary-text"] {
-  width: 11rem;
+  width: auto;
   min-width: 9rem;
 }
 
 [data-column-role="long-text"] {
-  width: 18rem;
+  width: auto;
   min-width: 16rem;
 }
 
 [data-column-role="description"] {
-  width: 15rem;
+  width: auto;
   min-width: 13rem;
 }
 
 [data-column-role="status"] {
-  width: 6rem;
+  width: 5.5rem;
   min-width: 5.5rem;
 }
 
 [data-column-role="date"] {
   width: 10.5rem;
-  min-width: 9rem;
+  min-width: 10.5rem;
 }
 
 [data-column-role="date-range"] {
@@ -186,7 +201,7 @@
 }
 
 [data-column-role="tag-list"] {
-  width: 10rem;
+  width: auto;
   min-width: 10rem;
 }
 
