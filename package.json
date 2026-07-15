@@ -12,6 +12,7 @@
     "lint:copy": "node scripts/check-hardcoded-copy.mjs",
     "lint:arch": "node scripts/check-architecture.mjs",
     "lint:db-config": "node scripts/check-db-config.mjs",
+    "lint:ui-gates": "node scripts/check-ant-residue.mjs && node scripts/check-token-bypass.mjs && node scripts/check-raw-color-usage.mjs && node scripts/check-high-font-weight.mjs && node scripts/check-row-action-icons.mjs && node scripts/check-stale-ui-docs.mjs",
     "lint:eslint": "pnpm --filter @exam/web lint:eslint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
@@ -32,13 +33,13 @@
     "test:e2e": "turbo test:e2e",
     "e2e:docker": "bash scripts/e2e/run.sh",
     "smoke": "turbo smoke",
-    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:eslint && pnpm typecheck && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build",
+    "verify": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm coverage && pnpm build",
     "test:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api test",
     "test:db": "pnpm --filter @exam/db test",
     "coverage:db": "pnpm --filter @exam/db coverage",
     "coverage:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
     "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
-    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check",
+    "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check",
     "prepare": "husky"
   },
   "lint-staged": {
