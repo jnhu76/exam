@@ -61,6 +61,10 @@ const zhCN = {
       disabled: "已禁用",
       unknown: "未知",
     },
+    account: {
+      active: "已启用",
+      inactive: "已停用",
+    },
     result: {
       passed: "及格",
       not_passed: "不及格",
@@ -161,7 +165,16 @@ const zhCN = {
       next: "下一页",
       pageLabel: "第 {{page}} 页",
       paginationLabel: "表格分页",
+      scrollHintRight: "向右滑动查看更多",
+      scrollHintBoth: "左右滑动查看更多",
+      scrollHintLeft: "向左滑动查看更多",
     },
+    /** DataWorkbench region label (screen-reader-only section heading). */
+    workbench: {
+      regionLabel: "题目数据工作台",
+    },
+    /** Tag overflow chip (+N) aria-label with count interpolation. */
+    moreTags: "还有 {{count}} 个标签",
     /** DatePicker default placeholder. */
     date: {
       placeholder: "选择日期",
@@ -237,6 +250,10 @@ const zhCN = {
       expand: "展开侧栏",
       logout: "退出登录",
       logoutShort: "退出",
+      openMenu: "打开菜单",
+      closeMenu: "关闭菜单",
+      menuTitle: "导航菜单",
+      menuDescription: "选择一个页面进行导航。",
     },
   },
 
@@ -638,6 +655,7 @@ const zhCN = {
       searchPlaceholder: "搜索课程名称、代码或描述...",
       searchLabel: "搜索课程",
       clearSearchLabel: "清除课程搜索",
+      count: "共 {{count}} 门课程",
       columns: {
         name: "课程名称",
         code: "课程代码",
@@ -703,9 +721,9 @@ const zhCN = {
       empty: "暂无题目",
       emptyDescription: "还没有创建任何题目，点击上方按钮创建。",
       noMatch: "未找到匹配的题目",
-      noMatchDescription: "当前筛选或当前页搜索没有匹配题目。",
-      searchPlaceholder: "搜索当前页题目内容...",
-      searchLabel: "搜索当前页题目",
+      noMatchDescription: "当前筛选或搜索没有匹配题目。",
+      searchPlaceholder: "搜索题目内容...",
+      searchLabel: "搜索题目",
       filterToolbar: "题目筛选工具栏",
       filterCourse: "按课程筛选",
       filterAllCourses: "全部课程",
@@ -1516,6 +1534,7 @@ const zhCN = {
         totalGraded: "已评分",
       },
       filters: {
+        label: "成绩筛选",
         all: "全部",
         passed: "及格",
         failed: "不及格",

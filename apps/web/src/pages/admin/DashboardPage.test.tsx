@@ -197,8 +197,8 @@ describe("DashboardPage", () => {
       renderPage();
       const title = await screen.findByText("近期考试");
       expect(title).toBeInTheDocument();
-      // The title sits inside the Card that owns the recent-exams table.
-      const card = title.closest("[data-slot='card']");
+      // The title sits inside the surface-content container for the recent-exams table.
+      const card = title.closest(".surface-content");
       expect(card).toBeInTheDocument();
       expect(card).toHaveTextContent("期中考试");
     });

@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Circle,
   CircleAlert,
+  CircleCheck,
   Clock,
   FilePenLine,
   Flag,
@@ -40,6 +41,14 @@ export interface StatusMeta {
   labelKey: string;
   tone: StatusTone;
   icon: LucideIcon;
+  /**
+   * Default icon visibility for this status in dense/table contexts.
+   * - "show": the status carries urgency/destructive/live meaning that the
+   *   icon helps communicate; StatusBadge shows the icon by default.
+   * - omitted: ordinary/dense status; StatusBadge defaults to text-only.
+   * Explicit `showIcon` prop on StatusBadge overrides this either way.
+   */
+  iconPolicy?: "show";
 }
 
 /** Lookup table mapping status keys to their display label key, tone, and icon. */
@@ -68,6 +77,7 @@ export const statusMeta = {
     labelKey: "status.enrollment.blocked",
     tone: "destructive",
     icon: Ban,
+    iconPolicy: "show",
   },
   not_started: {
     labelKey: "status.enrollment.not_started",
@@ -88,11 +98,12 @@ export const statusMeta = {
     labelKey: "status.attempt.disrupted",
     tone: "warning",
     icon: WifiOff,
+    iconPolicy: "show",
   },
   submitted: {
     labelKey: "status.attempt.submitted",
     tone: "secondary",
-    icon: Send,
+    icon: CircleCheck,
   },
   grading: {
     labelKey: "status.attempt.grading",
@@ -100,11 +111,17 @@ export const statusMeta = {
     icon: LoaderCircle,
   },
   graded: { labelKey: "status.attempt.graded", tone: "success", icon: Trophy },
-  voided: { labelKey: "status.attempt.voided", tone: "destructive", icon: Ban },
+  voided: {
+    labelKey: "status.attempt.voided",
+    tone: "destructive",
+    icon: Ban,
+    iconPolicy: "show",
+  },
   saving: {
     labelKey: "status.save.saving",
     tone: "warning",
     icon: LoaderCircle,
+    iconPolicy: "show",
   },
   saved: { labelKey: "status.save.saved", tone: "success", icon: CheckCircle2 },
   failed: {
@@ -141,12 +158,14 @@ export const statusMeta = {
     labelKey: "status.connection.offline",
     tone: "destructive",
     icon: WifiOff,
+    iconPolicy: "show",
   },
   ok: { labelKey: "status.health.ok", tone: "success", icon: CheckCircle2 },
   critical: {
     labelKey: "status.health.critical",
     tone: "destructive",
     icon: CircleAlert,
+    iconPolicy: "show",
   },
   // P3-M5B: diagnostics infrastructure status vocabulary. Used by the
   // SystemDiagnosticsPage email/worker surfaces via StatusBadge. Map the
@@ -165,6 +184,7 @@ export const statusMeta = {
     labelKey: "status.infra.unavailable",
     tone: "destructive",
     icon: XCircle,
+    iconPolicy: "show",
   },
   infraDisabled: {
     labelKey: "status.infra.disabled",
@@ -175,6 +195,16 @@ export const statusMeta = {
     labelKey: "status.infra.unknown",
     tone: "muted",
     icon: HelpCircle,
+  },
+  active: {
+    labelKey: "status.account.active",
+    tone: "success",
+    icon: CheckCircle2,
+  },
+  inactive: {
+    labelKey: "status.account.inactive",
+    tone: "muted",
+    icon: Ban,
   },
   unknown: {
     labelKey: "status.fallback.unknown",
@@ -206,11 +236,13 @@ export const statusMeta = {
     labelKey: "status.misconduct.misconduct_warning",
     tone: "warning",
     icon: Flag,
+    iconPolicy: "show",
   },
   misconduct_serious: {
     labelKey: "status.misconduct.misconduct_serious",
     tone: "destructive",
     icon: Flag,
+    iconPolicy: "show",
   },
 } as const satisfies Record<string, StatusMeta>;
 

@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { DataToolbar } from "@/components/shared/DataToolbar";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -59,6 +61,7 @@ const STATUS_CONFIG: Record<
 
 export function ImportLogsPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const [data, setData] = useState<ImportLogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,7 +113,7 @@ export function ImportLogsPage() {
           description={t("admin.importLogs.description")}
         />
         <EmptyState
-          icon={<Upload className="size-8" />}
+          icon={<AppIcon icon={Upload} size="state" />}
           title={t("admin.importLogs.empty")}
           description={t("admin.importLogs.emptyDescription")}
         />
@@ -124,7 +127,7 @@ export function ImportLogsPage() {
         title={t("admin.importLogs.title")}
         description={t("admin.importLogs.description")}
       />
-      <div className="flex flex-wrap items-center gap-3">
+      <DataToolbar>
         <Select
           value={typeFilter}
           onValueChange={(v) => {
@@ -153,22 +156,47 @@ export function ImportLogsPage() {
             onClick={clearFilters}
             className="text-muted-foreground"
           >
-            <X className="mr-1 size-4" />
+            <AppIcon icon={X} size="inline" className="mr-1" />
             {t("admin.importLogs.clearFilter")}
           </Button>
         )}
-      </div>
-      <div className="overflow-hidden rounded-md border">
+      </DataToolbar>
+      <DataTableShell>
         <Table>
+          <DataTableColumns
+            columns={[
+              { role: "date" },
+              { role: "type" },
+              { role: "status" },
+              { role: "number", key: "total" },
+              { role: "number", key: "created" },
+              { role: "number", key: "updated" },
+              { role: "number", key: "errors" },
+            ]}
+          />
           <TableHeader>
             <TableRow>
-              <TableHead>{t("admin.importLogs.columns.time")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.type")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.status")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.total")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.created")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.updated")}</TableHead>
-              <TableHead>{t("admin.importLogs.columns.errors")}</TableHead>
+              <DataTableHead role="date">
+                {t("admin.importLogs.columns.time")}
+              </DataTableHead>
+              <DataTableHead role="type">
+                {t("admin.importLogs.columns.type")}
+              </DataTableHead>
+              <DataTableHead role="status">
+                {t("admin.importLogs.columns.status")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.total")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.created")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.updated")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.importLogs.columns.errors")}
+              </DataTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -180,32 +208,35 @@ export function ImportLogsPage() {
                   setExpandedId(expandedId === item.id ? null : item.id)
                 }
               >
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {new Date(item.createdAt).toLocaleString("zh-CN")}
-                </TableCell>
-                <TableCell>
+                <DataTableCell
+                  role="date"
+                  className="text-sm text-muted-foreground"
+                >
+                  {formatDateTime(item.createdAt)}
+                </DataTableCell>
+                <DataTableCell role="type">
                   {t(
                     (TYPE_LABELS[item.type] ??
                       "admin.importLogs.typeFilters.all") as "admin.importLogs.typeLabels.candidate",
                   )}
-                </TableCell>
-                <TableCell>
+                </DataTableCell>
+                <DataTableCell role="status">
                   <Badge variant={STATUS_CONFIG[item.status]?.variant}>
                     {t(
                       (STATUS_CONFIG[item.status]?.labelKey ??
                         "admin.importLogs.statusConfig.completed") as "admin.importLogs.statusConfig.completed",
                     )}
                   </Badge>
-                </TableCell>
-                <TableCell>{item.total}</TableCell>
-                <TableCell>{item.createdCount}</TableCell>
-                <TableCell>{item.updatedCount}</TableCell>
-                <TableCell>{item.errors}</TableCell>
+                </DataTableCell>
+                <DataTableCell role="number">{item.total}</DataTableCell>
+                <DataTableCell role="number">{item.createdCount}</DataTableCell>
+                <DataTableCell role="number">{item.updatedCount}</DataTableCell>
+                <DataTableCell role="number">{item.errors}</DataTableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </div>
+      </DataTableShell>
       {expandedId &&
         (() => {
           const item = items.find((i) => i.id === expandedId);

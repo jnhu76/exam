@@ -25,14 +25,20 @@
  * Recipes do NOT encode domain status colors; status is a separate authority
  * (statusMeta.ts plus StatusBadge). Field errors are owned by the FieldError
  * component, not a type-NAME recipe.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Updated token references from warm Quiet
+ * Graphite (--text, --text-muted) to crisp cool-neutral (--ink values via
+ * --text, --text-muted). Page title bumped to 24px; metric explicitly sized
+ * at 28px per the admin clarity target.
  */
 
-/* page-title: the single title of a page. Strongest non-numeric hierarchy. */
+/* page-title: 24px / 500 / ink. Strongest non-numeric hierarchy.
+ * 500 (medium) instead of 700 — CJK bold reads heavy/clunky at UI sizes. */
 .type-page-title {
   font-family: var(--font-ui);
   font-size: 1.5rem;
   line-height: 2rem;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text);
 }
@@ -46,16 +52,16 @@
   color: var(--text-muted);
 }
 
-/* section-title: title of a content section / card / panel. */
+/* section-title: 16px / 500 / ink. Title of a content section / card / panel. */
 .type-section-title {
   font-family: var(--font-ui);
   font-size: 1rem;
   line-height: 1.5rem;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text);
 }
 
-/* body: default running UI text. */
+/* body: 14px / 400. Default running UI text. */
 .type-body {
   font-family: var(--font-ui);
   font-size: 0.875rem;
@@ -64,7 +70,7 @@
   color: var(--text);
 }
 
-/* secondary: de-emphasized running text (descriptive, not a factual record). */
+/* secondary: 14px / 400. De-emphasized running text (descriptive, not factual). */
 .type-secondary {
   font-family: var(--font-ui);
   font-size: 0.875rem;
@@ -73,7 +79,7 @@
   color: var(--text-muted);
 }
 
-/* metadata: compact supporting factual info (timestamps, IDs, record facts). */
+/* metadata: 12px / 400 / ink-muted. Compact supporting factual info. */
 .type-metadata {
   font-family: var(--font-ui);
   font-size: 0.75rem;
@@ -101,9 +107,25 @@
   white-space: pre-wrap;
 }
 
-/* metric: a KPI/stat numeric value. Owns weight + tabular-nums; layout owns size. */
+/* metric: 28px / 700 / tabular-nums. A KPI/stat numeric value. */
 .type-metric {
   font-family: var(--font-ui);
+  font-size: 1.75rem;
+  line-height: 2.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* metric-hero: 48px / 700 / tabular-nums. The single largest numeric emphasis
+ * on a screen — a final exam score shown to a candidate. Distinct from
+ * type-metric (28px) by deliberate scale; both own weight 700 + tabular-nums
+ * so numeric alignment is consistent. Introduced in UI-TOKEN-TABLE-FOUNDATION-1
+ * to replace an ad-hoc text-5xl font-bold at ResultPage. */
+.type-metric-hero {
+  font-family: var(--font-ui);
+  font-size: 3rem;
+  line-height: 1;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { SearchIcon, XIcon } from "lucide-react";
+import { Search, X } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -41,10 +42,10 @@ export function SearchInput({
 
   return (
     <div className={cn("relative min-w-0", containerClassName)}>
-      <SearchIcon
-        data-icon="inline-start"
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+      <AppIcon
+        icon={Search}
+        size="inline"
+        className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
       />
       <Input
         type="search"
@@ -64,7 +65,7 @@ export function SearchInput({
           className="absolute top-1/2 right-2 -translate-y-1/2"
           onClick={onClear ?? (() => onChange(""))}
         >
-          <XIcon data-icon="inline-start" aria-hidden="true" />
+          <AppIcon icon={X} size="inline" />
         </Button>
       )}
     </div>

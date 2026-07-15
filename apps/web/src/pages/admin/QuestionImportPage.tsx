@@ -4,8 +4,14 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { FileUpload } from "@/components/shared/FileUpload";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -15,16 +21,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { CircleCheck, CircleAlert, CircleX } from "lucide-react";
 import { getTypeLabelKey } from "@/lib/constants";
 
 /** Minimal course representation used to populate the course selector. */
@@ -267,37 +266,45 @@ export function QuestionImportPage() {
             {t("admin.questionImport.parsed", { count: parsedRows.length })}
           </div>
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "number" },
+                { role: "type" },
+                { role: "long-text" },
+                { role: "score" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">
+                <DataTableHead role="number">
                   {t("admin.questionImport.previewColumns.row")}
-                </TableHead>
-                <TableHead className="w-16">
+                </DataTableHead>
+                <DataTableHead role="type">
                   {t("admin.questionImport.previewColumns.type")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.questionImport.previewColumns.content")}
-                </TableHead>
-                <TableHead className="w-16">
+                </DataTableHead>
+                <DataTableHead role="score">
                   {t("admin.questionImport.previewColumns.score")}
-                </TableHead>
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {parsedRows.slice(0, 20).map((row, i) => (
                 <TableRow key={i}>
-                  <TableCell>{i + 1}</TableCell>
-                  <TableCell>
+                  <DataTableCell role="number">{i + 1}</DataTableCell>
+                  <DataTableCell role="type">
                     <Badge variant="outline">
                       {(getTypeLabelKey(row.type)
                         ? t(getTypeLabelKey(row.type) as never)
                         : undefined) ?? row.type}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="max-w-[400px] truncate">
+                  </DataTableCell>
+                  <DataTableCell role="long-text" className="truncate">
                     {row.content}
-                  </TableCell>
-                  <TableCell>{row.score}</TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="score">{row.score}</DataTableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -321,52 +328,86 @@ export function QuestionImportPage() {
         <div className="flex flex-col gap-4">
           <div className="flex gap-4 text-sm">
             <span className="flex items-center gap-1">
-              <CheckCircle2 className="size-4 text-success" />
+              <AppIcon
+                icon={CircleCheck}
+                size="inline"
+                className="text-success"
+              />
               {t("admin.questionImport.result.valid")}：{importResult.valid}
             </span>
             <span className="flex items-center gap-1">
-              <AlertCircle className="size-4 text-warning" />
+              <AppIcon
+                icon={CircleAlert}
+                size="inline"
+                className="text-warning"
+              />
               {t("admin.questionImport.result.warnings")}：
               {importResult.warnings}
             </span>
             <span className="flex items-center gap-1">
-              <XCircle className="size-4 text-destructive" />
+              <AppIcon
+                icon={CircleX}
+                size="inline"
+                className="text-destructive"
+              />
               {t("admin.questionImport.result.errors")}：{importResult.errors}
             </span>
           </div>
 
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "number" },
+                { role: "status" },
+                { role: "long-text" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12">
+                <DataTableHead role="number">
                   {t("admin.questionImport.previewColumns.row")}
-                </TableHead>
-                <TableHead className="w-16">
+                </DataTableHead>
+                <DataTableHead role="status">
                   {t("admin.questionImport.previewColumns.status")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.questionImport.previewColumns.detail")}
-                </TableHead>
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {importResult.details.map((d) => (
                 <TableRow key={d.row}>
-                  <TableCell>{d.row}</TableCell>
-                  <TableCell>
+                  <DataTableCell role="number">{d.row}</DataTableCell>
+                  <DataTableCell role="status">
                     {d.status === "valid" && (
-                      <CheckCircle2 className="size-4 text-success" />
+                      <AppIcon
+                        icon={CircleCheck}
+                        size="inline"
+                        className="text-success"
+                      />
                     )}
                     {d.status === "warning" && (
-                      <AlertCircle className="size-4 text-warning" />
+                      <AppIcon
+                        icon={CircleAlert}
+                        size="inline"
+                        className="text-warning"
+                      />
                     )}
                     {d.status === "error" && (
-                      <XCircle className="size-4 text-destructive" />
+                      <AppIcon
+                        icon={CircleX}
+                        size="inline"
+                        className="text-destructive"
+                      />
                     )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  </DataTableCell>
+                  <DataTableCell
+                    role="long-text"
+                    className="text-sm text-muted-foreground"
+                  >
                     {d.message ?? "-"}
-                  </TableCell>
+                  </DataTableCell>
                 </TableRow>
               ))}
             </TableBody>

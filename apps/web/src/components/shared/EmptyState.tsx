@@ -1,10 +1,11 @@
 import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { cn } from "@/lib/utils";
 
 /** Displays an empty-state placeholder with an icon, title, description, and optional action. */
 export function EmptyState({
-  icon = <Inbox className="size-8" />,
+  icon = <AppIcon icon={Inbox} size="state" />,
   title,
   description,
   action,

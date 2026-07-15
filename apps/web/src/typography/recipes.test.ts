@@ -92,21 +92,6 @@ describe("migrated consumers use semantic recipes (UI-RECIPE-1A §E)", () => {
       reason: "page description consumer",
     },
     {
-      file: "components/shared/StatsCard.tsx",
-      recipe: "type-metric",
-      reason: "metric/numeric consumer",
-    },
-    {
-      file: "components/shared/StatsCard.tsx",
-      recipe: "type-secondary",
-      reason: "label consumer",
-    },
-    {
-      file: "components/shared/StatsCard.tsx",
-      recipe: "type-metadata",
-      reason: "metadata consumer",
-    },
-    {
       file: "pages/exam/TakeExamPage.tsx",
       recipe: "type-reading",
       reason: "long Chinese reading consumer",

@@ -121,6 +121,9 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByText("10")).toBeInTheDocument();
     expect(screen.getByText("20")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="kpi"]'),
+    ).toHaveLength(3);
   });
 
   // Characterization (UI-MIGRATE-N-W4B): the diagnostic info/metric cards are
@@ -167,6 +170,50 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByText("已中断")).toBeInTheDocument();
     expect(screen.getByText("自动提交")).toBeInTheDocument();
     expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="scanner"]'),
+    ).toHaveLength(2);
+    expect(
+      document.querySelectorAll(
+        '[data-diagnostic-role="scanner"] [data-emphasis="timestamp"]',
+      ),
+    ).toHaveLength(2);
+    expect(
+      document.querySelectorAll(
+        '[data-diagnostic-role="scanner"] [data-emphasis="signal"]',
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("emits distinct information, scanner, disabled, and raised metric roles", async () => {
+    getMock.mockResolvedValueOnce(health());
+    getMock.mockResolvedValueOnce({
+      ...diag(),
+      emailStatus: {
+        status: "disabled" as const,
+        enabled: false,
+        worker: { status: "disabled" as const },
+        outbox: { pending: 0, sent: 0, failed: 0 },
+      },
+    });
+    renderPage();
+    expect(await screen.findByText("服务器信息")).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="information"]'),
+    ).toHaveLength(3);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="scanner"]'),
+    ).toHaveLength(2);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="disabled"]'),
+    ).toHaveLength(2);
+    for (const metric of document.querySelectorAll(
+      '[data-diagnostic-role="kpi"]',
+    )) {
+      expect(metric.querySelector('[data-slot="stats-card"]')).toHaveClass(
+        "surface-content",
+      );
+    }
   });
 
   it("renders server info with version", async () => {
@@ -324,10 +371,12 @@ describe("SystemDiagnosticsPage", () => {
     });
     renderPage();
     expect(await screen.findByText("邮件基础设施")).toBeInTheDocument();
-    // "已禁用" appears on both the email status badge and the worker badge
-    // when everything is disabled — assert presence, not uniqueness.
-    expect(screen.getAllByText("已禁用").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("未启用")).toBeInTheDocument();
+    // "已禁用" appears on the email status badge, the email-enabled badge,
+    // and the worker badge when everything is disabled — assert presence.
+    expect(screen.getAllByText("已禁用").length).toBeGreaterThanOrEqual(2);
+    expect(
+      document.querySelectorAll('[data-diagnostic-role="disabled"]'),
+    ).toHaveLength(2);
   });
 
   it("does not expose SMTP secrets, recipients, or raw email body in diagnostics", async () => {

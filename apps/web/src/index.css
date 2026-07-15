@@ -44,12 +44,20 @@
   --color-background: var(--bg);
   --color-foreground: var(--text);
   --color-card: var(--surface);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
   --color-card-foreground: var(--text);
   --color-popover: var(--surface);
   --color-popover-foreground: var(--text);
   --color-primary: var(--primary);
+  --color-primary-contrast: #ffffff;
   --color-primary-foreground: #ffffff;
   --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-strong: var(--primary-soft-strong);
   --color-primary-soft-foreground: var(--primary-hover);
   --color-secondary: var(--surface);
   --color-secondary-foreground: var(--text);
@@ -58,6 +66,7 @@
   --color-accent: var(--surface-muted);
   --color-accent-foreground: var(--text);
   --color-destructive: var(--danger);
+  --color-danger: var(--danger);
   --color-destructive-foreground: #ffffff;
   --color-destructive-soft: var(--danger-soft);
   --color-success: var(--success);
@@ -73,8 +82,14 @@
   --color-neutral-foreground: #ffffff;
   --color-neutral-soft: var(--surface-muted);
   --color-border: var(--border);
+  --color-border-shell: var(--border-shell);
+  --color-border-raised: var(--border-raised);
+  --color-border-divider: var(--border-divider);
+  --color-border-header: var(--border-header);
+  --color-border-row: var(--border-row);
+  --color-border-control: var(--border-control);
   --color-input: var(--border-strong);
-  --color-ring: var(--primary);
+  --color-ring: var(--primary-focus);
   --color-sidebar: var(--sidebar-bg);
   --color-sidebar-foreground: var(--sidebar-text);
   --color-sidebar-accent: var(--sidebar-active);
@@ -83,37 +98,111 @@
   --color-sidebar-text: var(--sidebar-text);
   --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar-border: var(--sidebar-border);
+  --color-text-primary: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
 }
 
 :root {
-  --bg: #f7f8fb;
+  /* Canvas / surfaces — UI-TABLE-KOI-COLOR-REFINE-2.
+   * Canvas is a very light NEUTRAL grey (#f5f7fa, no blue cast) so white
+   * content surfaces read as a distinct raised layer. Surfaces stay white;
+   * subtle/soft tints are neutral grey (#f8fafc) not blue. The previous
+   * pure-white canvas gave no separation and the blue-tinted borders made the
+   * whole page read blue-grey. */
+  --bg: #f5f7fa;
   --surface: #ffffff;
-  --surface-muted: #f9fafb;
+  --surface-raised: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-soft: #f8fafc;
+  --surface-muted: var(--surface-subtle);
+  --surface-hover: #f8fafc;
+  --surface-selected: #eff6ff;
   --text: #111827;
-  --text-muted: #6b7280;
-  --text-subtle: #9ca3af;
-  --border: #e5e7eb;
-  --border-strong: #d1d5db;
+  --text-secondary: #475467;
+  --text-muted: #64748b;
+  --text-subtle: #94a3b8;
+  /* Structural borders — NEUTRAL grey ladder (no blue cast). Visual strength
+   * ordering (strongest → weakest): control > shell ≈ header > row ≈ divider
+   * > grid. The grid is now the WEAKEST line (it was previously stronger than
+   * the row divider — the Excel-grid defect). Borders share near-identical
+   * neutral values where the semantic role does not need to differ; the goal
+   * is less noise, not more token contrast. */
+  --border-control: #d1d5db;
+  --border-shell: #dfe3e8;
+  --border-header: #e1e5ea;
+  --border-raised: var(--border-header);
+  --border-divider: #edf0f3;
+  --border-row: #edf0f3;
+  --border-grid: #f0f2f5;
+  --border: var(--border-shell);
+  --border-strong: var(--border-control);
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
+  --primary-active: #1e40af;
   --primary-soft: #eff6ff;
-  --sidebar-bg: #102a43;
-  --sidebar-active: #1f4e79;
-  --sidebar-active-soft: #edf5fa;
-  --sidebar-hover: rgb(255 255 255 / 8%);
-  --sidebar-text: #d9e2ec;
-  --sidebar-muted: #9fb3c8;
-  --sidebar-border: #1b3a57;
-  --danger: #b42318;
-  --danger-hover: #912018;
-  --danger-soft: #fef3f2;
-  --danger-border: #fecdca;
-  --success: #047857;
-  --success-soft: #ecfdf5;
-  --warning: #b54708;
-  --warning-soft: #fffbeb;
-  --info: #175cd3;
-  --info-soft: #eff6ff;
+  --primary-soft-strong: #dbeafe;
+  --primary-focus: #93c5fd;
+  /* Table state surfaces — neutral light tints. Header/hover are a hair
+   * lighter than the surface (neutral, not blue). Focus/selected are the only
+   * places blue is allowed in the table — they signal interaction. */
+  --table-header: #f8fafc;
+  --table-row-hover: #f8fafc;
+  --table-row-focus: #edf4ff;
+  --table-row-selected: #eff6ff;
+  --action-hover: #f8fafc;
+  /* UI-TABLE-KOI-COMPACT-1 — Koi compact workbench grid + band roles.
+   *   - grid border: the per-cell vertical line, the WEAKEST structural line
+   *     (#F0F2F5) — barely visible at 100% zoom, present but never noticed
+   *     first.
+   *   - action rail bg: the sticky right action column's own surface, a hair
+   *     off the body so scrolling content does not bleed through. Neutral, not
+   *     a blue side-bar.
+   *   - footer bg: the integrated pagination band. */
+  --table-grid-border: var(--border-grid);
+  --table-action-rail-bg: #fbfcfd;
+  --table-footer-bg: #fafbfc;
+  /* Sidebar — light neutral chrome (UI-TOKEN-TABLE-FOUNDATION-1). The nav is a
+   * quiet light surface, distinct from the canvas by a 1px border + a faint
+   * subtle tint, not by a dark fill. Text/active/hover follow the same neutral
+   * ladder as the rest of the UI; the active item signals via a primary-soft
+   * fill + primary left-accent, matching the selected-row treatment. */
+  --sidebar-bg: #fbfbfc;
+  --sidebar-active: var(--primary-soft);
+  --sidebar-active-soft: var(--primary-soft);
+  --sidebar-hover: #f4f5f7;
+  --sidebar-text: var(--text);
+  --sidebar-muted: var(--text-muted);
+  --sidebar-border: var(--border-shell);
+  /* Semantic colors — perceptually uniform, mid-high lightness (L≈52-60%)
+   * so they read bright and modern, not muddy. soft tints use one formula
+   * (main hue @ ~92% L bg / main text). Koi-UI-informed lightness strategy. */
+  --danger: #dc2f45;
+  --danger-hover: #c41e33;
+  --danger-soft: #fdecef;
+  --danger-border: #f4c8cf;
+  --success: #12936a;
+  --success-soft: #e9f8f1;
+  --warning: #c4770a;
+  --warning-soft: #fdf3e3;
+  --info: #0e6dd9;
+  --info-soft: #e8f1fd;
+  --status-neutral-bg: #f4f6fa;
+  --status-neutral-text: #475467;
+  --status-neutral-border: #e4e8ee;
+  --status-info-bg: #e8f1fd;
+  --status-info-text: #0e6dd9;
+  --status-info-border: #cfe0fa;
+  --status-positive-bg: #e9f8f1;
+  --status-positive-text: #12936a;
+  --status-positive-border: #bbe9d6;
+  --status-caution-bg: #fdf3e3;
+  --status-caution-text: #c4770a;
+  --status-caution-border: #f0dab2;
+  --status-destructive-bg: #fdecef;
+  --status-destructive-text: #c41e33;
+  --status-destructive-border: #f4c8cf;
   --radius: 0.5rem;
 }
 
@@ -132,6 +221,11 @@ body {
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 400;
+  /* UI-PRODUCT-FINISH-CLOSURE-1: forbid synthetic bold/italic. The self-hosted
+   * Noto Sans CJK SC has only 400/500/700; any 600 (or other missing weight)
+   * would be synthesized by the browser into a fuzzy fake bold. none forces the
+   * engine to pick the nearest real face instead of blurring. */
+  font-synthesis: none;
 }
 
 /*
@@ -142,10 +236,31 @@ body {
  * weight is 700, so base heading elements anchor there. Application-level
  * heading hierarchy is owned by the type-* recipe layer and component
  * classes (PageHeader, CardTitle, etc.), not by this element rule.
+ * UI-PRODUCT-FINISH-CLOSURE-1: headings use 500 (medium) — CJK 700 reads
+ * heavy/clunky at UI sizes; 500 is the loaded weight that stays crisp.
  */
 h1,
 h2,
 h3 {
   color: var(--text);
-  font-weight: 700;
+  font-weight: 500;
+}
+
+/*
+ * UI-PRODUCT-FINISH-CLOSURE-1 — icon optical weight.
+ * shadcn primitives (select/checkbox/dropdown/dialog/sheet/pagination/calendar)
+ * render internal Lucide icons at default stroke 2 with no absoluteStrokeWidth.
+ * At 16px (size-4) that reads heavy next to the refined AppIcon inline (1.5).
+ * CSS stroke-width overrides Lucide's presentation-attribute stroke-width, so we
+ * thin these ungoverned small icons to match the governed system. Targets only
+ * 16px svgs inside primitive data-slots; larger icons (state/hero) are untouched.
+ */
+[data-slot="select-trigger"] svg,
+[data-slot="select-content"] svg,
+[data-slot="checkbox-indicator"] svg,
+[data-slot="dropdown-menu-content"] svg,
+[data-slot="dialog-close"] svg,
+[data-slot="sheet-close"] svg,
+[data-slot="pagination"] svg {
+  stroke-width: 1.5;
 }

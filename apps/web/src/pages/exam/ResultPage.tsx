@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CircleCheck, CircleX } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { useNavigate, useParams } from "react-router";
 import type { AttemptResultResponse } from "@exam/contracts";
 import { api } from "@/lib/api";
@@ -10,13 +11,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 
 /** Formats an answer value into a human-readable string via i18n. */
 function formatAnswer(answer: unknown, t: (key: string) => string): string {
@@ -93,7 +92,7 @@ export function ResultPage() {
 
   return (
     <div className="mx-auto max-w-5xl flex flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">{result.examTitle}</h1>
+      <h1 className="type-page-title">{result.examTitle}</h1>
 
       {result.showResultImmediately ? (
         <>
@@ -102,10 +101,7 @@ export function ResultPage() {
               <CardTitle>{t("candidateResult.title")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-2 text-center">
-              <p
-                className="text-5xl font-bold"
-                data-testid="result-total-score"
-              >
+              <p className="type-metric-hero" data-testid="result-total-score">
                 {result.totalScore}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -133,24 +129,36 @@ export function ResultPage() {
             </CardHeader>
             <CardContent>
               <Table>
+                <DataTableColumns
+                  columns={[
+                    { role: "number" },
+                    { role: "long-text", key: "question" },
+                    { role: "type" },
+                    { role: "long-text", key: "candidate-answer" },
+                    { role: "long-text", key: "correct-answer" },
+                    { role: "score" },
+                  ]}
+                />
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
+                    <DataTableHead role="number">
                       {t("candidateResult.table.questionNumber")}
-                    </TableHead>
-                    <TableHead>
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
                       {t("candidateResult.table.questionContent")}
-                    </TableHead>
-                    <TableHead>
+                    </DataTableHead>
+                    <DataTableHead role="type">
                       {t("candidateResult.table.questionType")}
-                    </TableHead>
-                    <TableHead>
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
                       {t("candidateResult.table.yourAnswer")}
-                    </TableHead>
-                    <TableHead>
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
                       {t("candidateResult.table.correctAnswer")}
-                    </TableHead>
-                    <TableHead>{t("candidateResult.table.score")}</TableHead>
+                    </DataTableHead>
+                    <DataTableHead role="score">
+                      {t("candidateResult.table.score")}
+                    </DataTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -158,25 +166,35 @@ export function ResultPage() {
                     const isManual = question.standardAnswer == null;
                     return (
                       <TableRow key={question.questionId}>
-                        <TableCell>{question.order + 1}</TableCell>
-                        <TableCell>{question.content}</TableCell>
-                        <TableCell>
+                        <DataTableCell role="number">
+                          {question.order + 1}
+                        </DataTableCell>
+                        <DataTableCell role="long-text">
+                          {question.content}
+                        </DataTableCell>
+                        <DataTableCell role="type">
                           {formatQuestionType(
                             question.type,
                             t as (key: string) => string,
                           )}
-                        </TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="long-text">
                           <div className="flex items-center gap-2">
                             {question.correct ? (
-                              <CheckCircle2
-                                aria-label={t("candidateResult.aria.correct")}
-                                className="size-4 text-success"
+                              <AppIcon
+                                icon={CircleCheck}
+                                decorative={false}
+                                label={t("candidateResult.aria.correct")}
+                                size="inline"
+                                className="text-success"
                               />
                             ) : (
-                              <XCircle
-                                aria-label={t("candidateResult.aria.incorrect")}
-                                className="size-4 text-destructive"
+                              <AppIcon
+                                icon={CircleX}
+                                decorative={false}
+                                label={t("candidateResult.aria.incorrect")}
+                                size="inline"
+                                className="text-muted-foreground"
                               />
                             )}
                             <AnswerText
@@ -185,8 +203,9 @@ export function ResultPage() {
                               t={t as (key: string) => string}
                             />
                           </div>
-                        </TableCell>
-                        <TableCell
+                        </DataTableCell>
+                        <DataTableCell
+                          role="long-text"
                           data-testid={
                             isManual
                               ? `result-question-manual-${question.questionId}`
@@ -204,10 +223,10 @@ export function ResultPage() {
                               t={t as (key: string) => string}
                             />
                           )}
-                        </TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="score">
                           {question.score}/{question.maxScore}
-                        </TableCell>
+                        </DataTableCell>
                       </TableRow>
                     );
                   })}
@@ -219,7 +238,11 @@ export function ResultPage() {
       ) : (
         <Card>
           <CardContent className="py-10 text-center">
-            <CheckCircle2 className="mx-auto mb-3 size-10 text-success" />
+            <AppIcon
+              icon={CircleCheck}
+              size="state"
+              className="mx-auto mb-3 text-success"
+            />
             <p
               className="text-lg font-medium"
               data-testid="result-status-message"

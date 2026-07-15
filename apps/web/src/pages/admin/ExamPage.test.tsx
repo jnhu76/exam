@@ -91,12 +91,46 @@ describe("ExamPage", () => {
   it("renders through the shared list-page template", async () => {
     renderPage();
 
+    const heading = await screen.findByRole("heading", { name: "考试列表" });
+    const shell = heading.closest('[data-slot="admin-table-shell"]');
+
+    expect(shell).toBeInTheDocument();
+    expect(shell).toHaveTextContent("共 2 场考试");
     expect(
-      await screen.findByRole("toolbar", { name: "考试列表工具栏" }),
+      screen.queryByRole("toolbar", { name: "考试列表工具栏" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("declares atomic duration, score, date and action columns", async () => {
+    renderPage();
+
+    const duration = await screen.findAllByText("60分钟");
+    const score = await screen.findAllByText("60/100");
+    const deleteButtons = await screen.findAllByRole("button", {
+      name: "删除考试",
+    });
+
+    expect(duration[0]?.closest("td")).toHaveAttribute(
+      "data-column-role",
+      "duration",
+    );
+    expect(duration[0]?.closest("td")).toHaveAttribute(
+      "data-column-wrap",
+      "atomic",
+    );
+    expect(score[0]?.closest("td")).toHaveAttribute(
+      "data-column-role",
+      "score",
+    );
+    expect(
+      document.querySelector('col[data-column-role="date-range"]'),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "考试列表" }),
+      document.querySelector('col[data-column-role="actions"]'),
     ).toBeInTheDocument();
-    expect(screen.getByText("共 2 场考试")).toBeInTheDocument();
+    expect(deleteButtons[0]).toHaveAttribute(
+      "data-row-action-tone",
+      "destructive",
+    );
   });
 });

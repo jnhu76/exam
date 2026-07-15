@@ -18,8 +18,6 @@ ruleTester().run("no-typography-authority-conflict", rule, {
   valid: [
     // 1. No recipe present → rule does not apply.
     '<div className="text-lg font-semibold">x</div>',
-    // 2. type-metric text-3xl is VALID — metric layout-owns size+line-height.
-    '<div className="type-metric text-3xl">x</div>',
     // 3. type-numeric text-sm font-mono is VALID — size/family/weight layout-owned.
     '<div className="type-numeric text-sm font-mono">x</div>',
     // 4. Structural companions never conflict (touch no owned property).
@@ -31,9 +29,7 @@ ruleTester().run("no-typography-authority-conflict", rule, {
     // 7. A pseudo-element variant does NOT conflict with the root recipe.
     '<div className="type-metadata before:text-xs">x</div>',
     // 8. Co-occurrence: two branches that never co-exist → no false conflict.
-    '<div className={cond ? "type-metadata" : "type-metric text-3xl"}>x</div>',
-    // 9. A layout-size companion on type-metric is VALID (size+line-height layout-owned).
-    '<div className="type-metric text-5xl">x</div>',
+    '<div className={cond ? "type-metadata" : "type-metric"}>x</div>',
     // 10. A recipe alone with no conflicting companion.
     '<div className="type-page-title">x</div>',
     // 11. Dynamic className → unknown → not enforced.
@@ -49,6 +45,10 @@ ruleTester().run("no-typography-authority-conflict", rule, {
     // A. §12 example: type-metadata leading-none → conflict (line-height owned).
     {
       code: '<div className="type-metadata leading-none">x</div>',
+      errors: [{ messageId: "authorityConflict" }],
+    },
+    {
+      code: '<div className="type-metric text-3xl">x</div>',
       errors: [{ messageId: "authorityConflict" }],
     },
     // B. §12 example: type-metadata text-sm → conflict (font-size + line-height owned).

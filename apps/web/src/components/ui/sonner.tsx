@@ -21,10 +21,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         duration: 5000,
         classNames: {
-          success: "border-success/20",
-          info: "border-info/20",
-          warning: "border-warning/30",
-          error: "border-destructive/30",
+          success:
+            "border-success/30 bg-success-soft text-success",
+          info: "border-info/30 bg-info-soft text-info",
+          warning:
+            "border-warning/40 bg-warning-soft text-warning",
+          error:
+            "border-destructive/40 bg-destructive-soft text-destructive",
         },
       }}
       className="toaster group"
@@ -37,9 +40,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
+          "--normal-bg": "var(--surface)",
+          "--normal-text": "var(--text)",
+          "--normal-border": "var(--border-shell)",
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }

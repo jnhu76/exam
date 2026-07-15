@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api";
 import { downloadFile } from "@/lib/download";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -14,6 +16,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PageSection } from "@/components/shared/PageSection";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Play,
@@ -25,7 +32,8 @@ import {
   Timer,
   Flag,
   FileCheck2,
-  CheckCircle2,
+  CircleCheck,
+  X,
   HelpCircle,
   Download,
   FileJson,
@@ -48,14 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { getTypeLabelKey } from "@/lib/constants";
 import type {
   AttemptTimelineEvent,
@@ -150,7 +151,7 @@ const EVENT_META: Record<string, EventMeta> = {
   "grading.finalized": {
     labelKey: "admin.attemptDetail.events.finalized",
     tone: "success",
-    icon: CheckCircle2,
+    icon: CircleCheck,
   },
 };
 
@@ -279,7 +280,7 @@ function ExportButtons({ attemptId }: ExportButtonsProps) {
           )
         }
       >
-        <Download className="size-4" aria-hidden="true" />
+        <AppIcon icon={Download} size="inline" />
         {t("admin.attemptDetail.actions.exportCsv")}
       </Button>
       <Button
@@ -292,7 +293,7 @@ function ExportButtons({ attemptId }: ExportButtonsProps) {
           )
         }
       >
-        <FileJson className="size-4" aria-hidden="true" />
+        <AppIcon icon={FileJson} size="inline" />
         {t("admin.attemptDetail.actions.exportJson")}
       </Button>
     </>
@@ -322,6 +323,7 @@ function TimelineSection({
   onToggleEvent,
 }: TimelineSectionProps) {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   return (
     <Card>
       <CardHeader>
@@ -339,7 +341,7 @@ function TimelineSection({
           />
         ) : !events || events.length === 0 ? (
           <EmptyState
-            icon={<Clock className="size-8" />}
+            icon={<AppIcon icon={Clock} size="state" />}
             title={t("admin.attemptDetail.timeline.emptyTitle")}
             description={t("admin.attemptDetail.timeline.emptyDescription")}
           />
@@ -363,7 +365,7 @@ function TimelineSection({
                     aria-expanded={isExpanded}
                   >
                     <span className="text-muted-foreground" aria-hidden="true">
-                      <Icon className="size-4" />
+                      <AppIcon icon={Icon} size="inline" />
                     </span>
                     <span className="flex-1 min-w-0">
                       <span className="flex flex-wrap items-center gap-2">
@@ -374,7 +376,7 @@ function TimelineSection({
                           {label}
                         </Badge>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {new Date(event.createdAt).toLocaleString("zh-CN")}
+                          {formatDateTime(event.createdAt)}
                         </span>
                       </span>
                       <span className="mt-0.5 block text-xs text-muted-foreground truncate">
@@ -715,28 +717,25 @@ export function AttemptDetailPage() {
             <p className="text-sm text-muted-foreground">
               {t("admin.attemptDetail.result.totalScore")}
             </p>
-            <p className="text-3xl font-bold tabular-nums">
-              {result.totalScore}
-            </p>
+            <p className="type-metric">{result.totalScore}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">
               {t("admin.attemptDetail.result.earnedScore")}
             </p>
-            <p
-              data-testid="earned-score"
-              className={`text-3xl font-bold tabular-nums ${result.passed ? "text-success" : "text-destructive"}`}
-            >
-              {earnedScore}
+            <p data-testid="earned-score" className="type-metric">
+              <span
+                className={result.passed ? "text-success" : "text-destructive"}
+              >
+                {earnedScore}
+              </span>
             </p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">
               {t("admin.attemptDetail.result.passingLine")}
             </p>
-            <p className="text-3xl font-bold tabular-nums">
-              {result.passingScore}
-            </p>
+            <p className="type-metric">{result.passingScore}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">
@@ -758,57 +757,77 @@ export function AttemptDetailPage() {
         </CardHeader>
         <CardContent>
           <Table>
+            <DataTableColumns
+              columns={[
+                { role: "number" },
+                { role: "long-text", key: "question" },
+                { role: "type" },
+                { role: "long-text", key: "candidate-answer" },
+                { role: "long-text", key: "standard-answer" },
+                { role: "score", key: "earned-score" },
+                { role: "score", key: "max-score" },
+              ]}
+            />
             <TableHeader>
               <TableRow>
-                <TableHead className="w-16">
+                <DataTableHead role="number">
                   {t("admin.attemptDetail.result.columns.number")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.attemptDetail.result.columns.content")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="type">
                   {t("admin.attemptDetail.result.columns.type")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.attemptDetail.result.columns.candidateAnswer")}
-                </TableHead>
-                <TableHead>
+                </DataTableHead>
+                <DataTableHead role="long-text">
                   {t("admin.attemptDetail.result.columns.standardAnswer")}
-                </TableHead>
-                <TableHead className="text-right">
+                </DataTableHead>
+                <DataTableHead role="score">
                   {t("admin.attemptDetail.result.columns.score")}
-                </TableHead>
-                <TableHead className="text-right">
+                </DataTableHead>
+                <DataTableHead role="score">
                   {t("admin.attemptDetail.result.columns.maxScore")}
-                </TableHead>
+                </DataTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedQuestions.map((q) => (
                 <TableRow key={q.questionId}>
-                  <TableCell className="font-medium">{q.order}</TableCell>
-                  <TableCell className="max-w-md truncate" title={q.content}>
+                  <DataTableCell role="number">{q.order}</DataTableCell>
+                  <DataTableCell
+                    role="long-text"
+                    className="truncate"
+                    title={q.content}
+                  >
                     {q.content}
-                  </TableCell>
-                  <TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="type">
                     <Badge variant="outline">
                       {(getTypeLabelKey(q.type)
                         ? t(getTypeLabelKey(q.type) as never)
                         : undefined) ?? q.type}
                     </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={q.correct ? "default" : "destructive"}>
+                  </DataTableCell>
+                  <DataTableCell role="long-text">
+                    <Badge variant={q.correct ? "success" : "secondary"}>
+                      {!q.correct && (
+                        <AppIcon
+                          icon={X}
+                          size="inline"
+                          className="text-muted-foreground"
+                        />
+                      )}
                       {formatAnswer(q.candidateAnswer)}
                     </Badge>
-                  </TableCell>
-                  <TableCell>{formatAnswer(q.standardAnswer)}</TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
-                    {q.score}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {q.maxScore}
-                  </TableCell>
+                  </DataTableCell>
+                  <DataTableCell role="long-text">
+                    {formatAnswer(q.standardAnswer)}
+                  </DataTableCell>
+                  <DataTableCell role="score">{q.score}</DataTableCell>
+                  <DataTableCell role="score">{q.maxScore}</DataTableCell>
                 </TableRow>
               ))}
             </TableBody>

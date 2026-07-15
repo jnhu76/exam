@@ -11,6 +11,10 @@ concurrency:
 
 permissions:
   contents: read
+  # actions: write lets the e2e-merge job delete the per-shard blob artifacts
+  # after merging them into the final HTML report, so they do not accumulate
+  # against the GitHub Actions storage quota (free tier 2GB, account-wide).
+  actions: write
 
 # Turborepo remote cache — TURBO_TOKEN from secrets, TURBO_TEAM from vars
 # (vars keeps team slug visible in logs; secrets would be censored).
@@ -478,6 +482,8 @@ jobs:
       #     "invalid central directory file header signature" error.
       - name: Validate blob reports
         working-directory: apps/e2e
+        env:
+          E2E_RESULT: ${{ needs.e2e.result }}
         run: |
           echo "=== Files in all-blob-reports ==="
           find all-blob-reports -maxdepth 2 -type f -print -exec file {} \;
@@ -500,6 +506,16 @@ jobs:
           echo ""
 
           if [ "$COUNT" -eq 0 ]; then
+            # If the E2E shard jobs themselves PASSED but no blob reports were
+            # downloaded, the shard artifact uploads failed — almost always the
+            # GitHub Actions storage quota ("Artifact storage quota has been
+            # hit"). That is an infra quota issue, not a code defect, so it
+            # must NOT fail the PR. Downgrade to a warning and skip the merge.
+            if [ "$E2E_RESULT" = "success" ]; then
+              echo "::warning::E2E tests passed, but no blob reports were downloaded (likely Actions storage quota exhausted). Skipping HTML report merge — this does not block the PR."
+              echo "SKIPPED_MERGE=1" >> "$GITHUB_ENV"
+              exit 0
+            fi
             echo "::error::No Playwright blob report zips found. E2E merge cannot proceed."
             echo "Possible causes: all shards failed before producing reports, artifact upload/download failed, or artifact naming mismatch."
             exit 1
@@ -513,14 +529,45 @@ jobs:
           echo "All blob zips validated."
 
       - name: Merge into HTML report
+        if: env.SKIPPED_MERGE != '1'
         working-directory: apps/e2e
         run: npx playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Upload merged HTML report
+        if: env.SKIPPED_MERGE != '1'
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: playwright-html-report
           path: apps/e2e/playwright-report/
-          retention-days: 14
+          # Kept short (7d, down from 14) to limit accumulation against the
+          # account-wide Actions storage quota. Old runs' reports are rarely
+          # revisited beyond a week.
+          retention-days: 7
           if-no-files-found: ignore
+
+      # Delete the per-shard blob artifacts now that they have been merged into
+      # the final HTML report. Without this, every CI run leaves 2 shard
+      # artifacts behind; they accumulate against the Actions storage quota
+      # (free 2GB, account-wide) and eventually block all artifact uploads
+      # with "Artifact storage quota has been hit". Requires `actions: write`.
+      - name: Delete consumed shard artifacts
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+          API="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100"
+          echo "Fetching artifacts for run $RUN_ID..."
+          IDS=$(curl -fsSL "${AUTH[@]}" "$API" | jq -r '.artifacts[]? | select(.name | startswith("e2e-blob-shard-")) | .id')
+          DELETED=0
+          for id in $IDS; do
+            [ -z "$id" ] && continue
+            if curl -fsSL "${AUTH[@]}" -X DELETE "https://api.github.com/repos/$REPO/actions/artifacts/$id"; then
+              DELETED=$((DELETED + 1))
+            fi
+          done
+          echo "Deleted $DELETED consumed shard artifact(s)."

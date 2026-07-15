@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { routes } from "@/lib/routes";
 import { Separator } from "@/components/ui/separator";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { QuestionNavigator } from "@/components/exam/QuestionNavigator";
 import { ExamTimer } from "@/components/exam/ExamTimer";
 import { SaveIndicator } from "@/components/exam/SaveIndicator";
@@ -696,7 +697,7 @@ export function TakeExamPage() {
       <header className="sticky top-0 z-20 border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-lg font-semibold">
+            <div className="text-lg font-medium">
               {view.isLocked
                 ? t("candidateRuntime.status.ended")
                 : t("candidateRuntime.status.inProgress")}
@@ -733,7 +734,7 @@ export function TakeExamPage() {
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-4 xl:flex-row xl:items-start">
         <aside className="rounded-lg border bg-card p-3 xl:sticky xl:top-24 xl:max-h-[calc(100vh-8rem)] xl:w-24 xl:overflow-y-auto">
-          <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground xl:block">
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground xl:block">
             <span>{t("candidateRuntime.navigator.questionId")}</span>
             <span className="xl:hidden">
               {t("candidateRuntime.navigator.progress", {
@@ -770,7 +771,7 @@ export function TakeExamPage() {
                     className="border-destructive/30 bg-destructive/10"
                     data-testid="save-rejection-alert"
                   >
-                    <display.Icon aria-hidden="true" />
+                    <AppIcon icon={display.Icon} size="inline" />
                     <AlertTitle>{t(display.titleKey as never)}</AlertTitle>
                     <AlertDescription>
                       {t(display.descriptionKey as never)}
@@ -784,7 +785,7 @@ export function TakeExamPage() {
                 variant="destructive"
                 className="border-destructive/30 bg-destructive/10"
               >
-                <WifiOff aria-hidden="true" />
+                <AppIcon icon={WifiOff} size="inline" />
                 <AlertTitle>
                   {t("candidateRuntime.connection.abnormal")}
                 </AlertTitle>
@@ -804,11 +805,12 @@ export function TakeExamPage() {
                   data-testid="deadline-overlay"
                 >
                   <div className="flex flex-col items-center gap-3 text-center">
-                    <TimerOff
-                      className="size-12 text-destructive"
-                      aria-hidden="true"
+                    <AppIcon
+                      icon={TimerOff}
+                      size="state"
+                      className="text-destructive"
                     />
-                    <div className="text-lg font-semibold text-foreground">
+                    <div className="text-lg font-medium text-foreground">
                       {autoSubmitFailed
                         ? t("candidateRuntime.deadline.autoSubmitTitle")
                         : t("candidateRuntime.deadline.timeUp")}
@@ -837,7 +839,7 @@ export function TakeExamPage() {
                       total: snapshot.questions.length,
                     })}
                   </div>
-                  <div className="text-sm font-medium text-muted-foreground">
+                  <div className="text-sm text-muted-foreground">
                     {t("candidateRuntime.question.score", {
                       score: currentQuestionView.maxScore,
                     })}
@@ -845,8 +847,13 @@ export function TakeExamPage() {
                 </div>
                 {!view.isLocked && (
                   <Button variant="outline" size="sm" onClick={toggleFlag}>
+                    {/* Deliberate raw Lucide render: AppIcon does not support the
+                        fill toggle needed for flagged/unflagged visual state.
+                        Governed to match inline role (16px/1.75px). */}
                     <Flag
-                      data-icon="inline-start"
+                      size={16}
+                      strokeWidth={1.5}
+                      absoluteStrokeWidth
                       fill={
                         questionStates[currentIndex] === "flagged"
                           ? "currentColor"
@@ -896,12 +903,17 @@ export function TakeExamPage() {
                 onClick={handlePrev}
                 disabled={currentIndex === 0}
               >
-                <ChevronLeft data-icon="inline-start" />
+                <AppIcon icon={ChevronLeft} size="inline" />
                 {t("candidateRuntime.actions.previous")}
               </Button>
               <Button variant="outline" size="sm" onClick={toggleFlag}>
+                {/* Deliberate raw Lucide render: AppIcon does not support the
+                    fill toggle needed for flagged/unflagged visual state.
+                    Governed to match inline role (16px/1.75px). */}
                 <Flag
-                  data-icon="inline-start"
+                  size={16}
+                  strokeWidth={1.5}
+                  absoluteStrokeWidth
                   fill={
                     questionStates[currentIndex] === "flagged"
                       ? "currentColor"
@@ -923,7 +935,7 @@ export function TakeExamPage() {
               ) : (
                 <Button variant="outline" size="sm" onClick={handleNext}>
                   {t("candidateRuntime.actions.next")}
-                  <ChevronRight data-icon="inline-end" />
+                  <AppIcon icon={ChevronRight} size="inline" />
                 </Button>
               )}
             </div>

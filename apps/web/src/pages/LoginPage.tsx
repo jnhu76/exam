@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { FieldError } from "@/components/shared/FieldError";
 import { InlineErrorBanner } from "@/components/shared/InlineErrorBanner";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { PageContainer } from "@/components/shared/PageContainer";
 
 /**
  * Login page with username/password form, field validation,
@@ -40,70 +41,71 @@ export function LoginPage() {
   return (
     <main
       data-testid="login-layout"
-      className="flex min-h-screen items-center justify-center bg-background p-6"
+      className="flex min-h-screen items-center justify-center bg-background p-4 sm:p-6"
     >
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <BrandHeader textClassName="text-foreground" />
-        </CardHeader>
-        <CardContent>
-          {branding.productSubtitle && (
-            <p className="text-sm text-muted-foreground mb-6">
-              {branding.productSubtitle}
-            </p>
-          )}
-          <form onSubmit={handleSubmit}>
-            <FieldGroup data-testid="login-field-group" className="gap-4">
-              <Field>
-                <Label htmlFor="username">
-                  {t("auth.login.usernameLabel")}
-                </Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder={t("auth.login.usernamePlaceholder")}
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    if (fieldErrors.username)
-                      setFieldErrors((prev) => ({ ...prev, username: "" }));
-                  }}
+      <PageContainer role="auth">
+        <Card className="w-full">
+          <CardHeader>
+            <BrandHeader textClassName="text-foreground" />
+          </CardHeader>
+          <CardContent>
+            {branding.productSubtitle && (
+              <p className="type-secondary mb-6">{branding.productSubtitle}</p>
+            )}
+            <form onSubmit={handleSubmit}>
+              <FieldGroup data-testid="login-field-group" className="gap-4">
+                <Field>
+                  <Label htmlFor="username">
+                    {t("auth.login.usernameLabel")}
+                  </Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder={t("auth.login.usernamePlaceholder")}
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (fieldErrors.username)
+                        setFieldErrors((prev) => ({ ...prev, username: "" }));
+                    }}
+                    disabled={isSubmittingLogin}
+                  />
+                  <FieldError>{fieldErrors.username}</FieldError>
+                </Field>
+                <Field>
+                  <Label htmlFor="password">
+                    {t("auth.login.passwordLabel")}
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder={t("auth.login.passwordPlaceholder")}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password)
+                        setFieldErrors((prev) => ({ ...prev, password: "" }));
+                    }}
+                    disabled={isSubmittingLogin}
+                  />
+                  <FieldError>{fieldErrors.password}</FieldError>
+                </Field>
+                {error && <InlineErrorBanner>{error}</InlineErrorBanner>}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="w-full"
                   disabled={isSubmittingLogin}
-                />
-                <FieldError>{fieldErrors.username}</FieldError>
-              </Field>
-              <Field>
-                <Label htmlFor="password">
-                  {t("auth.login.passwordLabel")}
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder={t("auth.login.passwordPlaceholder")}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password)
-                      setFieldErrors((prev) => ({ ...prev, password: "" }));
-                  }}
-                  disabled={isSubmittingLogin}
-                />
-                <FieldError>{fieldErrors.password}</FieldError>
-              </Field>
-              {error && <InlineErrorBanner>{error}</InlineErrorBanner>}
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmittingLogin}
-              >
-                {isSubmittingLogin
-                  ? t("auth.login.submitting")
-                  : t("auth.login.submit")}
-              </Button>
-            </FieldGroup>
-          </form>
-        </CardContent>
-      </Card>
+                >
+                  {isSubmittingLogin
+                    ? t("auth.login.submitting")
+                    : t("auth.login.submit")}
+                </Button>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
+      </PageContainer>
     </main>
   );
 }

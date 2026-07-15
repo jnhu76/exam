@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/apiErrors";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -27,17 +28,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus, Users } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { RowActions } from "@/components/shared/RowActions";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DEFAULT_PASSWORD_POLICY, type AssignableRole } from "@exam/contracts";
 
 /** User row shape as returned by the users list API. */
@@ -180,88 +181,109 @@ export function UsersPage() {
         title={t("admin.users.title")}
         actions={
           <Button onClick={() => open()}>
-            <Plus data-icon="inline-start" />
+            <AppIcon icon={Plus} size="inline" />
             {t("admin.users.createBtn")}
           </Button>
         }
       />
       {users.length === 0 ? (
         <EmptyState
-          icon={<Users className="size-8" />}
+          icon={<AppIcon icon={Users} size="state" />}
           title={t("admin.users.empty")}
           description={t("admin.users.emptyDescription")}
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t("admin.users.columns.username")}</TableHead>
-              <TableHead>{t("admin.users.columns.name")}</TableHead>
-              <TableHead>{t("admin.users.columns.role")}</TableHead>
-              <TableHead>{t("admin.users.columns.status")}</TableHead>
-              <TableHead>{t("admin.users.columns.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>{user.username}</TableCell>
-                <TableCell>{user.name}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">
-                    {t(`admin.users.roleLabels.${user.role}` as any) ??
-                      user.role}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {user.isActive
-                    ? t("admin.common.enable")
-                    : t("admin.common.disable")}
-                </TableCell>
-                <TableCell>
-                  <RowActions>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => open(user)}
-                      aria-label={t("admin.users.editLabel")}
-                    >
-                      <Pencil />
-                    </Button>
-                    <ConfirmDialog
-                      trigger={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={togglingId !== null}
-                        >
-                          {togglingId === user.id
-                            ? t("admin.common.processing")
-                            : user.isActive
-                              ? t("admin.common.disable")
-                              : t("admin.common.enable")}
-                        </Button>
-                      }
-                      title={
-                        user.isActive
-                          ? t("admin.common.confirmDisable")
-                          : t("admin.common.confirmEnable")
-                      }
-                      description={t("admin.users.enableDisable", {
-                        action: user.isActive
-                          ? t("admin.common.disable")
-                          : t("admin.common.enable"),
-                        name: user.name,
-                      })}
-                      destructive={user.isActive}
-                      onConfirm={() => void toggle(user)}
-                    />
-                  </RowActions>
-                </TableCell>
+        <DataTableShell minTableWidth="compact" actionsDensity="normal">
+          <Table>
+            <DataTableColumns
+              columns={[
+                { role: "short-id" },
+                { role: "primary-text" },
+                { role: "type" },
+                { role: "status" },
+                { role: "actions" },
+              ]}
+            />
+            <TableHeader>
+              <TableRow>
+                <DataTableHead role="short-id">
+                  {t("admin.users.columns.username")}
+                </DataTableHead>
+                <DataTableHead role="primary-text">
+                  {t("admin.users.columns.name")}
+                </DataTableHead>
+                <DataTableHead role="type">
+                  {t("admin.users.columns.role")}
+                </DataTableHead>
+                <DataTableHead role="status">
+                  {t("admin.users.columns.status")}
+                </DataTableHead>
+                <DataTableHead role="actions">
+                  {t("admin.users.columns.actions")}
+                </DataTableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <DataTableCell role="short-id">{user.username}</DataTableCell>
+                  <DataTableCell role="primary-text">{user.name}</DataTableCell>
+                  <DataTableCell role="type">
+                    <Badge variant="outline">
+                      {t(`admin.users.roleLabels.${user.role}` as any) ??
+                        user.role}
+                    </Badge>
+                  </DataTableCell>
+                  <DataTableCell role="status">
+                    <StatusBadge
+                      status={user.isActive ? "active" : "inactive"}
+                    />
+                  </DataTableCell>
+                  <DataTableCell role="actions">
+                    <RowActions>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => open(user)}
+                        aria-label={t("admin.users.editLabel")}
+                      >
+                        <AppIcon icon={Pencil} size="inline" />
+                      </Button>
+                      <ConfirmDialog
+                        trigger={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={togglingId !== null}
+                          >
+                            {togglingId === user.id
+                              ? t("admin.common.processing")
+                              : user.isActive
+                                ? t("admin.common.disable")
+                                : t("admin.common.enable")}
+                          </Button>
+                        }
+                        title={
+                          user.isActive
+                            ? t("admin.common.confirmDisable")
+                            : t("admin.common.confirmEnable")
+                        }
+                        description={t("admin.users.enableDisable", {
+                          action: user.isActive
+                            ? t("admin.common.disable")
+                            : t("admin.common.enable"),
+                          name: user.name,
+                        })}
+                        destructive={user.isActive}
+                        onConfirm={() => void toggle(user)}
+                      />
+                    </RowActions>
+                  </DataTableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DataTableShell>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent aria-describedby={undefined}>

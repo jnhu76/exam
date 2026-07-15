@@ -24,6 +24,8 @@ export interface QuestionListFilters {
   type?: string;
   difficulty?: number;
   tags?: string[];
+  /** Case-insensitive substring search over question `content` (trimmed). */
+  search?: string;
 }
 
 /**
@@ -62,6 +64,24 @@ export function createQuestionRepo(db: Database) {
             sql`${questions.tags} @> ${JSON.stringify([tag])}::jsonb`,
           );
         }
+      }
+      // Server-side search: case-insensitive substring match on `content`.
+      // Mirrors the former client predicate (content.toLowerCase().includes(
+      // search.toLowerCase())) but applies to the full dataset before count +
+      // pagination. We use POSITION(lower(content) IN lower($term)) > 0 rather
+      // than ILIKE so the user term needs NO wildcard escaping — a search for
+      // "a_b" or "100%" matches literally, never as a LIKE pattern. (For full
+      // Unicode case-folding a pg_trgm index would be needed — deferred, see
+      // token-semantic-audit performance note.) Empty/whitespace search is a
+      // no-op (matches the client's empty-string behavior).
+      if (filters.search && filters.search.trim()) {
+        const term = filters.search.trim();
+        // POSITION(substr IN str): returns 1-based index of substr in str, 0 if
+        // absent. We search for the (lowercased) term INSIDE the (lowercased)
+        // content. No LIKE wildcard escaping needed — term matches literally.
+        conditions.push(
+          sql`position(lower(${term}) in lower(${questions.content})) > 0`,
+        );
       }
 
       const where = and(...conditions)!;

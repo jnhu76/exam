@@ -1,20 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Pagination,
   PaginationContent,
@@ -23,7 +24,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { ClipboardCheck } from "lucide-react";
+import { ListChecks } from "lucide-react";
 
 interface GradingQueueItem {
   attemptId: string;
@@ -45,6 +46,7 @@ interface GradingQueueResponse {
 
 export function GradingQueuePage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const navigate = useNavigate();
   const [data, setData] = useState<GradingQueueResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,7 +87,7 @@ export function GradingQueuePage() {
           description={t("admin.grading.description")}
         />
         <EmptyState
-          icon={<ClipboardCheck className="size-8" />}
+          icon={<AppIcon icon={ListChecks} size="state" />}
           title={t("admin.grading.empty")}
           description={t("admin.grading.emptyDescription")}
         />
@@ -101,15 +103,34 @@ export function GradingQueuePage() {
         title={t("admin.grading.title")}
         description={t("admin.grading.description")}
       />
-      <div className="overflow-hidden rounded-md border">
+      <DataTableShell>
         <Table>
+          <DataTableColumns
+            columns={[
+              { role: "primary-text" },
+              { role: "secondary-text" },
+              { role: "date" },
+              { role: "number" },
+              { role: "status" },
+            ]}
+          />
           <TableHeader>
             <TableRow>
-              <TableHead>{t("admin.grading.columns.candidate")}</TableHead>
-              <TableHead>{t("admin.grading.columns.exam")}</TableHead>
-              <TableHead>{t("admin.grading.columns.submittedAt")}</TableHead>
-              <TableHead>{t("admin.grading.columns.pendingCount")}</TableHead>
-              <TableHead>{t("admin.grading.columns.status")}</TableHead>
+              <DataTableHead role="primary-text">
+                {t("admin.grading.columns.candidate")}
+              </DataTableHead>
+              <DataTableHead role="secondary-text">
+                {t("admin.grading.columns.exam")}
+              </DataTableHead>
+              <DataTableHead role="date">
+                {t("admin.grading.columns.submittedAt")}
+              </DataTableHead>
+              <DataTableHead role="number">
+                {t("admin.grading.columns.pendingCount")}
+              </DataTableHead>
+              <DataTableHead role="status">
+                {t("admin.grading.columns.status")}
+              </DataTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,24 +143,26 @@ export function GradingQueuePage() {
                   navigate(`/admin/grading-queue/${item.attemptId}`)
                 }
               >
-                <TableCell className="font-medium">
+                <DataTableCell role="primary-text">
                   {item.candidateName}
-                </TableCell>
-                <TableCell>{item.examTitle}</TableCell>
-                <TableCell>
-                  {item.submittedAt
-                    ? new Date(item.submittedAt).toLocaleString("zh-CN")
-                    : "-"}
-                </TableCell>
-                <TableCell>{item.pendingQuestionCount}</TableCell>
-                <TableCell>
+                </DataTableCell>
+                <DataTableCell role="secondary-text">
+                  {item.examTitle}
+                </DataTableCell>
+                <DataTableCell role="date">
+                  {item.submittedAt ? formatDateTime(item.submittedAt) : "-"}
+                </DataTableCell>
+                <DataTableCell role="number">
+                  {item.pendingQuestionCount}
+                </DataTableCell>
+                <DataTableCell role="status">
                   <StatusBadge status={item.gradingStatus} />
-                </TableCell>
+                </DataTableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-      </div>
+      </DataTableShell>
       {totalPages > 1 && (
         <Pagination>
           <PaginationContent>

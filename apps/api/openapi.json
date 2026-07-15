@@ -5043,6 +5043,14 @@
             "in": "query",
             "name": "tags",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
           }
         ],
         "security": [

@@ -1,0 +1,216 @@
+/*
+ * Koi Compact Data Workbench — Question-Management-only enhancements
+ * (UI-TABLE-KOI-COMPACT-1).
+ *
+ * The shared low-contrast grid, tinted header, and table-head/cell borders are
+ * owned by recipes.css and apply to EVERY admin table. This file owns only what
+ * is specific to the unified Question Management workbench:
+ *   - the continuous shell bands (toolbar as shell top, footer as shell bottom);
+ *   - the sticky right action rail;
+ *   - compact row geometry + single-line content truncation;
+ *   - the question-type badge and metadata-tag chip geometry.
+ *
+ * Scoping: every rule is anchored under [data-slot="data-workbench"], so these
+ * enhancements reach ONLY Question Management. Other admin tables get the
+ * shared Koi grid from recipes.css and nothing from here.
+ *
+ * Token discipline: no hex here. All color flows from index.css semantic
+ * tokens. Cascade: this file is imported as plain (unlayered) CSS in main.tsx,
+ * so it wins over layered Tailwind utilities — mirroring recipes.css.
+ */
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Shell + region bands.
+ *
+ * The workbench root already carries surface-content (bg + 1px --border-shell
+ * + --radius) + overflow-hidden from DataWorkbench. These rules add the
+ * internal region separators so the toolbar/footer read as bands of one shell
+ * rather than stacked cards.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* Toolbar band: the workbench's quiet top region. It must NOT draw its own
+ * card border/radius — it is the top of the shell. The ListToolbar "quiet"
+ * appearance draws a surface-soft fill + bottom divider; inside the workbench
+ * we flatten it onto the shell so there is no nested rounded box. */
+[data-slot="data-workbench"] [data-slot="workbench-toolbar"] {
+  border-bottom: 1px solid var(--border-divider);
+}
+
+/* Flatten the quiet toolbar's own radius/border so it becomes the shell top. */
+[data-slot="data-workbench"] [data-toolbar-appearance="quiet"] {
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-divider);
+  background: var(--surface);
+}
+
+/* Footer band: the workbench's bottom region. Owns the count + pagination. */
+[data-slot="data-workbench"] [data-slot="workbench-footer"] {
+  min-height: 3.25rem;
+  border-top: 1px solid var(--border-divider);
+  background: var(--table-footer-bg);
+}
+
+/* The actions (sticky rail) column owns its own left divider instead of a
+ * right border, so the rail reads as a pinned layer. */
+[data-slot="data-workbench"]
+  [data-slot="table-body"]
+  [data-slot="table-cell"][data-column-role="actions"],
+[data-slot="data-workbench"]
+  [data-slot="table-header"]
+  [data-slot="table-head"][data-column-role="actions"] {
+  border-right: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Sticky action rail.
+ *
+ * The actions column becomes a true sticky right rail: pinned to the right
+ * edge of the scroll viewport, with its own surface so no white gap appears
+ * when a row is hovered/selected underneath it. A very light left inset
+ * shadow expresses the sticky layer without a heavy drop shadow.
+ * ────────────────────────────────────────────────────────────────────── */
+[data-slot="data-workbench"]
+  [data-slot="table-cell"][data-column-role="actions"] {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--table-action-rail-bg);
+  box-shadow: inset 4px 0 6px -4px
+    color-mix(in srgb, var(--text-muted) 6%, transparent);
+}
+
+[data-slot="data-workbench"]
+  [data-slot="table-head"][data-column-role="actions"] {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: var(--table-header);
+}
+
+/* The rail must keep its surface on hovered + selected rows so the pinned
+ * layer never shows a white break. */
+[data-slot="data-workbench"]
+  [data-slot="table-body"]
+  [data-slot="table-row"]:hover
+  [data-slot="table-cell"][data-column-role="actions"] {
+  background: var(--table-action-rail-bg);
+}
+
+[data-slot="data-workbench"]
+  [data-slot="table-body"]
+  [data-slot="table-row"]:focus-within
+  [data-slot="table-cell"][data-column-role="actions"],
+[data-slot="data-workbench"]
+  [data-slot="table-body"]
+  [data-slot="table-row"][data-state="selected"]
+  [data-slot="table-cell"][data-column-role="actions"] {
+  background: var(--table-action-rail-bg);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Row geometry — compact density.
+ *
+ * Header 42px, body rows 46px (min 44). Single-line content with ellipsis.
+ * ────────────────────────────────────────────────────────────────────── */
+[data-slot="data-workbench"] [data-slot="table-head"] {
+  height: 2.625rem;
+}
+
+[data-slot="data-workbench"] [data-slot="table-body"] [data-slot="table-row"] {
+  min-height: 2.75rem;
+}
+
+/* Content column: single-line truncation. The cell content (a span) clamps to
+ * one line; the full text is exposed via the accessible title on the span set
+ * by the page. */
+[data-slot="data-workbench"]
+  [data-slot="table-cell"][data-column-role="long-text"]
+  .workbench-cell-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Question-type badge — compact rectangle, not a pill.
+ *
+ * Category info, not a warning. One shared structure: 24px height, 8px
+ * inline padding, 4px radius, 12px / weight 500, 1px border, nowrap.
+ * single_choice reads as soft primary; the other types read as neutral
+ * surface, distinguished by label. Controlled low saturation — no four vivid
+ * colors. Overrides the global Badge rounded-md for this role only.
+ * ────────────────────────────────────────────────────────────────────── */
+[data-slot="data-workbench"]
+  [data-slot="table-cell"][data-column-role="type"]
+  [data-slot="badge"] {
+  height: 1.5rem;
+  padding-inline: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.125rem;
+  /* Soft fill, NO outline — a type label is a category, not an input or
+   * outline button. Removing the border stops it reading like a small input
+   * field (UI-TABLE-KOI-COLOR-REFINE-2 §6). The fill comes from the Badge
+   * variant (single_choice = soft primary; others = neutral surface). */
+  border-width: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Metadata tag chip — compact, low saturation, not a pill.
+ *
+ * Tags are metadata, not status badges: 22px height, 6px inline padding, 3px
+ * radius, 12px / weight 400, neutral subtle background, secondary text, no
+ * random color, no shadow. TagBadge emits data-tag-geometry="compact".
+ * ────────────────────────────────────────────────────────────────────── */
+[data-slot="data-workbench"]
+  [data-slot="table-cell"][data-column-role="tag-list"]
+  [data-slot="tag-badge"] {
+  height: 1.375rem;
+  padding-inline: 0.375rem;
+  border-radius: 0.1875rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.125rem;
+  background: var(--surface-subtle);
+  /* No border — a metadata tag must not look like a small input field or an
+   * outline button (UI-TABLE-KOI-COLOR-REFINE-2 §6). The subtle background
+   * alone defines its edge. */
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+/* Tag overflow chip (+N) shares the same chip geometry. */
+[data-slot="data-workbench"]
+  [data-slot="table-cell"][data-column-role="tag-list"]
+  [data-slot="tag-overflow"] {
+  display: inline-flex;
+  align-items: center;
+  height: 1.375rem;
+  padding-inline: 0.375rem;
+  border-radius: 0.1875rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.125rem;
+  color: var(--text-muted);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Empty + loading states keep the full shell.
+ *
+ * The toolbar, header, sticky rail and footer stay mounted; only the tbody
+ * content swaps. The empty placeholder owns a min height so the shell does
+ * not collapse. Skeleton rows (rendered by the page loading branch) keep the
+ * column structure and the sticky rail intact.
+ * ────────────────────────────────────────────────────────────────────── */
+[data-slot="data-workbench"] [data-slot="workbench-empty"] {
+  min-height: 10.625rem;
+}
+
+/* Skeleton shimmer row — a quiet placeholder, not a spinner. */
+[data-slot="data-workbench"] [data-slot="workbench-skeleton-cell"] {
+  background: var(--surface-subtle);
+  border-radius: 0.25rem;
+}

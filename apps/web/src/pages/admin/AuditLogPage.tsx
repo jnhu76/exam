@@ -1,20 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
-import { DatePicker } from "@/components/shared/DatePicker";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { DataToolbar } from "@/components/shared/DataToolbar";
+import { DatePicker } from "@/components/shared/DatePicker";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -126,6 +128,7 @@ function endOfDayISO(date: Date): string {
 
 export function AuditLogPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const [data, setData] = useState<AuditLogResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -209,7 +212,7 @@ export function AuditLogPage() {
         title={t("admin.audit.title")}
         description={t("admin.audit.description")}
       />
-      <div className="flex flex-wrap items-center gap-3">
+      <DataToolbar>
         <Select
           value={actionFilter}
           onValueChange={(v) => {
@@ -271,28 +274,47 @@ export function AuditLogPage() {
             onClick={clearFilters}
             className="text-muted-foreground"
           >
-            <X className="mr-1 size-4" />
+            <AppIcon icon={X} size="inline" className="mr-1" />
             {t("admin.audit.clearFilter")}
           </Button>
         )}
-      </div>
+      </DataToolbar>
       {items.length === 0 ? (
         <EmptyState
-          icon={<ScrollText className="size-8" />}
+          icon={<AppIcon icon={ScrollText} size="state" />}
           title={t("admin.audit.empty")}
           description={t("admin.audit.emptyDescription")}
         />
       ) : (
         <>
-          <div className="overflow-hidden rounded-md border">
+          <DataTableShell>
             <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "date" },
+                  { role: "secondary-text" },
+                  { role: "type", key: "action" },
+                  { role: "type", key: "target" },
+                  { role: "short-id" },
+                ]}
+              />
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("admin.audit.columns.time")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.actor")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.action")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.target")}</TableHead>
-                  <TableHead>{t("admin.audit.columns.detail")}</TableHead>
+                  <DataTableHead role="date">
+                    {t("admin.audit.columns.time")}
+                  </DataTableHead>
+                  <DataTableHead role="secondary-text">
+                    {t("admin.audit.columns.actor")}
+                  </DataTableHead>
+                  <DataTableHead role="type">
+                    {t("admin.audit.columns.action")}
+                  </DataTableHead>
+                  <DataTableHead role="type">
+                    {t("admin.audit.columns.target")}
+                  </DataTableHead>
+                  <DataTableHead role="short-id">
+                    {t("admin.audit.columns.detail")}
+                  </DataTableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -304,26 +326,35 @@ export function AuditLogPage() {
                       setExpandedId(expandedId === item.id ? null : item.id)
                     }
                   >
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {new Date(item.createdAt).toLocaleString("zh-CN")}
-                    </TableCell>
-                    <TableCell className="font-medium">
+                    <DataTableCell
+                      role="date"
+                      className="text-sm text-muted-foreground"
+                    >
+                      {formatDateTime(item.createdAt)}
+                    </DataTableCell>
+                    <DataTableCell
+                      role="secondary-text"
+                      className="text-foreground"
+                    >
                       {item.actorName ?? item.actorId}
-                    </TableCell>
-                    <TableCell>
+                    </DataTableCell>
+                    <DataTableCell role="type">
                       <span className="inline-flex items-center rounded-md bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary-soft-foreground">
                         {item.action}
                       </span>
-                    </TableCell>
-                    <TableCell>{item.targetType}</TableCell>
-                    <TableCell className="max-w-[120px] truncate text-sm text-muted-foreground">
+                    </DataTableCell>
+                    <DataTableCell role="type">{item.targetType}</DataTableCell>
+                    <DataTableCell
+                      role="short-id"
+                      className="truncate text-sm text-muted-foreground"
+                    >
                       {item.targetId}
-                    </TableCell>
+                    </DataTableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </DataTableShell>
           {expandedId &&
             (() => {
               const item = items.find((i) => i.id === expandedId);

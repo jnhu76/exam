@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { FlagIcon } from "lucide-react";
+import { Flag } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { cn } from "@/lib/utils";
 
 /** Visual state of a question in the navigator grid. */
@@ -83,10 +84,10 @@ export function QuestionNavigator({
             >
               {item.number}
               {item.state === "flagged" && (
-                <FlagIcon
-                  data-icon="inline-end"
-                  aria-hidden="true"
-                  className="absolute -top-1 -right-1 size-3"
+                <AppIcon
+                  icon={Flag}
+                  size="badge"
+                  className="absolute -top-1 -right-1"
                 />
               )}
             </button>

@@ -8,8 +8,9 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AppIcon } from "@/components/shared/AppIcon";
 import {
-  AlertTriangle,
+  TriangleAlert,
   Clock,
   FileText,
   Shield,
@@ -161,7 +162,7 @@ export function StartExamPage() {
 
   return (
     <div className="mx-auto max-w-2xl flex flex-col gap-6 p-6">
-      <h1 className="text-2xl font-semibold">{exam.title}</h1>
+      <h1 className="type-page-title">{exam.title}</h1>
 
       <Card>
         <CardHeader>
@@ -172,44 +173,52 @@ export function StartExamPage() {
         <CardContent className="flex flex-col gap-3 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="size-4" />
+              <AppIcon icon={Clock} size="inline" />
               <span>{t("startExam.info.duration")}</span>
             </div>
-            <span className="font-medium">
+            <span className="text-foreground">
               {t("startExam.info.durationValue", {
                 minutes: exam.durationMinutes,
               })}
             </span>
 
             <div className="flex items-center gap-2 text-muted-foreground">
-              <FileText className="size-4" />
+              <AppIcon icon={FileText} size="inline" />
               <span>{t("startExam.info.questionCount")}</span>
             </div>
-            <span className="font-medium">
+            <span className="text-foreground">
               {t("startExam.info.questionCountValue", {
                 count: exam.questionCount,
               })}
             </span>
 
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Shield className="size-4" />
+              <AppIcon icon={Shield} size="inline" />
               <span>{t("startExam.info.passingScore")}</span>
             </div>
-            <span className="font-medium">
+            <span className="text-foreground">
               {exam.passingScore}/{exam.totalScore}
             </span>
           </div>
 
           {exam.controlFlags.detectTabSwitch && (
             <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
-              <AlertTriangle className="size-4 shrink-0" />
+              <AppIcon
+                icon={TriangleAlert}
+                size="inline"
+                className="shrink-0"
+              />
               <span>{t("startExam.info.tabSwitchWarning")}</span>
             </div>
           )}
 
           {exam.controlFlags.disableCopyPaste && (
             <div className="flex items-center gap-2 rounded-md bg-warning/10 p-2 text-warning">
-              <AlertTriangle className="size-4 shrink-0" />
+              <AppIcon
+                icon={TriangleAlert}
+                size="inline"
+                className="shrink-0"
+              />
               <span>{t("startExam.info.copyPasteWarning")}</span>
             </div>
           )}
@@ -217,7 +226,7 @@ export function StartExamPage() {
       </Card>
 
       <div className="rounded-md border border-warning/20 bg-warning/10 p-4 text-sm text-warning">
-        <AlertTriangle className="mr-2 inline size-4" />
+        <AppIcon icon={TriangleAlert} size="inline" className="mr-2 inline" />
         {t("startExam.notice")}
       </div>
 
@@ -273,10 +282,10 @@ export function StartExamPage() {
           data-testid="exam-start-btn"
         >
           {isStarting && (
-            <LoaderCircle
-              data-icon="inline-start"
+            <AppIcon
+              icon={LoaderCircle}
+              size="inline"
               className="animate-spin"
-              aria-hidden="true"
             />
           )}
           {isStarting ? t("startExam.actions.entering") : actionLabel}

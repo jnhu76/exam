@@ -158,6 +158,11 @@ const EXCLUDE_PATTERNS = [
   /node_modules\//,
   /dist\//,
   /\.git\//,
+  // Dev-only comparison labs under apps/web/src/dev/ are tree-shaken out of
+  // production builds (gated behind import.meta.env.DEV). Their specimen
+  // copy is dev tooling, not product UI, and must not pollute the
+  // production i18n catalog. Treated like test/fixture files.
+  /apps\/web\/src\/dev\//,
 ];
 
 const SCAN_DIRS = ["apps", "packages"];

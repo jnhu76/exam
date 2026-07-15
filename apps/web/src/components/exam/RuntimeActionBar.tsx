@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { FlagIcon } from "lucide-react";
+import { Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { cn } from "@/lib/utils";
 
 /** Props for the RuntimeActionBar component. */
@@ -53,7 +54,7 @@ export function RuntimeActionBar({
       </div>
       <div className="flex gap-2">
         <Button variant="secondary" onClick={onToggleFlag}>
-          <FlagIcon data-icon="inline-start" aria-hidden="true" />
+          <AppIcon icon={Flag} size="inline" />
           {flagged
             ? t("candidateRuntime.actions.unflag")
             : t("candidateRuntime.actions.flag")}

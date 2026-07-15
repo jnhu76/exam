@@ -1,23 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { Button } from "@/components/ui/button";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { RowActions } from "@/components/shared/RowActions";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -43,6 +44,7 @@ interface ExamRow {
 /** Admin page for browsing published/closed exams and navigating to their score lists. */
 export function ResultsOverviewPage() {
   const { t } = useTranslation();
+  const { formatDateTime } = useProductDateTime();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,72 +93,79 @@ export function ResultsOverviewPage() {
       <div className="flex flex-col gap-6">
         <PageHeader title={t("admin.resultsOverview.title")} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {t("admin.resultsOverview.cardTitle")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {exams.length === 0 ? (
-              <EmptyState
-                icon={<Gauge className="size-12" />}
-                title={t("admin.resultsOverview.empty.title")}
-                description={t("admin.resultsOverview.empty.description")}
+        <DataTableShell
+          title={t("admin.resultsOverview.cardTitle")}
+          minTableWidth="compact"
+        >
+          {exams.length === 0 ? (
+            <EmptyState
+              icon={<AppIcon icon={Gauge} size="hero" />}
+              title={t("admin.resultsOverview.empty.title")}
+              description={t("admin.resultsOverview.empty.description")}
+            />
+          ) : (
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "primary-text" },
+                  { role: "status" },
+                  { role: "date" },
+                  { role: "number" },
+                  { role: "actions" },
+                ]}
               />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.title")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.status")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.time")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.gradedCount")}
-                    </TableHead>
-                    <TableHead>
-                      {t("admin.resultsOverview.columns.actions")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {exams.map((exam) => {
-                    const canView = gradable(exam);
-                    const reason = gradableReason(exam);
-                    const viewButton = (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={!canView}
-                        onClick={() =>
-                          void navigate(routes.admin.examScores(exam.id))
-                        }
-                      >
-                        <Eye data-icon="inline-start" />
-                        {t("admin.resultsOverview.actions.viewScores")}
-                      </Button>
-                    );
-                    return (
-                      <TableRow key={exam.id}>
-                        <TableCell className="font-medium">
-                          {exam.title}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={exam.status} />
-                        </TableCell>
-                        <TableCell>
-                          {exam.openAt
-                            ? new Date(exam.openAt).toLocaleString()
-                            : "-"}
-                        </TableCell>
-                        <TableCell>{exam.gradedAttemptCount ?? 0}</TableCell>
-                        <TableCell>
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="primary-text">
+                    {t("admin.resultsOverview.columns.title")}
+                  </DataTableHead>
+                  <DataTableHead role="status">
+                    {t("admin.resultsOverview.columns.status")}
+                  </DataTableHead>
+                  <DataTableHead role="date">
+                    {t("admin.resultsOverview.columns.time")}
+                  </DataTableHead>
+                  <DataTableHead role="number">
+                    {t("admin.resultsOverview.columns.gradedCount")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
+                    {t("admin.resultsOverview.columns.actions")}
+                  </DataTableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {exams.map((exam) => {
+                  const canView = gradable(exam);
+                  const reason = gradableReason(exam);
+                  const viewButton = (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!canView}
+                      onClick={() =>
+                        void navigate(routes.admin.examScores(exam.id))
+                      }
+                    >
+                      <AppIcon icon={Eye} size="inline" />
+                      {t("admin.resultsOverview.actions.viewScores")}
+                    </Button>
+                  );
+                  return (
+                    <TableRow key={exam.id}>
+                      <DataTableCell role="primary-text">
+                        {exam.title}
+                      </DataTableCell>
+                      <DataTableCell role="status">
+                        <StatusBadge status={exam.status} />
+                      </DataTableCell>
+                      <DataTableCell role="date">
+                        {exam.openAt ? formatDateTime(exam.openAt) : "-"}
+                      </DataTableCell>
+                      <DataTableCell role="number">
+                        {exam.gradedAttemptCount ?? 0}
+                      </DataTableCell>
+                      <DataTableCell role="actions">
+                        <RowActions>
                           {canView ? (
                             viewButton
                           ) : (
@@ -167,15 +176,15 @@ export function ResultsOverviewPage() {
                               <TooltipContent>{reason}</TooltipContent>
                             </Tooltip>
                           )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                        </RowActions>
+                      </DataTableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </DataTableShell>
       </div>
     </TooltipProvider>
   );

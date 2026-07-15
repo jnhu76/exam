@@ -2,6 +2,7 @@ import { Component, ErrorInfo, ReactNode } from "react";
 import i18n from "@/i18n";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppIcon } from "@/components/shared/AppIcon";
 import {
   Card,
   CardContent,
@@ -54,7 +55,11 @@ export class ErrorBoundary extends Component<Props, State> {
           <Card className="max-w-md">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <AlertTriangle className="size-6 text-destructive" />
+                <AppIcon
+                  icon={AlertTriangle}
+                  size="large"
+                  className="text-destructive"
+                />
                 <CardTitle>{i18n.t("common.errorBoundary.title")}</CardTitle>
               </div>
               <CardDescription>
@@ -81,7 +86,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardContent>
             <CardFooter>
               <Button onClick={this.handleReset} className="w-full">
-                <RefreshCw data-icon="inline-start" />
+                <AppIcon icon={RefreshCw} size="inline" />
                 {i18n.t("common.errorBoundary.reload")}
               </Button>
             </CardFooter>

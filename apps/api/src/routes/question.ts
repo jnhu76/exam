@@ -39,7 +39,7 @@ const questionListResponseSchema = z.object({
   totalPages: z.number().int().nonnegative(),
 });
 
-/** Zod schema for query parameters when listing questions, including filters for courseId, type, difficulty, and tags. */
+/** Zod schema for query parameters when listing questions, including filters for courseId, type, difficulty, tags, and a case-insensitive content search. */
 const questionListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -47,6 +47,7 @@ const questionListQuerySchema = z.object({
   type: z.string().optional(),
   difficulty: z.coerce.number().int().optional(),
   tags: z.string().optional(),
+  search: z.string().optional(),
 });
 
 /** Fastify plugin that registers all question CRUD and import routes. */
@@ -64,7 +65,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    /** List questions with pagination and optional filters (courseId, type, difficulty, tags). */
+    /** List questions with pagination and optional filters (courseId, type, difficulty, tags) and server-side content search. */
     async (request: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize } = PaginationParamsSchema.parse(request.query);
@@ -76,6 +77,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         type?: string;
         difficulty?: number;
         tags?: string[];
+        search?: string;
       } = {};
       if (query.courseId) filters.courseId = query.courseId;
       if (query.type) filters.type = query.type;
@@ -86,6 +88,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           .map((tag) => tag.trim())
           .filter(Boolean);
       }
+      if (query.search) filters.search = query.search;
 
       const { items, total } = await repo.listFiltered(ctx, filters, {
         page,

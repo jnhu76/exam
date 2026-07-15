@@ -96,7 +96,12 @@ describe("AttemptDetailPage", () => {
     await screen.findByText("成绩概览");
 
     const earnedScoreEl = screen.getByTestId("earned-score");
-    expect(earnedScoreEl.className).toContain("text-success");
+    // The status color lives on an inner span (the type-metric recipe owns
+    // color on the outer element; the pass/fail state color is applied to the
+    // text span so it does not conflict with the recipe).
+    expect(earnedScoreEl.querySelector("span")!.className).toContain(
+      "text-success",
+    );
 
     expect(screen.getByText("及格")).toBeInTheDocument();
   });
@@ -107,7 +112,9 @@ describe("AttemptDetailPage", () => {
     await screen.findByText("成绩概览");
 
     const earnedScoreEl = screen.getByTestId("earned-score");
-    expect(earnedScoreEl.className).toContain("text-destructive");
+    expect(earnedScoreEl.querySelector("span")!.className).toContain(
+      "text-destructive",
+    );
 
     expect(screen.getByText("不及格")).toBeInTheDocument();
   });

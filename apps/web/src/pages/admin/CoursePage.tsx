@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -10,6 +11,13 @@ import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { ListToolbar } from "@/components/shared/ListToolbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,14 +28,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -193,33 +194,40 @@ export function CoursePage() {
           title={t("admin.courses.title")}
           actions={
             <Button onClick={openCreate}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.courses.createBtn")}
             </Button>
           }
         />
 
         {courses.length > 0 && (
-          <SearchInput
-            aria-label={t("admin.courses.searchLabel")}
-            placeholder={t("admin.courses.searchPlaceholder")}
-            value={search}
-            onChange={setSearch}
-            onClear={() => setSearch("")}
-            clearLabel={t("admin.courses.clearSearchLabel")}
-            containerClassName="max-w-md"
+          <ListToolbar
+            search={
+              <SearchInput
+                aria-label={t("admin.courses.searchLabel")}
+                placeholder={t("admin.courses.searchPlaceholder")}
+                value={search}
+                onChange={setSearch}
+                onClear={() => setSearch("")}
+                clearLabel={t("admin.courses.clearSearchLabel")}
+                containerClassName="max-w-md"
+              />
+            }
+            summary={t("admin.courses.count", {
+              count: filteredCourses.length,
+            })}
           />
         )}
 
         {courses.length === 0 ? (
           <EmptyState
-            icon={<BookOpen className="size-8" />}
+            icon={<AppIcon icon={BookOpen} size="state" />}
             title={t("admin.courses.empty")}
             description={t("admin.courses.emptyDescription")}
           />
         ) : filteredCourses.length === 0 ? (
           <EmptyState
-            icon={<Search className="size-8" />}
+            icon={<AppIcon icon={Search} size="state" />}
             title={t("admin.courses.noMatch")}
             description={t("admin.courses.noMatchDescription", { q: search })}
             action={
@@ -229,63 +237,82 @@ export function CoursePage() {
             }
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("admin.courses.columns.name")}</TableHead>
-                <TableHead>{t("admin.courses.columns.code")}</TableHead>
-                <TableHead>{t("admin.courses.columns.description")}</TableHead>
-                <TableHead className="w-24">
-                  {t("admin.courses.columns.actions")}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCourses.map((course) => (
-                <TableRow key={course.id}>
-                  <TableCell className="font-medium">{course.name}</TableCell>
-                  <TableCell>{course.code}</TableCell>
-                  <TableCell className="max-w-[360px]">
-                    {course.description ? (
-                      <TruncatedCell text={course.description} />
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(course)}
-                        aria-label={t("admin.courses.editLabel")}
-                      >
-                        <Pencil />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("admin.courses.deleteLabel")}
-                          >
-                            <Trash2 className="text-destructive" />
-                          </Button>
-                        }
-                        title={t("admin.common.confirm")}
-                        description={t("admin.courses.enableDisable", {
-                          action: t("admin.common.delete"),
-                          name: course.name,
-                        })}
-                        destructive
-                        onConfirm={() => void handleDelete(course.id)}
-                      />
-                    </RowActions>
-                  </TableCell>
+          <DataTableShell minTableWidth="compact">
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "primary-text" },
+                  { role: "short-id" },
+                  { role: "description" },
+                  { role: "actions" },
+                ]}
+              />
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="primary-text">
+                    {t("admin.courses.columns.name")}
+                  </DataTableHead>
+                  <DataTableHead role="short-id">
+                    {t("admin.courses.columns.code")}
+                  </DataTableHead>
+                  <DataTableHead role="description">
+                    {t("admin.courses.columns.description")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
+                    {t("admin.courses.columns.actions")}
+                  </DataTableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredCourses.map((course) => (
+                  <TableRow key={course.id}>
+                    <DataTableCell role="primary-text">
+                      {course.name}
+                    </DataTableCell>
+                    <DataTableCell role="short-id">{course.code}</DataTableCell>
+                    <DataTableCell role="description">
+                      {course.description ? (
+                        <TruncatedCell text={course.description} />
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </DataTableCell>
+                    <DataTableCell role="actions">
+                      <RowActions>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(course)}
+                          aria-label={t("admin.courses.editLabel")}
+                        >
+                          <AppIcon icon={Pencil} size="inline" />
+                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("admin.courses.deleteLabel")}
+                              data-row-action-tone="destructive"
+                            >
+                              <AppIcon icon={Trash2} size="inline" />
+                            </Button>
+                          }
+                          title={t("admin.common.confirm")}
+                          description={t("admin.courses.enableDisable", {
+                            action: t("admin.common.delete"),
+                            name: course.name,
+                          })}
+                          destructive
+                          onConfirm={() => void handleDelete(course.id)}
+                        />
+                      </RowActions>
+                    </DataTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataTableShell>
         )}
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

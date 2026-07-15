@@ -1,38 +1,47 @@
 import type { ReactNode } from "react";
 
-/**
- * Dashboard statistics card displaying a label, numeric value,
- * optional icon, and optional trend line.
- *
- * Metric presentation authority (UI-COMP-1). Selects surface.content +
- * density.comfortable + the type-metric / type-secondary / type-metadata
- * recipes. Does NOT own elevation (forward elevation rule): the Card primitive
- * carries a default shadow-sm, so this renders a surface-content div instead
- * to stay deliberately flat. A metric and a shadow are orthogonal concerns.
- */
+/** Dashboard statistic presentation authority. */
 export function StatsCard({
   label,
   value,
   icon,
   trend,
+  supporting,
+  suffix,
 }: {
   label: string;
   value: number | string;
   icon?: ReactNode;
   trend?: string;
+  supporting?: ReactNode;
+  suffix?: ReactNode;
 }) {
   return (
-    <div className="surface-content">
-      <div className="flex items-center gap-4 p-6">
+    <div
+      data-slot="stats-card"
+      data-depth="flat"
+      className="surface-content p-4"
+    >
+      <div className="flex items-center gap-2.5">
         {icon && (
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <div
+            data-slot="stats-card-icon"
+            data-anchor-tone="primary-soft"
+            className="flex shrink-0 items-center text-primary"
+          >
             {icon}
           </div>
         )}
-        <div className="min-w-0">
+        <div data-slot="stats-card-content" className="min-w-0 flex-1">
           <p className="type-secondary truncate">{label}</p>
-          <p className="type-metric text-3xl">{value}</p>
-          {trend && <p className="type-metadata">{trend}</p>}
+          <div className="flex items-baseline gap-1">
+            <p data-slot="stats-card-value" className="type-metric">
+              {value}
+            </p>
+            {suffix && <span className="type-secondary">{suffix}</span>}
+          </div>
+          {trend && <p className="type-metadata mt-1">{trend}</p>}
+          {supporting && <div className="mt-1">{supporting}</div>}
         </div>
       </div>
     </div>

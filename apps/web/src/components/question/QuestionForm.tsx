@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2 } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
 
 /** A single option within a question, with an ID, display content, and correctness flag. */
@@ -229,7 +230,7 @@ export function QuestionForm({
                 size="sm"
                 onClick={addOption}
               >
-                <Plus className="size-3" />
+                <AppIcon icon={Plus} size="inline" />
                 {t("admin.forms.question.addOption")}
               </Button>
             )}
@@ -276,7 +277,7 @@ export function QuestionForm({
                     size="icon"
                     onClick={() => removeOption(i)}
                   >
-                    <Trash2 />
+                    <AppIcon icon={Trash2} size="inline" />
                   </Button>
                 )}
               </div>

@@ -9,6 +9,8 @@
  *   - exam-ui/no-arbitrary-typography
  *   - exam-ui/no-typography-authority-conflict (RECON-1 §12; exported, wired in C7)
  *   - exam-ui/no-arbitrary-inline-typography (RECON-1 §15; exported, wired in C6)
+ *   - exam-ui/no-heavy-font-weight (UI-PRODUCT-FINISH-CLOSURE-1; forbids
+ *     font-semibold always and font-bold outside large metrics)
  *
  * Retired (UI-FIELD-ERROR-AUTHORITY-CLOSURE-1, §8): `exam-ui/prefer-field-error`
  * is no longer wired. Its structural recipe (`<p> + text-destructive + text-size`)
@@ -54,6 +56,7 @@ import noBusinessShadow from "./rules/no-business-shadow";
 import noArbitraryTypography from "./rules/no-arbitrary-typography";
 import noTypographyAuthorityConflict from "./rules/no-typography-authority-conflict";
 import noArbitraryInlineTypography from "./rules/no-arbitrary-inline-typography";
+import noHeavyFontWeight from "./rules/no-heavy-font-weight";
 
 /**
  * The rules are typed as typescript-eslint v8 `RuleModule`s, but ESLint v10's
@@ -68,6 +71,7 @@ const rules = {
   "no-arbitrary-typography": noArbitraryTypography,
   "no-typography-authority-conflict": noTypographyAuthorityConflict,
   "no-arbitrary-inline-typography": noArbitraryInlineTypography,
+  "no-heavy-font-weight": noHeavyFontWeight,
 } as unknown as ESLint.Plugin["rules"];
 
 const plugin: ESLint.Plugin = {
@@ -82,4 +86,5 @@ export {
   noArbitraryTypography,
   noTypographyAuthorityConflict,
   noArbitraryInlineTypography,
+  noHeavyFontWeight,
 };

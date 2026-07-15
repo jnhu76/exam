@@ -143,11 +143,11 @@ describe("ExamTimer", () => {
     // prominent numeric.
     expect(label.tagName).toBe("DIV");
     expect(value.tagName).toBe("SPAN");
-    // The numeric value owns the tabular-nums numeric role (its defining
-    // property); the label does not. This is the durable role distinction that
-    // survives the label's typography-recipe migration.
-    expect(value.className).toContain("tabular-nums");
-    expect(label.className).not.toContain("tabular-nums");
+    // The numeric value owns the tabular-nums numeric role via the type-numeric
+    // recipe (its defining property); the label does not. This is the durable
+    // role distinction that survives the label's typography-recipe migration.
+    expect(value.className).toContain("type-numeric");
+    expect(label.className).not.toContain("type-numeric");
   });
 
   it("activates the low-time state at the 300s threshold", () => {

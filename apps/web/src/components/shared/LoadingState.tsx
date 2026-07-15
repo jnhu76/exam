@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { LoaderCircle } from "lucide-react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { cn } from "@/lib/utils";
 
 /** Centered loading indicator with a spinning icon and customizable label text. */
@@ -21,7 +22,11 @@ export function LoadingState({
         className,
       )}
     >
-      <LoaderCircle className="size-8 animate-spin text-muted-foreground" />
+      <AppIcon
+        icon={LoaderCircle}
+        size="state"
+        className="animate-spin text-muted-foreground"
+      />
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +29,7 @@ export function ErrorState({
         className,
       )}
     >
-      <CircleAlert className="size-8 text-destructive" aria-hidden="true" />
+      <AppIcon icon={CircleAlert} size="state" className="text-destructive" />
       <p className="text-sm text-muted-foreground">{message}</p>
       <div className="flex gap-2">
         {onRetry && (

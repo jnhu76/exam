@@ -10,6 +10,7 @@ import {
 } from "@/lib/candidateImport";
 import type { CandidateFieldConfig } from "@/lib/candidateImport";
 import { FieldGroup, Field } from "@/components/shared/FieldGroup";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -30,21 +31,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus, Search, Upload, Users, KeyRound } from "lucide-react";
 import { FieldError } from "@/components/shared/FieldError";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { RowActions } from "@/components/shared/RowActions";
+import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DEFAULT_PASSWORD_POLICY } from "@exam/contracts";
 
-/** Candidate custom field definition with display metadata. */
 /** Configuration of a candidate identity or metadata field. */
 interface Field {
   id: string;
@@ -55,7 +55,7 @@ interface Field {
   unique: boolean;
   sortOrder: number;
 }
-/** A candidate record with identity fields and custom field values. */
+
 /** A candidate (examinee) record with identity fields. */
 interface Candidate {
   id: string;
@@ -64,17 +64,19 @@ interface Candidate {
   isActive: boolean;
   fields: Record<string, unknown>;
 }
-/** Generic paginated API response wrapper. */
+
 /** Generic paginated response wrapper. */
 interface Page<T> {
   items: T[];
 }
 
-/** Admin candidate management page with search, CRUD, enable/disable, and CSV import. */
 /**
  * Admin page for managing candidates (examinees).
  * Supports listing, searching, creating, editing, enabling/disabling candidates,
  * and bulk-importing via CSV with a preview wizard.
+ *
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Admin table with distinct header, clear
+ * boundaries, cool-neutral palette.
  */
 export function CandidatesPage() {
   const { t } = useTranslation();
@@ -102,7 +104,7 @@ export function CandidatesPage() {
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [resetFieldError, setResetFieldError] = useState("");
   const [resetting, setResetting] = useState(false);
-  /** Fetches the candidate list and field definitions in parallel. */
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -120,7 +122,7 @@ export function CandidatesPage() {
     }
   }, []);
   useEffect(() => void load(), [load]);
-  /** Candidates filtered by the current search term (matches name or username). */
+
   const filteredCandidates = useMemo(
     () =>
       search
@@ -132,7 +134,7 @@ export function CandidatesPage() {
         : candidates,
     [candidates, search],
   );
-  /** Opens the create/edit dialog, pre-filling form state from the given candidate or defaults. */
+
   function open(candidate?: Candidate) {
     setEditing(candidate ?? null);
     setUsername(candidate?.username ?? "");
@@ -150,7 +152,7 @@ export function CandidatesPage() {
     setFieldErrors({});
     setDialogOpen(true);
   }
-  /** Builds the fields payload object from form values, coercing number fields. */
+
   function payloadFields() {
     return Object.fromEntries(
       fields.map((field) => [
@@ -161,7 +163,7 @@ export function CandidatesPage() {
       ]),
     );
   }
-  /** Validates the candidate form fields and sets field-level error messages. Returns true if valid. */
+
   function validate() {
     const errors: Record<string, string> = {};
     if (!name.trim())
@@ -184,7 +186,7 @@ export function CandidatesPage() {
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   }
-  /** Validates and persists the candidate via create or update API, then reloads the list. */
+
   async function save() {
     if (saving || !validate()) return;
     setSaveError(null);
@@ -215,7 +217,7 @@ export function CandidatesPage() {
       setSaving(false);
     }
   }
-  /** Toggles the active/disabled status of a candidate. */
+
   async function toggle(candidate: Candidate) {
     if (togglingId) return;
     setTogglingId(candidate.id);
@@ -230,7 +232,7 @@ export function CandidatesPage() {
       setTogglingId(null);
     }
   }
-  /** Opens the reset-password dialog for the given candidate. */
+
   function openReset(candidate: Candidate) {
     setResetTarget(candidate);
     setResetPassword("");
@@ -238,7 +240,7 @@ export function CandidatesPage() {
     setResetFieldError("");
     setResetOpen(true);
   }
-  /** Resets the targeted candidate's password via the admin API. */
+
   async function confirmResetPassword() {
     if (!resetTarget || resetting) return;
     const len = resetPassword.length;
@@ -277,7 +279,7 @@ export function CandidatesPage() {
       setResetting(false);
     }
   }
-  /** Converts field definitions to the CandidateFieldConfig format used by the import parser. */
+
   function fieldConfigs(): CandidateFieldConfig[] {
     return fields.map((f) => ({
       name: f.name,
@@ -287,15 +289,15 @@ export function CandidatesPage() {
       unique: f.unique,
     }));
   }
-  /** Parses the raw CSV input into structured import rows. */
+
   function importRows() {
     return parseImportCsv(csv, fieldConfigs()).rows;
   }
-  /** Returns true if the CSV input exceeded the maximum import row limit. */
+
   function importTruncated(): boolean {
     return parseImportCsv(csv, fieldConfigs()).truncated;
   }
-  /** Builds preview rows for the import wizard, marking each as error, update, or create. */
+
   function previewRows(): ImportPreviewRow[] {
     const rows = importRows();
     const seenUsernames = new Set<string>();
@@ -350,7 +352,7 @@ export function CandidatesPage() {
       };
     });
   }
-  /** Submits the parsed CSV rows to the import API and displays a summary. */
+
   async function importCsv() {
     try {
       const result = await api.post<{
@@ -376,8 +378,10 @@ export function CandidatesPage() {
       setImportSummary("");
     }, 1500);
   }
+
   if (isLoading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -385,7 +389,7 @@ export function CandidatesPage() {
         actions={
           <div className="flex gap-2">
             <Button onClick={() => open()}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.candidates.createBtn")}
             </Button>
             <Button
@@ -396,7 +400,7 @@ export function CandidatesPage() {
                 setCsv("");
               }}
             >
-              <Upload data-icon="inline-start" />
+              <AppIcon icon={Upload} size="inline" />
               {t("admin.candidates.importBtn")}
             </Button>
           </div>
@@ -413,7 +417,7 @@ export function CandidatesPage() {
       />
       {filteredCandidates.length === 0 && search ? (
         <EmptyState
-          icon={<Search className="size-8" />}
+          icon={<AppIcon icon={Search} size="state" />}
           title={t("admin.candidates.noMatch")}
           description={t("admin.candidates.noMatchDescription", { q: search })}
           action={
@@ -424,7 +428,7 @@ export function CandidatesPage() {
         />
       ) : filteredCandidates.length === 0 ? (
         <EmptyState
-          icon={<Users className="size-8" />}
+          icon={<AppIcon icon={Users} size="state" />}
           title={t("admin.candidates.empty")}
           description={t("admin.candidates.emptyDescription")}
           action={
@@ -447,86 +451,114 @@ export function CandidatesPage() {
         />
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("admin.candidates.columns.username")}</TableHead>
-                <TableHead>{t("admin.candidates.columns.name")}</TableHead>
-                {fields.map((field) => (
-                  <TableHead key={field.id}>{field.label}</TableHead>
-                ))}
-                <TableHead>{t("admin.candidates.columns.status")}</TableHead>
-                <TableHead>{t("admin.candidates.columns.actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCandidates.map((candidate) => (
-                <TableRow key={candidate.id}>
-                  <TableCell>{candidate.username}</TableCell>
-                  <TableCell>{candidate.name}</TableCell>
+          <DataTableShell minTableWidth="standard" actionsDensity="wide">
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "short-id" },
+                  { role: "primary-text" },
+                  ...fields.map((field) => ({
+                    role: "secondary-text" as const,
+                    key: field.id,
+                  })),
+                  { role: "status" },
+                  { role: "actions" },
+                ]}
+              />
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="short-id">
+                    {t("admin.candidates.columns.username")}
+                  </DataTableHead>
+                  <DataTableHead role="primary-text">
+                    {t("admin.candidates.columns.name")}
+                  </DataTableHead>
                   {fields.map((field) => (
-                    <TableCell key={field.id}>
-                      {String(candidate.fields[field.name] ?? "-")}
-                    </TableCell>
+                    <DataTableHead role="secondary-text" key={field.id}>
+                      {field.label}
+                    </DataTableHead>
                   ))}
-                  <TableCell>
-                    {candidate.isActive
-                      ? t("admin.common.enable")
-                      : t("admin.common.disable")}
-                  </TableCell>
-                  <TableCell>
-                    <RowActions>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => open(candidate)}
-                        aria-label={t("admin.candidates.editLabel")}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => openReset(candidate)}
-                        aria-label={t("admin.candidates.resetPassword")}
-                        data-testid={`candidate-reset-password-${candidate.id}`}
-                      >
-                        <KeyRound />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={togglingId !== null}
-                          >
-                            {togglingId === candidate.id
-                              ? t("admin.common.processing")
-                              : candidate.isActive
-                                ? t("admin.common.disable")
-                                : t("admin.common.enable")}
-                          </Button>
-                        }
-                        title={
-                          candidate.isActive
-                            ? t("admin.common.confirmDisable")
-                            : t("admin.common.confirmEnable")
-                        }
-                        description={t("admin.candidates.enableDisable", {
-                          action: candidate.isActive
-                            ? t("admin.common.disable")
-                            : t("admin.common.enable"),
-                          name: candidate.name,
-                        })}
-                        destructive={candidate.isActive}
-                        onConfirm={() => void toggle(candidate)}
-                      />
-                    </RowActions>
-                  </TableCell>
+                  <DataTableHead role="status">
+                    {t("admin.candidates.columns.status")}
+                  </DataTableHead>
+                  <DataTableHead role="actions">
+                    {t("admin.candidates.columns.actions")}
+                  </DataTableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredCandidates.map((candidate) => (
+                  <TableRow key={candidate.id}>
+                    <DataTableCell role="short-id">
+                      {candidate.username}
+                    </DataTableCell>
+                    <DataTableCell role="primary-text">
+                      {candidate.name}
+                    </DataTableCell>
+                    {fields.map((field) => (
+                      <DataTableCell role="secondary-text" key={field.id}>
+                        {String(candidate.fields[field.name] ?? "-")}
+                      </DataTableCell>
+                    ))}
+                    <DataTableCell role="status">
+                      <StatusBadge
+                        status={candidate.isActive ? "active" : "inactive"}
+                      />
+                    </DataTableCell>
+                    <DataTableCell role="actions">
+                      <RowActions>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => open(candidate)}
+                          aria-label={t("admin.candidates.editLabel")}
+                        >
+                          <AppIcon icon={Pencil} size="inline" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => openReset(candidate)}
+                          aria-label={t("admin.candidates.resetPassword")}
+                          data-testid={`candidate-reset-password-${candidate.id}`}
+                        >
+                          <AppIcon icon={KeyRound} size="inline" />
+                        </Button>
+                        <ConfirmDialog
+                          trigger={
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={togglingId !== null}
+                            >
+                              {togglingId === candidate.id
+                                ? t("admin.common.processing")
+                                : candidate.isActive
+                                  ? t("admin.common.disable")
+                                  : t("admin.common.enable")}
+                            </Button>
+                          }
+                          title={
+                            candidate.isActive
+                              ? t("admin.common.confirmDisable")
+                              : t("admin.common.confirmEnable")
+                          }
+                          description={t("admin.candidates.enableDisable", {
+                            action: candidate.isActive
+                              ? t("admin.common.disable")
+                              : t("admin.common.enable"),
+                            name: candidate.name,
+                          })}
+                          destructive={candidate.isActive}
+                          onConfirm={() => void toggle(candidate)}
+                        />
+                      </RowActions>
+                    </DataTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataTableShell>
         </>
       )}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

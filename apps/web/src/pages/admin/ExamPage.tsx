@@ -1,16 +1,23 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { useProductDateTime } from "@/contexts/DateTimeContext";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { AppIcon } from "@/components/shared/AppIcon";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
-import { DataToolbar } from "@/components/shared/DataToolbar";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import {
+  DataTableCell,
+  DataTableColumns,
+  DataTableHead,
+} from "@/components/shared/DataTableContract";
+import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -18,14 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
 
 /** Row shape returned by the exams list API. */
@@ -53,15 +53,19 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-/** Admin page for listing, viewing, and deleting exams. */
+/**
+ * Admin page for listing, viewing, and deleting exams.
+ * UI-KOI-WEGENT-VISUAL-PIVOT-1: Removed empty count strip. Count moved into
+ * toolbar summary. Admin table with distinct header, clear boundaries.
+ */
 export function ExamPage() {
   const { t } = useTranslation();
+  const { formatDateRange } = useProductDateTime();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  /** Fetches the exam list from the API and updates local state. */
   const loadExams = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -79,7 +83,6 @@ export function ExamPage() {
     loadExams();
   }, [loadExams]);
 
-  /** Deletes an exam by id and refreshes the list. */
   async function handleDelete(id: string) {
     try {
       await api.delete(`/api/exams/${id}`);
@@ -104,7 +107,7 @@ export function ExamPage() {
           title={t("admin.exams.title")}
           actions={
             <Button onClick={() => void navigate("/admin/exams/new")}>
-              <Plus data-icon="inline-start" />
+              <AppIcon icon={Plus} size="inline" />
               {t("admin.exams.createBtn")}
             </Button>
           }
@@ -112,43 +115,60 @@ export function ExamPage() {
 
         {exams.length === 0 ? (
           <EmptyState
-            icon={<ClipboardList className="size-8" />}
+            icon={<AppIcon icon={ClipboardList} size="state" />}
             title={t("admin.exams.empty")}
             description={t("admin.exams.emptyDescription")}
           />
         ) : (
           <>
-            <DataToolbar
-              aria-label={t("admin.exams.toolbarLabel")}
-              summary={t("admin.exams.summary", { count: exams.length })}
-            />
             <DataTableShell
               title={t("admin.exams.listTitle")}
               description={t("admin.exams.listDescription")}
+              toolbar={
+                <span className="type-secondary">
+                  {t("admin.exams.summary", { count: exams.length })}
+                </span>
+              }
             >
               <Table>
+                <DataTableColumns
+                  columns={[
+                    { role: "primary-text" },
+                    { role: "status" },
+                    { role: "date-range" },
+                    { role: "duration" },
+                    { role: "number", key: "question-count" },
+                    { role: "number", key: "participant-count" },
+                    { role: "score" },
+                    { role: "actions" },
+                  ]}
+                />
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("admin.exams.columns.title")}</TableHead>
-                    <TableHead className="w-20">
+                    <DataTableHead role="primary-text">
+                      {t("admin.exams.columns.title")}
+                    </DataTableHead>
+                    <DataTableHead role="status">
                       {t("admin.exams.columns.status")}
-                    </TableHead>
-                    <TableHead>{t("admin.exams.columns.timeWindow")}</TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="date-range">
+                      {t("admin.exams.columns.timeWindow")}
+                    </DataTableHead>
+                    <DataTableHead role="duration">
                       {t("admin.exams.columns.duration")}
-                    </TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="number">
                       {t("admin.exams.columns.questionCount")}
-                    </TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="number">
                       {t("admin.exams.columns.participants")}
-                    </TableHead>
-                    <TableHead className="w-16">
+                    </DataTableHead>
+                    <DataTableHead role="score">
                       {t("admin.exams.columns.passingScore")}
-                    </TableHead>
-                    <TableHead className="w-32">
+                    </DataTableHead>
+                    <DataTableHead role="actions">
                       {t("admin.exams.columns.actions")}
-                    </TableHead>
+                    </DataTableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -159,35 +179,42 @@ export function ExamPage() {
                         size="icon"
                         aria-label={t("admin.exams.deleteLabel")}
                         disabled={!exam.canDelete}
+                        data-row-action-tone="destructive"
                       >
-                        <Trash2 className="text-destructive" />
+                        <AppIcon icon={Trash2} size="inline" />
                       </Button>
                     );
 
                     return (
                       <TableRow key={exam.id}>
-                        <TableCell className="font-medium">
+                        <DataTableCell role="primary-text">
                           {exam.title}
-                        </TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="status">
                           <StatusBadge status={exam.status} />
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(exam.openAt).toLocaleDateString()} -{" "}
-                          {new Date(exam.closeAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell
+                          role="date-range"
+                          className="text-sm text-muted-foreground"
+                        >
+                          {formatDateRange(exam.openAt, exam.closeAt)}
+                        </DataTableCell>
+                        <DataTableCell role="duration">
                           {t("admin.exams.duration", {
                             min: exam.durationMinutes,
                           })}
-                        </TableCell>
-                        <TableCell>{exam.questionIds.length}</TableCell>
-                        <TableCell>{exam.participantCount}</TableCell>
-                        <TableCell>
+                        </DataTableCell>
+                        <DataTableCell role="number">
+                          {exam.questionIds.length}
+                        </DataTableCell>
+                        <DataTableCell role="number">
+                          {exam.participantCount}
+                        </DataTableCell>
+                        <DataTableCell role="score">
                           {exam.passingScore}/{exam.totalScore}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
+                        </DataTableCell>
+                        <DataTableCell role="actions">
+                          <RowActions>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -196,7 +223,7 @@ export function ExamPage() {
                               }
                               aria-label={t("admin.exams.viewDetail")}
                             >
-                              <Eye />
+                              <AppIcon icon={Eye} size="inline" />
                             </Button>
                             {exam.canDelete ? (
                               <ConfirmDialog
@@ -225,8 +252,8 @@ export function ExamPage() {
                                 </TooltipContent>
                               </Tooltip>
                             )}
-                          </div>
-                        </TableCell>
+                          </RowActions>
+                        </DataTableCell>
                       </TableRow>
                     );
                   })}

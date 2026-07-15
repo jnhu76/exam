@@ -34,7 +34,11 @@ export function PageHeader({
           <p className="type-page-description mt-1">{description}</p>
         )}
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
+      {actions && (
+        <div className="flex shrink-0 flex-wrap gap-2 [&_button]:min-h-11 sm:[&_button]:min-h-9">
+          {actions}
+        </div>
+      )}
     </header>
   );
 }

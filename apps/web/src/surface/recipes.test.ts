@@ -42,10 +42,19 @@ describe("surface recipe layer (UI-SURFACE-1)", () => {
   it("surface.content owns background + border + radius and no elevation", () => {
     const rule = extractRule(RECIPES_CSS, "surface-content");
     expect(rule).toContain("var(--surface)");
-    expect(rule).toContain("var(--border)");
+    expect(rule).toContain("var(--border-shell)");
     expect(rule).toContain("border-radius");
     // The forward elevation rule: ordinary content must not own a shadow.
     expect(rule).not.toMatch(/box-shadow/);
+  });
+
+  it("distinguishes raised and instrument business surfaces", () => {
+    const raised = extractRule(RECIPES_CSS, "surface-raised");
+    const instrument = extractRule(RECIPES_CSS, "surface-instrument");
+    expect(raised).toContain("var(--border-raised)");
+    expect(raised).toContain("box-shadow");
+    expect(instrument).toContain("var(--border-shell)");
+    expect(instrument).not.toContain("box-shadow");
   });
 
   it("surface.overlay is the elevation owner (shadow)", () => {
