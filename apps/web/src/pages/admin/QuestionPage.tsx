@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
@@ -8,16 +8,17 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { ListToolbar } from "@/components/shared/ListToolbar";
-import { SearchInput } from "@/components/shared/SearchInput";
+import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
 import { DataTableShell } from "@/components/shared/DataTableShell";
+import { DataView } from "@/components/shared/DataView";
 import {
-  DataTableCell,
-  DataTableColumns,
-  DataTableHead,
-  DataTableSpanCell,
-} from "@/components/shared/DataTableContract";
+  DesktopDataTable,
+  type DataViewColumnDef,
+} from "@/components/shared/DesktopDataTable";
+import { MobileRecordList } from "@/components/shared/MobileRecordList";
+import { MobileRecordCard } from "@/components/shared/MobileRecordCard";
 import { AppIcon } from "@/components/shared/AppIcon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,17 +31,16 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { TagBadge } from "@/components/shared/TagBadge";
-import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
+import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 import {
-  BookOpen,
   FileUp,
   LoaderCircle,
+  MoreVertical,
   Pencil,
   Plus,
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { getTypeLabel, TYPE_VARIANT } from "@/lib/constants";
 
 /** A question record for the admin question list table. */
 interface QuestionRow {
@@ -69,12 +69,17 @@ interface PaginatedResponse<T> {
   totalPages: number;
 }
 
+const PAGE_SIZE = 20;
+
 /**
- * Admin question management page with server-side filtering by course, type,
- * difficulty, and tags, plus client-side search and pagination.
+ * Admin question management page with server-side search, filtering by course,
+ * type, difficulty, and tags, plus pagination.
  *
- * UI-KOI-WEGENT-VISUAL-PIVOT-1: Structured filter toolbar, admin table,
- * numeric alignment, clear action column.
+ * UI-TOKEN-TABLE-FOUNDATION-1: rebuilt on DataView (orchestrator) +
+ * DesktopDataTable (TanStack headless engine, role-based column contract) +
+ * MobileRecordCard (<lg). Search is now SERVER-SIDE over the full dataset
+ * (debounced); the old client-side current-page filter is removed. The DataView
+ * shell stays mounted across loading/empty/error transitions — no jitter.
  */
 export function QuestionPage() {
   const { t } = useTranslation();
@@ -88,9 +93,9 @@ export function QuestionPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
   const [filterTags, setFilterTags] = useState("");
+  // Server-side search term (committed/debounced by DataViewSearch).
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
   const [total, setTotal] = useState(0);
 
   const loadCourses = useCallback(async () => {
@@ -108,12 +113,13 @@ export function QuestionPage() {
     try {
       const params = new URLSearchParams();
       params.set("page", String(page));
-      params.set("pageSize", "20");
+      params.set("pageSize", String(PAGE_SIZE));
       if (filterCourse !== "all") params.set("courseId", filterCourse);
       if (filterType !== "all") params.set("type", filterType);
       if (filterDifficulty !== "all")
         params.set("difficulty", filterDifficulty);
       if (filterTags.trim()) params.set("tags", filterTags.trim());
+      if (search.trim()) params.set("search", search.trim());
       const qData = await api.get<PaginatedResponse<QuestionRow>>(
         `/api/questions?${params.toString()}`,
       );
@@ -124,7 +130,7 @@ export function QuestionPage() {
     } finally {
       setIsTableLoading(false);
     }
-  }, [filterCourse, filterDifficulty, filterTags, filterType, page]);
+  }, [filterCourse, filterDifficulty, filterTags, filterType, page, search, t]);
 
   useEffect(() => {
     let canceledFlag = false;
@@ -154,13 +160,10 @@ export function QuestionPage() {
     }
   }
 
-  const filtered = questions.filter((q) => {
-    if (search && !q.content.toLowerCase().includes(search.toLowerCase()))
-      return false;
-    return true;
-  });
-
-  const courseMap = new Map(courses.map((c) => [c.id, c.name]));
+  const courseMap = useMemo(
+    () => new Map(courses.map((c) => [c.id, c.name])),
+    [courses],
+  );
 
   function clearFilters() {
     setFilterCourse("all");
@@ -178,13 +181,115 @@ export function QuestionPage() {
     filterTags.trim() !== "" ||
     search.trim() !== "";
 
+  // Immediate input change: update the displayed value only (no server query).
+  function handleSearchChange(term: string) {
+    setSearch(term);
+  }
+
+  // Debounced commit: fire the server query and reset to page 1.
+  function handleSearchCommit(term: string) {
+    setPage(1);
+    // search state is already current (set by handleSearchChange); the
+    // loadQuestions effect depends on `search`, so a no-op setSearch is safe.
+    setSearch(term);
+  }
+
   if (isInitialLoading) return <LoadingState />;
-  if (error) return <ErrorState message={error} onRetry={loadQuestions} />;
+  if (error && questions.length === 0 && !isTableLoading)
+    return <ErrorState message={error} onRetry={loadQuestions} />;
+
+  const columns: DataViewColumnDef<QuestionRow>[] = [
+    {
+      id: "type",
+      meta: { role: "type" },
+      header: t("admin.questions.columns.type" as never),
+      cell: ({ row }) => (
+        <Badge variant={TYPE_VARIANT[row.original.type] ?? "default"}>
+          {getTypeLabel(row.original.type, t) ?? row.original.type}
+        </Badge>
+      ),
+    },
+    {
+      id: "content",
+      meta: { role: "long-text" },
+      header: t("admin.questions.columns.content" as never),
+      cell: ({ row }) => (
+        <span className="line-clamp-2">{row.original.content}</span>
+      ),
+    },
+    {
+      id: "course",
+      meta: { role: "secondary-text" },
+      header: t("admin.questions.columns.course" as never),
+      cell: ({ row }) => courseMap.get(row.original.courseId) ?? "-",
+    },
+    {
+      id: "score",
+      meta: { role: "score" },
+      header: t("admin.questions.columns.score" as never),
+      cell: ({ row }) => row.original.score,
+    },
+    {
+      id: "difficulty",
+      meta: { role: "number" },
+      header: t("admin.questions.columns.difficulty" as never),
+      cell: ({ row }) => row.original.difficulty,
+    },
+    {
+      id: "tags",
+      meta: { role: "tag-list" },
+      header: t("admin.questions.columns.tags" as never),
+      cell: ({ row }) => (
+        <div className="flex flex-wrap gap-1">
+          {row.original.tags.map((tag) => (
+            <TagBadge key={tag}>{tag}</TagBadge>
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      meta: { role: "actions" },
+      header: t("admin.questions.columns.actions" as never),
+      cell: ({ row }) => (
+        <RowActions>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() =>
+              void navigate(`/admin/questions/${row.original.id}/edit`)
+            }
+            aria-label={t("admin.questions.editLabel" as never)}
+          >
+            <AppIcon icon={Pencil} size="inline" />
+          </Button>
+          <ConfirmDialog
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("admin.questions.deleteLabel" as never)}
+                data-row-action-tone="destructive"
+              >
+                <AppIcon icon={Trash2} size="inline" />
+              </Button>
+            }
+            title={t("admin.questions.confirmDelete" as never)}
+            description={t("admin.questions.confirmDeleteDescription" as never)}
+            destructive
+            onConfirm={() => void handleDelete(row.original.id)}
+          />
+        </RowActions>
+      ),
+    },
+  ];
+
+  const isEmpty = !isTableLoading && questions.length === 0;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={t("admin.questions.title")}
+        title={t("admin.questions.title" as never)}
         actions={
           <div className="flex gap-2">
             <Button
@@ -192,304 +297,274 @@ export function QuestionPage() {
               onClick={() => void navigate("/admin/questions/import")}
             >
               <AppIcon icon={FileUp} size="inline" />
-              {t("admin.questions.importBtn")}
+              {t("admin.questions.importBtn" as never)}
             </Button>
             <Button onClick={() => void navigate("/admin/questions/new")}>
               <AppIcon icon={Plus} size="inline" />
-              {t("admin.questions.createBtn")}
+              {t("admin.questions.createBtn" as never)}
             </Button>
           </div>
         }
       />
 
-      <ListToolbar
-        appearance="quiet"
-        aria-label={t("admin.questions.filterToolbar")}
-        filters={
-          <>
-            <Select
-              value={filterCourse}
-              onValueChange={(value) => {
-                setFilterCourse(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-auto lg:w-[180px]">
-                <SelectValue placeholder={t("admin.questions.filterCourse")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">
-                  {t("admin.questions.filterAllCourses")}
-                </SelectItem>
-                {courses.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <DataView
+        toolbar={
+          <ListToolbar
+            appearance="quiet"
+            aria-label={t("admin.questions.filterToolbar" as never)}
+            filters={
+              <>
+                <Select
+                  value={filterCourse}
+                  onValueChange={(value) => {
+                    setFilterCourse(value);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-auto lg:w-[180px]">
+                    <SelectValue
+                      placeholder={t("admin.questions.filterCourse" as never)}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {t("admin.questions.filterAllCourses" as never)}
+                    </SelectItem>
+                    {courses.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-            <Select
-              value={filterType}
-              onValueChange={(value) => {
-                setFilterType(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-auto lg:w-[150px]">
-                <SelectValue placeholder={t("admin.questions.filterType")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">
-                  {t("admin.questions.filterAllTypes")}
-                </SelectItem>
-                <SelectItem value="single_choice">
-                  {t("admin.questions.questionTypes.single_choice")}
-                </SelectItem>
-                <SelectItem value="multiple_choice">
-                  {t("admin.questions.questionTypes.multiple_choice")}
-                </SelectItem>
-                <SelectItem value="fill_blank">
-                  {t("admin.questions.questionTypes.fill_blank")}
-                </SelectItem>
-                <SelectItem value="true_false">
-                  {t("admin.questions.questionTypes.true_false")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+                <Select
+                  value={filterType}
+                  onValueChange={(value) => {
+                    setFilterType(value);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-auto lg:w-[150px]">
+                    <SelectValue
+                      placeholder={t("admin.questions.filterType" as never)}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {t("admin.questions.filterAllTypes" as never)}
+                    </SelectItem>
+                    <SelectItem value="single_choice">
+                      {t(
+                        "admin.questions.questionTypes.single_choice" as never,
+                      )}
+                    </SelectItem>
+                    <SelectItem value="multiple_choice">
+                      {t(
+                        "admin.questions.questionTypes.multiple_choice" as never,
+                      )}
+                    </SelectItem>
+                    <SelectItem value="fill_blank">
+                      {t("admin.questions.questionTypes.fill_blank" as never)}
+                    </SelectItem>
+                    <SelectItem value="true_false">
+                      {t("admin.questions.questionTypes.true_false" as never)}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
 
-            <Select
-              value={filterDifficulty}
-              onValueChange={(value) => {
-                setFilterDifficulty(value);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="w-auto lg:w-[140px]">
-                <SelectValue
-                  placeholder={t("admin.questions.filterDifficulty")}
+                <Select
+                  value={filterDifficulty}
+                  onValueChange={(value) => {
+                    setFilterDifficulty(value);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-auto lg:w-[140px]">
+                    <SelectValue
+                      placeholder={t(
+                        "admin.questions.filterDifficulty" as never,
+                      )}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {t("admin.questions.filterAllDifficulties" as never)}
+                    </SelectItem>
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <SelectItem key={value} value={String(value)}>
+                        {t("admin.questions.difficultyLabel" as never, {
+                          value,
+                        })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  className="w-auto lg:w-[180px]"
+                  placeholder={t("admin.questions.tagPlaceholder" as never)}
+                  value={filterTags}
+                  onChange={(e) => {
+                    setFilterTags(e.target.value);
+                    setPage(1);
+                  }}
                 />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">
-                  {t("admin.questions.filterAllDifficulties")}
-                </SelectItem>
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <SelectItem key={value} value={String(value)}>
-                    {t("admin.questions.difficultyLabel", { value })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Input
-              className="w-auto lg:w-[180px]"
-              placeholder={t("admin.questions.tagPlaceholder")}
-              value={filterTags}
-              onChange={(e) => {
-                setFilterTags(e.target.value);
-                setPage(1);
-              }}
+              </>
+            }
+            search={
+              <DataViewSearch
+                aria-label={t("admin.questions.searchLabel" as never)}
+                placeholder={t("admin.questions.searchPlaceholder" as never)}
+                value={search}
+                onChange={handleSearchChange}
+                onSearch={handleSearchCommit}
+                loading={isTableLoading}
+              />
+            }
+            actions={
+              <>
+                {/* Loading indicator: always rendered so its show/hide does not
+                    reflow the actions cluster (which would shift the search box
+                    position in the toolbar). Visibility toggles instead. */}
+                <span
+                  className={`inline-flex min-w-[5.5rem] items-center gap-2 text-sm text-muted-foreground ${
+                    isTableLoading ? "visible" : "invisible"
+                  }`}
+                  aria-live="polite"
+                  aria-hidden={!isTableLoading}
+                >
+                  <AppIcon
+                    icon={LoaderCircle}
+                    size="inline"
+                    className="animate-spin"
+                  />
+                  {t("common.loading" as never)}
+                </span>
+                {hasActiveFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    aria-label={t("admin.common.clearFilter" as never)}
+                  >
+                    <AppIcon icon={RotateCcw} size="inline" />
+                    {t("admin.questions.clearFilter" as never)}
+                  </Button>
+                )}
+              </>
+            }
+          />
+        }
+        desktopTable={
+          <DataTableShell>
+            <DesktopDataTable
+              columns={columns}
+              data={questions}
+              rowCount={total}
+              page={page}
+              pageSize={PAGE_SIZE}
+              getRowId={(q) => q.id}
+              loading={isTableLoading}
+              empty={isEmpty}
+              error={null}
+              emptyTitle={
+                hasActiveFilter
+                  ? t("admin.questions.noMatch" as never)
+                  : t("admin.questions.empty" as never)
+              }
+              emptyDescription={
+                hasActiveFilter
+                  ? t("admin.questions.noMatchDescription" as never)
+                  : t("admin.questions.emptyDescription" as never)
+              }
             />
-          </>
+          </DataTableShell>
         }
-        search={
-          <SearchInput
-            aria-label={t("admin.questions.searchLabel")}
-            placeholder={t("admin.questions.searchPlaceholder")}
-            value={search}
-            onChange={setSearch}
-            onClear={() => setSearch("")}
-            clearLabel={t("admin.common.clearSearch")}
+        mobileList={
+          <MobileRecordList
+            loading={isTableLoading}
+            empty={isEmpty}
+            emptyNode={
+              <MobileRecordCard
+                primary={
+                  hasActiveFilter
+                    ? t("admin.questions.noMatch" as never)
+                    : t("admin.questions.empty" as never)
+                }
+                meta={
+                  hasActiveFilter
+                    ? t("admin.questions.noMatchDescription" as never)
+                    : t("admin.questions.emptyDescription" as never)
+                }
+              />
+            }
+          >
+            {questions.map((q) => (
+              <MobileRecordCard
+                key={q.id}
+                header={
+                  <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
+                    {getTypeLabel(q.type, t) ?? q.type}
+                  </Badge>
+                }
+                primary={q.content}
+                meta={
+                  <>
+                    <span>{courseMap.get(q.courseId) ?? "-"}</span>
+                    <span>
+                      {t("admin.questions.columns.score" as never)}: {q.score}
+                    </span>
+                    <span>
+                      {t("admin.questions.columns.difficulty" as never)}:{" "}
+                      {q.difficulty}
+                    </span>
+                  </>
+                }
+                actions={
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("admin.questions.editLabel" as never)}
+                      onClick={() =>
+                        void navigate(`/admin/questions/${q.id}/edit`)
+                      }
+                    >
+                      <AppIcon icon={Pencil} size="inline" />
+                    </Button>
+                    <ConfirmDialog
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={t("admin.questions.deleteLabel" as never)}
+                          data-row-action-tone="destructive"
+                        >
+                          <AppIcon icon={MoreVertical} size="inline" />
+                        </Button>
+                      }
+                      title={t("admin.questions.confirmDelete" as never)}
+                      description={t(
+                        "admin.questions.confirmDeleteDescription" as never,
+                      )}
+                      destructive
+                      onConfirm={() => void handleDelete(q.id)}
+                    />
+                  </>
+                }
+              />
+            ))}
+          </MobileRecordList>
+        }
+        pagination={
+          <DataTablePagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onPageChange={setPage}
           />
         }
-        actions={
-          <>
-            {isTableLoading && (
-              <span
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground"
-                aria-live="polite"
-              >
-                <AppIcon
-                  icon={LoaderCircle}
-                  size="inline"
-                  className="animate-spin"
-                />
-                {t("admin.common.loading")}
-              </span>
-            )}
-            {hasActiveFilter && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                aria-label={t("admin.common.clearFilter")}
-              >
-                <AppIcon icon={RotateCcw} size="inline" />
-                {t("admin.questions.clearFilter")}
-              </Button>
-            )}
-          </>
-        }
-      />
-
-      {/*
-        Shell + pagination render UNCONDITIONALLY. Previously the shell and
-        the standalone EmptyState swapped in/out on filter changes, which
-        threw the whole block's height between ~8rem (empty card) and the
-        full table height — visible as a "the table jumps when I change a
-        filter" jitter. Keeping the shell (with its header + column widths)
-        always mounted stabilizes the layout; only the body content swaps.
-      */}
-      <DataTableShell>
-        <Table>
-          <DataTableColumns
-            columns={[
-              { role: "type" },
-              { role: "long-text" },
-              { role: "secondary-text" },
-              { role: "score" },
-              { role: "number" },
-              { role: "tag-list" },
-              { role: "actions" },
-            ]}
-          />
-          <TableHeader>
-            <TableRow>
-              <DataTableHead role="type">
-                {t("admin.questions.columns.type")}
-              </DataTableHead>
-              <DataTableHead role="long-text">
-                {t("admin.questions.columns.content")}
-              </DataTableHead>
-              <DataTableHead role="secondary-text">
-                {t("admin.questions.columns.course")}
-              </DataTableHead>
-              <DataTableHead role="score">
-                {t("admin.questions.columns.score")}
-              </DataTableHead>
-              <DataTableHead role="number">
-                {t("admin.questions.columns.difficulty")}
-              </DataTableHead>
-              <DataTableHead role="tag-list">
-                {t("admin.questions.columns.tags")}
-              </DataTableHead>
-              <DataTableHead role="actions">
-                {t("admin.questions.columns.actions")}
-              </DataTableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isTableLoading ? (
-              <TableRow aria-hidden="true">
-                <DataTableSpanCell colSpan={7} className="h-32 p-0">
-                  {/*
-                    Body skeleton: no text here. The toolbar already shows a
-                    live loading indicator (aria-live polite + spinner +
-                    label), so duplicating the "loading" string here would
-                    both repeat it and add a second live region. This row
-                    only holds height so the shell does not collapse while
-                    the request is in flight (the original jitter cause).
-                  */}
-                </DataTableSpanCell>
-              </TableRow>
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <DataTableSpanCell colSpan={7} className="h-32">
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <div className="text-muted-foreground" aria-hidden="true">
-                      <AppIcon icon={BookOpen} size="state" />
-                    </div>
-                    <div>
-                      <p className="font-medium">
-                        {hasActiveFilter
-                          ? t("admin.questions.noMatch")
-                          : t("admin.questions.empty")}
-                      </p>
-                      <p className="text-sm text-text-muted">
-                        {hasActiveFilter
-                          ? t("admin.questions.noMatchDescription")
-                          : t("admin.questions.emptyDescription")}
-                      </p>
-                    </div>
-                    {hasActiveFilter ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={clearFilters}
-                      >
-                        {t("admin.questions.clearFilter")}
-                      </Button>
-                    ) : null}
-                  </div>
-                </DataTableSpanCell>
-              </TableRow>
-            ) : (
-              filtered.map((q) => (
-                <TableRow key={q.id}>
-                  <DataTableCell role="type">
-                    <Badge variant={TYPE_VARIANT[q.type] ?? "default"}>
-                      {getTypeLabel(q.type, t) ?? q.type}
-                    </Badge>
-                  </DataTableCell>
-                  <DataTableCell role="long-text" className="truncate">
-                    {q.content}
-                  </DataTableCell>
-                  <DataTableCell role="secondary-text">
-                    {courseMap.get(q.courseId) ?? "-"}
-                  </DataTableCell>
-                  <DataTableCell role="score">{q.score}</DataTableCell>
-                  <DataTableCell role="number">{q.difficulty}</DataTableCell>
-                  <DataTableCell role="tag-list">
-                    <div className="flex flex-wrap gap-1">
-                      {q.tags.map((tag) => (
-                        <TagBadge key={tag}>{tag}</TagBadge>
-                      ))}
-                    </div>
-                  </DataTableCell>
-                  <DataTableCell role="actions">
-                    <RowActions>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          void navigate(`/admin/questions/${q.id}/edit`)
-                        }
-                        aria-label={t("admin.questions.editLabel")}
-                      >
-                        <AppIcon icon={Pencil} size="inline" />
-                      </Button>
-                      <ConfirmDialog
-                        trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("admin.questions.deleteLabel")}
-                            data-row-action-tone="destructive"
-                          >
-                            <AppIcon icon={Trash2} size="inline" />
-                          </Button>
-                        }
-                        title={t("admin.questions.confirmDelete")}
-                        description={t(
-                          "admin.questions.confirmDeleteDescription",
-                        )}
-                        destructive
-                        onConfirm={() => void handleDelete(q.id)}
-                      />
-                    </RowActions>
-                  </DataTableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </DataTableShell>
-      <DataTablePagination
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        onPageChange={setPage}
       />
     </div>
   );

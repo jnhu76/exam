@@ -186,9 +186,16 @@ export function SystemDiagnosticsPage() {
     };
   }, [loadHealth, loadDiag]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = () => {
-    setIsLoading(true);
-    Promise.all([loadHealth(), loadDiag()]).finally(() => setIsLoading(false));
+    // Manual refresh keeps existing data mounted (no full-content blank swap).
+    // Only the refresh icon spins; the cards stay visible with their last
+    // values until the new data arrives. Previously this toggled the initial
+    // `isLoading` flag, which could flash the whole main region blank.
+    setIsRefreshing(true);
+    Promise.all([loadHealth(), loadDiag()]).finally(() =>
+      setIsRefreshing(false),
+    );
   };
 
   if (isLoading && !health && !diag) {
@@ -239,9 +246,14 @@ export function SystemDiagnosticsPage() {
             variant="outline"
             size="sm"
             aria-label={t("diagnostics.actions.refresh")}
+            disabled={isRefreshing}
             onClick={handleRefresh}
           >
-            <AppIcon icon={RefreshCw} size="inline" />
+            <AppIcon
+              icon={RefreshCw}
+              size="inline"
+              className={isRefreshing ? "animate-spin" : undefined}
+            />
           </Button>
         </div>
       </div>
