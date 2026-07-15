@@ -12,6 +12,7 @@ import {
   DataTableColumns,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -262,53 +263,56 @@ export function QuestionImportPage() {
 
       {parsedRows.length > 0 && !importResult && (
         <>
-          <div className="text-sm text-muted-foreground">
-            {t("admin.questionImport.parsed", { count: parsedRows.length })}
-          </div>
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "number" },
-                { role: "type" },
-                { role: "long-text" },
-                { role: "score" },
-              ]}
-            />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="number">
-                  {t("admin.questionImport.previewColumns.row")}
-                </DataTableHead>
-                <DataTableHead role="type">
-                  {t("admin.questionImport.previewColumns.type")}
-                </DataTableHead>
-                <DataTableHead role="long-text">
-                  {t("admin.questionImport.previewColumns.content")}
-                </DataTableHead>
-                <DataTableHead role="score">
-                  {t("admin.questionImport.previewColumns.score")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {parsedRows.slice(0, 20).map((row, i) => (
-                <TableRow key={i}>
-                  <DataTableCell role="number">{i + 1}</DataTableCell>
-                  <DataTableCell role="type">
-                    <Badge variant="outline">
-                      {(getTypeLabelKey(row.type)
-                        ? t(getTypeLabelKey(row.type) as never)
-                        : undefined) ?? row.type}
-                    </Badge>
-                  </DataTableCell>
-                  <DataTableCell role="long-text" className="truncate">
-                    {row.content}
-                  </DataTableCell>
-                  <DataTableCell role="score">{row.score}</DataTableCell>
+          <DataTableShell
+            title={t("admin.questionImport.parsed", {
+              count: parsedRows.length,
+            })}
+          >
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "number" },
+                  { role: "type" },
+                  { role: "long-text" },
+                  { role: "score" },
+                ]}
+              />
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="number">
+                    {t("admin.questionImport.previewColumns.row")}
+                  </DataTableHead>
+                  <DataTableHead role="type">
+                    {t("admin.questionImport.previewColumns.type")}
+                  </DataTableHead>
+                  <DataTableHead role="long-text">
+                    {t("admin.questionImport.previewColumns.content")}
+                  </DataTableHead>
+                  <DataTableHead role="score">
+                    {t("admin.questionImport.previewColumns.score")}
+                  </DataTableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {parsedRows.slice(0, 20).map((row, i) => (
+                  <TableRow key={i}>
+                    <DataTableCell role="number">{i + 1}</DataTableCell>
+                    <DataTableCell role="type">
+                      <Badge variant="outline">
+                        {(getTypeLabelKey(row.type)
+                          ? t(getTypeLabelKey(row.type) as never)
+                          : undefined) ?? row.type}
+                      </Badge>
+                    </DataTableCell>
+                    <DataTableCell role="long-text" className="truncate">
+                      {row.content}
+                    </DataTableCell>
+                    <DataTableCell role="score">{row.score}</DataTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataTableShell>
           {parsedRows.length > 20 && (
             <p className="text-sm text-muted-foreground">
               {t("admin.questionImport.moreRows", {
@@ -354,64 +358,68 @@ export function QuestionImportPage() {
             </span>
           </div>
 
-          <Table>
-            <DataTableColumns
-              columns={[
-                { role: "number" },
-                { role: "status" },
-                { role: "long-text" },
-              ]}
-            />
-            <TableHeader>
-              <TableRow>
-                <DataTableHead role="number">
-                  {t("admin.questionImport.previewColumns.row")}
-                </DataTableHead>
-                <DataTableHead role="status">
-                  {t("admin.questionImport.previewColumns.status")}
-                </DataTableHead>
-                <DataTableHead role="long-text">
-                  {t("admin.questionImport.previewColumns.detail")}
-                </DataTableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {importResult.details.map((d) => (
-                <TableRow key={d.row}>
-                  <DataTableCell role="number">{d.row}</DataTableCell>
-                  <DataTableCell role="status">
-                    {d.status === "valid" && (
-                      <AppIcon
-                        icon={CircleCheck}
-                        size="inline"
-                        className="text-success"
-                      />
-                    )}
-                    {d.status === "warning" && (
-                      <AppIcon
-                        icon={CircleAlert}
-                        size="inline"
-                        className="text-warning"
-                      />
-                    )}
-                    {d.status === "error" && (
-                      <AppIcon
-                        icon={CircleX}
-                        size="inline"
-                        className="text-destructive"
-                      />
-                    )}
-                  </DataTableCell>
-                  <DataTableCell
-                    role="long-text"
-                    className="text-sm text-muted-foreground"
-                  >
-                    {d.message ?? "-"}
-                  </DataTableCell>
+          <DataTableShell
+            title={t("admin.questionImport.previewColumns.detail")}
+          >
+            <Table>
+              <DataTableColumns
+                columns={[
+                  { role: "number" },
+                  { role: "status" },
+                  { role: "long-text" },
+                ]}
+              />
+              <TableHeader>
+                <TableRow>
+                  <DataTableHead role="number">
+                    {t("admin.questionImport.previewColumns.row")}
+                  </DataTableHead>
+                  <DataTableHead role="status">
+                    {t("admin.questionImport.previewColumns.status")}
+                  </DataTableHead>
+                  <DataTableHead role="long-text">
+                    {t("admin.questionImport.previewColumns.detail")}
+                  </DataTableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {importResult.details.map((d) => (
+                  <TableRow key={d.row}>
+                    <DataTableCell role="number">{d.row}</DataTableCell>
+                    <DataTableCell role="status">
+                      {d.status === "valid" && (
+                        <AppIcon
+                          icon={CircleCheck}
+                          size="inline"
+                          className="text-success"
+                        />
+                      )}
+                      {d.status === "warning" && (
+                        <AppIcon
+                          icon={CircleAlert}
+                          size="inline"
+                          className="text-warning"
+                        />
+                      )}
+                      {d.status === "error" && (
+                        <AppIcon
+                          icon={CircleX}
+                          size="inline"
+                          className="text-destructive"
+                        />
+                      )}
+                    </DataTableCell>
+                    <DataTableCell
+                      role="long-text"
+                      className="text-sm text-muted-foreground"
+                    >
+                      {d.message ?? "-"}
+                    </DataTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DataTableShell>
 
           <div className="flex gap-3">
             {!confirmed && importResult.errors === 0 && (

@@ -292,10 +292,10 @@ export function AuditLogPage() {
               <DataTableColumns
                 columns={[
                   { role: "date" },
-                  { role: "secondary-text" },
+                  { role: "short-id", key: "actor" },
                   { role: "type", key: "action" },
                   { role: "type", key: "target" },
-                  { role: "short-id" },
+                  { role: "short-id", key: "detail" },
                 ]}
               />
               <TableHeader>
@@ -303,7 +303,7 @@ export function AuditLogPage() {
                   <DataTableHead role="date">
                     {t("admin.audit.columns.time")}
                   </DataTableHead>
-                  <DataTableHead role="secondary-text">
+                  <DataTableHead role="short-id">
                     {t("admin.audit.columns.actor")}
                   </DataTableHead>
                   <DataTableHead role="type">
@@ -333,8 +333,8 @@ export function AuditLogPage() {
                       {formatDateTime(item.createdAt)}
                     </DataTableCell>
                     <DataTableCell
-                      role="secondary-text"
-                      className="text-foreground"
+                      role="short-id"
+                      className="truncate text-foreground"
                     >
                       {item.actorName ?? item.actorId}
                     </DataTableCell>

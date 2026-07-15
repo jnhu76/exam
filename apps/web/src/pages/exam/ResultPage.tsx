@@ -15,6 +15,7 @@ import {
   DataTableColumns,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 
 /** Formats an answer value into a human-readable string via i18n. */
@@ -128,110 +129,112 @@ export function ResultPage() {
               <CardTitle>{t("candidateResult.detail.title")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <DataTableColumns
-                  columns={[
-                    { role: "number" },
-                    { role: "long-text", key: "question" },
-                    { role: "type" },
-                    { role: "long-text", key: "candidate-answer" },
-                    { role: "long-text", key: "correct-answer" },
-                    { role: "score" },
-                  ]}
-                />
-                <TableHeader>
-                  <TableRow>
-                    <DataTableHead role="number">
-                      {t("candidateResult.table.questionNumber")}
-                    </DataTableHead>
-                    <DataTableHead role="long-text">
-                      {t("candidateResult.table.questionContent")}
-                    </DataTableHead>
-                    <DataTableHead role="type">
-                      {t("candidateResult.table.questionType")}
-                    </DataTableHead>
-                    <DataTableHead role="long-text">
-                      {t("candidateResult.table.yourAnswer")}
-                    </DataTableHead>
-                    <DataTableHead role="long-text">
-                      {t("candidateResult.table.correctAnswer")}
-                    </DataTableHead>
-                    <DataTableHead role="score">
-                      {t("candidateResult.table.score")}
-                    </DataTableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {result.questionResults.map((question) => {
-                    const isManual = question.standardAnswer == null;
-                    return (
-                      <TableRow key={question.questionId}>
-                        <DataTableCell role="number">
-                          {question.order + 1}
-                        </DataTableCell>
-                        <DataTableCell role="long-text">
-                          {question.content}
-                        </DataTableCell>
-                        <DataTableCell role="type">
-                          {formatQuestionType(
-                            question.type,
-                            t as (key: string) => string,
-                          )}
-                        </DataTableCell>
-                        <DataTableCell role="long-text">
-                          <div className="flex items-center gap-2">
-                            {question.correct ? (
-                              <AppIcon
-                                icon={CircleCheck}
-                                decorative={false}
-                                label={t("candidateResult.aria.correct")}
-                                size="inline"
-                                className="text-success"
+              <DataTableShell contentClassName="p-0">
+                <Table>
+                  <DataTableColumns
+                    columns={[
+                      { role: "number" },
+                      { role: "long-text", key: "question" },
+                      { role: "type" },
+                      { role: "secondary-text", key: "candidate-answer" },
+                      { role: "secondary-text", key: "correct-answer" },
+                      { role: "score" },
+                    ]}
+                  />
+                  <TableHeader>
+                    <TableRow>
+                      <DataTableHead role="number">
+                        {t("candidateResult.table.questionNumber")}
+                      </DataTableHead>
+                      <DataTableHead role="long-text">
+                        {t("candidateResult.table.questionContent")}
+                      </DataTableHead>
+                      <DataTableHead role="type">
+                        {t("candidateResult.table.questionType")}
+                      </DataTableHead>
+                      <DataTableHead role="secondary-text">
+                        {t("candidateResult.table.yourAnswer")}
+                      </DataTableHead>
+                      <DataTableHead role="secondary-text">
+                        {t("candidateResult.table.correctAnswer")}
+                      </DataTableHead>
+                      <DataTableHead role="score">
+                        {t("candidateResult.table.score")}
+                      </DataTableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.questionResults.map((question) => {
+                      const isManual = question.standardAnswer == null;
+                      return (
+                        <TableRow key={question.questionId}>
+                          <DataTableCell role="number">
+                            {question.order + 1}
+                          </DataTableCell>
+                          <DataTableCell role="long-text">
+                            {question.content}
+                          </DataTableCell>
+                          <DataTableCell role="type">
+                            {formatQuestionType(
+                              question.type,
+                              t as (key: string) => string,
+                            )}
+                          </DataTableCell>
+                          <DataTableCell role="secondary-text">
+                            <div className="flex items-center gap-2">
+                              {question.correct ? (
+                                <AppIcon
+                                  icon={CircleCheck}
+                                  decorative={false}
+                                  label={t("candidateResult.aria.correct")}
+                                  size="inline"
+                                  className="text-success"
+                                />
+                              ) : (
+                                <AppIcon
+                                  icon={CircleX}
+                                  decorative={false}
+                                  label={t("candidateResult.aria.incorrect")}
+                                  size="inline"
+                                  className="text-muted-foreground"
+                                />
+                              )}
+                              <AnswerText
+                                answer={question.candidateAnswer}
+                                truncate={question.type === "fill_blank"}
+                                t={t as (key: string) => string}
                               />
+                            </div>
+                          </DataTableCell>
+                          <DataTableCell
+                            role="secondary-text"
+                            data-testid={
+                              isManual
+                                ? `result-question-manual-${question.questionId}`
+                                : undefined
+                            }
+                          >
+                            {isManual ? (
+                              <span className="text-muted-foreground">
+                                {t("candidateResult.answer.manual")}
+                              </span>
                             ) : (
-                              <AppIcon
-                                icon={CircleX}
-                                decorative={false}
-                                label={t("candidateResult.aria.incorrect")}
-                                size="inline"
-                                className="text-muted-foreground"
+                              <AnswerText
+                                answer={question.standardAnswer}
+                                truncate={question.type === "fill_blank"}
+                                t={t as (key: string) => string}
                               />
                             )}
-                            <AnswerText
-                              answer={question.candidateAnswer}
-                              truncate={question.type === "fill_blank"}
-                              t={t as (key: string) => string}
-                            />
-                          </div>
-                        </DataTableCell>
-                        <DataTableCell
-                          role="long-text"
-                          data-testid={
-                            isManual
-                              ? `result-question-manual-${question.questionId}`
-                              : undefined
-                          }
-                        >
-                          {isManual ? (
-                            <span className="text-muted-foreground">
-                              {t("candidateResult.answer.manual")}
-                            </span>
-                          ) : (
-                            <AnswerText
-                              answer={question.standardAnswer}
-                              truncate={question.type === "fill_blank"}
-                              t={t as (key: string) => string}
-                            />
-                          )}
-                        </DataTableCell>
-                        <DataTableCell role="score">
-                          {question.score}/{question.maxScore}
-                        </DataTableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                          </DataTableCell>
+                          <DataTableCell role="score">
+                            {question.score}/{question.maxScore}
+                          </DataTableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </DataTableShell>
             </CardContent>
           </Card>
         </>
