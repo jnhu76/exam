@@ -15,6 +15,7 @@ import {
   DataTableColumns,
   DataTableHead,
 } from "@/components/shared/DataTableContract";
+import { DataTableShell } from "@/components/shared/DataTableShell";
 import { RowActions } from "@/components/shared/RowActions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -246,7 +247,6 @@ export function ExamCreatePage() {
               {t("admin.examCreate.selectQuestions")}
             </Button>
           </div>
-
           {selectedQuestions.length === 0 ? (
             <EmptyState
               icon={<AppIcon icon={BookOpen} size="state" />}
@@ -254,60 +254,64 @@ export function ExamCreatePage() {
               description={t("admin.examCreate.noQuestionsDescription")}
             />
           ) : (
-            <Table>
-              <DataTableColumns
-                columns={[
-                  { role: "type" },
-                  { role: "long-text" },
-                  { role: "score" },
-                  { role: "actions" },
-                ]}
-              />
-              <TableHeader>
-                <TableRow>
-                  <DataTableHead role="type">
-                    {t("admin.examCreate.tableHeaders.type")}
-                  </DataTableHead>
-                  <DataTableHead role="long-text">
-                    {t("admin.examCreate.tableHeaders.content")}
-                  </DataTableHead>
-                  <DataTableHead role="score">
-                    {t("admin.examCreate.tableHeaders.score")}
-                  </DataTableHead>
-                  <DataTableHead role="actions">
-                    {t("admin.examCreate.tableHeaders.actions")}
-                  </DataTableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {selectedQuestions.map((q) => (
-                  <TableRow key={q.id}>
-                    <DataTableCell role="type">
-                      <Badge variant="outline">
-                        {getTypeLabel(q.type, t) ?? q.type}
-                      </Badge>
-                    </DataTableCell>
-                    <DataTableCell role="long-text" className="truncate">
-                      {q.content}
-                    </DataTableCell>
-                    <DataTableCell role="score">{q.score}</DataTableCell>
-                    <DataTableCell role="actions">
-                      <RowActions>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeQuestion(q.id)}
-                          aria-label={t("admin.examCreate.ariaDeleteQuestion")}
-                          data-row-action-tone="destructive"
-                        >
-                          <AppIcon icon={Trash2} size="inline" />
-                        </Button>
-                      </RowActions>
-                    </DataTableCell>
+            <DataTableShell>
+              <Table>
+                <DataTableColumns
+                  columns={[
+                    { role: "type" },
+                    { role: "long-text" },
+                    { role: "score" },
+                    { role: "actions" },
+                  ]}
+                />
+                <TableHeader>
+                  <TableRow>
+                    <DataTableHead role="type">
+                      {t("admin.examCreate.tableHeaders.type")}
+                    </DataTableHead>
+                    <DataTableHead role="long-text">
+                      {t("admin.examCreate.tableHeaders.content")}
+                    </DataTableHead>
+                    <DataTableHead role="score">
+                      {t("admin.examCreate.tableHeaders.score")}
+                    </DataTableHead>
+                    <DataTableHead role="actions">
+                      {t("admin.examCreate.tableHeaders.actions")}
+                    </DataTableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {selectedQuestions.map((q) => (
+                    <TableRow key={q.id}>
+                      <DataTableCell role="type">
+                        <Badge variant="outline">
+                          {getTypeLabel(q.type, t) ?? q.type}
+                        </Badge>
+                      </DataTableCell>
+                      <DataTableCell role="long-text" className="truncate">
+                        {q.content}
+                      </DataTableCell>
+                      <DataTableCell role="score">{q.score}</DataTableCell>
+                      <DataTableCell role="actions">
+                        <RowActions>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeQuestion(q.id)}
+                            aria-label={t(
+                              "admin.examCreate.ariaDeleteQuestion",
+                            )}
+                            data-row-action-tone="destructive"
+                          >
+                            <AppIcon icon={Trash2} size="inline" />
+                          </Button>
+                        </RowActions>
+                      </DataTableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </DataTableShell>
           )}
         </div>
       </div>
