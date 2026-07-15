@@ -83,14 +83,26 @@ describe("QuestionPage", () => {
     renderPage();
 
     expect(await screen.findByText("题目管理")).toBeInTheDocument();
-    // DataView renders both a desktop table (hidden below lg) and a mobile card
-    // list (hidden at lg+) in the DOM; scope content assertions to the desktop
-    // table shell so a single row's content isn't matched twice.
+    // The DataWorkbench renders a single continuous shell whose toolbar,
+    // desktop table, and footer are regions of one surface. The desktop table
+    // (hidden below lg) and mobile card list (hidden at lg+) are separate
+    // regions; scope content assertions to the desktop table shell so a single
+    // row's content isn't matched twice.
+    const workbench = document.querySelector(
+      '[data-slot="data-workbench"]',
+    ) as HTMLElement;
+    expect(workbench).toHaveClass("surface-content", "overflow-hidden");
     const desktop = document.querySelector(
       '[data-slot="admin-table-shell"]',
     ) as HTMLElement;
+    // toolbar and footer are both regions inside the single workbench shell.
+    expect(workbench.contains(screen.getByRole("toolbar"))).toBe(true);
     await waitFor(() =>
       expect(within(desktop).getByText("题目一内容")).toBeInTheDocument(),
+    );
+    // after load, the desktop table content and footer live in one shell.
+    expect(workbench.contains(within(desktop).getByText("题目一内容"))).toBe(
+      true,
     );
     expect(screen.getByRole("toolbar")).toHaveAttribute(
       "data-toolbar-appearance",

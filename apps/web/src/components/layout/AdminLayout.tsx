@@ -99,7 +99,7 @@ export function AdminLayout() {
       ? "admin-wide"
       : location.pathname === "/admin/users"
         ? "admin-sparse"
-        : /^\/admin\/(settings|candidate-fields|questions\/(new|import|[^/]+\/edit)|exams\/(new|[^/]+\/edit))$/.test(
+        : /^\/admin\/(settings|questions\/(new|import|[^/]+\/edit)|exams\/(new|[^/]+\/edit))$/.test(
               location.pathname,
             )
           ? "form"

@@ -22,11 +22,12 @@
  */
 [data-slot="admin-table-shell"] [data-slot="table"] {
   table-layout: fixed;
+  /* border-collapse (not separate): the grid is drawn directly on <th>/<td>
+   * below, which renders reliably even under collapse. collapse also makes a
+   * width:100% fixed-layout table shrink to its container when columns would
+   * otherwise overflow (the candidate-fields horizontal-scroll fix) — separate
+   * makes declared col widths strict and re-introduces that overflow. */
   border-collapse: collapse;
-}
-
-[data-slot="data-table-columns"] [data-column-role="primary-text"] {
-  width: auto;
 }
 
 [data-slot="admin-table-shell"] {
@@ -37,21 +38,24 @@
   overflow-x: visible;
 }
 
-[data-slot="table-header"] {
-  background: var(--table-header);
-}
-
-[data-slot="table-header"] [data-slot="table-row"] {
-  border-bottom-color: var(--border-header);
-  box-shadow: inset 0 -1px 0
-    color-mix(in srgb, var(--border-header) 45%, transparent);
-}
-
+/*
+ * Table visual direction (UI-TABLE-KOI-COMPACT-1) — a light, low-contrast full
+ * management grid. NOT a gray-block three-line table and NOT a heavy ERP grid.
+ * Every admin table renders the same Koi grid: header cells carry a quiet
+ * tinted fill (--table-header) plus the stronger --border-header bottom edge;
+ * body cells separate with right + bottom 1px in the very light
+ * --border-grid. The header band + the light grid provide structure without
+ * reading as a heavy Excel grid. Borders are drawn on <th>/<td> (reliable
+ * under border-separate), never on <tr>.
+ */
 [data-slot="table-head"] {
   color: var(--text-muted);
+  background: var(--table-header);
   font-size: 0.8125rem;
   font-weight: 500;
   line-height: 1.25rem;
+  border-right: 1px solid var(--border-grid);
+  border-bottom: 1px solid var(--border-header);
 }
 
 [data-slot="table-cell"] {
@@ -59,6 +63,8 @@
   font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.375rem;
+  border-right: 1px solid var(--border-grid);
+  border-bottom: 1px solid var(--border-row);
 }
 
 [data-slot="table-cell"][data-column-role="date"],
@@ -109,44 +115,54 @@
   min-width: 75rem;
 }
 
+/*
+ * Column widths are FIXED (not width:auto) so that under table-layout:fixed +
+ * width:100% (collapse), no single column can greedily swallow the container
+ * and starve its siblings (the "primary-text eats 750px, everything else
+ * wraps" defect). Fixed widths make the browser distribute the 100% table
+ * width proportionally across all columns — wide containers enlarge every
+ * column evenly, narrow containers scroll internally. The one auto-width
+ * column that previously absorbed all slack is removed; pages that need a
+ * large flexible text column use the long-text / description roles instead.
+ */
 [data-column-role="primary-text"] {
-  width: auto;
-  min-width: 13.75rem;
+  width: 16rem;
+  min-width: 12rem;
 }
 
 [data-column-role="secondary-text"] {
-  width: 10rem;
-  min-width: 10rem;
+  width: 11rem;
+  min-width: 9rem;
 }
 
 [data-column-role="long-text"] {
   width: 18rem;
-  min-width: 18rem;
+  min-width: 16rem;
 }
 
 [data-column-role="description"] {
-  width: 16rem;
-  min-width: 16rem;
+  width: 15rem;
+  min-width: 13rem;
 }
 
 [data-column-role="status"] {
   width: 6rem;
-  min-width: 6rem;
+  min-width: 5.5rem;
 }
 
 [data-column-role="date"] {
-  width: 9.5rem;
-  min-width: 9.5rem;
+  width: 10.5rem;
+  min-width: 9rem;
 }
 
 [data-column-role="date-range"] {
-  width: 14rem;
-  min-width: 14rem;
+  width: 12.5rem;
+  min-width: 12.5rem;
 }
 
 [data-column-role="duration"] {
-  width: 5.5rem;
-  min-width: 5.5rem;
+  width: 5rem;
+  min-width: 5rem;
 }
 
 [data-column-role="number"] {
@@ -155,23 +171,23 @@
 }
 
 [data-column-role="score"] {
+  width: 5rem;
+  min-width: 5rem;
+}
+
+[data-column-role="short-id"] {
+  width: 7.5rem;
+  min-width: 7.5rem;
+}
+
+[data-column-role="type"] {
   width: 5.5rem;
   min-width: 5.5rem;
 }
 
-[data-column-role="short-id"] {
-  width: 9rem;
-  min-width: 9rem;
-}
-
-[data-column-role="type"] {
-  width: 6.5rem;
-  min-width: 6.5rem;
-}
-
 [data-column-role="tag-list"] {
-  width: 11rem;
-  min-width: 11rem;
+  width: 10rem;
+  min-width: 10rem;
 }
 
 /*
@@ -180,26 +196,26 @@
  * column that is too narrow for its buttons would clip them; the page picks
  * the tier that fits its worst-case action set.
  *
- *   narrow (default): 1-2 icon buttons                  — 6.5rem
- *   normal:           1 icon + 1 short text button       — 9rem
- *   wide:             4 icon, or 2 icon + 1 text button  — 11rem
+ *   narrow (default): 1-2 icon buttons                  — 6rem
+ *   normal:           1 icon + 1 short text button       — 8rem
+ *   wide:             4 icon, or 2 icon + 1 text button  — 10rem
  *
  * The density is set on the shell root via data-actions-density and cascades
  * to the col/cell selectors below.
  */
 [data-column-role="actions"] {
-  width: 6.5rem;
-  min-width: 6.5rem;
+  width: 6rem;
+  min-width: 6rem;
 }
 
 [data-actions-density="normal"] [data-column-role="actions"] {
-  width: 9rem;
-  min-width: 9rem;
+  width: 8rem;
+  min-width: 8rem;
 }
 
 [data-actions-density="wide"] [data-column-role="actions"] {
-  width: 11rem;
-  min-width: 11rem;
+  width: 10rem;
+  min-width: 10rem;
 }
 
 [data-slot="table-head"][data-column-wrap="atomic"],

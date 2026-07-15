@@ -42,14 +42,17 @@ export function ListToolbar({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center">
         {search != null && (
-          <div data-slot="toolbar-search" className="min-w-0 flex-1">
+          <div
+            data-slot="toolbar-search"
+            className="min-w-0 shrink-0 lg:w-72 lg:max-w-md xl:w-80"
+          >
             {search}
           </div>
         )}
         {filters != null && (
           <div
             data-slot="toolbar-filters"
-            className="flex min-w-0 flex-wrap items-center gap-2"
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
           >
             {filters}
           </div>

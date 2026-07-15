@@ -105,41 +105,64 @@
 }
 
 :root {
-  /* Canvas / surfaces — pure neutral white canvas (#ffffff) with subtle
-   * grey tints for table headers and hovers. White cards sit on the same
-   * white canvas, separated by 1px borders; header/hover use #f7f7f7 so
-   * they are clearly distinct without reading dark. */
-  --bg: #ffffff;
+  /* Canvas / surfaces — UI-TABLE-KOI-COLOR-REFINE-2.
+   * Canvas is a very light NEUTRAL grey (#f5f7fa, no blue cast) so white
+   * content surfaces read as a distinct raised layer. Surfaces stay white;
+   * subtle/soft tints are neutral grey (#f8fafc) not blue. The previous
+   * pure-white canvas gave no separation and the blue-tinted borders made the
+   * whole page read blue-grey. */
+  --bg: #f5f7fa;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-subtle: #f7f7f7;
-  --surface-soft: #f7f7f7;
+  --surface-subtle: #f8fafc;
+  --surface-soft: #f8fafc;
   --surface-muted: var(--surface-subtle);
-  --surface-hover: #f7f7f7;
-  --surface-selected: #eaf2fd;
+  --surface-hover: #f8fafc;
+  --surface-selected: #eff6ff;
   --text: #111827;
-  --text-secondary: #374151;
-  --text-muted: #627287;
+  --text-secondary: #475467;
+  --text-muted: #64748b;
   --text-subtle: #94a3b8;
-  --border-raised: #d7dde5;
-  --border-shell: #dde2e8;
-  --border-control: #cdd6e2;
+  /* Structural borders — NEUTRAL grey ladder (no blue cast). Visual strength
+   * ordering (strongest → weakest): control > shell ≈ header > row ≈ divider
+   * > grid. The grid is now the WEAKEST line (it was previously stronger than
+   * the row divider — the Excel-grid defect). Borders share near-identical
+   * neutral values where the semantic role does not need to differ; the goal
+   * is less noise, not more token contrast. */
+  --border-control: #d1d5db;
+  --border-shell: #dfe3e8;
+  --border-header: #e1e5ea;
+  --border-raised: var(--border-header);
   --border-divider: #edf0f3;
-  --border-header: var(--border-raised);
-  --border-row: var(--border-divider);
+  --border-row: #edf0f3;
+  --border-grid: #f0f2f5;
   --border: var(--border-shell);
   --border-strong: var(--border-control);
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
   --primary-active: #1e40af;
-  --primary-soft: #eaf1ff;
-  --primary-soft-strong: #d3e2ff;
-  --primary-focus: #7aa7ff;
-  --table-header: #f7f7f7;
-  --table-row-hover: #f7f7f7;
-  --table-row-focus: #e6eefb;
-  --table-row-selected: #eaf2fd;
-  --action-hover: #f7f7f7;
+  --primary-soft: #eff6ff;
+  --primary-soft-strong: #dbeafe;
+  --primary-focus: #93c5fd;
+  /* Table state surfaces — neutral light tints. Header/hover are a hair
+   * lighter than the surface (neutral, not blue). Focus/selected are the only
+   * places blue is allowed in the table — they signal interaction. */
+  --table-header: #f8fafc;
+  --table-row-hover: #f8fafc;
+  --table-row-focus: #edf4ff;
+  --table-row-selected: #eff6ff;
+  --action-hover: #f8fafc;
+  /* UI-TABLE-KOI-COMPACT-1 — Koi compact workbench grid + band roles.
+   *   - grid border: the per-cell vertical line, the WEAKEST structural line
+   *     (#F0F2F5) — barely visible at 100% zoom, present but never noticed
+   *     first.
+   *   - action rail bg: the sticky right action column's own surface, a hair
+   *     off the body so scrolling content does not bleed through. Neutral, not
+   *     a blue side-bar.
+   *   - footer bg: the integrated pagination band. */
+  --table-grid-border: var(--border-grid);
+  --table-action-rail-bg: #fbfcfd;
+  --table-footer-bg: #fafbfc;
   /* Sidebar — light neutral chrome (UI-TOKEN-TABLE-FOUNDATION-1). The nav is a
    * quiet light surface, distinct from the canvas by a 1px border + a faint
    * subtle tint, not by a dark fill. Text/active/hover follow the same neutral

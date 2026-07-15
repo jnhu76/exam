@@ -11,8 +11,11 @@ import { ListToolbar } from "@/components/shared/ListToolbar";
 import { DataViewSearch } from "@/components/shared/DataViewSearch";
 import { RowActions } from "@/components/shared/RowActions";
 import { DataTablePagination } from "@/components/shared/DataTablePagination";
-import { DataTableShell } from "@/components/shared/DataTableShell";
-import { DataView } from "@/components/shared/DataView";
+import {
+  DataWorkbench,
+  DataWorkbenchToolbar,
+  DataWorkbenchFooter,
+} from "@/components/shared/DataWorkbench";
 import {
   DesktopDataTable,
   type DataViewColumnDef,
@@ -75,11 +78,13 @@ const PAGE_SIZE = 20;
  * Admin question management page with server-side search, filtering by course,
  * type, difficulty, and tags, plus pagination.
  *
- * UI-TOKEN-TABLE-FOUNDATION-1: rebuilt on DataView (orchestrator) +
- * DesktopDataTable (TanStack headless engine, role-based column contract) +
- * MobileRecordCard (<lg). Search is now SERVER-SIDE over the full dataset
- * (debounced); the old client-side current-page filter is removed. The DataView
- * shell stays mounted across loading/empty/error transitions — no jitter.
+ * UI-TABLE-KOI-COMPACT-1: the toolbar, table, and pagination are unified into
+ * a single continuous DataWorkbench shell (toolbar → header → body → footer
+ * are regions of one surface, not three separated cards). DesktopDataTable is
+ * the TanStack headless engine with a role-based column contract; MobileRecordCard
+ * renders below lg. Search is SERVER-SIDE over the full dataset (debounced);
+ * the workbench shell stays mounted across loading/empty/error transitions —
+ * only the table body swaps, so there is no layout jitter.
  */
 export function QuestionPage() {
   const { t } = useTranslation();
@@ -93,8 +98,14 @@ export function QuestionPage() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
   const [filterTags, setFilterTags] = useState("");
-  // Server-side search term (committed/debounced by DataViewSearch).
-  const [search, setSearch] = useState("");
+  // Search is split into two states to prevent stale/overlapping responses:
+  //   - searchInput: the live text in the field (updated every keystroke)
+  //   - committedSearch: the term actually sent to the server (updated only by
+  //     the debounced onSearch commit from DataViewSearch). loadQuestions
+  //     depends on committedSearch, so typing does NOT fire a request per
+  //     keystroke — only the debounced commit does. (CodeRabbit R3.)
+  const [searchInput, setSearchInput] = useState("");
+  const [committedSearch, setCommittedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
@@ -119,7 +130,7 @@ export function QuestionPage() {
       if (filterDifficulty !== "all")
         params.set("difficulty", filterDifficulty);
       if (filterTags.trim()) params.set("tags", filterTags.trim());
-      if (search.trim()) params.set("search", search.trim());
+      if (committedSearch.trim()) params.set("search", committedSearch.trim());
       const qData = await api.get<PaginatedResponse<QuestionRow>>(
         `/api/questions?${params.toString()}`,
       );
@@ -130,7 +141,15 @@ export function QuestionPage() {
     } finally {
       setIsTableLoading(false);
     }
-  }, [filterCourse, filterDifficulty, filterTags, filterType, page, search, t]);
+  }, [
+    filterCourse,
+    filterDifficulty,
+    filterTags,
+    filterType,
+    page,
+    committedSearch,
+    t,
+  ]);
 
   useEffect(() => {
     let canceledFlag = false;
@@ -170,7 +189,8 @@ export function QuestionPage() {
     setFilterType("all");
     setFilterDifficulty("all");
     setFilterTags("");
-    setSearch("");
+    setSearchInput("");
+    setCommittedSearch("");
     setPage(1);
   }
 
@@ -179,19 +199,21 @@ export function QuestionPage() {
     filterType !== "all" ||
     filterDifficulty !== "all" ||
     filterTags.trim() !== "" ||
-    search.trim() !== "";
+    committedSearch.trim() !== "";
 
-  // Immediate input change: update the displayed value only (no server query).
+  // Immediate input change: update ONLY the displayed value. No server query —
+  // loadQuestions does not depend on searchInput, so typing never fires a
+  // request. (CodeRabbit R3.)
   function handleSearchChange(term: string) {
-    setSearch(term);
+    setSearchInput(term);
   }
 
-  // Debounced commit: fire the server query and reset to page 1.
+  // Debounced commit: update the server-query term and reset to page 1. This is
+  // the only path that changes committedSearch, so only settled typing triggers
+  // a query — preventing stale overlapping responses.
   function handleSearchCommit(term: string) {
     setPage(1);
-    // search state is already current (set by handleSearchChange); the
-    // loadQuestions effect depends on `search`, so a no-op setSearch is safe.
-    setSearch(term);
+    setCommittedSearch(term);
   }
 
   if (isInitialLoading) return <LoadingState />;
@@ -214,7 +236,13 @@ export function QuestionPage() {
       meta: { role: "long-text" },
       header: t("admin.questions.columns.content" as never),
       cell: ({ row }) => (
-        <span className="line-clamp-2">{row.original.content}</span>
+        <span
+          className="workbench-cell-text"
+          title={row.original.content}
+          aria-label={row.original.content}
+        >
+          {row.original.content}
+        </span>
       ),
     },
     {
@@ -239,13 +267,30 @@ export function QuestionPage() {
       id: "tags",
       meta: { role: "tag-list" },
       header: t("admin.questions.columns.tags" as never),
-      cell: ({ row }) => (
-        <div className="flex flex-wrap gap-1">
-          {row.original.tags.map((tag) => (
-            <TagBadge key={tag}>{tag}</TagBadge>
-          ))}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const tags = row.original.tags;
+        const maxVisible = 3;
+        const visible = tags.slice(0, maxVisible);
+        const overflow = tags.length - visible.length;
+        return (
+          <div
+            className="flex flex-wrap gap-1"
+            title={tags.length > 0 ? tags.join(", ") : undefined}
+          >
+            {visible.map((tag) => (
+              <TagBadge key={tag}>{tag}</TagBadge>
+            ))}
+            {overflow > 0 && (
+              <span
+                data-slot="tag-overflow"
+                aria-label={t("common.moreTags", { count: overflow })}
+              >
+                +{overflow}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "actions",
@@ -307,184 +352,201 @@ export function QuestionPage() {
         }
       />
 
-      <DataView
+      <DataWorkbench
         toolbar={
-          <ListToolbar
-            appearance="quiet"
-            aria-label={t("admin.questions.filterToolbar" as never)}
-            filters={
-              <>
-                <Select
-                  value={filterCourse}
-                  onValueChange={(value) => {
-                    setFilterCourse(value);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-auto lg:w-[180px]">
-                    <SelectValue
-                      placeholder={t("admin.questions.filterCourse" as never)}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      {t("admin.questions.filterAllCourses" as never)}
-                    </SelectItem>
-                    {courses.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={filterType}
-                  onValueChange={(value) => {
-                    setFilterType(value);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-auto lg:w-[150px]">
-                    <SelectValue
-                      placeholder={t("admin.questions.filterType" as never)}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      {t("admin.questions.filterAllTypes" as never)}
-                    </SelectItem>
-                    <SelectItem value="single_choice">
-                      {t(
-                        "admin.questions.questionTypes.single_choice" as never,
-                      )}
-                    </SelectItem>
-                    <SelectItem value="multiple_choice">
-                      {t(
-                        "admin.questions.questionTypes.multiple_choice" as never,
-                      )}
-                    </SelectItem>
-                    <SelectItem value="fill_blank">
-                      {t("admin.questions.questionTypes.fill_blank" as never)}
-                    </SelectItem>
-                    <SelectItem value="true_false">
-                      {t("admin.questions.questionTypes.true_false" as never)}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={filterDifficulty}
-                  onValueChange={(value) => {
-                    setFilterDifficulty(value);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-auto lg:w-[140px]">
-                    <SelectValue
-                      placeholder={t(
-                        "admin.questions.filterDifficulty" as never,
-                      )}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      {t("admin.questions.filterAllDifficulties" as never)}
-                    </SelectItem>
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <SelectItem key={value} value={String(value)}>
-                        {t("admin.questions.difficultyLabel" as never, {
-                          value,
-                        })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Input
-                  className="w-auto lg:w-[180px]"
-                  placeholder={t("admin.questions.tagPlaceholder" as never)}
-                  value={filterTags}
-                  onChange={(e) => {
-                    setFilterTags(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </>
-            }
-            search={
-              <DataViewSearch
-                aria-label={t("admin.questions.searchLabel" as never)}
-                placeholder={t("admin.questions.searchPlaceholder" as never)}
-                value={search}
-                onChange={handleSearchChange}
-                onSearch={handleSearchCommit}
-                loading={isTableLoading}
-              />
-            }
-            actions={
-              <>
-                {/* Loading indicator: always rendered so its show/hide does not
-                    reflow the actions cluster (which would shift the search box
-                    position in the toolbar). Visibility toggles instead. */}
-                <span
-                  className={`inline-flex min-w-[5.5rem] items-center gap-2 text-sm text-muted-foreground ${
-                    isTableLoading ? "visible" : "invisible"
-                  }`}
-                  aria-live="polite"
-                  aria-hidden={!isTableLoading}
-                >
-                  <AppIcon
-                    icon={LoaderCircle}
-                    size="inline"
-                    className="animate-spin"
-                  />
-                  {t("common.loading" as never)}
-                </span>
-                {hasActiveFilter && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    aria-label={t("admin.common.clearFilter" as never)}
+          <DataWorkbenchToolbar>
+            <ListToolbar
+              appearance="quiet"
+              aria-label={t("admin.questions.filterToolbar" as never)}
+              filters={
+                <>
+                  <Select
+                    value={filterCourse}
+                    onValueChange={(value) => {
+                      setFilterCourse(value);
+                      setPage(1);
+                    }}
                   >
-                    <AppIcon icon={RotateCcw} size="inline" />
-                    {t("admin.questions.clearFilter" as never)}
-                  </Button>
-                )}
-              </>
-            }
-          />
-        }
-        desktopTable={
-          <DataTableShell>
-            <DesktopDataTable
-              columns={columns}
-              data={questions}
-              rowCount={total}
-              page={page}
-              pageSize={PAGE_SIZE}
-              getRowId={(q) => q.id}
-              loading={isTableLoading}
-              empty={isEmpty}
-              error={null}
-              emptyTitle={
-                hasActiveFilter
-                  ? t("admin.questions.noMatch" as never)
-                  : t("admin.questions.empty" as never)
+                    <SelectTrigger className="w-auto lg:w-[180px]">
+                      <SelectValue
+                        placeholder={t("admin.questions.filterCourse" as never)}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {t("admin.questions.filterAllCourses" as never)}
+                      </SelectItem>
+                      {courses.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={filterType}
+                    onValueChange={(value) => {
+                      setFilterType(value);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-auto lg:w-[150px]">
+                      <SelectValue
+                        placeholder={t("admin.questions.filterType" as never)}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {t("admin.questions.filterAllTypes" as never)}
+                      </SelectItem>
+                      <SelectItem value="single_choice">
+                        {t(
+                          "admin.questions.questionTypes.single_choice" as never,
+                        )}
+                      </SelectItem>
+                      <SelectItem value="multiple_choice">
+                        {t(
+                          "admin.questions.questionTypes.multiple_choice" as never,
+                        )}
+                      </SelectItem>
+                      <SelectItem value="fill_blank">
+                        {t("admin.questions.questionTypes.fill_blank" as never)}
+                      </SelectItem>
+                      <SelectItem value="true_false">
+                        {t("admin.questions.questionTypes.true_false" as never)}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={filterDifficulty}
+                    onValueChange={(value) => {
+                      setFilterDifficulty(value);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-auto lg:w-[140px]">
+                      <SelectValue
+                        placeholder={t(
+                          "admin.questions.filterDifficulty" as never,
+                        )}
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {t("admin.questions.filterAllDifficulties" as never)}
+                      </SelectItem>
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <SelectItem key={value} value={String(value)}>
+                          {t("admin.questions.difficultyLabel" as never, {
+                            value,
+                          })}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    className="w-auto lg:w-[180px]"
+                    placeholder={t("admin.questions.tagPlaceholder" as never)}
+                    value={filterTags}
+                    onChange={(e) => {
+                      setFilterTags(e.target.value);
+                      setPage(1);
+                    }}
+                  />
+                </>
               }
-              emptyDescription={
-                hasActiveFilter
-                  ? t("admin.questions.noMatchDescription" as never)
-                  : t("admin.questions.emptyDescription" as never)
+              search={
+                <DataViewSearch
+                  aria-label={t("admin.questions.searchLabel" as never)}
+                  placeholder={t("admin.questions.searchPlaceholder" as never)}
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  onSearch={handleSearchCommit}
+                  loading={isTableLoading}
+                />
+              }
+              actions={
+                <>
+                  {/* Loading indicator: always rendered so its show/hide does
+                      not reflow the actions cluster (which would shift the
+                      search box position in the toolbar). Visibility toggles. */}
+                  <span
+                    className={`inline-flex min-w-[5.5rem] items-center gap-2 text-sm text-muted-foreground ${
+                      isTableLoading ? "visible" : "invisible"
+                    }`}
+                    aria-live="polite"
+                    aria-hidden={!isTableLoading}
+                  >
+                    <AppIcon
+                      icon={LoaderCircle}
+                      size="inline"
+                      className="animate-spin"
+                    />
+                    {t("common.loading" as never)}
+                  </span>
+                  {hasActiveFilter && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
+                      aria-label={t("admin.common.clearFilter" as never)}
+                    >
+                      <AppIcon icon={RotateCcw} size="inline" />
+                      {t("admin.questions.clearFilter" as never)}
+                    </Button>
+                  )}
+                </>
               }
             />
-          </DataTableShell>
+          </DataWorkbenchToolbar>
+        }
+        footer={
+          <DataWorkbenchFooter>
+            <DataTablePagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              onPageChange={setPage}
+            />
+          </DataWorkbenchFooter>
+        }
+        desktopTable={
+          <DesktopDataTable
+            columns={columns}
+            data={questions}
+            rowCount={total}
+            page={page}
+            pageSize={PAGE_SIZE}
+            getRowId={(q) => q.id}
+            loading={isTableLoading}
+            empty={isEmpty}
+            error={!isTableLoading ? error : null}
+            emptyTitle={
+              hasActiveFilter
+                ? t("admin.questions.noMatch" as never)
+                : t("admin.questions.empty" as never)
+            }
+            emptyDescription={
+              hasActiveFilter
+                ? t("admin.questions.noMatchDescription" as never)
+                : t("admin.questions.emptyDescription" as never)
+            }
+          />
         }
         mobileList={
           <MobileRecordList
             loading={isTableLoading}
             empty={isEmpty}
+            error={!isTableLoading ? error : null}
+            errorNode={
+              <MobileRecordCard
+                primary={t("common.loading.loadFailed" as never)}
+                meta={error ?? undefined}
+              />
+            }
             emptyNode={
               <MobileRecordCard
                 primary={
@@ -556,14 +618,6 @@ export function QuestionPage() {
               />
             ))}
           </MobileRecordList>
-        }
-        pagination={
-          <DataTablePagination
-            page={page}
-            pageSize={PAGE_SIZE}
-            total={total}
-            onPageChange={setPage}
-          />
         }
       />
     </div>

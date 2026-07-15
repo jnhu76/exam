@@ -169,6 +169,12 @@ const zhCN = {
       scrollHintBoth: "左右滑动查看更多",
       scrollHintLeft: "向左滑动查看更多",
     },
+    /** DataWorkbench region label (screen-reader-only section heading). */
+    workbench: {
+      regionLabel: "题目数据工作台",
+    },
+    /** Tag overflow chip (+N) aria-label with count interpolation. */
+    moreTags: "还有 {{count}} 个标签",
     /** DatePicker default placeholder. */
     date: {
       placeholder: "选择日期",
