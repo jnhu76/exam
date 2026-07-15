@@ -43,5 +43,6 @@
 
 [data-slot="status-badge"] {
   height: 1.375rem;
-  border-radius: 0.3125rem;
+  /* DESIGN.md §radius: Status radius = 6px (0.375rem). Was 0.3125rem (5px). */
+  border-radius: 0.375rem;
 }
