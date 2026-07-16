@@ -84,6 +84,29 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
     expect(e?.permission).toBe("score.own.view");
     expect(e?.scope).toBe("own_score");
   });
+
+  // P4-1 §G drift closures — the three routes added to complete coverage.
+  it("candidate-fields template -> candidate_field.view @ organization scope", () => {
+    const e = find("GET", "/candidate-fields/template");
+    expect(e?.permission).toBe("candidate_field.view");
+    expect(e?.scope).toBe("organization");
+    expect(e?.currentGate).toBe("Admin");
+  });
+
+  it("candidate take snapshot -> attempt.view_own @ own_attempt scope", () => {
+    const e = find("GET", "/candidate/attempts/:attemptId/take");
+    expect(e?.permission).toBe("attempt.view_own");
+    expect(e?.scope).toBe("own_attempt");
+    expect(e?.currentGate).toBe("Candidate");
+  });
+
+  it("proctor incident -> attempt.misconduct.mark @ attempt scope (already capability-gated)", () => {
+    const e = find("POST", "/admin/attempts/:attemptId/proctor-incident");
+    expect(e?.permission).toBe("attempt.misconduct.mark");
+    expect(e?.scope).toBe("attempt");
+    expect(e?.auditAction).toBe("attempt.misconductFlagged");
+    expect(e?.sensitive).toBe(true);
+  });
 });
 
 describe("RBAC-M4 route permission registry — coverage of protected routes", () => {
@@ -167,6 +190,14 @@ describe("RBAC-M4 route permission registry — coverage of protected routes", (
     { method: "POST", path: "/candidate-fields" },
     { method: "PATCH", path: "/candidate-fields/:id" },
     { method: "DELETE", path: "/candidate-fields/:id" },
+    // P4-1 §G drift closures: three protected routes that were absent from the
+    // registry. /candidate-fields/template and /candidate/attempts/:attemptId/take
+    // are requireRole-gated; /admin/attempts/:attemptId/proctor-incident is
+    // already requireCapability-gated. All three are protected and therefore
+    // belong in the registry (RBAC-M4 coverage contract).
+    { method: "GET", path: "/candidate-fields/template" },
+    { method: "GET", path: "/candidate/attempts/:attemptId/take" },
+    { method: "POST", path: "/admin/attempts/:attemptId/proctor-incident" },
   ];
 
   it("every requireRole-protected route has a registry entry", () => {

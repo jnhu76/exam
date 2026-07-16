@@ -148,6 +148,18 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       migrationStage: 7,
     },
     {
+      // P4-1 §G.2 drift closure: the CandidateTakeSnapshot unified endpoint
+      // (P0/L0 authority). Same own_attempt semantic as GET /attempts/:id.
+      method: "GET",
+      path: "/candidate/attempts/:attemptId/take",
+      currentGate: "Candidate",
+      permission: Permission.AttemptViewOwn,
+      scope: Scope.OwnAttempt,
+      resolver: "attempt",
+      sensitive: false,
+      migrationStage: 7,
+    },
+    {
       method: "POST",
       path: "/attempts/:attemptId/answers/:questionId",
       currentGate: "Candidate",
@@ -405,6 +417,20 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptTimelineView,
       scope: Scope.Attempt,
       resolver: "attempt",
+      sensitive: true,
+      migrationStage: 7,
+    },
+    {
+      // P4-1 §G.3 drift closure: the proctor-incident write is already
+      // requireCapability-gated at runtime (proctorMonitoring.ts:164). It marks
+      // misconduct on an attempt, so it shares the misconduct semantic.
+      method: "POST",
+      path: "/admin/attempts/:attemptId/proctor-incident",
+      currentGate: "Admin",
+      permission: Permission.AttemptMisconductMark,
+      scope: Scope.Attempt,
+      resolver: "attempt",
+      auditAction: "attempt.misconductFlagged",
       sensitive: true,
       migrationStage: 7,
     },
@@ -866,6 +892,18 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       scope: Scope.Organization,
       resolver: "organization",
       sensitive: true,
+      migrationStage: 6,
+    },
+    {
+      // P4-1 §G.1 drift closure: the import-template download is an
+      // Admin-gated read of the candidate-field schema (Organization scope).
+      method: "GET",
+      path: "/candidate-fields/template",
+      currentGate: "Admin",
+      permission: Permission.CandidateFieldView,
+      scope: Scope.Organization,
+      resolver: "organization",
+      sensitive: false,
       migrationStage: 6,
     },
     // ── Role assignments (RBAC-M8) — admin capability surface ──
