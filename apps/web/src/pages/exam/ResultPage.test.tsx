@@ -236,4 +236,85 @@ describe("ResultPage", () => {
     );
     expect(screen.getByText("考试列表")).toBeInTheDocument();
   });
+
+  // ── P3-MOD-P3-2: independent result/answer visibility gates ──────
+  // The Candidate result DTO strips standardAnswer server-side and never
+  // carries rubric, so the realistic candidate DTO has score visible but NO
+  // answer material. These tests prove ResultPage does NOT self-infer answer
+  // visibility from score-visible or from grading state — it only renders what
+  // the DTO gate says.
+
+  it("P3-2: score visible + answers hidden — renders score but not standardAnswer/rubric", async () => {
+    // Realistic candidate DTO: standardAnswer stripped (undefined) by the API,
+    // no rubric field. The page must show score/pass and must NOT open an
+    // answer-review section just because the score is visible.
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "P3-2 mixed",
+      passingScore: 10,
+      totalScore: 25,
+      passed: true,
+      gradedAt: "2026-07-01T00:00:00.000Z",
+      questionResults: [
+        {
+          questionId: "q-obj",
+          type: "single_choice",
+          content: "P3-2 objective prompt",
+          order: 0,
+          candidateAnswer: "a",
+          // standardAnswer intentionally ABSENT (server strips it for candidates)
+          score: 10,
+          maxScore: 10,
+          correct: true,
+        },
+        {
+          questionId: "q-text",
+          type: "text_response",
+          content: "P3-2 essay prompt",
+          order: 1,
+          candidateAnswer: "candidate essay",
+          // standardAnswer absent; rubric is never in the DTO
+          score: 15,
+          maxScore: 20,
+          correct: true,
+        },
+      ],
+    });
+
+    renderPage();
+
+    // Score gate open: totalScore + pass render.
+    expect(await screen.findByTestId("result-total-score")).toHaveTextContent(
+      "25",
+    );
+    expect(screen.getByText("已通过")).toBeInTheDocument();
+
+    // Answer gate closed (DTO carries no standardAnswer): the correct-answer
+    // column renders the manual/placeholder text, NOT a real answer.
+    expect(screen.getAllByText("主观题").length).toBeGreaterThan(0);
+    // No rubric is ever rendered by ResultPage (it is not in the DTO contract).
+    expect(screen.queryByText(/评分标准|rubric/i)).not.toBeInTheDocument();
+  });
+
+  it("P3-2: does not self-release result from grading state when DTO gate is hidden", async () => {
+    // Deliberately cross-wired DTO: terminal grading state (graded) BUT the
+    // authoritative result gate says hidden. ResultPage must keep the result
+    // hidden — it must not infer release from status=graded.
+    getMock.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: false,
+      hiddenReason: "pending_publish",
+      examTitle: "P3-2 manual hidden",
+    });
+
+    renderPage();
+
+    // Pending message shows; no score/pass leaked.
+    expect(await screen.findByTestId("result-status-message")).toBeVisible();
+    expect(screen.queryByTestId("result-total-score")).not.toBeInTheDocument();
+    expect(screen.queryByText("已通过")).not.toBeInTheDocument();
+  });
 });
