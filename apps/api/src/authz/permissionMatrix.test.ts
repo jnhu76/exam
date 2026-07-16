@@ -149,36 +149,44 @@ describe("RBAC Step 7 permission matrix (flipped routes)", () => {
   });
 
   // ── Grading routes ──
-  function gradingRoutes(): Array<[string, string]> {
+  function gradingRoutes(): Array<[string, string, unknown?]> {
     return [
       ["GET", "/api/admin/grading-queue"],
       ["GET", `/api/admin/attempts/${FAKE_ATTEMPT_ID}/grading-details`],
+      // grade-question is a write, but the capability gate runs before the
+      // handler; a passed role reaches the handler (which 404s on the fake
+      // attempt — still "passed the gate"). Payload is the minimal valid shape.
+      [
+        "POST",
+        `/api/admin/attempts/${FAKE_ATTEMPT_ID}/grade-question`,
+        { questionId: "q", score: 0 },
+      ],
     ];
   }
 
   it("Admin passes grading routes", async () => {
-    for (const [m, u] of gradingRoutes()) {
-      expect(await verdict("Admin", m, u), `${m} ${u}`).toBe("passed");
+    for (const [m, u, p] of gradingRoutes()) {
+      expect(await verdict("Admin", m, u, p), `${m} ${u}`).toBe("passed");
     }
   });
   it("Grader passes grading routes", async () => {
-    for (const [m, u] of gradingRoutes()) {
-      expect(await verdict("Grader", m, u), `${m} ${u}`).toBe("passed");
+    for (const [m, u, p] of gradingRoutes()) {
+      expect(await verdict("Grader", m, u, p), `${m} ${u}`).toBe("passed");
     }
   });
   it("Proctor is denied grading routes", async () => {
-    for (const [m, u] of gradingRoutes()) {
-      expect(await verdict("Proctor", m, u), `${m} ${u}`).toBe("denied");
+    for (const [m, u, p] of gradingRoutes()) {
+      expect(await verdict("Proctor", m, u, p), `${m} ${u}`).toBe("denied");
     }
   });
   it("Candidate is denied grading routes", async () => {
-    for (const [m, u] of gradingRoutes()) {
-      expect(await verdict("Candidate", m, u), `${m} ${u}`).toBe("denied");
+    for (const [m, u, p] of gradingRoutes()) {
+      expect(await verdict("Candidate", m, u, p), `${m} ${u}`).toBe("denied");
     }
   });
   it("Teacher is denied grading routes", async () => {
-    for (const [m, u] of gradingRoutes()) {
-      expect(await verdict("Teacher", m, u), `${m} ${u}`).toBe("denied");
+    for (const [m, u, p] of gradingRoutes()) {
+      expect(await verdict("Teacher", m, u, p), `${m} ${u}`).toBe("denied");
     }
   });
 });
