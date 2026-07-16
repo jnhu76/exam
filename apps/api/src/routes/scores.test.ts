@@ -1211,3 +1211,361 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
     }
   });
 });
+
+// ── P3-MOD-P3-3: Admin frozen result view ─────────────────────────
+// Proves the Admin result projection is INDEPENDENT of candidate release
+// (INV-A1), reads frozen QuestionSnapshot truth (INV-A2/A5), keeps
+// standardAnswer for Admin (inverse of the candidate strip), and is
+// authorization-gated. The grading-details frozen-rubric/standardAnswer
+// immunity is already PROVEN in gradingQueue.test.ts (P3-MOD-P1-1 block);
+// this block covers the scores-endpoint Admin view AttemptDetailPage consumes.
+describe("P3-3 admin frozen result view", () => {
+  let ctx: TestContext;
+  let courseId: string;
+  let singleChoiceId: string;
+  let textResponseId: string;
+  let candidateProfileId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(examRoutes, { prefix: "" });
+      await fastify.register(attemptRoutes, { prefix: "" });
+      await fastify.register(scoreRoutes, { prefix: "" });
+    });
+    courseId = crypto.randomUUID();
+    singleChoiceId = crypto.randomUUID();
+    textResponseId = crypto.randomUUID();
+    await ctx.db.insert(schema.courses).values({
+      id: courseId,
+      organizationId: ctx.org.id,
+      name: "P3-3 Course",
+      code: `P33-${uniquePrefix()}`,
+      description: "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.questions).values({
+      id: singleChoiceId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "single_choice",
+      content: "P3-3 objective prompt",
+      options: [
+        { id: "a", content: "A" },
+        { id: "b", content: "B" },
+      ],
+      standardAnswer: "a",
+      attachments: [],
+      score: 10,
+      difficulty: 1,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await ctx.db.insert(schema.questions).values({
+      id: textResponseId,
+      organizationId: ctx.org.id,
+      courseId,
+      type: "text_response",
+      content: "P3-3 essay prompt",
+      options: [],
+      standardAnswer: "P3-3 frozen reference answer",
+      attachments: [],
+      score: 20,
+      difficulty: 3,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: "P3-3 key concept: 10\nfull argument: 10",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    candidateProfileId = await ensureCandidateProfile(ctx);
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  /**
+   * Builds a manual-mode mixed exam, the candidate answers + submits, then the
+   * attempt is marked fully_graded (terminal) with objective 10 + manual 15.
+   * Returns examId/attemptId. Used for the cross-proof and frozen tests.
+   */
+  async function buildTerminalManualAttempt(): Promise<{
+    examId: string;
+    attemptId: string;
+  }> {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "P3-3 manual cross",
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt: new Date(Date.now() - 3600000).toISOString(),
+        closeAt: new Date(Date.now() + 86400000).toISOString(),
+        passingScore: 20,
+        totalScore: 30,
+        questionSelectionMode: "manual",
+        questionIds: [singleChoiceId, textResponseId],
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          requireQueue: false,
+          batchSize: 10,
+          batchInterval: 3,
+          restrictIp: false,
+          requireLockdown: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 3,
+        resultPublicationMode: "manual",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/enrollments`,
+      payload: { candidateIds: [candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const startRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    const attemptId = startRes.json().id as string;
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${singleChoiceId}`,
+      payload: {
+        attemptId,
+        questionId: singleChoiceId,
+        answer: "a",
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/answers/${textResponseId}`,
+      payload: {
+        attemptId,
+        questionId: textResponseId,
+        answer: "P3-3 candidate\nmultiline essay",
+        clientSeq: 2,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      },
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${attemptId}/submit`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+
+    // Mark terminal (fully_graded, 10 + 15 = 25). Grading command is P1's
+    // proven domain; the Admin visibility LOGIC is under test here.
+    const adminCtx = {
+      actorId: ctx.admin.id,
+      organizationId: ctx.org.id,
+      targetOrganizationId: ctx.org.id,
+      role: "Admin" as const,
+      permissions: [] as import("@exam/domain").Permission[],
+      sessionId: "test",
+    };
+    const attempt = await createAttemptRepo(ctx.db).findById(
+      adminCtx,
+      attemptId,
+    );
+    // Build the terminal gradingResult explicitly with BOTH questions. After
+    // submit-freeze the objective is auto-graded but attempt.gradingResult is a
+    // projection regenerated by finalizeTerminalGrading (P1's proven domain);
+    // since the grading route isn't registered in this app, set the full
+    // terminal projection directly. The Admin visibility LOGIC is under test.
+    const existing = new Map(
+      (attempt?.gradingResult ?? []).map((r) => [r.questionId, r]),
+    );
+    const gradingResult = [
+      {
+        questionId: singleChoiceId,
+        score: 10,
+        maxScore: 10,
+        correct: true,
+        candidateAnswer: "a",
+        standardAnswer: "a",
+        ...(existing.get(singleChoiceId) ?? {}),
+      },
+      {
+        questionId: textResponseId,
+        score: 15,
+        maxScore: 20,
+        correct: true,
+        candidateAnswer: "P3-3 candidate\nmultiline essay",
+        standardAnswer: "P3-3 frozen reference answer",
+        ...(existing.get(textResponseId) ?? {}),
+      },
+    ];
+    await createAttemptRepo(ctx.db).update(adminCtx, attemptId, {
+      status: "graded",
+      gradingStatus: "fully_graded",
+      score: 25,
+      passed: true,
+      gradedAt: new Date(),
+      gradingResult,
+    });
+    return { examId, attemptId };
+  }
+
+  it("cross-proof: fully_graded + manual pending_publish — Admin sees full result, Candidate hidden", async () => {
+    const { attemptId } = await buildTerminalManualAttempt();
+
+    // SAME attempt, SAME moment. Admin result endpoint (scores, Admin bypasses
+    // the publication gate) returns the complete terminal result.
+    const adminRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(adminRes.statusCode).toBe(200);
+    const adminBody = adminRes.json();
+    expect(adminBody.showResultImmediately).toBe(true);
+    expect(adminBody.totalScore).toBe(25);
+    expect(adminBody.passed).toBe(true);
+
+    // Admin keeps standardAnswer (NOT stripped — inverse of the candidate gate)
+    // and per-question earnedScore, from the frozen snapshot.
+    const objQ = adminBody.questionResults.find(
+      (q: { questionId: string }) => q.questionId === singleChoiceId,
+    );
+    expect(objQ.standardAnswer).toBe("a");
+    expect(objQ.score).toBe(10);
+    const textQ = adminBody.questionResults.find(
+      (q: { questionId: string }) => q.questionId === textResponseId,
+    );
+    expect(textQ.score).toBe(15);
+
+    // Candidate result for the SAME attempt is still hidden (manual,
+    // pending_publish) — score/pass must not leak.
+    const candRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(candRes.statusCode).toBe(200);
+    const candBody = candRes.json();
+    expect(candBody.showResultImmediately).toBe(false);
+    expect(candBody.hiddenReason).toBe("pending_publish");
+    expect(candBody).not.toHaveProperty("totalScore");
+    expect(candBody).not.toHaveProperty("passed");
+    expect(candBody).not.toHaveProperty("questionResults");
+  });
+
+  it("admin scores result is immune to live-question mutation (frozen snapshot truth)", async () => {
+    const { attemptId } = await buildTerminalManualAttempt();
+
+    const before = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const beforeObj = before
+      .json()
+      .questionResults.find(
+        (q: { questionId: string }) => q.questionId === singleChoiceId,
+      );
+
+    // Mutate the LIVE question content/standardAnswer. The admin result reads
+    // the attempt's frozen questionSnapshot (buildQuestionResults joins
+    // gradingResult × questionSnapshot), so it must not drift.
+    await ctx.db
+      .update(schema.questions)
+      .set({
+        content: "P3-3 LIVE MUTATED objective prompt",
+        standardAnswer: "b",
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.questions.id, singleChoiceId));
+
+    const after = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const afterObj = after
+      .json()
+      .questionResults.find(
+        (q: { questionId: string }) => q.questionId === singleChoiceId,
+      );
+    expect(afterObj.content).toBe(beforeObj.content);
+    expect(afterObj.content).toBe("P3-3 objective prompt");
+    expect(afterObj.standardAnswer).toBe("a");
+    expect(afterObj.standardAnswer).not.toBe("b");
+  });
+
+  it("publish-results flips candidate visibility but does not change the admin projection", async () => {
+    const { examId, attemptId } = await buildTerminalManualAttempt();
+
+    const adminBefore = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    // Publish results — candidate becomes visible.
+    await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish-results`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    const candAfter = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.candidateToken },
+    });
+    expect(candAfter.json().showResultImmediately).toBe(true);
+    expect(candAfter.json().totalScore).toBe(25);
+
+    // Admin projection is unchanged by publication (no recompute).
+    const adminAfter = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(adminAfter.json().totalScore).toBe(adminBefore.json().totalScore);
+    expect(adminAfter.json().passed).toBe(adminBefore.json().passed);
+  });
+
+  it("rejects unauthenticated access to the admin result endpoint", async () => {
+    const { attemptId } = await buildTerminalManualAttempt();
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/scores/attempts/${attemptId}`,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
