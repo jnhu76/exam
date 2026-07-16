@@ -748,6 +748,7 @@ const zhCN = {
         multiple_choice: "多选题",
         fill_blank: "填空题",
         true_false: "判断题",
+        text_response: "文本作答题",
       },
       editLabel: "编辑题目",
       deleteLabel: "删除题目",
@@ -1023,6 +1024,7 @@ const zhCN = {
       editTitle: "编辑题目",
       loadDataFailed: "加载数据失败",
       saveFailed: "保存失败，请稍后重试",
+      rubricRequired: "评分标准不能为空",
       actions: {
         cancel: "取消",
         saving: "保存中...",
@@ -1130,6 +1132,11 @@ const zhCN = {
         typeMultipleChoice: "多选题",
         typeFillBlank: "填空题",
         typeTrueFalse: "判断题",
+        typeTextResponse: "文本作答题",
+        rubric: "评分标准",
+        rubricPlaceholder:
+          "请描述评分时应考虑的关键点、完整性、准确性或论证质量",
+        rubricHint: "评分依据；文本作答题在考试发布时必须填写非空评分标准",
         optionTrue: "是",
         optionFalse: "否",
         content: "题目内容",

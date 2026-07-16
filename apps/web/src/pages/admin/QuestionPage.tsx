@@ -416,6 +416,11 @@ export function QuestionPage() {
                       <SelectItem value="true_false">
                         {t("admin.questions.questionTypes.true_false" as never)}
                       </SelectItem>
+                      <SelectItem value="text_response">
+                        {t(
+                          "admin.questions.questionTypes.text_response" as never,
+                        )}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
 

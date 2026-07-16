@@ -63,6 +63,7 @@ export function QuestionEditPage() {
             multiSelectScoring: string;
             fillBlankMatchMode: string;
           };
+          rubric?: string | null;
         }>(`/api/questions/${id}`);
         setFormData({
           courseId: q.courseId,
@@ -74,6 +75,9 @@ export function QuestionEditPage() {
           difficulty: q.difficulty,
           tags: q.tags,
           gradingRule: q.gradingRule as QuestionFormData["gradingRule"],
+          // P3-MOD-P2-1C: echo the frozen grading basis; never overwrite with
+          // an empty value on edit.
+          rubric: q.rubric ?? null,
         });
       } else {
         setFormData({
@@ -92,6 +96,7 @@ export function QuestionEditPage() {
             multiSelectScoring: "all_correct_full",
             fillBlankMatchMode: "exact",
           },
+          rubric: null,
         });
       }
     } catch {
@@ -109,12 +114,35 @@ export function QuestionEditPage() {
   async function handleSave() {
     if (!formData || saving) return;
     setSaveError(null);
+
+    // P3-MOD-P2-1C: text_response requires a non-empty rubric before save.
+    // Mirror publish validation (publishExam rejects empty/placeholder rubric)
+    // so the author gets immediate feedback instead of a publish-time failure.
+    if (
+      formData.type === "text_response" &&
+      (formData.rubric == null || formData.rubric.trim() === "")
+    ) {
+      setSaveError(t("admin.questionEdit.rubricRequired"));
+      return;
+    }
+
+    // Normalize so incompatible fields never leak into the payload:
+    // objective types carry rubric: null; text_response keeps its rubric
+    // verbatim (newlines preserved) with options: [] / standardAnswer: null.
+    const payload: QuestionFormData = {
+      ...formData,
+      rubric: formData.type === "text_response" ? formData.rubric : null,
+      ...(formData.type === "text_response"
+        ? { options: [], standardAnswer: null }
+        : {}),
+    };
+
     setSaving(true);
     try {
       if (isEdit) {
-        await api.patch(`/api/questions/${id}`, formData);
+        await api.patch(`/api/questions/${id}`, payload);
       } else {
-        await api.post("/api/questions", formData);
+        await api.post("/api/questions", payload);
       }
       void navigate("/admin/questions");
     } catch (err) {

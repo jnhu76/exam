@@ -27,7 +27,12 @@ interface Option {
 /** Complete form data shape for creating or editing a question. */
 export interface QuestionFormData {
   courseId: string;
-  type: "single_choice" | "multiple_choice" | "fill_blank" | "true_false";
+  type:
+    | "single_choice"
+    | "multiple_choice"
+    | "fill_blank"
+    | "true_false"
+    | "text_response";
   content: string;
   options: Option[];
   standardAnswer: unknown;
@@ -39,6 +44,9 @@ export interface QuestionFormData {
     fillBlankMatchMode: "exact" | "keyword";
     fillBlankCaseSensitive?: boolean;
   };
+  // P3-MOD-P2-1C: text_response grading basis. null for objective types;
+  // a non-empty, non-whitespace string required for text_response publish.
+  rubric: string | null;
 }
 
 /** Props for the QuestionForm component. */
@@ -66,6 +74,7 @@ const defaultForm: QuestionFormData = {
     fillBlankMatchMode: "exact",
     fillBlankCaseSensitive: false,
   },
+  rubric: null,
 };
 
 /**
@@ -161,9 +170,12 @@ export function QuestionForm({
                   { id: "B", content: "" },
                 ];
                 defaults.standardAnswer = type === "single_choice" ? "" : [];
+                // Objective types never carry a rubric.
+                defaults.rubric = null;
               } else if (type === "fill_blank") {
                 defaults.options = [];
                 defaults.standardAnswer = "";
+                defaults.rubric = null;
               } else if (type === "true_false") {
                 defaults.options = [
                   { id: "true", content: t("admin.forms.question.optionTrue") },
@@ -173,11 +185,19 @@ export function QuestionForm({
                   },
                 ];
                 defaults.standardAnswer = true;
+                defaults.rubric = null;
+              } else if (type === "text_response") {
+                // text_response canonical form: no options, no objective
+                // standardAnswer, rubric is the grading basis. Preserve any
+                // in-flight rubric draft when re-entering the type.
+                defaults.options = [];
+                defaults.standardAnswer = null;
+                defaults.rubric = form.rubric ?? null;
               }
               update({ type, ...defaults });
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label={t("admin.forms.question.type")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -192,6 +212,9 @@ export function QuestionForm({
               </SelectItem>
               <SelectItem value="true_false">
                 {t("admin.forms.question.typeTrueFalse")}
+              </SelectItem>
+              <SelectItem value="text_response">
+                {t("admin.forms.question.typeTextResponse")}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -298,6 +321,21 @@ export function QuestionForm({
           />
           <p className="text-xs text-muted-foreground">
             {t("admin.forms.question.standardAnswerHint")}
+          </p>
+        </Field>
+      )}
+
+      {form.type === "text_response" && (
+        <Field>
+          <Label>{t("admin.forms.question.rubric")}</Label>
+          <Textarea
+            value={form.rubric ?? ""}
+            onChange={(e) => update({ rubric: e.target.value })}
+            placeholder={t("admin.forms.question.rubricPlaceholder")}
+            rows={4}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("admin.forms.question.rubricHint")}
           </p>
         </Field>
       )}
