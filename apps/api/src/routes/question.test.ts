@@ -808,4 +808,150 @@ describe("question routes", () => {
     expect(body.errors).toBe(1);
     expect(body.details[1].status).toBe("error");
   });
+
+  // ── P3-MOD-P2-2: MVP question creation proof — type-specific readback ──
+  // Proves each type's canonical fields are PERSISTED and read back through
+  // the production GET path (not just echoed in the create response), and
+  // that no type leaks rubric (objective) or options/standardAnswer
+  // (text_response). text_response multiline rubric readback is additionally
+  // proven above; this block closes the per-type persistence gap for the
+  // objective options/answer shapes that the older create tests only
+  // asserted via statusCode + type.
+  it("persists and reads back type-specific fields per question type", async () => {
+    const cases = [
+      {
+        name: "single_choice",
+        payload: {
+          type: "single_choice",
+          content: "rb single content",
+          options: [
+            { id: "a", content: "A" },
+            { id: "b", content: "B" },
+          ],
+          standardAnswer: "a",
+          score: 10,
+        },
+        check: (body: Record<string, unknown>) => {
+          expect(body.standardAnswer).toBe("a");
+          expect(body.options).toEqual([
+            { id: "a", content: "A" },
+            { id: "b", content: "B" },
+          ]);
+          expect(body.rubric).toBeNull();
+        },
+      },
+      {
+        name: "multiple_choice",
+        payload: {
+          type: "multiple_choice",
+          content: "rb multi content",
+          options: [
+            { id: "a", content: "1" },
+            { id: "b", content: "2" },
+            { id: "c", content: "3" },
+          ],
+          standardAnswer: ["a", "c"],
+          score: 10,
+        },
+        // Array answer must round-trip as an array, not collapse to a string.
+        check: (body: Record<string, unknown>) => {
+          expect(body.standardAnswer).toEqual(["a", "c"]);
+          expect(body.rubric).toBeNull();
+        },
+      },
+      {
+        name: "true_false",
+        payload: {
+          type: "true_false",
+          content: "rb true_false content",
+          standardAnswer: false,
+          score: 5,
+        },
+        // Canonical boolean representation preserved through persistence.
+        check: (body: Record<string, unknown>) => {
+          expect(body.standardAnswer).toBe(false);
+          expect(body.rubric).toBeNull();
+        },
+      },
+      {
+        name: "fill_blank",
+        payload: {
+          type: "fill_blank",
+          content: "rb fill ____ content",
+          standardAnswer: "Paris",
+          score: 10,
+          gradingRule: {
+            multiSelectScoring: "all_correct_full",
+            fillBlankMatchMode: "keyword",
+          },
+        },
+        check: (body: Record<string, unknown>) => {
+          expect(body.standardAnswer).toBe("Paris");
+          expect(body.rubric).toBeNull();
+        },
+      },
+      {
+        name: "text_response",
+        payload: {
+          type: "text_response",
+          content: "rb text_response content",
+          options: [],
+          standardAnswer: null,
+          rubric: "rb 关键概念\nrb 论证完整",
+          score: 20,
+        },
+        check: (body: Record<string, unknown>) => {
+          // Multiline rubric preserved verbatim; no objective fields leak.
+          expect(body.rubric).toBe("rb 关键概念\nrb 论证完整");
+          expect(body.standardAnswer).toBeNull();
+          expect(body.options).toEqual([]);
+        },
+      },
+    ] as const;
+
+    for (const c of cases) {
+      const createRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/questions",
+        payload: { courseId, ...c.payload } as Record<string, unknown>,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(createRes.statusCode, `create ${c.name}`).toBe(201);
+      const created = createRes.json();
+
+      // Independent readback via production GET — proves persistence, not echo.
+      const getRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/questions/${created.id}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(getRes.statusCode, `readback ${c.name}`).toBe(200);
+      const body = getRes.json() as Record<string, unknown>;
+      expect(body.type, `type ${c.name}`).toBe(c.payload.type);
+      c.check(body);
+    }
+  });
+
+  // Reject a multiple_choice payload whose array answer references a
+  // non-existent option — the multi-choice counterpart to the existing
+  // single_choice non-option rejection. Uses the current contract only.
+  it("POST /api/questions rejects multiple_choice with a non-option answer", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "multiple_choice",
+        content: "Bad multi answer.",
+        options: [
+          { id: "a", content: "A" },
+          { id: "b", content: "B" },
+        ],
+        standardAnswer: ["a", "zzz"],
+        score: 10,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

@@ -208,17 +208,152 @@ describe("QuestionEditPage", () => {
   });
 });
 
+// ── P3-MOD-P2-2: MVP question creation proof (objective types) ────
+// Proves each objective type's canonical create payload reaches POST with
+// type-specific fields correct (options/standardAnswer) and rubric=null.
+// text_response create payload is proven separately below (P2-1C block).
+
+const CONTENT_PLACEHOLDER = "输入题目内容";
+const RUBRIC_PLACEHOLDER =
+  "请描述评分时应考虑的关键点、完整性、准确性或论证质量";
+
+/** Open the type <Select> (a11y-labeled 题目类型) and pick an option. */
+async function selectType(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByRole("combobox", { name: "题目类型" }));
+  await user.click(await screen.findByRole("option", { name }));
+}
+
+describe("QuestionEditPage — objective type create payloads", () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("creates single_choice with selected option answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "单选题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请选择正确答案",
+    );
+    // Select option "A" (the first radio). Default single_choice ships with
+    // options A and B; picking A sets standardAnswer = "A".
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]!);
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "single_choice",
+          standardAnswer: "A",
+          rubric: null,
+        }),
+      );
+      // options survive into the payload (A and B present).
+      const payload = apiPost.mock.calls[0]![1] as { options: unknown[] };
+      expect(payload.options).toHaveLength(2);
+    });
+  });
+
+  it("creates multiple_choice with array answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "多选题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "选择所有偶数",
+    );
+    // multiple_choice renders checkboxes per option; check A and B.
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]!);
+    await user.click(checkboxes[1]!);
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "multiple_choice",
+          standardAnswer: ["A", "B"],
+          rubric: null,
+        }),
+      );
+    });
+  });
+
+  it("creates true_false with boolean canonical answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "判断题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "天空是蓝色的",
+    );
+    // true_false defaults standardAnswer to true; keep the default canonical
+    // boolean. No answer control interaction needed — prove the default.
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "true_false",
+          standardAnswer: true,
+          rubric: null,
+        }),
+      );
+    });
+  });
+
+  it("creates fill_blank with string answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "填空题");
+    // fill_blank content uses a distinct placeholder (marks the ____ slot).
+    await user.type(
+      screen.getByPlaceholderText("输入题目内容，用 ____ 标记空格位置"),
+      "法国的首都是 ____。",
+    );
+    await user.type(
+      screen.getByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
+      "巴黎",
+    );
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "fill_blank",
+          standardAnswer: "巴黎",
+          rubric: null,
+        }),
+      );
+    });
+  });
+});
+
 // ── P3-MOD-P2-1C: text_response authoring closure ────────────────
 // text_response must be creatable end-to-end via the UI: type option,
 // multiline rubric, optional standardAnswer, payload, edit echo, type
 // switch normalization. These tests document and guard that closure.
-
-// Field locators. QuestionForm uses detached <Label> + control (no
-// htmlFor/id), so fields are queried by placeholder like the rest of
-// this test file (see the existing "输入题目内容" usage above).
-const CONTENT_PLACEHOLDER = "输入题目内容";
-const RUBRIC_PLACEHOLDER =
-  "请描述评分时应考虑的关键点、完整性、准确性或论证质量";
 
 describe("QuestionEditPage — text_response authoring", () => {
   beforeEach(() => {
@@ -230,15 +365,6 @@ describe("QuestionEditPage — text_response authoring", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
-
-  /** Select a question type via the form's type <Select> combobox. */
-  async function selectType(
-    user: ReturnType<typeof userEvent.setup>,
-    name: string,
-  ) {
-    await user.click(screen.getByRole("combobox", { name: "题目类型" }));
-    await user.click(await screen.findByRole("option", { name }));
-  }
 
   it("renders text_response option and shows rubric control when selected", async () => {
     const user = userEvent.setup();
