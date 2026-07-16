@@ -11,23 +11,15 @@ concurrency:
 
 permissions:
   contents: read
-  # actions: write lets the e2e-merge job delete the per-shard blob artifacts
-  # after merging them into the final HTML report, so they do not accumulate
-  # against the GitHub Actions storage quota (free tier 2GB, account-wide).
+  # actions: write lets the e2e job (if needed) delete artifacts later; keep it if you want that behavior.
   actions: write
 
 # Turborepo remote cache — TURBO_TOKEN from secrets, TURBO_TEAM from vars
-# (vars keeps team slug visible in logs; secrets would be censored).
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
 
 jobs:
-  # ADR-007 Phase 6F: a fast, DB-free `static` job gates all heavier jobs.
-  # All coverage, build, and e2e jobs run `needs: static` so they start in
-  # parallel once static checks pass. Wall-clock is now
-  # static + max(web-coverage, api-coverage, package-coverage, verify-build, e2e).
-  # No coverage step repeats format/lint/typecheck (static owns those).
   static:
     name: Static checks
     runs-on: ubuntu-latest
@@ -55,8 +47,6 @@ jobs:
       - name: Static checks
         run: pnpm verify:static
 
-  # Full-build gate: validates that `turbo build` succeeds (packages + apps).
-  # Runs in parallel with all coverage jobs — no downstream job depends on it.
   verify-build:
     name: Build
     runs-on: ubuntu-latest
@@ -85,7 +75,6 @@ jobs:
       - name: Build
         run: pnpm build
 
-  # Web coverage — pure jsdom, no DB required.
   web-coverage:
     name: Web coverage
     runs-on: ubuntu-latest
@@ -111,17 +100,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Packages must be built first — vitest bypasses Turbo's task graph so
-      # the `^build` dependency in turbo.json does not apply. Without this,
-      # @exam/domain/dist and @exam/contracts/dist don't exist and Vite's
-      # import analysis fails.
       - name: Build workspace packages
         run: pnpm --filter "./packages/*" build
 
       - name: Coverage
         run: pnpm --filter @exam/web coverage
 
-  # API coverage — Postgres worker isolation, 4 parallel workers.
   api-coverage:
     name: API coverage
     runs-on: ubuntu-latest
@@ -187,8 +171,6 @@ jobs:
       - name: Coverage
         run: TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage
 
-  # Package coverage — all packages except @exam/web and @exam/api.
-  # @exam/db requires Postgres; other packages are pure unit tests.
   package-coverage:
     name: Package coverage
     runs-on: ubuntu-latest
@@ -249,7 +231,8 @@ jobs:
     timeout-minutes: 20
     needs: static
     strategy:
-      fail-fast: false
+      # stop other shards immediately if any shard fails
+      fail-fast: true
       matrix:
         shardIndex: [1, 2]
         shardTotal: [2]
@@ -340,35 +323,15 @@ jobs:
       - name: Run E2E tests (${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
         run: pnpm --filter @exam/e2e exec playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         env:
-          # Triggers blob reporter in playwright.config.ts (→ merge-reports).
+          # Triggers blob reporter in playwright.config.ts (if configured)
           E2E_SHARD_TOTAL: ${{ matrix.shardTotal }}
 
-      # Playwright blob reporter always writes `report.zip`. With merge-multiple,
-      # download-artifact flattens all matching artifacts into one directory —
-      # two `report.zip` files would collide (second overwrites first), producing
-      # the "invalid central directory file header signature" error. Rename each
-      # shard's zip to a unique name before uploading.
-      - name: Rename blob report for uniqueness
-        if: ${{ !cancelled() }}
+      # Remove local zips on success (prevent accidental uploads, free runner space)
+      - name: Cleanup local blob report on success
+        if: ${{ success() && !cancelled() }}
         run: |
-          if [ -f apps/e2e/blob-report/report.zip ]; then
-            mv apps/e2e/blob-report/report.zip "apps/e2e/blob-report/report-${{ matrix.shardIndex }}.zip"
-            echo "Renamed report.zip → report-${{ matrix.shardIndex }}.zip"
-            ls -la apps/e2e/blob-report/
-          else
-            echo "WARNING: No report.zip found in blob-report/ — shard may have been skipped or all tests filtered out."
-            ls -la apps/e2e/blob-report/ 2>/dev/null || echo "blob-report/ directory does not exist"
-          fi
-
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: e2e-blob-shard-${{ matrix.shardIndex }}
-          path: apps/e2e/blob-report/*.zip
-          retention-days: 1
-          if-no-files-found: ignore
+          rm -f apps/e2e/blob-report/report-*.zip || true
+          rm -f apps/e2e/blob-report/report.zip || true
 
       - name: Stop servers
         if: always()
@@ -439,135 +402,3 @@ jobs:
           path: e2e-diagnostics/
           retention-days: 1
           if-no-files-found: ignore
-
-  e2e-merge:
-    name: Merge E2E reports
-    if: ${{ !cancelled() }}
-    needs: [e2e]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24.15.x"
-          cache: "pnpm"
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Download blob reports from all shards
-        uses: actions/download-artifact@v4
-        with:
-          path: apps/e2e/all-blob-reports
-          pattern: e2e-blob-shard-*
-          merge-multiple: true
-
-      # Blob report contract:
-      #   - Each shard uploads a uniquely-named zip (report-{N}.zip).
-      #   - download-artifact with merge-multiple flattens into all-blob-reports/.
-      #   - We MUST reject non-blob files (e.g. leftover HTML report zips, .gitkeep)
-      #     because merge-reports treats every file in the input dir as a blob report.
-      #   - We MUST verify zip integrity before merge; a corrupt zip causes a cryptic
-      #     "invalid central directory file header signature" error.
-      - name: Validate blob reports
-        working-directory: apps/e2e
-        env:
-          E2E_RESULT: ${{ needs.e2e.result }}
-        run: |
-          echo "=== Files in all-blob-reports ==="
-          find all-blob-reports -maxdepth 2 -type f -print -exec file {} \;
-          echo ""
-
-          # Reject non-zip files.
-          NON_ZIP=$(find all-blob-reports -maxdepth 2 -type f ! -name '*.zip')
-          if [ -n "$NON_ZIP" ]; then
-            echo "ERROR: non-zip files found in blob report directory:"
-            echo "$NON_ZIP"
-            echo "Only report-*.zip files are allowed."
-            exit 1
-          fi
-
-          # Count and validate each blob zip.
-          BLOB_ZIPS=$(find all-blob-reports -maxdepth 1 -name '*.zip' -type f)
-          COUNT=$(echo "$BLOB_ZIPS" | grep -c . || true)
-          echo "Found $COUNT blob zip(s):"
-          echo "$BLOB_ZIPS"
-          echo ""
-
-          if [ "$COUNT" -eq 0 ]; then
-            # If the E2E shard jobs themselves PASSED but no blob reports were
-            # downloaded, the shard artifact uploads failed — almost always the
-            # GitHub Actions storage quota ("Artifact storage quota has been
-            # hit"). That is an infra quota issue, not a code defect, so it
-            # must NOT fail the PR. Downgrade to a warning and skip the merge.
-            if [ "$E2E_RESULT" = "success" ]; then
-              echo "::warning::E2E tests passed, but no blob reports were downloaded (likely Actions storage quota exhausted). Skipping HTML report merge — this does not block the PR."
-              echo "SKIPPED_MERGE=1" >> "$GITHUB_ENV"
-              exit 0
-            fi
-            echo "::error::No Playwright blob report zips found. E2E merge cannot proceed."
-            echo "Possible causes: all shards failed before producing reports, artifact upload/download failed, or artifact naming mismatch."
-            exit 1
-          fi
-
-          echo "=== Validating zip integrity ==="
-          for z in $BLOB_ZIPS; do
-            echo "Checking $z ..."
-            unzip -t "$z" || { echo "ERROR: $z is corrupt"; exit 1; }
-          done
-          echo "All blob zips validated."
-
-      - name: Merge into HTML report
-        if: env.SKIPPED_MERGE != '1'
-        working-directory: apps/e2e
-        run: npx playwright merge-reports --reporter html ./all-blob-reports
-
-      - name: Upload merged HTML report
-        if: env.SKIPPED_MERGE != '1'
-        uses: actions/upload-artifact@v4
-        continue-on-error: true
-        with:
-          name: playwright-html-report
-          path: apps/e2e/playwright-report/
-          # Kept short (7d, down from 14) to limit accumulation against the
-          # account-wide Actions storage quota. Old runs' reports are rarely
-          # revisited beyond a week.
-          retention-days: 7
-          if-no-files-found: ignore
-
-      # Delete the per-shard blob artifacts now that they have been merged into
-      # the final HTML report. Without this, every CI run leaves 2 shard
-      # artifacts behind; they accumulate against the Actions storage quota
-      # (free 2GB, account-wide) and eventually block all artifact uploads
-      # with "Artifact storage quota has been hit". Requires `actions: write`.
-      - name: Delete consumed shard artifacts
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -uo pipefail
-          AUTH=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
-          API="https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100"
-          echo "Fetching artifacts for run $RUN_ID..."
-          IDS=$(curl -fsSL "${AUTH[@]}" "$API" | jq -r '.artifacts[]? | select(.name | startswith("e2e-blob-shard-")) | .id')
-          DELETED=0
-          for id in $IDS; do
-            [ -z "$id" ] && continue
-            if curl -fsSL "${AUTH[@]}" -X DELETE "https://api.github.com/repos/$REPO/actions/artifacts/$id"; then
-              DELETED=$((DELETED + 1))
-            fi
-          done
-          echo "Deleted $DELETED consumed shard artifact(s)."
