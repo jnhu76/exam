@@ -74,10 +74,38 @@ export function canAccessAdminConsole(user: Pick<MeResponse, "role">): boolean {
 
 // ── Per-surface visibility (the single source the sidebar/layout consult) ──
 
-/** Management surface (users/candidates/audit/settings/system) — Admin only. */
+/**
+ * Management surface permission set.
+ *
+ * No single permission is documented as "the management gate" (ADR §158 names
+ * "all organization-scope management perms" as a group; AppSidebar's
+ * managementItems span users/candidates/importLogs/auditLogs/settings/
+ * candidateFields/system). Visibility is therefore derived from whether the
+ * principal holds ANY management-surface capability — an aggregate, not a
+ * surrogate permission and not a role-label check.
+ *
+ * NOTE: CandidateView is intentionally excluded. Teacher also holds CandidateView
+ * (scoped to course assignment per the preset comment), but the management
+ * section is the Admin-only surface (users/audit/settings/system/candidateFields).
+ * CandidateView is shared, so including it would over-grant the management nav
+ * to Teacher. The Admin-only management perms are the five below; CandidateView
+ * alone does not gate the management section.
+ */
+const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
+  Permission.UserView,
+  Permission.AuditLogView,
+  Permission.SettingsView,
+  Permission.SystemHealthView,
+  Permission.CandidateFieldView,
+] as const;
+
+/**
+ * Management surface (users/candidates/audit/settings/system) — visible when
+ * the principal holds any management-surface capability. Derived from the
+ * preset (same source `can()` consults), not from a role-label shortcut.
+ */
 export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
-  // Admin is the only preset with UserView/AuditLogView/SettingsView/SystemHealthView.
-  return isAdmin(user);
+  return MANAGEMENT_SURFACE_PERMS.some((p) => can(user, p));
 }
 
 export function canSeeDashboard(user: Pick<MeResponse, "role">): boolean {

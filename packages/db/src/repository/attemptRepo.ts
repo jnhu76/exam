@@ -62,6 +62,53 @@ export function createAttemptRepo(db: Database) {
       return rows[0] ?? null;
     },
     /**
+     * Score-authorization ownership chain (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
+     *
+     * Extends {@link findAuthorizationChain} with the attempt's candidate +
+     * candidate-user identity, so the score capability preHandler can arbitrate
+     * `score.own.view` (requires `attempt.candidateProfile.userId === actorId`)
+     * vs `score.all.view` (org-scoped, any attempt) without role-name branching.
+     *
+     * Source of truth per ADR §Resource Resolver Matrix: `score → attempt →
+     * candidate + exam`; the ownership fact is `candidateProfiles.userId`.
+     */
+    async findScoreOwnershipChain(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ) {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          attemptId: examAttempts.id,
+          attemptOrganizationId: examAttempts.organizationId,
+          candidateId: examAttempts.candidateId,
+          ownerUserId: candidateProfiles.userId,
+          linkedExamId: examAttempts.examId,
+          examId: exams.id,
+          examOrganizationId: exams.organizationId,
+          linkedCourseId: exams.courseId,
+          courseId: courses.id,
+          courseOrganizationId: courses.organizationId,
+          organizationId: organizations.id,
+        })
+        .from(examAttempts)
+        .leftJoin(
+          candidateProfiles,
+          eq(examAttempts.candidateId, candidateProfiles.id),
+        )
+        .leftJoin(exams, eq(examAttempts.examId, exams.id))
+        .leftJoin(courses, eq(exams.courseId, courses.id))
+        .leftJoin(organizations, eq(courses.organizationId, organizations.id))
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.id, attemptId),
+          ),
+        )
+        .limit(1);
+      return rows[0] ?? null;
+    },
+    /**
      * Finds an attempt by `id` with `FOR UPDATE` row lock, scoped to the tenant.
      * Used for optimistic concurrency during answer saves and submissions.
      */

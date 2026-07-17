@@ -35,5 +35,17 @@ declare module "fastify" {
       resolverKey: ResourceResolverKey,
       resourceIdKey: string,
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
+     * Capability + ownership arbitration for `GET /scores/attempts/:attemptId`.
+     * Authorizes iff the principal's preset grants ScoreAllView (any same-org
+     * attempt) OR ScoreOwnView + the attempt's owner is the actor. Own/all is
+     * resolved from the preset + resolved ownership — never a role-name branch.
+     * Publication visibility remains the handler's concern (ADR §262/691/697).
+     */
+    requireScoreCapability: () => (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ) => Promise<void>;
   }
 }

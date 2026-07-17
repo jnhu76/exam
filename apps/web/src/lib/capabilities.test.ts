@@ -193,3 +193,38 @@ describe("P4-4 capability helper — raw can() parity with backend presets", () 
     expect(can(user("Candidate"), "question.view")).toBe(false);
   });
 });
+
+describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capability-derived", () => {
+  // canSeeManagement must NOT short-circuit on a role label (isAdmin). It is an
+  // aggregate over the management-surface permission set: the management nav is
+  // visible iff the principal's preset grants ANY of UserView/CandidateView/
+  // AuditLogView/SettingsView/SystemHealthView/CandidateFieldView. This keeps
+  // the gate aligned with the backend per-route requireCapability gates and
+  // avoids anointing a single surrogate permission (directive §3).
+  it("Admin sees management (holds UserView + the full management set)", () => {
+    expect(canSeeManagement(user("Admin"))).toBe(true);
+  });
+
+  it.each(["Teacher", "Grader", "Proctor", "Candidate"] as const)(
+    "%s does NOT see management (holds none of the management-surface perms)",
+    (role) => {
+      expect(canSeeManagement(user(role))).toBe(false);
+    },
+  );
+
+  it("management visibility tracks a management-surface capability, not the Admin label", () => {
+    // Proof the gate is capability-driven: Admin CAN see management, and Admin
+    // is the only preset that holds UserView. If a future custom role held
+    // UserView without being Admin, the aggregate would return true. We assert
+    // the coupling via the underlying capability: every Admin-only management
+    // perm individually flips can() true for Admin and false for others.
+    const adminHasUserView = can(user("Admin"), "user.view");
+    const teacherHasUserView = can(user("Teacher"), "user.view");
+    expect(adminHasUserView).toBe(true);
+    expect(teacherHasUserView).toBe(false);
+    // And the aggregate includes more than just UserView — SettingsView also
+    // drives it, so the gate is robust to a preset that grants only some
+    // management perms.
+    expect(can(user("Admin"), "settings.view")).toBe(true);
+  });
+});

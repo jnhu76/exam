@@ -36,6 +36,11 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   // scoped gate (grading-details / grade-question). Same rationale as the
   // requireCapability stub above.
   app.decorate("requireScopedCapability", () => async () => {});
+  // requireScoreCapability (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1) — no-op
+  // stub so OpenAPI generation can register the score route, which now uses
+  // the dedicated score-capability gate (own/all arbitration). Same rationale
+  // as the requireScopedCapability stub above.
+  app.decorate("requireScoreCapability", () => async () => {});
   app.decorate("db", null as never);
   app.decorate("now", () => new Date());
   app.decorateRequest("ctx", null as never);

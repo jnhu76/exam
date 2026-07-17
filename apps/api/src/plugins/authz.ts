@@ -32,6 +32,7 @@ import {
   createAttemptResolver,
   createExamResolver,
 } from "../authz/resolvers/attemptResolver.js";
+import { buildScoreCapabilityPreHandler } from "../authz/scoreCapability.js";
 
 const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Resolver registry: one DB-backed resolver per resource family the flipped
@@ -39,6 +40,10 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   const resolvers: ResolverRegistry = {
     attempt: createAttemptResolver(fastify.db, fastify.log),
     exam: createExamResolver(fastify.db, fastify.log),
+    // NOTE: the `score` family is NOT a generic ScopeResolver — its resolution
+    // carries ownership facts the generic interface cannot express, so the
+    // score route uses the dedicated `requireScoreCapability` decorator below
+    // (which calls resolveScoreScope directly) instead of this registry.
   };
 
   fastify.decorate(
@@ -63,6 +68,20 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
         handler(request, reply);
     },
   );
+
+  // Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
+  // Capability + ownership arbitration for `GET /scores/attempts/:attemptId`.
+  // Own/all is resolved from the role preset (ScoreAllView / ScoreOwnView) plus
+  // the resolved attempt ownership — never from a role-name branch.
+  const scoreHandler = buildScoreCapabilityPreHandler({
+    db: fastify.db,
+    logger: fastify.log,
+    presetAllows,
+  });
+  fastify.decorate("requireScoreCapability", () => {
+    return (request: FastifyRequest, reply: FastifyReply) =>
+      scoreHandler(request, reply);
+  });
 };
 
 export default fp(authzScopedPlugin);

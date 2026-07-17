@@ -366,6 +366,47 @@ describe("score routes", () => {
 
     expect(response.statusCode).toBe(404);
   });
+
+  // RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1: roles that hold neither
+  // ScoreAllView nor ScoreOwnView must be denied on the score route. The
+  // preHandler resolves to a 403 PERMISSION_DENIED (genuine capability denial,
+  // not an ownership ambiguity). Closes the previously-untested Grader/Proctor
+  // gap on GET /scores/attempts/:attemptId. (Teacher holds ScoreAllView, so it
+  // is allowed and tested via the exam matrix instead.)
+  it.each(["Grader", "Proctor"] as const)(
+    "denies %s (holds neither ScoreAllView nor ScoreOwnView) with 403",
+    async (role) => {
+      const { attemptId } = await createGradedAttempt(false);
+      const now = new Date();
+      const roleId = crypto.randomUUID();
+      await ctx.db.insert(schema.users).values({
+        id: roleId,
+        organizationId: ctx.org.id,
+        username: `${role.toLowerCase()}-score-${uniquePrefix()}`,
+        passwordHash: "not-used",
+        name: `${role} User`,
+        role,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const token = signJWT(
+        {
+          actorId: roleId,
+          role,
+          organizationId: ctx.org.id,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/scores/attempts/${attemptId}`,
+        cookies: { "auth-token": token },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.code).toBe("PERMISSION_DENIED");
+    },
+  );
 });
 
 describe("J8: score list routes", () => {

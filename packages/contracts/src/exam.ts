@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // ── Exam ──────────────────────────────────────────────────────────
 
-const ExamStatusEnum = z.enum([
+export const ExamStatusEnum = z.enum([
   "draft",
   "published",
   "open",
@@ -10,6 +10,7 @@ const ExamStatusEnum = z.enum([
   "canceled",
   "archived",
 ]);
+export type ExamStatus = z.infer<typeof ExamStatusEnum>;
 const TimingModeEnum = z.enum([
   "timed_sync",
   "timed_window",
@@ -34,11 +35,12 @@ const Phase1RetakePolicyEnum = z.enum([
 ]);
 // P2D-J5a: result publishing policy. Authoritative visibility field;
 // showResultImmediately remains as a legacy input only.
-const ResultPublicationModeEnum = z.enum([
+export const ResultPublicationModeEnum = z.enum([
   "immediate",
   "after_grading",
   "manual",
 ]);
+export type ResultPublicationMode = z.infer<typeof ResultPublicationModeEnum>;
 
 const ControlFlagsSchema = z.object({
   shuffleQuestions: z.boolean().default(false),

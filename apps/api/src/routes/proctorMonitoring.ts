@@ -94,7 +94,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.ExamRoomView),
+        fastify.requireScopedCapability(
+          Permission.ExamRoomView,
+          "exam",
+          "examId",
+        ),
       ],
       schema: {
         params: examIdParamsSchema,
@@ -135,7 +139,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptTimelineView),
+        fastify.requireScopedCapability(
+          Permission.AttemptTimelineView,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: attemptEventsParamsSchema,
@@ -194,7 +202,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.AttemptMisconductMark),
+        fastify.requireScopedCapability(
+          Permission.AttemptMisconductMark,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: attemptEventsParamsSchema,

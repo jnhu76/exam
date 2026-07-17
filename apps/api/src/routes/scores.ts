@@ -16,7 +16,6 @@ import type {
 } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { Permission } from "@exam/authz";
 import {
@@ -69,8 +68,16 @@ function normalizeScoreListQuery(query: unknown) {
 }
 
 /**
- * Finds an attempt visible to the current user. Admins can see any attempt;
- * candidates can only see their own attempts.
+ * Fetches the attempt for the score result route.
+ *
+ * The authorization boundary (may this principal access this attempt?) is
+ * enforced upstream by `requireScoreCapability` (capability + ownership, no
+ * role-name branch — RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1). This function is
+ * a defense-in-depth fetch: it loads the attempt org-scoped and relies on the
+ * already-proven access. The previous role-string branch (`ctx.role !==
+ * "Candidate"`) was removed because the score capability gate now makes that
+ * distinction authoritatively (ADR §3.4: resolver is primary; handler is
+ * belt-and-suspenders, not a substitute).
  */
 async function findVisibleAttempt(
   fastify: Parameters<FastifyPluginAsync>[0],
@@ -78,20 +85,7 @@ async function findVisibleAttempt(
   attemptId: string,
 ) {
   const attemptRepo = createAttemptRepo(fastify.db);
-  if (ctx.role !== "Candidate") {
-    return (await attemptRepo.findById(ctx, attemptId)) as ExamAttempt | null;
-  }
-  const candidate = await createCandidateRepo(fastify.db).findByUserId(
-    ctx,
-    ctx.actorId,
-  );
-  return candidate
-    ? ((await attemptRepo.findByIdAndCandidate(
-        ctx,
-        attemptId,
-        candidate.id,
-      )) as ExamAttempt | null)
-    : null;
+  return (await attemptRepo.findById(ctx, attemptId)) as ExamAttempt | null;
 }
 
 /**
@@ -380,10 +374,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/scores/attempts/:attemptId",
     {
-      preHandler: [
-        fastify.authenticate,
-        fastify.requireRole(["Candidate", "Admin"]),
-      ],
+      preHandler: [fastify.authenticate, fastify.requireScoreCapability()],
       schema: {
         params: AttemptScoreParamsSchema,
         security: cookieAuth,
