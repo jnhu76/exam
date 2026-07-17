@@ -12,6 +12,7 @@ import {
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
+import { Permission } from "@exam/authz";
 import type { RequestContext } from "@exam/domain";
 import {
   ensureTargetOrg,
@@ -55,7 +56,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionView),
+      ],
       schema: {
         querystring: questionListQuerySchema,
         security: cookieAuth,
@@ -127,7 +131,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionView),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -172,7 +179,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/questions",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionCreate),
+      ],
       schema: {
         body: CreateQuestionRequestSchema,
         security: cookieAuth,
@@ -260,7 +270,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/questions/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateQuestionRequestSchema,
@@ -343,7 +356,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/questions/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionDelete),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -373,7 +389,10 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/questions/import",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionImport),
+      ],
       config: { rateLimit: { max: 5, timeWindow: 60 * 1000 } },
       schema: {
         body: QuestionImportRequestSchema,

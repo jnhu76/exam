@@ -8,6 +8,7 @@ import { buildTestApp } from "../routes/testHelpers.js";
 import { registerGradingQueueRoutes } from "../routes/gradingQueue.js";
 import { registerAdminAttemptRoutes } from "../routes/attempts.admin.js";
 import proctorMonitoringRoutes from "../routes/proctorMonitoring.js";
+import questionRoutes from "../routes/question.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 // Stable fake ids: the capability gate runs BEFORE the handler, so a denied
@@ -73,6 +74,7 @@ describe("RBAC Step 7 permission matrix (flipped routes)", () => {
     await fastify.register(registerGradingQueueRoutes);
     await fastify.register(registerAdminAttemptRoutes);
     await fastify.register(proctorMonitoringRoutes);
+    await fastify.register(questionRoutes);
   };
 
   beforeAll(async () => {
@@ -187,6 +189,53 @@ describe("RBAC Step 7 permission matrix (flipped routes)", () => {
   it("Teacher is denied grading routes", async () => {
     for (const [m, u, p] of gradingRoutes()) {
       expect(await verdict("Teacher", m, u, p), `${m} ${u}`).toBe("denied");
+    }
+  });
+
+  // ── P4-2B: question CRUD capability cutover ──
+  // GET routes are the authoritative capability-gate proof: they carry no
+  // payload, so Zod validation cannot preempt the gate. The write routes
+  // (POST/PATCH/DELETE/import) use the IDENTICAL requireCapability decorator,
+  // so the GET verdict transitively proves the write gate decision per role.
+  // (Write-route validation shape is owned by P2 authoring tests; the
+  // Teacher-creates-text_response write proof lives in question.test.ts.)
+  const FAKE_QUESTION_ID = "00000000-0000-4000-8000-0000000000bb";
+  function questionReadRoutes(): Array<[string, string]> {
+    return [
+      ["GET", "/api/questions"],
+      ["GET", `/api/questions/${FAKE_QUESTION_ID}`],
+    ];
+  }
+
+  it("P4-2B Admin passes question routes", async () => {
+    for (const [m, u] of questionReadRoutes()) {
+      expect(await verdict("Admin", m, u), `${m} ${u}`).toBe("passed");
+    }
+  });
+  it("P4-2B Teacher passes question routes (preset grants QuestionView)", async () => {
+    for (const [m, u] of questionReadRoutes()) {
+      expect(await verdict("Teacher", m, u), `${m} ${u}`).toBe("passed");
+    }
+  });
+  it("P4-2B Candidate is denied question routes", async () => {
+    for (const [m, u] of questionReadRoutes()) {
+      expect(await verdict("Candidate", m, u), `${m} ${u}`).toBe("denied");
+    }
+  });
+  it("P4-2B Grader is denied question routes", async () => {
+    for (const [m, u] of questionReadRoutes()) {
+      expect(await verdict("Grader", m, u), `${m} ${u}`).toBe("denied");
+    }
+  });
+  it("P4-2B Proctor is denied question routes", async () => {
+    for (const [m, u] of questionReadRoutes()) {
+      expect(await verdict("Proctor", m, u), `${m} ${u}`).toBe("denied");
+    }
+  });
+  it("P4-2B Unauthenticated is 401 on question routes", async () => {
+    for (const [m, u] of questionReadRoutes()) {
+      const res = await t.app.inject({ method: m as "GET", url: u });
+      expect(res.statusCode, `${m} ${u}`).toBe(401);
     }
   });
 });
