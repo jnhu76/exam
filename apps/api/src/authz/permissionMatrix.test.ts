@@ -9,6 +9,8 @@ import { registerGradingQueueRoutes } from "../routes/gradingQueue.js";
 import { registerAdminAttemptRoutes } from "../routes/attempts.admin.js";
 import proctorMonitoringRoutes from "../routes/proctorMonitoring.js";
 import questionRoutes from "../routes/question.js";
+import examRoutes from "../routes/exam.js";
+import scoreRoutes from "../routes/scores.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 // Stable fake ids: the capability gate runs BEFORE the handler, so a denied
@@ -75,6 +77,8 @@ describe("RBAC Step 7 permission matrix (flipped routes)", () => {
     await fastify.register(registerAdminAttemptRoutes);
     await fastify.register(proctorMonitoringRoutes);
     await fastify.register(questionRoutes);
+    await fastify.register(examRoutes);
+    await fastify.register(scoreRoutes);
   };
 
   beforeAll(async () => {
@@ -237,5 +241,65 @@ describe("RBAC Step 7 permission matrix (flipped routes)", () => {
       const res = await t.app.inject({ method: m as "GET", url: u });
       expect(res.statusCode, `${m} ${u}`).toBe(401);
     }
+  });
+
+  // ── P4-2C: exam authoring/lifecycle capability cutover ──
+  // GET /exams + GET /exams/:id are the clean Teacher-allow proof (no payload
+  // -> validation cannot preempt the gate). The lifecycle/enrollment writes
+  // use the same requireCapability decorator, so the GET verdict transitively
+  // proves the write gate. Admin-only routes (unpublish/extend/cancel/archive/
+  // delete) STAY on requireRole(["Admin"]); Teacher must be denied there.
+  const FAKE_EXAM_ID = "00000000-0000-4000-8000-0000000000ee";
+  function examReadRoutes(): Array<[string, string]> {
+    return [
+      ["GET", "/api/exams"],
+      ["GET", `/api/exams/${FAKE_EXAM_ID}`],
+      // score list — Teacher preset grants ScoreAllView
+      ["GET", `/api/exams/${FAKE_EXAM_ID}/scores`],
+    ];
+  }
+
+  it("P4-2C Admin passes exam read routes", async () => {
+    for (const [m, u] of examReadRoutes()) {
+      expect(await verdict("Admin", m, u), `${m} ${u}`).toBe("passed");
+    }
+  });
+  it("P4-2C Teacher passes exam read routes (ExamView + ScoreAllView)", async () => {
+    for (const [m, u] of examReadRoutes()) {
+      expect(await verdict("Teacher", m, u), `${m} ${u}`).toBe("passed");
+    }
+  });
+  it("P4-2C Candidate is denied exam read routes", async () => {
+    for (const [m, u] of examReadRoutes()) {
+      expect(await verdict("Candidate", m, u), `${m} ${u}`).toBe("denied");
+    }
+  });
+  it("P4-2C Grader is denied exam read routes", async () => {
+    for (const [m, u] of examReadRoutes()) {
+      expect(await verdict("Grader", m, u), `${m} ${u}`).toBe("denied");
+    }
+  });
+  it("P4-2C Proctor is denied exam read routes", async () => {
+    for (const [m, u] of examReadRoutes()) {
+      expect(await verdict("Proctor", m, u), `${m} ${u}`).toBe("denied");
+    }
+  });
+  it("P4-2C Unauthenticated is 401 on exam read routes", async () => {
+    for (const [m, u] of examReadRoutes()) {
+      const res = await t.app.inject({ method: m as "GET", url: u });
+      expect(res.statusCode, `${m} ${u}`).toBe(401);
+    }
+  });
+
+  // Admin-only exam routes MUST deny Teacher (stayed on requireRole; task 8.2
+  // explicitly keeps these Admin-only). DELETE has no body, so validation
+  // cannot preempt the gate — clean denial proof.
+  it("P4-2C Teacher is denied Admin-only exam DELETE (Admin-only by design)", async () => {
+    const res = await t.app.inject({
+      method: "DELETE",
+      url: `/api/exams/${FAKE_EXAM_ID}`,
+      cookies: { "auth-token": tokens["Teacher"] },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });

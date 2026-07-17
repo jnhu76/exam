@@ -31,6 +31,7 @@ import {
   publishExam,
   publishResults,
 } from "@exam/exam-engine";
+import { Permission } from "@exam/authz";
 import type { RequestContext, Exam, Question } from "@exam/domain";
 import {
   InvalidStateTransitionError,
@@ -327,7 +328,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamView),
+      ],
       schema: {
         querystring: PaginationParamsSchema,
         security: cookieAuth,
@@ -381,7 +385,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamView),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -423,7 +430,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamCreate),
+      ],
       schema: {
         body: CreateExamRequestSchema,
         security: cookieAuth,
@@ -517,7 +527,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/exams/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateExamRequestSchema,
@@ -633,7 +646,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/publish",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamPublish),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -688,7 +704,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/close",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamClose),
+      ],
       schema: {
         params: idParamsSchema,
         body: closeExamRequestSchema,
@@ -1113,7 +1132,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/publish-results",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamResultPublish),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -1203,7 +1225,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:examId/enrollments",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamEnrollmentManage),
+      ],
       schema: {
         params: examIdParamsSchema,
         security: cookieAuth,
@@ -1262,7 +1287,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:examId/enrollments",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamEnrollmentManage),
+      ],
       schema: {
         params: examIdParamsSchema,
         body: EnrollCandidatesRequestSchema,
@@ -1361,7 +1389,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/exams/:examId/enrollments/:enrollmentId",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamEnrollmentManage),
+      ],
       schema: {
         params: enrollmentIdParamsSchema,
         security: cookieAuth,
@@ -1418,7 +1449,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/exams/:examId/candidates/status",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamEnrollmentManage),
+      ],
       schema: {
         params: examIdParamsSchema,
         security: cookieAuth,

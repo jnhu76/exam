@@ -18,6 +18,7 @@ import { NotFoundError } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
+import { Permission } from "@exam/authz";
 import {
   formatZodError,
   ensureTargetOrg,
@@ -233,7 +234,10 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id/scores",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ScoreAllView),
+      ],
       schema: {
         params: idParamsSchema,
         querystring: ScoreListQuerySchema,
