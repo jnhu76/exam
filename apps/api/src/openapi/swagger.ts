@@ -8,6 +8,10 @@ import {
 import { openApiConfig } from "./config.js";
 import { registerApiRoutes } from "../routes/registerApiRoutes.js";
 import { healthResponseSchema } from "../routes/healthSchema.js";
+import type {
+  AuthzPreHandler,
+  AuthzMetadata,
+} from "../types/fastify-auth.d.js";
 
 /**
  * Build a throwaway Fastify instance pre-loaded with all route plugins and
@@ -30,12 +34,25 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   app.decorate("requireRole", () => async () => {});
   // requireCapability (Phase 3 capability gate, RBAC runtime activation) —
   // no-op stub so OpenAPI generation can register flipped routes.
-  app.decorate("requireCapability", () => async () => {});
+  app.decorate("requireCapability", () => {
+    const h: AuthzPreHandler = async () => {};
+    h.authz = { kind: "flat", permission: "exam.view" };
+    return h;
+  });
   // requireScopedCapability (RBAC-M10-finish resource-aware gate, P4-2A) —
   // no-op stub so OpenAPI generation can register routes that adopted the
   // scoped gate (grading-details / grade-question). Same rationale as the
   // requireCapability stub above.
-  app.decorate("requireScopedCapability", () => async () => {});
+  app.decorate("requireScopedCapability", () => {
+    const h: AuthzPreHandler = async () => {};
+    h.authz = {
+      kind: "scoped",
+      permission: "exam.view",
+      resolverKey: "attempt",
+      resourceIdKey: "stub" as const,
+    };
+    return h;
+  });
   // requireScoreCapability (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1) — no-op
   // stub so OpenAPI generation can register the score route, which now uses
   // the dedicated score-capability gate (own/all arbitration). Same rationale

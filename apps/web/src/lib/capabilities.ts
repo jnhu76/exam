@@ -25,13 +25,11 @@ import type { MeResponse } from "@exam/contracts";
 import { routes } from "@/lib/routes";
 
 // Memoized preset sets (presets are static; safe for module lifetime).
-const PRESET_SETS = new Map<string, ReadonlySet<string>>();
-function presetFor(role: string): ReadonlySet<string> {
+const PRESET_SETS = new Map<string, ReadonlySet<PermissionKey>>();
+function presetFor(role: string): ReadonlySet<PermissionKey> {
   let set = PRESET_SETS.get(role);
   if (!set) {
-    set = new Set<string>(
-      permissionsForRole(role as RoleKey).map((p) => String(p)),
-    );
+    set = new Set(permissionsForRole(role as RoleKey));
     PRESET_SETS.set(role, set);
   }
   return set;
@@ -105,7 +103,19 @@ const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
  * preset (same source `can()` consults), not from a role-label shortcut.
  */
 export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
-  return MANAGEMENT_SURFACE_PERMS.some((p) => can(user, p));
+  return hasManagementCapability(presetFor(user.role));
+}
+
+/**
+ * Pure permission-set predicate: true iff the set contains any management-surface
+ * capability. Independent of role labels — any role (or custom set) that holds
+ * at least one management perm is authorized. This is the canonical gate; the
+ * role-preset wrapper above is a convenience for the common case.
+ */
+export function hasManagementCapability(
+  permissions: ReadonlySet<PermissionKey>,
+): boolean {
+  return MANAGEMENT_SURFACE_PERMS.some((p) => permissions.has(p));
 }
 
 export function canSeeDashboard(user: Pick<MeResponse, "role">): boolean {

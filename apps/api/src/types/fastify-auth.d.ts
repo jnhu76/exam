@@ -3,6 +3,31 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Permission, RequestContext, Role } from "@exam/domain";
 import type { PermissionKey, ResourceResolverKey } from "@exam/authz";
 
+/**
+ * Metadata attached to preHandler functions returned by requireCapability and
+ * requireScopedCapability. Used by introspection tests to verify the correct
+ * kind of gate is wired at runtime (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2,
+ * Finding 2).
+ */
+export type AuthzMetadata =
+  | { kind: "flat"; permission: PermissionKey }
+  | {
+      kind: "scoped";
+      permission: PermissionKey;
+      resolverKey: ResourceResolverKey;
+      resourceIdKey: string;
+    };
+
+/**
+ * PreHandler function with runtime-observable authz metadata.
+ * The function is callable by Fastify; the `authz` property is for test
+ * introspection (cross-org integration test + onRoute capture).
+ */
+export interface AuthzPreHandler {
+  (request: FastifyRequest, reply: FastifyReply): Promise<void>;
+  authz: AuthzMetadata;
+}
+
 declare module "fastify" {
   interface FastifyRequest {
     ctx?: RequestContext;
@@ -20,9 +45,7 @@ declare module "fastify" {
       permission: Permission,
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     /** Phase 3 capability gate (RBAC runtime activation, PR #3). */
-    requireCapability: (
-      permission: PermissionKey,
-    ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    requireCapability: (permission: PermissionKey) => AuthzPreHandler;
     /**
      * Resource-aware capability gate (RBAC-M10-finish, P4-2A). Strict superset
      * of requireCapability: same preset check, plus a DB-backed scope resolver
@@ -34,7 +57,7 @@ declare module "fastify" {
       permission: PermissionKey,
       resolverKey: ResourceResolverKey,
       resourceIdKey: string,
-    ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    ) => AuthzPreHandler;
     /**
      * Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
      * Capability + ownership arbitration for `GET /scores/attempts/:attemptId`.

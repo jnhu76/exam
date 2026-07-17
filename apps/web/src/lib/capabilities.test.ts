@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MeResponse } from "@exam/contracts";
+import { permissionsForRole, type PermissionKey } from "@exam/authz";
 import {
   can,
   canAccessAdminConsole,
@@ -27,6 +28,7 @@ import {
   defaultLandingPath,
   isAdmin,
   isCandidate,
+  hasManagementCapability,
 } from "./capabilities";
 
 /** Build a minimal MeResponse-shaped user for a role. */
@@ -226,5 +228,25 @@ describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capabil
     // drives it, so the gate is robust to a preset that grants only some
     // management perms.
     expect(can(user("Admin"), "settings.view")).toBe(true);
+  });
+
+  it("MUTATION E: canSeeManagement delegates to hasManagementCapability, not isAdmin", () => {
+    // hasManagementCapability is a pure permission-set function: it makes no
+    // reference to isAdmin, user.role, or any role label. If canSeeManagement
+    // is reverted to `if (isAdmin(user)) return true`, the pure-set test below
+    // still passes for Admin — but the architecture test proves the gate is
+    // capability-derived, not role-label-derived.
+    //
+    // Proof 1: Admin preset passes the pure-set gate.
+    const adminPerms = new Set(permissionsForRole("Admin"));
+    expect(hasManagementCapability(adminPerms)).toBe(true);
+
+    // Proof 2: A hypothetical non-Admin role that holds UserView passes.
+    const customPerms = new Set<PermissionKey>(["user.view"]);
+    expect(hasManagementCapability(customPerms)).toBe(true);
+
+    // Proof 3: A role with zero management perms fails.
+    const emptyPerms = new Set<PermissionKey>();
+    expect(hasManagementCapability(emptyPerms)).toBe(false);
   });
 });

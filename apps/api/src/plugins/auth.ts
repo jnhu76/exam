@@ -8,6 +8,7 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { presetAllows } from "../lib/presetCache.js";
+import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
 
 /**
  * Fastify plugin that registers authentication and authorization decorators
@@ -157,7 +158,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
    * preHandler chain (Step 3 resolvers) — not here.
    */
   fastify.decorate("requireCapability", (permission: PermissionKey) => {
-    return async (request, reply) => {
+    const preHandler: AuthzPreHandler = async (request, reply) => {
       const ctx = request.ctx;
       if (!ctx) {
         return reply
@@ -171,6 +172,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
       }
     };
+    preHandler.authz = { kind: "flat", permission };
+    return preHandler;
   });
 };
 
