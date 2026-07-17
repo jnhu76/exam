@@ -140,14 +140,14 @@ No drift between registry and runtime for the migrated routes. The registry is a
 
 ### Questions answered
 
-1. **ctx.role source**: From JWT claims (set at login, decoded from auth-token cookie by authenticate plugin).
-2. **Login-time DB query or JWT claim?**: JWT claim. The role is stored in the token at login time.
-3. **user_role_assignments participation**: **NO.** The user_role_assignments table exists, but it is NOT consulted during runtime authorization. The authenticate plugin reads users.role from the JWT.
-4. **users.role is still authority?**: **YES.** The role from JWT (which was read from users.role at login) is the sole input to presetAllows().
+1. **ctx.role source**: From DB `users.role` — the authenticate plugin reads the user from DB on every request (`findByOrganizationAndId`) and sets `request.ctx.role = user.role`. The JWT's role claim is **not consulted** at runtime.
+2. **Login-time DB query or JWT claim?**: DB query on every authenticated request. The JWT carries only identity anchors (`actorId`, `organizationId`); the role is reloaded from `users.role` each time.
+3. **user_role_assignments participation**: **NO.** The `user_role_assignments` table exists, but it is NOT consulted during runtime authorization. The authenticate plugin reads `users.role` from the users table directly.
+4. **users.role is still authority?**: **YES.** `request.ctx.role` = `user.role` (DB column) is the sole input to `presetAllows()`. `user_role_assignments` has no runtime effect.
 5. **Multiple active assignments merged?**: **N/A.** Assignments are not read at runtime.
-6. **Revoked/inactive assignment effect on current session?**: **NONE.** Token carries the role from login; assignment changes require re-login.
-7. **Assignment scope in resolver comparison?**: **N/A.** Scope resolvers compare against ctx.organizationId (from JWT), not against assignment scopes.
-8. **Token old role expiry?**: When users.role is changed, the existing JWT remains valid until expiry. No server-side invalidation.
+6. **Revoked/inactive assignment effect on current session?**: **NONE.** Assignment changes have no runtime effect. However, a direct `users.role` change takes effect on the **next request** (no re-login required) because the authenticate plugin re-reads the user from DB.
+7. **Assignment scope in resolver comparison?**: **N/A.** Scope resolvers compare against `ctx.organizationId` (from JWT), not against assignment scopes.
+8. **Token old role expiry?**: The JWT carries identity (`actorId`, `organizationId`) — these are stable anchors. The role in the JWT claim is **never read** at runtime (replaced by the DB value). Token expiry/re-issue is irrelevant for role changes; they take effect immediately on the next request.
 
 ### Conclusion
 

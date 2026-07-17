@@ -478,7 +478,7 @@ describe("Proctor scoped routes — cross-org isolation", () => {
             payload,
             cookies: { "auth-token": token },
           });
-          const isDenied = res.statusCode === 403 || res.statusCode === 404;
+          const isDenied = res.statusCode === 403;
           const isPassed = res.statusCode === 200;
           if (expected === "passed") {
             expect(

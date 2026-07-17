@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MeResponse } from "@exam/contracts";
-import { permissionsForRole } from "@exam/authz";
+import { permissionsForRole, type PermissionKey } from "@exam/authz";
 import {
   can,
   canAccessAdminConsole,
@@ -242,13 +242,11 @@ describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capabil
     expect(hasManagementCapability(adminPerms)).toBe(true);
 
     // Proof 2: A hypothetical non-Admin role that holds UserView passes.
-    const customPerms = new Set<import("@exam/authz").PermissionKey>([
-      "user.view",
-    ]);
+    const customPerms = new Set<PermissionKey>(["user.view"]);
     expect(hasManagementCapability(customPerms)).toBe(true);
 
     // Proof 3: A role with zero management perms fails.
-    const emptyPerms = new Set<import("@exam/authz").PermissionKey>();
+    const emptyPerms = new Set<PermissionKey>();
     expect(hasManagementCapability(emptyPerms)).toBe(false);
   });
 });

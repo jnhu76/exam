@@ -25,13 +25,11 @@ import type { MeResponse } from "@exam/contracts";
 import { routes } from "@/lib/routes";
 
 // Memoized preset sets (presets are static; safe for module lifetime).
-const PRESET_SETS = new Map<string, ReadonlySet<string>>();
-function presetFor(role: string): ReadonlySet<string> {
+const PRESET_SETS = new Map<string, ReadonlySet<PermissionKey>>();
+function presetFor(role: string): ReadonlySet<PermissionKey> {
   let set = PRESET_SETS.get(role);
   if (!set) {
-    set = new Set<string>(
-      permissionsForRole(role as RoleKey).map((p) => String(p)),
-    );
+    set = new Set(permissionsForRole(role as RoleKey));
     PRESET_SETS.set(role, set);
   }
   return set;
@@ -105,9 +103,7 @@ const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
  * preset (same source `can()` consults), not from a role-label shortcut.
  */
 export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
-  return hasManagementCapability(
-    new Set(permissionsForRole(user.role as RoleKey)),
-  );
+  return hasManagementCapability(presetFor(user.role));
 }
 
 /**
