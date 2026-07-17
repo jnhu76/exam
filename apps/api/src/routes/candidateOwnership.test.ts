@@ -21,17 +21,17 @@ import scoreRoutes from "./scores.js";
  * findByIdAndCandidate / findByExamAndCandidate). This test proves that
  * predicate holds: Candidate A, holding a real attempt, cannot read/answer/
  * submit/restore/heartbeat/score Candidate B's attempt, and cannot see an exam
- * B is enrolled in that A is not. Per the anti-enumeration norm, cross-candidate
- * access returns 404 / unavailable / empty — never leaking B's existence,
+ * B is enrolled in that A is not. Per the anti-enumeration norm, direct
+ * cross-candidate access returns 404 — never leaking B's existence,
  * answers, status, score, or enrollment.
  *
- * This is a test-only batch: NO gate was flipped. The ownership predicate is
- * the security boundary and must NOT be replaced by a bare capability check
- * (R4).
+ * The ownership predicate is the security boundary and must not be replaced
+ * by a bare capability check (R4).
  */
 describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let examId: string;
+  let candidateBOnlyExamId: string;
   let candidateA: { candidateProfileId: string; userId: string; token: string };
   let candidateB: { candidateProfileId: string; userId: string; token: string };
   let attemptBId: string;
@@ -84,16 +84,37 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
       ctx.org.id,
     );
 
-    // Enroll both candidates so the exam is visible to each, but only B starts
-    // an attempt. A will try to attack B's attempt.
+    // Enroll both candidates so the shared exam is visible to each, but only B
+    // starts an attempt. A will try to attack B's attempt.
     for (const cand of [candidateA, candidateB]) {
-      await ctx.app.inject({
+      const enrollment = await ctx.app.inject({
         method: "POST",
         url: `/api/exams/${examId}/enrollments`,
         payload: { candidateIds: [cand.candidateProfileId] },
         cookies: { "auth-token": ctx.adminToken },
       });
+      expect(enrollment.statusCode).toBe(200);
     }
+
+    candidateBOnlyExamId = await createExamViaApi(ctx.app, ctx.adminToken, {
+      examTitle: "P4-3 Candidate B Only Exam",
+      courseCode: `P43B-${uniquePrefix()}`,
+      courseName: "P4-3 Candidate B Only Course",
+      questionContent: "P4-3 candidate B only question.",
+      questionAnswer: true,
+      questionScore: 100,
+      durationMinutes: 60,
+      passingScore: 50,
+      totalScore: 100,
+    });
+    await publishExamViaApi(ctx.app, ctx.adminToken, candidateBOnlyExamId);
+    const bOnlyEnrollment = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${candidateBOnlyExamId}/enrollments`,
+      payload: { candidateIds: [candidateB.candidateProfileId] },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(bOnlyEnrollment.statusCode).toBe(200);
 
     // B starts an attempt.
     const startRes = await ctx.app.inject({
@@ -129,7 +150,7 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
       "GET",
       `/api/candidate/attempts/${attemptBId}/take`,
     );
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
     // Must never return B's questions/answers.
     const body = res.json();
     expect(JSON.stringify(body)).not.toContain("questionSnapshot");
@@ -148,63 +169,160 @@ describe("P4-3 candidate ownership boundary (cross-candidate attack matrix)", ()
         baseVersion: 0,
       },
     );
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
   });
 
   it("A cannot submit B's attempt (POST .../submit -> deny)", async () => {
     const res = await attackA("POST", `/api/attempts/${attemptBId}/submit`);
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
   });
 
   it("A cannot heartbeat B's attempt (POST .../heartbeat -> deny)", async () => {
     const res = await attackA("POST", `/api/attempts/${attemptBId}/heartbeat`);
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
   });
 
   it("A cannot restore B's attempt (POST .../restore -> deny)", async () => {
     const res = await attackA("POST", `/api/attempts/${attemptBId}/restore`);
-    expect([403, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
   });
 
   it("A cannot read B's result (GET /scores/attempts/:id -> not B's full result)", async () => {
     const res = await attackA("GET", `/api/scores/attempts/${attemptBId}`);
-    // Either 404 (attempt not visible to A) or a status-only body with
-    // showResultImmediately=false — never B's questionResults/score.
-    expect([200, 404]).toContain(res.statusCode);
+    expect(res.statusCode).toBe(404);
     const body = res.json();
     expect(body.showResultImmediately).not.toBe(true);
     expect(JSON.stringify(body)).not.toContain("questionResults");
   });
 
-  it("A cannot start a second attempt on an exam A already started (own-resource only)", async () => {
-    // A starts its OWN attempt first (allowed), then tries to start again —
-    // proves A's own-runtime works (positive control) while cross-attacks fail.
+  it("A sees no detail for an exam enrolled only to B", async () => {
+    const res = await attackA(
+      "GET",
+      `/api/candidate/exams/${candidateBOnlyExamId}`,
+    );
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("A cannot join the queue for an exam enrolled only to B", async () => {
+    const res = await attackA(
+      "POST",
+      `/api/attempts/${candidateBOnlyExamId}/queue`,
+    );
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("A's exam list excludes an exam enrolled only to B", async () => {
+    const res = await attackA("GET", "/api/candidate/exams");
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ examId: candidateBOnlyExamId }),
+      ]),
+    );
+  });
+
+  it("A repeated start returns A's existing attempt instead of creating another", async () => {
     const ownStart = await ctx.app.inject({
       method: "POST",
       url: `/api/attempts/${examId}/start`,
       cookies: { "auth-token": candidateA.token },
     });
     expect(ownStart.statusCode).toBe(201);
-    // A's own attempt id is distinct from B's.
     expect(ownStart.json().id).not.toBe(attemptBId);
+
+    const repeatedStart = await ctx.app.inject({
+      method: "POST",
+      url: `/api/attempts/${examId}/start`,
+      cookies: { "auth-token": candidateA.token },
+    });
+    expect(repeatedStart.statusCode).toBe(200);
+    expect(repeatedStart.json().id).toBe(ownStart.json().id);
   });
 
   // ── Other roles cannot use the candidate runtime (task 9.3) ──
-  it("Admin token is denied on the candidate start route (role gate)", async () => {
-    const res = await ctx.app.inject({
+  const candidateRuntimeRequests = [
+    {
+      name: "exam list",
+      method: "GET",
+      url: () => "/api/candidate/exams",
+    },
+    {
+      name: "exam detail",
+      method: "GET",
+      url: () => `/api/candidate/exams/${candidateBOnlyExamId}`,
+    },
+    {
+      name: "attempt detail",
+      method: "GET",
+      url: () => `/api/attempts/${attemptBId}`,
+    },
+    {
+      name: "take snapshot",
+      method: "GET",
+      url: () => `/api/candidate/attempts/${attemptBId}/take`,
+    },
+    {
+      name: "save answer",
       method: "POST",
-      url: `/api/attempts/${examId}/start`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    // Candidate-runtime routes are requireRole(["Candidate"]); Admin is denied.
-    expect(res.statusCode).toBe(403);
-  });
+      url: () => `/api/attempts/${attemptBId}/answers/${sharedQuestionId}`,
+      payload: () => ({
+        attemptId: attemptBId,
+        questionId: sharedQuestionId,
+        answer: true,
+        clientSeq: 1,
+        clientSavedAt: new Date().toISOString(),
+        baseVersion: 0,
+      }),
+    },
+    {
+      name: "submit",
+      method: "POST",
+      url: () => `/api/attempts/${attemptBId}/submit`,
+    },
+    {
+      name: "heartbeat",
+      method: "POST",
+      url: () => `/api/attempts/${attemptBId}/heartbeat`,
+    },
+    {
+      name: "restore",
+      method: "POST",
+      url: () => `/api/attempts/${attemptBId}/restore`,
+    },
+    {
+      name: "queue",
+      method: "POST",
+      url: () => `/api/attempts/${candidateBOnlyExamId}/queue`,
+    },
+    {
+      name: "start",
+      method: "POST",
+      url: () => `/api/attempts/${examId}/start`,
+    },
+  ];
 
-  it("Unauthenticated is 401 on candidate start", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: `/api/attempts/${examId}/start`,
-    });
-    expect(res.statusCode).toBe(401);
-  });
+  it.each(candidateRuntimeRequests)(
+    "Admin is denied on candidate-only $name",
+    async ({ method, url, payload }) => {
+      const res = await ctx.app.inject({
+        method: method as never,
+        url: url(),
+        payload: payload?.() as never,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(403);
+    },
+  );
+
+  it.each(candidateRuntimeRequests)(
+    "unauthenticated requests receive 401 on candidate-only $name",
+    async ({ method, url, payload }) => {
+      const res = await ctx.app.inject({
+        method: method as never,
+        url: url(),
+        payload: payload?.() as never,
+      });
+      expect(res.statusCode).toBe(401);
+    },
+  );
 });
