@@ -63,7 +63,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         querystring: questionListQuerySchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: questionListResponseSchema,
         },
@@ -138,7 +138,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: QuestionSchema,
           404: ErrorResponseSchema,
@@ -186,7 +186,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         body: CreateQuestionRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           201: QuestionSchema,
           400: ErrorResponseSchema,
@@ -278,7 +278,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         body: UpdateQuestionRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: QuestionSchema,
           400: ErrorResponseSchema,
@@ -363,7 +363,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           204: z.null(),
           404: ErrorResponseSchema,
@@ -397,7 +397,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         body: QuestionImportRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: QuestionImportResultSchema,
           400: ErrorResponseSchema,

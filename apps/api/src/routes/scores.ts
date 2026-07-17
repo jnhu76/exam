@@ -228,7 +228,7 @@ function computeResultVisibility(
 const scoreRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /exams/:id/scores — Returns a paginated list of graded attempt
-   * scores for an exam. Admin-only. Includes stats (pass/fail counts)
+   * scores for an exam. Admin and Teacher. Includes stats (pass/fail counts)
    * and supports sorting and filtering.
    */
   fastify.get(
@@ -242,7 +242,7 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         querystring: ScoreListQuerySchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: ScoreListResponseSchema,
           400: ErrorResponseSchema,

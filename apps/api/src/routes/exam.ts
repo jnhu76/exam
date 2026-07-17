@@ -335,7 +335,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         querystring: PaginationParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: examListResponseSchema,
         },
@@ -392,7 +392,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: examDetailResponseSchema,
           404: ErrorResponseSchema,
@@ -437,7 +437,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         body: CreateExamRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           201: ExamSchema,
           400: ErrorResponseSchema,
@@ -535,7 +535,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         body: UpdateExamRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: ExamSchema,
           400: ErrorResponseSchema,
@@ -653,7 +653,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: ExamSchema,
           404: ErrorResponseSchema,
@@ -712,7 +712,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         params: idParamsSchema,
         body: closeExamRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: ExamSchema,
           404: ErrorResponseSchema,
@@ -1139,7 +1139,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: publishResultsResponseSchema,
           404: ErrorResponseSchema,
@@ -1232,7 +1232,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: examIdParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: z.array(enrollmentListItemSchema),
           404: ErrorResponseSchema,
@@ -1295,7 +1295,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         params: examIdParamsSchema,
         body: EnrollCandidatesRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: enrollmentAddResponseSchema,
           400: ErrorResponseSchema,
@@ -1396,7 +1396,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: enrollmentIdParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           204: z.null(),
           404: ErrorResponseSchema,
@@ -1444,7 +1444,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   /**
    * GET /admin/exams/:examId/candidates/status — Returns the live status of
    * every enrolled candidate for a given exam. Used by the proctor dashboard
-   * (P2C-J5) which polls this endpoint every 5 seconds. Admin only.
+   * (P2C-J5) which polls this endpoint every 5 seconds. Admin and Teacher.
    */
   fastify.get(
     "/admin/exams/:examId/candidates/status",
@@ -1456,7 +1456,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: examIdParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: CandidateStatusResponseSchema,
           404: ErrorResponseSchema,
