@@ -9,6 +9,7 @@ import {
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import type { RequestContext } from "@exam/domain";
+import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -44,11 +45,14 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/courses",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CourseView),
+      ],
       schema: {
         querystring: PaginationParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: { 200: courseListResponseSchema },
       },
     },
@@ -80,11 +84,14 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/courses/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CourseView),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: { 200: courseItemSchema, 404: ErrorResponseSchema },
       },
     },
@@ -114,11 +121,14 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/courses",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CourseCreate),
+      ],
       schema: {
         body: CreateCourseRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: { 201: courseItemSchema, 409: ErrorResponseSchema },
       },
     },
@@ -164,12 +174,15 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/courses/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CourseUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateCourseRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: { 200: courseItemSchema, 404: ErrorResponseSchema },
       },
     },

@@ -28,4 +28,14 @@ describe("classifyCapabilityVerdict", () => {
       }),
     ).toBe("passed");
   });
+
+  it("does not treat an unregistered-route 404 as proof that the gate passed", () => {
+    expect(
+      classifyCapabilityVerdict(404, {
+        message: "Route GET:/api/missing not found",
+        error: "Not Found",
+        statusCode: 404,
+      }),
+    ).toBe("unexpected");
+  });
 });

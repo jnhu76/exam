@@ -54,11 +54,10 @@ export function classifyCapabilityVerdict(
   if (statusCode === 403 && errorCodeFrom(body) === "PERMISSION_DENIED") {
     return "denied";
   }
-  if (
-    (statusCode >= 200 && statusCode < 300) ||
-    statusCode === 404 ||
-    statusCode === 409
-  ) {
+  if (statusCode === 404 && errorCodeFrom(body) === "RESOURCE_NOT_FOUND") {
+    return "passed";
+  }
+  if ((statusCode >= 200 && statusCode < 300) || statusCode === 409) {
     return "passed";
   }
   return "unexpected";
