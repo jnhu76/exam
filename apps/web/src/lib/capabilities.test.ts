@@ -165,14 +165,14 @@ describe("P4-4 capability helper — default landing paths", () => {
     ["Admin", "/admin/dashboard"],
     ["Teacher", "/admin/exams"],
     ["Grader", "/admin/grading-queue"],
-    ["Proctor", "/admin"],
+    ["Proctor", "/admin/proctor"],
     ["Candidate", "/exam/list"],
   ] as const)("routes %s to an accessible surface", (role, expectedPath) => {
     expect(defaultLandingPath(user(role))).toBe(expectedPath);
   });
 
-  it("does not invent a global Proctor surface before one exists", () => {
-    expect(adminLandingPath(user("Proctor"))).toBeNull();
+  it("uses the capability-backed Proctor workspace as the console landing", () => {
+    expect(adminLandingPath(user("Proctor"))).toBe("/admin/proctor");
   });
 });
 

@@ -236,18 +236,34 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("仪表盘")).not.toBeInTheDocument();
   });
 
-  it("Proctor sees NO admin nav groups (proctor monitoring not yet wired in sidebar)", () => {
+  it("Proctor sees only the monitoring workspace entry", () => {
     renderWithProviders(
       <AppSidebar user={proctor} collapsed={false} onLogout={() => {}} />,
     );
-    // Proctor's preset grants ExamRoomView but no question/exam/management
-    // permissions. The sidebar has no dedicated proctor group yet.
+    expect(screen.getByRole("link", { name: "监考工作台" })).toHaveAttribute(
+      "href",
+      "/admin/proctor",
+    );
     expect(screen.queryByText("题库")).not.toBeInTheDocument();
     expect(screen.queryByText("考试管理")).not.toBeInTheDocument();
     expect(screen.queryByText("评分队列")).not.toBeInTheDocument();
     expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
     expect(screen.queryByText("仪表盘")).not.toBeInTheDocument();
   });
+
+  it.each([
+    ["Teacher", teacher],
+    ["Grader", grader],
+    ["Candidate", candidate],
+  ] as const)(
+    "%s does not see the monitoring workspace entry",
+    (_role, user) => {
+      renderWithProviders(
+        <AppSidebar user={user} collapsed={false} onLogout={() => {}} />,
+      );
+      expect(screen.queryByText("监考工作台")).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("AppSidebar nav links", () => {

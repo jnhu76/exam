@@ -159,6 +159,7 @@ export function adminLandingPath(
   if (canSeeDashboard(user)) return routes.admin.dashboard;
   if (canSeeExams(user)) return routes.admin.exams;
   if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
+  if (canSeeProctor(user)) return routes.admin.proctorWorkspace;
   return null;
 }
 

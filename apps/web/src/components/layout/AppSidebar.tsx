@@ -6,6 +6,7 @@ import {
   canSeeExams,
   canSeeGradingQueue,
   canSeeManagement,
+  canSeeProctor,
   canSeeQuestions,
   canSeeResults,
 } from "@/lib/capabilities";
@@ -125,6 +126,17 @@ const groups: NavGroup[] = [
         to: routes.admin.results,
         icon: Gauge,
         visible: canSeeResults,
+      },
+    ],
+  },
+  {
+    labelKey: "nav.groups.monitoring",
+    items: [
+      {
+        labelKey: "nav.items.proctorWorkspace",
+        to: routes.admin.proctorWorkspace,
+        icon: Monitor,
+        visible: canSeeProctor,
       },
     ],
   },

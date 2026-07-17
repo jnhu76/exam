@@ -78,7 +78,7 @@ describe("AdminIndexRoute", () => {
     expect(screen.getByTestId("current-path").textContent).toBe("/admin/exams");
   });
 
-  it("keeps Proctor on a safe placeholder until a global surface exists", () => {
+  it("redirects Proctor to the monitoring workspace", () => {
     renderAdminIndex({
       id: "proctor",
       username: "proctor",
@@ -87,7 +87,8 @@ describe("AdminIndexRoute", () => {
       organizationId: "org",
     });
 
-    expect(screen.getByText("页面将在后续任务中实现。")).toBeInTheDocument();
-    expect(screen.queryByTestId("current-path")).not.toBeInTheDocument();
+    expect(screen.getByTestId("current-path").textContent).toBe(
+      "/admin/proctor",
+    );
   });
 });

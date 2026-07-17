@@ -223,7 +223,7 @@ describe("AuthContext", () => {
     it.each([
       ["Teacher", teacherUser, "login-teacher", "/admin/exams"],
       ["Grader", graderUser, "login-grader", "/admin/grading-queue"],
-      ["Proctor", proctorUser, "login-proctor", "/admin"],
+      ["Proctor", proctorUser, "login-proctor", "/admin/proctor"],
     ])(
       "redirects %s to its first capability-backed console surface",
       async (_role, nextUser, loginButton, expectedPath) => {

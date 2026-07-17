@@ -227,6 +227,7 @@ const zhCN = {
       overview: "概览",
       questionBank: "题库",
       exams: "考试",
+      monitoring: "监考",
       management: "管理",
     },
     items: {
@@ -237,6 +238,7 @@ const zhCN = {
       exams: "考试管理",
       gradingQueue: "待评分",
       results: "成绩查询",
+      proctorWorkspace: "监考工作台",
       users: "用户管理",
       candidates: "考生管理",
       importLogs: "导入日志",
@@ -1485,6 +1487,36 @@ const zhCN = {
         defaultNotes: "监考标记",
       },
     },
+    proctorWorkspace: {
+      title: "监考工作台",
+      description: "选择考试进入实时监考页面",
+      tableTitle: "可监考考试",
+      statusFilter: "考试状态",
+      statusFilters: {
+        all: "全部状态",
+        published: "已发布",
+        open: "开放中",
+        closed: "已关闭",
+      },
+      columns: {
+        title: "考试名称",
+        status: "状态",
+        openAt: "开放时间",
+        closeAt: "结束时间",
+        actions: "操作",
+      },
+      actions: {
+        enter: "进入监考",
+      },
+      empty: {
+        title: "当前没有可监考的考试",
+        description: "已发布、开放中或已关闭的考试会显示在这里。",
+        filteredTitle: "当前筛选条件下没有可监考的考试",
+        filteredDescription: "请选择其他考试状态。",
+      },
+      loading: "正在加载可监考考试...",
+      loadFailed: "加载监考考试失败",
+    },
     questionImport: {
       title: "导入题目",
       /** Downloaded CSV template filename (CSV artifact, not UI copy). */
@@ -1759,6 +1791,7 @@ const zhCN = {
       questionsImport: "题目导入",
       exams: "考试管理",
       examsNew: "新建考试",
+      proctorWorkspace: "监考工作台",
       results: "成绩查询",
       system: "系统监控",
       auditLogs: "审计日志",
