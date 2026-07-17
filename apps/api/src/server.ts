@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import cors from "./plugins/cors.js";
 import setupSecurity from "./plugins/security.js";
 import authPlugin from "./plugins/auth.js";
+import authzScopedPlugin from "./plugins/authz.js";
 import dbPlugin from "./plugins/db.js";
 import redisPlugin from "./plugins/redis.js";
 import nowPlugin from "./plugins/now.js";
@@ -45,6 +46,7 @@ async function main() {
   await app.register(redisPlugin);
   await app.register(nowPlugin);
   await app.register(authPlugin);
+  await app.register(authzScopedPlugin);
   await app.register(tenantPlugin);
   await app.register(rateLimitPlugin);
   await app.register(heartbeatPlugin);

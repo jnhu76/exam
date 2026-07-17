@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
 import { ClipboardList, Eye, Plus, Trash2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { canCreateExam, canDeleteExam } from "@/lib/capabilities";
 
 /** Row shape returned by the exams list API. */
 interface ExamRow {
@@ -61,10 +63,13 @@ interface PaginatedResponse<T> {
 export function ExamPage() {
   const { t } = useTranslation();
   const { formatDateRange } = useProductDateTime();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [exams, setExams] = useState<ExamRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mayCreateExam = user ? canCreateExam(user) : false;
+  const mayDeleteExam = user ? canDeleteExam(user) : false;
 
   const loadExams = useCallback(async () => {
     setIsLoading(true);
@@ -106,10 +111,12 @@ export function ExamPage() {
         <PageHeader
           title={t("admin.exams.title")}
           actions={
-            <Button onClick={() => void navigate("/admin/exams/new")}>
-              <AppIcon icon={Plus} size="inline" />
-              {t("admin.exams.createBtn")}
-            </Button>
+            mayCreateExam ? (
+              <Button onClick={() => void navigate("/admin/exams/new")}>
+                <AppIcon icon={Plus} size="inline" />
+                {t("admin.exams.createBtn")}
+              </Button>
+            ) : undefined
           }
         />
 
@@ -225,33 +232,34 @@ export function ExamPage() {
                             >
                               <AppIcon icon={Eye} size="inline" />
                             </Button>
-                            {exam.canDelete ? (
-                              <ConfirmDialog
-                                trigger={deleteButton}
-                                title={t("admin.exams.confirmDelete")}
-                                description={t(
-                                  "admin.exams.confirmDeleteDescription",
-                                  { title: exam.title },
-                                )}
-                                destructive
-                                onConfirm={() => void handleDelete(exam.id)}
-                              />
-                            ) : (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span
-                                    tabIndex={0}
-                                    aria-label={t("admin.exams.deleteLabel")}
-                                  >
-                                    {deleteButton}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  {exam.deleteDisabledReason ??
-                                    t("admin.exams.deleteDisabled")}
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
+                            {mayDeleteExam &&
+                              (exam.canDelete ? (
+                                <ConfirmDialog
+                                  trigger={deleteButton}
+                                  title={t("admin.exams.confirmDelete")}
+                                  description={t(
+                                    "admin.exams.confirmDeleteDescription",
+                                    { title: exam.title },
+                                  )}
+                                  destructive
+                                  onConfirm={() => void handleDelete(exam.id)}
+                                />
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      tabIndex={0}
+                                      aria-label={t("admin.exams.deleteLabel")}
+                                    >
+                                      {deleteButton}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {exam.deleteDisabledReason ??
+                                      t("admin.exams.deleteDisabled")}
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
                           </RowActions>
                         </DataTableCell>
                       </TableRow>

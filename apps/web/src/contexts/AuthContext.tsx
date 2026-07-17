@@ -14,6 +14,7 @@ import type {
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api, setNavigate } from "@/lib/api";
+import { defaultLandingPath } from "@/lib/capabilities";
 
 /** User shape returned by the /api/auth/me endpoint. */
 type SessionUser = MeResponse;
@@ -31,17 +32,6 @@ export interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-/**
- * Returns the default landing path for a given user role.
- *
- * Candidate → the exam list. Admin (and, once enforcement lands in PR #3,
- * Teacher/Proctor/Grader) → the admin dashboard. This is a redirect HINT;
- * AdminLayout/ExamLayout still enforce the real role gate (unchanged in M9).
- */
-function dashboardFor(user: SessionUser): string {
-  return user.role === "Candidate" ? "/exam/list" : "/admin/dashboard";
-}
 
 /**
  * Provides authentication state and actions (login, logout) to the
@@ -101,7 +91,7 @@ export function AuthProvider({
         { username, password },
       );
       setUser(nextUser);
-      navigate(dashboardFor(nextUser));
+      navigate(defaultLandingPath(nextUser));
     } catch (e) {
       setError(e instanceof Error ? e.message : t("auth.errors.loginFailed"));
     } finally {

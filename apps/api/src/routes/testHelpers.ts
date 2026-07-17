@@ -4,6 +4,7 @@ import fastifyCookie from "@fastify/cookie";
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
 import authPlugin from "../plugins/auth.js";
+import authzScopedPlugin from "../plugins/authz.js";
 import tenantPlugin from "../plugins/tenant.js";
 import rateLimitPlugin from "../plugins/rateLimit.js";
 import nowPlugin from "../plugins/now.js";
@@ -253,6 +254,7 @@ async function finishBuildTestApp(args: {
   await app.register(createDbPlugin(db));
   await app.register(nowPlugin);
   await app.register(authPlugin);
+  await app.register(authzScopedPlugin);
   await app.register(tenantPlugin);
   // Email sender is built from runtime config (M3). Tests that need to drive
   // transport selection stub env + resetRuntimeConfigForTest before building.

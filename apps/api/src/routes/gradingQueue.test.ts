@@ -542,6 +542,149 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
     expect(mine).toBeUndefined();
   });
 
+  // ── P4-2A: resource-aware capability resolver wiring (RBAC-M10-finish) ──
+  // The grading-details + grade-question routes use requireScopedCapability,
+  // which runs a DB-backed attempt resolver BEFORE the handler. The attempt
+  // resolver loads via attemptRepo.findById(ctx), which already filters by the
+  // actor's organizationId — so a foreign-org attempt is invisible to the
+  // resolver (returns resource_not_found). Per ADR §3.9 + the anti-enumeration
+  // norm, that maps to 404 (never leak existence). This is the resolver-layer
+  // proof; the handler's own findById is defense-in-depth (ADR §3.4).
+  it("scoped-capability resolver hides a foreign-org attempt on grading-details (404, anti-enumeration)", async () => {
+    const now = new Date();
+    const foreignOrgId = crypto.randomUUID();
+    await ctx.db.insert(schema.organizations).values({
+      id: foreignOrgId,
+      name: "Foreign2",
+      displayName: "Foreign2",
+      slug: `foreign2-${foreignOrgId.slice(0, 8)}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const foreignCourseId = crypto.randomUUID();
+    const foreignExamId = crypto.randomUUID();
+    const foreignCandidateId = crypto.randomUUID();
+    const foreignUserId = crypto.randomUUID();
+    const foreignAttemptId = crypto.randomUUID();
+    await ctx.db.insert(schema.courses).values({
+      id: foreignCourseId,
+      organizationId: foreignOrgId,
+      name: "F2",
+      code: `F2-${uniquePrefix()}`,
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.exams).values({
+      id: foreignExamId,
+      organizationId: foreignOrgId,
+      title: "Foreign2 Exam",
+      description: "",
+      courseId: foreignCourseId,
+      status: "open",
+      timingMode: "timed_window",
+      durationMinutes: 60,
+      openAt: now,
+      closeAt: new Date(Date.now() + 86400000),
+      passingScore: 0,
+      totalScore: 10,
+      questionSelectionMode: "manual",
+      questionIds: ["q"],
+      questionSnapshot: [subjectiveQuestion("q")],
+      controlFlags: {
+        shuffleQuestions: false,
+        shuffleOptions: false,
+        detectTabSwitch: false,
+        disableCopyPaste: false,
+        requireQueue: false,
+        batchSize: 10,
+        batchInterval: 3,
+        restrictIp: false,
+        requireLockdown: false,
+        showResultImmediately: false,
+      },
+      retakePolicy: "unlimited",
+      scoreStrategy: "highest",
+      maxAttempts: 3,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.users).values({
+      id: foreignUserId,
+      organizationId: foreignOrgId,
+      username: `fu2-${uniquePrefix()}`,
+      passwordHash: "h",
+      name: "Foreign2 User",
+      role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.candidateProfiles).values({
+      id: foreignCandidateId,
+      organizationId: foreignOrgId,
+      userId: foreignUserId,
+      fields: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+    const enrollmentId = crypto.randomUUID();
+    await ctx.db.insert(schema.examEnrollments).values({
+      id: enrollmentId,
+      organizationId: foreignOrgId,
+      examId: foreignExamId,
+      candidateId: foreignCandidateId,
+      status: "started",
+      attemptCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.examAttempts).values({
+      id: foreignAttemptId,
+      organizationId: foreignOrgId,
+      examId: foreignExamId,
+      candidateId: foreignCandidateId,
+      enrollmentId,
+      attemptNo: 1,
+      status: "submitted",
+      questionSnapshot: [subjectiveQuestion("q")],
+      answers: [],
+      gradingStatus: "pending_manual",
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Our Admin (org-1) requests the foreign-org (org-2) attempt's details.
+    // The resolver loads via findById(ctx) which filters by organizationId, so
+    // the foreign attempt is not found -> 404 (anti-enumeration). If the repo
+    // ever stopped filtering by org, the resolver's explicit organizationId
+    // anchor check (attemptResolver.ts:86) would catch it -> 403. Both paths
+    // deny; existence is never leaked.
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${foreignAttemptId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect([403, 404]).toContain(res.statusCode);
+    // In the current (org-filtering repo) configuration the resolver sees
+    // resource_not_found -> 404. Pin the live behavior so a future repo change
+    // that broke org filtering would flip this to 403 and surface here.
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("scoped-capability resolver returns 404 for a missing attempt on grading-details", async () => {
+    const missingId = "00000000-0000-4000-8000-0000000000ee";
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/attempts/${missingId}/grading-details`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    // resource_not_found maps to 404 (anti-enumeration; handler's canonical
+    // not-found), NOT 403 — a missing resource must not leak existence.
+    expect(res.statusCode).toBe(404);
+  });
+
   // ── Slice 4: GET grading-details returns subjective questions + state ──
   it("returns manual-mode questions and their grading state in details", async () => {
     const { attemptId } = await seedAttempt(ctx, {

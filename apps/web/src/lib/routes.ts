@@ -2,6 +2,7 @@
 export const routes = {
   login: "/login",
   admin: {
+    root: "/admin",
     dashboard: "/admin/dashboard",
     users: "/admin/users",
     candidates: "/admin/candidates",
@@ -19,6 +20,7 @@ export const routes = {
     examScores: (id: string) => `/admin/exams/${id}/scores`,
     examProctor: (id: string) => `/admin/exams/${id}/proctor`,
     examProctorMonitor: (id: string) => `/admin/exams/${id}/proctor/monitor`,
+    proctorWorkspace: "/admin/proctor",
     results: "/admin/results",
     gradingQueue: "/admin/grading-queue",
     gradingDetail: (id: string) => `/admin/grading-queue/${id}`,

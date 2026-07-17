@@ -78,6 +78,8 @@ export type ResolverKey =
   | "client_event"
   | "system_diagnostics";
 
+export type ResourceResolverKey = Extract<ResolverKey, ResourceType>;
+
 /** A successfully resolved scope: the scope type + the owning organization anchor. */
 export interface ResolvedScope {
   /** The resolved scope type. */
@@ -159,7 +161,7 @@ export function resolveOrganizationScope(ctx: ResolverContext): ResolvedScope {
  * so callers can map them to 503, not a silent 403.
  */
 export interface ScopeResolver {
-  readonly key: ResolverKey;
+  readonly key: ResourceResolverKey;
   resolve(
     ctx: ResolverContext,
     ref: ResourceRef,

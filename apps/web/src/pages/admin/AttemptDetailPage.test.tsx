@@ -290,4 +290,60 @@ describe("AttemptDetailPage", () => {
     // metadata JSON for the start event contains "source".
     expect(await screen.findByText(/source/)).toBeInTheDocument();
   });
+
+  // ── P3-MOD-P3-3: Admin frozen result view ────────────────────────
+  // AttemptDetailPage consumes the Admin scores DTO (GET /api/scores/attempts).
+  // For Admin the server bypasses the publication gate and keeps standardAnswer,
+  // so the DTO carries showResultImmediately:true + standardAnswer even when the
+  // candidate result is pending_publish. This test proves the page renders the
+  // full admin frozen detail (score/pass + objective standardAnswer) purely from
+  // that DTO — it never fetches live questions and never hides based on
+  // candidate publication state.
+  it("P3-3: renders full admin frozen result (score/pass + standardAnswer) from the admin scores DTO", async () => {
+    apiGet.mockResolvedValue({
+      attemptId: "attempt-1",
+      status: "graded",
+      showResultImmediately: true,
+      examTitle: "P3-3 admin frozen",
+      passingScore: 20,
+      totalScore: 30,
+      passed: true,
+      gradedAt: new Date().toISOString(),
+      questionResults: [
+        {
+          questionId: "q-obj",
+          score: 10,
+          maxScore: 10,
+          correct: true,
+          candidateAnswer: "a",
+          standardAnswer: "a",
+          type: "single_choice",
+          content: "P3-3 objective prompt",
+          order: 0,
+        },
+        {
+          questionId: "q-text",
+          score: 15,
+          maxScore: 20,
+          correct: true,
+          candidateAnswer: "candidate essay",
+          standardAnswer: "P3-3 frozen reference answer",
+          type: "text_response",
+          content: "P3-3 essay prompt",
+          order: 1,
+        },
+      ],
+    });
+    renderPage();
+
+    await screen.findByText("成绩概览");
+    // Admin aggregate score + pass render (candidate publication is irrelevant
+    // to the admin view — the DTO gate is the page's only input).
+    expect(screen.getByText("及格")).toBeInTheDocument();
+    expect(screen.getByText("P3-3 objective prompt")).toBeInTheDocument();
+    expect(screen.getByText("P3-3 essay prompt")).toBeInTheDocument();
+    // The objective frozen standardAnswer is rendered for the admin (the server
+    // does not strip it for Admin, unlike the candidate projection).
+    expect(screen.getAllByText("a").length).toBeGreaterThan(0);
+  });
 });

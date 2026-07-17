@@ -45,7 +45,7 @@ const mockDraftExam = {
   participants: [],
 };
 
-function renderPage() {
+function renderPage(role: "Admin" | "Teacher" = "Admin") {
   return render(
     <MemoryRouter initialEntries={["/admin/exams/exam-1"]}>
       <AuthProvider
@@ -53,7 +53,7 @@ function renderPage() {
           id: "admin-1",
           username: "admin",
           name: "Admin",
-          role: "Admin",
+          role,
           organizationId: "org1",
         }}
       >
@@ -166,6 +166,57 @@ describe("ExamDetailPage", () => {
   });
 
   describe("publish and archive", () => {
+    it("shows Teacher authoring actions but hides Admin-only lifecycle actions", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          status: "open",
+          resultPublicationMode: "manual",
+          resultsPublishedAt: null,
+        });
+      });
+
+      renderPage("Teacher");
+
+      expect(
+        await screen.findByTestId("exam-detail-close-btn"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId("exam-detail-publish-results-btn"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("添加考生")).toBeInTheDocument();
+      expect(
+        screen.queryByTestId("exam-detail-extend-btn"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("监考")).not.toBeInTheDocument();
+      expect(screen.queryByText("取消考试")).not.toBeInTheDocument();
+    });
+
+    it("hides published-state Admin-only lifecycle actions from Teacher", async () => {
+      getMock.mockImplementation((path: string) => {
+        if (path.includes("/enrollments")) return Promise.resolve([]);
+        return Promise.resolve({
+          ...mockDraftExam,
+          status: "published",
+          resultPublicationMode: "manual",
+          resultsPublishedAt: null,
+        });
+      });
+
+      renderPage("Teacher");
+
+      await screen.findByText("期末能力测评");
+      expect(
+        screen.queryByTestId("exam-detail-unpublish-btn"),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText("归档")).not.toBeInTheDocument();
+      expect(screen.queryByText("取消考试")).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId("exam-detail-publish-results-btn"),
+      ).toBeInTheDocument();
+    });
+
     it("renders publish button for draft", async () => {
       renderPage();
       expect(await screen.findByText("发布考试")).toBeInTheDocument();

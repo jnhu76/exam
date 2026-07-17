@@ -29,6 +29,30 @@ export const MONITORING_OFFLINE_THRESHOLD_MS = 90_000;
 export const ProctorAttemptStatusEnum = AttemptStatusEnum;
 export type ProctorAttemptStatusValue = AttemptStatusValue;
 
+export const ProctorExamStatusEnum = z.enum(["published", "open", "closed"]);
+export type ProctorExamStatus = z.infer<typeof ProctorExamStatusEnum>;
+
+export const ProctorExamListItemSchema = z
+  .object({
+    examId: z.string().uuid(),
+    title: z.string().min(1),
+    status: ProctorExamStatusEnum,
+    openAt: z.string().datetime(),
+    closeAt: z.string().datetime(),
+  })
+  .strict();
+export type ProctorExamListItem = z.infer<typeof ProctorExamListItemSchema>;
+
+export const ProctorExamListResponseSchema = z
+  .object({
+    items: z.array(ProctorExamListItemSchema),
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ProctorExamListResponse = z.infer<
+  typeof ProctorExamListResponseSchema
+>;
+
 /** Connectivity classification derived from heartbeat freshness (server-computed). */
 export const OnlineStateEnum = z.enum(["online", "stale", "offline"]);
 export type OnlineState = z.infer<typeof OnlineStateEnum>;

@@ -38,6 +38,19 @@ import {
   EnrollmentPicker,
   type CandidateItem,
 } from "@/components/exam/EnrollmentPicker";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  canArchiveExam,
+  canCancelExam,
+  canCloseExam,
+  canExtendExam,
+  canManageEnrollments,
+  canPublishExam,
+  canPublishResults,
+  canSeeProctor,
+  canUnpublishExam,
+  canUpdateExam,
+} from "@/lib/capabilities";
 
 /** Full exam detail including stats and participant list. */
 /** Full exam detail including configuration, statistics, and participant summaries. */
@@ -101,6 +114,7 @@ interface EnrollmentItem {
 export function ExamDetailPage() {
   const { t } = useTranslation();
   const { formatDateTime } = useProductDateTime();
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [exam, setExam] = useState<ExamDetail | null>(null);
@@ -126,6 +140,16 @@ export function ExamDetailPage() {
   );
   const [addingEnrollment, setAddingEnrollment] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const mayUpdateExam = user ? canUpdateExam(user) : false;
+  const mayPublishExam = user ? canPublishExam(user) : false;
+  const mayCloseExam = user ? canCloseExam(user) : false;
+  const mayPublishResults = user ? canPublishResults(user) : false;
+  const mayManageEnrollments = user ? canManageEnrollments(user) : false;
+  const mayUnpublishExam = user ? canUnpublishExam(user) : false;
+  const mayCancelExam = user ? canCancelExam(user) : false;
+  const mayArchiveExam = user ? canArchiveExam(user) : false;
+  const mayExtendExam = user ? canExtendExam(user) : false;
+  const maySeeProctor = user ? canSeeProctor(user) : false;
 
   /** Fetches the full exam detail from the API. */
   const loadExam = useCallback(async () => {
@@ -381,7 +405,7 @@ export function ExamDetailPage() {
         title={exam.title}
         actions={
           <div className="flex gap-2">
-            {exam.status === "draft" && (
+            {exam.status === "draft" && mayUpdateExam && (
               <Button
                 variant="outline"
                 onClick={() => void navigate(routes.admin.examEdit(id!))}
@@ -389,7 +413,7 @@ export function ExamDetailPage() {
                 {t("admin.examDetail.actions.edit")}
               </Button>
             )}
-            {exam.status === "draft" && (
+            {exam.status === "draft" && mayPublishExam && (
               <Button
                 onClick={() => void handlePublish()}
                 disabled={publishing}
@@ -399,7 +423,7 @@ export function ExamDetailPage() {
                   : t("admin.examDetail.actions.publish")}
               </Button>
             )}
-            {exam.status === "open" && (
+            {exam.status === "open" && mayCloseExam && (
               <ConfirmDialog
                 trigger={
                   <Button
@@ -419,7 +443,7 @@ export function ExamDetailPage() {
                 onConfirm={() => void handleClose()}
               />
             )}
-            {exam.status === "open" && (
+            {exam.status === "open" && mayExtendExam && (
               <Button
                 data-testid="exam-detail-extend-btn"
                 variant="outline"
@@ -428,7 +452,7 @@ export function ExamDetailPage() {
                 {t("admin.examDetail.actions.extend")}
               </Button>
             )}
-            {exam.status === "open" && (
+            {exam.status === "open" && maySeeProctor && (
               <Button
                 variant="outline"
                 onClick={() => void navigate(`/admin/exams/${id}/proctor`)}
@@ -436,7 +460,7 @@ export function ExamDetailPage() {
                 {t("admin.examDetail.actions.proctor")}
               </Button>
             )}
-            {exam.status === "published" && (
+            {exam.status === "published" && mayUnpublishExam && (
               <ConfirmDialog
                 trigger={
                   <Button
@@ -458,41 +482,47 @@ export function ExamDetailPage() {
                 onConfirm={() => void handleUnpublish()}
               />
             )}
-            {(exam.status === "published" || exam.status === "closed") && (
-              <ConfirmDialog
-                trigger={
-                  <Button variant="outline" disabled={archiving}>
-                    {archiving
-                      ? t("admin.examDetail.actions.archiving")
-                      : t("admin.examDetail.actions.archive")}
-                  </Button>
-                }
-                title={t("admin.examDetail.confirm.archiveTitle")}
-                description={t("admin.examDetail.confirm.archiveDescription", {
-                  title: exam.title,
-                })}
-                destructive
-                onConfirm={() => void handleArchive()}
-              />
-            )}
-            {(exam.status === "published" || exam.status === "open") && (
-              <ConfirmDialog
-                trigger={
-                  <Button variant="outline" disabled={canceling}>
-                    {canceling
-                      ? t("admin.examDetail.actions.canceling")
-                      : t("admin.examDetail.actions.cancel")}
-                  </Button>
-                }
-                title={t("admin.examDetail.confirm.cancelTitle")}
-                description={t("admin.examDetail.confirm.cancelDescription", {
-                  title: exam.title,
-                })}
-                destructive
-                onConfirm={() => void handleCancel()}
-              />
-            )}
-            {exam.resultPublicationMode === "manual" &&
+            {mayArchiveExam &&
+              (exam.status === "published" || exam.status === "closed") && (
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="outline" disabled={archiving}>
+                      {archiving
+                        ? t("admin.examDetail.actions.archiving")
+                        : t("admin.examDetail.actions.archive")}
+                    </Button>
+                  }
+                  title={t("admin.examDetail.confirm.archiveTitle")}
+                  description={t(
+                    "admin.examDetail.confirm.archiveDescription",
+                    {
+                      title: exam.title,
+                    },
+                  )}
+                  destructive
+                  onConfirm={() => void handleArchive()}
+                />
+              )}
+            {mayCancelExam &&
+              (exam.status === "published" || exam.status === "open") && (
+                <ConfirmDialog
+                  trigger={
+                    <Button variant="outline" disabled={canceling}>
+                      {canceling
+                        ? t("admin.examDetail.actions.canceling")
+                        : t("admin.examDetail.actions.cancel")}
+                    </Button>
+                  }
+                  title={t("admin.examDetail.confirm.cancelTitle")}
+                  description={t("admin.examDetail.confirm.cancelDescription", {
+                    title: exam.title,
+                  })}
+                  destructive
+                  onConfirm={() => void handleCancel()}
+                />
+              )}
+            {mayPublishResults &&
+              exam.resultPublicationMode === "manual" &&
               !exam.resultsPublishedAt &&
               (exam.status === "published" ||
                 exam.status === "open" ||
@@ -662,10 +692,12 @@ export function ExamDetailPage() {
               <CardTitle className="text-base">
                 {t("admin.examDetail.enrollment.title")}
               </CardTitle>
-              <Button size="sm" onClick={handleOpenAddDialog}>
-                <AppIcon icon={Plus} size="inline" />
-                {t("admin.examDetail.enrollment.addCandidate")}
-              </Button>
+              {mayManageEnrollments && (
+                <Button size="sm" onClick={handleOpenAddDialog}>
+                  <AppIcon icon={Plus} size="inline" />
+                  {t("admin.examDetail.enrollment.addCandidate")}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {enrollments.length === 0 ? (
@@ -738,33 +770,34 @@ export function ExamDetailPage() {
                           </DataTableCell>
                           <DataTableCell role="actions">
                             <RowActions>
-                              {enrollment.status === "assigned" && (
-                                <ConfirmDialog
-                                  trigger={
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      aria-label={t(
-                                        "admin.examDetail.confirm.removeCandidate",
-                                      )}
-                                      data-row-action-tone="destructive"
-                                    >
-                                      <AppIcon icon={Trash2} size="inline" />
-                                    </Button>
-                                  }
-                                  title={t(
-                                    "admin.examDetail.confirm.removeTitle",
-                                  )}
-                                  description={t(
-                                    "admin.examDetail.confirm.removeDescription",
-                                    { name: enrollment.candidateDisplayName },
-                                  )}
-                                  destructive
-                                  onConfirm={() =>
-                                    void handleRemoveEnrollment(enrollment.id)
-                                  }
-                                />
-                              )}
+                              {mayManageEnrollments &&
+                                enrollment.status === "assigned" && (
+                                  <ConfirmDialog
+                                    trigger={
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={t(
+                                          "admin.examDetail.confirm.removeCandidate",
+                                        )}
+                                        data-row-action-tone="destructive"
+                                      >
+                                        <AppIcon icon={Trash2} size="inline" />
+                                      </Button>
+                                    }
+                                    title={t(
+                                      "admin.examDetail.confirm.removeTitle",
+                                    )}
+                                    description={t(
+                                      "admin.examDetail.confirm.removeDescription",
+                                      { name: enrollment.candidateDisplayName },
+                                    )}
+                                    destructive
+                                    onConfirm={() =>
+                                      void handleRemoveEnrollment(enrollment.id)
+                                    }
+                                  />
+                                )}
                             </RowActions>
                           </DataTableCell>
                         </TableRow>

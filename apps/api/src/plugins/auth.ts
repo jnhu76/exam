@@ -3,29 +3,11 @@ import fp from "fastify-plugin";
 import { verifyJWT, deriveSessionId } from "@exam/auth/src/session.js";
 import type { Role, Permission } from "@exam/domain";
 import { getPermissionsForRole } from "@exam/auth/src/rbac.js";
-import {
-  permissionsForRole,
-  type PermissionKey,
-  type RoleKey,
-} from "@exam/authz";
+import { type PermissionKey, type RoleKey } from "@exam/authz";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
-
-/**
- * Memoized role-preset permission sets (Phase 3 dotted keys). Presets are
- * static, so the cache is safe for the process lifetime. Admin is a documented
- * superset (RBAC-M6), so it passes every capability check.
- */
-const PRESET_SETS = new Map<RoleKey, ReadonlySet<PermissionKey>>();
-function presetSet(role: RoleKey): ReadonlySet<PermissionKey> {
-  let set = PRESET_SETS.get(role);
-  if (!set) {
-    set = new Set<PermissionKey>(permissionsForRole(role));
-    PRESET_SETS.set(role, set);
-  }
-  return set;
-}
+import { presetAllows } from "../lib/presetCache.js";
 
 /**
  * Fastify plugin that registers authentication and authorization decorators
@@ -183,7 +165,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
       }
 
-      if (!presetSet(ctx.role as RoleKey).has(permission)) {
+      if (!presetAllows(ctx.role as RoleKey, permission)) {
         return reply
           .code(403)
           .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));

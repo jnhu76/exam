@@ -129,7 +129,11 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.GradingDetailView),
+        fastify.requireScopedCapability(
+          Permission.GradingDetailView,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: AttemptIdParamsSchema,
@@ -249,7 +253,11 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireCapability(Permission.GradingScoreWrite),
+        fastify.requireScopedCapability(
+          Permission.GradingScoreWrite,
+          "attempt",
+          "attemptId",
+        ),
       ],
       schema: {
         params: AttemptIdParamsSchema,

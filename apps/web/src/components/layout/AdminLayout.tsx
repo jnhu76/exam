@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
+import { canAccessAdminConsole, isCandidate } from "@/lib/capabilities";
 import { PageContainer } from "@/components/shared/PageContainer";
 
 /**
@@ -89,8 +90,17 @@ export function AdminLayout() {
       </div>
     );
   }
-  if (!user || user.role === "Candidate") {
+  // Console access is UX gating only (lib/capabilities.ts); the backend remains
+  // authoritative on every route. A Candidate is routed to the exam runtime;
+  // an unauthenticated user is routed to login.
+  if (!user) {
     return <Navigate to="/login" replace />;
+  }
+  if (!canAccessAdminConsole(user)) {
+    // Candidate -> exam runtime; any future non-console role lands on login.
+    return (
+      <Navigate to={isCandidate(user) ? "/exam/list" : "/login"} replace />
+    );
   }
 
   const topbarTitle = getPageTitle(location.pathname);

@@ -15,6 +15,7 @@ import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
+import { Permission } from "@exam/authz";
 import {
   CandidateIdentityConflictError,
   UserAlreadyExistsError,
@@ -170,17 +171,20 @@ const idParamsSchema = z.object({ id: z.string().uuid() });
  * Fastify plugin that registers candidate management routes.
  *
  * Provides list, create, update, and import endpoints for candidates.
- * All routes require Admin role authentication.
+ * Candidate writes require Admin; the read list follows CandidateView.
  */
 const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidates",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateView),
+      ],
       schema: {
         querystring: PaginationParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: { 200: candidateListResponseSchema },
       },
     },
@@ -188,7 +192,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
      * GET /candidates — list candidates with pagination.
      *
      * Returns paginated candidate records enriched with user-level
-     * name, username, and isActive status. Requires Admin role.
+     * name, username, and isActive status. Requires CandidateView.
      */
     async (request) => {
       const ctx = ensureTargetOrg(getRequestContext(request));

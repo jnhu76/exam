@@ -1,12 +1,12 @@
 import type { Database } from "../types.js";
-import { exams } from "../schema/pg.js";
+import { courses, exams, organizations } from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOrganizationId,
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 type ExamSelect = typeof exams.$inferSelect;
 
@@ -19,6 +19,46 @@ export function createExamRepo(db: Database) {
 
   return {
     ...repo,
+    async listProctorDiscoverable(ctx: TenantContext | RequestContext) {
+      const orgId = resolveOrganizationId(ctx);
+      return db
+        .select({
+          examId: exams.id,
+          title: exams.title,
+          status: exams.status,
+          openAt: exams.openAt,
+          closeAt: exams.closeAt,
+        })
+        .from(exams)
+        .where(
+          and(
+            eq(exams.organizationId, orgId),
+            inArray(exams.status, ["published", "open", "closed"]),
+          ),
+        )
+        .orderBy(asc(exams.openAt), asc(exams.id));
+    },
+    async findAuthorizationChain(
+      ctx: TenantContext | RequestContext,
+      examId: string,
+    ) {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          examId: exams.id,
+          examOrganizationId: exams.organizationId,
+          linkedCourseId: exams.courseId,
+          courseId: courses.id,
+          courseOrganizationId: courses.organizationId,
+          organizationId: organizations.id,
+        })
+        .from(exams)
+        .leftJoin(courses, eq(exams.courseId, courses.id))
+        .leftJoin(organizations, eq(courses.organizationId, organizations.id))
+        .where(and(eq(exams.organizationId, orgId), eq(exams.id, examId)))
+        .limit(1);
+      return rows[0] ?? null;
+    },
     /**
      * Finds an exam by `id` with `FOR UPDATE` row lock, scoped to the tenant.
      *

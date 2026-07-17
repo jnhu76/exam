@@ -84,6 +84,104 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
     expect(e?.permission).toBe("score.own.view");
     expect(e?.scope).toBe("own_score");
   });
+
+  // P4-1 §G drift closures — the three routes added to complete coverage.
+  it("candidate-fields template -> candidate_field.view @ organization scope", () => {
+    const e = find("GET", "/candidate-fields/template");
+    expect(e?.permission).toBe("candidate_field.view");
+    expect(e?.scope).toBe("organization");
+    expect(e?.currentGate).toBe("Admin");
+  });
+
+  it("candidate take snapshot -> attempt.view_own @ own_attempt scope", () => {
+    const e = find("GET", "/candidate/attempts/:attemptId/take");
+    expect(e?.permission).toBe("attempt.view_own");
+    expect(e?.scope).toBe("own_attempt");
+    expect(e?.currentGate).toBe("Candidate");
+  });
+
+  it("proctor incident -> attempt.misconduct.mark @ attempt scope (already capability-gated)", () => {
+    const e = find("POST", "/admin/attempts/:attemptId/proctor-incident");
+    expect(e?.permission).toBe("attempt.misconduct.mark");
+    expect(e?.scope).toBe("attempt");
+    expect(e?.auditAction).toBe("attempt.misconductFlagged");
+    expect(e?.sensitive).toBe(true);
+  });
+
+  it("proctor discovery -> exam.room.view with an organization-scoped list filter", () => {
+    const e = find("GET", "/admin/proctor/exams");
+    expect(e?.permission).toBe(Permission.ExamRoomView);
+    expect(e?.scope).toBe("organization");
+    expect(e?.resolver).toBe("organization");
+    expect(e?.resource).toEqual({
+      type: "list",
+      listOf: "exam",
+      filterSpec: "proctor-discoverable-exams",
+    });
+  });
+});
+
+/**
+ * RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — registry/runtime conformance.
+ *
+ * The route registry is the documented target state for every protected
+ * route. Four routes were migrated in this corrective to close the
+ * registry-vs-runtime drift surfaced in review #2/#5:
+ *
+ *   - GET  /scores/attempts/:attemptId        -> score capability (own/all)
+ *   - GET  /admin/exams/:examId/proctor/attempts   -> exam resolver
+ *   - GET  /admin/attempts/:attemptId/proctor-events   -> attempt resolver
+ *   - POST /admin/attempts/:attemptId/proctor-incident -> attempt resolver
+ *
+ * These tests pin the registry declarations so the runtime migration (which
+ * the route-level + permission-matrix tests prove behaviorally) is backed by
+ * a stable contract. If a future edit reverts a runtime decorator without
+ * updating the registry (or vice versa), the mismatch surfaces here.
+ */
+describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — migrated-route registry declarations", () => {
+  const find = (method: string, path: string) =>
+    ROUTE_PERMISSION_REGISTRY.find(
+      (e) => e.method === method && e.path === path,
+    );
+
+  it("GET /scores/attempts/:attemptId declares score.own.view @ own_score via the score resolver", () => {
+    const e = find("GET", "/scores/attempts/:attemptId");
+    expect(e).toBeDefined();
+    expect(e?.permission).toBe(Permission.ScoreOwnView);
+    expect(e?.scope).toBe(Scope.OwnScore);
+    expect(e?.resolver).toBe("score");
+    // Runtime uses requireScoreCapability() (own/all arbitration, no role branch).
+    // The registry's ScoreOwnView reflects the candidate path; ScoreAllView is
+    // the broadening grant arbitrated by the same preHandler (ADR §L619-620).
+  });
+
+  it("GET /admin/exams/:examId/proctor/attempts declares exam.room.view @ exam via the exam resolver", () => {
+    const e = find("GET", "/admin/exams/:examId/proctor/attempts");
+    expect(e).toBeDefined();
+    expect(e?.permission).toBe(Permission.ExamRoomView);
+    expect(e?.scope).toBe(Scope.Exam);
+    expect(e?.resolver).toBe("exam");
+    // Runtime uses requireScopedCapability(ExamRoomView, "exam", "examId").
+  });
+
+  it("GET /admin/attempts/:attemptId/proctor-events declares attempt.timeline.view @ attempt via the attempt resolver", () => {
+    const e = find("GET", "/admin/attempts/:attemptId/proctor-events");
+    expect(e).toBeDefined();
+    expect(e?.permission).toBe(Permission.AttemptTimelineView);
+    expect(e?.scope).toBe(Scope.Attempt);
+    expect(e?.resolver).toBe("attempt");
+    // Runtime uses requireScopedCapability(AttemptTimelineView, "attempt", "attemptId").
+  });
+
+  it("POST /admin/attempts/:attemptId/proctor-incident declares attempt.misconduct.mark @ attempt via the attempt resolver", () => {
+    const e = find("POST", "/admin/attempts/:attemptId/proctor-incident");
+    expect(e).toBeDefined();
+    expect(e?.permission).toBe(Permission.AttemptMisconductMark);
+    expect(e?.scope).toBe(Scope.Attempt);
+    expect(e?.resolver).toBe("attempt");
+    expect(e?.auditAction).toBe("attempt.misconductFlagged");
+    // Runtime uses requireScopedCapability(AttemptMisconductMark, "attempt", "attemptId").
+  });
 });
 
 describe("RBAC-M4 route permission registry — coverage of protected routes", () => {
@@ -124,6 +222,7 @@ describe("RBAC-M4 route permission registry — coverage of protected routes", (
     { method: "GET", path: "/admin/attempts/:attemptId/export" },
     { method: "GET", path: "/admin/attempts/:attemptId/export/csv" },
     { method: "GET", path: "/admin/exams/:examId/proctor/attempts" },
+    { method: "GET", path: "/admin/proctor/exams" },
     { method: "GET", path: "/admin/attempts/:attemptId/proctor-events" },
     { method: "GET", path: "/admin/grading-queue" },
     { method: "GET", path: "/admin/attempts/:attemptId/grading-details" },
@@ -167,6 +266,14 @@ describe("RBAC-M4 route permission registry — coverage of protected routes", (
     { method: "POST", path: "/candidate-fields" },
     { method: "PATCH", path: "/candidate-fields/:id" },
     { method: "DELETE", path: "/candidate-fields/:id" },
+    // P4-1 §G drift closures: three protected routes that were absent from the
+    // registry. /candidate-fields/template and /candidate/attempts/:attemptId/take
+    // are requireRole-gated; /admin/attempts/:attemptId/proctor-incident is
+    // already requireCapability-gated. All three are protected and therefore
+    // belong in the registry (RBAC-M4 coverage contract).
+    { method: "GET", path: "/candidate-fields/template" },
+    { method: "GET", path: "/candidate/attempts/:attemptId/take" },
+    { method: "POST", path: "/admin/attempts/:attemptId/proctor-incident" },
   ];
 
   it("every requireRole-protected route has a registry entry", () => {

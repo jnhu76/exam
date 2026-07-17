@@ -1,0 +1,271 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import {
+  Permission,
+  Scope,
+  type PermissionKey,
+  type ResolvedScope,
+  type DeniedScope,
+  type ScopeResolver,
+} from "@exam/authz";
+
+/**
+ * Unit tests for the resource-aware capability preHandler (RBAC-M10-finish,
+ * P4-2A). The preHandler composes the flat role-preset capability check with a
+ * registered scope resolver, and maps resolver denials per ADR §3.9:
+ *   resource_not_found      -> 404 (preserve anti-enumeration; handler's norm)
+ *   organization_mismatch   -> 403 (scope inconsistency, never allow)
+ *   ownership_mismatch      -> 403
+ *   broken_parent_chain     -> 403
+ *   resolver_error          -> 503 AUTHZ_UNAVAILABLE (never fail open, never
+ *                              masquerade operational failure as 403)
+ *
+ * The capability (preset) denial remains 403 PERMISSION_DENIED, identical to
+ * the base requireCapability decorator.
+ *
+ * The seam under test is the public preHandler returned by
+ * `buildScopedCapabilityPreHandler`. Resolvers are injected (not imported) so
+ * the mapping logic is tested without DB fixtures.
+ */
+const { buildScopedCapabilityPreHandler } =
+  await import("./scopedCapability.js");
+
+type ResolverMap = Record<string, ScopeResolver>;
+
+function makeResolverMap(resolvers: ResolverMap) {
+  return resolvers;
+}
+
+/** A fake request with the fields the preHandler reads. */
+function makeReq(
+  params: Record<string, string>,
+  role: string,
+  permissions: readonly PermissionKey[] = [],
+): FastifyRequest {
+  return {
+    ctx: {
+      actorId: "actor-1",
+      organizationId: "org-1",
+      role,
+      permissions: permissions as never,
+      sessionId: "s",
+    },
+    params,
+    log: { child: () => ({}), error: () => {}, warn: () => {}, info: () => {} },
+  } as unknown as FastifyRequest;
+}
+
+/** Captures the reply status + body the preHandler sent. The capture fields
+ *  live on the reply object itself so the chain `reply.code(n).send(b)` mutates
+ *  the same object the test reads. */
+function makeReply(): FastifyReply & { sentCode: number; sentBody: unknown } {
+  const reply = {
+    sentCode: 0,
+    sentBody: undefined as unknown,
+    code(c: number) {
+      reply.sentCode = c;
+      return reply;
+    },
+    send(b: unknown) {
+      reply.sentBody = b;
+      return reply;
+    },
+  };
+  return reply as unknown as FastifyReply & {
+    sentCode: number;
+    sentBody: unknown;
+  };
+}
+
+/** A resolver that returns a fixed result, for deterministic mapping tests. */
+function stubResolver(result: ResolvedScope | DeniedScope): ScopeResolver {
+  return {
+    key: "attempt",
+    async resolve() {
+      return result;
+    },
+  };
+}
+
+describe("scoped capability preHandler — preset denial (parity with requireCapability)", () => {
+  it("401 when there is no ctx (unauthenticated)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({}),
+      presetAllows: () => false,
+    });
+    const reply = makeReply();
+    await ph({ ctx: undefined, params: {} } as never, reply);
+    expect(reply.sentCode).toBe(401);
+  });
+
+  it("403 PERMISSION_DENIED when the role preset lacks the permission", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({
+          scope: Scope.Attempt,
+          organizationId: "org-1",
+        }),
+      }),
+      presetAllows: () => false,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "a1" }, "Teacher"), reply);
+    expect(reply.sentCode).toBe(403);
+    expect(JSON.stringify(reply.sentBody)).toContain("PERMISSION_DENIED");
+  });
+});
+
+describe("scoped capability preHandler — resolver denial mapping (ADR §3.9)", () => {
+  const allow = () => true;
+
+  it("resource_not_found -> 404 (anti-enumeration; handler canonical not-found)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({ denied: true, reason: "resource_not_found" }),
+      }),
+      presetAllows: allow,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "missing" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(404);
+  });
+
+  it("organization_mismatch -> 403 (scope inconsistency, never allow)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({
+          denied: true,
+          reason: "organization_mismatch",
+        }),
+      }),
+      presetAllows: allow,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "foreign" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(403);
+  });
+
+  it("ownership_mismatch -> 403", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({ denied: true, reason: "ownership_mismatch" }),
+      }),
+      presetAllows: allow,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "x" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(403);
+  });
+
+  it("broken_parent_chain -> 403", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({ denied: true, reason: "broken_parent_chain" }),
+      }),
+      presetAllows: allow,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "x" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(403);
+  });
+
+  it("resolver_error -> 503 AUTHZ_UNAVAILABLE (never fail open, never 403)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({ denied: true, reason: "resolver_error" }),
+      }),
+      presetAllows: allow,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "x" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+
+  it("resolved scope -> no reply sent (passes the gate; handler runs)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({
+        attempt: stubResolver({
+          scope: Scope.Attempt,
+          organizationId: "org-1",
+        }),
+      }),
+      presetAllows: allow,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "a1" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(0);
+    expect(reply.sentBody).toBeUndefined();
+  });
+});
+
+describe("scoped capability preHandler — resolver selection + resource id", () => {
+  it("uses the resolver registered for resolverKey", async () => {
+    const called: string[] = [];
+    const resolvers = makeResolverMap({
+      attempt: {
+        key: "attempt",
+        async resolve(_ctx, ref) {
+          called.push(ref.id);
+          return { scope: Scope.Attempt, organizationId: "org-1" };
+        },
+      },
+      exam: {
+        key: "exam",
+        async resolve() {
+          called.push("exam-called");
+          return { scope: Scope.Exam, organizationId: "org-1" };
+        },
+      },
+    });
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers,
+      presetAllows: () => true,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "a9" }, "Admin"), reply);
+    expect(called).toEqual(["a9"]);
+    expect(reply.sentCode).toBe(0);
+  });
+
+  it("503 when no resolver is registered for resolverKey (config error, never allow)", async () => {
+    const ph = buildScopedCapabilityPreHandler({
+      permission: Permission.GradingDetailView,
+      resolverKey: "attempt",
+      resourceIdKey: "attemptId",
+      resolvers: makeResolverMap({}),
+      presetAllows: () => true,
+    });
+    const reply = makeReply();
+    await ph(makeReq({ attemptId: "a1" }, "Admin"), reply);
+    expect(reply.sentCode).toBe(503);
+    expect(JSON.stringify(reply.sentBody)).toContain("AUTHZ_UNAVAILABLE");
+  });
+});

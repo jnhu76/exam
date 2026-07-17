@@ -1,12 +1,23 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import courseRoutes from "./course.js";
-import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createFutureRoleUserForTest,
+  uniquePrefix,
+} from "./testHelpers.js";
 
 describe("course routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let teacherToken: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(courseRoutes);
+    ({ token: teacherToken } = await createFutureRoleUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Teacher",
+      "course-teacher",
+    ));
   });
 
   afterAll(async () => {
@@ -133,6 +144,64 @@ describe("course routes", () => {
       cookies: { "auth-token": ctx.candidateToken },
     });
     expect(candidateRes.statusCode).toBe(403);
+  });
+
+  it("allows Teacher to list, create, read, and update courses", async () => {
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/courses",
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Teacher Course",
+        code: `TCH-${uniquePrefix()}`,
+        description: "Teacher-owned authoring dependency",
+      },
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const courseId = createRes.json().id as string;
+
+    const detailRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/courses/${courseId}`,
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(detailRes.statusCode).toBe(200);
+
+    const updateRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/courses/${courseId}`,
+      payload: { name: "Teacher Updated Course" },
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.json().name).toBe("Teacher Updated Course");
+  });
+
+  it("keeps course deletion unavailable to Teacher", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Teacher Non-delete Course",
+        code: `TND-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+
+    const deleteRes = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/courses/${createRes.json().id as string}`,
+      cookies: { "auth-token": teacherToken },
+    });
+    expect(deleteRes.statusCode).toBe(403);
   });
 
   it("POST /api/courses rejects duplicate code within org", async () => {

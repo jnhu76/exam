@@ -63,4 +63,7 @@ export const TYPE_VARIANT: Record<string, "default" | "secondary" | "outline"> =
     multiple_choice: "secondary",
     fill_blank: "outline",
     true_false: "outline",
+    // P3-MOD-P2-1C: text_response gets an explicit variant so it never
+    // silently falls back to default; secondary keeps it visually neutral.
+    text_response: "secondary",
   };

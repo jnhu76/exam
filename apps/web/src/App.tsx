@@ -11,6 +11,7 @@ import { AdminLayout } from "@/components/layout/AdminLayout";
 import { BrandProvider, useBranding } from "@/components/layout/BrandProvider";
 import { ExamLayout } from "@/components/layout/ExamLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { DateTimeProvider } from "@/contexts/DateTimeContext";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { getDocumentTitle } from "@/lib/pageMeta";
@@ -38,12 +39,25 @@ import { ResultsOverviewPage } from "@/pages/admin/ResultsOverviewPage";
 import { AttemptDetailPage } from "@/pages/admin/AttemptDetailPage";
 import { ProctorDashboardPage } from "@/pages/admin/ProctorDashboardPage";
 import { ExamMonitoringPage } from "@/pages/admin/ExamMonitoringPage";
+import { ProctorWorkspacePage } from "@/pages/admin/ProctorWorkspacePage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
 import { SystemDiagnosticsPage } from "@/pages/admin/SystemDiagnosticsPage";
 import { GradingQueuePage } from "@/pages/admin/GradingQueuePage";
 import { GradingDetailPage } from "@/pages/admin/GradingDetailPage";
 import { AuditLogPage } from "@/pages/admin/AuditLogPage";
 import { ImportLogsPage } from "@/pages/admin/ImportLogsPage";
+import { adminLandingPath } from "@/lib/capabilities";
+
+export function AdminIndexRoute() {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  const landingPath = adminLandingPath(user);
+  return landingPath ? (
+    <Navigate to={landingPath} replace />
+  ) : (
+    <PlaceholderPage />
+  );
+}
 
 /** Top-level route definitions for admin, candidate exam, and login views. */
 export function AppRoutes() {
@@ -51,7 +65,7 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin" element={<AdminLayout />}>
-        <Route index element={<Navigate to="/admin/dashboard" replace />} />
+        <Route index element={<AdminIndexRoute />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="system" element={<SystemDiagnosticsPage />} />
         <Route
@@ -73,6 +87,7 @@ export function AppRoutes() {
         <Route path="exams/:id/edit" element={<ExamEditPage />} />
         <Route path="exams/:id/scores" element={<ScoreListPage />} />
         <Route path="exams/:id/proctor" element={<ProctorDashboardPage />} />
+        <Route path="proctor" element={<ProctorWorkspacePage />} />
         <Route
           path="exams/:id/proctor/monitor"
           element={<ExamMonitoringPage />}

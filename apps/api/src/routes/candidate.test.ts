@@ -5,11 +5,12 @@ import { signJWT } from "@exam/auth/src/session.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import candidateRoutes from "./candidate.js";
-import { buildTestApp } from "./testHelpers.js";
+import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
 
 describe("candidate routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let adminToken: string;
+  let teacherToken: string;
   let organizationId: string;
   let identityFieldName: string;
 
@@ -42,6 +43,12 @@ describe("candidate routes", () => {
       role: "Admin",
       organizationId,
     });
+    ({ token: teacherToken } = await createFutureRoleUserForTest(
+      ctx.db,
+      organizationId,
+      "Teacher",
+      "candidate-teacher",
+    ));
 
     const fieldRepo = createCandidateFieldRepo(ctx.db);
     const repoCtx = {
@@ -81,6 +88,36 @@ describe("candidate routes", () => {
     expect(body).toHaveProperty("page", 1);
     expect(body).toHaveProperty("pageSize");
     expect(body.items).toBeInstanceOf(Array);
+  });
+
+  it("allows Teacher to read the candidate list used by enrollment", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidates",
+      cookies: { "auth-token": teacherToken },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      items: expect.any(Array),
+      total: expect.any(Number),
+    });
+  });
+
+  it("keeps candidate creation unavailable to Teacher", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username: `teacher-cannot-create-${Date.now()}`,
+        password: "password123",
+        name: "Forbidden Candidate",
+        fields: { [identityFieldName]: `forbidden-${Date.now()}` },
+      },
+      cookies: { "auth-token": teacherToken },
+    });
+
+    expect(res.statusCode).toBe(403);
   });
 
   it("POST /api/candidates creates a candidate with user", async () => {

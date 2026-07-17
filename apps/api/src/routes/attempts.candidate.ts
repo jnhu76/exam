@@ -515,6 +515,12 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       if (!exam) {
         throw new NotFoundError("Exam not found");
       }
+      const enrollment = await createEnrollmentRepo(
+        fastify.db,
+      ).findByExamAndCandidate(ctx, exam.id, candidateProfile.id);
+      if (!enrollment) {
+        throw new NotFoundError("Enrollment not found");
+      }
       return getQueueStatus(exam, candidateProfile.id, fastify.now());
     },
   );

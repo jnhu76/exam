@@ -12,6 +12,8 @@ import {
   startAndSubmitAttempt,
   closeExamApi,
   exportScoresCsv,
+  candidateLoginApi,
+  loginAsCandidate,
 } from "../lib/flow";
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -25,12 +27,13 @@ async function createNamedCandidate(
   request: APIRequestContext,
   token: string,
   name: string,
-): Promise<{ profileId: string; name: string }> {
+): Promise<{ profileId: string; name: string; username: string }> {
   const stamp = Date.now();
+  const username = `e2e-enr-${stamp}`;
   const res = await request.post(`${BASE_URL}/api/candidates`, {
     headers: { Cookie: `auth-token=${token}` },
     data: {
-      username: `e2e-enr-${stamp}`,
+      username,
       password: "candidate123",
       name,
       // demo-seed requires + uniquely constrains `candidateNo`.
@@ -43,7 +46,7 @@ async function createNamedCandidate(
     );
   }
   const body = (await res.json()) as { id: string };
-  return { profileId: body.id, name };
+  return { profileId: body.id, name, username };
 }
 
 /**
@@ -269,5 +272,220 @@ test.describe("admin operation flow", () => {
     // At least header + 1 data row
     const lines = csv.split("\n").filter((l) => l.length > 0);
     expect(lines.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ── P2 publish-to-candidate ──────────────────────────────────────
+  // P3-MOD-P2-3. Proves the publish STATE TRANSITION produces candidate
+  // runtime availability — NOT just that a seed fixture is visible. The
+  // exam is created as draft, the candidate enrolled, draft-proven
+  // un-startable, THEN published via the real endpoint, THEN the candidate
+  // starts it for real through the UI, and the authoritative take snapshot
+  // confirms the in-progress attempt + frozen text_response question.
+  //
+  // Does NOT use seedExam() (it auto-publishes and hides the transition).
+  test("P2 publish-to-candidate: admin publishes an exam and enrolled candidate can start it", async ({
+    page,
+    request,
+  }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const examTitle = `P2 Publish E2E ${suffix}`;
+    const questionContent = `P2 text response ${suffix}`;
+    const rubric = "关键概念正确：10 分\n论证结构完整：10 分";
+
+    // ── 1. Admin API: build the question + a DRAFT exam (no publish). ──
+    const adminToken = await adminApiToken(request);
+
+    const courseRes = await request.post(`${BASE_URL}/api/courses`, {
+      headers: { Cookie: `auth-token=${adminToken}` },
+      data: {
+        name: `P2 Course ${suffix}`,
+        code: `P2C-${suffix}`,
+        description: "",
+      },
+    });
+    expect(courseRes.ok()).toBeTruthy();
+    const courseId = ((await courseRes.json()) as { id: string }).id;
+
+    // Legal text_response with a non-empty multiline rubric (P2-1C boundary).
+    const questionRes = await request.post(`${BASE_URL}/api/questions`, {
+      headers: { Cookie: `auth-token=${adminToken}` },
+      data: {
+        courseId,
+        type: "text_response",
+        content: questionContent,
+        options: [],
+        standardAnswer: null,
+        rubric,
+        score: 20,
+        difficulty: 3,
+      },
+    });
+    expect(questionRes.ok()).toBeTruthy();
+    const questionId = ((await questionRes.json()) as { id: string }).id;
+
+    // Create as a genuine DRAFT (no asDraft=false shortcut, no publish here).
+    const now = Date.now();
+    const openAt = new Date(now - 10 * 60_000).toISOString();
+    const closeAt = new Date(now + 60 * 60_000).toISOString();
+    const examRes = await request.post(`${BASE_URL}/api/exams`, {
+      headers: { Cookie: `auth-token=${adminToken}` },
+      data: {
+        title: examTitle,
+        description: "",
+        courseId,
+        timingMode: "timed_window",
+        durationMinutes: 60,
+        openAt,
+        closeAt,
+        passingScore: 10,
+        totalScore: 20,
+        questionSelectionMode: "manual",
+        questionIds: [questionId],
+        resultPublicationMode: "immediate",
+        controlFlags: {
+          shuffleQuestions: false,
+          shuffleOptions: false,
+          detectTabSwitch: false,
+          disableCopyPaste: false,
+          showResultImmediately: true,
+        },
+        retakePolicy: "unlimited",
+        scoreStrategy: "highest",
+        maxAttempts: 1,
+      },
+    });
+    expect(examRes.ok()).toBeTruthy();
+    const examId = ((await examRes.json()) as { id: string; status: string })
+      .id;
+
+    // Confirm the created exam is genuinely a draft.
+    const draftDetail = await request.get(`${BASE_URL}/api/exams/${examId}`, {
+      headers: { Cookie: `auth-token=${adminToken}` },
+    });
+    expect(draftDetail.ok()).toBeTruthy();
+    expect(((await draftDetail.json()) as { status: string }).status).toBe(
+      "draft",
+    );
+
+    // ── 2. Create + enroll a candidate via the real API. ──
+    const candidate = await createNamedCandidate(
+      request,
+      adminToken,
+      `P2 Publish Candidate ${suffix}`,
+    );
+    const enrollRes = await request.post(
+      `${BASE_URL}/api/exams/${examId}/enrollments`,
+      {
+        headers: { Cookie: `auth-token=${adminToken}` },
+        data: { candidateIds: [candidate.profileId] },
+      },
+    );
+    expect(enrollRes.ok()).toBeTruthy();
+
+    const candidateToken = await candidateLoginApi(
+      request,
+      candidate.username,
+      "candidate123",
+    );
+
+    // ── 3. Pre-publish: candidate CANNOT start the draft exam. ──
+    const listBefore = await request.get(`${BASE_URL}/api/candidate/exams`, {
+      headers: { Cookie: `auth-token=${candidateToken}` },
+    });
+    expect(listBefore.ok()).toBeTruthy();
+    const listBeforeItems = (
+      (await listBefore.json()) as Array<{
+        examId: string;
+        primaryAction: string;
+      }>
+    ).filter((e) => e.examId === examId);
+    // The draft enrollment may surface as `unavailable` (primaryAction none) —
+    // the required proof is "not startable", NOT "absent from the list".
+    const before = listBeforeItems[0];
+    expect(before).toBeDefined();
+    expect(before!.primaryAction).not.toBe("start");
+
+    // ── 4. Explicit publish via the real endpoint. ──
+    const publishRes = await request.post(
+      `${BASE_URL}/api/exams/${examId}/publish`,
+      { headers: { Cookie: `auth-token=${adminToken}` }, data: {} },
+    );
+    expect(publishRes.ok()).toBeTruthy();
+    // Confirm the transition actually persisted via the detail API.
+    const publishedDetail = await request.get(
+      `${BASE_URL}/api/exams/${examId}`,
+      { headers: { Cookie: `auth-token=${adminToken}` } },
+    );
+    expect(publishedDetail.ok()).toBeTruthy();
+    const publishedBody = (await publishedDetail.json()) as {
+      status: string;
+    };
+    expect(publishedBody.status).toBe("published");
+    // questionSnapshot materialization is proven later via the authoritative
+    // take endpoint (the frozen text_response appears there); the exam detail
+    // response does not project the snapshot by contract.
+
+    // ── 5. Candidate UI: real login, list shows the exam, start enabled. ──
+    await loginAsCandidate(page, {
+      profileId: candidate.profileId,
+      userId: "",
+      username: candidate.username,
+      name: candidate.name,
+      password: "candidate123",
+    });
+    const card = page.getByTestId(`exam-card-${examId}`);
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const startAction = card.getByTestId("exam-primary-action");
+    await expect(startAction).toBeVisible();
+    // The card's primary action is now "start" (data-action reflects the
+    // availability projection; this is the runtime-availability proof).
+    await expect(startAction).toHaveAttribute("data-action", "start");
+
+    // ── 6. Real UI start: card action → /start page → exam-start-btn → POST. ──
+    // The card action navigates to the StartExamPage; the attempt is only
+    // created when the candidate confirms on that page (exam-start-btn).
+    await startAction.click();
+    await page.waitForURL((url) => /\/exam\/[^/]+\/start$/.test(url.pathname), {
+      timeout: 15_000,
+    });
+
+    // Capture the real start-attempt POST so the attemptId is provably the one
+    // THIS click produced (not a seed/legacy attempt).
+    const startResponsePromise = page.waitForResponse(
+      (res) =>
+        res.url().includes("/api/attempts/") &&
+        res.url().includes("/start") &&
+        res.request().method() === "POST" &&
+        res.ok(),
+      { timeout: 15_000 },
+    );
+    await page.getByTestId("exam-start-btn").click();
+    const startResponse = await startResponsePromise;
+    const attemptId = ((await startResponse.json()) as { id: string }).id;
+
+    // Wait for the take page to render this exam's question (UI proof).
+    await page.waitForURL((url) => /\/exam\/[^/]+\/take$/.test(url.pathname), {
+      timeout: 15_000,
+    });
+    await expect(page.getByText(questionContent)).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // ── 7. Authoritative take snapshot: in-progress attempt, frozen question. ──
+    const takeRes = await request.get(
+      `${BASE_URL}/api/candidate/attempts/${attemptId}/take`,
+      { headers: { Cookie: `auth-token=${candidateToken}` } },
+    );
+    expect(takeRes.ok()).toBeTruthy();
+    const take = (await takeRes.json()) as {
+      examId: string;
+      attemptStatus: string;
+      questions: Array<{ type: string; prompt: string }>;
+    };
+    expect(take.examId).toBe(examId);
+    expect(take.attemptStatus).toBe("in_progress");
+    expect(take.questions.length).toBe(1);
+    expect(take.questions[0]!.type).toBe("text_response");
+    expect(take.questions[0]!.prompt).toBe(questionContent);
   });
 });

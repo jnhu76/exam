@@ -207,3 +207,385 @@ describe("QuestionEditPage", () => {
     await act(async () => {});
   });
 });
+
+// ── P3-MOD-P2-2: MVP question creation proof (objective types) ────
+// Proves each objective type's canonical create payload reaches POST with
+// type-specific fields correct (options/standardAnswer) and rubric=null.
+// text_response create payload is proven separately below (P2-1C block).
+
+const CONTENT_PLACEHOLDER = "输入题目内容";
+const RUBRIC_PLACEHOLDER =
+  "请描述评分时应考虑的关键点、完整性、准确性或论证质量";
+
+/** Open the type <Select> (a11y-labeled 题目类型) and pick an option. */
+async function selectType(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  await user.click(screen.getByRole("combobox", { name: "题目类型" }));
+  await user.click(await screen.findByRole("option", { name }));
+}
+
+describe("QuestionEditPage — objective type create payloads", () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("creates single_choice with selected option answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "单选题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请选择正确答案",
+    );
+    // Select option "A" (the first radio). Default single_choice ships with
+    // options A and B; picking A sets standardAnswer = "A".
+    const radios = screen.getAllByRole("radio");
+    await user.click(radios[0]!);
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "single_choice",
+          standardAnswer: "A",
+          rubric: null,
+        }),
+      );
+      // options survive into the payload (A and B present).
+      const payload = apiPost.mock.calls[0]![1] as { options: unknown[] };
+      expect(payload.options).toHaveLength(2);
+    });
+  });
+
+  it("creates multiple_choice with array answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "多选题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "选择所有偶数",
+    );
+    // multiple_choice renders checkboxes per option; check A and B.
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]!);
+    await user.click(checkboxes[1]!);
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "multiple_choice",
+          standardAnswer: ["A", "B"],
+          rubric: null,
+        }),
+      );
+    });
+  });
+
+  it("creates true_false with boolean canonical answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "判断题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "天空是蓝色的",
+    );
+    // true_false defaults standardAnswer to true; keep the default canonical
+    // boolean. No answer control interaction needed — prove the default.
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "true_false",
+          standardAnswer: true,
+          rubric: null,
+        }),
+      );
+    });
+  });
+
+  it("creates fill_blank with string answer and rubric null", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "填空题");
+    // fill_blank content uses a distinct placeholder (marks the ____ slot).
+    await user.type(
+      screen.getByPlaceholderText("输入题目内容，用 ____ 标记空格位置"),
+      "法国的首都是 ____。",
+    );
+    await user.type(
+      screen.getByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
+      "巴黎",
+    );
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "fill_blank",
+          standardAnswer: "巴黎",
+          rubric: null,
+        }),
+      );
+    });
+  });
+});
+
+// ── P3-MOD-P2-1C: text_response authoring closure ────────────────
+// text_response must be creatable end-to-end via the UI: type option,
+// multiline rubric, optional standardAnswer, payload, edit echo, type
+// switch normalization. These tests document and guard that closure.
+
+describe("QuestionEditPage — text_response authoring", () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset().mockResolvedValue(undefined);
+    apiPatch.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders text_response option and shows rubric control when selected", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "文本作答题");
+
+    // rubric Textarea appears (placeholder marks the grading basis field)
+    expect(screen.getByPlaceholderText(RUBRIC_PLACEHOLDER)).toBeInTheDocument();
+    // objective options control is NOT shown for text_response
+    expect(screen.queryByText("选项")).not.toBeInTheDocument();
+  });
+
+  it("creates text_response question with multiline rubric preserved", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    const rubric = "关键概念正确：10 分\n论证完整且逻辑清晰：10 分";
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请阐述你的观点",
+    );
+    await user.type(screen.getByPlaceholderText(RUBRIC_PLACEHOLDER), rubric);
+
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "text_response",
+          options: [],
+          standardAnswer: null,
+          rubric,
+        }),
+      );
+    });
+  });
+
+  it("does not require standardAnswer for text_response (payload null)", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请阐述你的观点",
+    );
+    await user.type(
+      screen.getByPlaceholderText(RUBRIC_PLACEHOLDER),
+      "按逻辑完整性给分",
+    );
+
+    // No objective answer control is shown; rubric present is enough to save.
+    expect(
+      screen.queryByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "text_response",
+          standardAnswer: null,
+          rubric: "按逻辑完整性给分",
+        }),
+      );
+    });
+  });
+
+  it.each([
+    ["empty string", ""],
+    ["only spaces", "   "],
+    ["only newlines", "\n\n"],
+  ])(
+    "rejects empty/whitespace rubric (%s) before API call",
+    async (_label, badRubric) => {
+      const user = userEvent.setup();
+      renderNew();
+      await screen.findByText("新增题目");
+
+      await selectType(user, "文本作答题");
+      await user.type(
+        screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+        "请阐述你的观点",
+      );
+      if (badRubric.length > 0) {
+        await user.type(
+          screen.getByPlaceholderText(RUBRIC_PLACEHOLDER),
+          badRubric,
+        );
+      }
+
+      await user.click(screen.getByText("保存"));
+
+      // The save must be blocked client-side: no API call, error shown.
+      expect(apiPost).not.toHaveBeenCalled();
+      expect(await screen.findByText(/评分标准不能为空/)).toBeInTheDocument();
+    },
+  );
+
+  it("loads and preserves existing text_response multiline rubric in edit mode", async () => {
+    const existingTextResponse = {
+      courseId: "c1",
+      type: "text_response",
+      content: "请阐述你的观点",
+      options: [],
+      standardAnswer: null,
+      score: 20,
+      difficulty: 3,
+      tags: [],
+      gradingRule: {
+        multiSelectScoring: "all_correct_full",
+        fillBlankMatchMode: "exact",
+      },
+      rubric: "第一项评分标准\n第二项评分标准",
+    };
+    let callCount = 0;
+    apiGet.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.resolve({ items: courses });
+      return Promise.resolve(existingTextResponse);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin/questions/q1/edit"]}>
+        <AuthProvider
+          initialUser={{
+            id: "1",
+            username: "admin",
+            name: "Admin",
+            role: "Admin",
+            organizationId: "org1",
+          }}
+        >
+          <BrandProvider>
+            <Routes>
+              <Route
+                path="/admin/questions/:id/edit"
+                element={<QuestionEditPage />}
+              />
+              <Route
+                path="/admin/questions"
+                element={<div>questions list</div>}
+              />
+            </Routes>
+          </BrandProvider>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("编辑题目")).toBeInTheDocument();
+    const rubricField = screen.getByPlaceholderText(RUBRIC_PLACEHOLDER);
+    expect(rubricField).toBeInTheDocument();
+    expect(rubricField).toHaveValue("第一项评分标准\n第二项评分标准");
+  });
+
+  it("normalizes incompatible fields when switching single_choice → text_response", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    // default is single_choice with 2 options; switch to text_response
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "请阐述你的观点",
+    );
+    await user.type(
+      screen.getByPlaceholderText(RUBRIC_PLACEHOLDER),
+      "按逻辑给分",
+    );
+
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({
+          type: "text_response",
+          options: [],
+          standardAnswer: null,
+        }),
+      );
+    });
+  });
+
+  it("does not leak rubric into payload when switching text_response → objective type", async () => {
+    const user = userEvent.setup();
+    renderNew();
+    await screen.findByText("新增题目");
+
+    // Set up a text_response with a rubric, then switch back to fill_blank.
+    await selectType(user, "文本作答题");
+    await user.type(
+      screen.getByPlaceholderText(CONTENT_PLACEHOLDER),
+      "____ 是元素符号",
+    );
+    await user.type(
+      screen.getByPlaceholderText(RUBRIC_PLACEHOLDER),
+      "主观评分依据",
+    );
+    await selectType(user, "填空题");
+    // fill_blank canonical: objective, no rubric in payload
+    await user.type(
+      screen.getByPlaceholderText("输入标准答案，多个答案用 | 分隔"),
+      "Fe",
+    );
+
+    await user.click(screen.getByText("保存"));
+
+    await waitFor(() => {
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/questions",
+        expect.objectContaining({ type: "fill_blank", rubric: null }),
+      );
+    });
+  });
+});

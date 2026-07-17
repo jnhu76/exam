@@ -12,6 +12,7 @@ import {
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
+import { Permission } from "@exam/authz";
 import type { RequestContext } from "@exam/domain";
 import {
   ensureTargetOrg,
@@ -55,11 +56,14 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionView),
+      ],
       schema: {
         querystring: questionListQuerySchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: questionListResponseSchema,
         },
@@ -127,11 +131,14 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/questions/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionView),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: QuestionSchema,
           404: ErrorResponseSchema,
@@ -172,11 +179,14 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/questions",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionCreate),
+      ],
       schema: {
         body: CreateQuestionRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           201: QuestionSchema,
           400: ErrorResponseSchema,
@@ -260,12 +270,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/questions/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateQuestionRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: QuestionSchema,
           400: ErrorResponseSchema,
@@ -343,11 +356,14 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/questions/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionDelete),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           204: z.null(),
           404: ErrorResponseSchema,
@@ -373,12 +389,15 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/questions/import",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.QuestionImport),
+      ],
       config: { rateLimit: { max: 5, timeWindow: 60 * 1000 } },
       schema: {
         body: QuestionImportRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Teacher"],
         response: {
           200: QuestionImportResultSchema,
           400: ErrorResponseSchema,

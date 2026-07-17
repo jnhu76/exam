@@ -35,6 +35,7 @@ function codeForStatus(statusCode: number): ErrorCode {
   if (statusCode === 404) return "RESOURCE_NOT_FOUND";
   if (statusCode === 409) return "RESOURCE_CONFLICT";
   if (statusCode === 429) return "RATE_LIMITED";
+  if (statusCode === 503) return "AUTHZ_UNAVAILABLE";
   if (statusCode >= 400 && statusCode < 500) return "VALIDATION_ERROR";
   return "INTERNAL_ERROR";
 }

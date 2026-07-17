@@ -39,9 +39,9 @@ async function buildLoginError(
 }
 
 /**
- * Default post-login URL each role lands on. Candidates go to /exam/list;
- * admins (and any non-Candidate role) go to /admin/dashboard
- * (apps/web/src/contexts/AuthContext.tsx: redirectAfterLogin).
+ * Shared post-login URL patterns used by the role-specific login helpers.
+ * The application resolves each staff role through the centralized
+ * capability-backed landing helper.
  */
 const CANDIDATE_LANDING = /\/exam\/list(?:$|[/?#])/;
 const ADMIN_LANDING = /\/admin\/dashboard(?:$|[/?#])/;

@@ -108,6 +108,66 @@ merged independently.
 - `users.role` stays the compatibility cache; keep it synced via
   `syncUsersRoleFromPrimary` on every primary-active assignment change.
 
+## RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — ✅ done (2026-07-17)
+
+Code-review corrective that closed four findings on the proctor-landing PR.
+Disposition + authority reconstruction recorded here for traceability.
+
+**#1 ACCEPTED** — `GET /scores/attempts/:attemptId` migrated off
+`requireRole(["Candidate","Admin"])` to a capability-driven scoped gate:
+- New `resolveScoreScope` (`apps/api/src/authz/resolvers/scoreResolver.ts`)
+  implements ADR §Resource Resolver Matrix row `score` (→ attempt → candidate +
+  exam; source of truth: attempt ownership). Returns ownership facts
+  (`candidateId`, `ownerUserId = candidateProfiles.userId`) on success.
+- New `buildScoreCapabilityPreHandler` (`apps/api/src/authz/scoreCapability.ts`)
+  arbitrates `score.all.view` (any same-org attempt) vs `score.own.view` +
+  owner-is-actor from the role preset — **no role-name branching**. Own/all is
+  resolved from capability + ownership fact only.
+- Wired into `plugins/authz.ts` as `fastify.requireScoreCapability()`; swagger
+  stub added (`openapi/swagger.ts`).
+- `findVisibleAttempt` simplified to an org-scoped fetch (the resolver is now
+  the primary boundary); `computeResultVisibility` (publication gate) is
+  **unchanged** — authorization vs publication visibility remain separate
+  concerns (ADR §262/691/697).
+- Anti-enumeration preserved: cross-candidate (own-view holder, not owner) →
+  **404** (not 403); cross-org → resolver `resource_not_found` → 404; genuine
+  capability denial (Grader/Proctor) → 403.
+
+**#2 ACCEPTED** — three proctor routes migrated from preset-only
+`requireCapability` to `requireScopedCapability`:
+- `GET /admin/exams/:examId/proctor/attempts` → `(ExamRoomView, "exam", "examId")`
+- `GET /admin/attempts/:attemptId/proctor-events` → `(AttemptTimelineView, "attempt", "attemptId")`
+- `POST /admin/attempts/:attemptId/proctor-incident` → `(AttemptMisconductMark, "attempt", "attemptId")`
+- `GET /admin/proctor/exams` stays `requireCapability` (registry
+  `resolver: "organization"` is context-only — no DB resolver needed).
+- This closes the routeRegistry/runtime drift (#5): runtime middleware now
+  matches the registry declarations for all four proctor routes.
+- Handler-level `findById` cross-org→404 checks remain as defense-in-depth.
+
+**#3 ACCEPTED** — `canSeeManagement` (`apps/web/src/lib/capabilities.ts`) no
+longer short-circuits on `isAdmin(user)`. It is now an aggregate over the
+management-surface permission set (UserView, AuditLogView, SettingsView,
+SystemHealthView, CandidateFieldView). No single permission is anointed as
+"the management gate" (ADR §158 names "all organization-scope management
+perms" as a group). `CandidateView` is intentionally excluded (Teacher also
+holds it, scoped to course assignment — it is not a management-surface grant).
+`isAdmin`/`isCandidate` remain as coarse role-class helpers elsewhere.
+
+**#4 REJECTED** — the finding "Exam enters after_grading and disappears from
+the Proctor workspace" is a category error. `after_grading` is a
+`ResultPublicationMode` (result-visibility policy), NOT an `ExamStatus`
+(lifecycle status). An exam cannot "enter after_grading."
+`listProctorDiscoverable` filters `ExamStatus` (`published/open/closed`),
+matching the frontend `ProctorWorkspacePage.STATUS_FILTERS` exactly. No
+production change; orthogonality is now pinned by a contract test
+(`packages/contracts/src/examStatusOrthogonality.test.ts`) asserting the three
+enums are disjoint and `after_grading` appears only in `ResultPublicationMode`.
+
+**Tests added:** scoreCapability (19) + scoreResolver (6) + score-route
+Grader/Proctor denial (2) + proctor matrix incident row + registry-runtime
+conformance (4) + capabilities aggregate (3) + ExamStatus orthogonality (8).
+Full suite: 1116 passed / 5 skipped. `pnpm verify` green.
+
 ## Acceptance per job (filled in as each lands)
 
 ### Commit 0 — Tracking doc

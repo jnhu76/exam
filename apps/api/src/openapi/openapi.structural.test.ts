@@ -158,6 +158,7 @@ describe("OpenAPI structural baseline — route coverage", () => {
     expect(paths).toContain("/api/client-events");
 
     // proctorMonitoringRoutes
+    expect(paths).toContain("/api/admin/proctor/exams");
     expect(paths).toContain("/api/admin/exams/{examId}/proctor/attempts");
     expect(paths).toContain("/api/admin/attempts/{attemptId}/proctor-events");
 
@@ -350,6 +351,57 @@ describe("OpenAPI structural baseline — security & x-role metadata", () => {
     ).components?.securitySchemes;
     expect(schemes?.cookieAuth).toBeDefined();
   });
+
+  it.each([
+    ["get", "/api/courses"],
+    ["get", "/api/courses/{id}"],
+    ["post", "/api/courses"],
+    ["patch", "/api/courses/{id}"],
+    ["get", "/api/candidates"],
+    ["get", "/api/questions"],
+    ["get", "/api/questions/{id}"],
+    ["post", "/api/questions"],
+    ["patch", "/api/questions/{id}"],
+    ["delete", "/api/questions/{id}"],
+    ["post", "/api/questions/import"],
+    ["get", "/api/exams"],
+    ["get", "/api/exams/{id}"],
+    ["post", "/api/exams"],
+    ["patch", "/api/exams/{id}"],
+    ["post", "/api/exams/{id}/publish"],
+    ["post", "/api/exams/{id}/close"],
+    ["post", "/api/exams/{id}/publish-results"],
+    ["get", "/api/exams/{examId}/enrollments"],
+    ["post", "/api/exams/{examId}/enrollments"],
+    ["delete", "/api/exams/{examId}/enrollments/{enrollmentId}"],
+    ["get", "/api/admin/exams/{examId}/candidates/status"],
+    ["get", "/api/exams/{id}/scores"],
+  ] as const)("%s %s documents Teacher access", async (method, path) => {
+    const s = await spec();
+    const item = (s.paths as Record<string, unknown>)[path] as
+      | Record<string, { "x-role"?: string[] }>
+      | undefined;
+    expect(item?.[method]?.["x-role"]).toEqual(
+      expect.arrayContaining(["Admin", "Teacher"]),
+    );
+  });
+
+  it.each([
+    ["post", "/api/exams/{id}/unpublish"],
+    ["post", "/api/exams/{id}/extend"],
+    ["post", "/api/exams/{id}/cancel"],
+    ["post", "/api/exams/{id}/archive"],
+    ["delete", "/api/exams/{id}"],
+  ] as const)(
+    "%s %s remains documented as Admin-only",
+    async (method, path) => {
+      const s = await spec();
+      const item = (s.paths as Record<string, unknown>)[path] as
+        | Record<string, { "x-role"?: string[] }>
+        | undefined;
+      expect(item?.[method]?.["x-role"]).toEqual(["Admin"]);
+    },
+  );
 });
 
 // ─── Protected routes have 401 ───────────────────────────────────────
