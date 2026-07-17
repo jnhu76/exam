@@ -30,12 +30,12 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   app.decorate("requireRole", () => async () => {});
   // requireCapability (Phase 3 capability gate, RBAC runtime activation) —
   // no-op stub so OpenAPI generation can register flipped routes.
-  app.decorate("requireCapability", () => async () => {});
+  app.decorate("requireCapability", (() => async () => {}) as any);
   // requireScopedCapability (RBAC-M10-finish resource-aware gate, P4-2A) —
   // no-op stub so OpenAPI generation can register routes that adopted the
   // scoped gate (grading-details / grade-question). Same rationale as the
   // requireCapability stub above.
-  app.decorate("requireScopedCapability", () => async () => {});
+  app.decorate("requireScopedCapability", (() => async () => {}) as any);
   // requireScoreCapability (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1) — no-op
   // stub so OpenAPI generation can register the score route, which now uses
   // the dedicated score-capability gate (own/all arbitration). Same rationale

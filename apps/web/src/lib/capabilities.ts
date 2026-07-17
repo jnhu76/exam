@@ -105,7 +105,21 @@ const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
  * preset (same source `can()` consults), not from a role-label shortcut.
  */
 export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
-  return MANAGEMENT_SURFACE_PERMS.some((p) => can(user, p));
+  return hasManagementCapability(
+    new Set(permissionsForRole(user.role as RoleKey)),
+  );
+}
+
+/**
+ * Pure permission-set predicate: true iff the set contains any management-surface
+ * capability. Independent of role labels — any role (or custom set) that holds
+ * at least one management perm is authorized. This is the canonical gate; the
+ * role-preset wrapper above is a convenience for the common case.
+ */
+export function hasManagementCapability(
+  permissions: ReadonlySet<PermissionKey>,
+): boolean {
+  return MANAGEMENT_SURFACE_PERMS.some((p) => permissions.has(p));
 }
 
 export function canSeeDashboard(user: Pick<MeResponse, "role">): boolean {

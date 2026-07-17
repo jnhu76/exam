@@ -168,6 +168,57 @@ Grader/Proctor denial (2) + proctor matrix incident row + registry-runtime
 conformance (4) + capabilities aggregate (3) + ExamStatus orthogonality (8).
 Full suite: 1116 passed / 5 skipped. `pnpm verify` green.
 
+## RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2 — ✅ done (2026-07-17)
+
+Code-review corrective closing Finding 2 (Routes 2/3 scoped-gate regression
+protection) on PR #186. Disposition:
+
+**Finding 1 — Broken-parent HTTP construction**
+NON-BLOCKING. FK constraints prevent persistent missing-parent chains in
+production. Resolver/preHandler unit tests cover the fail-closed logic.
+
+**Finding 2 — Scoped-gate regression protection**
+CLOSED.
+
+Route 1 is protected behaviorally: replacing `requireScopedCapability` with
+`requireCapability` changes a cross-organization request from 404 to 200 with
+an empty result — the HTTP + DB integration test fails.
+
+Routes 2 and 3 retain handler-level tenant filtering, so their externally
+observable cross-organization result remains 404 after such a downgrade.
+They are therefore protected structurally. Both capability decorators attach
+immutable authorization metadata (`authz`) to their preHandler functions,
+and a Fastify `onRoute` hook captures the metadata from real runtime route
+registration.
+
+The tests assert, per route: authz kind, permission, resolver key, and
+resource parameter key — a full `toEqual({ kind, permission, resolverKey,
+resourceIdKey })` on the captured metadata.
+
+**Mutation experiments:**
+- Mutation B (Route 1): KILLED — behavioral (404 → 200)
+- Mutation B2 (Route 2): KILLED — metadata (`"scoped"` → `"flat"`)
+- Mutation B3 (Route 3): KILLED — metadata (`"scoped"` → `"flat"`)
+
+**Finding 3 — Permission matrix fake IDs**
+NON-BLOCKING PRE-EXISTING TEST DEBT. The matrix proves capability-stage
+passage, not real resource access.
+
+**Finding 4 — `canSeeManagement` frontend UX hint**
+NON-BLOCKING SECURITY-WISE. Backend remains the authorization authority.
+
+**Verdict:**
+```
+RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2:
+PASS WITH NON-BLOCKING FINDINGS
+
+FOUR-ROUTE SCOPED CORRECTIVE:
+CLOSED
+
+GLOBAL RBAC-M10-FINISH:
+OPEN
+```
+
 ## Acceptance per job (filled in as each lands)
 
 ### Commit 0 — Tracking doc

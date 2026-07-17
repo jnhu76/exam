@@ -33,6 +33,7 @@ import {
   createExamResolver,
 } from "../authz/resolvers/attemptResolver.js";
 import { buildScoreCapabilityPreHandler } from "../authz/scoreCapability.js";
+import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
 
 const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Resolver registry: one DB-backed resolver per resource family the flipped
@@ -64,8 +65,15 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
           return presetAllows(ctx.role as RoleKey, perm);
         },
       });
-      return (request: FastifyRequest, reply: FastifyReply) =>
+      const preHandler: AuthzPreHandler = (request, reply) =>
         handler(request, reply);
+      preHandler.authz = {
+        kind: "scoped",
+        permission,
+        resolverKey,
+        resourceIdKey,
+      };
+      return preHandler;
     },
   );
 
