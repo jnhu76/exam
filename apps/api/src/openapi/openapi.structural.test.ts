@@ -158,6 +158,7 @@ describe("OpenAPI structural baseline — route coverage", () => {
     expect(paths).toContain("/api/client-events");
 
     // proctorMonitoringRoutes
+    expect(paths).toContain("/api/admin/proctor/exams");
     expect(paths).toContain("/api/admin/exams/{examId}/proctor/attempts");
     expect(paths).toContain("/api/admin/attempts/{attemptId}/proctor-events");
 

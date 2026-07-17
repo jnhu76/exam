@@ -401,6 +401,21 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     // ── Proctor monitoring (exam/attempt scope) ──
     {
       method: "GET",
+      path: "/admin/proctor/exams",
+      currentGate: "Admin",
+      permission: Permission.ExamRoomView,
+      scope: Scope.Organization,
+      resolver: "organization",
+      resource: {
+        type: "list",
+        listOf: "exam",
+        filterSpec: "proctor-discoverable-exams",
+      },
+      sensitive: true,
+      migrationStage: 7,
+    },
+    {
+      method: "GET",
       path: "/admin/exams/:examId/proctor/attempts",
       currentGate: "Admin",
       permission: Permission.ExamRoomView,

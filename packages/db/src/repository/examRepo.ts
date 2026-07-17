@@ -6,7 +6,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import type { RequestContext } from "@exam/domain";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 type ExamSelect = typeof exams.$inferSelect;
 
@@ -19,6 +19,25 @@ export function createExamRepo(db: Database) {
 
   return {
     ...repo,
+    async listProctorDiscoverable(ctx: TenantContext | RequestContext) {
+      const orgId = resolveOrganizationId(ctx);
+      return db
+        .select({
+          examId: exams.id,
+          title: exams.title,
+          status: exams.status,
+          openAt: exams.openAt,
+          closeAt: exams.closeAt,
+        })
+        .from(exams)
+        .where(
+          and(
+            eq(exams.organizationId, orgId),
+            inArray(exams.status, ["published", "open", "closed"]),
+          ),
+        )
+        .orderBy(asc(exams.openAt), asc(exams.id));
+    },
     async findAuthorizationChain(
       ctx: TenantContext | RequestContext,
       examId: string,

@@ -18560,6 +18560,136 @@
         }
       }
     },
+    "/api/admin/proctor/exams": {
+      "get": {
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "x-role": ["Admin", "Proctor"],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "examId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "title": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["published", "open", "closed"]
+                          },
+                          "openAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "closeAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "examId",
+                          "title",
+                          "status",
+                          "openAt",
+                          "closeAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["items", "total"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/exams/{examId}/proctor/attempts": {
       "get": {
         "parameters": [
@@ -18578,7 +18708,7 @@
             "cookieAuth": []
           }
         ],
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Proctor"],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -18718,15 +18848,12 @@
             }
           },
           "401": {
-            "description": "Unauthorized — missing or invalid authentication cookie",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "requestId": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "object",
                       "properties": {
@@ -18735,10 +18862,19 @@
                         },
                         "message": {
                           "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
                         }
-                      }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }
@@ -18817,7 +18953,7 @@
             "cookieAuth": []
           }
         ],
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Proctor"],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -18960,15 +19096,12 @@
             }
           },
           "401": {
-            "description": "Unauthorized — missing or invalid authentication cookie",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "requestId": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "object",
                       "properties": {
@@ -18977,10 +19110,19 @@
                         },
                         "message": {
                           "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
                         }
-                      }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }
@@ -19113,7 +19255,7 @@
             "cookieAuth": []
           }
         ],
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Proctor"],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -19166,15 +19308,12 @@
             }
           },
           "401": {
-            "description": "Unauthorized — missing or invalid authentication cookie",
+            "description": "Default Response",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "requestId": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "object",
                       "properties": {
@@ -19183,10 +19322,19 @@
                         },
                         "message": {
                           "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
                         }
-                      }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
                     }
-                  }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
                 }
               }
             }

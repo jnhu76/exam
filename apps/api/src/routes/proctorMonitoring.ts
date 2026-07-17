@@ -5,6 +5,7 @@ import type { FastifyPluginAsync } from "fastify";
 import {
   ProctorAttemptListResponseSchema,
   ProctorAttemptEventListResponseSchema,
+  ProctorExamListResponseSchema,
   MarkProctorIncidentRequestSchema,
   MarkProctorIncidentResponseSchema,
   ErrorResponseSchema,
@@ -20,17 +21,16 @@ import {
   buildProctorAttemptEventTimeline,
 } from "../lib/proctorMonitoringService.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import type { Database } from "@exam/db/src/types.js";
 
 /**
  * OpenAPI security definition for cookie-based authentication.
  *
- * NAMING NOTE: "proctor" in these paths denotes the monitoring DOMAIN, not a
- * standalone role. Phase 2.1 gates these routes with Admin only (there is no
- * Proctor role yet). A formal Proctor role + proctor_assignments + scoped RBAC
- * are Phase 3. The path name is kept stable so the domain vocabulary does not
- * churn across phases.
+ * "proctor" in these paths denotes the monitoring domain. P4 grants the
+ * Proctor preset only the monitoring capabilities enforced below; Admin
+ * remains the compatibility superset.
  */
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
@@ -50,11 +50,42 @@ const attemptEventsQuerySchema = z.object({
 });
 
 const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get(
+    "/admin/proctor/exams",
+    {
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamRoomView),
+      ],
+      schema: {
+        security: cookieAuth,
+        "x-role": ["Admin", "Proctor"],
+        response: {
+          200: ProctorExamListResponseSchema,
+          401: ErrorResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const ctx = ensureTargetOrg(getRequestContext(request));
+      const exams = await createExamRepo(fastify.db).listProctorDiscoverable(
+        ctx,
+      );
+      const items = exams.map((exam) => ({
+        ...exam,
+        openAt: exam.openAt.toISOString(),
+        closeAt: exam.closeAt.toISOString(),
+      }));
+      return { items, total: items.length };
+    },
+  );
+
   /**
    * GET /admin/exams/:examId/proctor/attempts
    *
    * Returns the live monitoring status for every active (in_progress /
-   * disrupted) attempt in the exam. Admin-only; org-scoped via the context.
+   * disrupted) attempt in the exam. Admin/Proctor; org-scoped via the context.
    * `warningLevel` and `onlineState` are computed server-side. Response carries
    * no answer text / question content / sensitive metadata.
    */
@@ -68,10 +99,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
       schema: {
         params: examIdParamsSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Proctor"],
         response: {
           200: ProctorAttemptListResponseSchema,
           400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
           403: ErrorResponseSchema,
         },
       },
@@ -93,7 +125,7 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
    * GET /admin/attempts/:attemptId/proctor-events
    *
    * Returns the merged event timeline (client_events + audit_logs) for one
-   * attempt, newest first. Admin-only; org-scoped via the context. The attempt
+   * attempt, newest first. Admin/Proctor; org-scoped via the context. The attempt
    * must belong to the caller's organization (404 otherwise). Each row carries
    * ONLY allowlisted metadata — the raw client_events.metadata blob is never
    * returned.
@@ -109,10 +141,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         params: attemptEventsParamsSchema,
         querystring: attemptEventsQuerySchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Proctor"],
         response: {
           200: ProctorAttemptEventListResponseSchema,
           400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },
@@ -167,10 +200,11 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
         params: attemptEventsParamsSchema,
         body: MarkProctorIncidentRequestSchema,
         security: cookieAuth,
-        "x-role": ["Admin"],
+        "x-role": ["Admin", "Proctor"],
         response: {
           200: MarkProctorIncidentResponseSchema,
           400: ErrorResponseSchema,
+          401: ErrorResponseSchema,
           403: ErrorResponseSchema,
           404: ErrorResponseSchema,
         },

@@ -14,6 +14,7 @@ const EXAM_ID = "00000000-0000-4000-8000-0000000000ee";
 const ATTEMPT_ID = "00000000-0000-4000-8000-0000000000aa";
 
 const routes: readonly MatrixRoute[] = [
+  ["GET", "/api/admin/proctor/exams"],
   ["GET", `/api/admin/exams/${EXAM_ID}/proctor/attempts`],
   ["GET", `/api/admin/attempts/${ATTEMPT_ID}/proctor-events`],
 ];

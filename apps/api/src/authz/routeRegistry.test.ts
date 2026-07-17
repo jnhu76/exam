@@ -107,6 +107,18 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
     expect(e?.auditAction).toBe("attempt.misconductFlagged");
     expect(e?.sensitive).toBe(true);
   });
+
+  it("proctor discovery -> exam.room.view with an organization-scoped list filter", () => {
+    const e = find("GET", "/admin/proctor/exams");
+    expect(e?.permission).toBe(Permission.ExamRoomView);
+    expect(e?.scope).toBe("organization");
+    expect(e?.resolver).toBe("organization");
+    expect(e?.resource).toEqual({
+      type: "list",
+      listOf: "exam",
+      filterSpec: "proctor-discoverable-exams",
+    });
+  });
 });
 
 describe("RBAC-M4 route permission registry — coverage of protected routes", () => {
@@ -147,6 +159,7 @@ describe("RBAC-M4 route permission registry — coverage of protected routes", (
     { method: "GET", path: "/admin/attempts/:attemptId/export" },
     { method: "GET", path: "/admin/attempts/:attemptId/export/csv" },
     { method: "GET", path: "/admin/exams/:examId/proctor/attempts" },
+    { method: "GET", path: "/admin/proctor/exams" },
     { method: "GET", path: "/admin/attempts/:attemptId/proctor-events" },
     { method: "GET", path: "/admin/grading-queue" },
     { method: "GET", path: "/admin/attempts/:attemptId/grading-details" },
