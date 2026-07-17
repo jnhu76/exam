@@ -52,7 +52,7 @@ vi.mock("@/lib/api", () => ({
   setNavigate: () => {},
 }));
 
-function renderPage() {
+function renderPage(role: "Admin" | "Teacher" = "Admin") {
   return render(
     <MemoryRouter initialEntries={["/admin/exams"]}>
       <AuthProvider
@@ -60,7 +60,7 @@ function renderPage() {
           id: "1",
           username: "admin",
           name: "Admin",
-          role: "Admin",
+          role,
           organizationId: "org1",
         }}
       >
@@ -75,6 +75,17 @@ function renderPage() {
 }
 
 describe("ExamPage", () => {
+  it("shows Teacher create access without rendering Admin-only delete actions", async () => {
+    renderPage("Teacher");
+
+    expect(
+      await screen.findByRole("button", { name: "创建考试" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "删除考试" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows delete only as enabled for draft exams", async () => {
     renderPage();
 

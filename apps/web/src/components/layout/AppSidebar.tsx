@@ -2,6 +2,7 @@ import type { MeResponse } from "@exam/contracts";
 import {
   canImportQuestions,
   canSeeCourses,
+  canSeeDashboard,
   canSeeExams,
   canSeeGradingQueue,
   canSeeManagement,
@@ -75,6 +76,7 @@ const groups: NavGroup[] = [
         labelKey: "nav.items.dashboard",
         to: routes.admin.dashboard,
         icon: LayoutDashboard,
+        visible: canSeeDashboard,
       },
     ],
   },

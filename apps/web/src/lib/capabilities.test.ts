@@ -3,9 +3,11 @@ import type { MeResponse } from "@exam/contracts";
 import {
   can,
   canAccessAdminConsole,
+  adminLandingPath,
   canArchiveExam,
   canCancelExam,
   canCloseExam,
+  canCreateExam,
   canDeleteExam,
   canExtendExam,
   canImportQuestions,
@@ -13,6 +15,7 @@ import {
   canPublishExam,
   canPublishResults,
   canSeeCourses,
+  canSeeDashboard,
   canSeeExams,
   canSeeGradingQueue,
   canSeeManagement,
@@ -20,6 +23,8 @@ import {
   canSeeQuestions,
   canSeeResults,
   canUnpublishExam,
+  canUpdateExam,
+  defaultLandingPath,
   isAdmin,
   isCandidate,
 } from "./capabilities";
@@ -37,6 +42,7 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
     const u = user("Admin");
     expect(isAdmin(u)).toBe(true);
     expect(canSeeManagement(u)).toBe(true);
+    expect(canSeeDashboard(u)).toBe(true);
     expect(canSeeCourses(u)).toBe(true);
     expect(canSeeQuestions(u)).toBe(true);
     expect(canImportQuestions(u)).toBe(true);
@@ -51,6 +57,7 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
     const u = user("Teacher");
     expect(isAdmin(u)).toBe(false);
     expect(canSeeManagement(u)).toBe(false);
+    expect(canSeeDashboard(u)).toBe(false);
     expect(canSeeCourses(u)).toBe(true);
     expect(canSeeQuestions(u)).toBe(true);
     expect(canImportQuestions(u)).toBe(true);
@@ -64,6 +71,7 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
   it("Grader sees the grading queue but NOT authoring/management/proctor", () => {
     const u = user("Grader");
     expect(canSeeManagement(u)).toBe(false);
+    expect(canSeeDashboard(u)).toBe(false);
     expect(canSeeCourses(u)).toBe(false);
     expect(canSeeQuestions(u)).toBe(false);
     expect(canImportQuestions(u)).toBe(false);
@@ -77,6 +85,7 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
   it("Proctor sees proctor monitoring but NOT authoring/grading/management", () => {
     const u = user("Proctor");
     expect(canSeeManagement(u)).toBe(false);
+    expect(canSeeDashboard(u)).toBe(false);
     expect(canSeeCourses(u)).toBe(false);
     expect(canSeeQuestions(u)).toBe(false);
     expect(canImportQuestions(u)).toBe(false);
@@ -92,6 +101,7 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
     expect(isCandidate(u)).toBe(true);
     expect(canAccessAdminConsole(u)).toBe(false);
     expect(canSeeManagement(u)).toBe(false);
+    expect(canSeeDashboard(u)).toBe(false);
     expect(canSeeCourses(u)).toBe(false);
     expect(canSeeQuestions(u)).toBe(false);
     expect(canImportQuestions(u)).toBe(false);
@@ -106,6 +116,8 @@ describe("P4-4 capability helper — exam-page actions (task 10.4)", () => {
   it("Teacher may publish / close / publish-results / manage enrollments", () => {
     const u = user("Teacher");
     expect(canPublishExam(u)).toBe(true);
+    expect(canCreateExam(u)).toBe(true);
+    expect(canUpdateExam(u)).toBe(true);
     expect(canCloseExam(u)).toBe(true);
     expect(canPublishResults(u)).toBe(true);
     expect(canManageEnrollments(u)).toBe(true);
@@ -122,6 +134,8 @@ describe("P4-4 capability helper — exam-page actions (task 10.4)", () => {
 
   it("Admin may perform every exam action (no regression)", () => {
     const u = user("Admin");
+    expect(canCreateExam(u)).toBe(true);
+    expect(canUpdateExam(u)).toBe(true);
     expect(canPublishExam(u)).toBe(true);
     expect(canCloseExam(u)).toBe(true);
     expect(canPublishResults(u)).toBe(true);
@@ -136,11 +150,29 @@ describe("P4-4 capability helper — exam-page actions (task 10.4)", () => {
   it("Grader/Proctor/Candidate may not perform exam authoring actions", () => {
     for (const role of ["Grader", "Proctor", "Candidate"] as const) {
       const u = user(role);
+      expect(canCreateExam(u), role).toBe(false);
+      expect(canUpdateExam(u), role).toBe(false);
       expect(canPublishExam(u), role).toBe(false);
       expect(canCloseExam(u), role).toBe(false);
       expect(canPublishResults(u), role).toBe(false);
       expect(canManageEnrollments(u), role).toBe(false);
     }
+  });
+});
+
+describe("P4-4 capability helper — default landing paths", () => {
+  it.each([
+    ["Admin", "/admin/dashboard"],
+    ["Teacher", "/admin/exams"],
+    ["Grader", "/admin/grading-queue"],
+    ["Proctor", "/admin"],
+    ["Candidate", "/exam/list"],
+  ] as const)("routes %s to an accessible surface", (role, expectedPath) => {
+    expect(defaultLandingPath(user(role))).toBe(expectedPath);
+  });
+
+  it("does not invent a global Proctor surface before one exists", () => {
+    expect(adminLandingPath(user("Proctor"))).toBeNull();
   });
 });
 

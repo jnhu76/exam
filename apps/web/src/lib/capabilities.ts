@@ -22,6 +22,7 @@ import {
   type RoleKey,
 } from "@exam/authz";
 import type { MeResponse } from "@exam/contracts";
+import { routes } from "@/lib/routes";
 
 // Memoized preset sets (presets are static; safe for module lifetime).
 const PRESET_SETS = new Map<string, ReadonlySet<string>>();
@@ -79,6 +80,10 @@ export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
   return isAdmin(user);
 }
 
+export function canSeeDashboard(user: Pick<MeResponse, "role">): boolean {
+  return can(user, Permission.SystemHealthView);
+}
+
 export function canSeeCourses(user: Pick<MeResponse, "role">): boolean {
   return can(user, Permission.CourseView);
 }
@@ -116,6 +121,12 @@ export function canSeeProctor(user: Pick<MeResponse, "role">): boolean {
 export function canPublishExam(user: Pick<MeResponse, "role">): boolean {
   return can(user, Permission.ExamPublish);
 }
+export function canCreateExam(user: Pick<MeResponse, "role">): boolean {
+  return can(user, Permission.ExamCreate);
+}
+export function canUpdateExam(user: Pick<MeResponse, "role">): boolean {
+  return can(user, Permission.ExamUpdate);
+}
 export function canCloseExam(user: Pick<MeResponse, "role">): boolean {
   return can(user, Permission.ExamClose);
 }
@@ -140,4 +151,18 @@ export function canDeleteExam(user: Pick<MeResponse, "role">): boolean {
 }
 export function canExtendExam(user: Pick<MeResponse, "role">): boolean {
   return can(user, Permission.ExamExtend);
+}
+
+export function adminLandingPath(
+  user: Pick<MeResponse, "role">,
+): string | null {
+  if (canSeeDashboard(user)) return routes.admin.dashboard;
+  if (canSeeExams(user)) return routes.admin.exams;
+  if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
+  return null;
+}
+
+export function defaultLandingPath(user: Pick<MeResponse, "role">): string {
+  if (isCandidate(user)) return routes.exam.list;
+  return adminLandingPath(user) ?? routes.admin.root;
 }

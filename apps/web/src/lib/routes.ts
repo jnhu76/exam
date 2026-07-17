@@ -2,6 +2,7 @@
 export const routes = {
   login: "/login",
   admin: {
+    root: "/admin",
     dashboard: "/admin/dashboard",
     users: "/admin/users",
     candidates: "/admin/candidates",

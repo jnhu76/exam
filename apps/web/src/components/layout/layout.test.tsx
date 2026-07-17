@@ -222,6 +222,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.getByText("成绩查询")).toBeInTheDocument();
     expect(screen.queryByText("评分队列")).not.toBeInTheDocument();
     expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("仪表盘")).not.toBeInTheDocument();
   });
 
   it("Grader sees grading queue but NOT question bank/exams/management (P4-4)", () => {
@@ -232,6 +233,7 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("题库")).not.toBeInTheDocument();
     expect(screen.queryByText("考试管理")).not.toBeInTheDocument();
     expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("仪表盘")).not.toBeInTheDocument();
   });
 
   it("Proctor sees NO admin nav groups (proctor monitoring not yet wired in sidebar)", () => {
@@ -239,12 +241,12 @@ describe("AppSidebar role visibility", () => {
       <AppSidebar user={proctor} collapsed={false} onLogout={() => {}} />,
     );
     // Proctor's preset grants ExamRoomView but no question/exam/management
-    // perms. The sidebar has no dedicated proctor group yet, so Proctor sees
-    // only the overview (dashboard) group.
+    // permissions. The sidebar has no dedicated proctor group yet.
     expect(screen.queryByText("题库")).not.toBeInTheDocument();
     expect(screen.queryByText("考试管理")).not.toBeInTheDocument();
     expect(screen.queryByText("评分队列")).not.toBeInTheDocument();
     expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("仪表盘")).not.toBeInTheDocument();
   });
 });
 

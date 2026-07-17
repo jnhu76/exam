@@ -22,6 +22,30 @@ const candidateUser: MeResponse = {
   organizationId: "org",
 };
 
+const teacherUser: MeResponse = {
+  ...adminUser,
+  id: "teacher",
+  username: "teacher",
+  name: "教师",
+  role: Role.Teacher,
+};
+
+const graderUser: MeResponse = {
+  ...adminUser,
+  id: "grader",
+  username: "grader",
+  name: "评分员",
+  role: Role.Grader,
+};
+
+const proctorUser: MeResponse = {
+  ...adminUser,
+  id: "proctor",
+  username: "proctor",
+  name: "监考员",
+  role: Role.Proctor,
+};
+
 function AuthProbe() {
   const { user, isLoading, error, login, logout } = useAuthContext();
   return (
@@ -34,6 +58,15 @@ function AuthProbe() {
       </button>
       <button type="button" onClick={() => void login("candidate", "pass")}>
         login-candidate
+      </button>
+      <button type="button" onClick={() => void login("teacher", "pass")}>
+        login-teacher
+      </button>
+      <button type="button" onClick={() => void login("grader", "pass")}>
+        login-grader
+      </button>
+      <button type="button" onClick={() => void login("proctor", "pass")}>
+        login-proctor
       </button>
       <button type="button" onClick={() => void logout()}>
         logout
@@ -186,6 +219,41 @@ describe("AuthContext", () => {
         "/exam/list",
       );
     });
+
+    it.each([
+      ["Teacher", teacherUser, "login-teacher", "/admin/exams"],
+      ["Grader", graderUser, "login-grader", "/admin/grading-queue"],
+      ["Proctor", proctorUser, "login-proctor", "/admin"],
+    ])(
+      "redirects %s to its first capability-backed console surface",
+      async (_role, nextUser, loginButton, expectedPath) => {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn().mockResolvedValue(
+            new Response(JSON.stringify(nextUser), {
+              headers: { "Content-Type": "application/json" },
+            }),
+          ),
+        );
+
+        render(
+          <MemoryRouter initialEntries={["/login"]}>
+            <AuthProvider>
+              <AuthProbe />
+              <LocationProbe />
+            </AuthProvider>
+          </MemoryRouter>,
+        );
+
+        await act(async () => {
+          await userEvent.click(screen.getByText(loginButton));
+        });
+
+        expect(screen.getByTestId("current-path").textContent).toBe(
+          expectedPath,
+        );
+      },
+    );
   });
 
   describe("logout", () => {
