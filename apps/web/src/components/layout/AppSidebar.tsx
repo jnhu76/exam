@@ -1,5 +1,11 @@
 import type { MeResponse } from "@exam/contracts";
-import { Role } from "@exam/domain";
+import {
+  canSeeExams,
+  canSeeGradingQueue,
+  canSeeManagement,
+  canSeeQuestionBank,
+  canSeeResults,
+} from "@/lib/capabilities";
 import {
   BookOpen,
   ChevronLeft,
@@ -39,12 +45,15 @@ interface AppSidebarProps {
   onLogout: () => void;
 }
 
-/** A navigation item: route + icon + the i18n key for its label. */
+/** A navigation item: route + icon + the i18n key for its label.
+ *  `visible?` is a UX-only capability gate (see lib/capabilities.ts); it hides
+ *  the entry for roles that lack the permission. Backend remains authoritative. */
 interface NavItem {
   labelKey: string;
   to: string;
   icon: LucideIcon;
   end?: boolean;
+  visible?: (user: Pick<MeResponse, "role">) => boolean;
 }
 
 /** A navigation group: the i18n key for its heading + its items. */
@@ -74,17 +83,20 @@ const groups: NavGroup[] = [
         labelKey: "nav.items.courses",
         to: routes.admin.courses,
         icon: GraduationCap,
+        visible: canSeeQuestionBank,
       },
       {
         labelKey: "nav.items.questions",
         to: routes.admin.questions,
         icon: BookOpen,
         end: true,
+        visible: canSeeQuestionBank,
       },
       {
         labelKey: "nav.items.questionsImport",
         to: routes.admin.questionsImport,
         icon: FileUp,
+        visible: canSeeQuestionBank,
       },
     ],
   },
@@ -96,16 +108,19 @@ const groups: NavGroup[] = [
         to: routes.admin.exams,
         icon: ClipboardList,
         end: true,
+        visible: canSeeExams,
       },
       {
         labelKey: "nav.items.gradingQueue",
         to: routes.admin.gradingQueue,
         icon: ListChecks,
+        visible: canSeeGradingQueue,
       },
       {
         labelKey: "nav.items.results",
         to: routes.admin.results,
         icon: Gauge,
+        visible: canSeeResults,
       },
     ],
   },
@@ -203,14 +218,23 @@ export function SidebarContent({
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation();
-  const showManagement = user.role === Role.Admin;
+  const showManagement = canSeeManagement(user);
   const management = managementItems;
   const initials = user.name.slice(0, 2);
+
+  // UX-only capability filter (lib/capabilities.ts). Hides nav entries the
+  // role's preset does not grant; backend remains authoritative.
+  const visibleGroups = groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => !item.visible || item.visible(user)),
+    }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <>
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
-        {groups.map((group, gi) => (
+        {visibleGroups.map((group, gi) => (
           <section key={group.labelKey} className="flex flex-col gap-0.5">
             {!collapsed && (
               <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-sidebar-muted">

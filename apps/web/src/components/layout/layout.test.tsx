@@ -27,6 +27,28 @@ const candidate: MeResponse = {
   role: "Candidate",
 };
 
+const teacher: MeResponse = {
+  ...admin,
+  id: "a",
+  username: "t",
+  name: "教师",
+  role: "Teacher",
+};
+const grader: MeResponse = {
+  ...admin,
+  id: "b",
+  username: "g",
+  name: "评分员",
+  role: "Grader",
+};
+const proctor: MeResponse = {
+  ...admin,
+  id: "c",
+  username: "p",
+  name: "监考员",
+  role: "Proctor",
+};
+
 function BrandingProbe() {
   const branding = useBranding();
   return <p>{branding.productName}</p>;
@@ -89,13 +111,13 @@ describe("AppSidebar role visibility", () => {
     expect(screen.queryByText("管理")).not.toBeInTheDocument();
   });
 
-  it("shows question bank group for candidate role", () => {
+  it("hides question bank group for candidate role (P4-4: candidate sees no admin nav)", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
     );
-    expect(screen.getByText("题库")).toBeInTheDocument();
-    expect(screen.getByText("课程管理")).toBeInTheDocument();
-    expect(screen.getByText("题目管理")).toBeInTheDocument();
+    expect(screen.queryByText("题库")).not.toBeInTheDocument();
+    expect(screen.queryByText("课程管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("题目管理")).not.toBeInTheDocument();
   });
 
   it("shows question bank group for admin role", () => {
@@ -107,13 +129,13 @@ describe("AppSidebar role visibility", () => {
     expect(screen.getByText("题目管理")).toBeInTheDocument();
   });
 
-  it("shows exam group for candidate role", () => {
+  it("hides exam group for candidate role (P4-4: candidate sees no admin nav)", () => {
     renderWithProviders(
       <AppSidebar user={candidate} collapsed={false} onLogout={() => {}} />,
     );
-    expect(screen.getByText("考试")).toBeInTheDocument();
-    expect(screen.getByText("考试管理")).toBeInTheDocument();
-    expect(screen.getByText("成绩查询")).toBeInTheDocument();
+    expect(screen.queryByText("考试")).not.toBeInTheDocument();
+    expect(screen.queryByText("考试管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("成绩查询")).not.toBeInTheDocument();
   });
 
   it("shows exam group for admin role", () => {
@@ -184,6 +206,42 @@ describe("AppSidebar role visibility", () => {
       <AppSidebar user={admin} collapsed={true} onLogout={() => {}} />,
     );
     expect(screen.queryByText("管理员")).not.toBeInTheDocument();
+  });
+
+  // ── P4-4: Teacher/Grader/Proctor nav visibility ──
+  it("Teacher sees question bank and exams but NOT grading/management (P4-4)", () => {
+    renderWithProviders(
+      <AppSidebar user={teacher} collapsed={false} onLogout={() => {}} />,
+    );
+    expect(screen.getByText("题库")).toBeInTheDocument();
+    expect(screen.getByText("考试")).toBeInTheDocument();
+    expect(screen.getByText("考试管理")).toBeInTheDocument();
+    expect(screen.getByText("成绩查询")).toBeInTheDocument();
+    expect(screen.queryByText("评分队列")).not.toBeInTheDocument();
+    expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
+  });
+
+  it("Grader sees grading queue but NOT question bank/exams/management (P4-4)", () => {
+    renderWithProviders(
+      <AppSidebar user={grader} collapsed={false} onLogout={() => {}} />,
+    );
+    expect(screen.getByText("待评分")).toBeInTheDocument();
+    expect(screen.queryByText("题库")).not.toBeInTheDocument();
+    expect(screen.queryByText("考试管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
+  });
+
+  it("Proctor sees NO admin nav groups (proctor monitoring not yet wired in sidebar)", () => {
+    renderWithProviders(
+      <AppSidebar user={proctor} collapsed={false} onLogout={() => {}} />,
+    );
+    // Proctor's preset grants ExamRoomView but no question/exam/management
+    // perms. The sidebar has no dedicated proctor group yet, so Proctor sees
+    // only the overview (dashboard) group.
+    expect(screen.queryByText("题库")).not.toBeInTheDocument();
+    expect(screen.queryByText("考试管理")).not.toBeInTheDocument();
+    expect(screen.queryByText("评分队列")).not.toBeInTheDocument();
+    expect(screen.queryByText("用户管理")).not.toBeInTheDocument();
   });
 });
 
