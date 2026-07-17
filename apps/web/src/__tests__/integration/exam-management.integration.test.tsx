@@ -50,7 +50,15 @@ describe("考试管理流程集成测试", () => {
   const renderExamPage = () => {
     return render(
       <BrowserRouter>
-        <AuthProvider>
+        <AuthProvider
+          initialUser={{
+            id: "user-1",
+            username: "admin",
+            name: "管理员",
+            role: "Admin",
+            organizationId: "org-1",
+          }}
+        >
           <ExamPage />
         </AuthProvider>
       </BrowserRouter>,
