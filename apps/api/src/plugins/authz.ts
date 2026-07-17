@@ -19,11 +19,11 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import {
-  permissionsForRole,
   type PermissionKey,
-  type ResolverKey,
+  type ResourceResolverKey,
   type RoleKey,
 } from "@exam/authz";
+import { presetAllows } from "../lib/presetCache.js";
 import {
   buildScopedCapabilityPreHandler,
   type ResolverRegistry,
@@ -32,20 +32,6 @@ import {
   createAttemptResolver,
   createExamResolver,
 } from "../authz/resolvers/attemptResolver.js";
-
-/**
- * Memoized role-preset permission sets (mirrors `plugins/auth.ts`). Presets are
- * static, so the cache is safe for the process lifetime.
- */
-const PRESET_SETS = new Map<RoleKey, ReadonlySet<PermissionKey>>();
-function presetSet(role: RoleKey): ReadonlySet<PermissionKey> {
-  let set = PRESET_SETS.get(role);
-  if (!set) {
-    set = new Set<PermissionKey>(permissionsForRole(role));
-    PRESET_SETS.set(role, set);
-  }
-  return set;
-}
 
 const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Resolver registry: one DB-backed resolver per resource family the flipped
@@ -59,7 +45,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     "requireScopedCapability",
     (
       permission: PermissionKey,
-      resolverKey: ResolverKey,
+      resolverKey: ResourceResolverKey,
       resourceIdKey: string,
     ) => {
       const handler = buildScopedCapabilityPreHandler({
@@ -70,7 +56,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
         presetAllows: (request: FastifyRequest, perm: PermissionKey) => {
           const ctx = request.ctx;
           if (!ctx) return false;
-          return presetSet(ctx.role as RoleKey).has(perm);
+          return presetAllows(ctx.role as RoleKey, perm);
         },
       });
       return (request: FastifyRequest, reply: FastifyReply) =>

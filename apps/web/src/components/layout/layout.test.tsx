@@ -214,6 +214,9 @@ describe("AppSidebar role visibility", () => {
       <AppSidebar user={teacher} collapsed={false} onLogout={() => {}} />,
     );
     expect(screen.getByText("题库")).toBeInTheDocument();
+    expect(screen.getByText("课程管理")).toBeInTheDocument();
+    expect(screen.getByText("题目管理")).toBeInTheDocument();
+    expect(screen.getByText("题目导入")).toBeInTheDocument();
     expect(screen.getByText("考试")).toBeInTheDocument();
     expect(screen.getByText("考试管理")).toBeInTheDocument();
     expect(screen.getByText("成绩查询")).toBeInTheDocument();

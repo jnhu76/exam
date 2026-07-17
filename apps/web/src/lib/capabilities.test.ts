@@ -8,14 +8,16 @@ import {
   canCloseExam,
   canDeleteExam,
   canExtendExam,
+  canImportQuestions,
   canManageEnrollments,
   canPublishExam,
   canPublishResults,
+  canSeeCourses,
   canSeeExams,
   canSeeGradingQueue,
   canSeeManagement,
   canSeeProctor,
-  canSeeQuestionBank,
+  canSeeQuestions,
   canSeeResults,
   canUnpublishExam,
   isAdmin,
@@ -35,7 +37,9 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
     const u = user("Admin");
     expect(isAdmin(u)).toBe(true);
     expect(canSeeManagement(u)).toBe(true);
-    expect(canSeeQuestionBank(u)).toBe(true);
+    expect(canSeeCourses(u)).toBe(true);
+    expect(canSeeQuestions(u)).toBe(true);
+    expect(canImportQuestions(u)).toBe(true);
     expect(canSeeExams(u)).toBe(true);
     expect(canSeeGradingQueue(u)).toBe(true);
     expect(canSeeResults(u)).toBe(true);
@@ -47,7 +51,9 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
     const u = user("Teacher");
     expect(isAdmin(u)).toBe(false);
     expect(canSeeManagement(u)).toBe(false);
-    expect(canSeeQuestionBank(u)).toBe(true);
+    expect(canSeeCourses(u)).toBe(true);
+    expect(canSeeQuestions(u)).toBe(true);
+    expect(canImportQuestions(u)).toBe(true);
     expect(canSeeExams(u)).toBe(true);
     expect(canSeeGradingQueue(u)).toBe(false); // Teacher is NOT a Grader
     expect(canSeeResults(u)).toBe(true);
@@ -58,7 +64,9 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
   it("Grader sees the grading queue but NOT authoring/management/proctor", () => {
     const u = user("Grader");
     expect(canSeeManagement(u)).toBe(false);
-    expect(canSeeQuestionBank(u)).toBe(false);
+    expect(canSeeCourses(u)).toBe(false);
+    expect(canSeeQuestions(u)).toBe(false);
+    expect(canImportQuestions(u)).toBe(false);
     expect(canSeeExams(u)).toBe(false);
     expect(canSeeGradingQueue(u)).toBe(true);
     expect(canSeeResults(u)).toBe(false);
@@ -69,7 +77,9 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
   it("Proctor sees proctor monitoring but NOT authoring/grading/management", () => {
     const u = user("Proctor");
     expect(canSeeManagement(u)).toBe(false);
-    expect(canSeeQuestionBank(u)).toBe(false);
+    expect(canSeeCourses(u)).toBe(false);
+    expect(canSeeQuestions(u)).toBe(false);
+    expect(canImportQuestions(u)).toBe(false);
     expect(canSeeExams(u)).toBe(false);
     expect(canSeeGradingQueue(u)).toBe(false);
     expect(canSeeResults(u)).toBe(false);
@@ -82,7 +92,9 @@ describe("P4-4 capability helper — per-role nav/action visibility", () => {
     expect(isCandidate(u)).toBe(true);
     expect(canAccessAdminConsole(u)).toBe(false);
     expect(canSeeManagement(u)).toBe(false);
-    expect(canSeeQuestionBank(u)).toBe(false);
+    expect(canSeeCourses(u)).toBe(false);
+    expect(canSeeQuestions(u)).toBe(false);
+    expect(canImportQuestions(u)).toBe(false);
     expect(canSeeExams(u)).toBe(false);
     expect(canSeeGradingQueue(u)).toBe(false);
     expect(canSeeResults(u)).toBe(false);

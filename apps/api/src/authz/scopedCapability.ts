@@ -29,7 +29,8 @@ import { buildErrorResponse } from "../lib/errorResponse.js";
 import {
   isScopeDenied,
   type PermissionKey,
-  type ResolverKey,
+  type ResourceRef,
+  type ResourceResolverKey,
   type ScopeResolver,
 } from "@exam/authz";
 
@@ -37,7 +38,9 @@ import {
  *  Partial: a deployment registers only the resolver families its flipped
  *  routes reference (attempt/exam today); an unregistered key surfaces as 503
  *  AUTHZ_UNAVAILABLE at runtime (never fail open). */
-export type ResolverRegistry = Partial<Record<ResolverKey, ScopeResolver>>;
+export type ResolverRegistry = Partial<
+  Record<ResourceResolverKey, ScopeResolver>
+>;
 
 /** Predicate that decides the flat role-preset capability verdict. */
 export type PresetAllows = (
@@ -50,7 +53,7 @@ export interface ScopedCapabilityInput {
   /** The Phase 3 permission this route requires. */
   permission: PermissionKey;
   /** Which registered resolver reduces the resource to a scope. */
-  resolverKey: ResolverKey;
+  resolverKey: ResourceResolverKey;
   /** The request.params key carrying the resource id (e.g. "attemptId"). */
   resourceIdKey: string;
   /** Resolver lookup (injected; built by the authz plugin from fastify.db). */
@@ -115,9 +118,10 @@ export function buildScopedCapabilityPreHandler(
         .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
     }
 
+    const resourceRef: ResourceRef = { type: resolverKey, id: resourceId };
     const resolution = await resolver.resolve(
       { actorId: ctx.actorId, organizationId: ctx.organizationId },
-      { type: resolverKey as never, id: resourceId },
+      resourceRef,
     );
 
     if (isScopeDenied(resolution)) {

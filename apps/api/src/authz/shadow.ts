@@ -17,7 +17,7 @@
  */
 import { createHash } from "node:crypto";
 import { type PermissionKey, type RoleKey } from "@exam/authz";
-import { permissionsForRole } from "@exam/authz";
+import { presetAllows } from "../lib/presetCache.js";
 
 /** Minimal actor context shadow needs. */
 export interface ShadowContext {
@@ -79,25 +79,13 @@ function legacyAllows(ctx: ShadowContext, gate: RoleKey[]): boolean {
   return gate.includes(ctx.role);
 }
 
-// Memoized role-preset sets (presets are static; avoid per-call allocation on
-// the shadow hot path).
-const ROLE_PERMISSION_SETS = new Map<RoleKey, ReadonlySet<PermissionKey>>();
-function rolePresetSet(role: RoleKey): ReadonlySet<PermissionKey> {
-  let set = ROLE_PERMISSION_SETS.get(role);
-  if (!set) {
-    set = new Set<PermissionKey>(permissionsForRole(role));
-    ROLE_PERMISSION_SETS.set(role, set);
-  }
-  return set;
-}
-
 function capabilityAllows(
   ctx: ShadowContext,
   permission: PermissionKey,
 ): boolean {
   // Phase 1 flat source: the actor's role preset. (RBAC-M10 will swap in the
   // resolver-backed capability check; shadow's contract is unchanged.)
-  if (rolePresetSet(ctx.role).has(permission)) return true;
+  if (presetAllows(ctx.role, permission)) return true;
   // Fall back to the request's flat permission cache (compat with ctx.permissions).
   // Defensive: shadow must never crash (ADR §10.3); a legacy caller that omits
   // permissions simply yields a deny on this branch instead of throwing.

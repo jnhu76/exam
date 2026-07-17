@@ -1,9 +1,11 @@
 import type { MeResponse } from "@exam/contracts";
 import {
+  canImportQuestions,
+  canSeeCourses,
   canSeeExams,
   canSeeGradingQueue,
   canSeeManagement,
-  canSeeQuestionBank,
+  canSeeQuestions,
   canSeeResults,
 } from "@/lib/capabilities";
 import {
@@ -83,20 +85,20 @@ const groups: NavGroup[] = [
         labelKey: "nav.items.courses",
         to: routes.admin.courses,
         icon: GraduationCap,
-        visible: canSeeQuestionBank,
+        visible: canSeeCourses,
       },
       {
         labelKey: "nav.items.questions",
         to: routes.admin.questions,
         icon: BookOpen,
         end: true,
-        visible: canSeeQuestionBank,
+        visible: canSeeQuestions,
       },
       {
         labelKey: "nav.items.questionsImport",
         to: routes.admin.questionsImport,
         icon: FileUp,
-        visible: canSeeQuestionBank,
+        visible: canImportQuestions,
       },
     ],
   },

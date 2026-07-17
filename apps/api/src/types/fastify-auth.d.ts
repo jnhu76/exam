@@ -1,7 +1,7 @@
 import "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Permission, RequestContext, Role } from "@exam/domain";
-import type { PermissionKey, ResolverKey } from "@exam/authz";
+import type { PermissionKey, ResourceResolverKey } from "@exam/authz";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -32,7 +32,7 @@ declare module "fastify" {
      */
     requireScopedCapability: (
       permission: PermissionKey,
-      resolverKey: ResolverKey,
+      resolverKey: ResourceResolverKey,
       resourceIdKey: string,
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }

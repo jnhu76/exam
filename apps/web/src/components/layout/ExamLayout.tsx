@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { isCandidate } from "@/lib/capabilities";
 
 /**
  * Shell layout for candidate-facing exam pages. Renders a top header
@@ -42,7 +43,7 @@ export function ExamLayout() {
       </div>
     );
   }
-  if (!user || user.role !== "Candidate") {
+  if (!user || !isCandidate(user)) {
     return <Navigate to="/login" replace />;
   }
   const initials = user.name.slice(0, 2);

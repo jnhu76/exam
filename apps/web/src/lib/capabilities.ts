@@ -79,9 +79,16 @@ export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
   return isAdmin(user);
 }
 
-/** Question bank nav (courses/questions/import) — Admin + Teacher. */
-export function canSeeQuestionBank(user: Pick<MeResponse, "role">): boolean {
-  return can(user, Permission.QuestionView) || can(user, Permission.CourseView);
+export function canSeeCourses(user: Pick<MeResponse, "role">): boolean {
+  return can(user, Permission.CourseView);
+}
+
+export function canSeeQuestions(user: Pick<MeResponse, "role">): boolean {
+  return can(user, Permission.QuestionView);
+}
+
+export function canImportQuestions(user: Pick<MeResponse, "role">): boolean {
+  return can(user, Permission.QuestionImport);
 }
 
 /** Exams nav (list/detail/author) — Admin + Teacher. */
