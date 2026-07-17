@@ -1,6 +1,13 @@
 import type { Database } from "../types.js";
 import { pgNum } from "../types.js";
-import { examAttempts, candidateProfiles, users, exams } from "../schema/pg.js";
+import {
+  examAttempts,
+  candidateProfiles,
+  users,
+  exams,
+  courses,
+  organizations,
+} from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
@@ -24,6 +31,36 @@ export function createAttemptRepo(db: Database) {
 
   return {
     ...repo,
+    async findAuthorizationChain(
+      ctx: TenantContext | RequestContext,
+      attemptId: string,
+    ) {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({
+          attemptId: examAttempts.id,
+          attemptOrganizationId: examAttempts.organizationId,
+          linkedExamId: examAttempts.examId,
+          examId: exams.id,
+          examOrganizationId: exams.organizationId,
+          linkedCourseId: exams.courseId,
+          courseId: courses.id,
+          courseOrganizationId: courses.organizationId,
+          organizationId: organizations.id,
+        })
+        .from(examAttempts)
+        .leftJoin(exams, eq(examAttempts.examId, exams.id))
+        .leftJoin(courses, eq(exams.courseId, courses.id))
+        .leftJoin(organizations, eq(courses.organizationId, organizations.id))
+        .where(
+          and(
+            eq(examAttempts.organizationId, orgId),
+            eq(examAttempts.id, attemptId),
+          ),
+        )
+        .limit(1);
+      return rows[0] ?? null;
+    },
     /**
      * Finds an attempt by `id` with `FOR UPDATE` row lock, scoped to the tenant.
      * Used for optimistic concurrency during answer saves and submissions.

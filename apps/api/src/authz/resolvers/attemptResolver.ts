@@ -1,16 +1,3 @@
-/**
- * Concrete DB-backed scope resolvers (RBAC runtime activation, PR #3 Step 3).
- *
- * Implements the {@link ScopeResolver} contract from `@exam/authz/resolver`:
- * load the resource, explicitly verify the org anchor (ADR §3.4), and deny on
- * any inconsistency — never fail open (ADR §3.9). Operational failures are
- * logged and surface as `resolver_error` so callers map them to 503, not a
- * silent 403.
- *
- * Hot-path budget: ≤2 DB reads (ADR §22.2). attemptRepo.findById returns a row
- * carrying organizationId + examId + candidateId, so the attempt resolver is a
- * single read; the exam resolver is a single read.
- */
 import type { FastifyBaseLogger } from "fastify";
 import type { Database, TenantContext } from "@exam/db/src/types.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
@@ -18,94 +5,119 @@ import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import {
   Scope,
   type ResolverContext,
-  type ResourceRef,
   type ResolvedScope,
   type DeniedScope,
   type ScopeResolver,
-  type ScopeType,
+  type ResourceResolverKey,
   type ResourceType,
+  type ScopeType,
 } from "@exam/authz";
 
-/**
- * Builds the minimal TenantContext a repo needs from a ResolverContext.
- *
- * `role`/`permissions` here are NOT a real authorization decision — the repo's
- * `findById` only consumes `organizationId` for tenant scoping (it does not
- * branch on role/permissions). The values are placeholders required to satisfy
- * the `TenantContext` shape; the actual authorization happens in
- * `requireCapability` + this resolver, not in the repo.
- *
- * `role` is cast to `TenantContext["role"]` (not `as never`) to preserve
- * partial type safety: if `TenantContext.role` narrows, this cast surfaces
- * the mismatch rather than silently hiding it.
- */
-function repoCtx(c: ResolverContext): TenantContext {
+interface ChainNode {
+  type: ResourceType;
+  id: string | null;
+  linkedId?: string | null;
+}
+
+interface LoadedAuthorizationChain {
+  resourceId: string;
+  resourceOrganizationId: string;
+  organizationIds: readonly (string | null)[];
+  chain: readonly ChainNode[];
+}
+
+function repoCtx(ctx: ResolverContext): TenantContext {
   return {
-    actorId: c.actorId,
-    organizationId: c.organizationId,
+    actorId: ctx.actorId,
+    organizationId: ctx.organizationId,
     role: "Admin" as TenantContext["role"],
     permissions: [],
   };
 }
 
-/** A loaded tenant row carrying its parent id (for the resolution chain). */
-interface LoadedRow {
-  id: string;
-  organizationId: string;
-  parentId: string;
+function materializeChain(
+  nodes: readonly ChainNode[],
+): Array<{ type: ResourceType; id: string }> | null {
+  const chain: Array<{ type: ResourceType; id: string }> = [];
+  for (const node of nodes) {
+    if (
+      !node.id ||
+      (node.linkedId !== undefined && node.linkedId !== node.id)
+    ) {
+      return null;
+    }
+    chain.push({ type: node.type, id: node.id });
+  }
+  return chain;
 }
 
-/**
- * Shared resolution skeleton for a single tenant resource (attempt/exam).
- * Loads by id (1 read), explicitly verifies the org anchor, and returns the
- * resolved scope + parent chain. Used by both factories below to avoid
- * duplication.
- */
-async function resolveTenantResource(args: {
-  db: Database;
+function denyInconsistentChain(
+  logger: FastifyBaseLogger | undefined,
+  resolver: ResourceResolverKey,
+  resourceId: string,
+  reason: "organization_mismatch" | "broken_parent_chain",
+  loaded: LoadedAuthorizationChain,
+): DeniedScope {
+  logger?.warn(
+    {
+      resolver,
+      resourceId,
+      reason,
+      chain: loaded.chain,
+      organizationIds: loaded.organizationIds,
+    },
+    "authz resolver parent-chain inconsistency",
+  );
+  return { denied: true, reason };
+}
+
+async function resolveAuthorizationChain(args: {
   logger: FastifyBaseLogger | undefined;
   ctx: ResolverContext;
-  ref: ResourceRef;
+  resourceId: string;
+  resolver: ResourceResolverKey;
   scope: ScopeType;
-  childType: ResourceType;
-  parentType: ResourceType;
-  load: (
-    db: Database,
-    ctx: TenantContext,
-    id: string,
-  ) => Promise<LoadedRow | null>;
+  load: () => Promise<LoadedAuthorizationChain | null>;
 }): Promise<ResolvedScope | DeniedScope> {
   try {
-    const row = await args.load(args.db, repoCtx(args.ctx), args.ref.id);
-    if (!row) {
+    const loaded = await args.load();
+    if (!loaded) {
       return { denied: true, reason: "resource_not_found" };
     }
-    // ADR §3.4: explicit org anchor. findById already filters by org, but the
-    // rule requires the check to be explicit (defensive against a repo that
-    // ever broadens its filter).
-    if (row.organizationId !== args.ctx.organizationId) {
-      return { denied: true, reason: "organization_mismatch" };
+    const chain = materializeChain(loaded.chain);
+    if (!chain || loaded.organizationIds.some((id) => id === null)) {
+      return denyInconsistentChain(
+        args.logger,
+        args.resolver,
+        args.resourceId,
+        "broken_parent_chain",
+        loaded,
+      );
+    }
+    if (loaded.organizationIds.some((id) => id !== args.ctx.organizationId)) {
+      return denyInconsistentChain(
+        args.logger,
+        args.resolver,
+        args.resourceId,
+        "organization_mismatch",
+        loaded,
+      );
     }
     return {
       scope: args.scope,
-      organizationId: row.organizationId,
-      resourceId: row.id,
-      chain: [
-        { type: args.childType, id: row.id },
-        { type: args.parentType, id: row.parentId },
-      ],
+      organizationId: loaded.resourceOrganizationId,
+      resourceId: loaded.resourceId,
+      chain,
     };
   } catch (err) {
-    // Never fail open; log + surface as resolver_error -> caller maps to 503.
     args.logger?.error(
-      { err, resolver: args.childType, resourceId: args.ref.id },
+      { err, resolver: args.resolver, resourceId: args.resourceId },
       "authz resolver DB error",
     );
     return { denied: true, reason: "resolver_error" };
   }
 }
 
-/** Builds an attempt-scope resolver. 1 DB read (attemptRepo.findById). */
 export function createAttemptResolver(
   db: Database,
   logger?: FastifyBaseLogger,
@@ -113,18 +125,37 @@ export function createAttemptResolver(
   return {
     key: "attempt",
     async resolve(ctx, ref): Promise<ResolvedScope | DeniedScope> {
-      return resolveTenantResource({
-        db,
+      return resolveAuthorizationChain({
         logger,
         ctx,
-        ref,
+        resourceId: ref.id,
+        resolver: "attempt",
         scope: Scope.Attempt,
-        childType: "attempt",
-        parentType: "exam",
-        load: async (database, tenantCtx, id) => {
-          const a = await createAttemptRepo(database).findById(tenantCtx, id);
-          return a
-            ? { id: a.id, organizationId: a.organizationId, parentId: a.examId }
+        load: async () => {
+          const row = await createAttemptRepo(db).findAuthorizationChain(
+            repoCtx(ctx),
+            ref.id,
+          );
+          return row
+            ? {
+                resourceId: row.attemptId,
+                resourceOrganizationId: row.attemptOrganizationId,
+                organizationIds: [
+                  row.attemptOrganizationId,
+                  row.examOrganizationId,
+                  row.courseOrganizationId,
+                  row.organizationId,
+                ],
+                chain: [
+                  { type: "attempt", id: row.attemptId },
+                  { type: "exam", id: row.examId, linkedId: row.linkedExamId },
+                  {
+                    type: "course",
+                    id: row.courseId,
+                    linkedId: row.linkedCourseId,
+                  },
+                ],
+              }
             : null;
         },
       });
@@ -132,7 +163,6 @@ export function createAttemptResolver(
   };
 }
 
-/** Builds an exam-scope resolver. 1 DB read (examRepo.findById). */
 export function createExamResolver(
   db: Database,
   logger?: FastifyBaseLogger,
@@ -140,21 +170,34 @@ export function createExamResolver(
   return {
     key: "exam",
     async resolve(ctx, ref): Promise<ResolvedScope | DeniedScope> {
-      return resolveTenantResource({
-        db,
+      return resolveAuthorizationChain({
         logger,
         ctx,
-        ref,
+        resourceId: ref.id,
+        resolver: "exam",
         scope: Scope.Exam,
-        childType: "exam",
-        parentType: "course",
-        load: async (database, tenantCtx, id) => {
-          const e = await createExamRepo(database).findById(tenantCtx, id);
-          return e
+        load: async () => {
+          const row = await createExamRepo(db).findAuthorizationChain(
+            repoCtx(ctx),
+            ref.id,
+          );
+          return row
             ? {
-                id: e.id,
-                organizationId: e.organizationId,
-                parentId: e.courseId,
+                resourceId: row.examId,
+                resourceOrganizationId: row.examOrganizationId,
+                organizationIds: [
+                  row.examOrganizationId,
+                  row.courseOrganizationId,
+                  row.organizationId,
+                ],
+                chain: [
+                  { type: "exam", id: row.examId },
+                  {
+                    type: "course",
+                    id: row.courseId,
+                    linkedId: row.linkedCourseId,
+                  },
+                ],
               }
             : null;
         },
