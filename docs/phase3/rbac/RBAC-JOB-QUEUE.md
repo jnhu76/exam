@@ -9,7 +9,7 @@
 > tracker**; the authoritative current status now lives in
 > `docs/phase3/plan.md` §0/§3/§5. The single remaining open item is
 > **RBAC-M10-finish** (wire scope resolvers into the request path; flip the
-> remaining ~50 `requireRole` routes).
+> remaining 44 `requireRole` routes and 21 flat-capability routes requiring scoped enforcement).
 >
 > **Purpose.** Single source of truth for the Phase 3 Scoped RBAC rollout progress.
 > One ADR (`adr-scoped-rbac-architecture.md`) is the design authority; this file
@@ -27,7 +27,7 @@
 - **Never fail open.** Permission denied = 403; AuthZ unavailable / broken chain = 503 or deny (ADR §3.9).
 - **Organization anchor is explicit.** Every sensitive resolver verifies `resource.organizationId === ctx.organizationId` (ADR §3.4).
 - **Backend is authority.** Frontend capability state is a render hint only (ADR §3.5).
-- **No Redis as AuthZ authority. No external policy library. No audit-action rename.** `users.role` stays as a compatibility cache during migration.
+- **No Redis as AuthZ authority. No external policy library. No audit-action rename.** `users.role` is the de facto runtime authorization source (current migration state). Target: after M10-E, `user_role_assignments` becomes runtime authority; `users.role` remains compatibility cache only.
 
 ## Status legend
 
@@ -57,7 +57,7 @@
 | 14 | **M10-Step3** `createAttemptResolver` + `createExamResolver` (org-anchor + fail-closed) | resolver impl + tests | — | medium | [x] | ✅ enforcement PRs |
 | 15 | **PROCTOR flip** — `proctorMonitoring.ts` (×2) flipped to `requireCapability` | route flip | — | high | [x] | ✅ enforcement PRs |
 | 16 | **GRADING flip** — `gradingQueue.ts` (×3) + `attempts.admin.ts` (×6) flipped to `requireCapability`; permission-matrix test + swagger stub | route flip | — | high | [x] | ✅ enforcement PRs |
-| 17 | **RBAC-M10-finish** — wire scope resolvers into the `requireCapability` request path; flip remaining ~50 `requireRole` routes per-domain | resolver wiring + route flips | ❌ future PRs | high | **[ ] open** — see "Current real gap" below | ❌ |
+| 17 | **RBAC-M10-finish** — wire scope resolvers into the `requireCapability` request path; flip remaining 44 `requireRole` routes and remediate 21 flat-capability routes requiring scoped enforcement | resolver wiring + route flips | ❌ future PRs | high | **[ ] open** — baseline frozen at 8ef50e5 (see RBAC-M10-FINISH-BASELINE-1 below); 65 routes total, decomposed into 6 sub-jobs (M10-A through M10-F) | ❌ |
 
 ## Final review — APPROVED (foundation PR only)
 
@@ -72,41 +72,51 @@ Independent reviewer verdict: **APPROVE** — 58/58 tests, typecheck/lint clean,
 - **#2 `legacyMap` undefined guards** → defense-in-depth nit; TS already enforces completeness. Deferred.
 - **#3 `KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[]` → `readonly AuditActionKey[]`** → reasonable drift-detection tightening; deferred (low value — the test already asserts every entry ∈ `AuditAction`).
 
-## Current real gap (as of 2026-07-01) — RBAC-M10-finish
+## Current real gap (as of 2026-07-17) — RBAC-M10-finish
 
 Everything above rows 0–16 is merged. The **only** remaining RBAC work is row 17
-(RBAC-M10-finish). It has two distinct parts:
+(RBAC-M10-finish). **An authoritative baseline was frozen at commit 8ef50e5** and
+captured in `docs/phase3/rbac/RBAC-M10-FINISH-BASELINE-1.md` (§A–§R, 685 lines).
 
-1. **Wire scope resolvers into the request lifecycle.** Today `requireCapability`
-   (`apps/api/src/plugins/auth.ts`) checks only flat role-preset membership — it
-   never consults `createAttemptResolver` / `createExamResolver`. Those resolvers
-   exist and are unit-tested (`apps/api/src/authz/resolvers/attemptResolver.ts` +
-   `.test.ts`) but are **not constructed or invoked by any Fastify plugin, hook,
-   decorator, or route** (verified: zero call sites outside `resolvers/` and
-   tests). So on the 11 flipped routes, "Scoped RBAC" is at runtime a flat
-   6-role-preset gate; the scope/ownership/own-attempt boundary is not enforced
-   by the capability check.
-2. **Flip the remaining ~50 legacy `requireRole` routes** to `requireCapability`,
-   per-domain, each behind shadow-parity verification for that domain. Route
-   families still on `requireRole`: `user.ts`, `system.ts`, `settings.ts`,
-   `scores.ts`, `roleAssignments.ts`, `question.ts`, `importLogs.ts`, `export.ts`,
-   `exam.ts` (~16 endpoints), `email.ts`, `course.ts`, `candidateField.ts`,
-   `audit.ts`, `attempts.candidate.ts` (×9), `candidate.ts`.
+**Current known state (re-proven from source at baseline):**
 
-**Why this is Middle, not Large:** the design (ADR + permission matrix + scope
-model + resolver contract) is accepted and merged. M10-finish is incremental
-wiring + per-domain route flips with shadow parity, not new architecture. It
-should be decomposed into per-domain Middle Jobs (e.g. flip `user.*` routes,
-flip `exam.*` routes, wire attempt-scope into the candidate-runtime routes) and
-merged independently.
+| Metric | Count |
+| ------ | ----: |
+| requireRole(["Candidate"]) routes | 10 |
+| requireRole(["Admin"]) routes | 34 |
+| requireCapability (flat) routes | 31 |
+| requireScopedCapability routes | 5 |
+| requireScoreCapability routes | 1 |
+| requireRole total | **44** |
+| Flat-capability-to-scope gap | **21 of 31** (need resolver wiring) |
+| Runtime authority | MIXED — `users.role` is de facto authority; `user_role_assignments` never consulted |
+| Candidate ownership | handler-level only (not preHandler) |
 
-**Guardrails for M10-finish:**
+**Baseline verdict:** `PASS — BASELINE FROZEN` with `RUNTIME AUTHORITY: MIXED` as a finding (see RBAC-M10-FINISH-BASELINE-1.md §A).
+
+**Corrective-2 status:** `CLOSED` — mutation-proven (3/3 routes killed), metadata
+assertions frozen, verified at baseline commit.
+
+**Decomposition into 6 sub-jobs:**
+
+| Job | Scope | Routes | Risk |
+| --- | ----- | -----: | ---: |
+| M10-A | Candidate own-attempt runtime | 10 | HIGH |
+| M10-B | Resource-scoped academic management | 28 | MEDIUM |
+| M10-C | Identity & role assignment authority | 10 | MEDIUM |
+| M10-D | Organization/system administrative surfaces | 17 | LOW |
+| M10-E | Assignment-backed runtime authority | architectural | HIGH |
+| M10-F | Final drift & mutation closure | verification | LOW |
+| **Total** | **65 remediation routes** (44 requireRole + 21 flat-to-scope) | **65** | |
+
+**Guardrails for M10-finish (from baseline §O):**
 - Every domain flip must first run shadow parity for that domain (legacy vs
   capability disagreements logged, legacy stays authoritative until the flip).
 - Resolvers must verify the ADR §3.4 organization anchor on every sensitive
   resource and fail closed (ADR §3.9) on broken parent chains / not-found.
-- `users.role` stays the compatibility cache; keep it synced via
-  `syncUsersRoleFromPrimary` on every primary-active assignment change.
+- `users.role` is the de facto runtime authority (current migration state); after M10-E, `user_role_assignments` becomes runtime authority. Keep `users.role` synced via `syncUsersRoleFromPrimary` on every primary-active assignment change.
+- Handler-level ownership on Candidate routes must be retained as defense-in-depth
+  even after preHandler-level scope gates are added.
 
 ## RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — ✅ done (2026-07-17)
 
@@ -218,6 +228,28 @@ CLOSED
 GLOBAL RBAC-M10-FINISH:
 OPEN
 ```
+
+## RBAC-M10-FINISH-BASELINE-1 — ✅ done (2026-07-17)
+
+Authoritative authorization baseline frozen at commit `8ef50e52cd61b15fa1814b52d31ab3785da715a3`
+on branch `feat/rbac-m10-finish`. Full baseline document:
+`docs/phase3/rbac/RBAC-M10-FINISH-BASELINE-1.md` (685 lines, 18 sections A–R).
+
+**Key outputs:**
+- **44 legacy requireRole routes** (10 Candidate + 34 Admin) remaining
+- **31 flat requireCapability routes** — 21 require scoped resolver wiring
+- **5 requireScopedCapability routes** — match registry (proven by Corrective-2 mutations)
+- **1 requireScoreCapability route** — correct ownership-aware specialization
+- **Runtime authority: MIXED** — `users.role` is de facto authority; `user_role_assignments` never consulted
+- **0 production authorization decisions** bypass the unified gate
+- **6 sub-jobs** decomposed: M10-A (Candidate runtime), M10-B (academic management), M10-C (identity/roles), M10-D (admin surfaces), M10-E (assignment authority), M10-F (verification)
+- **Test suite:** 14 authz test files 113/113 PASS, 3 RBAC route test files 70/70 PASS, 5 registry/shadow/scope test files 56/56 PASS
+- **pnpm lint/typecheck/format:check:** all PASS
+- **Mutation-proven:** 3 scoped routes (Corrective-2) — B/B2/B3 mutations killed
+
+**Corrective-2: CLOSED** (3 proctor scoped routes, score specialized capability, authz metadata, mutation kills proven)
+
+**Global RBAC-M10-FINISH: OPEN** — see sub-jobs in "Current real gap" above.
 
 ## Acceptance per job (filled in as each lands)
 
