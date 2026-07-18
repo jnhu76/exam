@@ -90,10 +90,17 @@ function isRetryableError(err: unknown): boolean {
  * Executes the provided function inside a Drizzle database transaction
  * with automatic retry for concurrency failures.
  *
- * The transaction explicitly uses REPEATABLE READ isolation to ensure
+ * The transaction defaults to REPEATABLE READ isolation to ensure
  * consistent behavior across all environments regardless of database
  * defaults. Under REPEATABLE READ, concurrent transactions that modify
  * the same row trigger serialization_failure (40001) which is retried.
+ *
+ * Some callers (e.g., the attempt-start race) use READ COMMITTED because
+ * REPEATABLE READ does not see rows INSERTed by a concurrent transaction
+ * even after commit, which breaks the double-click idempotency pattern
+ * (the second transaction must find the existing attempt). In READ COMMITTED,
+ * each query sees the latest committed data, so `FOR UPDATE` on the attempt
+ * table finds the row created by the concurrent transaction.
  *
  * Retries automatically when the transaction fails with:
  * - 40001: serialization_failure (REPEATABLE READ concurrent update)
@@ -101,16 +108,17 @@ function isRetryableError(err: unknown): boolean {
  *
  * Note: unique_violation (23505) is NOT retried globally — most unique
  * violations are permanent conflicts (duplicate email, username, etc.)
- * and retrying them wastes resources. The startAttempt race is handled
- * by the enrollment FOR UPDATE lock which triggers 40001 under REPEATABLE READ.
+ * and retrying them wastes resources.
  *
  * @param db - Database instance.
  * @param fn - Async function that receives a transactional `Database` handle.
+ * @param isolationLevel - Transaction isolation level (default: "repeatable read").
  * @returns The value returned by `fn`.
  */
 export async function executeInTransaction<T>(
   db: Database,
   fn: (tx: Database) => Promise<T>,
+  isolationLevel: "read committed" | "repeatable read" = "repeatable read",
 ): Promise<T> {
   let lastError: unknown;
 
@@ -126,7 +134,7 @@ export async function executeInTransaction<T>(
         async (tx) => {
           return fn(tx as Database);
         },
-        { isolationLevel: "repeatable read" },
+        { isolationLevel },
       );
     } catch (err) {
       lastError = err;

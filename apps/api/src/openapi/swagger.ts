@@ -11,7 +11,9 @@ import { healthResponseSchema } from "../routes/healthSchema.js";
 import type {
   AuthzPreHandler,
   AuthzMetadata,
+  EligibilityDenialMode,
 } from "../types/fastify-auth.d.js";
+import type { PermissionKey } from "@exam/authz";
 
 /**
  * Build a throwaway Fastify instance pre-loaded with all route plugins and
@@ -58,9 +60,52 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   // the dedicated score-capability gate (own/all arbitration). Same rationale
   // as the requireScopedCapability stub above.
   app.decorate("requireScoreCapability", () => async () => {});
-  app.decorate("db", null as never);
+  // Candidate-runtime capability gates (RBAC-M10-A archetypes A/B/C-D) — no-op
+  // stubs so OpenAPI generation can register the 10 candidate runtime routes
+  // that now use the dedicated candidate-context / exam-eligibility /
+  // own-attempt gates. Each attaches a stub `.authz` matching its kind so the
+  // route registers cleanly (the spec is driven by route `schema.security` /
+  // `schema["x-role"]`, not the preHandler — same rationale as above).
+  app.decorate("requireCandidateContext", (permission: PermissionKey) => {
+    const h: AuthzPreHandler = async () => {};
+    h.authz = { kind: "candidate_context", permission };
+    return h;
+  });
+  app.decorate(
+    "requireExamEligibility",
+    (
+      permission: PermissionKey,
+      resourceIdKey: string,
+      eligibilityDenialMode: EligibilityDenialMode,
+    ) => {
+      const h: AuthzPreHandler = async () => {};
+      h.authz = {
+        kind: "exam_eligibility",
+        permission,
+        resourceIdKey,
+        eligibilityDenialMode,
+      };
+      return h;
+    },
+  );
+  app.decorate(
+    "requireOwnAttempt",
+    (permission: PermissionKey, resourceIdKey: string) => {
+      const h: AuthzPreHandler = async () => {};
+      h.authz = {
+        kind: "own_attempt",
+        permission,
+        resourceIdKey,
+      };
+      return h;
+    },
+  );
+  // Swagger-only bootstrap placeholders: DB and ctx are not used during
+  // OpenAPI generation; they exist only to satisfy Fastify's decorator
+  // contract when routes register.
+  app.decorate("db", null as unknown as never);
   app.decorate("now", () => new Date());
-  app.decorateRequest("ctx", null as never);
+  app.decorateRequest("ctx", null as unknown as never);
 
   await app.register(swaggerPlugin as never, openApiConfig);
 

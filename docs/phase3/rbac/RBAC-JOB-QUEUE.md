@@ -82,15 +82,15 @@ captured in `docs/phase3/rbac/RBAC-M10-FINISH-BASELINE-1.md` (§A–§R, 685 lin
 
 | Metric | Count |
 | ------ | ----: |
-| requireRole(["Candidate"]) routes | 10 |
+| requireRole(["Candidate"]) routes | ~~10~~ → **0** (M10-A) |
 | requireRole(["Admin"]) routes | 34 |
 | requireCapability (flat) routes | 31 |
 | requireScopedCapability routes | 5 |
 | requireScoreCapability routes | 1 |
-| requireRole total | **44** |
+| requireRole total | ~~44~~ → **34** (M10-A) |
 | Flat-capability-to-scope gap | **21 of 31** (need resolver wiring) |
 | Runtime authority | MIXED — `users.role` is de facto authority; `user_role_assignments` never consulted |
-| Candidate ownership | handler-level only (not preHandler) |
+| Candidate ownership | preHandler-level (M10-A) + handler defense-in-depth |
 
 **Baseline verdict:** `PASS — BASELINE FROZEN` with `RUNTIME AUTHORITY: MIXED` as a finding (see RBAC-M10-FINISH-BASELINE-1.md §A).
 
@@ -250,6 +250,77 @@ on branch `feat/rbac-m10-finish`. Full baseline document:
 **Corrective-2: CLOSED** (3 proctor scoped routes, score specialized capability, authz metadata, mutation kills proven)
 
 **Global RBAC-M10-FINISH: OPEN** — see sub-jobs in "Current real gap" above.
+
+## RBAC-M10-A — ✅ implemented (2026-07-17) — AWAITING INDEPENDENT ADVERSARIAL REVIEW
+
+Candidate own-attempt runtime authorization implemented on branch
+`feat/rbac-m10-a-candidate-runtime` off the frozen baseline. Full evidence
+document: `docs/phase3/rbac/RBAC-M10-A-IMPLEMENTATION-1.md` (sections A–S).
+
+**Scope:** the 10 legacy Candidate routes in `attempts.candidate.ts` migrated
+from `requireRole(["Candidate"])` to capability + scope + ownership
+authorization. Handler-level ownership and state guards retained as
+defense-in-depth (directive §6.6, baseline §I).
+
+**Result:**
+- production `requireRole`: **44 → 34**
+- Candidate `requireRole`: **10 → 0**
+- M10-A routes migrated: **10/10**
+
+**Design — four semantic authz kinds (directive §7):**
+- `candidate_context` (archetype A, GET /candidate/exams) — preset-only; the
+  handler scopes the list to the candidate profile.
+- `exam_eligibility` (archetype B, exam detail / queue / start) — capability +
+  exam org-anchor + server-derived candidate profile; enrollment presence is
+  NOT re-arbitrated (the handler keeps its established 403-start / 404-detail
+  contracts, spec §8/§9.5).
+- `own_attempt` (archetype C/D, own-attempt view / take / save / submit /
+  heartbeat / restore) — capability + ownership (candidateProfiles.userId ===
+  actorId); cross-candidate probe → 404 anti-enumeration.
+
+The decision is **capability + ownership/eligibility, never role-name**
+(directive §6.1). No `ctx.role === "Candidate"` branch in any new code. The
+Candidate preset already held all 7 runtime permissions — no preset-parity
+correction needed.
+
+**New infrastructure:**
+- resolvers: `ownAttemptResolver`, `examEligibilityResolver`
+- capability builders: `ownAttemptCapability`, `examEligibilityCapability`,
+  `candidateContextCapability`
+- `AuthzMetadata` union extended with 3 new kinds; 3 decorators registered in
+  `plugins/authz.ts`; 3 no-op stubs in `swagger.ts`
+- repo methods: `attemptRepo.findOwnAttemptChain`,
+  `examRepo.findCandidateEligibilityChain` (single query: exam chain +
+  candidate profile + enrollment)
+
+**Tests added (51 new):**
+- 33 unit tests (resolvers + capability builders, vi.mock repos)
+- 18 integration tests in `attempts/m10a.candidateRuntime.test.ts`: runtime
+  authz metadata for all 10 routes (onRoute capture), zero-side-effect denial
+  on the 5 mutating routes, non-Candidate role denial.
+
+**Mutation campaign (6 executed, 5 killed):** A (flat downgrade → metadata
+FAIL), B (mutating flat downgrade → metadata FAIL), C (ownership bypass → unit
+FAIL), D (org-anchor neutralized → unit FAIL), E (wrong resourceIdKey →
+metadata FAIL). F (handler defense-in-depth removal) honestly recorded as
+intentionally redundant (directive §11 F) — proven by source assertion + the
+fact that mutations A/C did not change external behavior (handler checks
+remained sufficient). No mutation committed.
+
+**Verified:** authz 46/46, attempts 157/157, candidateOwnership 31/31,
+scores PASS, m10a.candidateRuntime 18/18; typecheck / lint / lint:arch /
+lint:copy / format:check / api:openapi:check / `pnpm verify` all PASS.
+
+```
+RBAC-M10-A:
+IMPLEMENTED — AWAITING INDEPENDENT ADVERSARIAL REVIEW
+
+requireRole remaining: 34
+M10-A routes migrated: 10/10
+```
+
+M10-A is NOT marked CLOSED on author self-review alone. M10-B (academic
+management) is NOT started.
 
 ## Acceptance per job (filled in as each lands)
 

@@ -33,7 +33,11 @@ import {
   createExamResolver,
 } from "../authz/resolvers/attemptResolver.js";
 import { buildScoreCapabilityPreHandler } from "../authz/scoreCapability.js";
+import { buildCandidateContextCapabilityPreHandler } from "../authz/candidateContextCapability.js";
+import { buildExamEligibilityCapabilityPreHandler } from "../authz/examEligibilityCapability.js";
+import { buildOwnAttemptCapabilityPreHandler } from "../authz/ownAttemptCapability.js";
 import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
+import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 
 const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Resolver registry: one DB-backed resolver per resource family the flipped
@@ -90,6 +94,74 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
     return (request: FastifyRequest, reply: FastifyReply) =>
       scoreHandler(request, reply);
   });
+
+  // Candidate-context capability gate (RBAC-M10-A archetype A).
+  // Preset-only gate for `GET /candidate/exams`; the handler scopes the list to
+  // the candidate profile (defense-in-depth, directive §6.6). No DB resolver.
+  const candidateContextHandler = buildCandidateContextCapabilityPreHandler(
+    (role: RoleKey, perm: PermissionKey) => presetAllows(role, perm),
+  );
+  fastify.decorate("requireCandidateContext", (permission: PermissionKey) => {
+    const handler = candidateContextHandler(permission);
+    const preHandler: AuthzPreHandler = (request, reply) =>
+      handler(request, reply);
+    preHandler.authz = { kind: "candidate_context", permission };
+    return preHandler;
+  });
+
+  // Candidate exam-eligibility capability gate (RBAC-M10-A archetype B).
+  // Capability + eligibility for exam detail / queue / start. Exam must resolve
+  // under the org anchor AND the actor must have a candidate profile with an
+  // enrollment for the exam (server-derived, no client candidateId trust).
+  const examEligibilityHandler = buildExamEligibilityCapabilityPreHandler({
+    db: fastify.db,
+    logger: fastify.log,
+    presetAllows,
+  });
+  fastify.decorate(
+    "requireExamEligibility",
+    (
+      permission: PermissionKey,
+      resourceIdKey: string,
+      eligibilityDenialMode: EligibilityDenialMode,
+    ) => {
+      const handler = examEligibilityHandler(
+        permission,
+        resourceIdKey,
+        eligibilityDenialMode,
+      );
+      const preHandler: AuthzPreHandler = (request, reply) =>
+        handler(request, reply);
+      preHandler.authz = {
+        kind: "exam_eligibility",
+        permission,
+        resourceIdKey,
+        eligibilityDenialMode,
+      };
+      return preHandler;
+    },
+  );
+
+  // Own-attempt capability gate (RBAC-M10-A archetype C/D).
+  // Capability + ownership for attempt view / take / answer-save / submit /
+  // heartbeat / restore. Attempt must resolve under the org anchor AND its
+  // owner (candidateProfiles.userId) must equal the actor. Anti-enumeration:
+  // cross-candidate probe -> 404 (not 403).
+  const ownAttemptHandler = buildOwnAttemptCapabilityPreHandler({
+    db: fastify.db,
+    logger: fastify.log,
+    presetAllows,
+  });
+  fastify.decorate(
+    "requireOwnAttempt",
+    (permission: PermissionKey, resourceIdKey: string) => {
+      const handler = ownAttemptHandler(permission, resourceIdKey);
+      const preHandler: AuthzPreHandler = (request, reply) =>
+        handler(request, reply);
+      preHandler.authz = { kind: "own_attempt", permission, resourceIdKey };
+      return preHandler;
+    },
+  );
 };
 
 export default fp(authzScopedPlugin);

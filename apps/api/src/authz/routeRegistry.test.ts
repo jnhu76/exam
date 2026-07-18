@@ -16,7 +16,7 @@ describe("RBAC-M4 route permission registry — shape & invariants", () => {
       expect(["GET", "POST", "PATCH", "DELETE", "PUT"]).toContain(e.method);
       expect(typeof e.path).toBe("string");
       expect(e.path.startsWith("/")).toBe(true);
-      expect(typeof e.currentGate).toBe("string");
+      expect(typeof e.legacyGate).toBe("string");
       expect(typeof e.permission).toBe("string");
       expect(typeof e.scope).toBe("string");
       expect(typeof e.resolver).toBe("string");
@@ -90,14 +90,14 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
     const e = find("GET", "/candidate-fields/template");
     expect(e?.permission).toBe("candidate_field.view");
     expect(e?.scope).toBe("organization");
-    expect(e?.currentGate).toBe("Admin");
+    expect(e?.legacyGate).toBe("Admin");
   });
 
   it("candidate take snapshot -> attempt.view_own @ own_attempt scope", () => {
     const e = find("GET", "/candidate/attempts/:attemptId/take");
     expect(e?.permission).toBe("attempt.view_own");
     expect(e?.scope).toBe("own_attempt");
-    expect(e?.currentGate).toBe("Candidate");
+    expect(e?.legacyGate).toBe("Candidate");
   });
 
   it("proctor incident -> attempt.misconduct.mark @ attempt scope (already capability-gated)", () => {

@@ -50,18 +50,61 @@ export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
 
 export type LegacyGate = "Admin" | "Candidate" | "Admin+Candidate" | "public";
 
+/**
+ * Route-specific eligibility denial policy for exam-eligibility routes.
+ *
+ * - `resource_not_found`: missing profile/enrollment → 404 (anti-enumeration).
+ * - `permission_denied`: missing profile/enrollment → 403.
+ */
+export type EligibilityDenialMode = "resource_not_found" | "permission_denied";
+
+/**
+ * Exact runtime authorization strategy for Candidate runtime routes (RBAC-M10-A).
+ *
+ * Maps 1:1 to the {@link AuthzMetadata} kinds the actual Fastify decorators
+ * attach. The registry declares this so a runtime conformance test can compare
+ * the onRoute capture against the documented strategy without duplicating the
+ * expected values in the test.
+ *
+ * Three strategies exist:
+ *   - `candidate_context`: preset-only gate, no resolver, no resource param.
+ *   - `exam_eligibility`: exam+enrollment chain resolution via examId param.
+ *   - `own_attempt`: attempt ownership resolution via id/attemptId param.
+ */
+export type CandidateRuntimeAuthzStrategy =
+  | { kind: "candidate_context" }
+  | {
+      kind: "exam_eligibility";
+      resourceIdKey: "examId";
+      eligibilityDenialMode: "resource_not_found" | "permission_denied";
+    }
+  | {
+      kind: "own_attempt";
+      resourceIdKey: "id" | "attemptId";
+    };
+
 export interface RoutePermissionRegistryEntry {
   method: HttpMethod;
   /** Per-route definition path (canonical; plugin prefix applied at runtime). */
   path: string;
-  /** The current `requireRole` gate, for migration traceability. */
-  currentGate: LegacyGate;
+  /**
+   * Pre-migration role gate retained only for migration traceability.
+   * It is not the current runtime authorization authority.
+   */
+  legacyGate: LegacyGate;
   /** The Phase 3 permission this route will require once enforced. */
   permission: PermissionKey;
   /** The scope the capability check resolves against. */
   scope: ScopeType;
   /** The resolver key that reduces the resource to the scope. */
   resolver: ResolverKey;
+  /**
+   * Exact runtime authorization strategy for Candidate runtime routes (M10-A).
+   * Present only on the 10 candidate routes; absent on Admin routes.
+   * The runtime conformance test compares this field against the actual
+   * Fastify onRoute metadata to detect strategy drift.
+   */
+  runtimeAuthz?: CandidateRuntimeAuthzStrategy;
   /** Optional resource spec (id source / list filter). */
   resource?: ResourceSpec;
   /** Audit action to emit when the route is a sensitive read or state change. */
@@ -87,7 +130,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/email/test",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SystemDiagnosticsView,
       scope: Scope.System,
       resolver: "system",
@@ -99,40 +142,56 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/candidate/exams",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.ExamTake,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "organization",
+      runtimeAuthz: { kind: "candidate_context" },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "GET",
       path: "/candidate/exams/:examId",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.ExamTake,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "exam",
+      runtimeAuthz: {
+        kind: "exam_eligibility",
+        resourceIdKey: "examId",
+        eligibilityDenialMode: "resource_not_found",
+      },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "POST",
       path: "/attempts/:examId/queue",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptStart,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "exam",
+      runtimeAuthz: {
+        kind: "exam_eligibility",
+        resourceIdKey: "examId",
+        eligibilityDenialMode: "resource_not_found",
+      },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "POST",
       path: "/attempts/:examId/start",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptStart,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "exam",
+      runtimeAuthz: {
+        kind: "exam_eligibility",
+        resourceIdKey: "examId",
+        eligibilityDenialMode: "permission_denied",
+      },
       auditAction: "attempt.start",
       sensitive: false,
       migrationStage: 7,
@@ -140,10 +199,14 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/attempts/:id",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptViewOwn,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resourceIdKey: "id",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -152,30 +215,42 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       // (P0/L0 authority). Same own_attempt semantic as GET /attempts/:id.
       method: "GET",
       path: "/candidate/attempts/:attemptId/take",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptViewOwn,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "POST",
       path: "/attempts/:attemptId/answers/:questionId",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptAnswerSave,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "POST",
       path: "/attempts/:attemptId/submit",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptSubmit,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       auditAction: "attempt.submit",
       sensitive: false,
       migrationStage: 7,
@@ -183,27 +258,35 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/attempts/:attemptId/heartbeat",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptHeartbeatSend,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "POST",
       path: "/attempts/:attemptId/restore",
-      currentGate: "Candidate",
+      legacyGate: "Candidate",
       permission: Permission.AttemptRestore,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
     {
       method: "GET",
       path: "/scores/attempts/:attemptId",
-      currentGate: "Admin+Candidate",
+      legacyGate: "Admin+Candidate",
       permission: Permission.ScoreOwnView,
       scope: Scope.OwnScore,
       resolver: "score",
@@ -215,7 +298,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/questions",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.QuestionView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -226,7 +309,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/questions/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.QuestionView,
       scope: Scope.Course,
       resolver: "question",
@@ -236,7 +319,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/questions",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.QuestionCreate,
       scope: Scope.Course,
       resolver: "question",
@@ -246,7 +329,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/questions/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.QuestionUpdate,
       scope: Scope.Course,
       resolver: "question",
@@ -256,7 +339,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/questions/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.QuestionDelete,
       scope: Scope.Course,
       resolver: "question",
@@ -266,7 +349,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/questions/import",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.QuestionImport,
       scope: Scope.Course,
       resolver: "question",
@@ -278,7 +361,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/candidates",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -289,7 +372,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/candidates",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateCreate,
       scope: Scope.Organization,
       resolver: "organization",
@@ -299,7 +382,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/candidates/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateUpdate,
       scope: Scope.Candidate,
       resolver: "candidate",
@@ -310,7 +393,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/candidates/import",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateImport,
       scope: Scope.Organization,
       resolver: "organization",
@@ -322,7 +405,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/exams/:id/scores",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ScoreAllView,
       scope: Scope.Exam,
       resolver: "exam",
@@ -335,7 +418,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/admin/attempts/:attemptId/misconduct",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptMisconductMark,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -346,7 +429,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/admin/attempts/:attemptId/force-submit",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptForceSubmit,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -357,7 +440,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/admin/attempts/:attemptId/extend-time",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptTimeExtend,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -368,7 +451,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/timeline",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptTimelineView,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -378,7 +461,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/export",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptExport,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -389,7 +472,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/export/csv",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptExport,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -402,7 +485,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/proctor/exams",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamRoomView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -417,7 +500,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/exams/:examId/proctor/attempts",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamRoomView,
       scope: Scope.Exam,
       resolver: "exam",
@@ -428,7 +511,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/proctor-events",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptTimelineView,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -441,7 +524,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       // misconduct on an attempt, so it shares the misconduct semantic.
       method: "POST",
       path: "/admin/attempts/:attemptId/proctor-incident",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AttemptMisconductMark,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -454,7 +537,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/grading-queue",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.GradingQueueView,
       scope: Scope.Exam,
       resolver: "exam",
@@ -465,7 +548,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/attempts/:attemptId/grading-details",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.GradingDetailView,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -476,7 +559,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/admin/attempts/:attemptId/grade-question",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.GradingScoreWrite,
       scope: Scope.Attempt,
       resolver: "attempt",
@@ -489,7 +572,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/users",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -500,7 +583,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/users",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserCreate,
       scope: Scope.Organization,
       resolver: "organization",
@@ -511,7 +594,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/users/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserUpdate,
       scope: Scope.Organization,
       resolver: "user",
@@ -522,7 +605,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/users/:id/reset-password",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserPasswordReset,
       scope: Scope.Organization,
       resolver: "user",
@@ -532,7 +615,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/users/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserDelete,
       scope: Scope.Organization,
       resolver: "user",
@@ -545,7 +628,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/exams/:id/export/scores",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ScoreExport,
       scope: Scope.Exam,
       resolver: "exam",
@@ -558,7 +641,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/courses",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CourseView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -569,7 +652,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/courses/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CourseView,
       scope: Scope.Course,
       resolver: "course",
@@ -579,7 +662,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/courses",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CourseCreate,
       scope: Scope.Organization,
       resolver: "organization",
@@ -590,7 +673,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/courses/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CourseUpdate,
       scope: Scope.Course,
       resolver: "course",
@@ -601,7 +684,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/courses/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CourseDelete,
       scope: Scope.Course,
       resolver: "course",
@@ -614,7 +697,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/import-logs",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AuditLogView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -624,7 +707,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/settings",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SettingsView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -634,7 +717,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/settings/branding",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SettingsView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -644,7 +727,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/admin/settings/branding",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SettingsUpdate,
       scope: Scope.Organization,
       resolver: "organization",
@@ -654,7 +737,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/audit-logs",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.AuditLogView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -664,7 +747,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/system/health",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SystemHealthView,
       scope: Scope.System,
       resolver: "system",
@@ -674,7 +757,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/system/dashboard",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SystemHealthView,
       scope: Scope.System,
       resolver: "system",
@@ -684,7 +767,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/system/diagnostics",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.SystemDiagnosticsView,
       scope: Scope.System,
       resolver: "system",
@@ -696,7 +779,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/exams",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -707,7 +790,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/exams/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamView,
       scope: Scope.Exam,
       resolver: "exam",
@@ -717,7 +800,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamCreate,
       scope: Scope.Course,
       resolver: "exam",
@@ -728,7 +811,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/exams/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamUpdate,
       scope: Scope.Exam,
       resolver: "exam",
@@ -739,7 +822,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/publish",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamPublish,
       scope: Scope.Exam,
       resolver: "exam",
@@ -750,7 +833,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/close",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamClose,
       scope: Scope.Exam,
       resolver: "exam",
@@ -761,7 +844,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/unpublish",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamUnpublish,
       scope: Scope.Exam,
       resolver: "exam",
@@ -772,7 +855,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/extend",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamExtend,
       scope: Scope.Exam,
       resolver: "exam",
@@ -783,7 +866,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/cancel",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamCancel,
       scope: Scope.Exam,
       resolver: "exam",
@@ -794,7 +877,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/archive",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamArchive,
       scope: Scope.Exam,
       resolver: "exam",
@@ -805,7 +888,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:id/publish-results",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamResultPublish,
       scope: Scope.Exam,
       resolver: "exam",
@@ -816,7 +899,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/exams/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamDelete,
       scope: Scope.Exam,
       resolver: "exam",
@@ -827,7 +910,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/exams/:examId/enrollments",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamEnrollmentManage,
       scope: Scope.Exam,
       resolver: "exam",
@@ -838,7 +921,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/exams/:examId/enrollments",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamEnrollmentManage,
       scope: Scope.Exam,
       resolver: "exam",
@@ -848,7 +931,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/exams/:examId/enrollments/:enrollmentId",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamEnrollmentManage,
       scope: Scope.Exam,
       resolver: "enrollment",
@@ -858,7 +941,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/admin/exams/:examId/candidates/status",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.ExamEnrollmentManage,
       scope: Scope.Exam,
       resolver: "exam",
@@ -871,7 +954,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/candidate-fields",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateFieldView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -882,7 +965,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/candidate-fields",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateFieldCreate,
       scope: Scope.Organization,
       resolver: "organization",
@@ -892,7 +975,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/candidate-fields/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateFieldUpdate,
       scope: Scope.Organization,
       resolver: "organization",
@@ -902,7 +985,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/candidate-fields/:id",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateFieldDelete,
       scope: Scope.Organization,
       resolver: "organization",
@@ -914,7 +997,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       // Admin-gated read of the candidate-field schema (Organization scope).
       method: "GET",
       path: "/candidate-fields/template",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.CandidateFieldView,
       scope: Scope.Organization,
       resolver: "organization",
@@ -925,7 +1008,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/roles/assignable",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserRoleAssign,
       scope: Scope.Organization,
       resolver: "organization",
@@ -935,7 +1018,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "GET",
       path: "/users/:id/role-assignments",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserView,
       scope: Scope.Organization,
       resolver: "user",
@@ -945,7 +1028,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "POST",
       path: "/users/:id/role-assignments",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserRoleAssign,
       scope: Scope.Organization,
       resolver: "user",
@@ -956,7 +1039,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "PATCH",
       path: "/role-assignments/:assignmentId",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserRoleAssign,
       scope: Scope.Organization,
       resolver: "organization",
@@ -967,7 +1050,7 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     {
       method: "DELETE",
       path: "/role-assignments/:assignmentId",
-      currentGate: "Admin",
+      legacyGate: "Admin",
       permission: Permission.UserRoleAssign,
       scope: Scope.Organization,
       resolver: "organization",
