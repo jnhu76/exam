@@ -615,6 +615,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             },
           );
         },
+        "read committed",
       );
 
       recordAudit(
