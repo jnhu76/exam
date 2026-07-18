@@ -127,20 +127,25 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
     expect(reply.sent).toEqual([]);
   });
 
-  it("returns 404 (anti-enumeration, NOT 403) when the Candidate has no enrollment", async () => {
+  it("passes through (handler decides 403/404 per its contract) when the Candidate has no enrollment", async () => {
+    // The preHandler does NOT re-arbitrate enrollment presence — the handler
+    // already enforces it with its established per-route semantics (start ->
+    // 403 PERMISSION_DENIED; detail/queue -> 404 NotFoundError). Re-arbitrating
+    // here would unify two intentionally-distinct handler contracts (spec §8/
+    // §9.5). The preHandler's job is org-anchor + capability only.
     nextResolution = resolved({ enrollmentId: null });
     const req = makeReq("Candidate");
     const reply = makeReply();
     await build()(req, reply as unknown as FastifyReply);
-    expect(reply.sent[0]?.code).toBe(404);
+    expect(reply.sent).toEqual([]);
   });
 
-  it("returns 404 when the actor has no candidate profile", async () => {
+  it("passes through when the actor has no candidate profile (handler decides)", async () => {
     nextResolution = resolved({ candidateProfileId: null, enrollmentId: null });
     const req = makeReq("Candidate");
     const reply = makeReply();
     await build()(req, reply as unknown as FastifyReply);
-    expect(reply.sent[0]?.code).toBe(404);
+    expect(reply.sent).toEqual([]);
   });
 
   it("returns 403 when the preset lacks the permission (non-Candidate role)", async () => {

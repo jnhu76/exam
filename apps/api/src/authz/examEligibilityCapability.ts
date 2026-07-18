@@ -125,25 +125,23 @@ export function buildExamEligibilityCapabilityPreHandler(
       }
     }
 
-    // Resolved under the org anchor. Capability + eligibility arbitration:
-    // role preset must grant the route permission AND the actor must have a
-    // candidate profile AND an enrollment for this exam. No ctx.role branch.
+    // Resolved under the org anchor. The capability (preset) check is the
+    // strict analogue of the legacy role gate. Eligibility facts (candidate
+    // profile / enrollment presence) are NOT re-arbitrated here: the handler
+    // already enforces enrollment with its established per-route semantics
+    // (start -> PermissionDeniedError -> 403; detail/queue -> NotFoundError ->
+    // 404), and spec §8/§9.5 forbid casually flipping an established 403 to 404
+    // or vice versa. Re-arbitrating here would unify two intentionally-distinct
+    // handler contracts. The preHandler's job is the org-anchor + capability
+    // boundary (directive §6.4); the handler retains the enrollment predicate
+    // as defense-in-depth (directive §6.6).
     const role = ctx.role as RoleKey;
     if (!allows(role, permission)) {
       return reply
         .code(403)
         .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
     }
-    const hasProfile = resolution.ownership.candidateProfileId !== null;
-    const hasEnrollment = resolution.ownership.enrollmentId !== null;
-    if (hasProfile && hasEnrollment) {
-      return;
-    }
-    // Eligible role but no candidate profile / no enrollment. Anti-enumeration:
-    // 404 (not 403) so a candidate probing an exam they're not enrolled in
-    // cannot distinguish "exists but not enrolled" from "does not exist".
-    return reply
-      .code(404)
-      .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+    // Capability granted + exam resolved under the org anchor. The handler
+    // applies its own enrollment / state / availability guards.
   };
 }

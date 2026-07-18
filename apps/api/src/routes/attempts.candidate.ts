@@ -40,6 +40,7 @@ import {
 } from "@exam/exam-engine";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import { Permission } from "@exam/authz";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
@@ -279,7 +280,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/candidate/exams",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCandidateContext(Permission.ExamTake),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Candidate"],
@@ -409,7 +413,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/candidate/exams/:examId",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireExamEligibility(Permission.ExamTake, "examId"),
+      ],
       schema: {
         params: StartAttemptRequestSchema,
         security: cookieAuth,
@@ -490,7 +497,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/attempts/:examId/queue",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireExamEligibility(Permission.AttemptStart, "examId"),
+      ],
       schema: {
         params: StartAttemptRequestSchema,
         security: cookieAuth,
@@ -533,7 +543,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/attempts/:examId/start",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireExamEligibility(Permission.AttemptStart, "examId"),
+      ],
       schema: {
         params: StartAttemptRequestSchema,
         security: cookieAuth,
@@ -644,7 +657,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/attempts/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireOwnAttempt(Permission.AttemptViewOwn, "id"),
+      ],
       schema: {
         params: LoadAttemptParamsSchema,
         security: cookieAuth,
@@ -681,7 +697,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.get(
     "/candidate/attempts/:attemptId/take",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireOwnAttempt(Permission.AttemptViewOwn, "attemptId"),
+      ],
       schema: {
         params: AttemptIdParamsSchema,
         security: cookieAuth,
@@ -771,7 +790,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/attempts/:attemptId/answers/:questionId",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireOwnAttempt(Permission.AttemptAnswerSave, "attemptId"),
+      ],
       schema: {
         params: SaveAnswerParamsSchema,
         body: SaveAnswerRequestSchema,
@@ -917,7 +939,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/attempts/:attemptId/submit",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireOwnAttempt(Permission.AttemptSubmit, "attemptId"),
+      ],
       schema: {
         params: SubmitAttemptRequestSchema,
         security: cookieAuth,
@@ -974,7 +999,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/attempts/:attemptId/heartbeat",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireOwnAttempt(Permission.AttemptHeartbeatSend, "attemptId"),
+      ],
       schema: {
         params: HeartbeatRequestSchema,
         security: cookieAuth,
@@ -1018,7 +1046,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
   fastify.post(
     "/attempts/:attemptId/restore",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Candidate"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireOwnAttempt(Permission.AttemptRestore, "attemptId"),
+      ],
       schema: {
         params: RestoreAttemptRequestSchema,
         security: cookieAuth,
