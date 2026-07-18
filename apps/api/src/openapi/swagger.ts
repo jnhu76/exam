@@ -12,6 +12,7 @@ import type {
   AuthzPreHandler,
   AuthzMetadata,
 } from "../types/fastify-auth.d.js";
+import type { PermissionKey } from "@exam/authz";
 
 /**
  * Build a throwaway Fastify instance pre-loaded with all route plugins and
@@ -64,38 +65,41 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   // own-attempt gates. Each attaches a stub `.authz` matching its kind so the
   // route registers cleanly (the spec is driven by route `schema.security` /
   // `schema["x-role"]`, not the preHandler — same rationale as above).
-  app.decorate("requireCandidateContext", (permission: string) => {
+  app.decorate("requireCandidateContext", (permission: PermissionKey) => {
     const h: AuthzPreHandler = async () => {};
-    h.authz = { kind: "candidate_context", permission: permission as never };
+    h.authz = { kind: "candidate_context", permission };
     return h;
   });
   app.decorate(
     "requireExamEligibility",
-    (permission: string, resourceIdKey: string) => {
+    (permission: PermissionKey, resourceIdKey: string) => {
       const h: AuthzPreHandler = async () => {};
       h.authz = {
         kind: "exam_eligibility",
-        permission: permission as never,
-        resourceIdKey: resourceIdKey as never,
+        permission,
+        resourceIdKey,
       };
       return h;
     },
   );
   app.decorate(
     "requireOwnAttempt",
-    (permission: string, resourceIdKey: string) => {
+    (permission: PermissionKey, resourceIdKey: string) => {
       const h: AuthzPreHandler = async () => {};
       h.authz = {
         kind: "own_attempt",
-        permission: permission as never,
-        resourceIdKey: resourceIdKey as never,
+        permission,
+        resourceIdKey,
       };
       return h;
     },
   );
-  app.decorate("db", null as never);
+  // Swagger-only bootstrap placeholders: DB and ctx are not used during
+  // OpenAPI generation; they exist only to satisfy Fastify's decorator
+  // contract when routes register.
+  app.decorate("db", null as unknown as never);
   app.decorate("now", () => new Date());
-  app.decorateRequest("ctx", null as never);
+  app.decorateRequest("ctx", null as unknown as never);
 
   await app.register(swaggerPlugin as never, openApiConfig);
 
