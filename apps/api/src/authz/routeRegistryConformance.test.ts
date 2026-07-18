@@ -31,6 +31,8 @@ import examRoutes from "../routes/exam.js";
 import attemptRoutes from "../routes/attempts.js";
 import scoreRoutes from "../routes/scores.js";
 import { exportRoutes } from "../routes/export.js";
+import userRoutes from "../routes/user.js";
+import roleAssignmentRoutes from "../routes/roleAssignments.js";
 import { buildTestApp } from "../routes/testHelpers.js";
 
 function asArray<T>(value: T | T[]): T[] {
@@ -166,6 +168,11 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(attemptRoutes);
   await fastify.register(scoreRoutes);
   await fastify.register(exportRoutes);
+  // M10-C: identity + role-assignment surface. Registered WITHOUT a per-plugin
+  // prefix — the routes themselves declare their full paths (/users, /roles,
+  // /role-assignments, /users/:id/...). The buildTestApp /api prefix applies.
+  await fastify.register(userRoutes);
+  await fastify.register(roleAssignmentRoutes);
 };
 
 describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
@@ -505,6 +512,147 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     // Aggregate pass over the whole inventory so a future regression on ANY
     // route (not just the one surfaced by it.each) fails loudly here too.
     for (const { method, path } of m10bRouteSpecs) {
+      const matches = capturedRoutes.filter(
+        (r) => r.method === method && r.url.endsWith(path),
+      );
+      expect(matches).toHaveLength(1);
+      const route = matches[0]!;
+      expect(route.roleHandlerCount).toBe(0);
+      expect(route.permissionListHandlerCount).toBe(0);
+      expect(route.flatCapabilityHandlerCount).toBe(1);
+      expect(route.scopedCapabilityHandlerCount).toBe(0);
+    }
+  });
+
+  // ──────────────────────── M10-C conformance ────────────────────────
+
+  /**
+   * M10-C: identity & role-assignment authority. 10 admin routes using
+   * capability-based gates (kind "flat"), migrated from legacy
+   * requireRole(["Admin"]).
+   *
+   * INVENTORY SPLIT:
+   *   - user.ts: 5 routes (GET /users, POST /users, PATCH /users/:id,
+   *     POST /users/:id/reset-password, DELETE /users/:id)
+   *   - roleAssignments.ts: 5 routes (GET /roles/assignable,
+   *     GET /users/:id/role-assignments, POST /users/:id/role-assignments,
+   *     PATCH /role-assignments/:assignmentId,
+   *     DELETE /role-assignments/:assignmentId)
+   *
+   * TARGET PERMISSIONS:
+   *   UserView, UserCreate, UserUpdate, UserPasswordReset, UserDelete,
+   *   UserRoleAssign. All six are Admin-only across every role preset
+   *   (Teacher/Proctor/Grader/Candidate/System), so the migration is
+   *   access-matrix-neutral (zero effective expansion, zero Admin regression).
+   *
+   * RUNTIME AUTHORITY BOUNDARY:
+   *   - users.role remains the de facto runtime authorization source.
+   *   - user_role_assignments remains assignment-management data only.
+   *   - syncUsersRoleFromPrimary is preserved on every primary-active
+   *     assignment mutation path (POST/PATCH/DELETE in roleAssignments.ts;
+   *     PATCH role-change in user.ts).
+   *   - M10-C does NOT begin M10-E (assignment-backed runtime authority).
+   *
+   * RESOURCE-SCOPE ENFORCEMENT: NOT IMPLEMENTED BY M10-C. Same single-tenant
+   * boundary as M10-B. The registry's scope/resolver/migrationStage fields
+   * remain planned metadata; they are not consumed at runtime by the flat
+   * capability preHandler. Org-anchor isolation continues to be enforced
+   * via ensureTargetOrg in the route handlers.
+   */
+  const m10cRouteSpecs: Array<{
+    method: string;
+    path: string;
+    permission: string;
+  }> = [
+    // 5 user.ts routes (migrationStage 6)
+    { method: "GET", path: "/users", permission: "user.view" },
+    { method: "POST", path: "/users", permission: "user.create" },
+    { method: "PATCH", path: "/users/:id", permission: "user.update" },
+    {
+      method: "POST",
+      path: "/users/:id/reset-password",
+      permission: "user.password.reset",
+    },
+    { method: "DELETE", path: "/users/:id", permission: "user.delete" },
+    // 5 roleAssignments.ts routes (migrationStage 8)
+    {
+      method: "GET",
+      path: "/roles/assignable",
+      permission: "user.role.assign",
+    },
+    {
+      method: "GET",
+      path: "/users/:id/role-assignments",
+      permission: "user.view",
+    },
+    {
+      method: "POST",
+      path: "/users/:id/role-assignments",
+      permission: "user.role.assign",
+    },
+    {
+      method: "PATCH",
+      path: "/role-assignments/:assignmentId",
+      permission: "user.role.assign",
+    },
+    {
+      method: "DELETE",
+      path: "/role-assignments/:assignmentId",
+      permission: "user.role.assign",
+    },
+  ];
+
+  it("has exactly 10 M10-C routes defined", () => {
+    expect(m10cRouteSpecs).toHaveLength(10);
+  });
+
+  /**
+   * Per-route M10-C conformance. For each of the 10 routes we prove:
+   *
+   *   - exactly one matching route registration exists;
+   *   - exactly one flat-capability handler is wired;
+   *   - the flat capability carries the expected permission;
+   *   - zero scoped-capability handlers are wired;
+   *   - zero legacy role handlers are wired (the M10-C migration removed these);
+   *   - zero legacy permission-list handlers are wired.
+   *
+   * Same non-vacuity discipline as M10-B: the role / permission-list
+   * assertions rely on the `_isRequireRole` / `_isRequirePermission`
+   * introspection tags attached at the decorators, and the negative-control
+   * test below proves the classifier actually detects role gates.
+   */
+  it.each(m10cRouteSpecs)(
+    "[M10-C] $method $path — flat capability gate, no role/permission gate",
+    ({ method, path, permission }) => {
+      const matches = capturedRoutes.filter(
+        (r) => r.method === method && r.url.endsWith(path),
+      );
+      expect(matches, `no captured route for ${method} ${path}`).toHaveLength(
+        1,
+      );
+      const route = matches[0]!;
+      expect(
+        route.flatCapabilityHandlerCount,
+        `${method} ${path} flat count`,
+      ).toBe(1);
+      expect(route.authzHandlers).toHaveLength(1);
+      expect(route.authzHandlers[0]).toEqual({ kind: "flat", permission });
+      expect(
+        route.scopedCapabilityHandlerCount,
+        `${method} ${path} scoped count`,
+      ).toBe(0);
+      expect(route.roleHandlerCount, `${method} ${path} role gate count`).toBe(
+        0,
+      );
+      expect(
+        route.permissionListHandlerCount,
+        `${method} ${path} permission-list gate count`,
+      ).toBe(0);
+    },
+  );
+
+  it("no M10-C route carries a legacy role or permission-list gate", () => {
+    for (const { method, path } of m10cRouteSpecs) {
       const matches = capturedRoutes.filter(
         (r) => r.method === method && r.url.endsWith(path),
       );
