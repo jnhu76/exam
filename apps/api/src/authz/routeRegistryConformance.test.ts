@@ -22,6 +22,7 @@ import {
   ROUTE_PERMISSION_REGISTRY,
   type CandidateRuntimeAuthzStrategy,
 } from "./routeRegistry.js";
+import { Permission } from "@exam/authz";
 import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
 import courseRoutes from "../routes/course.js";
 import questionRoutes from "../routes/question.js";
@@ -49,11 +50,84 @@ function isAuthzPreHandler(ph: unknown): ph is AuthzPreHandler {
   );
 }
 
+/**
+ * Test-only classification of a single preHandler function into one of:
+ *   - "authentication": the authenticate gate (tagged `_isAuthenticate`).
+ *   - "role": a legacy `requireRole` gate (tagged `_isRequireRole`).
+ *   - "permission_list": a legacy `requirePermission` gate (tagged
+ *     `_isRequirePermission`).
+ *   - "flat": a `requireCapability` gate (authz.kind === "flat").
+ *   - "scoped": a `requireScopedCapability` / candidate-runtime gate
+ *     (authz.kind in scoped/candidate_context/exam_eligibility/own_attempt).
+ *   - "other": anything else (e.g. tenant guard, zod validation).
+ *
+ * RBAC-M10-B PR190 REVIEW CORRECTIVE 1, Finding 2: the prior capture pipeline
+ * filtered preHandlers through `isAuthzPreHandler` only, which excluded
+ * `requireRole` handlers (they carry no `.authz` metadata). A route containing
+ * BOTH `requireRole(["Admin"])` AND `requireCapability(perm)` would therefore
+ * appear to have exactly one capability handler and pass the assertion
+ * vacuously. This classification closes that hole by tagging role /
+ * permission-list handlers at the decorator (mirroring the existing
+ * `_isAuthenticate` tag), so the conformance test can assert `roleHandlers`
+ * is exactly zero on every M10-B route.
+ *
+ * This is production-neutral: the decorators still make the same runtime
+ * authorization decisions. The tags are introspection-only.
+ */
+type PreHandlerKind =
+  | "authentication"
+  | "role"
+  | "permission_list"
+  | "flat"
+  | "scoped"
+  | "other";
+
+interface ClassifiedPreHandler {
+  kind: PreHandlerKind;
+  /** For "flat"/"scoped" kinds: the authz metadata. Otherwise null. */
+  authz: AuthzPreHandler["authz"] | null;
+  /** For "role" kind: the allowed-roles list. Otherwise null. */
+  allowedRoles: readonly string[] | null;
+}
+
+function classifyPreHandler(ph: unknown): ClassifiedPreHandler {
+  if (typeof ph !== "function") {
+    return { kind: "other", authz: null, allowedRoles: null };
+  }
+  const tag = ph as unknown as Record<string, unknown>;
+  if (tag._isAuthenticate === true) {
+    return { kind: "authentication", authz: null, allowedRoles: null };
+  }
+  if (tag._isRequireRole === true) {
+    const roles = Array.isArray(tag._allowedRoles)
+      ? (tag._allowedRoles as readonly string[])
+      : [];
+    return { kind: "role", authz: null, allowedRoles: roles };
+  }
+  if (tag._isRequirePermission === true) {
+    return { kind: "permission_list", authz: null, allowedRoles: null };
+  }
+  if (isAuthzPreHandler(ph)) {
+    const meta = (ph as unknown as AuthzPreHandler).authz;
+    if (meta.kind === "flat") {
+      return { kind: "flat", authz: meta, allowedRoles: null };
+    }
+    return { kind: "scoped", authz: meta, allowedRoles: null };
+  }
+  return { kind: "other", authz: null, allowedRoles: null };
+}
+
 type CapturedRoute = {
   method: string;
   url: string;
   authzHandlers: readonly AuthzPreHandler["authz"][];
   authzCount: number;
+  /** Full preHandler classification, including role / permission gates. */
+  classified: readonly ClassifiedPreHandler[];
+  roleHandlerCount: number;
+  permissionListHandlerCount: number;
+  flatCapabilityHandlerCount: number;
+  scopedCapabilityHandlerCount: number;
 };
 
 const capturedRoutes: CapturedRoute[] = [];
@@ -61,15 +135,28 @@ const capturedRoutes: CapturedRoute[] = [];
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onRoute", (routeOptions) => {
     const preHandlers = asArray(routeOptions.preHandler).filter(Boolean);
-    const authzHandlers = preHandlers.filter(isAuthzPreHandler);
+    const classified = preHandlers.map((ph) => classifyPreHandler(ph));
+    const authzHandlers = classified
+      .filter((c) => c.authz !== null)
+      .map((c) => c.authz) as AuthzPreHandler["authz"][];
     capturedRoutes.push({
       method:
         typeof routeOptions.method === "string"
           ? routeOptions.method
           : "UNKNOWN",
       url: routeOptions.url as string,
-      authzHandlers: authzHandlers.map((h) => h.authz),
+      authzHandlers,
       authzCount: authzHandlers.length,
+      classified,
+      roleHandlerCount: classified.filter((c) => c.kind === "role").length,
+      permissionListHandlerCount: classified.filter(
+        (c) => c.kind === "permission_list",
+      ).length,
+      flatCapabilityHandlerCount: classified.filter((c) => c.kind === "flat")
+        .length,
+      scopedCapabilityHandlerCount: classified.filter(
+        (c) => c.kind === "scoped",
+      ).length,
     });
   });
   await fastify.register(courseRoutes);
@@ -362,8 +449,26 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     expect(m10bRouteSpecs).toHaveLength(28);
   });
 
+  /**
+   * Per-route M10-B conformance (RBAC-M10-B PR190 REVIEW CORRECTIVE 1,
+   * Finding 2). For each of the 28 routes we prove:
+   *
+   *   - exactly one matching route registration exists;
+   *   - exactly one flat-capability handler is wired;
+   *   - the flat capability carries the expected permission;
+   *   - zero scoped-capability handlers are wired;
+   *   - zero legacy role handlers are wired;
+   *   - zero legacy permission-list handlers are wired.
+   *
+   * The role / permission-list assertions use the `_isRequireRole` /
+   * `_isRequirePermission` introspection tags applied at the decorators. The
+   * prior implementation only filtered through `isAuthzPreHandler`, which
+   * silently excluded role handlers and made the assertion vacuous for any
+   * route that carried BOTH a role gate and a capability gate. The tag-based
+   * classification closes that hole.
+   */
   it.each(m10bRouteSpecs)(
-    "[M10-B] $method $path — uses flat capability gate with correct permission",
+    "[M10-B] $method $path — flat capability gate, no role/permission gate",
     ({ method, path, permission }) => {
       const matches = capturedRoutes.filter(
         (r) => r.method === method && r.url.endsWith(path),
@@ -371,24 +476,136 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       expect(matches, `no captured route for ${method} ${path}`).toHaveLength(
         1,
       );
-      expect(matches[0]!.authzCount).toBe(1);
-      expect(matches[0]!.authzHandlers).toHaveLength(1);
-      expect(matches[0]!.authzHandlers[0]).toEqual({
-        kind: "flat",
-        permission,
-      });
+      const route = matches[0]!;
+      // Flat-capability gate: exactly one, with the right permission.
+      expect(
+        route.flatCapabilityHandlerCount,
+        `${method} ${path} flat count`,
+      ).toBe(1);
+      expect(route.authzHandlers).toHaveLength(1);
+      expect(route.authzHandlers[0]).toEqual({ kind: "flat", permission });
+      // No scoped / candidate-runtime gates.
+      expect(
+        route.scopedCapabilityHandlerCount,
+        `${method} ${path} scoped count`,
+      ).toBe(0);
+      // No legacy role gate — the M10-B migration removed these.
+      expect(route.roleHandlerCount, `${method} ${path} role gate count`).toBe(
+        0,
+      );
+      // No legacy permission-list gate either.
+      expect(
+        route.permissionListHandlerCount,
+        `${method} ${path} permission-list gate count`,
+      ).toBe(0);
     },
   );
 
-  it("no M10-B route uses requireRole gate (all use capability)", () => {
+  it("no M10-B route carries a legacy role or permission-list gate", () => {
+    // Aggregate pass over the whole inventory so a future regression on ANY
+    // route (not just the one surfaced by it.each) fails loudly here too.
     for (const { method, path } of m10bRouteSpecs) {
       const matches = capturedRoutes.filter(
         (r) => r.method === method && r.url.endsWith(path),
       );
       expect(matches).toHaveLength(1);
-      const meta = matches[0]!.authzHandlers[0];
-      expect(meta).toBeDefined();
-      expect(meta!.kind).toBe("flat");
+      const route = matches[0]!;
+      expect(route.roleHandlerCount).toBe(0);
+      expect(route.permissionListHandlerCount).toBe(0);
+      expect(route.flatCapabilityHandlerCount).toBe(1);
+      expect(route.scopedCapabilityHandlerCount).toBe(0);
     }
+  });
+
+  /**
+   * Negative control (Finding 2 §5.4). Proves the tag-based classification
+   * actually detects a role gate. Without this, the corrected assertion above
+   * could still be vacuous — for example if the tag were never set or the
+   * classifier silently ignored it.
+   *
+   * Registers a SYNTHETIC test-only route whose preHandler chain contains
+   * BOTH `authenticate` AND `requireRole(["Admin"])` AND
+   * `requireCapability(Permission.ExamView)`. The capture pipeline must report
+   * exactly one role handler and exactly one flat-capability handler. This
+   * synthetic route is NOT part of the 28-route production inventory.
+   */
+  it("negative control — capture detects a role gate on a synthetic route", async () => {
+    const syntheticCaptured: CapturedRoute[] = [];
+    const syntheticPlugin: FastifyPluginAsync = async (fastify) => {
+      fastify.addHook("onRoute", (routeOptions) => {
+        const preHandlers = asArray(routeOptions.preHandler).filter(Boolean);
+        const classified = preHandlers.map((ph) => classifyPreHandler(ph));
+        const authzHandlers = classified
+          .filter((c) => c.authz !== null)
+          .map((c) => c.authz) as AuthzPreHandler["authz"][];
+        syntheticCaptured.push({
+          method:
+            typeof routeOptions.method === "string"
+              ? routeOptions.method
+              : "UNKNOWN",
+          url: routeOptions.url as string,
+          authzHandlers,
+          authzCount: authzHandlers.length,
+          classified,
+          roleHandlerCount: classified.filter((c) => c.kind === "role").length,
+          permissionListHandlerCount: classified.filter(
+            (c) => c.kind === "permission_list",
+          ).length,
+          flatCapabilityHandlerCount: classified.filter(
+            (c) => c.kind === "flat",
+          ).length,
+          scopedCapabilityHandlerCount: classified.filter(
+            (c) => c.kind === "scoped",
+          ).length,
+        });
+      });
+      // Synthetic route: a deliberately mixed chain the production inventory
+      // must NEVER contain on an M10-B route. The auth plugins come from
+      // buildTestApp (same production decorators that attach the
+      // `_isRequireRole` / `_isRequirePermission` / `_isAuthenticate` tags).
+      fastify.get(
+        "/synthetic-negative-control",
+        {
+          preHandler: [
+            fastify.authenticate,
+            fastify.requireRole(["Admin"]),
+            fastify.requireCapability(Permission.ExamView),
+          ],
+        },
+        // Handler is never invoked — the route exists only so onRoute fires
+        // and the preHandler chain is captured.
+        async () => "ok",
+      );
+    };
+
+    const syntheticCtx = await buildTestApp(syntheticPlugin, {
+      prefix: "/api",
+    });
+    await syntheticCtx.cleanup();
+
+    expect(syntheticCaptured.length).toBeGreaterThanOrEqual(1);
+    // Find the synthetic GET route explicitly — Fastify may also auto-register
+    // a HEAD route for GET handlers, which is irrelevant to this control.
+    const synthetic = syntheticCaptured.find(
+      (r) =>
+        r.method === "GET" && r.url.endsWith("/synthetic-negative-control"),
+    );
+    expect(
+      synthetic,
+      "synthetic negative-control route must be captured",
+    ).toBeDefined();
+    // The classifier MUST see the role gate. If it returns 0 here, the M10-B
+    // assertion above is vacuous.
+    expect(synthetic!.roleHandlerCount).toBe(1);
+    expect(synthetic!.flatCapabilityHandlerCount).toBe(1);
+    expect(synthetic!.permissionListHandlerCount).toBe(0);
+    expect(synthetic!.scopedCapabilityHandlerCount).toBe(0);
+    // The role handler's allowed-roles list is recoverable.
+    const roleHandler = synthetic!.classified.find((c) => c.kind === "role");
+    expect(roleHandler).toBeDefined();
+    expect(roleHandler!.allowedRoles).toEqual(["Admin"]);
+    // Sanity: production inventory still has exactly 28 entries — the
+    // synthetic route did not leak into the production capture.
+    expect(m10bRouteSpecs).toHaveLength(28);
   });
 });
