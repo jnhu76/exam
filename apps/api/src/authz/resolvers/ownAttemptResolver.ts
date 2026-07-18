@@ -1,0 +1,198 @@
+/**
+ * Own-attempt resource resolver (RBAC-M10-A, archetype C/D).
+ *
+ * Implements ADR §Resource Resolver Matrix row `own_attempt`:
+ *
+ *   own_attempt -> attempt -> candidate + exam | resolveOwnAttemptScope |
+ *                  attempt.view_own / attempt.start / attempt.answer.save /
+ *                  attempt.submit / attempt.heartbeat.send / attempt.restore
+ *                  | source of truth: attempt ownership
+ *
+ * Like the score resolver, this must surface the **ownership fact**
+ * (`candidateProfiles.userId`) so the own-attempt capability preHandler can
+ * authorize `ownerUserId === actorId` without role-name branching (ADR §scope
+ * table L443; directive §6.3).
+ *
+ * Anti-enumeration contract (directive §6.4 / §8): a cross-candidate probe —
+ * the attempt exists under the org anchor but is NOT owned by the actor — is
+ * mapped to `resource_not_found` (the handler then returns 404), matching the
+ * proven `candidateOwnership.test.ts` convention ("A cannot read B's attempt
+ * -> 404"). Org/chain inconsistency stays a genuine `organization_mismatch` /
+ * `broken_parent_chain` (403) because it is a scope violation, not an
+ * existence question.
+ *
+ * Integrity rules honored (resolver.ts top-of-file): full parent chain loaded;
+ * explicit organization anchor (ADR §3.4); deny-on-inconsistency (ADR §22.1);
+ * never fail open; operational errors surface as `resolver_error` (ADR §3.9).
+ */
+import type { FastifyBaseLogger } from "fastify";
+import type { Database, TenantContext } from "@exam/db/src/types.js";
+import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
+import {
+  Scope,
+  type ResolverContext,
+  type DeniedScope,
+  type ResourceType,
+} from "@exam/authz";
+
+/** Ownership facts the own-attempt preHandler needs to arbitrate ownership. */
+export interface OwnAttemptOwnership {
+  /** The attempt's candidate profile id (FK on exam_attempts.candidateId). */
+  candidateId: string | null;
+  /**
+   * The user id that owns the candidate profile (`candidateProfiles.userId`).
+   * This is the identity compared against `ctx.actorId`. Null when the
+   * candidate profile or its user link is missing.
+   */
+  ownerUserId: string | null;
+}
+
+/**
+ * A resolved own-attempt scope. Superset of `ResolvedScope` carrying the
+ * ownership block; only the own-attempt preHandler consumes the ownership
+ * fields.
+ */
+export interface OwnAttemptResolvedScope {
+  scope: typeof Scope.OwnAttempt;
+  organizationId: string;
+  resourceId: string;
+  chain: ReadonlyArray<{ type: ResourceType; id: string }>;
+  ownership: OwnAttemptOwnership;
+}
+
+export type OwnAttemptResolution = OwnAttemptResolvedScope | DeniedScope;
+
+/** Type guard: an own-attempt resolution is a denial. */
+export function isOwnAttemptDenied(r: OwnAttemptResolution): r is DeniedScope {
+  return (
+    typeof r === "object" &&
+    r !== null &&
+    (r as { denied?: unknown }).denied === true
+  );
+}
+
+function repoCtx(ctx: ResolverContext): TenantContext {
+  return {
+    actorId: ctx.actorId,
+    organizationId: ctx.organizationId,
+    role: "Admin" as TenantContext["role"],
+    permissions: [],
+  };
+}
+
+interface LoadedOwnAttemptChain {
+  resourceId: string;
+  resourceOrganizationId: string;
+  candidateId: string | null;
+  ownerUserId: string | null;
+  organizationIds: readonly (string | null)[];
+  chain: readonly {
+    type: ResourceType;
+    id: string | null;
+    linkedId?: string | null;
+  }[];
+}
+
+function materializeChain(
+  nodes: readonly LoadedOwnAttemptChain["chain"][number][],
+): Array<{ type: ResourceType; id: string }> | null {
+  const chain: Array<{ type: ResourceType; id: string }> = [];
+  for (const node of nodes) {
+    if (
+      !node.id ||
+      (node.linkedId !== undefined && node.linkedId !== node.id)
+    ) {
+      return null;
+    }
+    chain.push({ type: node.type, id: node.id });
+  }
+  return chain;
+}
+
+/**
+ * Resolves an own-attempt resource: loads the attempt→candidate+exam→course→org
+ * chain from PostgreSQL, validates the organization anchor and parent
+ * integrity, and returns the ownership facts on success. Denies per ADR §3.9 on
+ * any failure.
+ *
+ * @param db - Database handle (injected for testability).
+ * @param logger - Fastify logger for monitoring inconsistency warnings.
+ * @param ctx - Resolver context (actor + organization anchor).
+ * @param attemptId - The attempt id from the route params.
+ */
+export async function resolveOwnAttemptScope(
+  db: Database,
+  logger: FastifyBaseLogger | undefined,
+  ctx: ResolverContext,
+  attemptId: string,
+): Promise<OwnAttemptResolution> {
+  try {
+    const row = await createAttemptRepo(db).findOwnAttemptChain(
+      repoCtx(ctx),
+      attemptId,
+    );
+    if (!row) {
+      return { denied: true, reason: "resource_not_found" };
+    }
+    const loaded: LoadedOwnAttemptChain = {
+      resourceId: row.attemptId,
+      resourceOrganizationId: row.attemptOrganizationId,
+      candidateId: row.candidateId,
+      ownerUserId: row.ownerUserId,
+      organizationIds: [
+        row.attemptOrganizationId,
+        row.examOrganizationId,
+        row.courseOrganizationId,
+        row.organizationId,
+      ],
+      chain: [
+        { type: "attempt", id: row.attemptId },
+        { type: "exam", id: row.examId, linkedId: row.linkedExamId },
+        { type: "course", id: row.courseId, linkedId: row.linkedCourseId },
+      ],
+    };
+    const chain = materializeChain(loaded.chain);
+    if (!chain || loaded.organizationIds.some((id) => id === null)) {
+      logger?.warn(
+        {
+          resolver: "own_attempt",
+          resourceId: attemptId,
+          reason: "broken_parent_chain",
+          chain: loaded.chain,
+          organizationIds: loaded.organizationIds,
+        },
+        "authz own-attempt resolver parent-chain inconsistency",
+      );
+      return { denied: true, reason: "broken_parent_chain" };
+    }
+    if (loaded.organizationIds.some((id) => id !== ctx.organizationId)) {
+      logger?.warn(
+        {
+          resolver: "own_attempt",
+          resourceId: attemptId,
+          reason: "organization_mismatch",
+          chain: loaded.chain,
+          organizationIds: loaded.organizationIds,
+        },
+        "authz own-attempt resolver organization-anchor mismatch",
+      );
+      return { denied: true, reason: "organization_mismatch" };
+    }
+    return {
+      scope: Scope.OwnAttempt,
+      organizationId: loaded.resourceOrganizationId,
+      resourceId: loaded.resourceId,
+      chain,
+      ownership: {
+        candidateId: loaded.candidateId,
+        ownerUserId: loaded.ownerUserId,
+      },
+    };
+  } catch (err) {
+    logger?.error(
+      { err, resolver: "own_attempt", resourceId: attemptId },
+      "authz own-attempt resolver DB error",
+    );
+    return { denied: true, reason: "resolver_error" };
+  }
+}

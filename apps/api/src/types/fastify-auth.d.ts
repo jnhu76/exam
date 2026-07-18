@@ -4,10 +4,19 @@ import type { Permission, RequestContext, Role } from "@exam/domain";
 import type { PermissionKey, ResourceResolverKey } from "@exam/authz";
 
 /**
- * Metadata attached to preHandler functions returned by requireCapability and
- * requireScopedCapability. Used by introspection tests to verify the correct
- * kind of gate is wired at runtime (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2,
- * Finding 2).
+ * Metadata attached to preHandler functions returned by the authz decorators.
+ * Used by introspection tests to verify the correct kind of gate is wired at
+ * runtime (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2, Finding 2; extended for the
+ * 4 candidate-runtime archetypes in RBAC-M10-A).
+ *
+ * Per directive §7, an ownership/eligibility/context gate gets an explicit
+ * kind distinct from generic `scoped` (org-anchor-only). The candidate-runtime
+ * kinds are:
+ *   - candidate_context: archetype A (candidate-context list, preset-only).
+ *   - exam_eligibility: archetype B (exam + server-derived candidate profile
+ *     + enrollment; no attempt yet).
+ *   - own_attempt: archetype C/D (own-attempt ownership: candidateProfiles.userId
+ *     === actorId).
  */
 export type AuthzMetadata =
   | { kind: "flat"; permission: PermissionKey }
@@ -15,6 +24,17 @@ export type AuthzMetadata =
       kind: "scoped";
       permission: PermissionKey;
       resolverKey: ResourceResolverKey;
+      resourceIdKey: string;
+    }
+  | { kind: "candidate_context"; permission: PermissionKey }
+  | {
+      kind: "exam_eligibility";
+      permission: PermissionKey;
+      resourceIdKey: string;
+    }
+  | {
+      kind: "own_attempt";
+      permission: PermissionKey;
       resourceIdKey: string;
     };
 
@@ -70,5 +90,38 @@ declare module "fastify" {
       request: FastifyRequest,
       reply: FastifyReply,
     ) => Promise<void>;
+    /**
+     * Candidate-context capability gate (RBAC-M10-A archetype A). Preset-only
+     * gate for `GET /candidate/exams` — the query is scoped to the candidate
+     * profile in the handler (defense-in-depth). No DB resolver. Replies 401
+     * if no ctx, 403 if the preset lacks the permission. Attaches runtime
+     * metadata `{ kind: "candidate_context", permission }`.
+     */
+    requireCandidateContext: (permission: PermissionKey) => AuthzPreHandler;
+    /**
+     * Candidate exam-eligibility gate (RBAC-M10-A archetype B). Capability +
+     * eligibility for exam detail / queue / start. The exam must resolve under
+     * the org anchor (ADR §3.4) AND the actor must resolve to a candidate
+     * profile with an enrollment for the exam — server-derived, no client
+     * candidateId trust. Anti-enumeration: missing exam / no enrollment -> 404.
+     * Attaches runtime metadata `{ kind: "exam_eligibility", permission,
+     * resourceIdKey }`.
+     */
+    requireExamEligibility: (
+      permission: PermissionKey,
+      resourceIdKey: string,
+    ) => AuthzPreHandler;
+    /**
+     * Own-attempt capability gate (RBAC-M10-A archetype C/D). Capability +
+     * ownership for attempt view / take / answer-save / submit / heartbeat /
+     * restore. The attempt must resolve under the org anchor AND its owner
+     * (`candidateProfiles.userId`) must equal the actor. Anti-enumeration:
+     * cross-candidate probe -> 404 (not 403). Attaches runtime metadata
+     * `{ kind: "own_attempt", permission, resourceIdKey }`.
+     */
+    requireOwnAttempt: (
+      permission: PermissionKey,
+      resourceIdKey: string,
+    ) => AuthzPreHandler;
   }
 }

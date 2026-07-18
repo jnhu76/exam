@@ -58,6 +58,35 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   // the dedicated score-capability gate (own/all arbitration). Same rationale
   // as the requireScopedCapability stub above.
   app.decorate("requireScoreCapability", () => async () => {});
+  // Candidate-runtime capability gates (RBAC-M10-A archetypes A/B/C-D) — no-op
+  // stubs so OpenAPI generation can register the 10 candidate runtime routes
+  // that now use the dedicated candidate-context / exam-eligibility /
+  // own-attempt gates. Each attaches a stub `.authz` matching its kind so the
+  // route registers cleanly (the spec is driven by route `schema.security` /
+  // `schema["x-role"]`, not the preHandler — same rationale as above).
+  app.decorate("requireCandidateContext", () => {
+    const h: AuthzPreHandler = async () => {};
+    h.authz = { kind: "candidate_context", permission: "exam.take" };
+    return h;
+  });
+  app.decorate("requireExamEligibility", () => {
+    const h: AuthzPreHandler = async () => {};
+    h.authz = {
+      kind: "exam_eligibility",
+      permission: "exam.take",
+      resourceIdKey: "examId",
+    };
+    return h;
+  });
+  app.decorate("requireOwnAttempt", () => {
+    const h: AuthzPreHandler = async () => {};
+    h.authz = {
+      kind: "own_attempt",
+      permission: "attempt.view_own",
+      resourceIdKey: "attemptId",
+    };
+    return h;
+  });
   app.decorate("db", null as never);
   app.decorate("now", () => new Date());
   app.decorateRequest("ctx", null as never);
