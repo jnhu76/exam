@@ -237,9 +237,7 @@ describe("RBAC-M10-A candidate runtime — zero-side-effect denial (directive §
   let attemptBId: string;
 
   beforeAll(async () => {
-    ctx = await buildTestApp(async (fastify) => {
-      await combinedPlugin(fastify);
-    });
+    ctx = await buildTestApp(combinedPlugin, { prefix: "/api" });
 
     examId = await createExamViaApi(ctx.app, ctx.adminToken, {
       examTitle: "M10A Zero-Side-Effect Exam",
@@ -501,9 +499,7 @@ describe("RBAC-M10-A candidate runtime — non-Candidate role denial (directive 
   let examId: string;
 
   beforeAll(async () => {
-    ctx = await buildTestApp(async (fastify) => {
-      await combinedPlugin(fastify);
-    });
+    ctx = await buildTestApp(combinedPlugin, { prefix: "/api" });
     proctor = await createFutureRoleUserForTest(
       ctx.db,
       ctx.org.id,
