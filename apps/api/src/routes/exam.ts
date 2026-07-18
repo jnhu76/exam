@@ -823,7 +823,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/unpublish",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamUnpublish),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -877,7 +880,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/extend",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamExtend),
+      ],
       schema: {
         params: idParamsSchema,
         body: extendExamRequestSchema,
@@ -953,7 +959,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/cancel",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamCancel),
+      ],
       schema: {
         params: idParamsSchema,
         body: cancelExamRequestSchema,
@@ -1035,7 +1044,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/exams/:id/archive",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamArchive),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -1189,7 +1201,10 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/exams/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ExamDelete),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,

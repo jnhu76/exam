@@ -218,7 +218,10 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/courses/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CourseDelete),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
