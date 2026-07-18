@@ -50,6 +50,32 @@ export type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
 
 export type LegacyGate = "Admin" | "Candidate" | "Admin+Candidate" | "public";
 
+/**
+ * Exact runtime authorization strategy for Candidate runtime routes (RBAC-M10-A).
+ *
+ * Maps 1:1 to the {@link AuthzMetadata} kinds the actual Fastify decorators
+ * attach. The registry declares this so a runtime conformance test can compare
+ * the onRoute capture against the documented strategy without duplicating the
+ * expected values in the test.
+ *
+ * Three strategies exist:
+ *   - `candidate_context`: preset-only gate, no resolver, no resource param.
+ *   - `exam_eligibility`: exam+enrollment chain resolution via examId param.
+ *   - `own_attempt`: attempt ownership resolution via id/attemptId param.
+ */
+export type CandidateRuntimeAuthzStrategy =
+  | { kind: "candidate_context" }
+  | {
+      kind: "exam_eligibility";
+      resolverKey: "exam_eligibility";
+      resourceIdKey: "examId";
+    }
+  | {
+      kind: "own_attempt";
+      resolverKey: "own_attempt";
+      resourceIdKey: "id" | "attemptId";
+    };
+
 export interface RoutePermissionRegistryEntry {
   method: HttpMethod;
   /** Per-route definition path (canonical; plugin prefix applied at runtime). */
@@ -62,6 +88,13 @@ export interface RoutePermissionRegistryEntry {
   scope: ScopeType;
   /** The resolver key that reduces the resource to the scope. */
   resolver: ResolverKey;
+  /**
+   * Exact runtime authorization strategy for Candidate runtime routes (M10-A).
+   * Present only on the 10 candidate routes; absent on Admin routes.
+   * The runtime conformance test compares this field against the actual
+   * Fastify onRoute metadata to detect strategy drift.
+   */
+  runtimeAuthz?: CandidateRuntimeAuthzStrategy;
   /** Optional resource spec (id source / list filter). */
   resource?: ResourceSpec;
   /** Audit action to emit when the route is a sensitive read or state change. */
@@ -102,7 +135,8 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       currentGate: "Candidate",
       permission: Permission.ExamTake,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "organization",
+      runtimeAuthz: { kind: "candidate_context" },
       sensitive: false,
       migrationStage: 7,
     },
@@ -112,7 +146,12 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       currentGate: "Candidate",
       permission: Permission.ExamTake,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "exam",
+      runtimeAuthz: {
+        kind: "exam_eligibility",
+        resolverKey: "exam_eligibility",
+        resourceIdKey: "examId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -122,7 +161,12 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       currentGate: "Candidate",
       permission: Permission.AttemptStart,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "exam",
+      runtimeAuthz: {
+        kind: "exam_eligibility",
+        resolverKey: "exam_eligibility",
+        resourceIdKey: "examId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -132,7 +176,12 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       currentGate: "Candidate",
       permission: Permission.AttemptStart,
       scope: Scope.OwnAttempt,
-      resolver: "attempt",
+      resolver: "exam",
+      runtimeAuthz: {
+        kind: "exam_eligibility",
+        resolverKey: "exam_eligibility",
+        resourceIdKey: "examId",
+      },
       auditAction: "attempt.start",
       sensitive: false,
       migrationStage: 7,
@@ -144,6 +193,11 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptViewOwn,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resolverKey: "own_attempt",
+        resourceIdKey: "id",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -156,6 +210,11 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptViewOwn,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resolverKey: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -166,6 +225,11 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptAnswerSave,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resolverKey: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -176,6 +240,11 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptSubmit,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resolverKey: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       auditAction: "attempt.submit",
       sensitive: false,
       migrationStage: 7,
@@ -187,6 +256,11 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptHeartbeatSend,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resolverKey: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
@@ -197,6 +271,11 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.AttemptRestore,
       scope: Scope.OwnAttempt,
       resolver: "attempt",
+      runtimeAuthz: {
+        kind: "own_attempt",
+        resolverKey: "own_attempt",
+        resourceIdKey: "attemptId",
+      },
       sensitive: false,
       migrationStage: 7,
     },
