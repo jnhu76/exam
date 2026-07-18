@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
+import type { HTTPMethods } from "fastify";
 import {
   buildTestApp,
   createCandidateViaApi,
@@ -87,99 +88,71 @@ describe("permission boundary", () => {
       expect(res.statusCode).toBe(401);
     });
 
-    // M10-B: 7 capability-migrated routes — unauthenticated denied
-    it("POST /api/exams/:id/unpublish returns 401", async () => {
-      const res = await ctx.app.inject({
+    // M10-B: 7 capability-migrated routes — unauthenticated denied.
+    //
+    // The prior implementation only asserted `matrix.toHaveLength(7)` without
+    // executing any HTTP request, so the test was vacuous
+    // (RBAC-M10-B PR190 REVIEW CORRECTIVE 2). This table drives a real
+    // `ctx.app.inject()` per route and asserts 401 on each, replacing the
+    // seven duplicate single-route tests that covered the same ground.
+    //
+    // `method` is typed `HTTPMethods` and `payload` is optional, so each entry
+    // flows into `ctx.app.inject()` without an `as never` cast.
+    const m10bUnauthenticatedRoutes: ReadonlyArray<{
+      method: HTTPMethods;
+      url: string;
+      payload?: object;
+    }> = [
+      {
         method: "POST",
         url: "/api/exams/00000000-0000-0000-0000-000000000000/unpublish",
         payload: {},
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("POST /api/exams/:id/extend returns 401", async () => {
-      const res = await ctx.app.inject({
+      },
+      {
         method: "POST",
         url: "/api/exams/00000000-0000-0000-0000-000000000000/extend",
         payload: { extendMinutes: 10 },
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("POST /api/exams/:id/cancel returns 401", async () => {
-      const res = await ctx.app.inject({
+      },
+      {
         method: "POST",
         url: "/api/exams/00000000-0000-0000-0000-000000000000/cancel",
         payload: {},
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("POST /api/exams/:id/archive returns 401", async () => {
-      const res = await ctx.app.inject({
+      },
+      {
         method: "POST",
         url: "/api/exams/00000000-0000-0000-0000-000000000000/archive",
         payload: {},
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    it("DELETE /api/exams/:id returns 401", async () => {
-      const res = await ctx.app.inject({
+      },
+      {
         method: "DELETE",
         url: "/api/exams/00000000-0000-0000-0000-000000000000",
-      });
-      expect(res.statusCode).toBe(401);
-    });
-
-    // M10-B Finding 3: complete the 7-route unauthenticated matrix.
-    // Table-driven so future route additions surface as a count drift here.
-    it("all 7 M10-B migrated routes reject unauthenticated requests (401)", () => {
-      // Assert the inventory length is exactly seven — drift is a real signal.
-      const unauthenticatedMatrix = [
-        {
-          method: "POST",
-          url: "/api/exams/00000000-0000-0000-0000-000000000000/unpublish",
-          payload: {},
-        },
-        {
-          method: "POST",
-          url: "/api/exams/00000000-0000-0000-0000-000000000000/extend",
-          payload: { extendMinutes: 10 },
-        },
-        {
-          method: "POST",
-          url: "/api/exams/00000000-0000-0000-0000-000000000000/cancel",
-          payload: {},
-        },
-        {
-          method: "POST",
-          url: "/api/exams/00000000-0000-0000-0000-000000000000/archive",
-          payload: {},
-        },
-        {
-          method: "DELETE",
-          url: "/api/exams/00000000-0000-0000-0000-000000000000",
-        },
-        {
-          method: "DELETE",
-          url: "/api/courses/00000000-0000-0000-0000-000000000000",
-        },
-        {
-          method: "GET",
-          url: "/api/exams/00000000-0000-0000-0000-000000000000/export/scores",
-        },
-      ] as const;
-      expect(unauthenticatedMatrix).toHaveLength(7);
-    });
-
-    it("DELETE /api/courses/:id returns 401", async () => {
-      const res = await ctx.app.inject({
+      },
+      {
         method: "DELETE",
         url: "/api/courses/00000000-0000-0000-0000-000000000000",
-      });
-      expect(res.statusCode).toBe(401);
+      },
+      {
+        method: "GET",
+        url: "/api/exams/00000000-0000-0000-0000-000000000000/export/scores",
+      },
+    ];
+
+    it("contains exactly 7 M10-B unauthenticated routes", () => {
+      expect(m10bUnauthenticatedRoutes).toHaveLength(7);
     });
+
+    it.each(m10bUnauthenticatedRoutes)(
+      "$method $url returns 401 without authentication",
+      async ({ method, url, payload }) => {
+        const res = await ctx.app.inject({
+          method,
+          url,
+          ...(payload === undefined ? {} : { payload }),
+        });
+
+        expect(res.statusCode).toBe(401);
+      },
+    );
   });
 
   describe("candidate cannot access admin APIs", () => {
