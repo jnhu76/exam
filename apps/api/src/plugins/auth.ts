@@ -100,34 +100,17 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorate("authenticate", authenticateFn);
 
   /**
-   * Returns a pre-handler that checks whether the authenticated actor holds
-   * the specified permission. Replies 401 if no context is present, or 403
-   * if the permission is not in the actor's role permission set.
-   */
-  fastify.decorate("requirePermission", (permission: Permission) => {
-    return async (request, reply) => {
-      const ctx = request.ctx;
-      if (!ctx) {
-        return reply
-          .code(401)
-          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
-      }
-
-      if (!ctx.permissions.includes(permission)) {
-        return reply
-          .code(403)
-          .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
-      }
-    };
-  });
-
-  /**
    * Returns a pre-handler that checks whether the authenticated actor's role
    * is one of the allowed roles. Replies 401 if no context is present, or
    * 403 if the role is not in the allowed list.
+   *
+   * Tagged with `_isRequireRole: true` so conformance tests can distinguish a
+   * legacy role gate from a capability gate by reference identity / marker
+   * (mirroring the existing `_isAuthenticate` pattern). M10-B routes must NOT
+   * carry a role gate; the conformance test asserts this is zero.
    */
   fastify.decorate("requireRole", (roles: Role[]) => {
-    return async (request, reply) => {
+    const handler = async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = request.ctx;
       if (!ctx) {
         return reply
@@ -141,6 +124,35 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
       }
     };
+    Object.assign(handler, { _isRequireRole: true, _allowedRoles: roles });
+    return handler;
+  });
+
+  /**
+   * Returns a pre-handler that checks whether the authenticated actor holds
+   * the specified permission (legacy permission-list gate). Replies 401 if no
+   * context is present, or 403 if the permission is not in the actor's set.
+   *
+   * Tagged with `_isRequirePermission: true` for the same introspection reason
+   * as {@link requireRole}.
+   */
+  fastify.decorate("requirePermission", (permission: Permission) => {
+    const handler = async (request: FastifyRequest, reply: FastifyReply) => {
+      const ctx = request.ctx;
+      if (!ctx) {
+        return reply
+          .code(401)
+          .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
+      }
+
+      if (!ctx.permissions.includes(permission)) {
+        return reply
+          .code(403)
+          .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
+      }
+    };
+    Object.assign(handler, { _isRequirePermission: true });
+    return handler;
   });
 
   /**

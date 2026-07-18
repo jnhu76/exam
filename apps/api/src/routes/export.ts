@@ -7,6 +7,7 @@ import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateField
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
+import { Permission } from "@exam/authz";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /**
@@ -33,7 +34,10 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/exams/:id/export/scores",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.ScoreExport),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
