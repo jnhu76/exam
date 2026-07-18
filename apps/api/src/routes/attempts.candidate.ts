@@ -415,7 +415,11 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireExamEligibility(Permission.ExamTake, "examId"),
+        fastify.requireExamEligibility(
+          Permission.ExamTake,
+          "examId",
+          "resource_not_found",
+        ),
       ],
       schema: {
         params: StartAttemptRequestSchema,
@@ -499,7 +503,11 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireExamEligibility(Permission.AttemptStart, "examId"),
+        fastify.requireExamEligibility(
+          Permission.AttemptStart,
+          "examId",
+          "resource_not_found",
+        ),
       ],
       schema: {
         params: StartAttemptRequestSchema,
@@ -545,7 +553,11 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
     {
       preHandler: [
         fastify.authenticate,
-        fastify.requireExamEligibility(Permission.AttemptStart, "examId"),
+        fastify.requireExamEligibility(
+          Permission.AttemptStart,
+          "examId",
+          "permission_denied",
+        ),
       ],
       schema: {
         params: StartAttemptRequestSchema,

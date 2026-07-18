@@ -36,6 +36,7 @@ function sameOrgChain(overrides: Partial<Record<string, unknown>> = {}) {
     attemptOrganizationId: ORG,
     candidateId: randomUUID(),
     ownerUserId: ACTOR,
+    candidateProfileOrganizationId: ORG,
     linkedExamId: examId,
     examId,
     examOrganizationId: ORG,
@@ -138,6 +139,56 @@ describe("RBAC-M10-A own-attempt resolver", () => {
     expect(r).toMatchObject({
       scope: "own_attempt",
       ownership: { ownerUserId: OTHER_ACTOR },
+    });
+  });
+
+  it("resolves when candidate profile organization matches the core org anchor", async () => {
+    const row = sameOrgChain({ candidateProfileOrganizationId: ORG });
+    ownAttemptChain = row;
+    const r = await resolveOwnAttemptScope(
+      {} as never,
+      undefined,
+      { actorId: ACTOR, organizationId: ORG },
+      row.attemptId as string,
+    );
+    expect(isOwnAttemptDenied(r)).toBe(false);
+    expect(r).toMatchObject({
+      scope: "own_attempt",
+      organizationId: ORG,
+    });
+  });
+
+  it("denies organization_mismatch when candidate profile organization differs from the core org anchor", async () => {
+    const foreign = randomUUID();
+    const row = sameOrgChain({ candidateProfileOrganizationId: foreign });
+    ownAttemptChain = row;
+    const logger = { warn: vi.fn(), error: vi.fn() };
+    const r = await resolveOwnAttemptScope(
+      {} as never,
+      logger as never,
+      { actorId: ACTOR, organizationId: ORG },
+      row.attemptId as string,
+    );
+    expect(r).toMatchObject({ denied: true, reason: "organization_mismatch" });
+    expect(logger.warn).toHaveBeenCalledOnce();
+  });
+
+  it("does not fail on null candidate profile organization (missing profile is an existence fact, not a chain failure)", async () => {
+    const row = sameOrgChain({
+      candidateProfileOrganizationId: null,
+      candidateId: null,
+      ownerUserId: null,
+    });
+    ownAttemptChain = row;
+    const r = await resolveOwnAttemptScope(
+      {} as never,
+      undefined,
+      { actorId: ACTOR, organizationId: ORG },
+      row.attemptId as string,
+    );
+    expect(isOwnAttemptDenied(r)).toBe(false);
+    expect(r).toMatchObject({
+      ownership: { candidateId: null, ownerUserId: null },
     });
   });
 

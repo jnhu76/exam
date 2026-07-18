@@ -10,7 +10,7 @@ describe("RBAC-M6 — Admin superset covers the route registry (migration safety
     // requireCapability must never deny Admin. If any Admin-gated route's
     // permission is missing from the Admin preset, migration breaks.
     const adminGated = ROUTE_PERMISSION_REGISTRY.filter(
-      (e) => e.currentGate === "Admin",
+      (e) => e.legacyGate === "Admin",
     );
     expect(adminGated.length).toBeGreaterThan(0);
     const violations = adminGated.filter((e) => !adminPerms.has(e.permission));
@@ -31,7 +31,7 @@ describe("RBAC-M6 — Admin superset covers the route registry (migration safety
       Permission.AttemptViewOwn,
     ]);
     const wrong = ROUTE_PERMISSION_REGISTRY.filter(
-      (e) => e.currentGate === "Admin" && candidateOwnPerms.has(e.permission),
+      (e) => e.legacyGate === "Admin" && candidateOwnPerms.has(e.permission),
     );
     expect(wrong).toEqual([]);
   });

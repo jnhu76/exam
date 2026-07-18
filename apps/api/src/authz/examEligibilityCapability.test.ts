@@ -1,11 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Permission, type PermissionKey, type RoleKey } from "@exam/authz";
+import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 
 /**
  * Unit tests for the candidate exam-eligibility capability preHandler
- * (RBAC-M10-A archetype B). Verifies capability + eligibility arbitration and
- * ADR §3.9 deny mapping.
+ * (RBAC-M10-A archetype B). Verifies capability + eligibility arbitration,
+ * ADR §3.9 deny mapping, and route-specific denial policy (ARCH-A closure).
+ *
+ * Required matrix (task §3.4):
+ *
+ * | Case                                | Denial mode        | Expected |
+ * | ----------------------------------- | ------------------ | -------: |
+ * | Candidate enrolled and owns profile | either             |    allow |
+ * | permission missing                  | either             |      403 |
+ * | Candidate profile missing           | resource_not_found |      404 |
+ * | Candidate profile missing           | permission_denied  |      403 |
+ * | ownerUserId differs from actorId    | resource_not_found |      404 |
+ * | ownerUserId differs from actorId    | permission_denied  |      403 |
+ * | enrollment missing                  | resource_not_found |      404 |
+ * | enrollment missing                  | permission_denied  |      403 |
+ * | exam resource missing               | either             |      404 |
+ * | organization/chain mismatch         | either             |      403 |
+ * | resolver error                      | either             |      503 |
+ * | missing resource param              | either             |      503 |
+ * | no ctx                              | either             |      401 |
  */
 
 let nextResolution: unknown = null;
@@ -26,8 +45,6 @@ function resolved(opts: {
   enrollmentId?: string | null;
   ownerUserId?: string | null;
 }) {
-  // Use explicit defaults only when the key is absent (not when it's null),
-  // so tests can pass null to exercise the "no profile / no enrollment" path.
   const candidateProfileId = opts.hasOwnProperty("candidateProfileId")
     ? opts.candidateProfileId
     : "cand-1";
@@ -113,13 +130,15 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
     nextResolution = null;
   });
 
-  const build = () =>
+  const build = (denialMode: EligibilityDenialMode = "resource_not_found") =>
     buildExamEligibilityCapabilityPreHandler({
       db: {} as never,
       presetAllows: CANDIDATE_PRESET,
-    })(Permission.ExamTake, "examId");
+    })(Permission.ExamTake, "examId", denialMode);
 
-  it("allows an enrolled Candidate to view the exam", async () => {
+  // ── Allow cases ──
+
+  it("allows when Candidate is enrolled and owns the profile", async () => {
     nextResolution = resolved({});
     const req = makeReq("Candidate");
     const reply = makeReply();
@@ -127,26 +146,15 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
     expect(reply.sent).toEqual([]);
   });
 
-  it("passes through (handler decides 403/404 per its contract) when the Candidate has no enrollment", async () => {
-    // The preHandler does NOT re-arbitrate enrollment presence — the handler
-    // already enforces it with its established per-route semantics (start ->
-    // 403 PERMISSION_DENIED; detail/queue -> 404 NotFoundError). Re-arbitrating
-    // here would unify two intentionally-distinct handler contracts (spec §8/
-    // §9.5). The preHandler's job is org-anchor + capability only.
-    nextResolution = resolved({ enrollmentId: null });
+  it("allows regardless of denial mode when all eligibility facts are satisfied", async () => {
+    nextResolution = resolved({});
     const req = makeReq("Candidate");
     const reply = makeReply();
-    await build()(req, reply as unknown as FastifyReply);
+    await build("permission_denied")(req, reply as unknown as FastifyReply);
     expect(reply.sent).toEqual([]);
   });
 
-  it("passes through when the actor has no candidate profile (handler decides)", async () => {
-    nextResolution = resolved({ candidateProfileId: null, enrollmentId: null });
-    const req = makeReq("Candidate");
-    const reply = makeReply();
-    await build()(req, reply as unknown as FastifyReply);
-    expect(reply.sent).toEqual([]);
-  });
+  // ── Permission missing ──
 
   it("returns 403 when the preset lacks the permission (non-Candidate role)", async () => {
     nextResolution = resolved({});
@@ -155,6 +163,62 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
     await build()(req, reply as unknown as FastifyReply);
     expect(reply.sent[0]?.code).toBe(403);
   });
+
+  // ── Candidate profile missing ──
+
+  it("returns 404 (resource_not_found mode) when candidate profile is missing", async () => {
+    nextResolution = resolved({ candidateProfileId: null });
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build("resource_not_found")(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(404);
+  });
+
+  it("returns 403 (permission_denied mode) when candidate profile is missing", async () => {
+    nextResolution = resolved({ candidateProfileId: null });
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build("permission_denied")(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(403);
+  });
+
+  // ── Owner mismatch ──
+
+  it("returns 404 (resource_not_found mode) when ownerUserId differs from actorId", async () => {
+    nextResolution = resolved({ ownerUserId: "other-user" });
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build("resource_not_found")(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(404);
+  });
+
+  it("returns 403 (permission_denied mode) when ownerUserId differs from actorId", async () => {
+    nextResolution = resolved({ ownerUserId: "other-user" });
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build("permission_denied")(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(403);
+  });
+
+  // ── Enrollment missing ──
+
+  it("returns 404 (resource_not_found mode) when enrollment is missing", async () => {
+    nextResolution = resolved({ enrollmentId: null });
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build("resource_not_found")(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(404);
+  });
+
+  it("returns 403 (permission_denied mode) when enrollment is missing", async () => {
+    nextResolution = resolved({ enrollmentId: null });
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build("permission_denied")(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(403);
+  });
+
+  // ── Resolver deny cases ──
 
   it("returns 404 when the resolver reports resource_not_found", async () => {
     nextResolution = denied("resource_not_found");
@@ -172,6 +236,14 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
     expect(reply.sent[0]?.code).toBe(403);
   });
 
+  it("returns 403 when the resolver reports broken_parent_chain", async () => {
+    nextResolution = denied("broken_parent_chain");
+    const req = makeReq("Candidate");
+    const reply = makeReply();
+    await build()(req, reply as unknown as FastifyReply);
+    expect(reply.sent[0]?.code).toBe(403);
+  });
+
   it("returns 503 when the resolver reports resolver_error", async () => {
     nextResolution = denied("resolver_error");
     const req = makeReq("Candidate");
@@ -179,6 +251,8 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
     await build()(req, reply as unknown as FastifyReply);
     expect(reply.sent[0]?.code).toBe(503);
   });
+
+  // ── Infrastructure cases ──
 
   it("returns 401 when there is no ctx", async () => {
     nextResolution = resolved({});

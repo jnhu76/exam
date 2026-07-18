@@ -37,6 +37,7 @@ import { buildCandidateContextCapabilityPreHandler } from "../authz/candidateCon
 import { buildExamEligibilityCapabilityPreHandler } from "../authz/examEligibilityCapability.js";
 import { buildOwnAttemptCapabilityPreHandler } from "../authz/ownAttemptCapability.js";
 import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
+import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 
 const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Resolver registry: one DB-backed resolver per resource family the flipped
@@ -119,14 +120,23 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   });
   fastify.decorate(
     "requireExamEligibility",
-    (permission: PermissionKey, resourceIdKey: string) => {
-      const handler = examEligibilityHandler(permission, resourceIdKey);
+    (
+      permission: PermissionKey,
+      resourceIdKey: string,
+      eligibilityDenialMode: EligibilityDenialMode,
+    ) => {
+      const handler = examEligibilityHandler(
+        permission,
+        resourceIdKey,
+        eligibilityDenialMode,
+      );
       const preHandler: AuthzPreHandler = (request, reply) =>
         handler(request, reply);
       preHandler.authz = {
         kind: "exam_eligibility",
         permission,
         resourceIdKey,
+        eligibilityDenialMode,
       };
       return preHandler;
     },

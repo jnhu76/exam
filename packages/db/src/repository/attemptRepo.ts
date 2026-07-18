@@ -133,6 +133,7 @@ export function createAttemptRepo(db: Database) {
           attemptOrganizationId: examAttempts.organizationId,
           candidateId: examAttempts.candidateId,
           ownerUserId: candidateProfiles.userId,
+          candidateProfileOrganizationId: candidateProfiles.organizationId,
           linkedExamId: examAttempts.examId,
           examId: exams.id,
           examOrganizationId: exams.organizationId,

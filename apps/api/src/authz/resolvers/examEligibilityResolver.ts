@@ -100,6 +100,7 @@ interface LoadedEligibilityChain {
   resourceId: string;
   resourceOrganizationId: string;
   candidateProfileId: string | null;
+  candidateProfileOrganizationId: string | null;
   ownerUserId: string | null;
   enrollmentId: string | null;
   organizationIds: readonly (string | null)[];
@@ -157,6 +158,7 @@ export async function resolveExamEligibilityScope(
       resourceId: row.examId,
       resourceOrganizationId: row.examOrganizationId,
       candidateProfileId: row.candidateProfileId,
+      candidateProfileOrganizationId: row.candidateProfileOrganizationId,
       ownerUserId: row.ownerUserId,
       enrollmentId: row.enrollmentId,
       organizationIds: [
@@ -197,7 +199,8 @@ export async function resolveExamEligibilityScope(
     // Core chain org consistency: exam + course + organization must all be the
     // ctx org. The candidate profile / enrollment org ids are joined on the ctx
     // org (see repo), so if they are non-null they already match; if null they
-    // are handled as existence facts below.
+    // are handled as existence facts. An explicit check is added for
+    // defense-in-depth (ARCH-B closure).
     const coreOrgs = [
       row.examOrganizationId,
       row.courseOrganizationId,
@@ -213,6 +216,26 @@ export async function resolveExamEligibilityScope(
           organizationIds: loaded.organizationIds,
         },
         "authz exam-eligibility resolver organization-anchor mismatch",
+      );
+      return { denied: true, reason: "organization_mismatch" };
+    }
+    // Candidate profile organization defense-in-depth: if the profile exists
+    // (non-null), its org must match the anchor. The query already enforces
+    // this via WHERE candidateProfiles.organizationId = orgId, so a mismatch
+    // here indicates malformed internal data.
+    if (
+      loaded.candidateProfileOrganizationId !== undefined &&
+      loaded.candidateProfileOrganizationId !== null &&
+      loaded.candidateProfileOrganizationId !== ctx.organizationId
+    ) {
+      logger?.warn(
+        {
+          resolver: "exam_eligibility",
+          resourceId: examId,
+          reason: "organization_mismatch",
+          candidateProfileOrganizationId: loaded.candidateProfileOrganizationId,
+        },
+        "authz exam-eligibility resolver candidate profile organization mismatch",
       );
       return { denied: true, reason: "organization_mismatch" };
     }

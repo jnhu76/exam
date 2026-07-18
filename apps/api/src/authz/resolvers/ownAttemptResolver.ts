@@ -80,6 +80,7 @@ interface LoadedOwnAttemptChain {
   resourceOrganizationId: string;
   candidateId: string | null;
   ownerUserId: string | null;
+  candidateProfileOrganizationId: string | null;
   organizationIds: readonly (string | null)[];
   chain: readonly {
     type: ResourceType;
@@ -134,11 +135,13 @@ export async function resolveOwnAttemptScope(
       resourceOrganizationId: row.attemptOrganizationId,
       candidateId: row.candidateId,
       ownerUserId: row.ownerUserId,
+      candidateProfileOrganizationId: row.candidateProfileOrganizationId,
       organizationIds: [
         row.attemptOrganizationId,
         row.examOrganizationId,
         row.courseOrganizationId,
         row.organizationId,
+        row.candidateProfileOrganizationId,
       ],
       chain: [
         { type: "attempt", id: row.attemptId },
@@ -147,7 +150,16 @@ export async function resolveOwnAttemptScope(
       ],
     };
     const chain = materializeChain(loaded.chain);
-    if (!chain || loaded.organizationIds.some((id) => id === null)) {
+    // Core chain: attempt, exam, course, organization must all be present and
+    // consistent. The candidate profile is LEFT JOINed (optional), so its org
+    // can be null — that's an existence fact, not a chain integrity failure.
+    const coreOrgIds = [
+      loaded.organizationIds[0], // attempt
+      loaded.organizationIds[1], // exam
+      loaded.organizationIds[2], // course
+      loaded.organizationIds[3], // organization
+    ];
+    if (!chain || coreOrgIds.some((id) => id === null)) {
       logger?.warn(
         {
           resolver: "own_attempt",
@@ -160,7 +172,7 @@ export async function resolveOwnAttemptScope(
       );
       return { denied: true, reason: "broken_parent_chain" };
     }
-    if (loaded.organizationIds.some((id) => id !== ctx.organizationId)) {
+    if (coreOrgIds.some((id) => id !== ctx.organizationId)) {
       logger?.warn(
         {
           resolver: "own_attempt",
@@ -170,6 +182,26 @@ export async function resolveOwnAttemptScope(
           organizationIds: loaded.organizationIds,
         },
         "authz own-attempt resolver organization-anchor mismatch",
+      );
+      return { denied: true, reason: "organization_mismatch" };
+    }
+    // Candidate profile organization integrity: if the profile exists (non-null
+    // id), its org must match the core org anchor. A null profile org is handled
+    // as an existence fact by the capability preHandler, not a chain failure.
+    // Only check if the field is actually present in the loaded data.
+    if (
+      loaded.candidateProfileOrganizationId !== undefined &&
+      loaded.candidateProfileOrganizationId !== null &&
+      loaded.candidateProfileOrganizationId !== ctx.organizationId
+    ) {
+      logger?.warn(
+        {
+          resolver: "own_attempt",
+          resourceId: attemptId,
+          reason: "organization_mismatch",
+          candidateProfileOrganizationId: loaded.candidateProfileOrganizationId,
+        },
+        "authz own-attempt resolver candidate profile organization mismatch",
       );
       return { denied: true, reason: "organization_mismatch" };
     }

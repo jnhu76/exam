@@ -115,6 +115,7 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
           kind: "exam_eligibility",
           permission: entry.permission,
           resourceIdKey: strategy.resourceIdKey,
+          eligibilityDenialMode: strategy.eligibilityDenialMode,
         };
       case "own_attempt":
         return {

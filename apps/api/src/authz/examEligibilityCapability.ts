@@ -13,14 +13,15 @@
  * iff, in order:
  *
  *   1. The exam resolves under the actor's organization anchor (ADR §3.4) via
- *      {@link resolveExamEligibilityScope}. Denials map per ADR §3.9.
+ *      {@link resolveExamEligibilityScope}.
  *   2. The principal's role preset grants the route permission (ExamTake /
- *      AttemptStart) AND the actor resolves to a candidate profile under the
- *      org anchor AND that profile holds an enrollment for the exam.
- *   3. Otherwise deny — anti-enumeration: a candidate with no profile or no
- *      enrollment for this exam returns 404, not 403, matching the proven
- *      `candidateOwnership.test.ts` convention ("A sees no detail for an exam
- *      enrolled only to B -> 404").
+ *      AttemptStart).
+ *   3. The actor resolves to a candidate profile under the org anchor AND
+ *      the candidate profile's ownerUserId equals the actorId AND the
+ *      candidate holds an enrollment for the exam.
+ *   4. Otherwise deny — route-specific denial policy declared via
+ *      `eligibilityDenialMode`: `resource_not_found` → 404 (anti-enumeration),
+ *      `permission_denied` → 403.
  *
  * The start route never trusts a client-supplied `candidateId` (directive
  * §6.3): the candidate profile is server-derived from `ctx.actorId` inside the
@@ -40,6 +41,7 @@ import {
   type RoleKey,
   type ResolverContext,
 } from "@exam/authz";
+import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 import {
   resolveExamEligibilityScope,
   isExamEligibilityDenied,
@@ -60,20 +62,44 @@ export interface ExamEligibilityCapabilityInput {
 }
 
 /**
+ * Send a route-specific eligibility denial response.
+ *
+ * Missing profile, owner mismatch, or missing enrollment map to the
+ * route-declared denial policy:
+ *   - `resource_not_found` → 404 (anti-enumeration)
+ *   - `permission_denied` → 403
+ */
+function sendEligibilityDenied(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  mode: EligibilityDenialMode,
+) {
+  if (mode === "resource_not_found") {
+    return reply
+      .code(404)
+      .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+  }
+  return reply
+    .code(403)
+    .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
+}
+
+/**
  * Builds a per-route eligibility capability preHandler. The route-specific
- * permission is captured at decoration time; the exam id is sourced from
- * request.params at request time. Pure: the DB + preset dependencies are
- * injected, so the ADR §3.9 denial mapping and the eligibility arbitration are
- * unit-testable without DB fixtures.
+ * permission and denial policy are captured at decoration time; the exam id
+ * is sourced from request.params at request time. Pure: the DB + preset
+ * dependencies are injected, so the ADR §3.9 denial mapping and the
+ * eligibility arbitration are unit-testable without DB fixtures.
  */
 export function buildExamEligibilityCapabilityPreHandler(
   input: ExamEligibilityCapabilityInput,
 ): (
   permission: PermissionKey,
   resourceIdKey: string,
+  eligibilityDenialMode: EligibilityDenialMode,
 ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
   const { db, logger, presetAllows: allows } = input;
-  return (permission, resourceIdKey) => async (request, reply) => {
+  return (permission, resourceIdKey, denialMode) => async (request, reply) => {
     const ctx = request.ctx;
     if (!ctx) {
       return reply
@@ -104,8 +130,6 @@ export function buildExamEligibilityCapabilityPreHandler(
       // ADR §3.9 deny mapping.
       switch (resolution.reason) {
         case "resource_not_found":
-          // Anti-enumeration: a missing exam (or an exam the actor has no
-          // profile/enrollment for) is the handler's canonical 404.
           return reply
             .code(404)
             .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
@@ -126,22 +150,34 @@ export function buildExamEligibilityCapabilityPreHandler(
     }
 
     // Resolved under the org anchor. The capability (preset) check is the
-    // strict analogue of the legacy role gate. Eligibility facts (candidate
-    // profile / enrollment presence) are NOT re-arbitrated here: the handler
-    // already enforces enrollment with its established per-route semantics
-    // (start -> PermissionDeniedError -> 403; detail/queue -> NotFoundError ->
-    // 404), and spec §8/§9.5 forbid casually flipping an established 403 to 404
-    // or vice versa. Re-arbitrating here would unify two intentionally-distinct
-    // handler contracts. The preHandler's job is the org-anchor + capability
-    // boundary (directive §6.4); the handler retains the enrollment predicate
-    // as defense-in-depth (directive §6.6).
+    // strict analogue of the legacy role gate.
     const role = ctx.role as RoleKey;
     if (!allows(role, permission)) {
       return reply
         .code(403)
         .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
     }
-    // Capability granted + exam resolved under the org anchor. The handler
-    // applies its own enrollment / state / availability guards.
+
+    // Eligibility enforcement: server-derived candidate profile must exist,
+    // the actor must own the profile, and an enrollment must exist.
+    // These are the authoritative eligibility boundary (ARCH-A closure).
+    const { candidateProfileId, ownerUserId, enrollmentId } =
+      resolution.ownership;
+
+    if (candidateProfileId === null) {
+      return sendEligibilityDenied(request, reply, denialMode);
+    }
+
+    if (ownerUserId !== ctx.actorId) {
+      return sendEligibilityDenied(request, reply, denialMode);
+    }
+
+    if (enrollmentId === null) {
+      return sendEligibilityDenied(request, reply, denialMode);
+    }
+
+    // Capability granted + exam resolved under the org anchor + candidate
+    // profile + enrollment verified. The handler applies its own exam
+    // availability / state / queue admission / attempt-count guards.
   };
 }

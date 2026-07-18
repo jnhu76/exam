@@ -4,6 +4,14 @@ import type { Permission, RequestContext, Role } from "@exam/domain";
 import type { PermissionKey, ResourceResolverKey } from "@exam/authz";
 
 /**
+ * Route-specific eligibility denial policy for exam-eligibility routes.
+ *
+ * - `resource_not_found`: missing profile/enrollment → 404 (anti-enumeration).
+ * - `permission_denied`: missing profile/enrollment → 403.
+ */
+export type EligibilityDenialMode = "resource_not_found" | "permission_denied";
+
+/**
  * Metadata attached to preHandler functions returned by the authz decorators.
  * Used by introspection tests to verify the correct kind of gate is wired at
  * runtime (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2, Finding 2; extended for the
@@ -31,6 +39,7 @@ export type AuthzMetadata =
       kind: "exam_eligibility";
       permission: PermissionKey;
       resourceIdKey: string;
+      eligibilityDenialMode: EligibilityDenialMode;
     }
   | {
       kind: "own_attempt";
@@ -105,11 +114,12 @@ declare module "fastify" {
      * profile with an enrollment for the exam — server-derived, no client
      * candidateId trust. Anti-enumeration: missing exam / no enrollment -> 404.
      * Attaches runtime metadata `{ kind: "exam_eligibility", permission,
-     * resourceIdKey }`.
+     * resourceIdKey, eligibilityDenialMode }`.
      */
     requireExamEligibility: (
       permission: PermissionKey,
       resourceIdKey: string,
+      eligibilityDenialMode: EligibilityDenialMode,
     ) => AuthzPreHandler;
     /**
      * Own-attempt capability gate (RBAC-M10-A archetype C/D). Capability +

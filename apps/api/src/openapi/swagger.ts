@@ -11,6 +11,7 @@ import { healthResponseSchema } from "../routes/healthSchema.js";
 import type {
   AuthzPreHandler,
   AuthzMetadata,
+  EligibilityDenialMode,
 } from "../types/fastify-auth.d.js";
 import type { PermissionKey } from "@exam/authz";
 
@@ -72,12 +73,17 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   });
   app.decorate(
     "requireExamEligibility",
-    (permission: PermissionKey, resourceIdKey: string) => {
+    (
+      permission: PermissionKey,
+      resourceIdKey: string,
+      eligibilityDenialMode: EligibilityDenialMode,
+    ) => {
       const h: AuthzPreHandler = async () => {};
       h.authz = {
         kind: "exam_eligibility",
         permission,
         resourceIdKey,
+        eligibilityDenialMode,
       };
       return h;
     },
