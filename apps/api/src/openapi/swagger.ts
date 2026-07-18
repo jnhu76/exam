@@ -64,29 +64,35 @@ export async function buildSwaggerApp(): Promise<FastifyInstance> {
   // own-attempt gates. Each attaches a stub `.authz` matching its kind so the
   // route registers cleanly (the spec is driven by route `schema.security` /
   // `schema["x-role"]`, not the preHandler — same rationale as above).
-  app.decorate("requireCandidateContext", () => {
+  app.decorate("requireCandidateContext", (permission: string) => {
     const h: AuthzPreHandler = async () => {};
-    h.authz = { kind: "candidate_context", permission: "exam.take" };
+    h.authz = { kind: "candidate_context", permission: permission as never };
     return h;
   });
-  app.decorate("requireExamEligibility", () => {
-    const h: AuthzPreHandler = async () => {};
-    h.authz = {
-      kind: "exam_eligibility",
-      permission: "exam.take",
-      resourceIdKey: "examId",
-    };
-    return h;
-  });
-  app.decorate("requireOwnAttempt", () => {
-    const h: AuthzPreHandler = async () => {};
-    h.authz = {
-      kind: "own_attempt",
-      permission: "attempt.view_own",
-      resourceIdKey: "attemptId",
-    };
-    return h;
-  });
+  app.decorate(
+    "requireExamEligibility",
+    (permission: string, resourceIdKey: string) => {
+      const h: AuthzPreHandler = async () => {};
+      h.authz = {
+        kind: "exam_eligibility",
+        permission: permission as never,
+        resourceIdKey: resourceIdKey as never,
+      };
+      return h;
+    },
+  );
+  app.decorate(
+    "requireOwnAttempt",
+    (permission: string, resourceIdKey: string) => {
+      const h: AuthzPreHandler = async () => {};
+      h.authz = {
+        kind: "own_attempt",
+        permission: permission as never,
+        resourceIdKey: resourceIdKey as never,
+      };
+      return h;
+    },
+  );
   app.decorate("db", null as never);
   app.decorate("now", () => new Date());
   app.decorateRequest("ctx", null as never);

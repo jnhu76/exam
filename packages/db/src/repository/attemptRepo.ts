@@ -118,10 +118,9 @@ export function createAttemptRepo(db: Database) {
      * Resolver Matrix: `own_attempt -> attempt -> candidate + exam`; the
      * ownership fact is `candidateProfiles.userId`.
      *
-     * Cross-candidate probing (attempt exists under the org anchor but is not
-     * owned by the actor) is mapped by the resolver to `resource_not_found`
-     * (404), preserving the anti-enumeration invariant proven by
-     * `candidateOwnership.test.ts`. Org/chain inconsistency stays a 403.
+     * The resolver (ownAttemptResolver.ts) validates the chain and org anchor.
+     * The capability preHandler (ownAttemptCapability.ts) compares
+     * `ownerUserId === ctx.actorId` and maps non-owner to HTTP 404.
      */
     async findOwnAttemptChain(
       ctx: TenantContext | RequestContext,

@@ -9,7 +9,7 @@
  * For each of the ten M10-A routes, this test:
  *   1. reads the route registry entry (including runtimeAuthz);
  *   2. finds the corresponding captured route from the Fastify onRoute hook;
- *   3. asserts exactly one authz preHandler;
+ *   3. asserts exactly one authz preHandler (via authzCount);
  *   4. compares the runtime metadata against the registry's runtimeAuthz + permission.
  *
  * The expected object is NOT duplicated inside the test — it IS the registry
@@ -35,39 +35,40 @@ function asArray<T>(value: T | T[]): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+function isAuthzPreHandler(ph: unknown): ph is AuthzPreHandler {
+  return (
+    typeof ph === "function" &&
+    !!(
+      (ph as unknown as AuthzPreHandler).authz?.kind === "candidate_context" ||
+      (ph as unknown as AuthzPreHandler).authz?.kind === "exam_eligibility" ||
+      (ph as unknown as AuthzPreHandler).authz?.kind === "own_attempt" ||
+      (ph as unknown as AuthzPreHandler).authz?.kind === "scoped" ||
+      (ph as unknown as AuthzPreHandler).authz?.kind === "flat"
+    )
+  );
+}
+
 type CapturedRoute = {
   method: string;
   url: string;
-  authz: AuthzPreHandler["authz"] | null;
+  authzHandlers: readonly AuthzPreHandler["authz"][];
+  authzCount: number;
 };
 
 const capturedRoutes: CapturedRoute[] = [];
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("onRoute", (routeOptions) => {
-    const preHandlers = asArray(routeOptions.preHandler).filter(
-      Boolean,
-    ) as unknown[];
-    const authzHandler = preHandlers.find(
-      (ph): ph is AuthzPreHandler =>
-        typeof ph === "function" &&
-        !!(
-          (ph as unknown as AuthzPreHandler).authz?.kind ===
-            "candidate_context" ||
-          (ph as unknown as AuthzPreHandler).authz?.kind ===
-            "exam_eligibility" ||
-          (ph as unknown as AuthzPreHandler).authz?.kind === "own_attempt" ||
-          (ph as unknown as AuthzPreHandler).authz?.kind === "scoped" ||
-          (ph as unknown as AuthzPreHandler).authz?.kind === "flat"
-        ),
-    );
+    const preHandlers = asArray(routeOptions.preHandler).filter(Boolean);
+    const authzHandlers = preHandlers.filter(isAuthzPreHandler);
     capturedRoutes.push({
       method:
         typeof routeOptions.method === "string"
           ? routeOptions.method
           : "UNKNOWN",
       url: routeOptions.url as string,
-      authz: authzHandler?.authz ?? null,
+      authzHandlers: authzHandlers.map((h) => h.authz),
+      authzCount: authzHandlers.length,
     });
   });
   await fastify.register(courseRoutes);
@@ -127,15 +128,16 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
   it.each(m10aRegistryEntries)(
     "$method $path — runtime metadata matches registry declaration",
     (entry) => {
-      const match = capturedRoutes.find(
+      const matches = capturedRoutes.filter(
         (r) => r.method === entry.method && r.url.endsWith(entry.path),
       );
       expect(
-        match,
+        matches,
         `no captured route for ${entry.method} ${entry.path}`,
-      ).toBeDefined();
-      expect(match!.authz).not.toBeNull();
-      expect(match!.authz).toEqual(expectedMetadata(entry));
+      ).toHaveLength(1);
+      expect(matches[0]!.authzCount).toBe(1);
+      expect(matches[0]!.authzHandlers).toHaveLength(1);
+      expect(matches[0]!.authzHandlers[0]).toEqual(expectedMetadata(entry));
     },
   );
 
@@ -144,8 +146,9 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       const matches = capturedRoutes.filter(
         (r) => r.method === entry.method && r.url.endsWith(entry.path),
       );
-      expect(matches.length).toBeGreaterThanOrEqual(1);
-      expect(matches[0]?.authz).not.toBeNull();
+      expect(matches).toHaveLength(1);
+      expect(matches[0]!.authzCount).toBe(1);
+      expect(matches[0]!.authzHandlers).toHaveLength(1);
     }
   });
 
@@ -154,22 +157,15 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       (e) => e.runtimeAuthz?.kind === "candidate_context",
     );
     for (const entry of contextEntries) {
-      const match = capturedRoutes.find(
+      const matches = capturedRoutes.filter(
         (r) => r.method === entry.method && r.url.endsWith(entry.path),
       );
-      expect(match).toBeDefined();
-      const meta = match!.authz;
-      expect(meta).not.toBeNull();
-      if (meta && "kind" in meta) {
-        // candidate_context metadata must NOT contain resolverKey or resourceIdKey
-        expect(meta.kind).toBe("candidate_context");
-        expect(
-          "resolverKey" in meta ? (meta as any).resolverKey : undefined,
-        ).toBeUndefined();
-        expect(
-          "resourceIdKey" in meta ? (meta as any).resourceIdKey : undefined,
-        ).toBeUndefined();
-      }
+      expect(matches).toHaveLength(1);
+      const meta = matches[0]!.authzHandlers[0];
+      expect(meta).toBeDefined();
+      expect(meta!.kind).toBe("candidate_context");
+      expect(meta).not.toHaveProperty("resolverKey");
+      expect(meta).not.toHaveProperty("resourceIdKey");
     }
   });
 
@@ -184,11 +180,11 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
         { kind: "exam_eligibility" }
       >;
       expect(strategy.resourceIdKey).toBe("examId");
-      const match = capturedRoutes.find(
+      const matches = capturedRoutes.filter(
         (r) => r.method === entry.method && r.url.endsWith(entry.path),
       );
-      expect(match).toBeDefined();
-      expect(match!.authz).toEqual(
+      expect(matches).toHaveLength(1);
+      expect(matches[0]!.authzHandlers[0]).toEqual(
         expect.objectContaining({ resourceIdKey: "examId" }),
       );
     }
@@ -205,11 +201,11 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
         { kind: "own_attempt" }
       >;
       expect(["id", "attemptId"]).toContain(strategy.resourceIdKey);
-      const match = capturedRoutes.find(
+      const matches = capturedRoutes.filter(
         (r) => r.method === entry.method && r.url.endsWith(entry.path),
       );
-      expect(match).toBeDefined();
-      expect(match!.authz).toEqual(
+      expect(matches).toHaveLength(1);
+      expect(matches[0]!.authzHandlers[0]).toEqual(
         expect.objectContaining({ resourceIdKey: strategy.resourceIdKey }),
       );
     }

@@ -8,18 +8,13 @@
  *                  attempt.submit / attempt.heartbeat.send / attempt.restore
  *                  | source of truth: attempt ownership
  *
- * Like the score resolver, this must surface the **ownership fact**
- * (`candidateProfiles.userId`) so the own-attempt capability preHandler can
- * authorize `ownerUserId === actorId` without role-name branching (ADR §scope
- * table L443; directive §6.3).
+ * **Responsibility:** validates the resource chain (attempt→exam→course→org),
+ * verifies the organization anchor, and returns **ownership facts**
+ * (`candidateProfiles.userId`). The resolver does NOT map non-owner to HTTP 404;
+ * it returns the ownership facts for the own-attempt capability preHandler.
  *
- * Anti-enumeration contract (directive §6.4 / §8): a cross-candidate probe —
- * the attempt exists under the org anchor but is NOT owned by the actor — is
- * mapped to `resource_not_found` (the handler then returns 404), matching the
- * proven `candidateOwnership.test.ts` convention ("A cannot read B's attempt
- * -> 404"). Org/chain inconsistency stays a genuine `organization_mismatch` /
- * `broken_parent_chain` (403) because it is a scope violation, not an
- * existence question.
+ * The own-attempt capability preHandler (ownAttemptCapability.ts) compares
+ * `ownerUserId === ctx.actorId` and maps non-owner to HTTP 404 (anti-enumeration).
  *
  * Integrity rules honored (resolver.ts top-of-file): full parent chain loaded;
  * explicit organization anchor (ADR §3.4); deny-on-inconsistency (ADR §22.1);
