@@ -1815,7 +1815,15 @@ describe("permission boundary", () => {
 
     it("PATCH deactivate primary assignment auto-promotes and writes audit", async () => {
       const { user } = await insertTargetUserWithPrimary("Candidate");
-      // Seed a secondary Grader to auto-promote.
+      const auditRepo = createAuditLogRepo(ctx.db);
+      // Baseline BEFORE any setup that writes audit (fire-and-forget race).
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed" },
+      );
+      // Seed a secondary Grader to auto-promote (writes audit).
       const addRes = await ctx.app.inject({
         method: "POST",
         url: `/api/users/${user.id}/role-assignments`,
@@ -1838,14 +1846,7 @@ describe("permission boundary", () => {
       const primary = listItems.find((i) => i.isPrimary);
       requireDefined(primary, "primary deactivate: primary assignment");
 
-      const auditRepo = createAuditLogRepo(ctx.db);
-      const auditBefore = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        { action: "user.role_changed", targetId: user.id },
-      );
-
+      // Deactivate primary (writes another user.role_changed audit).
       const res = await ctx.app.inject({
         method: "PATCH",
         url: `/api/role-assignments/${primary.id}`,
@@ -1854,28 +1855,29 @@ describe("permission boundary", () => {
       });
       expect(res.statusCode).toBe(200);
 
+      // Wait for BOTH audits (secondary-creation + primary-deactivation).
       const auditTotal = await waitForAuditCount(
         auditRepo,
         adminCtx(),
-        auditBefore.total + 1,
-        { action: "user.role_changed", targetId: user.id },
+        auditBefore.total + 2,
+        { action: "user.role_changed" },
       );
-      expect(auditTotal).toBe(auditBefore.total + 1);
+      expect(auditTotal).toBe(auditBefore.total + 2);
 
       const auditAfter = await auditRepo.listPaginatedFiltered(
         adminCtx(),
         1,
         1000,
-        { action: "user.role_changed", targetId: user.id },
+        { action: "user.role_changed" },
       );
       const newRows3 = auditAfter.items.filter(
         (a) => !auditBefore.items.some((b) => b.auditLog.id === a.auditLog.id),
       );
-      const lastNewRow = newRows3[newRows3.length - 1];
-      requireDefined(lastNewRow, "deactivate primary audit row");
-      // The most recent audit row is the deactivate one (may also have the
-      // secondary-assignment audit from seeding — we check the latest).
-      const lastMeta = lastNewRow.auditLog.metadata as Record<string, unknown>;
+      // newRows3 contains [deactivate_audit, secondary_audit] (DESC order).
+      // newRows3[0] is the deactivation audit (most recent).
+      const deactRow = newRows3[0];
+      requireDefined(deactRow, "deactivate primary audit row");
+      const lastMeta = deactRow.auditLog.metadata as Record<string, unknown>;
       expect(lastMeta.assignmentDeactivated).toBe(true);
       expect(lastMeta.oldPrimaryRole).toBe("Candidate");
       expect(lastMeta.resultingPrimaryRole).toBe("Grader");

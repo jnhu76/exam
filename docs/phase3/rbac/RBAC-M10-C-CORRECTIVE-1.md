@@ -94,7 +94,7 @@ The `[401, 403]` union was an admission that the test author wasn't sure which g
 
 | File | Change |
 | ---- | ------ |
-| `apps/api/src/routes/permissionBoundary.test.ts` | System-login test split & tightened to exact 401; added scoped audit-count assertions on 3 denied user mutations; switched PATCH assignment to real promote branch; added `waitForAuditCount` polling helper for fire-and-forget audit race; race-safe deactivate audit tests moved `auditBefore` before setup |
+| `apps/api/src/routes/permissionBoundary.test.ts` | System-login test split & tightened to exact 401; added scoped audit-count assertions on 3 denied user mutations; switched PATCH assignment to real promote branch; added `waitForAuditCount` polling helper for fire-and-forget audit race; deactivate audit tests: moved `auditBefore` before audit-writing setup (POST secondary), changed expected count to `+2` to cover creation + deactivation audits |
 | `apps/api/src/routes/roleAssignments.ts` | Added `recordAudit` calls for secondary assignment creation (`assignmentAdded`, `role`, `isPrimary`) and deactivation (`assignmentDeactivated`, `oldPrimaryRole`, `resultingPrimaryRole`, `assignmentId`) — closes H6/H7 |
 | `docs/phase3/rbac/RBAC-JOB-QUEUE.md` | Updated M10-C status to CLOSED — PR #191 + PR #193; synced H6/H7 disposition |
 | `docs/phase3/rbac/RBAC-M10-C-ADVERSARIAL-REVIEW-20260719-073604-2e385644.md` | Independent adversarial review log (preserved as evidence) |
@@ -353,4 +353,7 @@ All 4 CodeRabbit/gemini findings plus 2 adversarial-review gaps (H6/H7) have bee
 One additional defect was codiscovered and fixed:
 - **Audit race condition:** Fire-and-forget `recordAudit` caused flaky failure under coverage. Added `waitForAuditCount` polling helper. Also moved `auditBefore` baseline before audit-writing setup in deactivate tests.
 
-All validation gates pass (full API suite 1308/5, `pnpm verify`). 10 M10-C route conformance confirmed. Permission matrix unchanged. Sync invariants preserved. M10-D/M10-E not started.
+All validation gates pass (full API suite 1311 passed, 5 skipped; `pnpm verify` exit 0). 10 M10-C route conformance confirmed. Permission matrix unchanged. Sync invariants preserved. M10-D/M10-E not started.
+
+**Modified files (6):** `permissionBoundary.test.ts`, `roleAssignments.ts`, `RBAC-JOB-QUEUE.md`, `RBAC-M10-C-CORRECTIVE-1.md`, adversarial review, identity authority report.
+**New tests:** 3 success-path audit tests (secondary create, secondary deactivate, primary deactivate) + race-safe polling helper.

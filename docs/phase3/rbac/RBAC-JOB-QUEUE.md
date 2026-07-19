@@ -221,7 +221,7 @@ passage, not real resource access.
 NON-BLOCKING SECURITY-WISE. Backend remains the authorization authority.
 
 **Verdict:**
-```
+```text
 RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-2:
 PASS WITH NON-BLOCKING FINDINGS
 
@@ -259,7 +259,7 @@ on branch `feat/rbac-m10-finish`. Full baseline document:
 Candidate own-attempt runtime authorization (M10-A) was independently
 adversarial-reviewed and merged via PR #189. No further action needed.
 
-```
+```text
 RBAC-M10-A:
 CLOSED — PR #189
 
@@ -272,7 +272,7 @@ M10-A routes migrated: 10/10
 Single-tenant corrective (M10-B) closing the admin-console residual findings.
 Merged via PR #190. No further action needed.
 
-```
+```text
 RBAC-M10-B:
 CLOSED — PR #190
 ```
@@ -286,7 +286,7 @@ race-safe zero-audit assertions. Full evidence:
 - `docs/phase3/rbac/RBAC-M10-C-IDENTITY-AUTHORITY-20260719-002102-ddbc808b.md`
 - `docs/phase3/rbac/RBAC-M10-C-CORRECTIVE-1.md`
 
-```
+```text
 RBAC-M10-C:
 CLOSED — PR #191 + PR #193
 
