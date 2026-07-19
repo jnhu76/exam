@@ -21,21 +21,29 @@ AUTHORIZED TO START FROM FINAL_HEAD
 
 ## B. Baseline
 
+This corrective PR (#193) sits on top of the already-merged PR #191. The
+baseline is therefore three-layered:
+
 ```text
-BASE_BRANCH:              master
-EXPECTED_BASE_COMMIT:     ddbc808b9c640584ece7690dd8aef681739081a5
-ACTUAL_BASE_COMMIT:       ddbc808b9c640584ece7690dd8aef681739081a5
-MERGE_BASE:               ddbc808b (Merge PR #190 — RBAC-M10-B)
+ORIGINAL_M10_C_BASE:      ddbc808b9c640584ece7690dd8aef681739081a5
+                           (M10-B merge — the pre-M10-C starting point)
 ORIGINAL_PR_HEAD:         2e3856445d09645ce7930f0ab3e7c569ed1a82ec
+                           (3 commits: feat + test + docs)
 ORIGINAL_PR_COMMITS:      3
   e9c3f4c — feat(authz): migrate M10-C identity and role-assignment routes
   ee9064d — test(authz): prove M10-C identity and assignment boundaries
   2e38564 — docs(authz): record M10-C identity-authority implementation evidence
-CORRECTIVE_FINAL_HEAD:    (after commit — see below)
+ORIGINAL_MERGE:           4d68745daf38be605744827f71bd09efa375d955
+                           (PR #191 merged into master)
 BRANCH:                   feat/rbac-m10-c-identity-authority-ddbc808b
+                           (same branch, now ahead of master by 2 commits)
+
+CORRECTIVE_PR_BASE:       4d68745daf38be605744827f71bd09efa375d955
+                           (the merge commit — master's HEAD after PR #191)
+CORRECTIVE_FINAL_HEAD:    ec5d869a2e99c4f0e99abeeced4d3823dc864cf9
 CORRECTIVE_COMMITS:       2
-  test(authz): strengthen M10-C denial and System-login evidence
-  docs(authz): close M10-C corrective findings
+  6d7501b — test(authz): strengthen M10-C denial and System-login evidence
+  ec5d869 — docs(authz): close M10-C corrective findings
 WORKTREE:                 clean (after corrective commits)
 ```
 

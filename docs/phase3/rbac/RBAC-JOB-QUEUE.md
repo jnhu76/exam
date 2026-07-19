@@ -72,11 +72,14 @@ Independent reviewer verdict: **APPROVE** — 58/58 tests, typecheck/lint clean,
 - **#2 `legacyMap` undefined guards** → defense-in-depth nit; TS already enforces completeness. Deferred.
 - **#3 `KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[]` → `readonly AuditActionKey[]`** → reasonable drift-detection tightening; deferred (low value — the test already asserts every entry ∈ `AuditAction`).
 
-## Current real gap (as of 2026-07-17) — RBAC-M10-finish
+## Current real gap (as of 2026-07-19) — RBAC-M10-finish
 
 Everything above rows 0–16 is merged. The **only** remaining RBAC work is row 17
 (RBAC-M10-finish). **An authoritative baseline was frozen at commit 8ef50e5** and
 captured in `docs/phase3/rbac/RBAC-M10-FINISH-BASELINE-1.md` (§A–§R, 685 lines).
+
+M10-A (PR #189), M10-B (PR #190), and M10-C (PR #191 + PR #193) are all CLOSED.
+See their respective sections below for disposition.
 
 **Current known state (re-proven from source at baseline):**
 
@@ -251,76 +254,49 @@ on branch `feat/rbac-m10-finish`. Full baseline document:
 
 **Global RBAC-M10-FINISH: OPEN** — see sub-jobs in "Current real gap" above.
 
-## RBAC-M10-A — ✅ implemented (2026-07-17) — AWAITING INDEPENDENT ADVERSARIAL REVIEW
+## RBAC-M10-A — ✅ CLOSED (PR #189)
 
-Candidate own-attempt runtime authorization implemented on branch
-`feat/rbac-m10-a-candidate-runtime` off the frozen baseline. Full evidence
-document: `docs/phase3/rbac/RBAC-M10-A-IMPLEMENTATION-1.md` (sections A–S).
-
-**Scope:** the 10 legacy Candidate routes in `attempts.candidate.ts` migrated
-from `requireRole(["Candidate"])` to capability + scope + ownership
-authorization. Handler-level ownership and state guards retained as
-defense-in-depth (directive §6.6, baseline §I).
-
-**Result:**
-- production `requireRole`: **44 → 34**
-- Candidate `requireRole`: **10 → 0**
-- M10-A routes migrated: **10/10**
-
-**Design — four semantic authz kinds (directive §7):**
-- `candidate_context` (archetype A, GET /candidate/exams) — preset-only; the
-  handler scopes the list to the candidate profile.
-- `exam_eligibility` (archetype B, exam detail / queue / start) — capability +
-  exam org-anchor + server-derived candidate profile; enrollment presence is
-  NOT re-arbitrated (the handler keeps its established 403-start / 404-detail
-  contracts, spec §8/§9.5).
-- `own_attempt` (archetype C/D, own-attempt view / take / save / submit /
-  heartbeat / restore) — capability + ownership (candidateProfiles.userId ===
-  actorId); cross-candidate probe → 404 anti-enumeration.
-
-The decision is **capability + ownership/eligibility, never role-name**
-(directive §6.1). No `ctx.role === "Candidate"` branch in any new code. The
-Candidate preset already held all 7 runtime permissions — no preset-parity
-correction needed.
-
-**New infrastructure:**
-- resolvers: `ownAttemptResolver`, `examEligibilityResolver`
-- capability builders: `ownAttemptCapability`, `examEligibilityCapability`,
-  `candidateContextCapability`
-- `AuthzMetadata` union extended with 3 new kinds; 3 decorators registered in
-  `plugins/authz.ts`; 3 no-op stubs in `swagger.ts`
-- repo methods: `attemptRepo.findOwnAttemptChain`,
-  `examRepo.findCandidateEligibilityChain` (single query: exam chain +
-  candidate profile + enrollment)
-
-**Tests added (51 new):**
-- 33 unit tests (resolvers + capability builders, vi.mock repos)
-- 18 integration tests in `attempts/m10a.candidateRuntime.test.ts`: runtime
-  authz metadata for all 10 routes (onRoute capture), zero-side-effect denial
-  on the 5 mutating routes, non-Candidate role denial.
-
-**Mutation campaign (6 executed, 5 killed):** A (flat downgrade → metadata
-FAIL), B (mutating flat downgrade → metadata FAIL), C (ownership bypass → unit
-FAIL), D (org-anchor neutralized → unit FAIL), E (wrong resourceIdKey →
-metadata FAIL). F (handler defense-in-depth removal) honestly recorded as
-intentionally redundant (directive §11 F) — proven by source assertion + the
-fact that mutations A/C did not change external behavior (handler checks
-remained sufficient). No mutation committed.
-
-**Verified:** authz 46/46, attempts 157/157, candidateOwnership 31/31,
-scores PASS, m10a.candidateRuntime 18/18; typecheck / lint / lint:arch /
-lint:copy / format:check / api:openapi:check / `pnpm verify` all PASS.
+Candidate own-attempt runtime authorization (M10-A) was independently
+adversarial-reviewed and merged via PR #189. No further action needed.
 
 ```
 RBAC-M10-A:
-IMPLEMENTED — AWAITING INDEPENDENT ADVERSARIAL REVIEW
+CLOSED — PR #189
 
 requireRole remaining: 34
 M10-A routes migrated: 10/10
 ```
 
-M10-A is NOT marked CLOSED on author self-review alone. M10-B (academic
-management) is NOT started.
+## RBAC-M10-B — ✅ CLOSED (PR #190)
+
+Single-tenant corrective (M10-B) closing the admin-console residual findings.
+Merged via PR #190. No further action needed.
+
+```
+RBAC-M10-B:
+CLOSED — PR #190
+```
+
+## RBAC-M10-C — ✅ CLOSED (PR #191 + PR #193)
+
+Identity & role-assignment authority (M10-C) implemented via PR #191 and
+corrective-closed via PR #193. The corrective addresses 4 CodeRabbit findings,
+adds audit events for secondary assignment and deactivate paths, and provides
+race-safe zero-audit assertions. Full evidence:
+- `docs/phase3/rbac/RBAC-M10-C-IDENTITY-AUTHORITY-20260719-002102-ddbc808b.md`
+- `docs/phase3/rbac/RBAC-M10-C-CORRECTIVE-1.md`
+
+```
+RBAC-M10-C:
+CLOSED — PR #191 + PR #193
+
+requireRole remaining: 34
+M10-C routes migrated: 10/10
+```
+
+## RBAC-M10-D — NOT STARTED
+## RBAC-M10-E — NOT STARTED
+## RBAC-M10-F — NOT STARTED
 
 ## Acceptance per job (filled in as each lands)
 

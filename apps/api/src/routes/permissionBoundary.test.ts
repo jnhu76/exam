@@ -64,6 +64,32 @@ async function waitForAuditCount<TFilter extends Record<string, unknown>>(
   return result.total;
 }
 
+/**
+ * Polling helper for ABSENCE-of-audit assertions. Polls for the full
+ * `settleMs` window, continuously checking that the filtered audit count
+ * never exceeds `expectedTotal`. If a fire-and-forget audit write races
+ * after the HTTP response, this catches it before the settle window ends.
+ */
+async function expectAuditCountStable<TFilter extends Record<string, unknown>>(
+  auditRepo: ReturnType<typeof createAuditLogRepo>,
+  ctx: Parameters<typeof auditRepo.listPaginatedFiltered>[0],
+  expectedTotal: number,
+  filter: TFilter,
+  settleMs = 800,
+): Promise<void> {
+  const deadline = Date.now() + settleMs;
+  while (Date.now() < deadline) {
+    const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
+    if (result.total > expectedTotal) {
+      expect(result.total).toBe(expectedTotal);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
+  expect(result.total).toBe(expectedTotal);
+}
+
 describe("permission boundary", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
@@ -1230,13 +1256,9 @@ describe("permission boundary", () => {
         1000,
       );
       expect(afterCount.total).toBe(beforeCount.total);
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        { action: "user.create" },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "user.create",
+      });
     });
 
     it("PATCH /users/:id denied — user row, role, password hash, active status all unchanged", async () => {
@@ -1268,13 +1290,11 @@ describe("permission boundary", () => {
       expect(after.isActive).toBe(before.isActive);
       expect(after.passwordHash).toBe(before.passwordHash);
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        { action: "user.update", targetType: "user", targetId: user.id },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "user.update",
+        targetType: "user",
+        targetId: user.id,
+      });
     });
 
     it("POST /users/:id/reset-password denied — password hash unchanged", async () => {
@@ -1308,17 +1328,11 @@ describe("permission boundary", () => {
       requireDefined(after, "reset-password deny: user must still exist");
       expect(after.passwordHash).toBe(before.passwordHash);
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        {
-          action: "candidate.password_reset",
-          targetType: "user",
-          targetId: user.id,
-        },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "candidate.password_reset",
+        targetType: "user",
+        targetId: user.id,
+      });
     });
 
     it("DELETE /users/:id denied — user row still exists, assignment rows intact", async () => {
@@ -1352,13 +1366,11 @@ describe("permission boundary", () => {
       const afterAssignments = await readAssignmentsForUser(user.id);
       expect(afterAssignments.length).toBe(beforeAssignments.length);
       expect(afterAssignments.some((a) => a.id === assignment.id)).toBe(true);
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        { action: "user.delete", targetType: "user", targetId: user.id },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "user.delete",
+        targetType: "user",
+        targetId: user.id,
+      });
     });
 
     it("POST /users/:id/role-assignments denied — no new assignment row, users.role unchanged, no audit", async () => {
@@ -1390,13 +1402,10 @@ describe("permission boundary", () => {
       );
       const afterAssignments = await readAssignmentsForUser(user.id);
       expect(afterAssignments.length).toBe(beforeAssignments.length);
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        { action: "user.role_changed", targetId: user.id },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "user.role_changed",
+        targetId: user.id,
+      });
     });
 
     it("PATCH /role-assignments/:assignmentId denied — promote-to-primary branch never runs, no audit", async () => {
@@ -1483,13 +1492,11 @@ describe("permission boundary", () => {
       requireDefined(afterUser, "PATCH assignment deny: user must still exist");
       expect(afterUser.role).toBe(beforeUser.role);
       expect(afterUser.role).toBe("Candidate");
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        { action: "user.role_changed", targetType: "user", targetId: user.id },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "user.role_changed",
+        targetType: "user",
+        targetId: user.id,
+      });
     });
 
     it("DELETE /role-assignments/:assignmentId denied — assignment row still exists, users.role unchanged, no audit", async () => {
@@ -1531,17 +1538,11 @@ describe("permission boundary", () => {
         "DELETE assignment deny: user must still exist",
       );
       expect(afterUser.role).toBe(beforeUser.role);
-      const auditAfter = await auditRepo.listPaginatedFiltered(
-        adminCtx(),
-        1,
-        1000,
-        {
-          action: "user.role_changed",
-          targetType: "role_assignment",
-          targetId: assignment.id,
-        },
-      );
-      expect(auditAfter.total).toBe(auditBefore.total);
+      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+        action: "user.role_changed",
+        targetType: "role_assignment",
+        targetId: assignment.id,
+      });
     });
   });
 
@@ -1553,6 +1554,17 @@ describe("permission boundary", () => {
     // These positive-path tests prove the sync still happens after the
     // capability-gate migration — they would fail if the migration had
     // accidentally removed a syncUsersRoleFromPrimary call site.
+
+    function adminCtx() {
+      return {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      };
+    }
 
     async function insertTargetUserWithPrimary(
       role: "Admin" | "Candidate" = "Candidate",
@@ -1698,6 +1710,174 @@ describe("permission boundary", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().role).toBe("Admin");
       expect(await readUserRole(user.id)).toBe("Admin");
+    });
+
+    it("POST secondary assignment writes a user.role_changed audit", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Proctor", isPrimary: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(201);
+
+      const auditTotal = await waitForAuditCount(
+        auditRepo,
+        adminCtx(),
+        auditBefore.total + 1,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      expect(auditTotal).toBe(auditBefore.total + 1);
+
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      const newRows = auditAfter.items.filter(
+        (a) => !auditBefore.items.some((b) => b.auditLog.id === a.auditLog.id),
+      );
+      const newRow = newRows[0];
+      requireDefined(newRow, "secondary assignment audit row");
+      const meta = newRow.auditLog.metadata as Record<string, unknown>;
+      expect(meta.assignmentAdded).toBe(true);
+      expect(meta.role).toBe("Proctor");
+      expect(meta.isPrimary).toBe(false);
+    });
+
+    it("PATCH deactivate secondary assignment writes a user.role_changed audit", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      // Seed a secondary Grader assignment.
+      const addRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Grader", isPrimary: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(addRes.statusCode).toBe(201);
+      const secondaryId: string = addRes.json().id;
+
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/role-assignments/${secondaryId}`,
+        payload: { isActive: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const auditTotal = await waitForAuditCount(
+        auditRepo,
+        adminCtx(),
+        auditBefore.total + 1,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      expect(auditTotal).toBe(auditBefore.total + 1);
+
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      const newRows2 = auditAfter.items.filter(
+        (a) => !auditBefore.items.some((b) => b.auditLog.id === a.auditLog.id),
+      );
+      const newRow2 = newRows2[0];
+      requireDefined(newRow2, "deactivate secondary audit row");
+      const meta = newRow2.auditLog.metadata as Record<string, unknown>;
+      expect(meta.assignmentDeactivated).toBe(true);
+      expect(meta.role).toBe("Grader");
+      expect(meta.isPrimary).toBe(false);
+      expect(meta.assignmentId).toBe(secondaryId);
+      expect(await readUserRole(user.id)).toBe("Candidate");
+    });
+
+    it("PATCH deactivate primary assignment auto-promotes and writes audit", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      // Seed a secondary Grader to auto-promote.
+      const addRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Grader", isPrimary: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(addRes.statusCode).toBe(201);
+
+      // Find the primary Candidate assignment id.
+      const listRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/users/${user.id}/role-assignments`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const listItems = listRes.json().items as Array<{
+        id: string;
+        role: string;
+        isPrimary: boolean;
+      }>;
+      const primary = listItems.find((i) => i.isPrimary);
+      requireDefined(primary, "primary deactivate: primary assignment");
+
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/role-assignments/${primary.id}`,
+        payload: { isActive: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const auditTotal = await waitForAuditCount(
+        auditRepo,
+        adminCtx(),
+        auditBefore.total + 1,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      expect(auditTotal).toBe(auditBefore.total + 1);
+
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      const newRows3 = auditAfter.items.filter(
+        (a) => !auditBefore.items.some((b) => b.auditLog.id === a.auditLog.id),
+      );
+      const lastNewRow = newRows3[newRows3.length - 1];
+      requireDefined(lastNewRow, "deactivate primary audit row");
+      // The most recent audit row is the deactivate one (may also have the
+      // secondary-assignment audit from seeding — we check the latest).
+      const lastMeta = lastNewRow.auditLog.metadata as Record<string, unknown>;
+      expect(lastMeta.assignmentDeactivated).toBe(true);
+      expect(lastMeta.oldPrimaryRole).toBe("Candidate");
+      expect(lastMeta.resultingPrimaryRole).toBe("Grader");
+      expect(lastMeta.assignmentId).toBe(primary.id);
+      expect(await readUserRole(user.id)).toBe("Grader");
     });
   });
 
