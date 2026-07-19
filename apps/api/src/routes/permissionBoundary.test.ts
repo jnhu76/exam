@@ -41,6 +41,29 @@ function requireDefined<T>(
   expect(value, message).toBeDefined();
 }
 
+/**
+ * Polling helper for fire-and-forget audit assertions. `recordAudit` is
+ * async/fire-and-forget (audit.ts:77 `.catch()`), so a direct
+ * `listPaginatedFiltered` after the HTTP response may race with the write.
+ * Polls up to `timeoutMs` for the expected count.
+ */
+async function waitForAuditCount<TFilter extends Record<string, unknown>>(
+  auditRepo: ReturnType<typeof createAuditLogRepo>,
+  ctx: Parameters<typeof auditRepo.listPaginatedFiltered>[0],
+  expectedTotal: number,
+  filter: TFilter,
+  timeoutMs = 1500,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
+    if (result.total >= expectedTotal) return result.total;
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
+  return result.total;
+}
+
 describe("permission boundary", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
 
@@ -959,13 +982,43 @@ describe("permission boundary", () => {
   });
 
   describe("M10-C System login path is unavailable", () => {
-    // The System preset is `loginAllowed: false` and `assignable: false`. There
-    // is no API to mint a System session in the current contract, and the
-    // authenticate plugin requires an active user row. Therefore the System
-    // principal cannot reach any M10-C handler. This test proves the negative:
-    // a JWT claiming role "System" but bearing no matching active user row is
-    // rejected by authenticate with 401 (not passed to the capability gate).
-    it("a System-claimed JWT with no user row is rejected before capability gate", async () => {
+    // The System preset is `loginAllowed: false` and `assignable: false`
+    // (packages/authz/src/presets.ts). Two distinct boundaries prevent a
+    // System principal from reaching any M10-C handler, and each requires
+    // its own test (CodeRabbit review on PR #191):
+    //
+    //   1. AUTHENTICATION BOUNDARY — a forged JWT whose actorId has no
+    //      matching active user row is rejected by the `authenticate`
+    //      plugin with 401 AUTH_REQUIRED before any capability check.
+    //      This protects against forged-JWT attacks regardless of role.
+    //
+    //   2. SYSTEM-ROLE POLICY BOUNDARY — even when a real active
+    //      System-role user presents valid credentials at POST /auth/login,
+    //      the login handler rejects it at `auth.ts` ASSIGNABLE_LOGIN_ROLES
+    //      with 401 AUTH_INVALID_CREDENTIALS + login.failure audit
+    //      (reason=non_login_role). This is the actual System non-login
+    //      policy from ADR §System Actor Policy.
+    //
+    // The prior single test conflated these two by minting a forged JWT
+    // for a non-existent actor and accepting [401, 403]. That proved only
+    // boundary #1. It is split and tightened below.
+
+    function adminCtx() {
+      return {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      };
+    }
+
+    it("a forged System-claimed JWT with no user row is rejected by authenticate with 401", async () => {
+      // Boundary #1: authenticate plugin requires an active user row.
+      // A JWT claiming any role (including System) for a non-existent
+      // actorId is rejected before the capability gate. Exact 401 —
+      // never 403, because the capability gate is never reached.
       const { signJWT } = await import("@exam/auth/src/session.js");
       const { getRuntimeConfig } = await import("../config/runtimeConfig.js");
       const systemToken = signJWT(
@@ -981,7 +1034,87 @@ describe("permission boundary", () => {
         url: "/api/users",
         cookies: { "auth-token": systemToken },
       });
-      expect([401, 403]).toContain(res.statusCode);
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("an active System-role user cannot login via POST /auth/login (401, no cookie, non_login_role audit)", async () => {
+      // Boundary #2: the actual System-role non-login policy.
+      // Seed a real active System-role user with a valid password
+      // (users.role is plain text — no CHECK constraint — so direct
+      // insert of role="System" is allowed; createFutureRoleUserForTest
+      // cannot be used because LegacyRole excludes "System").
+      const username = `m10c-system-${uniquePrefix()}`;
+      const password = "password123";
+      const userId = randomUUID();
+      const now = new Date();
+      const rows = await ctx.db
+        .insert(schema.users)
+        .values({
+          id: userId,
+          organizationId: ctx.org.id,
+          username,
+          passwordHash: await hashPassword(password),
+          name: "M10C System User",
+          role: "System",
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const systemUser = rows[0];
+      requireDefined(systemUser, "System user must be seeded");
+
+      // Audit count before — scoped to login.failure for this user.
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "login.failure", targetType: "login", targetId: userId },
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { username, password },
+      });
+
+      // Exact 401 — System-role rejection, not invalid credentials.
+      expect(res.statusCode).toBe(401);
+      // No auth-token cookie issued (login did not succeed).
+      const setCookie = res.headers["set-cookie"];
+      if (setCookie !== undefined) {
+        const cookieHeader = Array.isArray(setCookie)
+          ? setCookie.join(";")
+          : setCookie;
+        expect(cookieHeader).not.toContain("auth-token=");
+      }
+      // Generic error code — does not leak the System-role reason.
+      expect(res.json().error.code).toBe("AUTH_INVALID_CREDENTIALS");
+      // login.failure audit was written with the System-specific reason.
+      // Poll because recordAudit is fire-and-forget (audit.ts:77).
+      const auditTotal = await waitForAuditCount(
+        auditRepo,
+        adminCtx(),
+        auditBefore.total + 1,
+        { action: "login.failure", targetType: "login", targetId: userId },
+      );
+      expect(auditTotal).toBe(auditBefore.total + 1);
+      // Re-read to get the actual item for metadata assertions.
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "login.failure", targetType: "login", targetId: userId },
+      );
+      const newAudit = auditAfter.items.find(
+        (a) => !auditBefore.items.some((b) => b.auditLog.id === a.auditLog.id),
+      );
+      requireDefined(newAudit, "new login.failure audit row must exist");
+      const metadata = newAudit.auditLog.metadata as Record<string, unknown>;
+      expect(metadata.reason).toBe("non_login_role");
+      expect(metadata.role).toBe("System");
+      expect(metadata.username).toBe(username);
     });
   });
 
@@ -1110,6 +1243,15 @@ describe("permission boundary", () => {
       const { user } = await insertTargetUserWithAssignment();
       const before = await readUser(user.id);
       requireDefined(before, "PATCH deny: user must exist before");
+      // CodeRabbit PR #191 review: assert unchanged route-specific audit
+      // count (user.update) scoped to (org, targetType=user, targetId).
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.update", targetType: "user", targetId: user.id },
+      );
 
       const res = await ctx.app.inject({
         method: "PATCH",
@@ -1126,12 +1268,33 @@ describe("permission boundary", () => {
       expect(after.isActive).toBe(before.isActive);
       expect(after.passwordHash).toBe(before.passwordHash);
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.update", targetType: "user", targetId: user.id },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
     });
 
     it("POST /users/:id/reset-password denied — password hash unchanged", async () => {
       const { user } = await insertTargetUserWithAssignment("Candidate");
       const before = await readUser(user.id);
       requireDefined(before, "reset-password deny: user must exist before");
+      // CodeRabbit PR #191 review: assert unchanged route-specific audit
+      // count (candidate.password_reset) scoped to (org, targetType=user,
+      // targetId).
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        {
+          action: "candidate.password_reset",
+          targetType: "user",
+          targetId: user.id,
+        },
+      );
 
       const res = await ctx.app.inject({
         method: "POST",
@@ -1145,6 +1308,17 @@ describe("permission boundary", () => {
       requireDefined(after, "reset-password deny: user must still exist");
       expect(after.passwordHash).toBe(before.passwordHash);
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        {
+          action: "candidate.password_reset",
+          targetType: "user",
+          targetId: user.id,
+        },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
     });
 
     it("DELETE /users/:id denied — user row still exists, assignment rows intact", async () => {
@@ -1153,6 +1327,15 @@ describe("permission boundary", () => {
       requireDefined(beforeUser, "DELETE deny: user must exist before");
       const beforeAssignments = await readAssignmentsForUser(user.id);
       expect(beforeAssignments.some((a) => a.id === assignment.id)).toBe(true);
+      // CodeRabbit PR #191 review: assert unchanged route-specific audit
+      // count (user.delete) scoped to (org, targetType=user, targetId).
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.delete", targetType: "user", targetId: user.id },
+      );
 
       const res = await ctx.app.inject({
         method: "DELETE",
@@ -1169,6 +1352,13 @@ describe("permission boundary", () => {
       const afterAssignments = await readAssignmentsForUser(user.id);
       expect(afterAssignments.length).toBe(beforeAssignments.length);
       expect(afterAssignments.some((a) => a.id === assignment.id)).toBe(true);
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.delete", targetType: "user", targetId: user.id },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
     });
 
     it("POST /users/:id/role-assignments denied — no new assignment row, users.role unchanged, no audit", async () => {
@@ -1209,8 +1399,38 @@ describe("permission boundary", () => {
       expect(auditAfter.total).toBe(auditBefore.total);
     });
 
-    it("PATCH /role-assignments/:assignmentId denied — assignment isPrimary/isActive/role unchanged, no audit", async () => {
-      const { user, assignment } = await insertTargetUserWithAssignment();
+    it("PATCH /role-assignments/:assignmentId denied — promote-to-primary branch never runs, no audit", async () => {
+      // CodeRabbit PR #191 review: the prior payload `{ isPrimary: false }`
+      // hit the no-op throw branch at roleAssignments.ts (neither
+      // `isPrimary===true` nor `isActive===false`). The denial held only
+      // because the capability gate fires first — the test would also
+      // pass with an empty payload. Switch to the REAL promote branch
+      // (`isPrimary: true` against a secondary assignment) so the test
+      // would fail if the gate ever let an unauthorized principal reach
+      // a state-changing promote operation.
+      const { user, assignment: primaryAssignment } =
+        await insertTargetUserWithAssignment("Candidate");
+      // Seed a SECONDARY Grader assignment as the promote target.
+      const now = new Date();
+      const secondaryRows = await ctx.db
+        .insert(schema.userRoleAssignments)
+        .values({
+          id: randomUUID(),
+          organizationId: ctx.org.id,
+          userId: user.id,
+          role: "Grader",
+          isPrimary: false,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const secondaryAssignment = secondaryRows[0];
+      requireDefined(
+        secondaryAssignment,
+        "PATCH assignment deny: secondary assignment must be seeded",
+      );
+
       const beforeUser = await readUser(user.id);
       requireDefined(beforeUser, "PATCH assignment deny: user must exist");
       const auditRepo = createAuditLogRepo(ctx.db);
@@ -1218,38 +1438,56 @@ describe("permission boundary", () => {
         adminCtx(),
         1,
         1000,
-        { action: "user.role_changed", targetId: user.id },
+        { action: "user.role_changed", targetType: "user", targetId: user.id },
       );
 
+      // Denial payload targets the REAL promote branch: this WOULD
+      // promote the secondary Grader assignment to primary, demote the
+      // Candidate primary, sync users.role → "Grader", and write
+      // user.role_changed audit if the handler ran.
       const res = await ctx.app.inject({
         method: "PATCH",
-        url: `/api/role-assignments/${assignment.id}`,
-        payload: { isPrimary: false },
+        url: `/api/role-assignments/${secondaryAssignment.id}`,
+        payload: { isPrimary: true },
         cookies: { "auth-token": ctx.candidateToken },
       });
       expect(res.statusCode).toBe(403);
 
-      const rows = await ctx.db
+      // Secondary assignment must remain non-primary.
+      const secondaryRowsAfter = await ctx.db
         .select()
         .from(schema.userRoleAssignments)
-        .where(eq(schema.userRoleAssignments.id, assignment.id));
-      const after = rows[0];
+        .where(eq(schema.userRoleAssignments.id, secondaryAssignment.id));
+      const secondaryAfter = secondaryRowsAfter[0];
       requireDefined(
-        after,
-        "PATCH assignment deny: assignment must still exist",
+        secondaryAfter,
+        "PATCH assignment deny: secondary assignment must still exist",
       );
-      expect(after.isPrimary).toBe(assignment.isPrimary);
-      expect(after.isActive).toBe(assignment.isActive);
-      expect(after.role).toBe(assignment.role);
+      expect(secondaryAfter.isPrimary).toBe(false);
+      expect(secondaryAfter.isActive).toBe(true);
+      expect(secondaryAfter.role).toBe("Grader");
+      // Primary Candidate assignment must remain the sole primary.
+      const primaryRowsAfter = await ctx.db
+        .select()
+        .from(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.id, primaryAssignment.id));
+      const primaryAfter = primaryRowsAfter[0];
+      requireDefined(
+        primaryAfter,
+        "PATCH assignment deny: primary assignment must still exist",
+      );
+      expect(primaryAfter.isPrimary).toBe(true);
+      expect(primaryAfter.role).toBe("Candidate");
       // users.role must be unchanged — the sync path was never reached.
       const afterUser = await readUser(user.id);
       requireDefined(afterUser, "PATCH assignment deny: user must still exist");
       expect(afterUser.role).toBe(beforeUser.role);
+      expect(afterUser.role).toBe("Candidate");
       const auditAfter = await auditRepo.listPaginatedFiltered(
         adminCtx(),
         1,
         1000,
-        { action: "user.role_changed", targetId: user.id },
+        { action: "user.role_changed", targetType: "user", targetId: user.id },
       );
       expect(auditAfter.total).toBe(auditBefore.total);
     });

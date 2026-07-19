@@ -20,12 +20,23 @@ BASE_COMMIT:      ddbc808b9c640584ece7690dd8aef681739081a5
 BASE_SHORT_SHA:   ddbc808b
 M10-B MERGE:      ddbc808 (Merge PR #190 — RBAC-M10-B Single-Tenant Corrective)
 STARTING_HEAD:    ddbc808b
-FINAL_HEAD:       ee9064d6d07f24996c37cbe633bf65353104d291
+FINAL_HEAD:       2e3856445d09645ce7930f0ab3e7c569ed1a82ec
+                  (pre-review-fix head; this report + the review-fix
+                  commit land on top — see §O for the post-fix SHA once
+                  the review-comment refresh is committed)
 BRANCH:           feat/rbac-m10-c-identity-authority-ddbc808b
-COMMITS:          2 (production migration + tests)
-WORKTREE:         clean (after this report commit: clean)
+COMMITS:          3 (production migration + tests + this report)
+                  A 4th review-fix commit addresses the CodeRabbit /
+                  gemini-code-assist comments on PR #191 (see §O).
+WORKTREE:         clean
 PR:               opened against master (see §M)
 ```
+
+> **CodeRabbit PR #191 review metadata correction (H8):** the prior
+> version of this report recorded `FINAL_HEAD: ee9064d6...` and
+> `COMMITS: 2`. That was stale by one commit — the report commit itself
+> (`2e385644`) was added on top of `ee9064d` without refreshing the
+> metadata. Corrected here.
 
 ---
 
@@ -73,19 +84,21 @@ unrelated test deletion
 broad authz refactoring
 ```
 
-Diff stat (production + test):
+Diff stat (production + test + this report, as of pre-review-fix HEAD
+`2e385644`):
 
 ```text
  apps/api/src/authz/routeRegistryConformance.test.ts | 148 ++++
- apps/api/src/routes/permissionBoundary.test.ts      | 838 ++++++++++++++
+ apps/api/src/routes/permissionBoundary.test.ts      | 838 ++++++++++++++++
  apps/api/src/routes/roleAssignments.ts              |  38 ++-
  apps/api/src/routes/user.ts                         |  32 ++-
- 4 files changed, 1041 insertions(+), 15 deletions(-)
+ docs/phase3/rbac/RBAC-M10-C-IDENTITY-AUTHORITY-20260719-002102-ddbc808b.md | 650 ++++++++++
+ 5 files changed, 1691 insertions(+), 15 deletions(-)
 ```
 
-No files outside the expected boundary (see §I) were modified. A local
-`.env` was created to satisfy the AGENTS.md "bare `pnpm verify` works"
-contract; it is `.gitignore`d and is not part of any commit.
+The review-fix commit (§O) adds a 6th changed file only insofar as it
+extends `permissionBoundary.test.ts` further and refreshes this report.
+No production source files change in the review-fix commit.
 
 ---
 
@@ -198,14 +211,21 @@ at all 5 call sites (1 in user.ts, 4 in roleAssignments.ts). The runtime
 authority remains `users.role`; the sync keeps it in sync with the
 primary active assignment per the ADR migration-window invariant.
 
+> **CodeRabbit PR #191 review metadata correction (H8):** the prior
+> version of this section and the §N PR-summary block claimed "5
+> positive sync cases" while enumerating only 4. The accurate count is
+> **4 positive + 1 negative = 5 `it()` blocks** in the
+> `permissionBoundary.test.ts` M10-C sync describe. Corrected here and
+> in §N.
+
 ```text
-PROVEN (positive sync happens, tested):
+PROVEN (positive sync happens, tested): 4 cases
   - POST primary assignment       → users.role becomes new role
   - PATCH promote-to-primary      → users.role becomes promoted role
   - DELETE primary assignment     → auto-promote + users.role syncs
   - PATCH /users/:id role-change  → users.role becomes new role
 
-PROVEN (negative sync does NOT happen, tested):
+PROVEN (negative sync does NOT happen, tested): 1 case
   - POST secondary assignment     → users.role unchanged
 
 PRESERVED (existing RBAC-M8 tests, still passing):
@@ -269,7 +289,10 @@ business state:    name, role, isActive, passwordHash, updatedAt — all
                    byte-equal before/after
 assignment state:  primary assignment row intact
 users.role:        unchanged (handler never reached; sync never invoked)
-audit count:       n/a (no audit scoped to this user.id for user.update)
+audit count:       before = after (action=user.update,
+                   targetType=user, targetId=user.id)
+                   [CodeRabbit PR #191 review: route-specific audit
+                   assertion added in the review-fix commit]
 ```
 
 ### POST /users/:id/reset-password denied (Candidate principal)
@@ -281,7 +304,10 @@ response:          403
 business state:    passwordHash byte-equal before/after; updatedAt
                    byte-equal
 users.role:        unchanged
-audit count:       n/a
+audit count:       before = after (action=candidate.password_reset,
+                   targetType=user, targetId=user.id)
+                   [CodeRabbit PR #191 review: route-specific audit
+                   assertion added in the review-fix commit]
 ```
 
 ### DELETE /users/:id denied (Candidate principal)
@@ -294,7 +320,10 @@ business state:    user row still exists; updatedAt byte-equal
 assignment state:  assignment rows length unchanged; primary row still
                    present
 users.role:        unchanged (row still exists with same role)
-audit count:       n/a
+audit count:       before = after (action=user.delete,
+                   targetType=user, targetId=user.id)
+                   [CodeRabbit PR #191 review: route-specific audit
+                   assertion added in the review-fix commit]
 ```
 
 ### POST /users/:id/role-assignments denied (Candidate principal)
@@ -313,13 +342,22 @@ audit count:       before = after (action=user.role_changed,
 ### PATCH /role-assignments/:assignmentId denied (Candidate principal)
 
 ```text
-fixture:           deterministic user + primary assignment
+fixture:           deterministic Candidate user + primary Candidate
+                   assignment + secondary Grader assignment (the promote
+                   target). [CodeRabbit PR #191 review: prior version
+                   seeded only a primary assignment and sent the no-op
+                   payload {isPrimary:false}, which never reached a
+                   state-changing branch. Now seeds a real secondary
+                   assignment and sends {isPrimary:true} — the promote
+                   branch that WOULD state-change if authorized.]
 principal:         Candidate
 response:          403
-assignment state:  isPrimary / isActive / role byte-equal
+assignment state:  secondary isPrimary=false, isActive=true, role=Grader
+                   (unchanged); primary isPrimary=true, role=Candidate
+                   (unchanged)
 users.role:        unchanged (sync never invoked)
 audit count:       before = after (action=user.role_changed,
-                   targetId=user.id)
+                   targetType=user, targetId=user.id)
 ```
 
 ### DELETE /role-assignments/:assignmentId denied (Candidate principal)
@@ -407,10 +445,18 @@ apps/api/src/authz/routeRegistryConformance.test.ts
 apps/api/src/routes/permissionBoundary.test.ts
   Reason: register roleAssignmentRoutes; add M10-C unauthenticated
   matrix (10 routes); add Candidate/Teacher/Proctor/Grader denial
-  matrices (10 routes each); add System-login-path-unavailable test;
-  add zero-write evidence for 6 mutating routes (business + assignment +
-  users.role + audit counts); add users.role sync preservation (5
-  cases); add Admin-reaches-handler sanity tests.
+  matrices (10 routes each); add System-login-path-unavailable tests
+  (forged-JWT boundary + real System-role POST /auth/login boundary);
+  add zero-write evidence for 7 mutating routes (business + assignment +
+  users.role + audit counts — every route now has a route-specific
+  scoped audit assertion); add users.role sync preservation (4 positive
+  + 1 negative); add Admin-reaches-handler sanity tests.
+  [CodeRabbit PR #191 review-fix: System-login test was split and
+  tightened to exact 401; three user-route denial tests gained scoped
+  audit-count assertions (user.update, candidate.password_reset,
+  user.delete); PATCH /role-assignments denial test switched from the
+  no-op {isPrimary:false} payload to the real promote branch
+  {isPrimary:true} against a seeded secondary assignment.]
 
 docs/phase3/rbac/RBAC-M10-C-IDENTITY-AUTHORITY-20260719-002102-ddbc808b.md
   Reason: this report.
@@ -525,14 +571,16 @@ P1:    none
 P2:    none
 
 P3:
-  - The 'System login path' test asserts the response is in [401, 403]
-    rather than exactly 401. Reason: the test mints a JWT claiming
-    role "System" for a non-existent actorId; the authenticate plugin
-    loads the user via findByOrganizationAndId (returns null) and
-    replies 401 AUTH_REQUIRED. The [401, 403] union is defensive in
-    case the authenticate path ever short-circuits to the capability
-    gate first. Acceptable for an author self-assessment; the
-    independent reviewer may tighten to 401 if desired.
+  - RESOLVED by CodeRabbit PR #191 review-fix: the 'System login path'
+    test previously asserted the response is in [401, 403] rather than
+    exactly 401. It is now split into two tests:
+      (a) forged System-claimed JWT with no user row → exact 401
+          (authentication boundary);
+      (b) real active System-role user POST /auth/login → exact 401,
+          no auth-token cookie, AUTH_INVALID_CREDENTIALS error code,
+          login.failure audit with reason=non_login_role, role=System
+          (System-role policy boundary).
+    The [401, 403] union is removed.
 
 M10-E FOLLOW-UP:
   - Runtime permission derivation from user_role_assignments (the
@@ -627,20 +675,35 @@ merged. Independent adversarial review is the closure authority.
 RUN_ID:           RBAC-M10-C-IDENTITY-AUTHORITY-20260719-002102-ddbc808b
 BRANCH:           feat/rbac-m10-c-identity-authority-ddbc808b
 BASE_COMMIT:      ddbc808b9c640584ece7690dd8aef681739081a5
-FINAL_HEAD:       ee9064d6d07f24996c37cbe633bf65353104d291
-COMMITS:          2
-PR:               (see PR URL after gh pr create)
+FINAL_HEAD:       2e3856445d09645ce7930f0ab3e7c569ed1a82ec
+                  (pre-review-fix head; review-fix commit lands on top —
+                  see §O for the post-fix SHA once committed)
+COMMITS:          3 (production migration + tests + this report)
+                  A 4th review-fix commit addresses CodeRabbit /
+                  gemini-code-assist comments on PR #191 (see §O).
+PR:               191
 ROUTES MIGRATED:  10 (5 user.ts + 5 roleAssignments.ts)
 SHADOW PARITY:    60/60 cells EQUAL (6 roles × 10 routes)
 ACCESS EXPANSIONS:0
 ACCESS REGRESSIONS: 0
-SYNC INVARIANTS:  5 call sites preserved; 5 positive + 1 negative sync
-                  tests passing
-ZERO-WRITE:       6 mutating routes, all prove business + assignment +
+SYNC INVARIANTS:  5 call sites preserved; 4 positive + 1 negative sync
+                  tests passing (5 it() blocks total)
+                  [CodeRabbit PR #191 review H8: prior "5 positive + 1
+                  negative" was internally inconsistent — only 4
+                  positive cases exist.]
+ZERO-WRITE:       7 mutating routes, all prove business + assignment +
                   users.role + audit zero-write on denied request
-TARGETED TESTS:   161 passed (conformance + boundary + user +
-                  roleAssignments + audit)
-FULL TESTS:       1307 passed | 5 skipped | 0 failed (114 files)
+                  [CodeRabbit PR #191 review H2: prior "6 mutating
+                  routes" undercounted; the 7 routes are POST /users,
+                  PATCH /users/:id, POST /users/:id/reset-password,
+                  DELETE /users/:id, POST /users/:id/role-assignments,
+                  PATCH /role-assignments/:assignmentId,
+                  DELETE /role-assignments/:assignmentId.]
+TARGETED TESTS:   166 passed post-review-fix
+                  (conformance 58 + boundary 65 + user 18 +
+                  roleAssignments 6 + auth 19; boundary was 64
+                  pre-fix, now 65 with the split System-login tests)
+FULL TESTS:       reproduced green post-review-fix
 STATIC GATES:     format, lint, lint:copy, lint:arch, lint:db-config,
                   lint:ui-gates, lint:eslint, typecheck, openapi — all PASS
 BUILD:            PASS (9/9 turbo tasks)
@@ -648,3 +711,130 @@ WORKTREE:         clean
 FINAL VERDICT:    PASS — AUTHOR SELF-ASSESSMENT
                   (independent adversarial review required for closure)
 ```
+
+---
+
+## O. Post-review-fix addendum (PR #191 CodeRabbit + gemini-code-assist)
+
+This addendum documents the review-comment fixes applied on top of
+`2e385644` in response to the four actionable comments on PR #191
+(gemini-code-assist ×1, coderabbitai ×3). The fixes were judged VALID
+against current HEAD before implementation; each maps to a finding in
+the independent adversarial review at
+`docs/phase3/rbac/RBAC-M10-C-ADVERSARIAL-REVIEW-20260719-073604-2e385644.md`.
+
+```text
+FIX 1 — System-login test (gemini + coderabbitai #1)
+  FILES: apps/api/src/routes/permissionBoundary.test.ts
+  ADDRESSES: H5 in adversarial review
+  CHANGE: replaced the single forged-JWT-against-missing-actor test
+          (which proved only the authentication boundary, with a loose
+          [401,403] union) with two distinct tests:
+            (a) forged System-claimed JWT, no user row → exact 401
+                (authentication boundary)
+            (b) real active System-role user POST /api/auth/login →
+                exact 401, no auth-token cookie, AUTH_INVALID_CREDENTIALS
+                error code, login.failure audit with
+                reason=non_login_role + role=System + username match
+                (the actual System non-login policy from auth.ts:168-203)
+  WHY VALID: createFutureRoleUserForTest cannot seed role="System"
+             (LegacyRole excludes it), but users.role is plain text
+             with no CHECK constraint, so a direct schema.users insert
+             is allowed and exercises the real production path.
+
+FIX 2 — Route-specific audit-count assertions (coderabbitai #2 part 1)
+  FILES: apps/api/src/routes/permissionBoundary.test.ts
+  ADDRESSES: H3 in adversarial review
+  CHANGE: three denied-mutation tests (PATCH /users/:id, POST
+          /users/:id/reset-password, DELETE /users/:id) gained
+          scoped audit-count assertions before/after the denied
+          request:
+            - PATCH /users/:id         → action=user.update,
+              targetType=user, targetId=user.id
+            - reset-password           → action=candidate.password_reset,
+              targetType=user, targetId=user.id
+            - DELETE /users/:id        → action=user.delete,
+              targetType=user, targetId=user.id
+  WHY VALID: the prior "audit count: n/a" was an unstated assumption.
+             The capability gate guarantees the handler never runs on
+             a denied request, so the audit-zero-write is implied —
+             but the test now PROVES it instead of assuming it.
+
+FIX 3 — PATCH assignment promote-branch coverage (coderabbitai #2 part 2)
+  FILES: apps/api/src/routes/permissionBoundary.test.ts
+  ADDRESSES: H4 in adversarial review
+  CHANGE: the PATCH /role-assignments denial test switched from the
+          no-op payload {isPrimary:false} (which fell through to the
+          handler's no-op throw at roleAssignments.ts:228 and never
+          exercised a state-changing branch) to {isPrimary:true}
+          against a SEEDED SECONDARY assignment — the real promote
+          branch. Assertions now verify:
+            - secondary assignment remains isPrimary=false, isActive=true
+            - primary assignment remains isPrimary=true
+            - users.role unchanged
+            - no new user.role_changed audit
+  WHY VALID: the prior denial held only because the capability gate
+             fired first; the test would also pass with payload {}.
+             The new test would fail if the gate ever let an
+             unauthorized principal reach a real state-changing promote.
+
+FIX 4 — Report metadata refresh (coderabbitai #3)
+  FILES: this report
+  ADDRESSES: H8 in adversarial review
+  CHANGE: refreshed §B / §F / §G / §I / §K / §N to reflect:
+            - FINAL_HEAD: ee9064d6 → 2e385644 (was stale by 1 commit)
+            - COMMITS: 2 → 3 (plus this review-fix = 4)
+            - diff stat: 4 files / 1041 insertions → 5 files / 1691
+              insertions (the report itself is the 5th file)
+            - sync tests: "5 positive + 1 negative" (internally
+              inconsistent) → "4 positive + 1 negative" (matches the
+              5 it() blocks in the test file)
+            - "6 mutating routes" → "7 mutating routes" (H2 correction)
+
+ADDITIONAL CORRECTION (H2, not flagged by CodeRabbit but cheap while
+refreshing metadata): the report previously claimed "6 mutating routes"
+in §G and §N. The accurate count is 7 — POST /users,
+PATCH /users/:id, POST /users/:id/reset-password, DELETE /users/:id,
+POST /users/:id/role-assignments, PATCH /role-assignments/:assignmentId,
+DELETE /role-assignments/:assignmentId. The "6 conceptual mutations"
+in §J refers to the directive-§16 mutation EXPERIMENTS A–F, which is
+correct and unchanged.
+```
+
+### Adversarial-review findings NOT addressed in this fix
+
+The independent adversarial review surfaced additional findings that
+were NOT flagged by the bot reviewers and are therefore out of scope
+for this fix commit. They are recorded here for traceability and
+scheduled for follow-up:
+
+```text
+H1 (P2): M10-C conformance test duplicates m10cRouteSpecs as a
+   hand-written table instead of deriving from
+   ROUTE_PERMISSION_REGISTRY. Mutation D in the adversarial review
+   proved the test passes even when the registry is silently edited.
+   DEFER: post-RBAC decomposition (apply uniformly to M10-A/B/C).
+
+H6 (P2): POST /users/:id/role-assignments secondary-assignment create
+   writes NO user.role_changed audit (roleAssignments.ts:151-158 only
+   audits if isPrimary). ADR §7.2 classifies user.role.assign as a
+   privilege change requiring audit.
+   DISPOSITION REQUIRED: either add the audit in a follow-up, or
+   amend the ADR to defer secondary-assignment audit to M10-E.
+
+H7 (P2): PATCH /role-assignments/:assignmentId deactivate branch
+   (roleAssignments.ts:213-226) writes NO audit, even though it can
+   auto-promote a different role and re-sync users.role.
+   DISPOSITION REQUIRED: same as H6.
+
+H9 (P3, pre-existing): last-Admin guard (countActiveByRole) exists
+   only in PATCH /users/:id; PATCH/DELETE /role-assignments bypass
+   it. ADR §9 schedules the guard migration with M10-E.
+   DEFER: M10-E.
+
+H10 (P3): no direct cross-org test for the M10-C ID-bearing routes.
+   Org-anchor enforcement IS present in the repos; the gap is test
+   evidence only.
+   DEFER: post-M10-C test addition.
+```
+
