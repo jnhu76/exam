@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { schema } from "./schema/pg.js";
+import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import type {
   QuestionSnapshot,
   QuestionScoreResult,
@@ -232,32 +233,26 @@ export async function seedDemo(
     }
   }
 
-  // RBAC-M7: mirror each seeded user into a primary active role assignment so
-  // users.role and user_role_assignments agree after demo seed. Idempotent
-  // upsert on the (org, user, role) unique index — safe on re-seed.
+  // RBAC-M10-E: mirror each seeded user into a primary active role assignment
+  // so users.role and user_role_assignments agree after demo seed. Uses the
+  // invariant-aware ensurePrimaryAssignment helper (NOT a bare upsert) so a
+  // re-seed against a user whose primary was since changed does NOT try to
+  // create a second active primary (which the partial unique index rejects).
+  // Idempotent on re-seed.
+  const assignmentRepo = createUserRoleAssignmentRepo(db);
+  const demoSeedCtx = {
+    organizationId: ids.orgId,
+    actorId: "demo-seed",
+    role: "Admin" as const,
+    permissions: [] as never,
+  };
   for (const ud of userDefs) {
     const userId = ids.users[ud.username];
     if (!userId) continue;
-    await db
-      .insert(schema.userRoleAssignments)
-      .values({
-        id: uuid("roleassign"),
-        organizationId: ids.orgId,
-        userId,
-        role: ud.role as never,
-        isPrimary: true,
-        isActive: true,
-        createdAt: ts(),
-        updatedAt: ts(),
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.userRoleAssignments.organizationId,
-          schema.userRoleAssignments.userId,
-          schema.userRoleAssignments.role,
-        ],
-        set: { isPrimary: true, isActive: true, updatedAt: ts() },
-      });
+    await assignmentRepo.ensurePrimaryAssignment(db, demoSeedCtx, {
+      userId,
+      role: ud.role,
+    });
   }
 
   // ── CandidateProfiles ─────────────────────────────────────────

@@ -11,20 +11,34 @@ async function createCandidateUser(
   orgId: string,
   username: string,
 ) {
+  const userId = crypto.randomUUID();
+  const now = new Date();
+  await db.insert(schema.users).values({
+    id: userId,
+    organizationId: orgId,
+    username,
+    passwordHash: await hashPassword("password123"),
+    name: `Candidate ${username}`,
+    role: "Candidate",
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  // RBAC-M10-E: the candidate-password-reset endpoint targets the
+  // CandidateProfile identity (not a role projection). A candidate user
+  // without a profile is NOT a valid target, so the fixture must create one.
+  await db.insert(schema.candidateProfiles).values({
+    id: crypto.randomUUID(),
+    organizationId: orgId,
+    userId,
+    fields: {},
+    createdAt: now,
+    updatedAt: now,
+  });
   const rows = await db
-    .insert(schema.users)
-    .values({
-      id: crypto.randomUUID(),
-      organizationId: orgId,
-      username,
-      passwordHash: await hashPassword("password123"),
-      name: `Candidate ${username}`,
-      role: "Candidate",
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .returning();
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
   return rows[0]!;
 }
 

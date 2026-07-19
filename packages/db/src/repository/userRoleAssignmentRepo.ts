@@ -118,6 +118,12 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * Assigns a role to a user. When `isPrimary`, demotes the user's prior
    * primary active assignment(s) first (transactional) to preserve the
    * ≤1-primary invariant. Returns the new assignment row.
+   *
+   * This is the standalone (own-transaction) entry point. Code paths that are
+   * ALREADY inside an {@link executeInTransaction} caller MUST use
+   * {@link assignWithinTransaction} instead — calling this from inside another
+   * transaction would nest a second `executeInTransaction` (savepoint + retry
+   * policy) and is the wrong primitive (RBAC-M10-E P0-3).
    */
   async function assign(
     ctx: TenantContext | RequestContext,
@@ -129,38 +135,137 @@ export function createUserRoleAssignmentRepo(db: Database) {
     },
   ): Promise<UserRoleAssignmentRow> {
     const orgId = resolveOrganizationId(ctx);
+    return executeInTransaction(db, (tx) =>
+      assignWithinTransaction(tx, orgId, params),
+    );
+  }
+
+  /**
+   * Transaction-aware assignment primitive (RBAC-M10-E P0-3). Writes against a
+   * caller-supplied transaction handle — NO `executeInTransaction` wrapper, so
+   * it composes into a larger atomic unit (user creation + assignment +
+   * profile, all in one txn). Callers that are NOT already in a transaction
+   * MUST use {@link assign} instead.
+   *
+   * Invariant behavior is identical to {@link assign}: when `isPrimary &&
+   * isActive`, every other active primary assignment for the same (org, user)
+   * is demoted first so the ≤1-primary-active rule holds. This demotion is
+   * what keeps the new partial unique index
+   * `user_role_assignments_active_primary_unique` satisfiable when a different
+   * active primary already exists.
+   */
+  async function assignWithinTransaction(
+    tx: Database,
+    orgId: string,
+    params: {
+      userId: string;
+      role: AssignableRole;
+      isPrimary?: boolean;
+      isActive?: boolean;
+    },
+  ): Promise<UserRoleAssignmentRow> {
     const isPrimary = params.isPrimary ?? false;
     const isActive = params.isActive ?? true;
+    if (isPrimary && isActive) {
+      // Demote any existing primary active assignment(s) for this user.
+      await tx
+        .update(userRoleAssignments)
+        .set({ isPrimary: false, updatedAt: now() })
+        .where(
+          and(
+            eq(userRoleAssignments.organizationId, orgId),
+            eq(userRoleAssignments.userId, params.userId),
+            eq(userRoleAssignments.isPrimary, true),
+          ),
+        );
+    }
+    const inserted = await tx
+      .insert(userRoleAssignments)
+      .values({
+        id: randomUUID(),
+        organizationId: orgId,
+        userId: params.userId,
+        role: params.role,
+        isPrimary,
+        isActive,
+        createdAt: now(),
+        updatedAt: now(),
+      })
+      .returning();
+    return row(inserted[0]!);
+  }
 
-    return executeInTransaction(db, async (tx) => {
-      if (isPrimary && isActive) {
-        // Demote any existing primary active assignment(s) for this user.
-        await tx
-          .update(userRoleAssignments)
-          .set({ isPrimary: false, updatedAt: now() })
-          .where(
-            and(
-              eq(userRoleAssignments.organizationId, orgId),
-              eq(userRoleAssignments.userId, params.userId),
-              eq(userRoleAssignments.isPrimary, true),
-            ),
-          );
-      }
-      const inserted = await tx
-        .insert(userRoleAssignments)
-        .values({
-          id: randomUUID(),
-          organizationId: orgId,
-          userId: params.userId,
-          role: params.role,
-          isPrimary,
-          isActive,
-          createdAt: now(),
-          updatedAt: now(),
-        })
+  /**
+   * Invariant-aware "make this role the user's primary active assignment"
+   * (RBAC-M10-E). Unlike a bare upsert, this never tries to create a SECOND
+   * active primary (which the partial unique index would reject). Flow:
+   *
+   *   1. demote every existing active primary for the (org, user);
+   *   2. if an assignment row for (org, user, role) already exists, activate +
+   *      promote it;
+   *   3. otherwise insert a new active primary row for that role.
+   *
+   * Used by seed/demo-seed (replacing the `ON CONFLICT (org,user,role) SET
+   * is_primary=true` upsert, which collides with the partial index when a
+   * different active primary exists) and is the canonical primitive for any
+   * path that must guarantee a specific role is the primary active authority.
+   *
+   * Transaction-aware: writes against the supplied `dbOrTx`, which may be a
+   * `Database` or an in-flight transaction handle.
+   */
+  async function ensurePrimaryAssignment(
+    dbOrTx: Database,
+    ctx: TenantContext | RequestContext,
+    params: { userId: string; role: AssignableRole },
+  ): Promise<UserRoleAssignmentRow> {
+    const orgId = resolveOrganizationId(ctx);
+    // 1. Demote existing active primaries for this user.
+    await dbOrTx
+      .update(userRoleAssignments)
+      .set({ isPrimary: false, updatedAt: now() })
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.userId, params.userId),
+          eq(userRoleAssignments.isPrimary, true),
+          eq(userRoleAssignments.isActive, true),
+        ),
+      );
+    // 2. Look for an existing row for (org, user, role).
+    const existing = await dbOrTx
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.userId, params.userId),
+          eq(userRoleAssignments.role, params.role),
+        ),
+      )
+      .limit(1);
+    if (existing[0]) {
+      const updated = await dbOrTx
+        .update(userRoleAssignments)
+        .set({ isPrimary: true, isActive: true, updatedAt: now() })
+        .where(eq(userRoleAssignments.id, existing[0]!.id))
         .returning();
-      return row(inserted[0]!);
-    });
+      return row(updated[0]!);
+    }
+    // 3. Insert a new active primary row.
+    const inserted = await dbOrTx
+      .insert(userRoleAssignments)
+      .values({
+        id: randomUUID(),
+        organizationId: orgId,
+        userId: params.userId,
+        role: params.role,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now(),
+        updatedAt: now(),
+      })
+      .returning();
+    return row(inserted[0]!);
   }
 
   /** Promotes an assignment to be the user's primary active role, demoting
@@ -304,6 +409,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
     listActiveForUser,
     findPrimaryActiveForUser,
     assign,
+    assignWithinTransaction,
+    ensurePrimaryAssignment,
     setPrimary,
     deactivate,
     remove,

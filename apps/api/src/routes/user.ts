@@ -11,6 +11,8 @@ import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
+import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
 import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
@@ -135,23 +137,30 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const data = CreateUserRequestSchema.parse(request.body);
-      const repo = createUserRepo(fastify.db);
       const passwordHash = await hashPassword(data.password);
-      const user = await repo.createUnique(ctx, {
-        username: data.username,
-        passwordHash,
-        name: data.name,
-        role: data.role,
-        isActive: true,
-      });
-      // RBAC-M8 sync: seed a primary active assignment mirroring the created
-      // role so both stores agree (users.role cache + assignment source).
-      const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
-      await assignmentRepo.assign(ctx, {
-        userId: user.id,
-        role: data.role,
-        isPrimary: true,
-        isActive: true,
+      // RBAC-M10-E: create the user AND its primary active assignment in ONE
+      // transaction. A crash between the two writes previously left a user
+      // with no authority row, which the M10-E flip would lock out. Both
+      // writes succeed atomically or roll back together (P0-2 / E19).
+      const user = await executeInTransaction(fastify.db, async (tx) => {
+        const created = await createUserRepo(tx).createUnique(ctx, {
+          username: data.username,
+          passwordHash,
+          name: data.name,
+          role: data.role,
+          isActive: true,
+        });
+        await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+          tx,
+          ctx.targetOrganizationId ?? ctx.organizationId,
+          {
+            userId: created.id,
+            role: data.role,
+            isPrimary: true,
+            isActive: true,
+          },
+        );
+        return created;
       });
       recordAudit(fastify, request, ctx, "user.create", "user", user.id);
       return reply.code(201).send({
@@ -212,18 +221,29 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const willDisableAdmin =
-        target.role === "Admin" &&
-        target.isActive &&
+      // RBAC-M10-E last-admin guard (P0-7): the question "how many active
+      // admins remain?" is assignment-backed, not users.role-backed. A user
+      // whose users.role is Candidate but who holds an active Admin
+      // assignment IS an admin authority-wise (task §3.3). Trigger when the
+      // target would lose its active Admin authority: explicit disable, OR a
+      // role change away from Admin (which demotes the primary assignment).
+      //
+      // Whether THIS target currently holds the active Admin authority is
+      // proxied by the users.role cache (the legacy projection). users.role is
+      // re-synced to the primary assignment on every role change, so it is an
+      // accurate proxy for "is this user an admin right now" at guard time;
+      // the count itself is the authoritative assignment-backed number.
+      const activeAdminCount =
+        await repo.countActiveUsersWithPrimaryRoleAssignment(ctx, "Admin");
+      const targetProjectsAsAdmin = target.role === "Admin" && target.isActive;
+      const losingAdminAuthority =
+        targetProjectsAsAdmin &&
         ((data.isActive !== undefined && data.isActive === false) ||
           (data.role !== undefined && data.role !== "Admin"));
-      if (willDisableAdmin) {
-        const activeAdminCount = await repo.countActiveByRole(ctx, "Admin");
-        if (activeAdminCount <= 1) {
-          throw new ValidationError("不能停用或降级最后一位活跃管理员", {
-            reason: "LAST_ACTIVE_ADMIN",
-          });
-        }
+      if (losingAdminAuthority && activeAdminCount <= 1) {
+        throw new ValidationError("不能停用或降级最后一位活跃管理员", {
+          reason: "LAST_ACTIVE_ADMIN",
+        });
       }
 
       const updated = await repo.update(ctx, id, {
@@ -235,20 +255,23 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      // RBAC-M8 sync: when the role changes, mutate the primary active
-      // assignment (the source of truth) and re-sync users.role from it so
-      // both stores agree. isActive=false deactivates the assignment too.
+      // RBAC-M10-E active-state decoupling (P0-8): users.isActive is the
+      // account-level switch; user_role_assignments.isActive is the role-
+      // authority switch. They are INDEPENDENT.
+      //   - When ONLY isActive changes (no role change), do NOT touch the
+      //     assignment: disabling the account does not revoke role authority,
+      //     and re-enabling the account restores the user's prior role perms.
+      //   - When the role changes, the new primary assignment is created
+      //     ACTIVE (its authority is on); whether the account can log in is
+      //     still gated by users.isActive (handled by the repo.update above).
+      // Revoking a specific role is a role-assignment API concern, not here.
       if (data.role !== undefined && data.role !== target.role) {
         const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
         await assignmentRepo.assign(ctx, {
           userId: id,
           role: data.role,
           isPrimary: true,
-          // Preserve the user's existing active status when only the role
-          // changes; only an explicit isActive=false deactivates. (Review #1:
-          // the prior `data.isActive !== false` wrongly re-activated.)
-          isActive:
-            data.isActive !== undefined ? data.isActive : target.isActive,
+          isActive: true,
         });
         await syncUsersRoleFromPrimary(fastify.db, ctx, id);
       }
@@ -298,8 +321,11 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * POST /users/:id/reset-password — reset a candidate user's password.
      *
-     * Only targets users with the Candidate role. Admin password
-     * resets are not allowed through this endpoint.
+     * Targets users who have a CandidateProfile (the candidate examinee
+     * identity). RBAC-M10-E (P0-7): the target identity is the candidate
+     * profile, NOT a role projection — a user with primary Teacher + secondary
+     * Candidate (and a candidate profile) is a valid target; a pure Admin is
+     * not. This endpoint is the "candidate password reset" surface.
      */
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
@@ -314,7 +340,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      if (target.role !== "Candidate") {
+      const candidateProfile = await createCandidateRepo(
+        fastify.db,
+      ).findByUserId(ctx, id);
+      if (!candidateProfile) {
         return reply
           .code(400)
           .send(

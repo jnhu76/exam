@@ -272,4 +272,98 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
       expect(activeRows.map((r) => r.role)).toEqual(["Candidate", "Teacher"]);
     });
   });
+
+  describe("RBAC-M10-E migration 0015 + invariant primitives", () => {
+    /**
+     * The isolated test DB has ALL migrations applied (0000..0015), so the
+     * partial unique index `user_role_assignments_active_primary_unique`
+     * exists. These tests prove the index enforces ≤1 active primary per
+     * (org, user) at the DB (E12-A) and that ensurePrimaryAssignment is the
+     * invariant-aware primitive that keeps the index satisfiable.
+     */
+    it("the partial unique index rejects a second active primary at the DB (23505)", async () => {
+      const { userId, orgId } = await seedOrgAndUser(db, "paula");
+      const repo = createUserRoleAssignmentRepo(db);
+      // Establish one legitimate active primary via the repo (demotes correctly).
+      await repo.assign(
+        { organizationId: orgId, actorId: "t", role: "Admin", permissions: [] },
+        { userId, role: "Candidate", isPrimary: true, isActive: true },
+      );
+      // Bypass the repo and attempt a direct second active primary insert.
+      // The migration-created partial unique index must reject this.
+      let caught: unknown;
+      try {
+        await db.insert(schema.userRoleAssignments).values({
+          id: randomUUID(),
+          organizationId: orgId,
+          userId,
+          role: "Teacher",
+          isPrimary: true,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(
+        caught,
+        "second active primary insert should have been rejected",
+      ).toBeDefined();
+      // postgres.js wraps the driver error; the constraint name and SQLSTATE
+      // live on the error object. Match either the constraint name or 23505.
+      const errStr = JSON.stringify(caught ?? "");
+      expect(errStr).toMatch(
+        /user_role_assignments_active_primary_unique|23505/,
+      );
+    });
+
+    it("ensurePrimaryAssignment demotes an existing active primary instead of colliding", async () => {
+      // The seed/demo-seed replacement: a user whose primary was since
+      // changed must not trigger a second-active-primary insert.
+      const { userId, ctx } = await seedOrgAndUser(db, "quinn");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(ctx, {
+        userId,
+        role: "Candidate",
+        isPrimary: true,
+        isActive: true,
+      });
+      // Now make Teacher the primary via ensurePrimaryAssignment.
+      const result = await repo.ensurePrimaryAssignment(db, ctx, {
+        userId,
+        role: "Teacher",
+      });
+      expect(result.role).toBe("Teacher");
+      expect(result.isPrimary).toBe(true);
+      expect(result.isActive).toBe(true);
+      // Exactly one active primary remains.
+      const active = await repo.listActiveForUser(ctx, userId);
+      const primaries = active.filter((r) => r.isPrimary);
+      expect(primaries).toHaveLength(1);
+      expect(primaries[0]!.role).toBe("Teacher");
+    });
+
+    it("ensurePrimaryAssignment re-activates an existing (org,user,role) row in place", async () => {
+      const { userId, ctx } = await seedOrgAndUser(db, "ruth");
+      const repo = createUserRoleAssignmentRepo(db);
+      // Pre-existing Teacher row, currently inactive non-primary.
+      await repo.assign(ctx, {
+        userId,
+        role: "Teacher",
+        isPrimary: false,
+        isActive: false,
+      });
+      const result = await repo.ensurePrimaryAssignment(db, ctx, {
+        userId,
+        role: "Teacher",
+      });
+      // The existing row was promoted in place — no duplicate insert.
+      const active = await repo.listActiveForUser(ctx, userId);
+      expect(active).toHaveLength(1);
+      expect(active[0]!.role).toBe("Teacher");
+      expect(active[0]!.isPrimary).toBe(true);
+      expect(active[0]!.id).toBe(result.id);
+    });
+  });
 });
