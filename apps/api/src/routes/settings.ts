@@ -14,6 +14,7 @@ import type { PublicBrandingContext } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { Permission } from "@exam/authz";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -116,7 +117,10 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/settings",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.SettingsView),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Admin"],
@@ -142,7 +146,10 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/settings/branding",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.SettingsView),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Admin"],
@@ -168,7 +175,10 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/admin/settings/branding",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.SettingsUpdate),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Admin"],

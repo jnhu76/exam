@@ -294,7 +294,19 @@ requireRole remaining: 34
 M10-C routes migrated: 10/10
 ```
 
-## RBAC-M10-D — NOT STARTED
+## RBAC-M10-D — ✅ FINISHED
+- Delivered: 17 organization/system administrative surface routes migrated from `requireRole(["Admin"])` to `requireCapability(permission)`.
+- Files modified: `candidateField.ts` ×5, `settings.ts` ×3, `system.ts` ×3, `candidate.ts` ×3, `importLogs.ts` ×1, `email.ts` ×1, `audit.ts` ×1. Zero new files.
+- Shadow parity wired for all 17 routes (AUDIT-M2 `shadowRequireCapability`). Both shadow + migration-test conformance.
+- Conformance: `routeRegistryConformance.test.ts` M10-D section — 17/17 M10-D routes registry-derived; 82 conformance tests passing.
+- Boundary test: `m10dPermissionBoundary.test.ts` — 112 tests covering all 17 routes × 4 non-Admin roles (68 denial cells) + 17 unauthenticated + 17 Admin passage + 8 zero-write evidence tests including deep import proof (gate-removal mutation) and audit-count stability. No false-negative risk.
+- Key fixes during implementation:
+  - `candidateField.ts` POST/DELETE: added `fastify.authenticate` preHandler (was using only `requireRole`; `requireCapability` requires authenticate to provide a user/role).
+  - `candidate.ts` POST/PATCH/import: same authenticate addition.
+  - `email.ts` POST: same authenticate addition.
+  - `system.ts` GET diagnostics: same authenticate addition.
+- Commands: `pnpm --filter @exam/api exec vitest run src/routes/m10dPermissionBoundary.test.ts` ✅ 112/112 · `pnpm --filter @exam/api exec vitest run src/authz/routeRegistryConformance.test.ts` ✅ 82/82 · `pnpm verify` ✅ 1450/1455.
+
 ## RBAC-M10-E — NOT STARTED
 ## RBAC-M10-F — NOT STARTED
 

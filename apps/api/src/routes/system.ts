@@ -17,6 +17,7 @@ import {
 } from "../config/runtimeConfig.js";
 import { heartbeatMetrics } from "../plugins/heartbeat.js";
 import { deadlineScannerMetrics } from "../plugins/deadlineScanner.js";
+import { Permission } from "@exam/authz";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -195,7 +196,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
    * Admin-only.
    */
   fastify.get("/system/health", {
-    preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemHealthView),
+    ],
     schema: {
       security: cookieAuth,
       "x-role": ["Admin"],
@@ -219,7 +223,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
    * count, today's attempts) and a list of recent exams. Admin-only.
    */
   fastify.get("/system/dashboard", {
-    preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemHealthView),
+    ],
     schema: {
       security: cookieAuth,
       "x-role": ["Admin"],
@@ -249,7 +256,10 @@ const systemRoutes: FastifyPluginAsync = async (fastify) => {
    * runtime config. Admin-only.
    */
   fastify.get("/system/diagnostics", {
-    preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+    preHandler: [
+      fastify.authenticate,
+      fastify.requireCapability(Permission.SystemDiagnosticsView),
+    ],
     schema: {
       security: cookieAuth,
       "x-role": ["Admin"],

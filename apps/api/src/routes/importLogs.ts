@@ -5,6 +5,7 @@ import {
 } from "@exam/contracts";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
+import { Permission } from "@exam/authz";
 
 const cookieAuth = [{ cookieAuth: [] }] as const;
 
@@ -12,7 +13,10 @@ const importLogRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/import-logs",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AuditLogView),
+      ],
       schema: {
         querystring: ImportLogListQuerySchema,
         security: cookieAuth,
