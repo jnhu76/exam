@@ -50,11 +50,15 @@ function denied(reason: string) {
   return { denied: true, reason };
 }
 
-/** A preset predicate backed by an explicit role->perms map (no role branching
- *  in the code under test — this just feeds the injected dependency). */
+/** A preset map backing the injected request-scoped predicate. The predicate
+ *  looks up the request's role in the map (no role branching in the code
+ *  under test — this just feeds the injected dependency). This mirrors how a
+ *  real single-role user resolves: the role drives the capability set. */
 function presetFrom(map: Record<string, PermissionKey[]>) {
-  return (role: RoleKey, perm: PermissionKey) =>
-    (map[role] ?? []).includes(perm);
+  return (request: FastifyRequest, perm: PermissionKey) => {
+    const role = request.ctx?.role as string | undefined;
+    return (map[role ?? ""] ?? []).includes(perm);
+  };
 }
 
 /** Real presets (mirror @exam/authz ROLE_PRESETS for the score perms). */
@@ -76,6 +80,10 @@ function makeReq(
       actorId,
       organizationId: "org-1",
       role,
+      roles: [role as RoleKey],
+      // Capabilities are populated by the injected predicate at decision
+      // time; the field is here for RuntimeRequestContext structural completeness.
+      capabilities: [],
       permissions: [],
       sessionId: "s",
     },
@@ -109,10 +117,10 @@ function makeReply(): FastifyReply & { sentCode: number; sentBody: unknown } {
   };
 }
 
-function build(presetAllows = REAL_PRESETS) {
+function build(allows = REAL_PRESETS) {
   return buildScoreCapabilityPreHandler({
     db: {} as never,
-    presetAllows,
+    allows,
   });
 }
 

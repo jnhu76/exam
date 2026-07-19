@@ -323,10 +323,94 @@ async function finishBuildTestApp(args: {
 }
 
 /**
+ * Creates a user WITH a primary active role assignment for testing
+ * role-gated endpoints (RBAC-M10-E). Post-flip, every authenticated request
+ * resolves authority from ACTIVE user_role_assignments, so a user without an
+ * assignment is locked out (E10). This helper is the canonical way to build a
+ * login-capable test user. Returns the user row and a signed JWT token.
+ *
+ * The JWT role claim is the compatibility projection; it never authorizes
+ * (authenticate re-resolves from assignments).
+ *
+ * Options:
+ *   - isPrimary (default true): whether the assignment is the primary.
+ *   - isActive  (default true): whether the assignment is active. Pass false
+ *     to build an inactive-assignment user (E7 / revocation-without-relogin
+ *     fixtures) — such a user's token authenticates but has no authority.
+ */
+export async function createAssignedUserForTest(
+  db: Database,
+  orgId: string,
+  role: LegacyRole,
+  usernamePrefix: string,
+  options: { isPrimary?: boolean; isActive?: boolean } = {},
+): Promise<{ user: TestUser; token: string }> {
+  const now = new Date();
+  const passwordHash = await hashPassword("password123");
+  const isPrimary = options.isPrimary ?? true;
+  const isActive = options.isActive ?? true;
+  const userId = randomUUID();
+  await db.insert(schema.users).values({
+    id: userId,
+    organizationId: orgId,
+    username: `${usernamePrefix}-${uniquePrefix()}`,
+    passwordHash,
+    name: `${role} Test User`,
+    role,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.insert(schema.userRoleAssignments).values({
+    id: randomUUID(),
+    organizationId: orgId,
+    userId,
+    role: role as never,
+    isPrimary,
+    isActive,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const userRows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId));
+  const user = userRows[0]!;
+  const token = signJWT(
+    {
+      actorId: user.id,
+      role: user.role as Role,
+      organizationId: user.organizationId,
+    },
+    getRuntimeConfig().authSecret.jwtSecret,
+  );
+  return { user, token };
+}
+
+/**
  * Creates a user with a future/legacy role (e.g. Teacher, Proctor) for
  * testing role-gated endpoints. Returns the user row and a signed JWT token.
+ *
+ * Delegates to {@link createAssignedUserForTest} so the user is
+ * assignment-complete (RBAC-M10-E: a user without an assignment is locked
+ * out post-flip).
  */
 export async function createFutureRoleUserForTest(
+  db: Database,
+  orgId: string,
+  role: LegacyRole,
+  usernamePrefix: string,
+): Promise<{ user: TestUser; token: string }> {
+  return createAssignedUserForTest(db, orgId, role, usernamePrefix);
+}
+
+/**
+ * Creates a user row WITHOUT any role assignment — the canonical negative
+ * fixture for "no active assignment" tests (E10 / E13). The returned token
+ * authenticates the identity but the actor has NO authority, so any
+ * capability gate / login attempt fails closed.
+ */
+export async function createUnassignedUserForTest(
   db: Database,
   orgId: string,
   role: LegacyRole,

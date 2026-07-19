@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { signJWT } from "@exam/auth/src/session.js";
-import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import type { Role } from "@exam/domain";
-import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
-import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createFutureRoleUserForTest,
+  uniquePrefix,
+} from "./testHelpers.js";
 
 describe("GET /api/admin/proctor/exams", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -17,20 +18,16 @@ describe("GET /api/admin/proctor/exams", () => {
   let foreignExamId: string;
 
   async function createRoleToken(role: Exclude<Role, "Admin" | "System">) {
-    const id = randomUUID();
-    await ctx.db.insert(schema.users).values({
-      id,
-      organizationId: ctx.org.id,
-      username: `proctor-discovery-${role.toLowerCase()}-${uniquePrefix()}`,
-      passwordHash: await hashPassword("test-password"),
-      name: `${role} discovery`,
+    // RBAC-M10-E: delegate to createFutureRoleUserForTest so the user gets an
+    // active primary role assignment — without it, authenticate denies 401 and
+    // the future-role capability decisions under test never run.
+    const { token } = await createFutureRoleUserForTest(
+      ctx.db,
+      ctx.org.id,
       role,
-      isActive: true,
-    });
-    return signJWT(
-      { actorId: id, role, organizationId: ctx.org.id },
-      getRuntimeConfig().authSecret.jwtSecret,
+      `${role.toLowerCase()}-proctor-discovery`,
     );
+    return token;
   }
 
   async function seedCourse(organizationId: string, suffix: string) {

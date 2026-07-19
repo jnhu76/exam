@@ -136,29 +136,45 @@ describe("attempt routes", () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it("rejects unassigned candidate (Phase 1 requires explicit enrollment)", async () => {
-      const unassignedUserId = crypto.randomUUID();
+    it("rejects unenrolled candidate (Phase 1 requires explicit enrollment)", async () => {
+      const unenrolledUserId = crypto.randomUUID();
+      const now = new Date();
       await ctx.db.insert(schema.users).values({
-        id: unassignedUserId,
+        id: unenrolledUserId,
         organizationId: ctx.org.id,
-        username: `unassigned-${uniquePrefix()}`,
+        username: `unenrolled-${uniquePrefix()}`,
         passwordHash: "$argon2id$dummy",
-        name: "Unassigned Candidate",
+        name: "Unenrolled Candidate",
         role: "Candidate",
         isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
       });
       await ctx.db.insert(schema.candidateProfiles).values({
         id: crypto.randomUUID(),
         organizationId: ctx.org.id,
-        userId: unassignedUserId,
+        userId: unenrolledUserId,
         fields: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: now,
+        updatedAt: now,
       });
-      const unassignedToken = signJWT({
-        actorId: unassignedUserId,
+      // RBAC-M10-E: the candidate must authenticate to reach the enrollment
+      // gate. Seed an active primary Candidate assignment so the rejection
+      // happens at the capability/enrollment layer (403 PERMISSION_DENIED),
+      // not at authenticate (401 AUTH_REQUIRED). The user is intentionally
+      // NOT enrolled in `examId` — that is the property under test.
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId: unenrolledUserId,
+        role: "Candidate" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const unenrolledToken = signJWT({
+        actorId: unenrolledUserId,
         role: "Candidate",
         organizationId: ctx.org.id,
       });
@@ -166,7 +182,7 @@ describe("attempt routes", () => {
       const res = await ctx.app.inject({
         method: "POST",
         url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": unassignedToken },
+        cookies: { "auth-token": unenrolledToken },
       });
       expect(res.statusCode).toBe(403);
       expect(res.json().error.code).toBe("PERMISSION_DENIED");

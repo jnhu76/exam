@@ -225,6 +225,16 @@ describe("attempt routes", () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId,
+        role: "Candidate",
+        isPrimary: true,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
       await ctx.db.insert(schema.candidateProfiles).values({
         id: crypto.randomUUID(),
         organizationId: ctx.org.id,
@@ -845,6 +855,20 @@ describe("attempt routes", () => {
         organizationId: ctx.org.id,
         userId: otherUserId,
         fields: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      // RBAC-M10-E: this user must authenticate to exercise the cross-candidate
+      // submit rejection at the ownership layer — seed an active primary
+      // Candidate assignment so the failure is at ownership, not authenticate
+      // (401).
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId: otherUserId,
+        role: "Candidate" as never,
+        isPrimary: true,
+        isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
       });

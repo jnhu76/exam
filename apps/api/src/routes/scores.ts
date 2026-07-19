@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   AttemptResultResponseSchema,
@@ -153,8 +153,16 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
  *      scoring. after_grading mode additionally requires gradingStatus to be
  *      exactly 'fully_graded' (auto_graded is not enough — that mode means
  *      "wait for all grading including manual to finish").
- *   2. publication gate — for candidates only. Admins (role !== 'Candidate')
+ *   2. publication gate — applies when the request reached this route via the
+ *      ScoreOwnView capability path (candidate own-score access). Requests
+ *      that reached via ScoreAllView (administrative / academic result access)
  *      bypass this stage and see the full result whenever resultReady is true.
+ *
+ * RBAC-M10-E (P1-4): the gate is driven by `scoreView` — the capability path
+ * the score preHandler arbitrates (ScoreAllView -> "all", ScoreOwnView+owner
+ * -> "own"). It is NOT `roles.includes("Candidate")`: a multi-role actor
+ * reaching via ScoreAllView must NOT be demoted to candidate publication
+ * policy just because they happen to hold a Candidate assignment.
  *
  * Returns `{ visible: true }` when the full result can be shown, otherwise
  * `{ visible: false, hiddenReason }` where hiddenReason is one of:
@@ -165,7 +173,7 @@ function canOpenScoreList(exam: Exam, gradedCount: number, now: Date) {
 function computeResultVisibility(
   exam: Exam,
   attempt: ExamAttempt,
-  role: RequestContext["role"],
+  view: "own" | "all",
 ): { visible: true } | { visible: false; hiddenReason: HiddenReason } {
   // Stage 1: is the result computable?
   const isPreSubmit = attempt.status !== "graded";
@@ -200,8 +208,9 @@ function computeResultVisibility(
     return { visible: false, hiddenReason: "not_graded" };
   }
 
-  // Stage 2: publication gate (candidates only).
-  if (role !== "Candidate") {
+  // Stage 2: publication gate — applies only on the own-view capability path
+  // (ScoreOwnView + owner). The all-view path (ScoreAllView) bypasses it.
+  if (view === "all") {
     return { visible: true };
   }
   switch (exam.resultPublicationMode) {
@@ -214,6 +223,36 @@ function computeResultVisibility(
         ? { visible: true }
         : { visible: false, hiddenReason: "pending_publish" };
   }
+}
+
+/**
+ * Resolves the score preHandler's authoritative own/all capability-path
+ * decision (RBAC-M10-E, P1-4). `request.scoreView` is set ONLY by
+ * `requireScoreCapability` after it arbitrates ScoreAllView vs
+ * ScoreOwnView+ownership. A missing signal is a wiring bug (the route's
+ * preHandler chain did not include the score capability gate, or the gate
+ * failed to set it) — NEVER silently default to "own" (that would mask the
+ * bug and could demote a legitimate all-view principal). Instead fail closed
+ * as 503 AUTHZ_UNAVAILABLE.
+ *
+ * Returns the view, or `null` after sending the 503 response (caller must
+ * short-circuit on null).
+ */
+async function requireScoreView(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<"own" | "all" | null> {
+  if (request.scoreView === "own" || request.scoreView === "all") {
+    return request.scoreView;
+  }
+  request.log.error(
+    { route: request.url },
+    "score handler reached without a scoreView signal — preHandler wiring bug",
+  );
+  await reply
+    .code(503)
+    .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+  return null;
 }
 
 /**
@@ -407,7 +446,9 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
         throw new NotFoundError("Exam not found");
       }
 
-      const visibility = computeResultVisibility(exam, attempt, ctx.role);
+      const view = await requireScoreView(request, reply);
+      if (view === null) return;
+      const visibility = computeResultVisibility(exam, attempt, view);
 
       if (!visibility.visible) {
         return AttemptResultResponseSchema.parse({
@@ -426,9 +467,13 @@ const scoreRoutes: FastifyPluginAsync = async (fastify) => {
       const gradingResult = attempt.gradingResult as QuestionScoreResult[];
       const questionResults = buildQuestionResults(attempt, gradingResult);
 
-      // Candidate-safe: strip standardAnswer so candidates cannot see correct answers.
-      const isCandidate = ctx.role === "Candidate";
-      const safeQuestionResults = isCandidate
+      // standardAnswer stripping follows the capability path (RBAC-M10-E):
+      // own-view (ScoreOwnView) = candidate own-score access -> strip; all-view
+      // (ScoreAllView) = administrative/academic result access -> keep. This is
+      // NOT roles.includes("Candidate"): a multi-role actor reaching via
+      // ScoreAllView keeps the full result.
+      const stripStandardAnswer = view === "own";
+      const safeQuestionResults = stripStandardAnswer
         ? questionResults.map(({ standardAnswer: _, ...rest }) => rest)
         : questionResults;
 

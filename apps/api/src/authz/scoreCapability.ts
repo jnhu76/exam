@@ -38,15 +38,24 @@ import { buildErrorResponse } from "../lib/errorResponse.js";
 import {
   Permission,
   type PermissionKey,
-  type RoleKey,
   type ResolverContext,
 } from "@exam/authz";
-import { presetAllows } from "../lib/presetCache.js";
 import {
   resolveScoreScope,
   isScoreDenied,
   type ScoreResolution,
 } from "./resolvers/scoreResolver.js";
+
+/**
+ * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * `ctx.capabilities` union resolved at authenticate time. Signature matches
+ * the scoped / candidate-context / own-attempt / exam-eligibility gates so all
+ * five switch authority in lockstep.
+ */
+export type ScoreCapabilityAllows = (
+  request: FastifyRequest,
+  permission: PermissionKey,
+) => boolean;
 
 /** Input to the score capability preHandler builder (pure, injectable). */
 export interface ScoreCapabilityInput {
@@ -55,10 +64,10 @@ export interface ScoreCapabilityInput {
   /** Fastify logger (injected; for resolver monitoring events). */
   logger?: FastifyBaseLogger;
   /**
-   * Flat role-preset predicate (injected; wraps @exam/authz presetAllows).
-   * Same source as {@link requireCapability} — not a role-name branch.
+   * Capability predicate (injected; reads ctx.capabilities). Same authority
+   * source as {@link requireCapability} — not a role-name branch.
    */
-  presetAllows: (role: RoleKey, permission: PermissionKey) => boolean;
+  allows: ScoreCapabilityAllows;
 }
 
 /** The route param key carrying the attempt id (fixed for the score route). */
@@ -72,7 +81,7 @@ const ATTEMPT_ID_PARAM = "attemptId";
 export function buildScoreCapabilityPreHandler(
   input: ScoreCapabilityInput,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  const { db, logger, presetAllows: allows } = input;
+  const { db, logger, allows } = input;
   return async (request, reply) => {
     const ctx = request.ctx;
     if (!ctx) {
@@ -134,28 +143,24 @@ export function buildScoreCapabilityPreHandler(
     }
 
     // Resolved under the org anchor. Now arbitrate own vs all by CAPABILITY
-    // (resolved from the role preset — the same source requireCapability uses).
+    // (read from ctx.capabilities — the authoritative assignment union).
     // No ctx.role === "..." branch: the decision is purely perm + ownership.
-    const role = ctx.role as RoleKey;
-    const hasAllView = allows(role, Permission.ScoreAllView);
-    if (hasAllView) {
-      // Broadest grant: any same-org attempt. Done.
+    // ScoreAllView wins (strictly broader) — matching the prior arbitration
+    // order. A multi-role actor reaching here via ScoreAllView gets "all".
+    if (allows(request, Permission.ScoreAllView)) {
+      request.scoreView = "all";
       return;
     }
-    const hasOwnView = allows(role, Permission.ScoreOwnView);
-    if (hasOwnView) {
+    if (allows(request, Permission.ScoreOwnView)) {
       // Own-only: the attempt's owner must be the actor.
       const ownerUserId = resolution.ownership.ownerUserId;
       if (ownerUserId !== null && ownerUserId === ctx.actorId) {
+        request.scoreView = "own";
         return;
       }
       // Own-view holder but not the owner. Anti-enumeration: return 404 (not
       // 403) so a candidate probing another candidate's attemptId cannot
-      // distinguish "exists but not mine" from "does not exist". This matches
-      // the documented cross-candidate convention (p4-mvp-rbac-route-matrix §L:
-      // "Candidate A calls /scores/attempts/<B's attempt> -> 404, not B's full
-      // result") and the prior `findVisibleAttempt` behavior (findByIdAndCandidate
-      // returned null -> NotFoundError -> 404).
+      // distinguish "exists but not mine" from "does not exist".
       return reply
         .code(404)
         .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));

@@ -59,6 +59,19 @@ describe("Phase 1.1 regression - critical path", () => {
         ),
       );
     passwordTestUserId = pwRows[0]!.id;
+    // RBAC-M10-E: this admin must authenticate for PATCH /me/password — seed an
+    // active primary Admin assignment so authenticate grants Admin's preset.
+    const pgSchema = await import("@exam/db/src/schema/pg.js");
+    await ctx.db.insert(pgSchema.schema.userRoleAssignments).values({
+      id: randomUUID(),
+      organizationId: ctx.org.id,
+      userId: passwordTestUserId,
+      role: "Admin" as never,
+      isPrimary: true,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     const { signJWT } = await import("@exam/auth/src/session.js");
     passwordTestToken = signJWT({
       actorId: passwordTestUserId,

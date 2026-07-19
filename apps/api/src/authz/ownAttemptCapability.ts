@@ -35,16 +35,21 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyBaseLogger } from "fastify";
 import type { Database } from "@exam/db/src/types.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
-import {
-  type PermissionKey,
-  type RoleKey,
-  type ResolverContext,
-} from "@exam/authz";
+import { type PermissionKey, type ResolverContext } from "@exam/authz";
 import {
   resolveOwnAttemptScope,
   isOwnAttemptDenied,
   type OwnAttemptResolution,
 } from "./resolvers/ownAttemptResolver.js";
+
+/**
+ * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * `ctx.capabilities` union. Signature matches the other gates.
+ */
+export type OwnAttemptAllows = (
+  request: FastifyRequest,
+  permission: PermissionKey,
+) => boolean;
 
 /** Input to the own-attempt capability preHandler builder (pure, injectable). */
 export interface OwnAttemptCapabilityInput {
@@ -53,10 +58,10 @@ export interface OwnAttemptCapabilityInput {
   /** Fastify logger (injected; for resolver monitoring events). */
   logger?: FastifyBaseLogger;
   /**
-   * Flat role-preset predicate (injected; wraps @exam/authz presetAllows).
-   * Same source as {@link requireCapability} — not a role-name branch.
+   * Capability predicate (injected; reads ctx.capabilities). Same authority
+   * source as {@link requireCapability} — not a role-name branch.
    */
-  presetAllows: (role: RoleKey, permission: PermissionKey) => boolean;
+  allows: OwnAttemptAllows;
 }
 
 /**
@@ -72,7 +77,7 @@ export function buildOwnAttemptCapabilityPreHandler(
   permission: PermissionKey,
   resourceIdKey: string,
 ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  const { db, logger, presetAllows: allows } = input;
+  const { db, logger, allows } = input;
   return (permission, resourceIdKey) => async (request, reply) => {
     const ctx = request.ctx;
     if (!ctx) {
@@ -133,10 +138,9 @@ export function buildOwnAttemptCapabilityPreHandler(
     }
 
     // Resolved under the org anchor. Capability + ownership arbitration: the
-    // role preset must grant the route permission AND the attempt owner must
-    // be the actor. No ctx.role === "..." branch.
-    const role = ctx.role as RoleKey;
-    if (!allows(role, permission)) {
+    // authoritative ctx.capabilities union must grant the route permission AND
+    // the attempt owner must be the actor. No ctx.role === "..." branch.
+    if (!allows(request, permission)) {
       return reply
         .code(403)
         .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));

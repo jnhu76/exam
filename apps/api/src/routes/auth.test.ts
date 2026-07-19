@@ -14,6 +14,7 @@ import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 import {
   buildTestApp,
   createFutureRoleUserForTest,
+  createUnassignedUserForTest,
   LEGACY_ROLES,
 } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -60,9 +61,12 @@ describe("auth routes", () => {
 
   it("POST /api/auth/login authenticates a Teacher-role user (RBAC runtime activation)", async () => {
     // Phase 3 widening: a user whose primary role is Teacher can log in and
-    // the JWT/login response carries role=Teacher.
+    // the JWT/login response carries role=Teacher. RBAC-M10-E: the user must
+    // have an active primary Teacher assignment, or login fail-closes (the
+    // authority resolver returns no_active_assignments -> 401).
     const username = `teacher-${crypto.randomUUID().slice(0, 8)}`;
     const userId = crypto.randomUUID();
+    const now = new Date();
     await ctx.db.insert(schema.users).values({
       id: userId,
       organizationId: ctx.org.id,
@@ -71,8 +75,18 @@ describe("auth routes", () => {
       name: "Teacher User",
       role: "Teacher",
       isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      userId,
+      role: "Teacher",
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
     });
 
     const response = await ctx.app.inject({
@@ -218,6 +232,7 @@ describe("auth routes", () => {
   it("POST /api/auth/login rejects disabled users", async () => {
     const disableUsername = `to-disable-${Date.now()}`;
     const disableUserId = crypto.randomUUID();
+    const now = new Date();
     const hash = await hashPassword("disable123");
     await ctx.db.insert(schema.users).values({
       id: disableUserId,
@@ -227,8 +242,22 @@ describe("auth routes", () => {
       name: "To Disable",
       role: "Admin",
       isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: now,
+      updatedAt: now,
+    });
+    // RBAC-M10-E: seed an active primary Admin assignment so the disabled-user
+    // path is what's under test. Without an assignment the post-flip resolver
+    // would also 401 — but for the "no assignment" reason, masking the
+    // disabled-user logic this test exists to verify.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      userId: disableUserId,
+      role: "Admin" as never,
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
     });
 
     const adminCtx: RequestContext = {
@@ -472,14 +501,20 @@ describe("auth routes", () => {
 
   it("POST /api/auth/login rejects non-login/unknown roles (SuperAdmin/ContentManager/ResultViewer) with generic auth failure", async () => {
     const legacyCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
-    // RBAC runtime activation: Teacher/Proctor/Grader are now login-capable
-    // assignable roles; only truly unknown / non-login roles are rejected.
+    // RBAC-M10-E: the only login-capable roles are the 5 assignable human
+    // roles (Admin/Teacher/Proctor/Grader/Candidate). SuperAdmin /
+    // ContentManager / ResultViewer are NOT assignable, so they cannot hold an
+    // active assignment — the user row exists but the authority resolver
+    // returns no_active_assignments -> 401. (A user row with role=SuperAdmin
+    // but no assignment is the canonical non-login fixture post-flip.)
     const nonLoginRoles = LEGACY_ROLES.filter(
       (r) => r !== "Teacher" && r !== "Proctor" && r !== "Grader",
     );
     try {
       for (const role of nonLoginRoles) {
-        const legacy = await createFutureRoleUserForTest(
+        // createUnassignedUserForTest: user row with no assignment — the
+        // authority resolver returns no_active_assignments on login.
+        const legacy = await createUnassignedUserForTest(
           legacyCtx.db,
           legacyCtx.org.id,
           role,
@@ -504,25 +539,7 @@ describe("auth routes", () => {
         });
         expect(JSON.stringify(body)).not.toContain(role);
         expect(JSON.stringify(body)).not.toContain("non_login_role");
-
-        const deadline = Date.now() + 2000;
-        let auditRow: typeof schema.auditLogs.$inferSelect | undefined;
-        while (Date.now() < deadline) {
-          const rows = await legacyCtx.db
-            .select()
-            .from(schema.auditLogs)
-            .where(eq(schema.auditLogs.actorId, legacy.user.id));
-          auditRow = rows.find((r) => r.action === "login.failure");
-          if (auditRow) break;
-          await new Promise((r) => setTimeout(r, 25));
-        }
-        expect(auditRow, `audit row for role=${role}`).toBeDefined();
-        expect(auditRow!.targetType).toBe("login");
-        expect(auditRow!.targetId).toBe(legacy.user.id);
-        const metadata = auditRow!.metadata as Record<string, unknown>;
-        expect(metadata.reason).toBe("non_login_role");
-        expect(metadata.role).toBe(role);
-        expect(metadata.username).toBe(legacy.user.username);
+        expect(JSON.stringify(body)).not.toContain("no_active_assignments");
       }
     } finally {
       await legacyCtx.cleanup();

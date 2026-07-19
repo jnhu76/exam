@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import userRoutes from "./user.js";
-import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createFutureRoleUserForTest,
+  createUnassignedUserForTest,
+} from "./testHelpers.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
@@ -238,7 +242,10 @@ describe("user routes", () => {
         "Teacher",
         `legacy-teacher-list`,
       );
-      await createFutureRoleUserForTest(
+      // SuperAdmin is not in the assignable set (DB CHECK rejects an
+      // assignment row), so use the no-assignment variant. The user row
+      // exists; the user-list filter under test excludes it regardless.
+      await createUnassignedUserForTest(
         legacyCtx.db,
         legacyCtx.org.id,
         "SuperAdmin",

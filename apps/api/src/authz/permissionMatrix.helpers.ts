@@ -6,6 +6,26 @@ import { schema } from "@exam/db/src/schema/pg.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { buildTestApp } from "../routes/testHelpers.js";
 
+/**
+ * RBAC-M10-E: post-flip, every authenticated request resolves its authority
+ * from ACTIVE user_role_assignments — a user without one is locked out (no
+ * capabilities, login 401). The permission-matrix suites deliberately cover
+ * both Phase 1 assignable roles (Admin, Candidate) AND future roles
+ * (Teacher, Proctor, Grader) to assert the catalog presets keep producing
+ * the same allow/deny verdicts under assignment-backed authority. The matrix
+ * fixture therefore creates an active primary assignment for every matrix
+ * role — this is a test-only deviation from the Phase 1 product surface
+ * (which is Admin + Candidate only); it does NOT widen the production
+ * assignable set.
+ */
+const ASSIGNABLE_ROLES: readonly MatrixRole[] = [
+  "Admin",
+  "Teacher",
+  "Proctor",
+  "Grader",
+  "Candidate",
+];
+
 export type MatrixRole =
   | "Admin"
   | "Teacher"
@@ -68,6 +88,7 @@ export async function buildPermissionMatrixFixture(
 ): Promise<PermissionMatrixFixture> {
   const testApp = await buildTestApp(plugin, { prefix: "/api" });
   const passwordHash = await hashPassword("pw123456");
+  const now = new Date();
   const users = ROLES.map((role) => ({
     id: randomUUID(),
     organizationId: testApp.org.id,
@@ -76,10 +97,28 @@ export async function buildPermissionMatrixFixture(
     name: `${role} user`,
     role,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: now,
+    updatedAt: now,
   }));
   await testApp.db.insert(schema.users).values(users);
+
+  // RBAC-M10-E: every authenticated request resolves its authority from ACTIVE
+  // user_role_assignments. Without an active primary assignment, the matrix
+  // users would have no capabilities and every verdict would collapse to 401 /
+  // denied — masking the real allow/deny decisions under test. Seed one active
+  // primary assignment per matrix role so the resolver produces that role's
+  // preset (the catalog under test) and the matrix asserts the preset verdicts.
+  const assignments = users.map((user) => ({
+    id: randomUUID(),
+    organizationId: testApp.org.id,
+    userId: user.id,
+    role: user.role as never,
+    isPrimary: true,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  await testApp.db.insert(schema.userRoleAssignments).values(assignments);
 
   const tokens = Object.fromEntries(
     users.map((user) => [

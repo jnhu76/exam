@@ -8,13 +8,10 @@ import candidateRoutes from "./candidate.js";
 import scoreRoutes from "./scores.js";
 import {
   buildTestApp,
+  createAssignedUserForTest,
   createCandidateViaApi,
   uniquePrefix,
 } from "./testHelpers.js";
-import { signJWT } from "@exam/auth/src/session.js";
-import { hashPassword } from "@exam/auth/src/password.js";
-import { schema } from "@exam/db/src/schema/pg.js";
-import { getRuntimeConfig } from "../config/runtimeConfig.js";
 
 /**
  * P4-2C capability cutover — Teacher exam authoring/lifecycle proof (task 8.4).
@@ -70,24 +67,17 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
     });
     questionId = qRes.json().id;
 
-    const { jwtSecret } = getRuntimeConfig().authSecret;
+    // RBAC-M10-E: delegates to createAssignedUserForTest so the user gets an
+    // active primary role assignment — without it, authenticate denies 401 and
+    // the capability decisions under test never run.
     const mkUser = async (role: "Teacher" | "Candidate") => {
-      const id = randomUUID();
-      await ctx.db.insert(schema.users).values({
-        id,
-        organizationId: ctx.org.id,
-        username: `p42c-${role.toLowerCase()}-${randomUUID().slice(0, 6)}`,
-        passwordHash: await hashPassword("pw123456"),
-        name: `${role} p42c`,
-        role,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      return signJWT(
-        { actorId: id, role, organizationId: ctx.org.id },
-        jwtSecret,
+      const { token } = await createAssignedUserForTest(
+        ctx.db,
+        ctx.org.id,
+        role as never,
+        `p42c-${role.toLowerCase()}-exam-auth`,
       );
+      return token;
     };
     teacherToken = await mkUser("Teacher");
     candidateToken = await mkUser("Candidate");

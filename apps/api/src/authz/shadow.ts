@@ -1,30 +1,31 @@
 /**
- * Shadow permission mode (RBAC-M5).
+ * Shadow permission mode (RBAC-M5 / M10-E).
  *
- * Runs the legacy `requireRole` decision and the new `requireCapability`
- * decision side-by-side and records disagreements. **Legacy stays
- * authoritative** (ADR §10.3): a shadow mismatch NEVER blocks or alters a
- * production request. Shadow exists only to prove the permission matrix is
- * parity-safe before enforcement flips (RBAC-M10/PROCTOR-M1/GRADING-M1).
- *
- * Capability evaluation here is the flat preset check (Phase 1 semantics):
- * "is this permission in the actor's role preset?". Once `user_role_assignments`
- * + scope resolvers are live (RBAC-M7/M10), the capability side will consult
- * those instead — shadow's signature stays the same.
+ * Runs the legacy role-gate decision and the authoritative capability
+ * decision side-by-side and records disagreements. Since RBAC-M10-E flipped
+ * runtime authority to ACTIVE `user_role_assignments`, **production follows
+ * the capability side**; shadow exists only to record drift between the
+ * `users.role` compatibility projection (the legacy side) and the
+ * assignment-derived capability union (the authoritative side). A mismatch
+ * NEVER blocks or alters a production request (ADR §10.3) — it is a signal
+ * that `users.role` is stale relative to the assignment table and the
+ * compatibility cache should be re-synced.
  *
  * Logging hygiene (ADR §10.6 / §3.8): record `resource.type` + an opaque hash
  * of the id, never the candidate-answer payload or PII.
  */
 import { createHash } from "node:crypto";
 import { type PermissionKey, type RoleKey } from "@exam/authz";
-import { presetAllows } from "../lib/presetCache.js";
 
 /** Minimal actor context shadow needs. */
 export interface ShadowContext {
   actorId: string;
   role: RoleKey;
-  /** Flat permission cache on the request (Phase 1 source). */
-  permissions: readonly PermissionKey[];
+  /**
+   * Authoritative capability union resolved at authenticate time from ACTIVE
+   * user_role_assignments (RBAC-M10-E). Shadow's capability side reads this.
+   */
+  capabilities: readonly PermissionKey[];
 }
 
 /** A concrete resource reference (type + id). */
@@ -61,9 +62,15 @@ export interface ShadowResult {
   permission: PermissionKey;
   resourceType: string;
   resourceIdHash: string;
+  /** What the legacy `users.role` projection would have allowed. */
   legacyAllowed: boolean;
+  /** What the authoritative assignment-derived capability set allows. */
   capabilityAllowed: boolean;
-  /** "allow" | "deny" — always mirrors legacyAllowed (legacy authoritative). */
+  /**
+   * "allow" | "deny" — mirrors capabilityAllowed (the authoritative side,
+   * post-M10-E). Shadow never returns a decision to a production caller (it
+   * records only), but the field's semantics follow production authority.
+   */
   decision: "allow" | "deny";
 }
 
@@ -83,18 +90,19 @@ function capabilityAllows(
   ctx: ShadowContext,
   permission: PermissionKey,
 ): boolean {
-  // Phase 1 flat source: the actor's role preset. (RBAC-M10 will swap in the
-  // resolver-backed capability check; shadow's contract is unchanged.)
-  if (presetAllows(ctx.role, permission)) return true;
-  // Fall back to the request's flat permission cache (compat with ctx.permissions).
-  // Defensive: shadow must never crash (ADR §10.3); a legacy caller that omits
-  // permissions simply yields a deny on this branch instead of throwing.
-  return ctx.permissions?.includes(permission) ?? false;
+  // RBAC-M10-E authoritative source: the capability union resolved at
+  // authenticate time from ACTIVE user_role_assignments. The legacy
+  // ctx.permissions fallback is gone — it was always [] on runtime contexts
+  // and shadow must reflect what the capability gates actually read.
+  return ctx.capabilities.includes(permission);
 }
 
 /**
  * Evaluates legacy + capability decisions, logs any disagreement, and returns
- * the **legacy** decision. Never throws on a mismatch (ADR §10.3).
+ * a record whose `decision` mirrors the **capability** side (the
+ * authoritative side, post-RBAC-M10-E). Shadow is advisory only — it never
+ * decides a production request; production capability gates read
+ * `ctx.capabilities` directly. Never throws on a mismatch (ADR §10.3).
  */
 export function shadowRequireCapability(
   input: ShadowInput,
@@ -112,19 +120,20 @@ export function shadowRequireCapability(
     resourceIdHash: hashResourceId(input.resource.id),
     legacyAllowed,
     capabilityAllowed,
-    decision: legacyAllowed ? "allow" : "deny",
+    decision: capabilityAllowed ? "allow" : "deny",
   };
 
   if (legacyAllowed !== capabilityAllowed) {
-    // Mismatch = a matrix bug. Record as a warning for staging/CI aggregation;
-    // do NOT change the decision (legacy authoritative). `decision: "mismatch"`
+    // Mismatch = `users.role` is stale relative to the assignment table.
+    // Record as a warning for staging/CI aggregation; do NOT change any
+    // production decision (shadow is advisory only). `decision: "mismatch"`
     // is set AFTER spreading result so it is not overwritten by result.decision.
     logger.warn({
       ...result,
       event: "authz.shadow.mismatch",
       decision: "mismatch",
       reason:
-        "legacy requireRole and new requireCapability disagree — matrix bug candidate",
+        "users.role projection and assignment-derived capability disagree — re-sync users.role from primary assignment",
     });
   } else {
     logger.info({ ...result, event: "authz.shadow.agree" });

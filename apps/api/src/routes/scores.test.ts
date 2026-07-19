@@ -349,6 +349,19 @@ describe("score routes", () => {
       createdAt: now,
       updatedAt: now,
     });
+    // RBAC-M10-E: primary active assignment so the foreign admin's token
+    // resolves authority (the test then asserts the org-anchor 404, not a
+    // 401 from no-assignment).
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: foreignOrganizationId,
+      userId: foreignAdminId,
+      role: "Admin",
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     const foreignAdminToken = signJWT(
       {
         actorId: foreignAdminId,
@@ -386,6 +399,18 @@ describe("score routes", () => {
         passwordHash: "not-used",
         name: `${role} User`,
         role,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      // RBAC-M10-E: primary active assignment so the Grader/Proctor token
+      // resolves authority (then the capability gate denies 403 — not 401).
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId: roleId,
+        role,
+        isPrimary: true,
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -680,6 +705,17 @@ describe("J8: score list routes", () => {
       passwordHash: "not-used",
       name: "Temp Candidate",
       role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // RBAC-M10-E: assignment so tempToken can start an attempt.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      userId: tempUserId,
+      role: "Candidate",
+      isPrimary: true,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -1069,6 +1105,17 @@ describe("P3-2 candidate result / answer visibility boundaries", () => {
       passwordHash: "not-used",
       name: "Candidate B",
       role: "Candidate",
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    // RBAC-M10-E: assignment so candidateBToken can act.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      userId: userIdB,
+      role: "Candidate",
+      isPrimary: true,
       isActive: true,
       createdAt: now,
       updatedAt: now,

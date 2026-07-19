@@ -128,6 +128,34 @@ describe("Tenant Isolation (S01)", () => {
     });
     adminB = { id: adminBId, organizationId: orgBId, role: "Admin" };
 
+    // RBAC-M10-E: authenticate resolves authority from ACTIVE
+    // user_role_assignments. Both manually-inserted admins need an active
+    // primary Admin assignment scoped to their own org, or their tokens
+    // collapse to 401 AUTH_REQUIRED and the cross-tenant assertions never
+    // exercise the org-anchor logic under test.
+    await db.insert(schema.userRoleAssignments).values([
+      {
+        id: randomUUID(),
+        organizationId: orgA.id,
+        userId: adminAId,
+        role: "Admin" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: randomUUID(),
+        organizationId: orgBId,
+        userId: adminBId,
+        role: "Admin" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+
     const courseId = randomUUID();
     await db.insert(schema.courses).values({
       id: courseId,

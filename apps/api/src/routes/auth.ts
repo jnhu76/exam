@@ -31,6 +31,7 @@ import {
 import { recordAudit } from "./audit.js";
 import { getRequestContext } from "./helpers.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
 
 /**
  * Fastify plugin that registers authentication routes.
@@ -80,6 +81,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         response: {
           200: LoginResponseSchema,
           401: ErrorResponseSchema,
+          503: ErrorResponseSchema,
         },
       },
     },
@@ -161,17 +163,86 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
+      // RBAC-M10-E: the actor's authority is resolved from ACTIVE
+      // user_role_assignments. users.role / JWT role are NO LONGER
+      // authoritative — they are compatibility projections. Login must fail
+      // closed for a user with no active assignment (locked out), and must
+      // surface operational / integrity failures as 503 (never 401, which
+      // would hide an authz-system outage behind a credentials error; P1-3).
+      const authority = await loadAssignmentAuthority(
+        fastify.db,
+        {
+          actorId: user.id,
+          organizationId: user.organizationId,
+          role: user.role as Role,
+          permissions: [],
+          sessionId: "login",
+        },
+        user.id,
+      );
+      if (!authority.ok) {
+        if (authority.reason === "no_active_assignments") {
+          // Record the login failure for audit (mirrors the legacy
+          // non_login_role audit shape). The response stays generic so it
+          // does not leak the no-assignment reason to the client.
+          const noAssignmentCtx: RequestContext = {
+            actorId: user.id,
+            organizationId: user.organizationId,
+            targetOrganizationId: user.organizationId,
+            role: user.role as Role,
+            permissions: [],
+            sessionId: "anonymous",
+          };
+          recordAudit(
+            fastify,
+            request,
+            noAssignmentCtx,
+            "login.failure",
+            "login",
+            user.id,
+            {
+              reason: "no_active_assignments",
+              username: data.username,
+            },
+          );
+          fastify.log.warn(
+            {
+              event: "login.failure",
+              reason: "no_active_assignments",
+              username: data.username,
+            },
+            "Login failed: user has no active role assignment",
+          );
+          return reply
+            .code(401)
+            .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
+        }
+        fastify.log.error(
+          {
+            event: "login.failure",
+            reason: authority.reason,
+            username: data.username,
+          },
+          "Login failed: assignment authority resolution failed — fail closed",
+        );
+        return reply
+          .code(503)
+          .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+      }
+
+      const primaryRole = authority.authority.primaryRole;
+
       // RBAC runtime activation: only the 5 assignable human roles
       // (Admin/Teacher/Proctor/Grader/Candidate) may log in. System is the
       // synthetic non-login actor; any other/unknown role string (SuperAdmin,
       // legacy future roles, garbage) is rejected. ADR §System Actor Policy.
-      if (!ASSIGNABLE_LOGIN_ROLES.has(user.role)) {
-        const blockedRole = user.role;
+      // The check is against the authoritative primaryRole, not users.role.
+      if (!ASSIGNABLE_LOGIN_ROLES.has(primaryRole)) {
         const blockedCtx: RequestContext = {
           actorId: user.id,
           organizationId: user.organizationId,
           targetOrganizationId: user.organizationId,
-          role: blockedRole as unknown as Role,
+          role: primaryRole as unknown as Role,
           permissions: [],
           sessionId: "anonymous",
         };
@@ -185,7 +256,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           {
             reason: "non_login_role",
             username: user.username,
-            role: blockedRole,
+            role: primaryRole,
           },
         );
         fastify.log.warn(
@@ -193,19 +264,21 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             event: "login.failure",
             reason: "non_login_role",
             username: user.username,
-            role: blockedRole,
+            role: primaryRole,
           },
-          "Login failed: role is not a login-capable assignable role",
+          "Login failed: primary assignment role is not login-capable",
         );
         return reply
           .code(401)
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
       }
 
+      // JWT role claim is a compatibility projection only; it never
+      // authorizes (authenticate resolves authority fresh from assignments).
       const token = signJWT(
         {
           actorId: user.id,
-          role: user.role as Role,
+          role: primaryRole as Role,
           organizationId: user.organizationId,
         },
         getRuntimeConfig().authSecret.jwtSecret,
@@ -223,7 +296,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         actorId: user.id,
         organizationId: user.organizationId,
         targetOrganizationId: user.organizationId,
-        role: user.role as Role,
+        role: primaryRole as Role,
         permissions: [],
         sessionId: "login",
       };
@@ -241,7 +314,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         id: user.id,
         username: user.username,
         name: user.name,
-        role: user.role,
+        role: primaryRole,
         organizationId: user.organizationId,
       });
 
@@ -326,7 +399,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         id: user.id,
         username: user.username,
         name: user.name,
-        role: user.role,
+        // RBAC-M10-E: role is the primary-assignment projection resolved at
+        // authenticate time, NOT a fresh re-read of users.role. The two are
+        // kept in sync by syncUsersRoleFromPrimary, but the authenticated ctx
+        // is the authoritative projection for this response.
+        role: ctx.role,
         organizationId: user.organizationId,
       });
       return reply.code(200).send(response);

@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { signJWT } from "@exam/auth/src/session.js";
-import { Permission } from "@exam/authz";
-import authPlugin from "./auth.js";
+import { Permission, permissionsForRole, type RoleKey } from "@exam/authz";
+import { buildAuthPluginFp } from "./auth.js";
+import type { AssignmentAuthorityResult } from "../authz/assignmentAuthority.js";
 import { resetRuntimeConfigForTest } from "../config/runtimeConfig.js";
 
 /** The role the mocked userRepo returns; override per-test. */
@@ -12,18 +13,44 @@ vi.mock("@exam/db/src/repository/userRepo.js", () => ({
   createUserRepo: () => ({
     findByOrganizationAndId: async () => ({
       id: "user-1",
+      organizationId: "org-1",
       role: mockRole,
       isActive: true,
     }),
   }),
 }));
 
+/**
+ * RBAC-M10-E: the mocked userRepo returns a user with no real DB, so the
+ * production assignment loader cannot run. Inject a single-role loader that
+ * derives authority from `mockRole` (the role the mocked userRepo returns),
+ * matching how a real single-assignment user would resolve. This tests the
+ * actual DI seam in {@link buildAuthPlugin}.
+ */
+function mockLoadAuthority(): typeof import("../authz/assignmentAuthority.js").loadAssignmentAuthority {
+  return async () => {
+    const role = mockRole as RoleKey;
+    const result: AssignmentAuthorityResult = {
+      ok: true,
+      authority: {
+        primaryRole: role,
+        activeRoles: [role],
+        capabilities: permissionsForRole(role),
+        assignmentIds: ["assignment-mock"],
+      },
+    };
+    return result;
+  };
+}
+
 async function buildAppWithAuth(): Promise<FastifyInstance> {
   resetRuntimeConfigForTest();
   const app = Fastify();
   await app.register(cookie);
   app.decorate("db", {} as never);
-  await app.register(authPlugin);
+  await app.register(
+    buildAuthPluginFp({ loadAssignmentAuthority: mockLoadAuthority() }),
+  );
   app.get("/protected", { preHandler: app.authenticate }, async (req) => ({
     actorId: req.ctx?.actorId,
     role: req.ctx?.role,
@@ -120,7 +147,9 @@ describe("auth plugin: requireCapability (RBAC runtime activation, PR #3)", () =
     const app = Fastify();
     await app.register(cookie);
     app.decorate("db", {} as never);
-    await app.register(authPlugin);
+    await app.register(
+      buildAuthPluginFp({ loadAssignmentAuthority: mockLoadAuthority() }),
+    );
     app.get(
       "/cap",
       {

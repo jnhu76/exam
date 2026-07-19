@@ -394,6 +394,20 @@ describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => 
       })
       .returning();
     const orgBAdmin = orgBAdminRows[0]!;
+    // RBAC-M10-E: Org B admin must authenticate (positive control + exam
+    // creation/enrollment) — seed an active primary Admin assignment scoped to
+    // orgBId so capability resolution produces Admin's preset rather than 401
+    // AUTH_REQUIRED.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: randomUUID(),
+      organizationId: orgBId,
+      userId: orgBAdmin.id,
+      role: "Admin" as never,
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     orgBAdminToken = signJWT({
       actorId: orgBAdmin.id,
       organizationId: orgBId,
@@ -417,6 +431,21 @@ describe("RBAC-M10-A-CORRECTIVE-1 cross-organization own-attempt denial", () => 
       })
       .returning();
     const orgBCandUser = orgBCandUserRows[0]!;
+
+    // RBAC-M10-E: Org B candidate must authenticate (positive controls + the
+    // attempt whose ownership the cross-org matrix attacks) — seed an active
+    // primary Candidate assignment scoped to orgBId so capability resolution
+    // produces Candidate's preset rather than 401 AUTH_REQUIRED.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: randomUUID(),
+      organizationId: orgBId,
+      userId: orgBCandUser.id,
+      role: "Candidate" as never,
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     // ── Create Org B candidate profile ──
     const orgBCandProfileRows = await ctx.db
