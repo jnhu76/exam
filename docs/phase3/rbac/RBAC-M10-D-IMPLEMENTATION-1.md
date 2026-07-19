@@ -3,14 +3,16 @@
 ## A. Baseline
 
 - **Branch**: `feat/rbac-M10-D`
-- **HEAD**: `3e5f508fa107f0c75c5ab43798dffee9e656e625`
-- **Base**: PR #193 merge (M10-C identity authority)
+- **IMPLEMENTATION_COMMIT**: `b16ce7927f000684c254861e3a246f317a7f243c`
+- **CORRECTIVE_COMMIT**: `7b15074ace8239e1d7e54a5be08500c8a92bb0e3`
+- **Base**: `3e5f508fa107f0c75c5ab43798dffee9e656e625` (PR #193 merge, M10-C identity authority)
+- **REVIEWED_PR_HEAD**: see PR #194 current head
 
-## B. CURRENT ROUTE / GATE / REGISTRY / PERMISSION AUTHORITY
+## B. PRE-MIGRATION BASELINE
 
 ### D1 — Organization/System Administrative Surfaces (14 routes)
 
-| ID | File | Method | Route | Current Gate | Registry Permission | Scope | Resolver | Classification |
+| ID | File | Method | Route | Pre-Migration Gate | Registry Permission | Scope | Resolver | Classification |
 |----|------|--------|-------|-------------|---------------------|-------|----------|----------------|
 | D01 | candidateField.ts | GET | /candidate-fields | requireRole(["Admin"]) | candidate_field.view | organization | organization | LEGACY_GATE_ONLY |
 | D02 | candidateField.ts | POST | /candidate-fields | requireRole(["Admin"]) | candidate_field.create | organization | organization | LEGACY_GATE_ONLY |
@@ -29,7 +31,7 @@
 
 ### D2 — Candidate Administrative Mutations (3 routes)
 
-| ID | File | Method | Route | Current Gate | Registry Permission | Scope | Resolver | Classification |
+| ID | File | Method | Route | Pre-Migration Gate | Registry Permission | Scope | Resolver | Classification |
 |----|------|--------|-------|-------------|---------------------|-------|----------|----------------|
 | D15 | candidate.ts | POST | /candidates | requireRole(["Admin"]) | candidate.create | organization | organization | LEGACY_GATE_ONLY |
 | D16 | candidate.ts | PATCH | /candidates/:id | requireRole(["Admin"]) | candidate.update | candidate | candidate | LEGACY_GATE_ONLY |
@@ -37,7 +39,7 @@
 
 ### Classification Summary
 
-All 17 routes are classified as **LEGACY_GATE_ONLY** — the current runtime gate uses `requireRole(["Admin"])`, the registry declares the correct Phase 3 permission, and the preset matrix grants each permission to Admin (and only Admin). No drift detected.
+All 17 routes were classified as **LEGACY_GATE_ONLY** at baseline — the pre-migration runtime gate used `requireRole(["Admin"])`, the registry declared the correct Phase 3 permission, and the preset matrix granted each permission to Admin (and only Admin). No drift was detected. After migration, all 17 routes now use `requireCapability(permission)` (see Section C).
 
 ### Registry Verification
 
@@ -50,7 +52,7 @@ All 17 entries exist in `ROUTE_PERMISSION_REGISTRY` (`apps/api/src/authz/routeRe
 
 ### Admin Preset Verification
 
-All 13 distinct permissions are in the Admin preset (`packages/authz/src/presets.ts:51-118`):
+All 12 distinct permissions are in the Admin preset (`packages/authz/src/presets.ts:51-118`):
 - `candidate_field.view` (line 70), `candidate_field.create` (line 71), `candidate_field.update` (line 72), `candidate_field.delete` (line 73)
 - `settings.view` (line 61), `settings.update` (line 62)
 - `system.health.view` (line 116), `system.diagnostics.view` (line 117)
@@ -59,7 +61,7 @@ All 13 distinct permissions are in the Admin preset (`packages/authz/src/presets
 
 ### Non-Admin Preset Verification
 
-None of the 13 permissions appear in Teacher, Proctor, Grader, Candidate, or System presets. System has `system.auto_submit`, `system.heartbeat_scan`, `system.lifecycle_reconcile` — NOT `system.health.view` or `system.diagnostics.view`.
+None of the 12 permissions appear in Teacher, Proctor, Grader, Candidate, or System presets. System has `system.auto_submit`, `system.heartbeat_scan`, `system.lifecycle_reconcile` — NOT `system.health.view` or `system.diagnostics.view`.
 
 ## C. Gate-Selection Rule
 
@@ -67,7 +69,7 @@ All 17 routes use `requireCapability(permission)` — the simplest flat-preset g
 
 ## D. Shadow Parity Matrix
 
-All 13 distinct permissions × 6 roles:
+All 12 distinct permissions × 6 roles:
 
 | Permission | Admin legacy | Admin capability | Teacher | Proctor | Grader | Candidate | System |
 |-----------|-------------|-----------------|---------|---------|--------|-----------|--------|
@@ -84,7 +86,7 @@ All 13 distinct permissions × 6 roles:
 | candidate.update | allow | allow | deny | deny | deny | deny | deny |
 | candidate.import | allow | allow | deny | deny | deny | deny | deny |
 
-**Verdict: PARITY** — Admin legacy == Admin capability for all 13 permissions. No non-Admin role receives access expansion.
+**Verdict: PARITY** — Admin legacy == Admin capability for all 12 permissions. No non-Admin role receives access expansion.
 
 ## E. Implementation Plan
 
@@ -112,8 +114,8 @@ All 13 distinct permissions × 6 roles:
 - **68 denial cells**: 17 routes × 4 non-Admin roles (Teacher/Proctor/Grader/Candidate).
 - **17 unauthenticated**: every route returns 401 without auth.
 - **17 Admin passage**: each route returns 2xx with Admin capability.
-- **8 zero-write** mutating-route denials: real fixture comparison (before/after), audit-count stability, deep import proof via gate-removal mutation.
-- **Import deep proof**: same payload denied (Teacher) → no user created, zero audit; allowed (Admin) → user created with `Deep Import Proof` name, audit recorded.
+- **8 zero-write** mutating-route denials: real fixture comparison (before/after), audit-count stability, import non-vacuity positive control.
+- **Import non-vacuity positive control**: same payload denied for Teacher → no user created, zero audit; same payload successfully processed for Admin → user created, audit recorded. This proves the denial is not vacuous (the payload passes handler-level validation and produces side effects under Admin).
 - **Authenticate guard**: all 17 routes force authentication before capability check.
 
 ### Boundary Test Architecture
@@ -123,7 +125,7 @@ All 13 distinct permissions × 6 roles:
 - Real DB fixtures: identity field for validation, test field for PATCH/DELETE, candidate for PATCH.
 - Prettier formatting: compliant. ESLint: compliant. typecheck: compliant.
 
-### Coverage (existing since no new source files added)
+### Coverage (test + doc files added by this PR)
 
 - 100% of M10-D routes covered by the boundary tests.
 - All 9 modified files covered by conformance + boundary suites.

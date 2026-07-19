@@ -78,20 +78,20 @@ Everything above rows 0–16 is merged. The **only** remaining RBAC work is row 
 (RBAC-M10-finish). **An authoritative baseline was frozen at commit 8ef50e5** and
 captured in `docs/phase3/rbac/RBAC-M10-FINISH-BASELINE-1.md` (§A–§R, 685 lines).
 
-M10-A (PR #189), M10-B (PR #190), and M10-C (PR #191 + PR #193) are all CLOSED.
+M10-A (PR #189), M10-B (PR #190), M10-C (PR #191 + PR #193), and M10-D (PR #194) are all CLOSED.
 See their respective sections below for disposition.
 
-**Current known state (re-proven from source at baseline):**
+**Current known state (after M10-D):**
 
 | Metric | Count |
 | ------ | ----: |
 | requireRole(["Candidate"]) routes | ~~10~~ → **0** (M10-A) |
-| requireRole(["Admin"]) routes | 34 |
-| requireCapability (flat) routes | 31 |
+| requireRole(["Admin"]) routes | ~~34~~ → **17** (M10-D) |
+| requireCapability (flat) routes | ~~31~~ → **48** (M10-D) |
 | requireScopedCapability routes | 5 |
 | requireScoreCapability routes | 1 |
-| requireRole total | ~~44~~ → **34** (M10-A) |
-| Flat-capability-to-scope gap | **21 of 31** (need resolver wiring) |
+| requireRole total | ~~44~~ → **17** (M10-A + M10-D) |
+| Flat-capability-to-scope gap | **21 of 48** (need resolver wiring) |
 | Runtime authority | MIXED — `users.role` is de facto authority; `user_role_assignments` never consulted |
 | Candidate ownership | preHandler-level (M10-A) + handler defense-in-depth |
 
@@ -290,22 +290,27 @@ race-safe zero-audit assertions. Full evidence:
 RBAC-M10-C:
 CLOSED — PR #191 + PR #193
 
-requireRole remaining: 34
+requireRole remaining after M10-C: 34
 M10-C routes migrated: 10/10
 ```
 
-## RBAC-M10-D — ✅ FINISHED
+## RBAC-M10-D — ✅ FINISHED (PR #194)
 - Delivered: 17 organization/system administrative surface routes migrated from `requireRole(["Admin"])` to `requireCapability(permission)`.
-- Files modified: `candidateField.ts` ×5, `settings.ts` ×3, `system.ts` ×3, `candidate.ts` ×3, `importLogs.ts` ×1, `email.ts` ×1, `audit.ts` ×1. Zero new files.
+- Files modified: `candidateField.ts` ×5, `settings.ts` ×3, `system.ts` ×3, `candidate.ts` ×3, `importLogs.ts` ×1, `email.ts` ×1, `audit.ts` ×1 (source files).
+- **New files:** `m10dPermissionBoundary.test.ts` (112-test boundary suite), `RBAC-M10-D-IMPLEMENTATION-1.md` (implementation report).
 - Shadow parity wired for all 17 routes (AUDIT-M2 `shadowRequireCapability`). Both shadow + migration-test conformance.
 - Conformance: `routeRegistryConformance.test.ts` M10-D section — 17/17 M10-D routes registry-derived; 82 conformance tests passing.
-- Boundary test: `m10dPermissionBoundary.test.ts` — 112 tests covering all 17 routes × 4 non-Admin roles (68 denial cells) + 17 unauthenticated + 17 Admin passage + 8 zero-write evidence tests including deep import proof (gate-removal mutation) and audit-count stability. No false-negative risk.
-- Key fixes during implementation:
-  - `candidateField.ts` POST/DELETE: added `fastify.authenticate` preHandler (was using only `requireRole`; `requireCapability` requires authenticate to provide a user/role).
-  - `candidate.ts` POST/PATCH/import: same authenticate addition.
-  - `email.ts` POST: same authenticate addition.
-  - `system.ts` GET diagnostics: same authenticate addition.
+- Boundary test: `m10dPermissionBoundary.test.ts` — 112 tests covering all 17 routes × 4 non-Admin roles (68 denial cells) + 17 unauthenticated + 17 Admin passage + 8 zero-write evidence tests including import non-vacuity positive control and audit-count stability. No false-negative risk.
+- **Authenticate preHandler clarification:** all 17 routes already had `fastify.authenticate` in their `preHandler` chain before this PR. The commit replaced only the second gate (`requireRole(["Admin"])` → `requireCapability(permission)`) while preserving the existing `authenticate`. No `authenticate` was added by this PR.
 - Commands: `pnpm --filter @exam/api exec vitest run src/routes/m10dPermissionBoundary.test.ts` ✅ 112/112 · `pnpm --filter @exam/api exec vitest run src/authz/routeRegistryConformance.test.ts` ✅ 82/82 · `pnpm verify` ✅ 1450/1455.
+
+```text
+RBAC-M10-D:
+CLOSED — PR #194
+
+requireRole remaining after M10-D: 17
+M10-D routes migrated: 17/17
+```
 
 ## RBAC-M10-E — NOT STARTED
 ## RBAC-M10-F — NOT STARTED

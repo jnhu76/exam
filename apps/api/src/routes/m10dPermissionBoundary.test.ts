@@ -7,7 +7,7 @@
  *   - 17 routes Admin capability-stage passage
  *   - 8 mutating routes: real non-vacuous zero-write evidence
  *   - candidate-field PATCH/DELETE: real fixture, material property change
- *   - candidate import: deep proof via gate-removal mutation
+ *   - candidate import: positive control — Admin same-payload success
  *   - audit absence: fire-and-forget settle-window stability
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -158,6 +158,7 @@ describe("M10-D permission boundary", () => {
   let fieldId: string;
   let identityFieldName: string;
   let candidateId: string;
+  let candidateUserId: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(async (fastify) => {
@@ -206,6 +207,7 @@ describe("M10-D permission boundary", () => {
       ctx.org.id,
     );
     candidateId = candidate.candidateProfileId;
+    candidateUserId = candidate.userId;
   });
 
   afterAll(async () => {
@@ -599,6 +601,7 @@ describe("M10-D permission boundary", () => {
     it("PATCH /api/admin/settings/branding denied — branding unchanged, no audit", async () => {
       const settingsRepo = createSettingsRepo(ctx.db);
       const before = await settingsRepo.get(orgCtx(ctx));
+      requireDefined(before, "settings must exist before denied PATCH");
       const auditRepo = createAuditLogRepo(ctx.db);
       const auditBefore = await auditRepo.listPaginatedFiltered(
         orgCtx(ctx),
@@ -616,20 +619,18 @@ describe("M10-D permission boundary", () => {
       expect(res.statusCode).toBe(403);
 
       const after = await settingsRepo.get(orgCtx(ctx));
-      if (before && after) {
-        expect(after.productName).toBe(before.productName);
-        expect(new Date(after.updatedAt).getTime()).toBe(
-          new Date(before.updatedAt).getTime(),
-        );
-      }
+      requireDefined(after, "settings must exist after denied PATCH");
+      expect(after.productName).toBe(before.productName);
+      expect(new Date(after.updatedAt).getTime()).toBe(
+        new Date(before.updatedAt).getTime(),
+      );
       await expectAuditCountStable(auditRepo, orgCtx(ctx), auditBefore.total);
     });
 
     it("POST /api/candidates denied — no candidate created, no audit", async () => {
-      const candidateRepo = createCandidateRepo(ctx.db);
-      // Instead of list count (which may include candidates from other tests),
-      // track by checking the specific username won't exist
-      const zwUsername = `zw-cand-${uniquePrefix()}`;
+      const prefix = uniquePrefix();
+      const zwUsername = `zw-cand-${prefix}`;
+      const zwIdentity = `zw-identity-${prefix}`;
       const auditRepo = createAuditLogRepo(ctx.db);
       const auditBefore = await auditRepo.listPaginatedFiltered(
         orgCtx(ctx),
@@ -645,11 +646,18 @@ describe("M10-D permission boundary", () => {
           username: zwUsername,
           password: "password123",
           name: "ZW Candidate",
-          fields: {},
+          fields: { [identityFieldName]: zwIdentity },
         },
         cookies: { "auth-token": teacherToken },
       });
       expect(res.statusCode).toBe(403);
+
+      // Verify no user was created with this username
+      const users = await ctx.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.username, zwUsername));
+      expect(users).toHaveLength(0);
 
       await expectAuditCountStable(auditRepo, orgCtx(ctx), auditBefore.total);
     });
@@ -683,6 +691,7 @@ describe("M10-D permission boundary", () => {
     });
 
     it("PATCH /api/candidates/:id with real candidate — denied, unchanged, no audit", async () => {
+      const candidateRepo = createCandidateRepo(ctx.db);
       const userRepo = createUserRepo(ctx.db);
       const auditRepo = createAuditLogRepo(ctx.db);
       const auditBefore = await auditRepo.listPaginatedFiltered(
@@ -692,7 +701,19 @@ describe("M10-D permission boundary", () => {
         {},
       );
 
-      const userBefore = await userRepo.findById(orgCtx(ctx), candidateId);
+      const candidateBefore = await candidateRepo.findById(
+        orgCtx(ctx),
+        candidateId,
+      );
+      const userBefore = await userRepo.findById(orgCtx(ctx), candidateUserId);
+      requireDefined(
+        candidateBefore,
+        "candidate must exist before denied PATCH",
+      );
+      requireDefined(
+        userBefore,
+        "candidate user must exist before denied PATCH",
+      );
 
       const res = await ctx.app.inject({
         method: "PATCH",
@@ -702,10 +723,17 @@ describe("M10-D permission boundary", () => {
       });
       expect(res.statusCode).toBe(403);
 
-      const userAfter = await userRepo.findById(orgCtx(ctx), candidateId);
-      if (userBefore && userAfter) {
-        expect(userAfter.name).toBe(userBefore.name);
-      }
+      const candidateAfter = await candidateRepo.findById(
+        orgCtx(ctx),
+        candidateId,
+      );
+      const userAfter = await userRepo.findById(orgCtx(ctx), candidateUserId);
+      requireDefined(candidateAfter, "candidate must exist after denied PATCH");
+      requireDefined(userAfter, "candidate user must exist after denied PATCH");
+
+      expect(candidateAfter).toEqual(candidateBefore);
+      expect(userAfter).toEqual(userBefore);
+
       await expectAuditCountStable(auditRepo, orgCtx(ctx), auditBefore.total);
     });
 
@@ -801,7 +829,7 @@ describe("M10-D permission boundary", () => {
       await expectAuditCountStable(auditRepo, orgCtx(ctx), auditBefore.total);
     });
 
-    it("import denial proven non-vacuous — gate-removal mutation creates side effect", async () => {
+    it("import denial proven non-vacuous — Admin same-payload positive control", async () => {
       const auditRepo = createAuditLogRepo(ctx.db);
       const auditBefore = await auditRepo.listPaginatedFiltered(
         orgCtx(ctx),
