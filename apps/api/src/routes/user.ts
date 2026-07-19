@@ -12,6 +12,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { ValidationError } from "@exam/domain";
+import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
@@ -54,13 +55,20 @@ const PHASE1_SUPPORTED_ROLES = ["Admin", "Candidate"] as const;
  * Fastify plugin that registers user management routes.
  *
  * Provides list, create, update, delete, and password-reset endpoints.
- * All routes require Admin role authentication.
+ * Gates use capability-based authorization (RBAC-M10-C). All six target
+ * permissions (UserView, UserCreate, UserUpdate, UserPasswordReset,
+ * UserDelete, and indirectly UserRoleAssign via the assignment surface)
+ * are Admin-only in the current permission presets, so the migration from
+ * legacy requireRole(["Admin"]) is access-matrix-neutral.
  */
 const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/users",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserView),
+      ],
       schema: {
         querystring: PaginationParamsSchema,
         security: cookieAuth,
@@ -107,7 +115,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/users",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserCreate),
+      ],
       schema: {
         body: CreateUserRequestSchema,
         security: cookieAuth,
@@ -159,7 +170,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/users/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateUserRequestSchema,
@@ -265,7 +279,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/users/:id/reset-password",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserPasswordReset),
+      ],
       schema: {
         params: idParamsSchema,
         body: ResetPasswordRequestSchema,
@@ -332,7 +349,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/users/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserDelete),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,

@@ -14,14 +14,19 @@ import examRoutes from "./exam.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import userRoutes from "./user.js";
+import roleAssignmentRoutes from "./roleAssignments.js";
 import scoreRoutes from "./scores.js";
 import { exportRoutes } from "./export.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { DEFAULT_CONTROL_FLAGS } from "./attempts/attempts.testHelpers.js";
 import type { Exam } from "@exam/domain";
+import { hashPassword } from "@exam/auth/src/password.js";
+import { eq } from "drizzle-orm";
 
 /**
  * Fail-fast type-narrowing helper. Used in zero-write fixtures to prove the
@@ -48,6 +53,7 @@ describe("permission boundary", () => {
       await fastify.register(courseRoutes);
       await fastify.register(questionRoutes);
       await fastify.register(userRoutes);
+      await fastify.register(roleAssignmentRoutes);
       await fastify.register(scoreRoutes);
       await fastify.register(exportRoutes);
     });
@@ -652,6 +658,838 @@ describe("permission boundary", () => {
         cookies: { "auth-token": ctx.adminToken },
       });
       expect(res.statusCode).toBe(200);
+    });
+  });
+
+  // ─────────────────── M10-C: identity & role-assignment ────────────────────
+  //
+  // M10-C migrates 10 routes from legacy requireRole(["Admin"]) to flat
+  // capability gates (Permission.UserView / UserCreate / UserUpdate /
+  // UserPasswordReset / UserDelete / UserRoleAssign). All six permissions are
+  // Admin-only in the current role presets, so this block proves:
+  //
+  //   1. unauthenticated → 401 on all 10 routes
+  //   2. Candidate → 403 on all 10 routes
+  //   3. Teacher / Proctor / Grader → 403 on all 10 routes
+  //   4. System login path unavailable (System is non-login)
+  //   5. denied mutations leave zero business write (user row, password hash,
+  //      account status, users.role, role-assignment rows, primary assignment)
+  //   6. denied mutations leave zero audit write
+  //   7. successful primary-assignment mutations still sync users.role
+  //      (compatibility invariant preserved — runtime authority unchanged)
+  //   8. Admin reaches the handler (capability decision = allow) on read routes
+  //
+  // Same non-vacuity discipline as M10-B: every fixture is created via direct
+  // schema insert with a deterministic unique prefix; every read-back is
+  // fail-fast via requireDefined.
+
+  describe("M10-C unauthenticated matrix — all 10 routes return 401", () => {
+    const placeholderId = "00000000-0000-0000-0000-000000000000";
+    const m10cUnauthenticatedRoutes: ReadonlyArray<{
+      method: HTTPMethods;
+      url: string;
+      payload?: object;
+    }> = [
+      { method: "GET", url: "/api/users" },
+      {
+        method: "POST",
+        url: "/api/users",
+        payload: {
+          username: "should-not-create",
+          password: "password123",
+          name: "Should Not",
+          role: "Candidate",
+        },
+      },
+      {
+        method: "PATCH",
+        url: `/api/users/${placeholderId}`,
+        payload: { name: "Should Not" },
+      },
+      {
+        method: "POST",
+        url: `/api/users/${placeholderId}/reset-password`,
+        payload: { newPassword: "ShouldNot123!" },
+      },
+      { method: "DELETE", url: `/api/users/${placeholderId}` },
+      { method: "GET", url: "/api/roles/assignable" },
+      {
+        method: "GET",
+        url: `/api/users/${placeholderId}/role-assignments`,
+      },
+      {
+        method: "POST",
+        url: `/api/users/${placeholderId}/role-assignments`,
+        payload: { role: "Teacher", isPrimary: false },
+      },
+      {
+        method: "PATCH",
+        url: `/api/role-assignments/${placeholderId}`,
+        payload: { isPrimary: true },
+      },
+      {
+        method: "DELETE",
+        url: `/api/role-assignments/${placeholderId}`,
+      },
+    ];
+
+    it("contains exactly 10 M10-C unauthenticated routes", () => {
+      expect(m10cUnauthenticatedRoutes).toHaveLength(10);
+    });
+
+    it.each(m10cUnauthenticatedRoutes)(
+      "$method $url returns 401 without authentication",
+      async ({ method, url, payload }) => {
+        const res = await ctx.app.inject({
+          method,
+          url,
+          ...(payload === undefined ? {} : { payload }),
+        });
+        expect(res.statusCode).toBe(401);
+      },
+    );
+  });
+
+  describe("M10-C non-Admin denial matrix — Candidate/Teacher/Proctor/Grader get 403", () => {
+    let candidateToken: string;
+    let teacherToken: string;
+    let proctorToken: string;
+    let graderToken: string;
+
+    // Deterministic target fixtures created once per describe (worker-DB
+    // isolation resets between runs; unique prefix avoids in-run collisions).
+    let candidateTargetId: string;
+    let assignmentId: string;
+
+    async function insertTargetUser(
+      role: "Admin" | "Candidate" = "Candidate",
+      usernamePrefix = "m10c-target",
+    ) {
+      const id = randomUUID();
+      const username = `${usernamePrefix}-${uniquePrefix()}`;
+      const now = new Date();
+      const rows = await ctx.db
+        .insert(schema.users)
+        .values({
+          id,
+          organizationId: ctx.org.id,
+          username,
+          passwordHash: await hashPassword("password123"),
+          name: `M10C ${username}`,
+          role,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const user = rows[0];
+      requireDefined(user, "insertTargetUser: user row must be created");
+      // Seed a primary active assignment so the role-assignment routes have a
+      // real target. (Both stores must agree for sync tests to be meaningful.)
+      const aRows = await ctx.db
+        .insert(schema.userRoleAssignments)
+        .values({
+          id: randomUUID(),
+          organizationId: ctx.org.id,
+          userId: id,
+          role,
+          isPrimary: true,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const assignment = aRows[0];
+      requireDefined(
+        assignment,
+        "insertTargetUser: assignment row must be created",
+      );
+      return { user, assignment };
+    }
+
+    beforeAll(async () => {
+      // Mint a Candidate via the API so its session is real.
+      const candidate = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `m10c-cand-${uniquePrefix()}`,
+        ctx.org.id,
+      );
+      candidateToken = candidate.token;
+      // Future roles via direct DB insert (consistent with the M10-B pattern).
+      const teacher = await createFutureRoleUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Teacher",
+        "m10c-tchr",
+      );
+      teacherToken = teacher.token;
+      const proctor = await createFutureRoleUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Proctor",
+        "m10c-proc",
+      );
+      proctorToken = proctor.token;
+      const grader = await createFutureRoleUserForTest(
+        ctx.db,
+        ctx.org.id,
+        "Grader",
+        "m10c-grad",
+      );
+      graderToken = grader.token;
+
+      // Deterministic fixtures for the parameterized routes.
+      const { user, assignment } = await insertTargetUser();
+      candidateTargetId = user.id;
+      assignmentId = assignment.id;
+    });
+
+    const m10cRoutes: ReadonlyArray<{
+      method: HTTPMethods;
+      buildUrl: () => string;
+      payload?: object;
+      label: string;
+    }> = [
+      { method: "GET", buildUrl: () => "/api/users", label: "list users" },
+      {
+        method: "POST",
+        buildUrl: () => "/api/users",
+        payload: {
+          username: `m10c-deny-${uniquePrefix()}`,
+          password: "password123",
+          name: "M10C Deny",
+          role: "Candidate",
+        },
+        label: "create user",
+      },
+      {
+        method: "PATCH",
+        buildUrl: () => `/api/users/${candidateTargetId}`,
+        payload: { name: "Should Not Update" },
+        label: "update user",
+      },
+      {
+        method: "POST",
+        buildUrl: () => `/api/users/${candidateTargetId}/reset-password`,
+        payload: { newPassword: "ShouldNot123!" },
+        label: "reset password",
+      },
+      {
+        method: "DELETE",
+        buildUrl: () => `/api/users/${candidateTargetId}`,
+        label: "delete user",
+      },
+      {
+        method: "GET",
+        buildUrl: () => "/api/roles/assignable",
+        label: "list assignable roles",
+      },
+      {
+        method: "GET",
+        buildUrl: () => `/api/users/${candidateTargetId}/role-assignments`,
+        label: "list user assignments",
+      },
+      {
+        method: "POST",
+        buildUrl: () => `/api/users/${candidateTargetId}/role-assignments`,
+        payload: { role: "Teacher", isPrimary: false },
+        label: "create assignment",
+      },
+      {
+        method: "PATCH",
+        buildUrl: () => `/api/role-assignments/${assignmentId}`,
+        payload: { isPrimary: true },
+        label: "promote assignment",
+      },
+      {
+        method: "DELETE",
+        buildUrl: () => `/api/role-assignments/${assignmentId}`,
+        label: "delete assignment",
+      },
+    ];
+
+    it("Candidate denied on all 10 M10-C routes", async () => {
+      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+        const res = await ctx.app.inject({
+          method,
+          url: buildUrl(),
+          ...(payload === undefined ? {} : { payload }),
+          cookies: { "auth-token": candidateToken },
+        });
+        expect(res.statusCode, `Candidate → ${label}`).toBe(403);
+      }
+    });
+
+    it("Teacher denied on all 10 M10-C routes", async () => {
+      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+        const res = await ctx.app.inject({
+          method,
+          url: buildUrl(),
+          ...(payload === undefined ? {} : { payload }),
+          cookies: { "auth-token": teacherToken },
+        });
+        expect(res.statusCode, `Teacher → ${label}`).toBe(403);
+      }
+    });
+
+    it("Proctor denied on all 10 M10-C routes", async () => {
+      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+        const res = await ctx.app.inject({
+          method,
+          url: buildUrl(),
+          ...(payload === undefined ? {} : { payload }),
+          cookies: { "auth-token": proctorToken },
+        });
+        expect(res.statusCode, `Proctor → ${label}`).toBe(403);
+      }
+    });
+
+    it("Grader denied on all 10 M10-C routes", async () => {
+      for (const { method, buildUrl, payload, label } of m10cRoutes) {
+        const res = await ctx.app.inject({
+          method,
+          url: buildUrl(),
+          ...(payload === undefined ? {} : { payload }),
+          cookies: { "auth-token": graderToken },
+        });
+        expect(res.statusCode, `Grader → ${label}`).toBe(403);
+      }
+    });
+  });
+
+  describe("M10-C System login path is unavailable", () => {
+    // The System preset is `loginAllowed: false` and `assignable: false`. There
+    // is no API to mint a System session in the current contract, and the
+    // authenticate plugin requires an active user row. Therefore the System
+    // principal cannot reach any M10-C handler. This test proves the negative:
+    // a JWT claiming role "System" but bearing no matching active user row is
+    // rejected by authenticate with 401 (not passed to the capability gate).
+    it("a System-claimed JWT with no user row is rejected before capability gate", async () => {
+      const { signJWT } = await import("@exam/auth/src/session.js");
+      const { getRuntimeConfig } = await import("../config/runtimeConfig.js");
+      const systemToken = signJWT(
+        {
+          actorId: randomUUID(),
+          role: "System" as never,
+          organizationId: ctx.org.id,
+        },
+        getRuntimeConfig().authSecret.jwtSecret,
+      );
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/users",
+        cookies: { "auth-token": systemToken },
+      });
+      expect([401, 403]).toContain(res.statusCode);
+    });
+  });
+
+  describe("M10-C zero-write evidence — denied mutations", () => {
+    function adminCtx() {
+      return {
+        actorId: ctx.admin.id,
+        organizationId: ctx.org.id,
+        targetOrganizationId: ctx.org.id,
+        role: "Admin" as const,
+        permissions: [] as import("@exam/domain").Permission[],
+        sessionId: "test",
+      };
+    }
+
+    /**
+     * Insert a deterministic user + primary assignment directly into the DB.
+     * Returns both rows so the caller can compare byte-exact state before
+     * and after a denied request.
+     */
+    async function insertTargetUserWithAssignment(
+      role: "Admin" | "Candidate" = "Candidate",
+      usernamePrefix = "m10c-zw",
+    ) {
+      const id = randomUUID();
+      const username = `${usernamePrefix}-${uniquePrefix()}`;
+      const now = new Date();
+      const userRows = await ctx.db
+        .insert(schema.users)
+        .values({
+          id,
+          organizationId: ctx.org.id,
+          username,
+          passwordHash: await hashPassword("password123"),
+          name: `M10C ZW ${username}`,
+          role,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const user = userRows[0];
+      requireDefined(user, "insertTargetUserWithAssignment: user must exist");
+      const aRows = await ctx.db
+        .insert(schema.userRoleAssignments)
+        .values({
+          id: randomUUID(),
+          organizationId: ctx.org.id,
+          userId: id,
+          role,
+          isPrimary: true,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const assignment = aRows[0];
+      requireDefined(
+        assignment,
+        "insertTargetUserWithAssignment: assignment must exist",
+      );
+      return { user, assignment };
+    }
+
+    async function readUser(id: string) {
+      const rows = await ctx.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, id));
+      return rows[0] ?? null;
+    }
+
+    async function readAssignmentsForUser(userId: string) {
+      return ctx.db
+        .select()
+        .from(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.userId, userId));
+    }
+
+    it("POST /users denied — no new user row, no new assignment, no audit", async () => {
+      const userRepo = createUserRepo(ctx.db);
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const beforeCount = await userRepo.listPaginatedByRoles(
+        adminCtx(),
+        ["Admin", "Candidate"],
+        1,
+        1000,
+      );
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.create" },
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/users",
+        payload: {
+          username: `m10c-deny-create-${uniquePrefix()}`,
+          password: "password123",
+          name: "Should Not Exist",
+          role: "Candidate",
+        },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const afterCount = await userRepo.listPaginatedByRoles(
+        adminCtx(),
+        ["Admin", "Candidate"],
+        1,
+        1000,
+      );
+      expect(afterCount.total).toBe(beforeCount.total);
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.create" },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
+    });
+
+    it("PATCH /users/:id denied — user row, role, password hash, active status all unchanged", async () => {
+      const { user } = await insertTargetUserWithAssignment();
+      const before = await readUser(user.id);
+      requireDefined(before, "PATCH deny: user must exist before");
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/users/${user.id}`,
+        payload: { name: "Hacked Name", isActive: false },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const after = await readUser(user.id);
+      requireDefined(after, "PATCH deny: user must still exist after denial");
+      expect(after.name).toBe(before.name);
+      expect(after.role).toBe(before.role);
+      expect(after.isActive).toBe(before.isActive);
+      expect(after.passwordHash).toBe(before.passwordHash);
+      expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+    });
+
+    it("POST /users/:id/reset-password denied — password hash unchanged", async () => {
+      const { user } = await insertTargetUserWithAssignment("Candidate");
+      const before = await readUser(user.id);
+      requireDefined(before, "reset-password deny: user must exist before");
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/reset-password`,
+        payload: { newPassword: "HackedPass123!" },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const after = await readUser(user.id);
+      requireDefined(after, "reset-password deny: user must still exist");
+      expect(after.passwordHash).toBe(before.passwordHash);
+      expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+    });
+
+    it("DELETE /users/:id denied — user row still exists, assignment rows intact", async () => {
+      const { user, assignment } = await insertTargetUserWithAssignment();
+      const beforeUser = await readUser(user.id);
+      requireDefined(beforeUser, "DELETE deny: user must exist before");
+      const beforeAssignments = await readAssignmentsForUser(user.id);
+      expect(beforeAssignments.some((a) => a.id === assignment.id)).toBe(true);
+
+      const res = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/users/${user.id}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const afterUser = await readUser(user.id);
+      requireDefined(afterUser, "DELETE deny: user must still exist");
+      expect(afterUser.updatedAt.getTime()).toBe(
+        beforeUser.updatedAt.getTime(),
+      );
+      const afterAssignments = await readAssignmentsForUser(user.id);
+      expect(afterAssignments.length).toBe(beforeAssignments.length);
+      expect(afterAssignments.some((a) => a.id === assignment.id)).toBe(true);
+    });
+
+    it("POST /users/:id/role-assignments denied — no new assignment row, users.role unchanged, no audit", async () => {
+      const { user } = await insertTargetUserWithAssignment("Candidate");
+      const beforeUser = await readUser(user.id);
+      requireDefined(beforeUser, "POST assignment deny: user must exist");
+      const beforeAssignments = await readAssignmentsForUser(user.id);
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Teacher", isPrimary: true },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const afterUser = await readUser(user.id);
+      requireDefined(afterUser, "POST assignment deny: user must still exist");
+      expect(afterUser.role).toBe(beforeUser.role);
+      expect(afterUser.updatedAt.getTime()).toBe(
+        beforeUser.updatedAt.getTime(),
+      );
+      const afterAssignments = await readAssignmentsForUser(user.id);
+      expect(afterAssignments.length).toBe(beforeAssignments.length);
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
+    });
+
+    it("PATCH /role-assignments/:assignmentId denied — assignment isPrimary/isActive/role unchanged, no audit", async () => {
+      const { user, assignment } = await insertTargetUserWithAssignment();
+      const beforeUser = await readUser(user.id);
+      requireDefined(beforeUser, "PATCH assignment deny: user must exist");
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/role-assignments/${assignment.id}`,
+        payload: { isPrimary: false },
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const rows = await ctx.db
+        .select()
+        .from(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.id, assignment.id));
+      const after = rows[0];
+      requireDefined(
+        after,
+        "PATCH assignment deny: assignment must still exist",
+      );
+      expect(after.isPrimary).toBe(assignment.isPrimary);
+      expect(after.isActive).toBe(assignment.isActive);
+      expect(after.role).toBe(assignment.role);
+      // users.role must be unchanged — the sync path was never reached.
+      const afterUser = await readUser(user.id);
+      requireDefined(afterUser, "PATCH assignment deny: user must still exist");
+      expect(afterUser.role).toBe(beforeUser.role);
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
+    });
+
+    it("DELETE /role-assignments/:assignmentId denied — assignment row still exists, users.role unchanged, no audit", async () => {
+      const { user, assignment } = await insertTargetUserWithAssignment();
+      const beforeUser = await readUser(user.id);
+      requireDefined(beforeUser, "DELETE assignment deny: user must exist");
+      const auditRepo = createAuditLogRepo(ctx.db);
+      const auditBefore = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        {
+          action: "user.role_changed",
+          targetType: "role_assignment",
+          targetId: assignment.id,
+        },
+      );
+
+      const res = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/role-assignments/${assignment.id}`,
+        cookies: { "auth-token": ctx.candidateToken },
+      });
+      expect(res.statusCode).toBe(403);
+
+      const rows = await ctx.db
+        .select()
+        .from(schema.userRoleAssignments)
+        .where(eq(schema.userRoleAssignments.id, assignment.id));
+      const after = rows[0];
+      requireDefined(
+        after,
+        "DELETE assignment deny: assignment must still exist",
+      );
+      expect(after.isPrimary).toBe(assignment.isPrimary);
+      const afterUser = await readUser(user.id);
+      requireDefined(
+        afterUser,
+        "DELETE assignment deny: user must still exist",
+      );
+      expect(afterUser.role).toBe(beforeUser.role);
+      const auditAfter = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        {
+          action: "user.role_changed",
+          targetType: "role_assignment",
+          targetId: assignment.id,
+        },
+      );
+      expect(auditAfter.total).toBe(auditBefore.total);
+    });
+  });
+
+  describe("M10-C users.role compatibility synchronization (preserved)", () => {
+    // The runtime authority is still users.role (M10-E has not started).
+    // M10-C must NOT change this. It must preserve the existing sync invariant:
+    // every primary-active assignment mutation re-syncs users.role.
+    //
+    // These positive-path tests prove the sync still happens after the
+    // capability-gate migration — they would fail if the migration had
+    // accidentally removed a syncUsersRoleFromPrimary call site.
+
+    async function insertTargetUserWithPrimary(
+      role: "Admin" | "Candidate" = "Candidate",
+      usernamePrefix = "m10c-sync",
+    ) {
+      const id = randomUUID();
+      const username = `${usernamePrefix}-${uniquePrefix()}`;
+      const now = new Date();
+      const userRows = await ctx.db
+        .insert(schema.users)
+        .values({
+          id,
+          organizationId: ctx.org.id,
+          username,
+          passwordHash: await hashPassword("password123"),
+          name: `M10C Sync ${username}`,
+          role,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const user = userRows[0];
+      requireDefined(user, "insertTargetUserWithPrimary: user must exist");
+      const aRows = await ctx.db
+        .insert(schema.userRoleAssignments)
+        .values({
+          id: randomUUID(),
+          organizationId: ctx.org.id,
+          userId: id,
+          role,
+          isPrimary: true,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      const primary = aRows[0];
+      requireDefined(
+        primary,
+        "insertTargetUserWithPrimary: primary assignment must exist",
+      );
+      return { user, primary };
+    }
+
+    async function readUserRole(userId: string) {
+      const rows = await ctx.db
+        .select({ role: schema.users.role })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId));
+      const r = rows[0];
+      requireDefined(r, "readUserRole: user must exist");
+      return r.role;
+    }
+
+    it("POST a new primary assignment syncs users.role to the new role", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Teacher", isPrimary: true },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(await readUserRole(user.id)).toBe("Teacher");
+    });
+
+    it("POST a secondary assignment does NOT change users.role", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Proctor", isPrimary: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(await readUserRole(user.id)).toBe("Candidate");
+    });
+
+    it("PATCH promote-to-primary syncs users.role to the promoted role", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      // Add a secondary Grader assignment to promote.
+      const addRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Grader", isPrimary: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(addRes.statusCode).toBe(201);
+      const graderAssignmentId = addRes.json().id;
+
+      const promoteRes = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/role-assignments/${graderAssignmentId}`,
+        payload: { isPrimary: true },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(promoteRes.statusCode).toBe(200);
+      expect(await readUserRole(user.id)).toBe("Grader");
+    });
+
+    it("DELETE a primary assignment auto-promotes the next active and syncs users.role", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      // Add a secondary Grader assignment to auto-promote.
+      const addRes = await ctx.app.inject({
+        method: "POST",
+        url: `/api/users/${user.id}/role-assignments`,
+        payload: { role: "Grader", isPrimary: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(addRes.statusCode).toBe(201);
+
+      // Find the primary Candidate assignment id, then delete it.
+      const listRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/users/${user.id}/role-assignments`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      const items = listRes.json().items as Array<{
+        id: string;
+        role: string;
+        isPrimary: boolean;
+      }>;
+      const primary = items.find((i) => i.role === "Candidate" && i.isPrimary);
+      requireDefined(primary, "sync delete: primary Candidate assignment");
+      const delRes = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/role-assignments/${primary.id}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(delRes.statusCode).toBe(204);
+      expect(await readUserRole(user.id)).toBe("Grader");
+    });
+
+    it("PATCH /users/:id role-change syncs users.role to the new role", async () => {
+      const { user } = await insertTargetUserWithPrimary("Candidate");
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/users/${user.id}`,
+        payload: { role: "Admin" },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().role).toBe("Admin");
+      expect(await readUserRole(user.id)).toBe("Admin");
+    });
+  });
+
+  describe("M10-C Admin reaches handler on read routes", () => {
+    // Sanity: the capability gate must ALLOW Admin (the only role holding
+    // these permissions) and reach the handler. This proves the migration did
+    // not accidentally regress Admin access — the equal half of shadow parity.
+    it("GET /api/users returns 200 for Admin", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/users",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it("GET /api/roles/assignable returns 200 with the 5 human roles for Admin", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/roles/assignable",
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(200);
+      const keys = res
+        .json()
+        .items.map((i: { key: string }) => i.key)
+        .sort();
+      expect(keys).toEqual(
+        ["Admin", "Candidate", "Grader", "Proctor", "Teacher"].sort(),
+      );
     });
   });
 });

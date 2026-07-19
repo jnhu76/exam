@@ -7,7 +7,7 @@ import {
   AssignableRoleSchema,
   ErrorResponseSchema,
 } from "@exam/contracts";
-import { ROLE_PRESETS, Role, type RoleKey } from "@exam/authz";
+import { ROLE_PRESETS, Role, type RoleKey, Permission } from "@exam/authz";
 import type { RolePreset } from "@exam/authz";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
@@ -38,16 +38,24 @@ const assignableRolesResponseSchema = z.object({
 /**
  * Fastify plugin registering role-assignment routes (RBAC-M8).
  *
- * NOTE: gates still use legacy `requireRole(["Admin"])` — enforcement is PR #3.
- * These routes are the role-assignment *capability* surface; they keep
- * `users.role` synced to the primary active assignment (ADR migration cache).
+ * Gates use capability-based authorization (RBAC-M10-C). All four mutating /
+ * management routes use Permission.UserRoleAssign; the per-user list route
+ * uses Permission.UserView. Both permissions are Admin-only in the current
+ * permission presets, so the migration from legacy requireRole(["Admin"]) is
+ * access-matrix-neutral.
+ *
+ * These routes keep `users.role` synced to the primary active assignment
+ * (ADR migration cache). Runtime authority remains users.role until M10-E.
  */
 const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
   // ── GET /roles/assignable ───────────────────────────────────────
   fastify.get(
     "/roles/assignable",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserRoleAssign),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Admin"],
@@ -67,7 +75,10 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/users/:id/role-assignments",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserView),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -106,7 +117,10 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/users/:id/role-assignments",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserRoleAssign),
+      ],
       schema: {
         params: idParamsSchema,
         body: AssignRoleRequestSchema,
@@ -156,7 +170,10 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/role-assignments/:assignmentId",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserRoleAssign),
+      ],
       schema: {
         params: assignmentParamsSchema,
         body: PatchRoleAssignmentRequestSchema,
@@ -216,7 +233,10 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/role-assignments/:assignmentId",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.UserRoleAssign),
+      ],
       schema: {
         params: assignmentParamsSchema,
         security: cookieAuth,
