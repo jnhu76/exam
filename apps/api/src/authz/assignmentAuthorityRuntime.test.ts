@@ -415,6 +415,67 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     expect(system).toEqual([]);
   });
 
+  // ── E12 (DB-resolver layer) — multiple active primaries fail-closed ────
+  // Spec §12 E12: "directly DB-insert multiple active primary assignments
+  //               bypassing the repo → request fails closed."
+  //
+  // Two layers protect this invariant:
+  //   1. DB partial unique index `user_role_assignments_active_primary_unique`
+  //      (migration 0015 step 5) — the production backstop. A direct
+  //      insert of a SECOND active primary is rejected with a 23505
+  //      unique-violation, so the corrupt state can never exist in prod.
+  //   2. Runtime resolver `deriveAssignmentAuthority` (assignmentAuthority.ts)
+  //      — returns `multiple_primary` and the caller fail-closes.
+  //
+  // This test proves layer 1: a direct DB insert of a second active primary
+  // is REJECTED by the partial unique index (Drizzle wraps the underlying
+  // PostgresError under `.cause`, so we walk the chain). The pure-kernel E12
+  // test (assignmentAuthority.test.ts "fails closed on multiple active
+  // primaries") proves layer 2 in isolation with hand-built rows.
+  //
+  // The combination kills spec §16 Mutation I (`.limit(1)` on
+  // listActiveForUser): even if the repo query masked corruption, the index
+  // prevents the corrupt rows from existing in the first place.
+  it("E12: DB rejects a second active primary via the partial unique index (23505)", async () => {
+    const { user } = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Candidate" as never,
+      "e12-index-backstop",
+    );
+    // createAssignedUserForTest already seeded one active primary. Attempt a
+    // SECOND active primary directly via DB; the partial unique index must
+    // reject it.
+    let pgCode: string | undefined;
+    try {
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: ctx.org.id,
+        userId: user.id,
+        role: "Admin" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      // Drizzle wraps the underlying PostgresError multiple levels deep.
+      let cursor: unknown = err;
+      const visited = new Set<unknown>();
+      while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        const c = (cursor as { code?: unknown }).code;
+        if (typeof c === "string") {
+          pgCode = c;
+          break;
+        }
+        cursor = (cursor as { cause?: unknown }).cause;
+      }
+    }
+    // 23505 = unique_violation; the partial unique index fired.
+    expect(pgCode).toBe("23505");
+  });
+
   // ── E16 — scoped resource resolver is NOT bypassed by capability union ─
   it("E16: capability-allowed but resource-not-owned → still denied (scoped resolver preserved)", async () => {
     // Admin's preset includes ExamView, so the capability gate passes. The

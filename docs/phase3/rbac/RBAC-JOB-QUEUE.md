@@ -81,7 +81,7 @@ captured in `docs/phase3/rbac/RBAC-M10-FINISH-BASELINE-1.md` (§A–§R, 685 lin
 M10-A (PR #189), M10-B (PR #190), M10-C (PR #191 + PR #193), and M10-D (PR #194) are all CLOSED.
 See their respective sections below for disposition.
 
-**Current known state (after M10-D):**
+**Current known state (after M10-E):**
 
 | Metric | Count |
 | ------ | ----: |
@@ -92,7 +92,7 @@ See their respective sections below for disposition.
 | requireScoreCapability routes | 1 |
 | requireRole total | ~~44~~ → **17** (M10-A + M10-D) |
 | Flat-capability-to-scope gap | **21 of 48** (need resolver wiring) |
-| Runtime authority | MIXED — `users.role` is de facto authority; `user_role_assignments` never consulted |
+| Runtime authority | **assignment-backed** (M10-E): every authenticated request resolves the union of ACTIVE `user_role_assignments`; `users.role` and the JWT `role` claim are compatibility projections only. Fail-closed contract enforced. |
 | Candidate ownership | preHandler-level (M10-A) + handler defense-in-depth |
 
 **Baseline verdict:** `PASS — BASELINE FROZEN` with `RUNTIME AUTHORITY: MIXED` as a finding (see RBAC-M10-FINISH-BASELINE-1.md §A).
@@ -312,7 +312,30 @@ requireRole remaining after M10-D: 17
 M10-D routes migrated: 17/17
 ```
 
-## RBAC-M10-E — NOT STARTED
+## RBAC-M10-E — ✅ DONE (author self-assessment; see RBAC-M10-E-ASSIGNMENT-BACKED-RUNTIME-AUTHORITY-1.md)
+
+Runtime authority flipped from `users.role` (single-role preset) to the union
+of a human actor's ACTIVE `user_role_assignments`. Every authenticated request
+resolves the union fresh via `loadAssignmentAuthority`; `users.role` and the
+JWT `role` claim are compatibility projections only (telemetry / login
+response / audit display). Fail-closed contract: `no_active_assignments` →
+401; every integrity / DB failure → 503 AUTHZ_UNAVAILABLE (never falls back
+to `users.role`).
+
+- Commits: `e14ff3d` (kernel) → `901fda0` (data-integrity + migration 0015) →
+  `fd5062f` (runtime flip) → `98f9f62` (adversarial tests) → (this update)
+  E12 DB-layer backstop test + docs.
+- Adversarial matrix: spec §12 E1–E16 covered (HTTP layer in
+  `assignmentAuthorityRuntime.test.ts`; pure kernel in
+  `assignmentAuthority.test.ts`; E14 via `auth.test.ts` DI seam).
+- Mutation campaign: 7/11 KILLED (A B C D H J K), 4 SURVIVED with documented
+  reasoning (E/F fixture alignment — production is correct; G test gap —
+  follow-up; I defense-in-depth — DB partial unique index holds the
+  invariant regardless of resolver mutation).
+- Full suite: 116/116 api test files green; authz / db / api targeted re-runs
+  green.
+- Known follow-up: multi-role score-arbitration test (Mutation G coverage gap).
+
 ## RBAC-M10-F — NOT STARTED
 
 ## Acceptance per job (filled in as each lands)
