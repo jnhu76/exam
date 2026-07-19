@@ -66,6 +66,33 @@ export function createUserRoleAssignmentRepo(db: Database) {
     return rows.map(row);
   }
 
+  /**
+   * Lists every ACTIVE assignment for a user, scoped to ctx's org
+   * (RBAC-M10-E). Deliberately returns the full active set — NO `.limit(1)` —
+   * so the assignment-authority resolver can detect multi-primary corruption
+   * (multiple `is_primary && is_active` rows for the same user). Inactive rows
+   * are excluded by the WHERE clause, not by post-filtering. Ordered by
+   * `createdAt` for deterministic regression output.
+   */
+  async function listActiveForUser(
+    ctx: TenantContext | RequestContext,
+    userId: string,
+  ): Promise<UserRoleAssignmentRow[]> {
+    const orgId = resolveOrganizationId(ctx);
+    const rows = await db
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.userId, userId),
+          eq(userRoleAssignments.isActive, true),
+        ),
+      )
+      .orderBy(userRoleAssignments.createdAt);
+    return rows.map(row);
+  }
+
   /** Returns the single primary active assignment for a user, or null. */
   async function findPrimaryActiveForUser(
     ctx: TenantContext | RequestContext,
@@ -274,6 +301,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
   return {
     ...repo,
     listForUser,
+    listActiveForUser,
     findPrimaryActiveForUser,
     assign,
     setPrimary,

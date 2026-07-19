@@ -201,4 +201,75 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
     await repo.remove(ctx, primary.id);
     expect(await repo.findPrimaryActiveForUser(ctx, userId)).toBeNull();
   });
+
+  describe("listActiveForUser (RBAC-M10-E)", () => {
+    it("returns only ACTIVE assignments, excluding inactive rows", async () => {
+      const { userId, ctx } = await seedOrgAndUser(db, "kara");
+      const repo = createUserRoleAssignmentRepo(db);
+      const active1 = await repo.assign(ctx, {
+        userId,
+        role: "Candidate",
+        isPrimary: true,
+      });
+      const active2 = await repo.assign(ctx, {
+        userId,
+        role: "Teacher",
+        isPrimary: false,
+      });
+      const inactive = await repo.assign(ctx, {
+        userId,
+        role: "Grader",
+        isPrimary: false,
+        isActive: false,
+      });
+      const activeRows = await repo.listActiveForUser(ctx, userId);
+      const activeIds = new Set(activeRows.map((r) => r.id));
+      expect(activeRows).toHaveLength(2);
+      expect(activeIds.has(active1.id)).toBe(true);
+      expect(activeIds.has(active2.id)).toBe(true);
+      expect(activeIds.has(inactive.id)).toBe(false);
+      expect(activeRows.every((r) => r.isActive)).toBe(true);
+    });
+
+    it("returns the FULL active set (no .limit(1)) so multi-primary corruption is observable", async () => {
+      const { userId, ctx } = await seedOrgAndUser(db, "leo");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(ctx, { userId, role: "Candidate", isPrimary: true });
+      await repo.assign(ctx, { userId, role: "Teacher", isPrimary: false });
+      await repo.assign(ctx, { userId, role: "Grader", isPrimary: false });
+      const activeRows = await repo.listActiveForUser(ctx, userId);
+      expect(activeRows).toHaveLength(3);
+    });
+
+    it("is scoped to ctx's organization (does not leak cross-org rows)", async () => {
+      const a = await seedOrgAndUser(db, "mia-org-a");
+      const b = await seedOrgAndUser(db, "noah-org-b");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(a.ctx, {
+        userId: a.userId,
+        role: "Candidate",
+        isPrimary: true,
+      });
+      await repo.assign(b.ctx, {
+        userId: b.userId,
+        role: "Admin",
+        isPrimary: true,
+      });
+      const seenForA = await repo.listActiveForUser(a.ctx, a.userId);
+      const seenForB = await repo.listActiveForUser(a.ctx, b.userId);
+      expect(seenForA).toHaveLength(1);
+      expect(seenForA[0]!.role).toBe("Candidate");
+      expect(seenForB).toHaveLength(0);
+    });
+
+    it("returns rows ordered by createdAt (deterministic)", async () => {
+      const { userId, ctx } = await seedOrgAndUser(db, "oscar");
+      const repo = createUserRoleAssignmentRepo(db);
+      await repo.assign(ctx, { userId, role: "Candidate", isPrimary: true });
+      await new Promise((r) => setTimeout(r, 5));
+      await repo.assign(ctx, { userId, role: "Teacher", isPrimary: false });
+      const activeRows = await repo.listActiveForUser(ctx, userId);
+      expect(activeRows.map((r) => r.role)).toEqual(["Candidate", "Teacher"]);
+    });
+  });
 });
