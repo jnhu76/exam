@@ -19,7 +19,10 @@ import scoreRoutes from "./scores.js";
 import { exportRoutes } from "./export.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import {
+  createAuditLogRepo,
+  type AuditLogListFilter,
+} from "@exam/db/src/repository/auditLogRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { schema } from "@exam/db/src/schema/pg.js";
@@ -47,7 +50,7 @@ function requireDefined<T>(
  * `listPaginatedFiltered` after the HTTP response may race with the write.
  * Polls up to `timeoutMs` for the expected count.
  */
-async function waitForAuditCount<TFilter extends Record<string, unknown>>(
+async function waitForAuditCount<TFilter extends AuditLogListFilter>(
   auditRepo: ReturnType<typeof createAuditLogRepo>,
   ctx: Parameters<typeof auditRepo.listPaginatedFiltered>[0],
   expectedTotal: number,
@@ -70,7 +73,7 @@ async function waitForAuditCount<TFilter extends Record<string, unknown>>(
  * never exceeds `expectedTotal`. If a fire-and-forget audit write races
  * after the HTTP response, this catches it before the settle window ends.
  */
-async function expectAuditCountStable<TFilter extends Record<string, unknown>>(
+async function expectAuditCountStable<TFilter extends AuditLogListFilter>(
   auditRepo: ReturnType<typeof createAuditLogRepo>,
   ctx: Parameters<typeof auditRepo.listPaginatedFiltered>[0],
   expectedTotal: number,

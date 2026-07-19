@@ -40,11 +40,12 @@ BRANCH:                   feat/rbac-m10-c-identity-authority-ddbc808b
 
 CORRECTIVE_PR_BASE:       4d68745daf38be605744827f71bd09efa375d955
                            (the merge commit — master's HEAD after PR #191)
-CORRECTIVE_FINAL_HEAD:    ec5d869a2e99c4f0e99abeeced4d3823dc864cf9
-CORRECTIVE_COMMITS:       2
+CORRECTIVE_FINAL_HEAD:    054de9b2b637e0774c58463ba2be7a4791a2472a
+CORRECTIVE_COMMITS:       3
   6d7501b — test(authz): strengthen M10-C denial and System-login evidence
   ec5d869 — docs(authz): close M10-C corrective findings
-WORKTREE:                 clean (after corrective commits)
+  054de9b — fix: typecheck error — use requireDefined for array access in new audit tests
+WORKTREE:                 clean
 ```
 
 ---
@@ -93,8 +94,12 @@ The `[401, 403]` union was an admission that the test author wasn't sure which g
 
 | File | Change |
 | ---- | ------ |
-| `apps/api/src/routes/permissionBoundary.test.ts` | System-login test split & tightened to exact 401; added scoped audit-count assertions on 3 denied user mutations; switched PATCH assignment to real promote branch; added `waitForAuditCount` polling helper for fire-and-forget audit race |
+| `apps/api/src/routes/permissionBoundary.test.ts` | System-login test split & tightened to exact 401; added scoped audit-count assertions on 3 denied user mutations; switched PATCH assignment to real promote branch; added `waitForAuditCount` polling helper for fire-and-forget audit race; race-safe deactivate audit tests moved `auditBefore` before setup |
+| `apps/api/src/routes/roleAssignments.ts` | Added `recordAudit` calls for secondary assignment creation (`assignmentAdded`, `role`, `isPrimary`) and deactivation (`assignmentDeactivated`, `oldPrimaryRole`, `resultingPrimaryRole`, `assignmentId`) — closes H6/H7 |
+| `docs/phase3/rbac/RBAC-JOB-QUEUE.md` | Updated M10-C status to CLOSED — PR #191 + PR #193; synced H6/H7 disposition |
+| `docs/phase3/rbac/RBAC-M10-C-ADVERSARIAL-REVIEW-20260719-073604-2e385644.md` | Independent adversarial review log (preserved as evidence) |
 | `docs/phase3/rbac/RBAC-M10-C-CORRECTIVE-1.md` | This corrective closure report |
+| `docs/phase3/rbac/RBAC-M10-C-IDENTITY-AUTHORITY-20260719-002102-ddbc808b.md` | Original evidence report updated with §O addendum; `FINAL_HEAD` corrected |
 
 ---
 
@@ -308,8 +313,8 @@ unrelated cleanup:                                       NOT STARTED
 | Finding | Severity | Classification |
 | ------- | :------: | -------------- |
 | Original adversarial review H1 — m10cRouteSpecs duplicates registry | P2 | **OUT OF SCOPE** — post-RBAC decomposition; applies uniformly to M10-A/B/C |
-| Original adversarial review H6 — secondary assignment writes no audit | P2 | **OUT OF SCOPE** — ADR §7.2 follow-up |
-| Original adversarial review H7 — deactivate branch writes no audit | P2 | **OUT OF SCOPE** — same as H6 |
+| Original adversarial review H6 — secondary assignment writes no audit | P2 | **CLOSED BY PR #193** — `roleAssignments.ts` now writes `user.role_changed` with `assignmentAdded` metadata on POST secondary |
+| Original adversarial review H7 — deactivate branch writes no audit | P2 | **CLOSED BY PR #193** — `roleAssignments.ts` now writes `user.role_changed` with `assignmentDeactivated` metadata on PATCH deactivate |
 | Original adversarial review H9 — last-Admin guard bypassed by assignment routes | P3 | **PRE-EXISTING** — scheduled for M10-E |
 | Original adversarial review H10 — no direct cross-org test | P3 | **PRE-EXISTING** — post-M10-C test addition |
 
@@ -330,14 +335,22 @@ M10-D:
 AUTHORIZED TO START FROM FINAL_HEAD
 ```
 
-All 4 CodeRabbit/gemini findings have been independently verified and corrected:
+All 4 CodeRabbit/gemini findings plus 2 adversarial-review gaps (H6/H7) have been independently verified and corrected:
 
 1. **Finding 1 (System login):** Test split into authentication-boundary (forged JWT → 401) and System-policy-boundary (real System user → 401 + audit). `[401,403]` union removed.
 2. **Finding 2 (Audit assertions):** Scoped zero-audit assertions added for `user.update`, `candidate.password_reset`, `user.delete`.
 3. **Finding 3 (Non-vacuous fixtures):** PATCH assignment now tests real promote branch (`{isPrimary:true}` on secondary), not no-op path.
 4. **Finding 4 (Stale metadata):** Closed via this corrective report (Strategy B, no history rewriting).
 
+**H6 — CLOSED BY PR #193:**
+- `roleAssignments.ts` now calls `recordAudit` with `action: "user.role_changed"` on POST secondary assignment (metadata: `assignmentAdded: true`, `role`, `isPrimary: false`).
+- Proven by test `permissionBoundary.test.ts` — secondary-creation audit row has correct metadata.
+
+**H7 — CLOSED BY PR #193:**
+- `roleAssignments.ts` now calls `recordAudit` with `action: "user.role_changed"` on PATCH deactivate (metadata: `assignmentDeactivated: true`, `role`, `isPrimary`, `assignmentId`, plus auto-promote fields).
+- Proven by tests `permissionBoundary.test.ts` — both secondary deactivate and primary deactivate audit rows have correct metadata.
+
 One additional defect was codiscovered and fixed:
-- **Audit race condition:** Fire-and-forget `recordAudit` caused flaky failure under coverage. Added `waitForAuditCount` polling helper.
+- **Audit race condition:** Fire-and-forget `recordAudit` caused flaky failure under coverage. Added `waitForAuditCount` polling helper. Also moved `auditBefore` baseline before audit-writing setup in deactivate tests.
 
 All validation gates pass (full API suite 1308/5, `pnpm verify`). 10 M10-C route conformance confirmed. Permission matrix unchanged. Sync invariants preserved. M10-D/M10-E not started.
