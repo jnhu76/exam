@@ -148,12 +148,20 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         isActive: true,
       });
       // RBAC-M8 sync: a new primary assignment must update users.role cache.
+      // H6 fix: secondary assignment creates also emit a user.role_changed
+      // audit (privilege change tracking, ADR §7.2).
       if (created.isPrimary) {
         const prevRole = target.role;
         await syncUsersRoleFromPrimary(fastify.db, ctx, id);
         recordAudit(fastify, request, ctx, "user.role_changed", "user", id, {
           oldRole: prevRole,
           newRole: data.role,
+        });
+      } else {
+        recordAudit(fastify, request, ctx, "user.role_changed", "user", id, {
+          assignmentAdded: true,
+          role: data.role,
+          isPrimary: false,
         });
       }
       return reply.code(201).send({
@@ -215,6 +223,37 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         if (!deactivated) throw new NotFoundError("role assignment");
         if (deactivated.isPrimary) {
           await syncUsersRoleFromPrimary(fastify.db, ctx, deactivated.userId);
+          const userRepo = createUserRepo(fastify.db);
+          const user = await userRepo.findById(ctx, deactivated.userId);
+          recordAudit(
+            fastify,
+            request,
+            ctx,
+            "user.role_changed",
+            "user",
+            deactivated.userId,
+            {
+              assignmentDeactivated: true,
+              oldPrimaryRole: deactivated.role,
+              resultingPrimaryRole: user?.role ?? null,
+              assignmentId: deactivated.id,
+            },
+          );
+        } else {
+          recordAudit(
+            fastify,
+            request,
+            ctx,
+            "user.role_changed",
+            "user",
+            deactivated.userId,
+            {
+              assignmentDeactivated: true,
+              role: deactivated.role,
+              isPrimary: false,
+              assignmentId: deactivated.id,
+            },
+          );
         }
         return {
           id: deactivated.id,
