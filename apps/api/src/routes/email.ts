@@ -5,6 +5,7 @@ import {
 } from "@exam/contracts";
 import { DisabledEmailSender } from "../email/senders.js";
 import { sanitizeEmailError } from "../email/sanitizeError.js";
+import { Permission } from "@exam/authz";
 
 /** OpenAPI security scheme requiring cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -12,8 +13,8 @@ const cookieAuth = [{ cookieAuth: [] }] as const;
 /**
  * Fastify plugin that registers email admin routes (M3).
  *
- * All routes require Admin authentication. There is no `/admin` prefix in
- * this project — admin-ness is enforced per-route via `requireRole(["Admin"])`.
+ * All routes require Admin authentication. Authorization is enforced
+ * per-route via capability gates.
  */
 export const emailRoutes: FastifyPluginAsync = async (fastify) => {
   /**
@@ -32,7 +33,10 @@ export const emailRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/email/test",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.SystemDiagnosticsView),
+      ],
       schema: {
         body: SendTestEmailRequestSchema,
         security: cookieAuth,

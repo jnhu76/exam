@@ -227,7 +227,10 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/candidates",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateCreate),
+      ],
       schema: {
         body: CreateCandidateRequestSchema,
         security: cookieAuth,
@@ -328,7 +331,10 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/candidates/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateCandidateRequestSchema,
@@ -404,7 +410,10 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/candidates/import",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateImport),
+      ],
       config: {
         rateLimit: {
           max: 10,

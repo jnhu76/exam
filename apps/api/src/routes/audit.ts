@@ -11,6 +11,7 @@ import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { isAuditAction as isKnownAuditAction } from "@exam/authz";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
+import { Permission } from "@exam/authz";
 
 /**
  * Records an audit log entry asynchronously. Failures are logged but do
@@ -127,7 +128,10 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/admin/audit-logs",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.AuditLogView),
+      ],
       schema: {
         querystring: AuditLogQuerySchema,
         security: cookieAuth,

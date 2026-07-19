@@ -174,3 +174,86 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
     ).toBe(0);
   });
 });
+
+// ──────────────────────── M10-D Shadow Parity ────────────────────────
+
+const m10dPerms = [
+  Permission.CandidateFieldView,
+  Permission.CandidateFieldCreate,
+  Permission.CandidateFieldUpdate,
+  Permission.CandidateFieldDelete,
+  Permission.SettingsView,
+  Permission.SettingsUpdate,
+  Permission.SystemHealthView,
+  Permission.SystemDiagnosticsView,
+  Permission.AuditLogView,
+  Permission.CandidateCreate,
+  Permission.CandidateUpdate,
+  Permission.CandidateImport,
+];
+
+const ALL_ROLES = [
+  Role.Admin,
+  Role.Teacher,
+  Role.Proctor,
+  Role.Grader,
+  Role.Candidate,
+  Role.System,
+] as const;
+
+describe("M10-D shadow parity matrix", () => {
+  it("Admin: legacy allow == capability allow for all M10-D permissions", () => {
+    const log = makeLogger();
+    for (const perm of m10dPerms) {
+      const r = shadowRequireCapability(
+        {
+          route: `M10D ${perm}`,
+          ctx: { actorId: "admin", role: Role.Admin, permissions: [] },
+          legacyGate: ["Admin"],
+          permission: perm,
+          resource: { type: "organization", id: "org-1" },
+        },
+        log,
+      );
+      expect(r.legacyAllowed, `Admin legacy ${perm}`).toBe(true);
+      expect(r.capabilityAllowed, `Admin capability ${perm}`).toBe(true);
+    }
+  });
+
+  it("Admin parity: zero mismatches logged", () => {
+    const log = makeLogger();
+    for (const perm of m10dPerms) {
+      shadowRequireCapability(
+        {
+          route: `M10D-ADMIN ${perm}`,
+          ctx: { actorId: "admin", role: Role.Admin, permissions: [] },
+          legacyGate: ["Admin"],
+          permission: perm,
+          resource: { type: "organization", id: "org-1" },
+        },
+        log,
+      );
+    }
+    expect(log.mismatches).toBe(0);
+  });
+
+  it("no non-Admin role receives accidental access expansion", () => {
+    const nonAdminRoles = ALL_ROLES.filter((r) => r !== Role.Admin);
+    for (const role of nonAdminRoles) {
+      for (const perm of m10dPerms) {
+        const r = shadowRequireCapability(
+          {
+            route: `M10D ${role}/${perm}`,
+            ctx: { actorId: role.toLowerCase(), role, permissions: [] },
+            legacyGate: ["Admin"],
+            permission: perm,
+            resource: { type: "organization", id: "org-1" },
+          },
+          makeLogger(),
+        );
+        expect(r.legacyAllowed, `${role} legacy ${perm}`).toBe(false);
+        expect(r.capabilityAllowed, `${role} capability ${perm}`).toBe(false);
+      }
+    }
+  });
+});

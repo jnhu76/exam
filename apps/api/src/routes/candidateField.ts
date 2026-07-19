@@ -10,6 +10,7 @@ import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { Permission } from "@exam/authz";
 
 /** Zod schema for route params containing a UUID `id`. */
 const idParamsSchema = z.object({ id: z.string().uuid() });
@@ -46,7 +47,10 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate-fields",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateFieldView),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Admin"],
@@ -72,7 +76,10 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post(
     "/candidate-fields",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateFieldCreate),
+      ],
       schema: {
         body: CreateCandidateFieldRequestSchema,
         security: cookieAuth,
@@ -116,7 +123,10 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch(
     "/candidate-fields/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateFieldUpdate),
+      ],
       schema: {
         params: idParamsSchema,
         body: UpdateCandidateFieldRequestSchema,
@@ -177,7 +187,10 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.delete(
     "/candidate-fields/:id",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateFieldDelete),
+      ],
       schema: {
         params: idParamsSchema,
         security: cookieAuth,
@@ -230,7 +243,10 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
     "/candidate-fields/template",
     {
-      preHandler: [fastify.authenticate, fastify.requireRole(["Admin"])],
+      preHandler: [
+        fastify.authenticate,
+        fastify.requireCapability(Permission.CandidateFieldView),
+      ],
       schema: {
         security: cookieAuth,
         "x-role": ["Admin"],
