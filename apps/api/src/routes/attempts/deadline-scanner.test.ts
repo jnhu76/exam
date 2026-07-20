@@ -8,7 +8,10 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { scanDatabaseForExpiredAttempts } from "../../plugins/deadlineScanner.js";
 import { autoSubmitAndGrade } from "../../plugins/deadlineScanner.js";
-import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import {
+  cleanupBusinessData,
+  cleanupOrganizationTestData,
+} from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
@@ -308,7 +311,7 @@ describe("attempt routes", () => {
           like(schema.organizations.slug, `${DEADLINE_SCANNER_TEST_PREFIX}%`),
         );
       for (const org of stale) {
-        await cleanupOrganizationTestData(ctx.db, org.id);
+        await cleanupBusinessData(ctx.db, org.id);
       }
     });
 
