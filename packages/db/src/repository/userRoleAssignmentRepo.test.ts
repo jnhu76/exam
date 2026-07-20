@@ -282,20 +282,22 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
      * invariant-aware primitive that keeps the index satisfiable.
      */
     it("the partial unique index rejects a second active primary at the DB (23505)", async () => {
-      const { userId, orgId } = await seedOrgAndUser(db, "paula");
+      const { userId, ctx } = await seedOrgAndUser(db, "paula");
       const repo = createUserRoleAssignmentRepo(db);
       // Establish one legitimate active primary via the repo (demotes correctly).
-      await repo.assign(
-        { organizationId: orgId, actorId: "t", role: "Admin", permissions: [] },
-        { userId, role: "Candidate", isPrimary: true, isActive: true },
-      );
+      await repo.assign(ctx, {
+        userId,
+        role: "Candidate",
+        isPrimary: true,
+        isActive: true,
+      });
       // Bypass the repo and attempt a direct second active primary insert.
       // The migration-created partial unique index must reject this.
       let caught: unknown;
       try {
         await db.insert(schema.userRoleAssignments).values({
           id: randomUUID(),
-          organizationId: orgId,
+          organizationId: ctx.organizationId,
           userId,
           role: "Teacher",
           isPrimary: true,
@@ -339,6 +341,10 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
       expect(result.isActive).toBe(true);
       // Exactly one active primary remains.
       const active = await repo.listActiveForUser(ctx, userId);
+      // The existing Candidate assignment must remain active but demoted.
+      const candidateAssignment = active.find((r) => r.role === "Candidate");
+      expect(candidateAssignment).toBeDefined();
+      expect(candidateAssignment?.isPrimary).toBe(false);
       const primaries = active.filter((r) => r.isPrimary);
       expect(primaries).toHaveLength(1);
       expect(primaries[0]!.role).toBe("Teacher");
@@ -348,7 +354,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
       const { userId, ctx } = await seedOrgAndUser(db, "ruth");
       const repo = createUserRoleAssignmentRepo(db);
       // Pre-existing Teacher row, currently inactive non-primary.
-      await repo.assign(ctx, {
+      const existing = await repo.assign(ctx, {
         userId,
         role: "Teacher",
         isPrimary: false,
@@ -359,6 +365,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
         role: "Teacher",
       });
       // The existing row was promoted in place — no duplicate insert.
+      expect(result.id).toBe(existing.id);
       const active = await repo.listActiveForUser(ctx, userId);
       expect(active).toHaveLength(1);
       expect(active[0]!.role).toBe("Teacher");

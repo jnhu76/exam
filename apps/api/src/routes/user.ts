@@ -153,7 +153,7 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         });
         await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
           tx,
-          ctx.targetOrganizationId ?? ctx.organizationId,
+          ctx,
           {
             userId: created.id,
             role: data.role,

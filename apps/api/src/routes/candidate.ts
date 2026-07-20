@@ -282,7 +282,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           // would leave the new candidate with no authority row (locked out).
           await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
             tx,
-            ctx.targetOrganizationId ?? ctx.organizationId,
+            ctx,
             {
               userId: user.id,
               role: "Candidate",
@@ -531,7 +531,7 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             async (tx) => {
               const txUserRepo = createUserRepo(tx);
               const txCandidateRepo = createCandidateRepo(tx);
-              const created = await txUserRepo.createUnique(ctx, {
+              const createdUser = await txUserRepo.createUnique(ctx, {
                 username,
                 passwordHash,
                 name,
@@ -540,16 +540,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
               });
               await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
                 tx,
-                ctx.targetOrganizationId ?? ctx.organizationId,
+                ctx,
                 {
-                  userId: created.id,
+                  userId: createdUser.id,
                   role: "Candidate",
                   isPrimary: true,
                   isActive: true,
                 },
               );
               return txCandidateRepo.create(ctx, {
-                userId: created.id,
+                userId: createdUser.id,
                 fields,
               });
             },

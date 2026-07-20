@@ -134,9 +134,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
       isActive?: boolean;
     },
   ): Promise<UserRoleAssignmentRow> {
-    const orgId = resolveOrganizationId(ctx);
     return executeInTransaction(db, (tx) =>
-      assignWithinTransaction(tx, orgId, params),
+      assignWithinTransaction(tx, ctx, params),
     );
   }
 
@@ -156,7 +155,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    */
   async function assignWithinTransaction(
     tx: Database,
-    orgId: string,
+    ctx: TenantContext | RequestContext,
     params: {
       userId: string;
       role: AssignableRole;
@@ -164,6 +163,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
       isActive?: boolean;
     },
   ): Promise<UserRoleAssignmentRow> {
+    const orgId = resolveOrganizationId(ctx);
     const isPrimary = params.isPrimary ?? false;
     const isActive = params.isActive ?? true;
     if (isPrimary && isActive) {
@@ -293,51 +293,10 @@ export function createUserRoleAssignmentRepo(db: Database) {
     ctx: TenantContext | RequestContext,
     params: { userId: string; role: AssignableRole },
   ): Promise<UserRoleAssignmentRow> {
-    const orgId = resolveOrganizationId(ctx);
-    await tx
-      .update(userRoleAssignments)
-      .set({ isPrimary: false, updatedAt: now() })
-      .where(
-        and(
-          eq(userRoleAssignments.organizationId, orgId),
-          eq(userRoleAssignments.userId, params.userId),
-          eq(userRoleAssignments.isPrimary, true),
-          eq(userRoleAssignments.isActive, true),
-        ),
-      );
-    const existing = await tx
-      .select()
-      .from(userRoleAssignments)
-      .where(
-        and(
-          eq(userRoleAssignments.organizationId, orgId),
-          eq(userRoleAssignments.userId, params.userId),
-          eq(userRoleAssignments.role, params.role),
-        ),
-      )
-      .limit(1);
-    if (existing[0]) {
-      const updated = await tx
-        .update(userRoleAssignments)
-        .set({ isPrimary: true, isActive: true, updatedAt: now() })
-        .where(eq(userRoleAssignments.id, existing[0]!.id))
-        .returning();
-      return row(updated[0]!);
-    }
-    const inserted = await tx
-      .insert(userRoleAssignments)
-      .values({
-        id: randomUUID(),
-        organizationId: orgId,
-        userId: params.userId,
-        role: params.role,
-        isPrimary: true,
-        isActive: true,
-        createdAt: now(),
-        updatedAt: now(),
-      })
-      .returning();
-    return row(inserted[0]!);
+    // Single-sourced: the demote-existing-then-promote-or-insert invariant is
+    // owned by ensurePrimaryAssignmentWithinTransaction. Delegating keeps the
+    // two copies from drifting independently.
+    return ensurePrimaryAssignmentWithinTransaction(tx, ctx, params);
   }
 
   /**
@@ -471,9 +430,10 @@ export function createUserRoleAssignmentRepo(db: Database) {
    */
   async function deactivateWithinTransaction(
     tx: Database,
-    orgId: string,
+    ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
+    const orgId = resolveOrganizationId(ctx);
     const before = await tx
       .select()
       .from(userRoleAssignments)
@@ -504,9 +464,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
-    const orgId = resolveOrganizationId(ctx);
     return executeInTransaction(db, async (tx) =>
-      deactivateWithinTransaction(tx, orgId, assignmentId),
+      deactivateWithinTransaction(tx, ctx, assignmentId),
     );
   }
 
@@ -518,9 +477,10 @@ export function createUserRoleAssignmentRepo(db: Database) {
    */
   async function removeWithinTransaction(
     tx: Database,
-    orgId: string,
+    ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
+    const orgId = resolveOrganizationId(ctx);
     const before = await tx
       .select()
       .from(userRoleAssignments)
@@ -549,9 +509,8 @@ export function createUserRoleAssignmentRepo(db: Database) {
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
-    const orgId = resolveOrganizationId(ctx);
     return executeInTransaction(db, async (tx) =>
-      removeWithinTransaction(tx, orgId, assignmentId),
+      removeWithinTransaction(tx, ctx, assignmentId),
     );
   }
 

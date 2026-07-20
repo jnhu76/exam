@@ -233,7 +233,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
             const txRepo = createUserRoleAssignmentRepo(tx);
             const result = await txRepo.deactivateWithinTransaction(
               tx,
-              ctx.organizationId,
+              ctx,
               assignmentId,
             );
             if (result?.isPrimary) {
@@ -319,7 +319,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
           const txRepo = createUserRoleAssignmentRepo(tx);
           const result = await txRepo.removeWithinTransaction(
             tx,
-            ctx.organizationId,
+            ctx,
             assignmentId,
           );
           if (result?.isPrimary) {

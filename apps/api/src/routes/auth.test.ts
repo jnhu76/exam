@@ -24,7 +24,20 @@ import {
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/src/password.js";
-import { signJWT } from "@exam/auth/src/session.js";
+import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
+
+/**
+ * Extracts the raw value of a named cookie from a set-cookie header string.
+ * Fastify emits `auth-token=<token>; Path=/; HttpOnly; ...`; the value ends
+ * at the first semicolon.
+ */
+function extractCookieValue(
+  cookieHeader: string,
+  name: string,
+): string | undefined {
+  const match = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
+  return match?.[1];
+}
 
 describe("auth routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -523,13 +536,21 @@ describe("auth routes", () => {
     const body = response.json();
     expect(body.role).toBe("Candidate");
     expect(body.capabilities).toBeDefined();
-    // The JWT compatibility claim must also be Candidate, not SuperAdmin.
-    const token = signJWT({
-      actorId: user.id,
-      role: "Candidate",
-      organizationId: ctx.org.id,
-    });
+    // The JWT compatibility claim signed by the login route must also be
+    // Candidate, not the stale SuperAdmin projection. Verify the actual token
+    // the route set on the response rather than re-minting one in the test.
+    const setCookie = response.headers["set-cookie"];
+    const cookieStr = Array.isArray(setCookie)
+      ? setCookie.join(";")
+      : setCookie;
+    expect(cookieStr).toBeDefined();
+    const token = extractCookieValue(cookieStr!, "auth-token");
     expect(token).toBeDefined();
+    const decoded = verifyJWT(token!);
+    expect(decoded.actorId).toBe(user.id);
+    expect(decoded.organizationId).toBe(ctx.org.id);
+    expect(decoded.role).toBe("Candidate");
+    expect(decoded.role).not.toBe("SuperAdmin");
   });
 
   it("POST /api/auth/login rejects unsupported roles (SuperAdmin/ContentManager/ResultViewer) with generic auth failure", async () => {

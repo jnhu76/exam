@@ -86,7 +86,7 @@ export async function bootstrapAdmin(
     // so the bootstrap user is authority-complete before the txn commits.
     await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
       tx,
-      systemCtx.organizationId,
+      systemCtx,
       {
         userId: user.id,
         role: "Admin",
