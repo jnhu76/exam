@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
-import type { Database, TenantContext } from "./types.js";
-import { schema } from "./schema/pg.js";
+import {
+  executeInTransaction,
+  type Database,
+  type TenantContext,
+} from "./types.js";
+import { schema, ASSIGNABLE_ROLES } from "./schema/pg.js";
+import type { AssignableRole } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import type {
   QuestionSnapshot,
@@ -76,7 +81,11 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
 /**
  * Seeds a full demo dataset: organization, settings, candidate fields, users,
  * candidate profiles, courses, questions, exams, enrollments, and attempts.
- * Idempotent — re-running upserts on conflict.
+ *
+ * This is a demo reset routine: it writes demo questions, exams, enrollments,
+ * and attempts to a known sample state. User authority is preserved if the
+ * user already has any assignment rows. It is NOT allowed in production.
+ *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
  * @returns IDs of all seeded entities for verification.
@@ -85,6 +94,10 @@ export async function seedDemo(
   db: Database,
   hashFn: HashFunction,
 ): Promise<DemoIds> {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("demo-seed is not allowed in production mode");
+  }
+
   const now = Date.now();
   const ids: DemoIds = {
     orgId: "",
@@ -200,6 +213,14 @@ export async function seedDemo(
     { username: "candidate4", name: "考生丁", role: "Candidate" as const },
   ];
 
+  const demoSeedCtx: TenantContext = {
+    organizationId: ids.orgId,
+    actorId: "demo-seed",
+    role: "Admin",
+    permissions: [],
+  };
+  const assignableRoleSet = new Set<string>(ASSIGNABLE_ROLES);
+
   for (const ud of userDefs) {
     const existing = await db
       .select()
@@ -212,47 +233,58 @@ export async function seedDemo(
       );
 
     if (existing.length > 0) {
-      ids.users[ud.username] = existing[0]!.id;
+      const user = existing[0]!;
+      ids.users[ud.username] = user.id;
+      await executeInTransaction(
+        db,
+        async (tx) => {
+          const assignmentRepo = createUserRoleAssignmentRepo(tx);
+          const assignments = await assignmentRepo.listForUser(
+            demoSeedCtx,
+            user.id,
+          );
+          if (assignments.some((a) => a.isActive)) return;
+          if (assignments.length > 0) return;
+          if (assignableRoleSet.has(user.role)) {
+            await assignmentRepo.ensurePrimaryAssignmentWithinTransaction(
+              tx,
+              demoSeedCtx,
+              { userId: user.id, role: user.role as AssignableRole },
+            );
+          }
+        },
+        "read committed",
+      );
     } else {
       const userId = uuid("user");
       ids.users[ud.username] = userId;
       const passwordHash = await hashFn(
         ud.role === "Candidate" ? "candidate123" : "admin123",
       );
-      await db.insert(schema.users).values({
-        id: userId,
-        organizationId: ids.orgId,
-        username: ud.username,
-        passwordHash,
-        name: ud.name,
-        role: ud.role,
-        isActive: true,
-        createdAt: ts(),
-        updatedAt: ts(),
-      });
+      await executeInTransaction(
+        db,
+        async (tx) => {
+          await tx.insert(schema.users).values({
+            id: userId,
+            organizationId: ids.orgId,
+            username: ud.username,
+            passwordHash,
+            name: ud.name,
+            role: ud.role,
+            isActive: true,
+            createdAt: ts(),
+            updatedAt: ts(),
+          });
+          await createUserRoleAssignmentRepo(
+            tx,
+          ).ensurePrimaryAssignmentWithinTransaction(tx, demoSeedCtx, {
+            userId,
+            role: ud.role,
+          });
+        },
+        "read committed",
+      );
     }
-  }
-
-  // RBAC-M10-E: mirror each seeded user into a primary active role assignment
-  // so users.role and user_role_assignments agree after demo seed. Uses the
-  // invariant-aware ensurePrimaryAssignment helper (NOT a bare upsert) so a
-  // re-seed against a user whose primary was since changed does NOT try to
-  // create a second active primary (which the partial unique index rejects).
-  // Idempotent on re-seed.
-  const assignmentRepo = createUserRoleAssignmentRepo(db);
-  const demoSeedCtx: TenantContext = {
-    organizationId: ids.orgId,
-    actorId: "demo-seed",
-    role: "Admin",
-    permissions: [],
-  };
-  for (const ud of userDefs) {
-    const userId = ids.users[ud.username];
-    if (!userId) continue;
-    await assignmentRepo.ensurePrimaryAssignment(demoSeedCtx, {
-      userId,
-      role: ud.role,
-    });
   }
 
   // ── CandidateProfiles ─────────────────────────────────────────

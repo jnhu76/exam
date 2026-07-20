@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Database, TenantContext } from "./types.js";
-import { schema } from "./schema/pg.js";
+import {
+  executeInTransaction,
+  type Database,
+  type TenantContext,
+} from "./types.js";
+import { schema, ASSIGNABLE_ROLES } from "./schema/pg.js";
 import type { AssignableRole } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import dotenv from "dotenv";
-import { eq } from "drizzle-orm";
 
 dotenv.config({ quiet: true });
 
@@ -106,7 +109,15 @@ export async function seed(
   const orgId = orgRows[0]!.id;
 
   const userIds: string[] = [];
-  const seededUsers: { id: string; role: AssignableRole }[] = [];
+
+  const seedCtx: TenantContext = {
+    organizationId: orgId,
+    actorId: "seed",
+    role: "Admin",
+    permissions: [],
+  };
+
+  const assignableRoleSet = new Set<string>(ASSIGNABLE_ROLES);
 
   for (const def of USER_DEFS) {
     const username = process.env[def.envUsername] || def.defaults.username;
@@ -114,47 +125,53 @@ export async function seed(
     const name = process.env[def.envName] || def.nameDefault;
     const passwordHash = await hashFn(password);
 
-    const userRows = await db
-      .insert(schema.users)
-      .values({
-        id: randomUUID(),
-        organizationId: orgId,
-        username,
-        passwordHash,
-        name,
-        role: def.defaults.role,
-        isActive: true,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
-      .onConflictDoUpdate({
-        target: [schema.users.organizationId, schema.users.username],
-        set: { passwordHash, isActive: true, updatedAt: timestamp },
-      })
-      .returning({ id: schema.users.id });
+    let seededUserId: string | undefined;
+    await executeInTransaction(
+      db,
+      async (tx) => {
+        const userRows = await tx
+          .insert(schema.users)
+          .values({
+            id: randomUUID(),
+            organizationId: orgId,
+            username,
+            passwordHash,
+            name,
+            role: def.defaults.role,
+            isActive: true,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          })
+          .onConflictDoUpdate({
+            target: [schema.users.organizationId, schema.users.username],
+            set: { passwordHash, name, updatedAt: timestamp },
+          })
+          .returning({ id: schema.users.id, role: schema.users.role });
 
-    userIds.push(userRows[0]!.id);
-    seededUsers.push({ id: userRows[0]!.id, role: def.defaults.role });
-  }
+        const user = userRows[0]!;
+        seededUserId = user.id;
 
-  // RBAC-M10-E: mirror each seeded user into a primary active role assignment
-  // so users.role and user_role_assignments agree after seed. Uses the
-  // invariant-aware ensurePrimaryAssignment helper (NOT a bare upsert) so a
-  // re-seed against a user whose primary was since changed does NOT try to
-  // create a second active primary (which the partial unique index rejects).
-  // Idempotent on re-seed.
-  const assignmentRepo = createUserRoleAssignmentRepo(db);
-  const seedCtx: TenantContext = {
-    organizationId: orgId,
-    actorId: "seed",
-    role: "Admin",
-    permissions: [],
-  };
-  for (const u of seededUsers) {
-    await assignmentRepo.ensurePrimaryAssignment(seedCtx, {
-      userId: u.id,
-      role: u.role,
-    });
+        const assignmentRepo = createUserRoleAssignmentRepo(tx);
+        const assignments = await assignmentRepo.listForUser(seedCtx, user.id);
+        const hasActive = assignments.some((a) => a.isActive);
+        if (hasActive) return;
+        const hasAny = assignments.length > 0;
+        if (hasAny) return;
+
+        if (assignableRoleSet.has(user.role)) {
+          await assignmentRepo.ensurePrimaryAssignmentWithinTransaction(
+            tx,
+            seedCtx,
+            {
+              userId: user.id,
+              role: user.role as AssignableRole,
+            },
+          );
+        }
+      },
+      "read committed",
+    );
+    userIds.push(seededUserId!);
   }
 
   return {
