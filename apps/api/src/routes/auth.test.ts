@@ -495,6 +495,74 @@ describe("auth routes", () => {
     expect(body.id).toBe(ctx.admin.id);
     expect(body.username).toBe(ctx.admin.username);
     expect(body.role).toBe(ctx.admin.role);
+    // RBAC-M10-E closure (F-2): /me/profile must return the authoritative
+    // capability union (from the authenticated ctx), NOT lose it. The
+    // frontend AuthContext stores this response as the session user; a
+    // missing field here would silently drop capabilities on profile update.
+    expect(body.capabilities).toBeDefined();
+    expect(Array.isArray(body.capabilities)).toBe(true);
+    expect(body.capabilities.length).toBeGreaterThan(0);
+  });
+
+  it("GET /api/auth/me returns the authoritative capability union for the authenticated actor", async () => {
+    // RBAC-M10-E closure (F-2): /me must return the same authoritative
+    // capability union that /login returns, so a session restore (page
+    // refresh) does not lose capabilities. The frontend previously had to
+    // re-derive visibility from presetFor(user.role) on /me, hiding
+    // secondary-role capabilities from multi-role actors.
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.id).toBe(ctx.admin.id);
+    expect(body.role).toBe(ctx.admin.role);
+    expect(body.capabilities).toBeDefined();
+    expect(Array.isArray(body.capabilities)).toBe(true);
+    // Admin preset includes UserView (sanity check the union is non-empty
+    // and contains a real Admin permission).
+    expect(body.capabilities).toContain("user.view");
+  });
+
+  it("GET /api/auth/me returns the full multi-role capability union, not just the primary role's preset", async () => {
+    // Multi-role closure (F-3): a primary Candidate + secondary Teacher must
+    // receive the UNION of both presets on /me, so the frontend can surface
+    // Teacher-only capabilities (e.g. exam.view) even though primary is
+    // Candidate. This is the /me-side proof of the union that E19 proves on
+    // the score route; here we assert the /me surface carries it.
+    const { user, token } = await createFutureRoleUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Candidate",
+      `me-multirole-${crypto.randomUUID().slice(0, 8)}`,
+    );
+    // Grant a secondary Teacher assignment. Teacher's preset includes
+    // exam.view; Candidate's does not.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId: ctx.org.id,
+      userId: user.id,
+      role: "Teacher",
+      isPrimary: false,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      cookies: { "auth-token": token },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.role).toBe("Candidate"); // primary projection unchanged
+    // The union MUST include exam.view (from Teacher) even though the
+    // primary role is Candidate. A presetFor("Candidate") fallback would
+    // miss this.
+    expect(body.capabilities).toContain("exam.view");
   });
 
   it("PATCH /api/auth/me/profile rejects empty name", async () => {

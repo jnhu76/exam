@@ -406,6 +406,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         // is the authoritative projection for this response.
         role: ctx.role,
         organizationId: user.organizationId,
+        // capabilities: the authoritative union resolved at authenticate time
+        // from active user_role_assignments. Surfaced here (and on
+        // PATCH /me/profile) so the frontend does not have to re-derive
+        // visibility from presetFor(user.role) — which would hide secondary-
+        // role capabilities from multi-role actors on session restore.
+        capabilities: ctx.capabilities,
       });
       return reply.code(200).send(response);
     },
@@ -531,8 +537,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         id: updated.id,
         username: updated.username,
         name: updated.name,
-        role: updated.role,
+        // RBAC-M10-E: role + capabilities come from the authenticated ctx
+        // (the authoritative assignment-backed projection), NOT from a fresh
+        // re-read of the users row. Profile update does not change authority,
+        // so the authenticated projection is correct and avoids surface area
+        // where a stale users.role cache could leak into the response.
+        role: ctx.role,
         organizationId: updated.organizationId,
+        capabilities: ctx.capabilities,
       };
       const validated = MeResponseSchema.safeParse(profile);
       return validated.success ? validated.data : profile;

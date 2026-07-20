@@ -275,6 +275,12 @@
                     "organizationId": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -282,7 +288,8 @@
                     "username",
                     "name",
                     "role",
-                    "organizationId"
+                    "organizationId",
+                    "capabilities"
                   ],
                   "additionalProperties": false
                 }
@@ -549,6 +556,12 @@
                     "organizationId": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -556,7 +569,8 @@
                     "username",
                     "name",
                     "role",
-                    "organizationId"
+                    "organizationId",
+                    "capabilities"
                   ],
                   "additionalProperties": false
                 }
