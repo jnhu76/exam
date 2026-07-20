@@ -233,10 +233,15 @@ export function canExtendExam(
 export function adminLandingPath(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): string | null {
+  // Most specific role workspaces first, tiered by role specificity.
+  // Dashboard (SystemHealthView) is Admin-only — check first so Admin lands
+  // on the dashboard even though Admin also holds all other capability perms.
+  // Proctor workspace is the most targeted non-Admin surface, followed by
+  // grading queue, then exams as a general fallback.
   if (canSeeDashboard(user)) return routes.admin.dashboard;
-  if (canSeeExams(user)) return routes.admin.exams;
-  if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
   if (canSeeProctor(user)) return routes.admin.proctorWorkspace;
+  if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
+  if (canSeeExams(user)) return routes.admin.exams;
   return null;
 }
 
