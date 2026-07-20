@@ -74,7 +74,7 @@ describe("exam routes — P4-2C capability cutover (Teacher authoring)", () => {
       const { token } = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
-        role as never,
+        role,
         `p42c-${role.toLowerCase()}-exam-auth`,
       );
       return token;

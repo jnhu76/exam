@@ -71,7 +71,19 @@ UPDATE "user_role_assignments"
 SET "is_primary" = true, "updated_at" = now()
 WHERE "id" IN (SELECT "id" FROM ranked_active WHERE rn = 1);
 
--- 3. Insert only for users with NO assignment row at all (the orphaned case).
+-- 3. Insert only for users with NO assignment row at all (the orphaned case),
+--    AND whose users.role is in the assignable set. The users.role column has
+--    no CHECK constraint (it is plain text), so it can hold non-assignable
+--    values (SuperAdmin, System, ContentManager, ResultViewer) used by tests
+--    and legacy data as non-login / non-authority sentinels. Backfilling such
+--    a row with its own role would violate user_role_assignments_role_check,
+--    abort the migration's transaction, and leave the DB permanently stuck
+--    (Drizzle wraps all pending migrations in one transaction; a failed
+--    migration is never recorded as applied and is retried every run).
+--    Non-assignable orphans are deliberately skipped here: they have no valid
+--    role to assign, and the runtime resolver already fail-closes on any user
+--    without an active primary assignment, so skipping them preserves the
+--    security invariant instead of weakening it.
 INSERT INTO "user_role_assignments"
   ("id", "organization_id", "user_id", "role", "is_primary", "is_active", "created_at", "updated_at")
 SELECT
@@ -84,12 +96,13 @@ SELECT
   now(),
   now()
 FROM "users" u
-WHERE NOT EXISTS (
-  SELECT 1
-  FROM "user_role_assignments" ura
-  WHERE ura."organization_id" = u."organization_id"
-    AND ura."user_id" = u."id"
-);
+WHERE u."role" IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM "user_role_assignments" ura
+    WHERE ura."organization_id" = u."organization_id"
+      AND ura."user_id" = u."id"
+  );
 
 -- 4. Re-sync users.role compatibility cache to the final primary role.
 UPDATE "users" u

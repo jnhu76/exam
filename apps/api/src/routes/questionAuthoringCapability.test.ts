@@ -39,7 +39,7 @@ describe("question routes — Teacher authoring capabilities", () => {
       const { token } = await createAssignedUserForTest(
         ctx.db,
         ctx.org.id,
-        role as never,
+        role,
         `p42b-${role.toLowerCase()}-question-auth`,
       );
       return token;

@@ -15,7 +15,7 @@ import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
-import { schema } from "@exam/db/src/schema/pg.js";
+import { schema, type AssignableRole } from "@exam/db/src/schema/pg.js";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
@@ -341,7 +341,7 @@ async function finishBuildTestApp(args: {
 export async function createAssignedUserForTest(
   db: Database,
   orgId: string,
-  role: LegacyRole,
+  role: AssignableRole,
   usernamePrefix: string,
   options: { isPrimary?: boolean; isActive?: boolean } = {},
 ): Promise<{ user: TestUser; token: string }> {
@@ -365,7 +365,7 @@ export async function createAssignedUserForTest(
     id: randomUUID(),
     organizationId: orgId,
     userId,
-    role: role as never,
+    role,
     isPrimary,
     isActive,
     createdAt: now,
@@ -398,7 +398,7 @@ export async function createAssignedUserForTest(
 export async function createFutureRoleUserForTest(
   db: Database,
   orgId: string,
-  role: LegacyRole,
+  role: AssignableRole,
   usernamePrefix: string,
 ): Promise<{ user: TestUser; token: string }> {
   return createAssignedUserForTest(db, orgId, role, usernamePrefix);

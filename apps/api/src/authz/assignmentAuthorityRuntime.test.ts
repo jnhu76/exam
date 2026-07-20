@@ -25,11 +25,17 @@ import type { FastifyPluginAsync } from "fastify";
 import { eq } from "drizzle-orm";
 import examRoutes from "../routes/exam.js";
 import courseRoutes from "../routes/course.js";
+import candidateRoutes from "../routes/candidate.js";
+import questionRoutes from "../routes/question.js";
+import scoreRoutes from "../routes/scores.js";
 import systemRoutes from "../routes/system.js";
+import { registerCandidateAttemptRoutes } from "../routes/attempts.candidate.js";
 import {
   buildTestApp,
   uniquePrefix,
   createAssignedUserForTest,
+  createCandidateViaApi,
+  submitExamAsCandidate,
 } from "../routes/testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { signJWT } from "@exam/auth/src/session.js";
@@ -40,6 +46,14 @@ import { buildExamPayload } from "../routes/attempts/attempts.testHelpers.js";
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(courseRoutes);
   await fastify.register(examRoutes);
+  await fastify.register(candidateRoutes);
+  // E19 needs a publishable exam, which requires >=1 question; the question
+  // routes are registered so E19 can create one via the API.
+  await fastify.register(questionRoutes);
+  await fastify.register(async (scope) => {
+    registerCandidateAttemptRoutes(scope);
+  });
+  await fastify.register(scoreRoutes);
   await fastify.register(systemRoutes);
 };
 
@@ -63,7 +77,7 @@ async function insertAssignmentDirectly(
     id: crypto.randomUUID(),
     organizationId: args.organizationId,
     userId: args.userId,
-    role: args.role as never,
+    role: args.role,
     isPrimary: args.isPrimary,
     isActive: args.isActive,
     createdAt: now,
@@ -107,14 +121,14 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e1-cache-admin",
     );
     // Flip users.role to Admin (the stale cache); primary assignment stays
     // Candidate (the authority). Runtime must follow the assignment.
     await ctx.db
       .update(schema.users)
-      .set({ role: "Admin" as never, updatedAt: new Date() })
+      .set({ role: "Admin", updatedAt: new Date() })
       .where(eq(schema.users.id, user.id));
 
     // ExamCreate is Admin-gated (not in Candidate's preset).
@@ -150,7 +164,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     );
     await ctx.db
       .update(schema.users)
-      .set({ role: "Candidate" as never, updatedAt: new Date() })
+      .set({ role: "Candidate", updatedAt: new Date() })
       .where(eq(schema.users.id, user.id));
 
     const courseId = await createCourse(ctx.app, token, "E2 Course");
@@ -173,7 +187,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user, token: candidateToken } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e3-jwt-admin",
     );
     // Re-sign with role: "Admin" for the same actor. authenticate verifies
@@ -254,7 +268,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e8-before-grant",
     );
     // Candidate lacks CourseCreate. Confirm denied.
@@ -298,7 +312,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e9-before-revoke",
     );
     await insertAssignmentDirectly(ctx.db, {
@@ -353,7 +367,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e7-inactive-admin",
     );
     await insertAssignmentDirectly(ctx.db, {
@@ -383,7 +397,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user, token } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e10-all-inactive",
     );
     await ctx.db
@@ -440,7 +454,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const { user } = await createAssignedUserForTest(
       ctx.db,
       ctx.org.id,
-      "Candidate" as never,
+      "Candidate",
       "e12-index-backstop",
     );
     // createAssignedUserForTest already seeded one active primary. Attempt a
@@ -452,7 +466,7 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
         id: crypto.randomUUID(),
         organizationId: ctx.org.id,
         userId: user.id,
-        role: "Admin" as never,
+        role: "Admin",
         isPrimary: true,
         isActive: true,
         createdAt: new Date(),
@@ -529,5 +543,196 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
       cookies: { "auth-token": token },
     });
     expect(getRes.statusCode).toBe(200);
+  });
+
+  // ── E17 — scoped gate with multi-role: primary Candidate + secondary
+  // Admin. The scoped gate consults the capability union (not the primary
+  // role). This kills spec §16 Mutation E: a role-based predicate would
+  // see "Candidate" (not in ADMINISH_ROLES) and deny, but the union
+  // includes Admin's ExamView.
+  it("E17: scoped gate allows when primary role lacks the permission but secondary role grants it", async () => {
+    const { user, token } = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Candidate",
+      "e17-scoped-multi-role",
+    );
+    // Grant a secondary Admin assignment. Admin's preset includes ExamView
+    // (gated by requireScopedCapability). Primary Candidate alone lacks it.
+    await insertAssignmentDirectly(ctx.db, {
+      organizationId: ctx.org.id,
+      userId: user.id,
+      role: "Admin",
+      isPrimary: false,
+      isActive: true,
+    });
+
+    // Create a course + exam via the admin token (the test user is still
+    // Candidate-primary, but the union includes Admin's perms).
+    const courseId = await createCourse(ctx.app, ctx.adminToken, "E17 Course");
+    const examRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      cookies: { "auth-token": token },
+      payload: buildExamPayload({
+        title: "E17 Exam",
+        courseId,
+        questionIds: [],
+        durationMinutes: 60,
+      }),
+    });
+    expect(examRes.statusCode, examRes.body).toBe(201);
+    const examId = examRes.json().id;
+
+    // GET /api/exams/:id is gated by requireScopedCapability(ExamView).
+    // The union includes ExamView (from Admin), so 200 is expected.
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": token },
+    });
+    expect(getRes.statusCode).toBe(200);
+  });
+
+  // ── E18 — candidate-context gate with multi-role: primary Teacher +
+  // secondary Candidate. The candidate-context gate consults the capability
+  // union (ExamTake), NOT the primary role name. This kills spec §16
+  // Mutation F: a role-based predicate (ctx.role === "Candidate") would
+  // see "Teacher" and deny, but the union includes ExamTake from the
+  // secondary Candidate assignment.
+  it("E18: candidate-context gate allows when primary role is not Candidate but secondary assignment grants Candidate permissions", async () => {
+    const { user, token } = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Teacher",
+      "e18-cc-multi-role",
+    );
+    // Grant a secondary Candidate assignment. Candidate's preset includes
+    // ExamTake (gated by requireCandidateContext). Primary Teacher alone
+    // lacks it — but the union now includes it.
+    await insertAssignmentDirectly(ctx.db, {
+      organizationId: ctx.org.id,
+      userId: user.id,
+      role: "Candidate",
+      isPrimary: false,
+      isActive: true,
+    });
+
+    // GET /api/candidate/exams is gated by requireCandidateContext(ExamTake).
+    // The union includes ExamTake (from Candidate), so 200 is expected
+    // (empty list — no candidate profile or enrollments). Under Mutation F
+    // the gate would check ctx.role === "Candidate" → false → 403.
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidate/exams",
+      cookies: { "auth-token": token },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  // ── E19 — score gate with multi-role: primary Candidate + secondary
+  // Teacher. The score gate consults the capability union for ScoreAllView,
+  // NOT the primary role's preset. This kills spec §16 Mutation G: a
+  // primary-role preset would yield only ScoreOwnView (Candidate's preset),
+  // but the union includes ScoreAllView from the Teacher assignment.
+  //
+  // Role choice note: Teacher is the secondary role because Teacher is the
+  // non-Admin assignable role whose preset includes ScoreAllView; Grader's
+  // preset only carries Grading* permissions and does NOT include
+  // ScoreAllView, so Grader cannot serve as the ScoreAllView-granting
+  // secondary.
+  it("E19: score gate grants ScoreAllView when primary role lacks it but secondary role grants it", async () => {
+    const { user, token } = await createAssignedUserForTest(
+      ctx.db,
+      ctx.org.id,
+      "Candidate",
+      "e19-score-multi-role",
+    );
+    // Grant a secondary Teacher assignment. Teacher's preset includes
+    // ScoreAllView. The union now includes ScoreAllView (Teacher) +
+    // ScoreOwnView / ExamTake (Candidate).
+    await insertAssignmentDirectly(ctx.db, {
+      organizationId: ctx.org.id,
+      userId: user.id,
+      role: "Teacher",
+      isPrimary: false,
+      isActive: true,
+    });
+
+    // Create a course + a publishable question + exam via the admin token.
+    // Publish requires >=1 question, and submitExamAsCandidate needs a real
+    // question to answer, so a question must exist before publish.
+    const courseId = await createCourse(ctx.app, ctx.adminToken, "E19 Course");
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "E19 question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(qRes.statusCode, qRes.body).toBe(201);
+    const questionId = qRes.json().id;
+
+    const examRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: buildExamPayload({
+        title: "E19 Exam",
+        courseId,
+        questionIds: [questionId],
+        durationMinutes: 60,
+      }),
+    });
+    expect(examRes.statusCode, examRes.body).toBe(201);
+    const examId = examRes.json().id;
+
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(publishRes.statusCode, publishRes.body).toBe(200);
+
+    // Submit the exam as a SEPARATE candidate so the scores route has a real
+    // attempt to resolve.
+    await submitExamAsCandidate(
+      ctx.app,
+      ctx.adminToken,
+      ctx.org.id,
+      examId,
+      `e19-${uniquePrefix()}`,
+    );
+
+    // GET /exams/:id/scores additionally requires the exam to have ended
+    // (canOpenScoreList: status closed/archived OR now >= closeAt). Move
+    // closeAt into the past so the "examEnded" branch is satisfied without
+    // a real-time wait. (startAttempt already happened inside
+    // submitExamAsCandidate while the window was still open.)
+    await ctx.db
+      .update(schema.exams)
+      .set({ closeAt: new Date(Date.now() - 1000) })
+      .where(eq(schema.exams.id, examId));
+
+    // GET /api/exams/:examId/scores is gated by
+    // requireCapability(Permission.ScoreAllView). The union includes
+    // ScoreAllView (from Teacher), so the gate grants access and the handler
+    // returns the submitted score.
+    // Under Mutation G, permissionsForRole("Candidate") would only yield
+    // ScoreOwnView, and the gate would deny — but the multi-role user is not
+    // the owner of the attempt created by submitExamAsCandidate (which
+    // creates a SEPARATE candidate), so ScoreOwnView would also deny. Only
+    // the cap-union path (ScoreAllView from Teacher) grants access.
+    const scoreRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}/scores`,
+      cookies: { "auth-token": token },
+    });
+    expect(scoreRes.statusCode, scoreRes.body).toBe(200);
   });
 });

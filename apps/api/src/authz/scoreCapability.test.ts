@@ -231,6 +231,40 @@ describe("score capability preHandler — own/all arbitration (no role branching
     expect(reply.sentCode).toBe(0);
   });
 
+  it("RBAC-M10-E: multi-role union — ctx.capabilities includes ScoreAllView from a secondary role grant, primary role is Candidate", async () => {
+    // This test kills spec §16 Mutation G: a score gate that reads
+    // permissionsForRole(ctx.role) would see only the Candidate preset
+    // (ScoreOwnView, no ScoreAllView) and would limit to "own" scope.
+    // The production gate reads ctx.capabilities (the union of ALL active
+    // role assignments), so the secondary Grader grant's ScoreAllView
+    // must win — the handler proceeds with scoreView="all".
+    //
+    // The predicate mirrors the production ctxAllows: it reads
+    // ctx.capabilities, NOT the role preset.
+    nextResolution = resolved("owner-B"); // someone else's attempt
+    const capsPredicate = (request: FastifyRequest, perm: PermissionKey) => {
+      const caps = request.ctx?.capabilities ?? [];
+      return caps.includes(perm);
+    };
+    const handler = buildScoreCapabilityPreHandler({
+      db: {} as never,
+      allows: capsPredicate,
+    });
+    const reply = makeReply();
+    // Primary role is Candidate (no ScoreAllView in its own preset).
+    // Capabilities are the UNION of Candidate + Grader — Grader's preset
+    // includes ScoreAllView, so the union includes ScoreAllView.
+    const req = makeReq("Candidate", "actor-1");
+    (req.ctx as any).capabilities = [
+      Permission.ScoreOwnView, // from Candidate preset
+      Permission.ScoreAllView, // from secondary Grader assignment
+    ];
+    await handler(req, reply);
+    // ScoreAllView must win (strictly broader) — the handler proceeds
+    // (no reply sent, scoreView="all").
+    expect(reply.sentCode).toBe(0);
+  });
+
   it("principal with NEITHER score grant -> 403 PERMISSION_DENIED", async () => {
     nextResolution = resolved("actor-1"); // even if it IS their own attempt
     const handler = build();
