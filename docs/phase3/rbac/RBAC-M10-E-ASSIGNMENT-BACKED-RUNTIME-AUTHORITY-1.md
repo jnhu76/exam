@@ -74,10 +74,10 @@ BASE_BRANCH:        master
 M10-D MERGE COMMIT: 2bb956d (PR #194)
 START_HEAD:         2bb956d
 BRANCH:             feat/rbac-M10-E
-REVIEWED_CODE_HEAD: <recorded inline in §E at each campaign run>
-REPORT_COMMIT:      <recorded inline in §P at each report amend>
+REVIEWED_CODE_HEAD:    <recorded inline in §E at each campaign run>
+REPORT_COMMIT:         <recorded inline in §P at each report amend>
 PR_HEAD_AT_PUBLICATION: <recorded inline in §P at each publication>
-COMMITS (22, current series):
+COMMITS (23, current series):
   Kernel + flip (A/B series):
     - e14ff3d  feat(authz): add assignment authority kernel for M10-E
     - 901fda0  fix(authz): make user creation assignment-complete + DB invariant
@@ -107,7 +107,9 @@ COMMITS (22, current series):
     - eb7949b  docs(rbac): amend audit report for corrective closure
     - 3850f30  fix(web): reorder adminLandingPath to prioritize Proctor workspace over exams
   Review closure (Round 2 — re-point E17/E19 + scan + e2e):
-    - <pending commit>  test(rbac): re-point E17 to scoped route and E19 to dedicated score route
+    - 307bd65  test(rbac): round-2 corrective — re-point E17/E19 at real gates, fix e2e, add scan
+  Frontend multi-role shell corrective (this series):
+    - <pending commit>  fix(web): make frontend shell predicates capability-derived (M10-E shell corrective)
 WORKTREE:           (clean at each commit; recorded inline in §P)
 ```
 
@@ -286,7 +288,7 @@ scoped/score routes (`GET /admin/exams/:examId/proctor/attempts` and
 dedicated wiring is observable in isolation.
 
 ```text
-REVIEWED_CODE_HEAD (round 2): 3850f30fc2e0df83a25f84c932f906ee060b8f97
+REVIEWED_CODE_HEAD (round 2): 307bd65d0df6aa689f48f46187cb93403515be40
 ```
 
 | ID | Mutation | Mutation point (file:line) | Killer test | Result |
@@ -707,12 +709,13 @@ REVIEW-CLOSURE-AND-FIX-1 round-2 additional exit conditions:
 - **Resource relationship authorization (M11)** is explicitly out of scope;
   the score gate's `computeResultVisibility` and the scoped resolver chain
   are the M10-E surface, not the future M11 resource-ownership model.
-- **Frontend multi-role UX (carry-over from scan §Q)**: the API surface
-  exposes `capabilities` and the primary role, but `apps/web/src/pages/admin/UsersPage.tsx`
-  currently presents role as a single projection with no role-assignment
-  drawer. This is a UX gap, NOT a security gap (the backend remains the
-  authority and every assignment mutation is atomic). Tracked as a separate
-  frontend corrective, NOT deferred to M10-F.
+- **Frontend shell reachability (resolved in this series)**: `canAccessAdminConsole`,
+  `canAccessExamRuntime`, `adminLandingPath`, and `defaultLandingPath` are now
+  capability-derived. `AdminLayout` and `ExamLayout` redirects use these
+  predicates. Multi-role actors with secondary-role console/ExamTake
+  capabilities reach both shells.
+- **UsersPage role editor** remains the single frontend multi-role UX
+  limitation: no role-assignment drawer. Deferred, not a security gap.
 - **Dead `requireRole` decorator (carry-over from scan §Q)**:
   `apps/api/src/plugins/auth.ts:211-228` still defines `fastify.requireRole`
   with zero production callers (only the conformance test references its
@@ -737,9 +740,10 @@ AUTHOR SELF-ASSESSMENT PASS
 M10-F:
 NOT YET AUTHORIZED
 
-REPORT_COMMIT:         <amended by the round-2 commit>
+REVIEWED_CODE_HEAD:    307bd65d0df6aa689f48f46187cb93403515be40 (PR HEAD at review)
+REPORT_COMMIT:         <amended by the frontend-shell-corrective commit>
 PR_HEAD_AT_PUBLICATION: <recorded at push time>
-REVIEWED_CODE_HEAD:    3850f30fc2e0df83a25f84c932f906ee060b8f97
+FRONTEND_CORRECTIVE_AT: <same as REPORT_COMMIT>
 ```
 
 ## Q. Codebase-wide scan — legacy role-assignment patterns + RBAC coverage
@@ -804,12 +808,18 @@ Adversarial fixtures that intentionally corrupt `users.role` or omit
 assignments (`corruptUsersRoleProjectionForTest`, `createUnassignedUserForTest`)
 are explicitly labeled negative fixtures and must not be migrated.
 
-### Q.4 Frontend multi-role UI — UX gap (carry-over)
+### Q.4 Frontend multi-role UI — shell reachability (resolved)
 
 `apps/web/src/pages/admin/UsersPage.tsx` is a single-role editor with no
 role-assignment drawer. The backend already supports multi-role assignments
 via `/api/users/:id/role-assignments`, but the frontend does not surface
 it. This is a UX limitation, NOT a security gap (backend is authoritative).
+
+The shell reachability gap identified in Q.4 of the original scan is now
+**resolved**: `capabilities.ts` predicates and shell layout redirects are
+capability-derived. Multi-role actors with secondary-role console/ExamTake
+capabilities navigate both shells. The remaining UsersPage UX gap (no role-
+assignment drawer) is deferred.
 
 ### Q.5 Scan verdict
 
@@ -817,5 +827,5 @@ it. This is a UX limitation, NOT a security gap (backend is authoritative).
 PRODUCTION LEGACY PATTERNS:    NONE FOUND — fully migrated
 RBAC ENFORCEMENT COVERAGE:     COMPLETE
 TEST FIXTURES:                 correct (non-atomic hardening optional)
-FRONTEND MULTI-ROLE UX:        deferred (separate corrective)
+FRONTEND MULTI-ROLE UX:        shell reachability resolved; UsersPage editor deferred
 ```

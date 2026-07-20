@@ -24,7 +24,7 @@ CORRECTIVE CLOSED IN PR #195
 
 Blocking authority / mutation / tenant / system defects: NONE
 Authority closure: PROVEN by production code paths + E1–E19 + cross-org matrix
-Evidence / UX / documentation defects: 7 (1 P1, 5 P2, 1 P3) — ALL RESOLVED
+Evidence / UX / documentation defects: 8 (1 P1, 6 P2, 1 P3) — ALL RESOLVED
 
 PR #195:
 MERGE CANDIDATE (all corrective items closed in commits 1–6)
@@ -33,8 +33,8 @@ M10-E:
 READY FOR INDEPENDENT RE-REVIEW
 
 M10-F:
-AUTHORIZED (the M10-E runtime authority flip is sound; no authority escape
-reached outside the authz modules)
+NOT YET AUTHORIZED
+(the global RBAC-M10-FINISH verification job has not been executed)
 ```
 
 The "CORRECTIVE REQUIRED" verdict is driven entirely by **evidence / UX /
@@ -52,11 +52,11 @@ was found in the audited tree. The 6 findings are listed in §E and triaged in
 BASE_BRANCH:    master
 BASE_SHA:       2bb956da4814486a557b7d911eef84e40e282b66
 REVIEW_BRANCH:  feat/rbac-M10-E
-REVIEW_HEAD:    e39977f934bfa446b65f9e2a3e0f656fef39f8ef   (corrective closure HEAD)
+REVIEW_HEAD:    307bd65d0df6aa689f48f46187cb93403515be40   (PR HEAD at review)
 MERGE_BASE:     2bb956da4814486a557b7d911eef84e40e282b66  (=== BASE_SHA)
-WORKTREE:       clean (only this audit report is added, under docs/)
-COMMIT_COUNT:   20 commits between BASE_SHA and CORRECTIVE_HEAD
-CHANGED_FILES:  78 files, +7543 / -833 (baseline); +6 corrective commits
+WORKTREE:       7 modified files (uncommitted shell corrective + doc updates)
+COMMIT_COUNT:   23 commits between BASE_SHA and REVIEW_HEAD
+CHANGED_FILES:  119 files, +9370 / -1056 (baseline)
 ```
 
 Commits in range (re-verified against the remote PR HEAD):
@@ -319,24 +319,24 @@ task §7 TENANT_OR_OWNERSHIP_BOUNDARY guidance.
 
 | Primary        | Secondary        | Backend capabilities include                       | UI reachability (apps/web)                                              | Verdict |
 | -------------- | ---------------- | ------------------------------------------------- | ----------------------------------------------------------------------- | ------- |
-| Admin          | —                | Admin preset (full union)                         | Admin console, all nav (`canSee*` all true via `presetFor("Admin")`)    | ✓ reachable |
-| Candidate      | —                | Candidate preset                                  | Exam runtime only (`isCandidate` → `/exam/list`)                        | ✓ reachable |
-| Candidate      | Teacher          | + `ExamView`, `ScoreAllView`, `ExamUpdate`, …    | Exam runtime only — admin nav hidden (F-3); results/exams nav hidden     | ⚠ **partially unreachable** (backend allows; UI does not surface) |
-| Candidate      | Admin            | + full Admin preset                               | Exam runtime only — admin console hidden (`isCandidate` → true)         | ⚠ **partially unreachable** (Scenario L) |
-| Candidate      | Proctor          | + `ExamRoomView`                                  | Proctor nav hidden                                                      | ⚠ partially unreachable |
-| Candidate      | Grader           | + `GradingQueueView`, `Grading*`                  | Grading-queue nav hidden                                                | ⚠ partially unreachable |
-| Teacher        | —                | Teacher preset                                    | Admin console (non-Candidate) — but `canSeeManagement` false, dashboard false | ✓ partial (Teacher's own preset correctly gates nav) |
-| Teacher        | Candidate        | + Candidate preset                                | Admin console (primary Teacher → `isCandidate` false) — exam runtime not routed to | ⚠ exam-runtime UI not auto-routed for secondary Candidate |
+| Admin          | —                | Admin preset (full union)                         | Admin console, all nav (capability-derived)                             | ✓ reachable |
+| Candidate      | —                | Candidate preset                                  | Exam runtime only (`canAccessExamRuntime` → `/exam/list`)               | ✓ reachable |
+| Candidate      | Teacher          | + `ExamView`, `ScoreAllView`, `ExamUpdate`, …    | Both shells: admin console (`ExamView`) + exam runtime (`ExamTake`)     | ✓ reachable (corrective) |
+| Candidate      | Admin            | + full Admin preset                               | Both shells: admin console + exam runtime                               | ✓ reachable (corrective) |
+| Candidate      | Proctor          | + `ExamRoomView`                                  | Both shells: admin console (`ExamRoomView`) + exam runtime (`ExamTake`) | ✓ reachable (corrective) |
+| Candidate      | Grader           | + `GradingQueueView`, `Grading*`                  | Both shells: admin console + exam runtime                               | ✓ reachable (corrective) |
+| Teacher        | —                | Teacher preset                                    | Admin console; exam runtime denied                                      | ✓ correct |
+| Teacher        | Candidate        | + Candidate preset                                | Both shells: admin console + exam runtime (`ExamTake`)                  | ✓ reachable (corrective) |
 
-**Conclusion (Scenario L):** the backend correctly computes the capability
-union from active assignments, but the frontend re-derives visibility from
-`user.role` alone (the primary-role projection). A multi-role actor's
-secondary-role capabilities are reachable by direct URL (backend 200) but
-**not** surfaced through navigation. This is a UX reachability defect
-(Findings F-2 + F-3), not an authority defect — hidden routes still
-enforce `requireCapability` server-side. The capability union is already
-returned by `POST /auth/login`; closing the gap is a one-contract-field
-change (`MeResponse.capabilities`) plus a frontend source switch.
+**Conclusion (Scenario L, RESOLVED):** the frontend now derives shell routing
+from capability-derived predicates (`canAccessAdminConsole`,
+`canAccessExamRuntime`, `adminLandingPath`, `defaultLandingPath`) instead of
+`user.role` alone. Multi-role actors with secondary-role console/ExamTake
+capabilities reach both shells through navigation and layout routing. The
+underlying UX dataflow (F-2 + F-3: `MeResponse.capabilities` surfaced,
+frontend consumes them) was resolved in the earlier corrective commits;
+the final shell-predicate switch closes the remaining gap. See commit
+<pending> (RBAC-M10-E-FRONTEND-MULTI-ROLE-SHELL-CORRECTIVE-1).
 
 ---
 
@@ -374,7 +374,7 @@ evidence defect is the M10-E report's stale Mutation-G "SURVIVED" entry
 ## M. Corrective ownership
 
 ```text
-CLOSED IN PR #195 (commits 1–6):
+CLOSED IN PR #195 (commits 1–7):
   F-1  (P1)  M10-E report Mutation G row + §E.2 corrected.
              Commit: 6a (M10-E report §D/E.2 corrected).
   F-2  (P2)  MeResponseSchema.capabilities added; /api/auth/me and
@@ -397,11 +397,19 @@ CLOSED IN PR #195 (commits 1–6):
              assignable roles. Regression test proves guard semantics.
              Commit: 4 (db).
 
+  F-8  (P2)  Shell predicates (canAccessAdminConsole, canAccessExamRuntime,
+              adminLandingPath, defaultLandingPath) changed from role-based to
+              capability-derived. AdminLayout and ExamLayout redirects updated.
+              Multi-role actors now reach both shells through navigation.
+              Commit: 7 (web, this series).
+
 DEFERRED (pre-existing, out of scope):
   - Teacher↔course, Proctor↔exam, Grader↔work-item relationship
     authorization. M11 gap; not an M10-E concern.
   - UsersPage.tsx role filter (role !== "Candidate" client-side re-filter).
     Benign data filter; no authority impact.
+  - UsersPage role-assignment drawer: the backend already supports multi-role
+    assignments, but the frontend editor is single-role only. Deferred.
 ```
 
 ---
@@ -411,9 +419,9 @@ DEFERRED (pre-existing, out of scope):
 ```text
 PR #195:
 MERGE CANDIDATE
-(all 7 corrective findings closed in commits 1–6; no outstanding authority,
+(all 8 corrective findings closed in commits 1–7; no outstanding authority,
 mutation, tenant, or system defect; the M10-E runtime authority flip is
-assignment-backed end-to-end.)
+assignment-backed end-to-end; frontend shell reachability is capability-derived.)
 
 M10-E:
 READY FOR INDEPENDENT RE-REVIEW
@@ -421,12 +429,14 @@ READY FOR INDEPENDENT RE-REVIEW
 ctx.capabilities; fail-closed is proven by E14; multi-role union is proven
 by E5/E6/E8/E9/E19; last-admin concurrency is proven by adminInvariant.test;
 cross-org / cross-candidate ownership is proven by candidateOwnership.test;
-System actor is non-login, factory-built, and rejects unknown ids.)
+System actor is non-login, factory-built, and rejects unknown ids; frontend
+shell routing is capability-derived with proven behavioral matrix.)
 
 M10-F:
-AUTHORIZED
-(no authority escape reached outside the authz modules; the M10-E flip is
-sound. All 7 corrective findings from the audit have been resolved.)
+NOT YET AUTHORIZED
+(the global RBAC-M10-FINISH verification job has not been executed;
+this audit's scope is limited to the M10-E dataflow, not the full
+flip. All 8 corrective findings from the audit have been resolved.)
 ```
 
 ---
@@ -476,13 +486,14 @@ This audit **did**:
 ```
 
 Condition 12 was the only failure — all three documentation drift items (F-1 P1,
-F-5 P2, F-6 P3) have been resolved within PR #195. The full audit exit condition
-set is now satisfied.
+F-5 P2, F-6 P3) have been resolved within PR #195. F-8 (frontend shell
+reachability) was added and resolved as a continuation of the F-2/F-3 dataflow
+corrective sequence.
 
 ```text
 VERDICT: CORRECTIVE CLOSED IN PR #195
-PR #195: MERGE CANDIDATE (all 7 corrective findings resolved)
-M10-F:   AUTHORIZED
+PR #195: MERGE CANDIDATE (all 8 corrective findings resolved)
+M10-F:   NOT YET AUTHORIZED
 ```
 
 The "CORRECTIVE REQUIRED" verdict is documentation-hygiene-driven. No

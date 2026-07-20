@@ -48,15 +48,24 @@ export function isCandidate(user: Pick<MeResponse, "role">): boolean {
 }
 
 /**
- * Roles that may use the Admin console at all (vs being routed to the exam
- * runtime). Candidate is excluded; everyone with at least one non-candidate,
- * non-system preset enters the console.
+ * Returns true if the user has any admin-console capability (is gated into the
+ * admin shell). Derived from adminLandingPath: if there is any console surface
+ * the user can reach, console access is granted.
  */
-export function canAccessAdminConsole(user: Pick<MeResponse, "role">): boolean {
-  // System is non-login and never appears in MeResponse.role. Candidate is
-  // routed to the exam runtime; every other role (Admin/Teacher/Proctor/Grader)
-  // holds at least one non-candidate capability -> console access.
-  return !isCandidate(user);
+export function canAccessAdminConsole(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return adminLandingPath(user) !== null;
+}
+
+/**
+ * Exam-runtime access: requires ExamTake capability (Candidate's entry perm).
+ * Multi-role users with secondary Candidate reach the exam shell.
+ */
+export function canAccessExamRuntime(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.ExamTake);
 }
 
 // ── Per-surface visibility (the single source the sidebar/layout consult) ──
@@ -237,17 +246,33 @@ export function adminLandingPath(
   // Dashboard (SystemHealthView) is Admin-only — check first so Admin lands
   // on the dashboard even though Admin also holds all other capability perms.
   // Proctor workspace is the most targeted non-Admin surface, followed by
-  // grading queue, then exams as a general fallback.
+  // grading queue, then exams as a general fallback. CourseView, QuestionView,
+  // and management-surface perms extend the set so non-standard presets or
+  // multi-role unions still get a console landing.
   if (canSeeDashboard(user)) return routes.admin.dashboard;
   if (canSeeProctor(user)) return routes.admin.proctorWorkspace;
   if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
   if (canSeeExams(user)) return routes.admin.exams;
+  if (canSeeCourses(user)) return routes.admin.courses;
+  if (canSeeQuestions(user)) return routes.admin.questions;
+  if (hasManagementCapability(user.capabilities as PermissionKey[]))
+    return routes.admin.users;
   return null;
 }
 
 export function defaultLandingPath(
   user: Pick<MeResponse, "role" | "capabilities">,
 ): string {
-  if (isCandidate(user)) return routes.exam.list;
-  return adminLandingPath(user) ?? routes.admin.root;
+  // If user has any admin-console capability, resolve which surface they land on.
+  const adminPath = adminLandingPath(user);
+  if (adminPath) {
+    // Primary-Candidate users with console capabilities default to exam runtime
+    // (Candidate-primary preference).
+    if (isCandidate(user)) return routes.exam.list;
+    return adminPath;
+  }
+  // Pure candidate or secondary-candidate-only user.
+  if (canAccessExamRuntime(user)) return routes.exam.list;
+  // No capabilities — redirect to login.
+  return routes.login;
 }

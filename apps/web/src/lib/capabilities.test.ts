@@ -4,6 +4,7 @@ import { permissionsForRole, type PermissionKey } from "@exam/authz";
 import {
   can,
   canAccessAdminConsole,
+  canAccessExamRuntime,
   adminLandingPath,
   canArchiveExam,
   canCancelExam,
@@ -281,7 +282,8 @@ describe("RBAC-M10-E closure — multi-role capability union", () => {
     expect(canSeeResults(u)).toBe(true);
     // Shell classification still uses role: Candidate routes to exam runtime.
     expect(isCandidate(u)).toBe(true);
-    expect(canAccessAdminConsole(u)).toBe(false);
+    // Teacher's ExamView grants admin-console access via adminLandingPath.
+    expect(canAccessAdminConsole(u)).toBe(true);
   });
 
   it("primary Candidate + secondary Admin grants all Admin capabilities", () => {
@@ -291,13 +293,179 @@ describe("RBAC-M10-E closure — multi-role capability union", () => {
     expect(canSeeDashboard(u)).toBe(true);
     expect(canSeeGradingQueue(u)).toBe(true);
     expect(canSeeProctor(u)).toBe(true);
-    // Shell classification: primary role is Candidate, so console is hidden.
-    expect(canAccessAdminConsole(u)).toBe(false);
+    // Admin's SystemHealthView grants admin-console access.
+    expect(canAccessAdminConsole(u)).toBe(true);
   });
 
   it("canSeeSettings works with explicit capability set", () => {
     const u = userWith("Candidate", ["settings.view"]);
     expect(canSeeSettings(u)).toBe(true);
     expect(canSeeManagement(u)).toBe(true); // SettingsView is a management perm
+  });
+});
+
+describe("RBAC-M10-E-FRONTEND-MULTI-ROLE-SHELL-CORRECTIVE-1 — shell reachability matrix", () => {
+  // Full behavioral matrix:
+  // | Primary   | Secondary | Admin console | Exam runtime | Default landing (primary Candidate) | Default landing (non-Candidate-primary) |
+  // |-----------|-----------|---------------|--------------|-------------------------------------|-----------------------------------------|
+  // | Admin     | –         | allow         | deny         | –                                   | /admin/dashboard                        |
+  // | Teacher   | –         | allow         | deny         | –                                   | /admin/exams                            |
+  // | Proctor   | –         | allow         | deny         | –                                   | /admin/proctor                          |
+  // | Grader    | –         | allow         | deny         | –                                   | /admin/grading-queue                    |
+  // | Candidate | –         | deny          | allow        | /exam/list                          | –                                       |
+  // | Candidate | Teacher   | allow         | allow        | /exam/list                          | –                                       |
+  // | Candidate | Admin     | allow         | allow        | /exam/list                          | –                                       |
+  // | Candidate | Proctor   | allow         | allow        | /exam/list                          | –                                       |
+  // | Candidate | Grader    | allow         | allow        | /exam/list                          | –                                       |
+  // | Teacher   | Candidate | allow         | allow        | –                                   | /admin/exams                            |
+  // | Proctor   | Candidate | allow         | allow        | –                                   | /admin/proctor                          |
+  // | Grader    | Candidate | allow         | allow        | –                                   | /admin/grading-queue                    |
+
+  describe("canAccessExamRuntime", () => {
+    it.each([
+      ["Admin", false],
+      ["Teacher", false],
+      ["Proctor", false],
+      ["Grader", false],
+      ["Candidate", true],
+    ] as const)("%s exam-runtime access: %s", (role, expected) => {
+      expect(canAccessExamRuntime(user(role))).toBe(expected);
+    });
+
+    it("Candidate + Teacher: exam-runtime allowed (ExamTake from Candidate union)", () => {
+      const unionPerms = [
+        ...permissionsForRole("Candidate"),
+        ...permissionsForRole("Teacher"),
+      ];
+      const u = userWith("Candidate", unionPerms);
+      expect(canAccessExamRuntime(u)).toBe(true);
+    });
+
+    it("Teacher + Candidate: exam-runtime allowed (ExamTake from secondary Candidate union)", () => {
+      const unionPerms = [
+        ...permissionsForRole("Teacher"),
+        ...permissionsForRole("Candidate"),
+      ];
+      const u = userWith("Teacher", unionPerms);
+      expect(canAccessExamRuntime(u)).toBe(true);
+    });
+
+    it("no capabilities: exam-runtime denied", () => {
+      const u = userWith("Candidate", []);
+      expect(canAccessExamRuntime(u)).toBe(false);
+    });
+  });
+
+  describe("canAccessAdminConsole — single-role", () => {
+    it.each([
+      ["Admin", true],
+      ["Teacher", true],
+      ["Proctor", true],
+      ["Grader", true],
+      ["Candidate", false],
+    ] as const)("%s admin-console access: %s", (role, expected) => {
+      expect(canAccessAdminConsole(user(role))).toBe(expected);
+    });
+  });
+
+  describe("canAccessAdminConsole — multi-role", () => {
+    it.each([
+      ["Candidate + Teacher", "Candidate", "Teacher"],
+      ["Candidate + Admin", "Candidate", "Admin"],
+      ["Candidate + Proctor", "Candidate", "Proctor"],
+      ["Candidate + Grader", "Candidate", "Grader"],
+    ] as const)(
+      "%s: admin-console allowed (secondary role grants a console perm)",
+      (_label, primary, secondary) => {
+        const secondaryPerms = [...permissionsForRole(secondary)];
+        const u = userWith(primary, secondaryPerms);
+        expect(canAccessAdminConsole(u)).toBe(true);
+      },
+    );
+
+    it("Candidate + no console perms: admin-console denied", () => {
+      const u = userWith("Candidate", ["attempt.submit"]);
+      expect(canAccessAdminConsole(u)).toBe(false);
+    });
+  });
+
+  describe("adminLandingPath — extended coverage", () => {
+    it("returns /admin/courses when user only has CourseView", () => {
+      const u = userWith("Candidate", ["course.view"]);
+      expect(adminLandingPath(u)).toBe("/admin/courses");
+    });
+
+    it("returns /admin/questions when user only has QuestionView", () => {
+      const u = userWith("Candidate", ["question.view"]);
+      expect(adminLandingPath(u)).toBe("/admin/questions");
+    });
+
+    it("returns /admin/users when user only has a management-surface perm", () => {
+      const u = userWith("Candidate", ["user.view"]);
+      expect(adminLandingPath(u)).toBe("/admin/users");
+    });
+
+    it("returns null when user has no console capability", () => {
+      const u = userWith("Candidate", []);
+      expect(adminLandingPath(u)).toBeNull();
+    });
+
+    it("prioritizes dashboard over broader permissions", () => {
+      const u = userWith("Admin", permissionsForRole("Admin"));
+      expect(adminLandingPath(u)).toBe("/admin/dashboard");
+    });
+
+    it("prioritizes proctor workspace over grading queue", () => {
+      // Proctor+Grader union: ExamRoomView checked before GradingQueueView.
+      const gradgerPerms = [...permissionsForRole("Grader")];
+      const proctorPerms = [...permissionsForRole("Proctor")];
+      const u = userWith("Proctor", [...gradgerPerms, ...proctorPerms]);
+      expect(adminLandingPath(u)).toBe("/admin/proctor");
+    });
+  });
+
+  describe("defaultLandingPath — multi-role-aware", () => {
+    it.each([
+      ["Admin", "/admin/dashboard"],
+      ["Teacher", "/admin/exams"],
+      ["Grader", "/admin/grading-queue"],
+      ["Proctor", "/admin/proctor"],
+      ["Candidate", "/exam/list"],
+    ] as const)("single-role %s lands on %s", (role, expectedPath) => {
+      expect(defaultLandingPath(user(role))).toBe(expectedPath);
+    });
+
+    it("Candidate+Teacher: lands on /exam/list (Candidate-primary preference)", () => {
+      const unionPerms = [
+        ...permissionsForRole("Candidate"),
+        ...permissionsForRole("Teacher"),
+      ];
+      const u = userWith("Candidate", unionPerms);
+      expect(defaultLandingPath(u)).toBe("/exam/list");
+    });
+
+    it("Teacher+Candidate: lands on /admin/exams (non-Candidate primary)", () => {
+      const unionPerms = [
+        ...permissionsForRole("Teacher"),
+        ...permissionsForRole("Candidate"),
+      ];
+      const u = userWith("Teacher", unionPerms);
+      expect(defaultLandingPath(u)).toBe("/admin/exams");
+    });
+
+    it("no capabilities: lands on /login", () => {
+      const u = userWith("Admin", []);
+      expect(defaultLandingPath(u)).toBe("/login");
+    });
+
+    it("only ExamTake: lands on /exam/list", () => {
+      const u = userWith("Candidate", ["exam.take"]);
+      expect(defaultLandingPath(u)).toBe("/exam/list");
+    });
+
+    it("only console perm (no ExamTake): lands on console", () => {
+      const u = userWith("Teacher", ["exam.view"]);
+      expect(defaultLandingPath(u)).toBe("/admin/exams");
+    });
   });
 });
