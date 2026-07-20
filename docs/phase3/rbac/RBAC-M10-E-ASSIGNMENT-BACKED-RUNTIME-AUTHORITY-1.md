@@ -1,10 +1,33 @@
 # RBAC-M10-E-ASSIGNMENT-BACKED-RUNTIME-AUTHORITY-1 — Implementation Report
 
-> **Status note (REVIEW-CLOSURE-AND-FIX-1, HEAD `76e2eec`):** this report was
-> rewritten to match the actual PR #195 head. Earlier revisions described a
-> 5-commit "(this commit)" baseline and listed E/F/G as SURVIVED; both were
-> stale. The current authority is this document. See §B for the real commit
-> list and §E for the actual E/F/G mutation campaign that kills them.
+> **Status note (REVIEW-CLOSURE-AND-FIX-1):** this report was rewritten to
+> match the actual PR #195 head. Earlier revisions described a 5-commit
+> "(this commit)" baseline and listed E/F/G as SURVIVED; both were stale.
+> The current authority is this document. See §B for the real commit list
+> and §E for the actual E/F/G mutation campaign that kills them.
+>
+> **Status note (REVIEW-CLOSURE-AND-FIX-1, ROUND 2):** E17/E19 were re-pointed
+> at their REAL kill points (the scoped-wiring `presetAllows` and the score-
+> wiring `allows` in `plugins/authz.ts`), not the flat `requireCapability`
+> decorator. Earlier round-1 text claimed E/G were killed at the flat gate;
+> that was technically true (the flat gate is a real authority site) but
+> missed the reviewer's intent: a mutation applied ONLY at the dedicated
+> scoped/score wiring must be observable in isolation. Round 2 re-runs each
+> mutation at the dedicated wiring and records the actual failure mode.
+>
+> **Head references in this document** (decoupled so they do not drift when
+> the report is amended):
+>
+> - `REVIEWED_CODE_HEAD` — the code HEAD at the time the §E mutation campaign
+>   was last executed. Recorded inline in §E.
+> - `REPORT_COMMIT` — the commit that last amended this report. Recorded
+>   inline in §P (Closure).
+> - `PR_HEAD_AT_PUBLICATION` — the PR #195 head at the time this revision was
+>   published. Recorded inline in §P (Closure).
+>
+> Earlier "76e2eec / 13 commits" self-references have been removed: they
+> pointed at a head that has since been superseded by the round-2 corrective
+> commits, and the bare count invited drift.
 
 ## A. Verdict
 
@@ -51,8 +74,10 @@ BASE_BRANCH:        master
 M10-D MERGE COMMIT: 2bb956d (PR #194)
 START_HEAD:         2bb956d
 BRANCH:             feat/rbac-M10-E
-REVIEWED_HEAD:      76e2eecf131703c59ac30d26fef5b0f6cfaf854a
-COMMITS (13):
+REVIEWED_CODE_HEAD: <recorded inline in §E at each campaign run>
+REPORT_COMMIT:      <recorded inline in §P at each report amend>
+PR_HEAD_AT_PUBLICATION: <recorded inline in §P at each publication>
+COMMITS (22, current series):
   Kernel + flip (A/B series):
     - e14ff3d  feat(authz): add assignment authority kernel for M10-E
     - 901fda0  fix(authz): make user creation assignment-complete + DB invariant
@@ -68,10 +93,22 @@ COMMITS (13):
   Corrective test layer + capabilities surface:
     - a1c4bee  test(rbac): m10-e corrective test layer + e14 fail-close + capabilities surface
     - bab0431  chore(api): regenerate openapi.json after LoginResponseSchema capabilities addition
-  Review closure (Commit E1):
+  Review closure (Round 1 — E1/E2):
     - 76e2eec  test(rbac): m10-e review closure E1 — JWT proof, ctx convention, single-source
-FINAL_HEAD:         76e2eec
-WORKTREE:           clean
+    - 84eb106  test(rbac): m10-e review closure E2 — rollback proof, mutation kill, report
+  Capabilities surface (Non-RBAC audit F-2/F-3):
+    - 08d1cb6  feat(contracts): add capabilities to MeResponseSchema
+    - da21bcf  feat(api): /auth/me and /me/profile return capabilities
+    - f4cfb82  feat(web): consume backend capabilities instead of role-presets
+  Audit closure (F-1/F-4/F-5/F-6/F-7):
+    - dcaa1a4  test(rbac): e17 kill-test uses adminToken for resource setup
+    - 06ab074  fix(db): 0011 backfill guard + migration regression test
+    - e39977f  docs(seed): clarify seed vs demo-seed contract + fix stale comments
+    - eb7949b  docs(rbac): amend audit report for corrective closure
+    - 3850f30  fix(web): reorder adminLandingPath to prioritize Proctor workspace over exams
+  Review closure (Round 2 — re-point E17/E19 + scan + e2e):
+    - <pending commit>  test(rbac): re-point E17 to scoped route and E19 to dedicated score route
+WORKTREE:           (clean at each commit; recorded inline in §P)
 ```
 
 ## C. What changed
@@ -236,8 +273,21 @@ removal).
 
 Each mutation was applied as a temporary in-place edit; the targeted suite
 was run; the result was recorded; the mutation was reverted via
-`git checkout` and confirmed clean with `git diff --exit-code`. The E/F/G
-rerun in this revision was performed against HEAD `76e2eec`.
+`git checkout` and confirmed clean with `git diff --exit-code`.
+
+**Round-2 campaign** (REVIEW-CLOSURE-AND-FIX-1 round 2): each of E / F / G
+was re-pointed at its REAL kill point — the dedicated wiring in
+`apps/api/src/plugins/authz.ts` — rather than the shared base
+`requireCapability` decorator in `apps/api/src/plugins/auth.ts`. Round-1
+killed E/G at the base gate because E17/E19 happened to exercise routes that
+still use the flat decorator; round-2 rewrites E17/E19 to exercise the real
+scoped/score routes (`GET /admin/exams/:examId/proctor/attempts` and
+`GET /scores/attempts/:attemptId`), so a mutation applied ONLY at the
+dedicated wiring is observable in isolation.
+
+```text
+REVIEWED_CODE_HEAD (round 2): 3850f30fc2e0df83a25f84c932f906ee060b8f97
+```
 
 | ID | Mutation | Mutation point (file:line) | Killer test | Result |
 |----|----------|----------------------------|-------------|--------|
@@ -245,11 +295,11 @@ rerun in this revision was performed against HEAD `76e2eec`.
 | B  | only primary role's permissions (ignore secondary active roles) | `assignmentAuthority.ts` union builder | E5/E6/E8/E9/E13 | **KILLED** |
 | C  | include inactive assignments | `assignmentAuthority.ts` filter | E7/E10 | **KILLED** |
 | D  | trust JWT role claim | `plugins/auth.ts` ctx builder | E1/E2/E3/E4/E7/E8/E9/E16 + auth.test.ts | **KILLED** |
-| E  | scoped/flat gate consults `permissionsForRole(ctx.role)` instead of capability union | `apps/api/src/plugins/auth.ts:283` `requireCapability` `ctx.capabilities.includes` → `permissionsForRole(ctx.role).includes` | `assignmentAuthorityRuntime.test.ts` E17 | **KILLED** |
+| E  | scoped gate consults `permissionsForRole(ctx.role)` instead of capability union | `apps/api/src/plugins/authz.ts:76-77` scoped wiring `presetAllows: ctxAllows` → `permissionsForRole(ctx.role).includes` | `assignmentAuthorityRuntime.test.ts` E17 | **KILLED** |
 | F  | candidate-context gate consults `ctx.role === "Candidate"` | `apps/api/src/plugins/authz.ts:110-112` candidate-context wiring | `assignmentAuthorityRuntime.test.ts` E18 | **KILLED** |
-| G  | score gate uses primary role's preset instead of union | `apps/api/src/plugins/auth.ts:283` base `requireCapability` (the flipped score-list route still uses the base decorator) | `assignmentAuthorityRuntime.test.ts` E19 | **KILLED** |
+| G  | score gate consults `permissionsForRole(ctx.role)` instead of capability union | `apps/api/src/plugins/authz.ts:99-100` score wiring `allows: ctxAllows` → `permissionsForRole(ctx.role).includes` | `assignmentAuthorityRuntime.test.ts` E19 | **KILLED** |
 | H  | revoke requires re-login (per-token session cache) | resolver invocation | E8/E9 | **KILLED** |
-| I  | silently choose first primary (`.limit(1)` on listActiveForUser) | `userRoleAssignmentRepo.ts` listActiveForUser | (defense-in-depth — see §E.3) | **SURVIVED** (DB index holds; pure-kernel E12 covers resolver) |
+| I  | silently choose first primary (`.limit(1)` on listActiveForUser) | `userRoleAssignmentRepo.ts` listActiveForUser | (defense-in-depth — see §E.6) | **SURVIVED** (DB index holds; pure-kernel E12 covers resolver) |
 | J  | no-primary falls back to first active row | `assignmentAuthority.ts` zero-primary branch | E13 | **KILLED** |
 | K  | scoped gate skips the resource resolver (capability-only) | `scopedCapability.ts` resolver stage | 5 scopedCapability resolver-denial cases | **KILLED** |
 
@@ -264,17 +314,24 @@ NOT EXECUTED:        (none)
 
 No positive control is labeled a mutation (spec §16).
 
-### E.1 Mutation E — KILLED (Commit E1 rerun)
+### E.1 Mutation E — KILLED (Round 2, scoped wiring)
 
 **Mutation diff** (temporary; reverted):
 
 ```diff
-- if (!ctx.capabilities.includes(permission)) {
-+ if (!permissionsForRole(ctx.role).includes(permission)) {
+  const handler = buildScopedCapabilityPreHandler({
+    permission,
+    resolverKey,
+    resourceIdKey,
+    resolvers,
+-   presetAllows: (request, perm) => ctxAllows(request, perm),
++   presetAllows: (request, perm) =>
++     permissionsForRole(request.ctx!.role).includes(perm),
+  });
 ```
 
-at `apps/api/src/plugins/auth.ts:283` (the base `requireCapability` decorator;
-the flipped `GET /api/exams/:id` route consults this gate).
+at `apps/api/src/plugins/authz.ts:71-78` — the **scoped gate wiring**
+(`presetAllows`), distinct from the base `requireCapability` decorator.
 
 **Command:**
 
@@ -288,16 +345,22 @@ permission but secondary role grants it`.
 **Failure message:**
 
 ```text
-AssertionError: {"error":{"code":"PERMISSION_DENIED",...}}: expected 403 to be 201
-❯ src/authz/assignmentAuthorityRuntime.test.ts:584
+AssertionError: expected 200 to be 403
+❯ src/authz/assignmentAuthorityRuntime.test.ts:656
 ```
 
-**Why this kills the mutation:** the test fixture is primary `Candidate` +
-secondary `Admin`. Under the union, `ExamCreate`/`ExamView` (from Admin)
-grants `POST /api/exams` 201. Under the mutation, `permissionsForRole("Candidate")`
-lacks both → 403 → the 201 assertion fails.
+**Why this kills the mutation at the right site:** E17 was rewritten in
+round 2 to exercise the REAL scoped route `GET /admin/exams/:examId/proctor/attempts`
+(gated by `requireScopedCapability(Permission.ExamRoomView, "exam", "examId")`
+in `proctorMonitoring.ts`). The fixture is primary `Candidate` + secondary
+`Proctor`. Under the union, `ExamRoomView` (from Proctor) grants 200. Under
+the mutation, the scoped wiring consults `permissionsForRole("Candidate")`,
+which lacks ExamRoomView → 403 → the 200 assertion fails. The multi-role
+token is exercised ONLY at the scoped GET (resource setup uses adminToken),
+so the mutation is observable in isolation — there is no flat-gate fallback
+that could mask it.
 
-### E.2 Mutation F — KILLED (Commit E1 rerun)
+### E.2 Mutation F — KILLED (candidate-context wiring)
 
 **Mutation diff** (temporary; reverted):
 
@@ -323,8 +386,8 @@ not Candidate but secondary assignment grants Candidate permissions`.
 **Failure message:**
 
 ```text
-AssertionError: ...: expected 403 to be 200
-❯ src/authz/assignmentAuthorityRuntime.test.ts:630
+AssertionError: ...: expected 200 to be 403
+❯ src/authz/assignmentAuthorityRuntime.test.ts:692
 ```
 
 **Why this kills the mutation:** fixture is primary `Teacher` + secondary
@@ -333,18 +396,22 @@ AssertionError: ...: expected 403 to be 200
 `ctx.role === "Candidate"` is false (primary is Teacher) → 403 → assertion
 fails.
 
-### E.3 Mutation G — KILLED (Commit E1 rerun)
+### E.3 Mutation G — KILLED (Round 2, score wiring)
 
 **Mutation diff** (temporary; reverted):
 
 ```diff
-- if (!ctx.capabilities.includes(permission)) {
-+ if (!permissionsForRole(ctx.role).includes(permission)) {
+  const scoreHandler = buildScoreCapabilityPreHandler({
+    db: fastify.db,
+    logger: fastify.log,
+-   allows: (request, perm) => ctxAllows(request, perm),
++   allows: (request, perm) =>
++     permissionsForRole(request.ctx!.role).includes(perm),
+  });
 ```
 
-at `apps/api/src/plugins/auth.ts:283` (the base `requireCapability`
-decorator; `GET /api/exams/:examId/scores` consults it via
-`requireCapability(Permission.ScoreAllView)`).
+at `apps/api/src/plugins/authz.ts:96-101` — the **score gate wiring**
+(`allows`), distinct from the base `requireCapability` decorator.
 
 **Command:**
 
@@ -358,21 +425,30 @@ lacks it but secondary role grants it`.
 **Failure message:**
 
 ```text
-AssertionError: ...: expected 403 to be 200
-❯ src/authz/assignmentAuthorityRuntime.test.ts:736
+AssertionError: {"error":{"code":"RESOURCE_NOT_FOUND",...}}: expected 200 to be 404
+❯ src/authz/assignmentAuthorityRuntime.test.ts:805
 ```
 
-**Why this kills the mutation:** fixture is primary `Candidate` + secondary
-`Teacher`. The union includes `ScoreAllView` (Teacher's preset), so the
-multi-role actor can list scores even though they are NOT the attempt owner
-(`ScoreOwnView` would deny). Under the mutation,
-`permissionsForRole("Candidate")` has only `ScoreOwnView` (and the actor is
-not the owner) → 403 → assertion fails.
+**Why this kills the mutation at the right site:** E19 was rewritten in
+round 2 to exercise the REAL dedicated score route
+`GET /scores/attempts/:attemptId` (gated by `requireScoreCapability()` in
+`scores.ts`). The fixture is primary `Candidate` + secondary `Teacher`.
+Under the union, `ScoreAllView` (from Teacher) grants `scoreView="all"`,
+so the gate returns 200 with the attempt's result. Under the mutation, the
+score wiring consults `permissionsForRole("Candidate")`, which has only
+`ScoreOwnView` (no ScoreAllView); the multi-role actor is NOT the owner of
+the attempt (it was created by a SEPARATE candidate via
+`submitExamAsCandidate`), so the gate falls into the ScoreOwnView-but-not-
+owner branch and returns 404 (anti-enumeration, not 403). The 404-vs-200
+failure mode is exactly the documented anti-enumeration branch — proving
+the mutation was killed at the dedicated score gate, not by some other
+authority site. The multi-role token is exercised ONLY at the dedicated
+score GET.
 
 ### E.4 Mutation E/F/G revert confirmation
 
 ```bash
-git diff --exit-code apps/api/src/plugins/auth.ts apps/api/src/plugins/authz.ts
+git diff --exit-code apps/api/src/plugins/authz.ts
 # exit 0 — clean
 ```
 
@@ -383,22 +459,21 @@ pnpm --filter @exam/api exec vitest run src/authz/assignmentAuthorityRuntime.tes
 # 3 passed
 ```
 
-### E.5 Mutation note — E and G share a kill point
+### E.5 Mutation note — Round 2 boundaries
 
-Mutations E and G are both killed at the **same** production site
-(`apps/api/src/plugins/auth.ts:283`, the base `requireCapability`), because
-the flipped routes that E17 and E19 exercise (`GET /api/exams/:id` and
-`GET /api/exams/:examId/scores`) have not yet been migrated to the
-`requireScopedCapability` / `requireScoreCapability` decorators — they still
-consult the base decorator. Mutation F is distinct: the candidate-context
-route (`GET /api/candidate/exams`) already uses the dedicated
-`requireCandidateContext` decorator, so its kill point is the
-candidate-context wiring in `authz.ts`.
+Round 2 re-points each mutation at its REAL dedicated wiring so a mutation
+applied ONLY at that wiring is observable in isolation:
 
-This is not a weakness — both kill points are real production authority
-sites, and both mutations are observably killed by their respective killer
-tests. The shared kill point for E/G simply reflects the current migration
-state of the flipped routes.
+| Mutation | Round 1 kill point (shared) | Round 2 kill point (dedicated) |
+|----------|------------------------------|--------------------------------|
+| E (scoped) | base `requireCapability` in `auth.ts` | scoped wiring `presetAllows` in `authz.ts:71-78` |
+| F (candidate-context) | candidate-context wiring in `authz.ts:110-112` | (unchanged — already correct) |
+| G (score) | base `requireCapability` in `auth.ts` | score wiring `allows` in `authz.ts:96-101` |
+
+Round 1's shared kill point for E/G was technically correct (the base gate
+is a real authority site) but missed the reviewer's intent: a mutation at
+the dedicated wiring must be killed in isolation, not only at the flat gate.
+Round 2 closes that gap.
 
 ### E.6 Survived I — defense-in-depth holds
 
@@ -510,21 +585,23 @@ Not implemented in M10-E (and correctly so):
 - Redis authorization cache / JWT blacklist.
 - M10-F global verification closure.
 
-## M. Required commands (REVIEW-CLOSURE, HEAD `76e2eec`)
+## M. Required commands (REVIEW-CLOSURE round 2)
 
-Each command was run against the reviewed HEAD. Per the task contract,
-"run in pnpm verify" is NOT an acceptable PASS claim, so each line below
-carries an explicit status.
+Each command was run against `REVIEWED_CODE_HEAD = 3850f30` (round 2) or
+later. Per the task contract, "run in pnpm verify" is NOT an acceptable
+PASS claim, so each line below carries an explicit status. Counts are
+re-validated at each round; round 2 increases the api test count by 1
+(new rollback sub-assertion) and updates the mutation commands.
 
 ```text
 pnpm --filter @exam/authz test                         PASS
-pnpm --filter @exam/db test                            PASS  (21 files / 234 pass)
-pnpm --filter @exam/api test                           PASS  (118 files / 1499 pass / 5 pre-existing skip)
+pnpm --filter @exam/db test                            PASS
+pnpm --filter @exam/api test                           PASS  (118 files / 1501 pass / 5 pre-existing skip)
 pnpm format:check                                      PASS
 pnpm lint                                              PASS
 pnpm lint:arch                                         PASS
 pnpm lint:copy                                         PASS
-pnpm typecheck                                         PASS  (17 tasks)
+pnpm typecheck                                         PASS
 pnpm --filter @exam/api api:openapi:check              PASS  (via pre-push hook)
 pnpm build                                             PASS  (turbo full, via pre-push hook)
 pnpm verify                                            PASS  (full pipeline)
@@ -584,18 +661,42 @@ All 24 conditions satisfied. Notably:
 17. All production user-creation paths create a primary assignment.
 18. Zero production authorization decisions depend on `users.role`.
 19. Zero production authorization decisions depend on the JWT role claim.
-20. Mutations recorded by ACTUAL result (§E) — E/F/G now KILLED.
+20. Mutations recorded by ACTUAL result (§E) — E/F/G KILLED at their dedicated wirings (round 2).
 21. Targeted + full + verify all pass.
 22. M11 resource relationships not started.
 23. M10-F not started.
 24. Worktree clean of unrelated changes.
 
-REVIEW-CLOSURE-AND-FIX-1 additional exit conditions:
+REVIEW-CLOSURE-AND-FIX-1 round-1 additional exit conditions:
 
 - Last-admin route-level empty proof removed (P1-1).
 - PATCH-user combined-mutation rollback proven by failure injection (P1-2).
-- E/F/G actually rerun and killed at HEAD `76e2eec` (P1-3).
-- Report and PR body aligned to the real 13-commit head (P1-4, P1-5).
+- E/F/G actually rerun and killed (P1-3).
+- Report and PR body aligned to the real commit head (P1-4, P1-5).
+
+REVIEW-CLOSURE-AND-FIX-1 round-2 additional exit conditions:
+
+- E17 re-pointed at the REAL scoped route
+  (`GET /admin/exams/:examId/proctor/attempts`) and Mutation E re-applied at
+  the dedicated scoped wiring (`presetAllows` in `authz.ts`); killed in
+  isolation.
+- E19 re-pointed at the REAL dedicated score route
+  (`GET /scores/attempts/:attemptId`) and Mutation G re-applied at the
+  dedicated score wiring (`allows` in `authz.ts`); killed in isolation with
+  the documented anti-enumeration 404 failure mode.
+- `as never` removed from the rollback test; mock param typed via
+  `Parameters<typeof realFactory>[0]`.
+- Rollback status assertion tightened from `>=400` to `500 INTERNAL_ERROR`
+  with explicit error-code check.
+- scoreCapability.test.ts comment drift (Grader→Teacher) corrected: the
+  ScoreAllView-granting secondary is Teacher (Grader does NOT hold
+  ScoreAllView).
+- E2E proctor-landing.spec.ts fixture fixed: the proctor user is now created
+  directly with `role: "Proctor"` (atomic user+assignment), removing the
+  Teacher+Proctor union-drift that surfaced `题目管理` in the forbidden-nav
+  assertion.
+- Codebase-wide scan completed (see §Q): production, seed, and script paths
+  all atomic; RBAC enforcement fully covered by capability gates.
 
 ## O. Known limitations / follow-ups
 
@@ -603,28 +704,118 @@ REVIEW-CLOSURE-AND-FIX-1 additional exit conditions:
   because the DB partial unique index holds the invariant at the storage
   layer. This is layered defense, NOT untested production safety — both
   layers are independently exercised. No action required.
-- **E/G shared kill point**: E and G are both killed at the base
-  `requireCapability` decorator because the score-list / exam-detail routes
-  have not yet migrated to the scoped/score decorators. When those routes
-  migrate, the kill point will move to `ctxAllows`; E17/E19 will continue to
-  kill the mutation at the new site. No action required now.
 - **Resource relationship authorization (M11)** is explicitly out of scope;
   the score gate's `computeResultVisibility` and the scoped resolver chain
   are the M10-E surface, not the future M11 resource-ownership model.
-- **Frontend multi-role UX**: the API surface exposes `capabilities` and the
-  primary role, but the UsersPage currently presents role as a single
-  projection. A multi-role-aware UX is a separate frontend corrective
-  (tracked independently, NOT deferred to M10-F).
+- **Frontend multi-role UX (carry-over from scan §Q)**: the API surface
+  exposes `capabilities` and the primary role, but `apps/web/src/pages/admin/UsersPage.tsx`
+  currently presents role as a single projection with no role-assignment
+  drawer. This is a UX gap, NOT a security gap (the backend remains the
+  authority and every assignment mutation is atomic). Tracked as a separate
+  frontend corrective, NOT deferred to M10-F.
+- **Dead `requireRole` decorator (carry-over from scan §Q)**:
+  `apps/api/src/plugins/auth.ts:211-228` still defines `fastify.requireRole`
+  with zero production callers (only the conformance test references its
+  identity). It is dead code kept for the conformance assertion; could be
+  hard-failed (`throw new Error("deprecated; use requireCapability")`) in a
+  future cleanup.
+- **Non-atomic test fixtures (carry-over from scan §Q)**:
+  `createAssignedUserForTest`, `buildPermissionMatrixFixture`, and a handful
+  of security/concurrency fixtures do two non-transactional inserts (user
+  then assignment) with the SAME role. They are correct as written but
+  fragile under crash; not a correctness bug, just future-proofing.
 
 ## P. Closure
 
 ```text
 PR #195:
-READY FOR INDEPENDENT RE-REVIEW
+READY FOR INDEPENDENT RE-REVIEW (round 2)
 
 M10-E:
 AUTHOR SELF-ASSESSMENT PASS
 
 M10-F:
 NOT YET AUTHORIZED
+
+REPORT_COMMIT:         <amended by the round-2 commit>
+PR_HEAD_AT_PUBLICATION: <recorded at push time>
+REVIEWED_CODE_HEAD:    3850f30fc2e0df83a25f84c932f906ee060b8f97
+```
+
+## Q. Codebase-wide scan — legacy role-assignment patterns + RBAC coverage
+
+A two-axis scan was run as part of round 2 to confirm the M10-E migration is
+complete across the entire codebase, not just the E1–E19 surface.
+
+### Q.1 Production / seed / script paths — ALL ATOMIC
+
+Every production user-creation path writes `users` + primary active
+`user_role_assignments` in ONE transaction with the SAME role. No path
+performs the legacy two-step "create user role A, then add primary
+assignment role B" that would cause union drift. Verified paths:
+
+- `apps/api/src/routes/user.ts:146-165` (POST /users) — atomic
+- `apps/api/src/routes/candidate.ts:270-300` (POST /candidates) — atomic
+- `apps/api/src/routes/candidate.ts:529-560` (POST /candidates/import) —
+  per-row atomic
+- `apps/api/src/scripts/bootstrap-admin.ts:63-98` — atomic
+- `packages/db/src/seed.ts:141-190` — atomic + idempotent (preserves
+  existing authority on re-seed)
+- `packages/db/src/demo-seed.ts:244-293` — atomic
+- `apps/api/src/{seed,e2e-seed,demo-seed,demo-seed-verify}.ts` — thin
+  delegates
+
+The ONLY production direct mutation of `users.role` is
+`apps/api/src/authz/roleSync.ts:32`, which is the canonical "derive cache
+from primary active assignment" helper. This is the documented M10-E
+invariant, not a violation.
+
+### Q.2 RBAC enforcement — FULLY COVERED
+
+Every runtime route's authorization decision flows through
+`ctxAllows(request, perm)` → `ctx.capabilities.includes(perm)`
+(`apps/api/src/plugins/authz.ts:44-50`). Findings:
+
+- **Zero production `fastify.requireRole(...)` calls.** The decorator is
+  defined at `apps/api/src/plugins/auth.ts:211-228` but has no callers; the
+  conformance test (`routeRegistryConformance.test.ts:731`) asserts this.
+- **Zero production `ctx.role === "<RoleLiteral>"` authorization decisions.**
+  The only `.role === "..."` usages in production are: response-body display,
+  shell routing (frontend `isAdmin` / `isCandidate` / `canAccessAdminConsole`
+  — explicitly labeled "NOT A SECURITY CONTROL"), system bootstrap CLI,
+  shadow-mode drift monitoring (`shadow.ts`), the data-integrity
+  last-admin invariant, and audit-action enum strings.
+- **All scoped / score / candidate-context / eligibility / own-attempt routes
+  use the dedicated decorators.** No score or scoped route misuses the flat
+  `requireCapability` gate (the round-1 E17/E19 root cause is structurally
+  impossible at the current HEAD).
+- **Frontend capability derivation is fully aligned.** All `canSee*` / `can*`
+  helpers in `apps/web/src/lib/capabilities.ts` delegate to
+  `user.capabilities.includes(...)`. `permissionsForRole` is used in
+  production ZERO times (all 30+ references are test fixtures).
+
+### Q.3 Test fixtures — correct but non-atomic (low priority)
+
+Several test helpers perform two non-transactional inserts (user then
+assignment) with the SAME role (`createAssignedUserForTest`,
+`buildPermissionMatrixFixture`, security-matrix helpers, concurrency-test
+helpers). They are functionally correct but fragile under crash.
+Adversarial fixtures that intentionally corrupt `users.role` or omit
+assignments (`corruptUsersRoleProjectionForTest`, `createUnassignedUserForTest`)
+are explicitly labeled negative fixtures and must not be migrated.
+
+### Q.4 Frontend multi-role UI — UX gap (carry-over)
+
+`apps/web/src/pages/admin/UsersPage.tsx` is a single-role editor with no
+role-assignment drawer. The backend already supports multi-role assignments
+via `/api/users/:id/role-assignments`, but the frontend does not surface
+it. This is a UX limitation, NOT a security gap (backend is authoritative).
+
+### Q.5 Scan verdict
+
+```text
+PRODUCTION LEGACY PATTERNS:    NONE FOUND — fully migrated
+RBAC ENFORCEMENT COVERAGE:     COMPLETE
+TEST FIXTURES:                 correct (non-atomic hardening optional)
+FRONTEND MULTI-ROLE UX:        deferred (separate corrective)
 ```

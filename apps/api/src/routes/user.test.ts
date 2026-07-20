@@ -576,8 +576,8 @@ describe("user routes", () => {
         vi.spyOn(
           userRoleAssignmentRepoModule,
           "createUserRoleAssignmentRepo",
-        ).mockImplementation((dbOrTx: unknown) => {
-          const real = realFactory(dbOrTx as never);
+        ).mockImplementation((dbOrTx: Parameters<typeof realFactory>[0]) => {
+          const real = realFactory(dbOrTx);
           return {
             ...real,
             replacePrimaryRoleWithinTransaction: async () => {
@@ -596,9 +596,14 @@ describe("user routes", () => {
           cookies: { "auth-token": targetCtx.adminToken },
         });
 
-        // The injected failure propagated: request failed (500 for an
-        // unexpected Error, mapped by the global error handler).
-        expect(res.statusCode).toBeGreaterThanOrEqual(400);
+        // The injected failure propagated as 500 INTERNAL_ERROR (the global
+        // error handler maps a thrown, non-AppError to 500 INTERNAL_ERROR).
+        // NOT >=400: the precise code proves the rollback path was reached,
+        // not a validation/auth error before the txn opened.
+        expect(res.statusCode).toBe(500);
+        expect((res.json() as { error: { code: string } }).error.code).toBe(
+          "INTERNAL_ERROR",
+        );
         expect(replaceWasCalled).toBe(true);
 
         // THE ATOMICITY PROOF: reload every row from the DB and confirm

@@ -235,11 +235,17 @@ describe("score capability preHandler — own/all arbitration (no role branching
     // permissionsForRole(ctx.role) would see only the Candidate preset
     // (ScoreOwnView, no ScoreAllView) and would limit to "own" scope.
     // The production gate reads ctx.capabilities (the union of ALL active
-    // role assignments), so the secondary Grader grant's ScoreAllView
+    // role assignments), so the secondary Teacher grant's ScoreAllView
     // must win — the handler proceeds with scoreView="all".
     //
     // The predicate mirrors the production ctxAllows: it reads
     // ctx.capabilities, NOT the role preset.
+    //
+    // Role choice note: Teacher is the secondary role because Teacher is the
+    // non-Admin assignable role whose preset includes ScoreAllView; Grader's
+    // preset only carries Grading* permissions and does NOT include
+    // ScoreAllView, so Grader cannot serve as the ScoreAllView-granting
+    // secondary.
     nextResolution = resolved("owner-B"); // someone else's attempt
     const capsPredicate = (request: FastifyRequest, perm: PermissionKey) => {
       const caps = request.ctx?.capabilities ?? [];
@@ -251,11 +257,11 @@ describe("score capability preHandler — own/all arbitration (no role branching
     });
     const reply = makeReply();
     // Primary role is Candidate (no ScoreAllView in its own preset).
-    // Capabilities are the UNION of Candidate + Grader — Grader's preset
+    // Capabilities are the UNION of Candidate + Teacher — Teacher's preset
     // includes ScoreAllView, so the union includes ScoreAllView.
     const req = makeReq("Candidate", "actor-1", undefined, [
       Permission.ScoreOwnView, // from Candidate preset
-      Permission.ScoreAllView, // from secondary Grader assignment
+      Permission.ScoreAllView, // from secondary Teacher assignment
     ]);
     await handler(req, reply);
     // ScoreAllView must win (strictly broader) — the handler proceeds

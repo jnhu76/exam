@@ -29,6 +29,7 @@ import candidateRoutes from "../routes/candidate.js";
 import questionRoutes from "../routes/question.js";
 import scoreRoutes from "../routes/scores.js";
 import systemRoutes from "../routes/system.js";
+import proctorMonitoringRoutes from "../routes/proctorMonitoring.js";
 import { registerCandidateAttemptRoutes } from "../routes/attempts.candidate.js";
 import {
   buildTestApp,
@@ -54,6 +55,9 @@ const combinedPlugin: FastifyPluginAsync = async (fastify) => {
     registerCandidateAttemptRoutes(scope);
   });
   await fastify.register(scoreRoutes);
+  // E17 needs the proctor monitoring route (real requireScopedCapability site
+  // for ExamRoomView) so the multi-role actor can exercise the scoped gate.
+  await fastify.register(proctorMonitoringRoutes);
   await fastify.register(systemRoutes);
 };
 
@@ -546,10 +550,23 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
   });
 
   // ── E17 — scoped gate with multi-role: primary Candidate + secondary
-  // Admin. The scoped gate consults the capability union (not the primary
-  // role). This kills spec §16 Mutation E: a role-based predicate would
-  // see "Candidate" (not in ADMINISH_ROLES) and deny, but the union
-  // includes Admin's ExamView.
+  // Proctor. The scoped gate consults the capability union (not the primary
+  // role). This kills spec §16 Mutation E at its REAL kill point: the
+  // presetAllows wiring in plugins/authz.ts that requireScopedCapability
+  // consults.
+  //
+  // ROUTE CHOICE: GET /api/admin/exams/:examId/proctor/attempts is gated by
+  // requireScopedCapability(Permission.ExamRoomView, "exam", "examId")
+  // (proctorMonitoring.ts) — a real scoped gate, NOT the flat requireCapability
+  // decorator. This is the only way a Mutation E applied at the scoped wiring
+  // (presetAllows) is observably killed: GET /api/exams/:id uses the FLAT gate
+  // and would hide a scoped-wiring mutation.
+  //
+  // ROLE CHOICE: primary Candidate + secondary Proctor. Proctor's preset
+  // includes ExamRoomView; Candidate's does NOT. A scoped-wiring mutation that
+  // consults permissionsForRole(ctx.role) would see only Candidate's preset
+  // → deny ExamRoomView → 403; the real ctxAllows union sees ExamRoomView from
+  // Proctor → 200.
   it("E17: scoped gate allows when primary role lacks the permission but secondary role grants it", async () => {
     const { user, token } = await createAssignedUserForTest(
       ctx.db,
@@ -557,27 +574,40 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
       "Candidate",
       "e17-scoped-multi-role",
     );
-    // Grant a secondary Admin assignment. Admin's preset includes ExamView
-    // (gated by requireScopedCapability). Primary Candidate alone lacks it.
+    // Grant a secondary Proctor assignment. Proctor's preset includes
+    // ExamRoomView (gated by requireScopedCapability on the proctor route).
+    // Primary Candidate alone lacks ExamRoomView.
     await insertAssignmentDirectly(ctx.db, {
       organizationId: ctx.org.id,
       userId: user.id,
-      role: "Admin",
+      role: "Proctor",
       isPrimary: false,
       isActive: true,
     });
 
-    // Resource setup MUST use ctx.adminToken, NOT the multi-role token. The
-    // eventual scoped-gate exercise is GET /api/exams/:id; everything before
-    // it (course create, exam create) runs through the FLAT requireCapability
-    // decorator on different permissions (ExamCreate). If the multi-role token
-    // were used for setup, a Mutation E applied only at the scoped wiring
-    // (presetAllows in plugins/authz.ts) would NOT kill E17 — the flat
-    // ExamCreate check would still pass (Admin is in the union) and the test
-    // would only fail (or pass) for the wrong reason. By using adminToken for
-    // setup, the multi-role token is exercised ONLY at the scoped GET, so a
-    // scoped-wiring mutation is observable in isolation.
+    // Resource setup MUST use ctx.adminToken, NOT the multi-role token. Every
+    // setup step (course create, question create, exam create, publish,
+    // enroll-and-start) runs through other gates; if the multi-role token
+    // were used, a Mutation E applied ONLY at the scoped wiring (presetAllows)
+    // could be masked by a different gate firing first. By using adminToken
+    // for setup, the multi-role token is exercised ONLY at the final scoped
+    // GET, so a scoped-wiring mutation is observable in isolation.
     const courseId = await createCourse(ctx.app, ctx.adminToken, "E17 Course");
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "E17 question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(qRes.statusCode, qRes.body).toBe(201);
+    const questionId = qRes.json().id;
+
     const examRes = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
@@ -585,23 +615,45 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
       payload: buildExamPayload({
         title: "E17 Exam",
         courseId,
-        questionIds: [],
+        questionIds: [questionId],
         durationMinutes: 60,
       }),
     });
     expect(examRes.statusCode, examRes.body).toBe(201);
     const examId = examRes.json().id;
 
-    // GET /api/exams/:id is gated by requireScopedCapability(ExamView).
-    // The union includes ExamView (from Admin), so 200 is expected. The
-    // multi-role token is exercised ONLY here — the scoped gate is the
-    // sole authority site this assertion reaches.
+    // Publish + start an attempt so the proctor monitoring route has a real
+    // attempt to enumerate. (A published exam with no attempts would still
+    // return 200 with an empty list — but starting an attempt proves the
+    // scoped resolver succeeds end-to-end, not just the empty-list path.)
+    const publishRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(publishRes.statusCode, publishRes.body).toBe(200);
+    await submitExamAsCandidate(
+      ctx.app,
+      ctx.adminToken,
+      ctx.org.id,
+      examId,
+      `e17-cand-${uniquePrefix()}`,
+    );
+
+    // GET /api/admin/exams/:examId/proctor/attempts is gated by
+    // requireScopedCapability(Permission.ExamRoomView, "exam", "examId")
+    // (proctorMonitoring.ts) — a real scoped gate. The union includes
+    // ExamRoomView (from Proctor), so 200 is expected. The multi-role token
+    // is exercised ONLY here — the scoped gate is the sole authority site
+    // this assertion reaches. Under Mutation E (presetAllows consulting
+    // permissionsForRole(ctx.role)), the gate would see only Candidate's
+    // preset → 403.
     const getRes = await ctx.app.inject({
       method: "GET",
-      url: `/api/exams/${examId}`,
+      url: `/api/admin/exams/${examId}/proctor/attempts`,
       cookies: { "auth-token": token },
     });
-    expect(getRes.statusCode).toBe(200);
+    expect(getRes.statusCode, getRes.body).toBe(200);
   });
 
   // ── E18 — candidate-context gate with multi-role: primary Teacher +
@@ -642,9 +694,24 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
 
   // ── E19 — score gate with multi-role: primary Candidate + secondary
   // Teacher. The score gate consults the capability union for ScoreAllView,
-  // NOT the primary role's preset. This kills spec §16 Mutation G: a
-  // primary-role preset would yield only ScoreOwnView (Candidate's preset),
-  // but the union includes ScoreAllView from the Teacher assignment.
+  // NOT the primary role's preset. This kills spec §16 Mutation G at its REAL
+  // kill point: the `allows` wiring in plugins/authz.ts that
+  // requireScoreCapability consults.
+  //
+  // ROUTE CHOICE: GET /api/scores/attempts/:attemptId is gated by
+  // requireScoreCapability() (scores.ts) — the DEDICATED score gate, NOT the
+  // flat requireCapability decorator. This is the only way a Mutation G
+  // applied at the score wiring (allows) is observably killed: GET
+  // /api/exams/:examId/scores uses the FLAT gate and would hide a
+  // score-wiring mutation.
+  //
+  // ROLE CHOICE: primary Candidate + secondary Teacher. Teacher's preset
+  // includes ScoreAllView; Candidate's preset has only ScoreOwnView. A
+  // score-wiring mutation that consults permissionsForRole(ctx.role) would
+  // see only Candidate's preset → ScoreOwnView; the multi-role actor is NOT
+  // the owner of the attempt created by a SEPARATE candidate, so ScoreOwnView
+  // would also deny → 404 (anti-enumeration). Only the cap-union path
+  // (ScoreAllView from Teacher) grants access (scoreView="all").
   //
   // Role choice note: Teacher is the secondary role because Teacher is the
   // non-Admin assignable role whose preset includes ScoreAllView; Grader's
@@ -709,38 +776,30 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     });
     expect(publishRes.statusCode, publishRes.body).toBe(200);
 
-    // Submit the exam as a SEPARATE candidate so the scores route has a real
-    // attempt to resolve.
-    await submitExamAsCandidate(
+    // Submit the exam as a SEPARATE candidate so the score route has a real
+    // attempt that the multi-role actor is NOT the owner of. The attempt id
+    // is then used to exercise the dedicated score route.
+    const submitted = (await submitExamAsCandidate(
       ctx.app,
       ctx.adminToken,
       ctx.org.id,
       examId,
       `e19-${uniquePrefix()}`,
-    );
+    )) as { id: string };
 
-    // GET /exams/:id/scores additionally requires the exam to have ended
-    // (canOpenScoreList: status closed/archived OR now >= closeAt). Move
-    // closeAt into the past so the "examEnded" branch is satisfied without
-    // a real-time wait. (startAttempt already happened inside
-    // submitExamAsCandidate while the window was still open.)
-    await ctx.db
-      .update(schema.exams)
-      .set({ closeAt: new Date(Date.now() - 1000) })
-      .where(eq(schema.exams.id, examId));
-
-    // GET /api/exams/:examId/scores is gated by
-    // requireCapability(Permission.ScoreAllView). The union includes
-    // ScoreAllView (from Teacher), so the gate grants access and the handler
-    // returns the submitted score.
-    // Under Mutation G, permissionsForRole("Candidate") would only yield
-    // ScoreOwnView, and the gate would deny — but the multi-role user is not
-    // the owner of the attempt created by submitExamAsCandidate (which
-    // creates a SEPARATE candidate), so ScoreOwnView would also deny. Only
-    // the cap-union path (ScoreAllView from Teacher) grants access.
+    // GET /api/scores/attempts/:attemptId is gated by requireScoreCapability()
+    // (scores.ts) — the DEDICATED score gate. The union includes ScoreAllView
+    // (from Teacher), so the gate grants scoreView="all" and the handler
+    // returns the submitted attempt's result. The multi-role token is
+    // exercised ONLY here — the score gate is the sole authority site this
+    // assertion reaches.
+    //
+    // Under Mutation G (allows consulting permissionsForRole(ctx.role)), the
+    // gate would see only Candidate's preset → ScoreOwnView; the multi-role
+    // actor is NOT the owner → 404 (anti-enumeration, not 200).
     const scoreRes = await ctx.app.inject({
       method: "GET",
-      url: `/api/exams/${examId}/scores`,
+      url: `/api/scores/attempts/${submitted.id}`,
       cookies: { "auth-token": token },
     });
     expect(scoreRes.statusCode, scoreRes.body).toBe(200);
