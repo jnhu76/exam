@@ -567,13 +567,21 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
       isActive: true,
     });
 
-    // Create a course + exam via the admin token (the test user is still
-    // Candidate-primary, but the union includes Admin's perms).
+    // Resource setup MUST use ctx.adminToken, NOT the multi-role token. The
+    // eventual scoped-gate exercise is GET /api/exams/:id; everything before
+    // it (course create, exam create) runs through the FLAT requireCapability
+    // decorator on different permissions (ExamCreate). If the multi-role token
+    // were used for setup, a Mutation E applied only at the scoped wiring
+    // (presetAllows in plugins/authz.ts) would NOT kill E17 — the flat
+    // ExamCreate check would still pass (Admin is in the union) and the test
+    // would only fail (or pass) for the wrong reason. By using adminToken for
+    // setup, the multi-role token is exercised ONLY at the scoped GET, so a
+    // scoped-wiring mutation is observable in isolation.
     const courseId = await createCourse(ctx.app, ctx.adminToken, "E17 Course");
     const examRes = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
-      cookies: { "auth-token": token },
+      cookies: { "auth-token": ctx.adminToken },
       payload: buildExamPayload({
         title: "E17 Exam",
         courseId,
@@ -585,7 +593,9 @@ describe("RBAC-M10-E — assignment-backed runtime authority (E1–E16 HTTP)", (
     const examId = examRes.json().id;
 
     // GET /api/exams/:id is gated by requireScopedCapability(ExamView).
-    // The union includes ExamView (from Admin), so 200 is expected.
+    // The union includes ExamView (from Admin), so 200 is expected. The
+    // multi-role token is exercised ONLY here — the scoped gate is the
+    // sole authority site this assertion reaches.
     const getRes = await ctx.app.inject({
       method: "GET",
       url: `/api/exams/${examId}`,
