@@ -233,8 +233,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       // re-synced to the primary assignment on every role change, so it is an
       // accurate proxy for "is this user an admin right now" at guard time;
       // the count itself is the authoritative assignment-backed number.
-      const activeAdminCount =
-        await repo.countActiveUsersWithPrimaryRoleAssignment(ctx, "Admin");
+      const activeAdminCount = await repo.countEffectiveActiveUsersWithRole(
+        ctx,
+        "Admin",
+      );
       const targetProjectsAsAdmin = target.role === "Admin" && target.isActive;
       const losingAdminAuthority =
         targetProjectsAsAdmin &&

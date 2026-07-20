@@ -65,11 +65,10 @@ export async function bootstrapAdmin(
     // RBAC-M10-E: "already has an active admin" is an assignment-backed
     // question (a user whose users.role is Candidate but holds a secondary
     // active Admin assignment IS an admin authority-wise). P0-7.
-    const activeAdminCount =
-      await txUserRepo.countActiveUsersWithPrimaryRoleAssignment(
-        systemCtx,
-        "Admin",
-      );
+    const activeAdminCount = await txUserRepo.countEffectiveActiveUsersWithRole(
+      systemCtx,
+      "Admin",
+    );
     if (activeAdminCount > 0 && !params.force) {
       throw new Error(
         `An active Admin already exists in this organization. ` +
