@@ -19,6 +19,7 @@ import { eq } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
 import * as adminInvariantModule from "../authz/adminInvariant.js";
+import * as userRoleAssignmentRepoModule from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 
 async function createCandidateUser(
   db: Database,
@@ -299,31 +300,17 @@ describe("user routes", () => {
     });
   });
 
-  it("PATCH /api/users/:id rejects disabling the last active Admin", async () => {
-    const adminCtx = await buildTestApp(userRoutes);
-    try {
-      const res = await adminCtx.app.inject({
-        method: "PATCH",
-        url: `/api/users/${adminCtx.admin.id}`,
-        payload: { isActive: false },
-        cookies: { "auth-token": adminCtx.adminToken },
-      });
-      expect(res.statusCode).toBe(400);
-      expect(res.json()).toMatchObject({
-        error: {
-          code: "VALIDATION_ERROR",
-          details: {
-            reason: expect.stringMatching(
-              /LAST_ACTIVE_ADMIN|CANNOT_DISABLE_SELF/,
-            ),
-          },
-          requestId: expect.any(String),
-        },
-      });
-    } finally {
-      await adminCtx.cleanup();
-    }
-  });
+  // NOTE: there is intentionally NO "rejects disabling the last active Admin"
+  // route test here. The earlier version of this test pointed the actor and the
+  // target at the same id (adminCtx.admin.id), so the self-disable guard at the
+  // top of the PATCH handler fired FIRST and the route never reached the
+  // last-admin postcondition. Its assertion `reason: /LAST_ACTIVE_ADMIN|
+  // CANNOT_DISABLE_SELF/` would still pass even if the last-admin invariant
+  // were deleted, so it was empty evidence. Real last-admin proof lives at the
+  // service level in adminInvariant.test.ts (disable/delete last Admin,
+  // deactivate/delete last Admin assignment, secondary-Admin count, concurrent
+  // two-admin removal). At the route layer the meaningful evidence is the
+  // positive case below ("allows disabling a non-last Admin …").
 
   it("PATCH /api/users/:id allows disabling a non-last Admin when another active Admin exists", async () => {
     const second = await ctx.app.inject({
@@ -523,6 +510,132 @@ describe("user routes", () => {
           requestId: expect.any(String),
         },
       });
+    });
+  });
+
+  // RBAC-M10-E atomicity proof (P1-2): the combined PATCH /users/:id mutation
+  // (users row UPDATE + primary-role replacement + users.role projection sync)
+  // MUST execute inside ONE transaction. If the inner assignment mutation fails
+  // AFTER the users UPDATE has already executed, the whole transaction must
+  // roll back — no partial state (name changed but role untouched, or users.role
+  // desynced from assignments, or stray deactivated primary) may persist.
+  //
+  // This is NOT a route-wiring mock of mutateWithEffectiveAdminPostcondition
+  // (that only proves error mapping). Here we inject the failure INSIDE the
+  // transaction callback by wrapping the assignment repo factory so that
+  // replacePrimaryRoleWithinTransaction throws after the users UPDATE ran.
+  // We then reload the rows from the DB and assert full rollback.
+  describe("PATCH /users/:id atomicity — inner failure rolls back the whole txn (RBAC-M10-E P1-2)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("rolls back users.name + users.isActive + users.role + assignments when replacePrimaryRoleWithinTransaction throws mid-txn", async () => {
+      // Create a second active Admin so the PATCH target (a third user) can be
+      // a non-last Admin whose primary role we attempt to change. We need a
+      // real existing user with an active primary assignment to mutate.
+      const targetCtx = await buildTestApp(userRoutes);
+      try {
+        // Target: a Candidate user with an active primary Candidate assignment.
+        // We will PATCH it to change BOTH name AND role (Candidate -> Teacher),
+        // which exercises the combined mutation path in the route.
+        const createRes = await targetCtx.app.inject({
+          method: "POST",
+          url: "/api/users",
+          payload: {
+            username: `rollback-target-${Date.now()}`,
+            password: "password123",
+            name: "Original Name",
+            role: "Candidate",
+          },
+          cookies: { "auth-token": targetCtx.adminToken },
+        });
+        expect(createRes.statusCode).toBe(201);
+        const target = createRes.json();
+
+        // Capture pre-mutation state from the DB (the source of truth).
+        const usersBefore = await targetCtx.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, target.id));
+        expect(usersBefore).toHaveLength(1);
+        const userBefore = usersBefore[0]!;
+        const assignmentsBefore = await targetCtx.db
+          .select()
+          .from(schema.userRoleAssignments)
+          .where(eq(schema.userRoleAssignments.userId, target.id));
+        expect(assignmentsBefore.length).toBeGreaterThanOrEqual(1);
+
+        // Inject the failure: wrap the assignment repo factory so that
+        // replacePrimaryRoleWithinTransaction throws AFTER the users UPDATE
+        // has executed inside the transaction callback. All other repo methods
+        // delegate to the real implementation (so the users UPDATE truly runs).
+        const realFactory =
+          userRoleAssignmentRepoModule.createUserRoleAssignmentRepo;
+        let replaceWasCalled = false;
+        vi.spyOn(
+          userRoleAssignmentRepoModule,
+          "createUserRoleAssignmentRepo",
+        ).mockImplementation((dbOrTx: unknown) => {
+          const real = realFactory(dbOrTx as never);
+          return {
+            ...real,
+            replacePrimaryRoleWithinTransaction: async () => {
+              replaceWasCalled = true;
+              throw new Error("INJECTED_FAILURE_after_users_update");
+            },
+          } as typeof real;
+        });
+
+        // Combined mutation: name + role in one PATCH. The users UPDATE runs
+        // first; the injected failure then fires on the role replacement.
+        const res = await targetCtx.app.inject({
+          method: "PATCH",
+          url: `/api/users/${target.id}`,
+          payload: { name: "Changed Name", role: "Teacher" },
+          cookies: { "auth-token": targetCtx.adminToken },
+        });
+
+        // The injected failure propagated: request failed (500 for an
+        // unexpected Error, mapped by the global error handler).
+        expect(res.statusCode).toBeGreaterThanOrEqual(400);
+        expect(replaceWasCalled).toBe(true);
+
+        // THE ATOMICITY PROOF: reload every row from the DB and confirm
+        // nothing changed. No partial mutation may persist.
+        const usersAfter = await targetCtx.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.id, target.id));
+        expect(usersAfter).toHaveLength(1);
+        const userAfter = usersAfter[0]!;
+        expect(userAfter.name).toBe(userBefore.name); // name rolled back
+        expect(userAfter.isActive).toBe(userBefore.isActive); // isActive rolled back
+        expect(userAfter.role).toBe(userBefore.role); // users.role projection rolled back
+        expect(userAfter.updatedAt.getTime()).toBe(
+          userBefore.updatedAt.getTime(),
+        ); // updatedAt untouched => no write committed
+
+        const assignmentsAfter = await targetCtx.db
+          .select()
+          .from(schema.userRoleAssignments)
+          .where(eq(schema.userRoleAssignments.userId, target.id));
+        expect(assignmentsAfter).toHaveLength(assignmentsBefore.length); // no stray rows
+        // No assignment was deactivated/modified: every row matches its
+        // pre-mutation (role, isPrimary, isActive) tuple.
+        for (const before of assignmentsBefore) {
+          const after = assignmentsAfter.find((a) => a.id === before.id);
+          expect(
+            after,
+            `assignment ${before.id} must still exist`,
+          ).toBeDefined();
+          expect(after!.role).toBe(before.role);
+          expect(after!.isPrimary).toBe(before.isPrimary);
+          expect(after!.isActive).toBe(before.isActive);
+        }
+      } finally {
+        await targetCtx.cleanup();
+      }
     });
   });
 });
