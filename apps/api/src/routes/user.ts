@@ -18,6 +18,7 @@ import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
+import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** Zod schema for route params containing a UUID `id`. */
@@ -198,8 +199,11 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * PATCH /users/:id — update a user's name, role, or active status.
      *
-     * Prevents self-deactivation and protects the last active Admin
-     * from being disabled or downgraded.
+     * Self-deactivation is rejected before any authority check. All other
+     * mutations that can remove effective Admin authority (disable, role
+     * replacement) run inside {@link mutateWithEffectiveAdminPostcondition},
+     * which holds an organization advisory lock and rolls back if the
+     * organization would be left with zero effective Admins.
      */
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
@@ -221,73 +225,54 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      // RBAC-M10-E last-admin guard (P0-7): the question "how many active
-      // admins remain?" is assignment-backed, not users.role-backed. A user
-      // whose users.role is Candidate but who holds an active Admin
-      // assignment IS an admin authority-wise (task §3.3). Trigger when the
-      // target would lose its active Admin authority: explicit disable, OR a
-      // role change away from Admin (which demotes the primary assignment).
-      //
-      // Whether THIS target currently holds the active Admin authority is
-      // proxied by the users.role cache (the legacy projection). users.role is
-      // re-synced to the primary assignment on every role change, so it is an
-      // accurate proxy for "is this user an admin right now" at guard time;
-      // the count itself is the authoritative assignment-backed number.
-      const activeAdminCount = await repo.countEffectiveActiveUsersWithRole(
-        ctx,
-        "Admin",
-      );
-      const targetProjectsAsAdmin = target.role === "Admin" && target.isActive;
-      const losingAdminAuthority =
-        targetProjectsAsAdmin &&
-        ((data.isActive !== undefined && data.isActive === false) ||
-          (data.role !== undefined && data.role !== "Admin"));
-      if (losingAdminAuthority && activeAdminCount <= 1) {
-        throw new ValidationError("不能停用或降级最后一位活跃管理员", {
-          reason: "LAST_ACTIVE_ADMIN",
-        });
-      }
+      const newRole = data.role;
+      const roleChanged = newRole !== undefined && newRole !== target.role;
 
-      const updated = await repo.update(ctx, id, {
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-      });
-      if (!updated) {
+      const finalUser = await mutateWithEffectiveAdminPostcondition(
+        fastify.db,
+        ctx,
+        async (tx) => {
+          const txUserRepo = createUserRepo(tx);
+          const txAssignmentRepo = createUserRoleAssignmentRepo(tx);
+
+          const updated = await txUserRepo.update(ctx, id, {
+            ...(data.name !== undefined ? { name: data.name } : {}),
+            ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+          });
+          if (!updated) {
+            return null;
+          }
+
+          if (roleChanged) {
+            await txAssignmentRepo.replacePrimaryRoleWithinTransaction(
+              tx,
+              ctx,
+              {
+                userId: id,
+                role: newRole,
+              },
+            );
+          }
+
+          await syncUsersRoleFromPrimary(tx, ctx, id);
+          return txUserRepo.findByOrganizationAndId(ctx, id);
+        },
+      );
+
+      if (!finalUser) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      // RBAC-M10-E active-state decoupling (P0-8): users.isActive is the
-      // account-level switch; user_role_assignments.isActive is the role-
-      // authority switch. They are INDEPENDENT.
-      //   - When ONLY isActive changes (no role change), do NOT touch the
-      //     assignment: disabling the account does not revoke role authority,
-      //     and re-enabling the account restores the user's prior role perms.
-      //   - When the role changes, the new primary assignment is created
-      //     ACTIVE (its authority is on); whether the account can log in is
-      //     still gated by users.isActive (handled by the repo.update above).
-      // Revoking a specific role is a role-assignment API concern, not here.
-      if (data.role !== undefined && data.role !== target.role) {
-        const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
-        await assignmentRepo.assign(ctx, {
-          userId: id,
-          role: data.role,
-          isPrimary: true,
-          isActive: true,
-        });
-        await syncUsersRoleFromPrimary(fastify.db, ctx, id);
-      }
-      const refreshed = await repo.findByOrganizationAndId(ctx, id);
+
       recordAudit(fastify, request, ctx, "user.update", "user", id);
-      // AUDIT-M2: privilege change gets its own sensitive audit (ADR sec.11.5).
-      // Metadata is opaque scalar state only (old/new role) — no PII.
-      if (data.role !== undefined && data.role !== target.role) {
+      if (roleChanged) {
         recordAudit(fastify, request, ctx, "user.role_changed", "user", id, {
           oldRole: target.role,
-          newRole: data.role,
+          newRole,
         });
       }
-      const finalUser = refreshed ?? updated;
+
       return {
         id: finalUser.id,
         organizationId: finalUser.organizationId,
@@ -394,19 +379,31 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
     /**
      * DELETE /users/:id — permanently delete a user.
      *
-     * Removes the user record from the organization.
+     * Removes the user record from the organization. Runs inside
+     * {@link mutateWithEffectiveAdminPostcondition} so deleting the last
+     * effective Admin is rejected.
      * Returns 404 if the user does not exist.
      */
     async (request, reply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const repo = createUserRepo(fastify.db);
-      const deleted = await repo.delete(ctx, id);
-      if (!deleted) {
+
+      const target = await repo.findByOrganizationAndId(ctx, id);
+      if (!target) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+
+      await mutateWithEffectiveAdminPostcondition(
+        fastify.db,
+        ctx,
+        async (tx) => {
+          await createUserRepo(tx).delete(ctx, id);
+        },
+      );
+
       recordAudit(fastify, request, ctx, "user.delete", "user", id);
       return reply.code(204).send();
     },

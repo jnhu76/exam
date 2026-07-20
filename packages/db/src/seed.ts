@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Database } from "./types.js";
+import type { Database, TenantContext } from "./types.js";
 import { schema } from "./schema/pg.js";
 import type { AssignableRole } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
@@ -144,14 +144,14 @@ export async function seed(
   // create a second active primary (which the partial unique index rejects).
   // Idempotent on re-seed.
   const assignmentRepo = createUserRoleAssignmentRepo(db);
-  const seedCtx = {
+  const seedCtx: TenantContext = {
     organizationId: orgId,
     actorId: "seed",
-    role: "Admin" as const,
-    permissions: [] as never,
+    role: "Admin",
+    permissions: [],
   };
   for (const u of seededUsers) {
-    await assignmentRepo.ensurePrimaryAssignment(db, seedCtx, {
+    await assignmentRepo.ensurePrimaryAssignment(seedCtx, {
       userId: u.id,
       role: u.role,
     });

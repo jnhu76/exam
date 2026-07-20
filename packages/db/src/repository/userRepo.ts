@@ -121,36 +121,6 @@ export function createUserRepo(db: Database) {
       return rows.length;
     },
     /**
-     * Counts active users who hold an ACTIVE PRIMARY role assignment of the
-     * given role, scoped to the tenant.
-     *
-     * @deprecated This is a compatibility/reporting projection only. It does
-     * NOT represent effective authority — a user with a secondary active Admin
-     * assignment is also an effective Admin. For authorization invariants use
-     * {@link countEffectiveActiveUsersWithRole} instead.
-     */
-    async countActiveUsersWithPrimaryRoleProjection(
-      ctx: TenantContext | RequestContext,
-      role: AssignableRole,
-    ): Promise<number> {
-      const orgId = resolveOrganizationId(ctx);
-      const rows = await db
-        .select({ cnt: count() })
-        .from(users)
-        .innerJoin(
-          userRoleAssignments,
-          and(
-            eq(userRoleAssignments.userId, users.id),
-            eq(userRoleAssignments.organizationId, orgId),
-            eq(userRoleAssignments.role, role),
-            eq(userRoleAssignments.isPrimary, true),
-            eq(userRoleAssignments.isActive, true),
-          ),
-        )
-        .where(and(eq(users.organizationId, orgId), eq(users.isActive, true)));
-      return Number(rows[0]?.cnt ?? 0);
-    },
-    /**
      * Counts active users who hold ANY ACTIVE role assignment of the given
      * role, scoped to the tenant (RBAC-M10-E effective authority).
      *

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
-import type { Database } from "./types.js";
+import type { Database, TenantContext } from "./types.js";
 import { schema } from "./schema/pg.js";
 import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import type {
@@ -240,16 +240,16 @@ export async function seedDemo(
   // create a second active primary (which the partial unique index rejects).
   // Idempotent on re-seed.
   const assignmentRepo = createUserRoleAssignmentRepo(db);
-  const demoSeedCtx = {
+  const demoSeedCtx: TenantContext = {
     organizationId: ids.orgId,
     actorId: "demo-seed",
-    role: "Admin" as const,
-    permissions: [] as never,
+    role: "Admin",
+    permissions: [],
   };
   for (const ud of userDefs) {
     const userId = ids.users[ud.username];
     if (!userId) continue;
-    await assignmentRepo.ensurePrimaryAssignment(db, demoSeedCtx, {
+    await assignmentRepo.ensurePrimaryAssignment(demoSeedCtx, {
       userId,
       role: ud.role,
     });

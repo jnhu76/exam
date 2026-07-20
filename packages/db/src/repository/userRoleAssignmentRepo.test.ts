@@ -330,7 +330,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
         isActive: true,
       });
       // Now make Teacher the primary via ensurePrimaryAssignment.
-      const result = await repo.ensurePrimaryAssignment(db, ctx, {
+      const result = await repo.ensurePrimaryAssignment(ctx, {
         userId,
         role: "Teacher",
       });
@@ -354,7 +354,7 @@ describe("RBAC-M7 userRoleAssignmentRepo", () => {
         isPrimary: false,
         isActive: false,
       });
-      const result = await repo.ensurePrimaryAssignment(db, ctx, {
+      const result = await repo.ensurePrimaryAssignment(ctx, {
         userId,
         role: "Teacher",
       });
