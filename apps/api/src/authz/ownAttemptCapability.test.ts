@@ -50,13 +50,7 @@ function denied(reason: string) {
   return { denied: true, reason };
 }
 
-function presetFrom(map: Record<string, PermissionKey[]>) {
-  return (role: RoleKey, perm: PermissionKey) =>
-    (map[role] ?? []).includes(perm);
-}
-
-/** Real Candidate preset slice for the attempt-runtime perms. */
-const CANDIDATE_PRESET = presetFrom({
+const ROLE_CAPS: Record<string, PermissionKey[]> = {
   Candidate: [
     Permission.AttemptViewOwn,
     Permission.AttemptAnswerSave,
@@ -64,7 +58,16 @@ const CANDIDATE_PRESET = presetFrom({
     Permission.AttemptHeartbeatSend,
     Permission.AttemptRestore,
   ],
-});
+};
+
+function capabilitiesFor(role: string): readonly PermissionKey[] {
+  return ROLE_CAPS[role] ?? [];
+}
+
+/** Request-scoped predicate that reads ctx.capabilities (RBAC-M10-E). */
+function allows(request: FastifyRequest, perm: PermissionKey): boolean {
+  return (request.ctx?.capabilities ?? []).includes(perm);
+}
 
 function makeReq(
   role: string,
@@ -79,6 +82,8 @@ function makeReq(
             actorId,
             organizationId: "org-1",
             role,
+            roles: [role as RoleKey],
+            capabilities: capabilitiesFor(role),
             permissions: [],
             sessionId: "s",
           },
@@ -120,7 +125,7 @@ describe("RBAC-M10-A own-attempt capability preHandler", () => {
   const build = () =>
     buildOwnAttemptCapabilityPreHandler({
       db: {} as never,
-      presetAllows: CANDIDATE_PRESET,
+      allows,
     })(Permission.AttemptViewOwn, "attemptId");
 
   it("allows a Candidate viewing their own attempt", async () => {

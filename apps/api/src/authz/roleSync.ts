@@ -5,8 +5,10 @@
  * MUST stay in sync with the user's primary active assignment (ADR migration
  * window). Every write path that can change the primary active role calls
  * {@link syncUsersRoleFromPrimary} after the assignment mutation so the cache
- * matches. The last-admin guard still reads `users.role` (read path not
- * migrated in this PR), so this sync is what keeps the guard correct.
+ * matches. The last-admin postcondition (`adminInvariant.ts`) reads active
+ * assignments via `countEffectiveActiveUsersWithRole` — NOT `users.role`.
+ * This sync keeps the `users.role` compatibility cache consistent with the
+ * primary assignment for legacy display paths.
  */
 import type { Database } from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";

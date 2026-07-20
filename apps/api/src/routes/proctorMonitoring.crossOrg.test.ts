@@ -10,6 +10,7 @@ import attemptRoutes from "./attempts.js";
 import proctorMonitoringRoutes from "./proctorMonitoring.js";
 import {
   buildTestApp,
+  createAssignedUserForTest,
   createCandidateViaApi,
   createExamViaApi,
   createFutureRoleUserForTest,
@@ -575,25 +576,15 @@ async function createOrgBAdmin(
   db: Awaited<ReturnType<typeof buildTestApp>>["db"],
   orgId: string,
 ): Promise<{ token: string }> {
-  const { hashPassword } = await import("@exam/auth/src/password.js");
-  const { signJWT } = await import("@exam/auth/src/session.js");
-  const { getRuntimeConfig } = await import("../config/runtimeConfig.js");
-  const now = new Date();
-  const id = randomUUID();
-  await db.insert(schema.users).values({
-    id,
-    organizationId: orgId,
-    username: `orgb-admin-${randomUUID().slice(0, 8)}`,
-    passwordHash: await hashPassword("password123"),
-    name: "Org B Admin",
-    role: "Admin",
-    isActive: true,
-    createdAt: now,
-    updatedAt: now,
-  });
-  const token = signJWT(
-    { actorId: id, role: "Admin", organizationId: orgId },
-    getRuntimeConfig().authSecret.jwtSecret,
+  // RBAC-M10-E: delegate to createAssignedUserForTest so the user gets an
+  // active primary Admin assignment scoped to orgId — without it, the
+  // cross-org admin token gets 401 AUTH_REQUIRED instead of exercising the
+  // cross-org isolation under test.
+  const { token } = await createAssignedUserForTest(
+    db,
+    orgId,
+    "Admin",
+    "orgb-admin",
   );
   return { token };
 }

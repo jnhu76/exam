@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { DashboardPage } from "./DashboardPage";
+import { permissionsForRole } from "@exam/authz";
 
 const { apiGet } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -27,6 +28,7 @@ function renderPage() {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>

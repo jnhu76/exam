@@ -132,6 +132,12 @@
                     "organizationId": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -139,7 +145,8 @@
                     "username",
                     "name",
                     "role",
-                    "organizationId"
+                    "organizationId",
+                    "capabilities"
                   ],
                   "additionalProperties": false
                 }
@@ -147,6 +154,38 @@
             }
           },
           "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "requestId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": ["code", "message", "requestId"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -236,6 +275,12 @@
                     "organizationId": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -243,7 +288,8 @@
                     "username",
                     "name",
                     "role",
-                    "organizationId"
+                    "organizationId",
+                    "capabilities"
                   ],
                   "additionalProperties": false
                 }
@@ -510,6 +556,12 @@
                     "organizationId": {
                       "type": "string",
                       "format": "uuid"
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -517,7 +569,8 @@
                     "username",
                     "name",
                     "role",
-                    "organizationId"
+                    "organizationId",
+                    "capabilities"
                   ],
                   "additionalProperties": false
                 }

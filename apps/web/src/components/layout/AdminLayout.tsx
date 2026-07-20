@@ -17,7 +17,10 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getPageTitle } from "@/lib/pageMeta";
-import { canAccessAdminConsole, isCandidate } from "@/lib/capabilities";
+import {
+  canAccessAdminConsole,
+  canAccessExamRuntime,
+} from "@/lib/capabilities";
 import { PageContainer } from "@/components/shared/PageContainer";
 
 /**
@@ -97,9 +100,13 @@ export function AdminLayout() {
     return <Navigate to="/login" replace />;
   }
   if (!canAccessAdminConsole(user)) {
-    // Candidate -> exam runtime; any future non-console role lands on login.
+    // No admin-console capability: route to exam runtime if user has ExamTake,
+    // otherwise redirect to login.
     return (
-      <Navigate to={isCandidate(user) ? "/exam/list" : "/login"} replace />
+      <Navigate
+        to={canAccessExamRuntime(user) ? "/exam/list" : "/login"}
+        replace
+      />
     );
   }
 

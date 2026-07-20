@@ -1,12 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { hashPassword } from "@exam/auth/src/password.js";
-import { signJWT } from "@exam/auth/src/session.js";
-import { schema } from "@exam/db/src/schema/pg.js";
-import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
-import { buildTestApp, uniquePrefix } from "./testHelpers.js";
+import {
+  buildTestApp,
+  createAssignedUserForTest,
+  uniquePrefix,
+} from "./testHelpers.js";
 
 describe("question routes — Teacher authoring capabilities", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -33,24 +32,17 @@ describe("question routes — Teacher authoring capabilities", () => {
     expect(courseRes.statusCode).toBe(201);
     courseId = courseRes.json().id;
 
-    const { jwtSecret } = getRuntimeConfig().authSecret;
+    // RBAC-M10-E: delegates to createAssignedUserForTest so the user gets an
+    // active primary role assignment — without it, authenticate denies 401 and
+    // the capability decisions under test never run.
     const createUserToken = async (role: "Teacher" | "Candidate") => {
-      const id = randomUUID();
-      await ctx.db.insert(schema.users).values({
-        id,
-        organizationId: ctx.org.id,
-        username: `p42b-${role.toLowerCase()}-${randomUUID().slice(0, 6)}`,
-        passwordHash: await hashPassword("pw123456"),
-        name: `${role} p42b`,
+      const { token } = await createAssignedUserForTest(
+        ctx.db,
+        ctx.org.id,
         role,
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      return signJWT(
-        { actorId: id, role, organizationId: ctx.org.id },
-        jwtSecret,
+        `p42b-${role.toLowerCase()}-question-auth`,
       );
+      return token;
     };
     teacherToken = await createUserToken("Teacher");
     candidateToken = await createUserToken("Candidate");

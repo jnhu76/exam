@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { isCandidate } from "@/lib/capabilities";
+import {
+  canAccessExamRuntime,
+  canAccessAdminConsole,
+  adminLandingPath,
+} from "@/lib/capabilities";
 
 /**
  * Shell layout for candidate-facing exam pages. Renders a top header
@@ -43,7 +47,15 @@ export function ExamLayout() {
       </div>
     );
   }
-  if (!user || !isCandidate(user)) {
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!canAccessExamRuntime(user)) {
+    // Multi-role user with admin-console capabilities but no ExamTake:
+    // redirect to the admin console landing instead of login.
+    if (canAccessAdminConsole(user)) {
+      return <Navigate to={adminLandingPath(user)!} replace />;
+    }
     return <Navigate to="/login" replace />;
   }
   const initials = user.name.slice(0, 2);

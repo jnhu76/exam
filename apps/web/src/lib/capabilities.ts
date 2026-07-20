@@ -1,52 +1,41 @@
 /**
- * Frontend UX capability helper (P4-4).
+ * Frontend UX capability helper (P4-4, RBAC-M10-E closure).
  *
- * Derives navigation/action visibility from the CANONICAL @exam/authz role
- * presets so the UI shows only the entries a role is actually authorized for.
- * This is the option-B path from the P4 task: the backend does not yet return
- * effective capabilities on /api/auth/me (MeResponse carries only `role`), so
- * the frontend derives UX visibility from the same preset matrix the backend
- * enforces. There is exactly ONE place that maps role -> visible UX surface;
- * scattered `role === "..."` checks are explicitly forbidden (task 10.2 C).
+ * Capabilities now come from the backend on both /login and /auth/me,
+ * resolved fresh from active user_role_assignments (the single source of
+ * truth for human actor authorization). Every can* function reads from
+ * user.capabilities (the union of every active role assignment's preset),
+ * NOT from a role-preset projection that would hide secondary-role
+ * capabilities from multi-role actors.
  *
  * ⚠️ THIS IS NOT A SECURITY CONTROL. It hides/disables UI to reduce confusion.
  * The backend remains the authority: every gated route enforces
  * requireCapability/requireRole + ownership/organization predicates. A hidden
  * nav entry is still reachable by direct URL; the backend will 403/404 it.
- * (P4-3 candidate-ownership + P4-2 capability tests are the security proof.)
  */
-import {
-  Permission,
-  permissionsForRole,
-  type PermissionKey,
-  type RoleKey,
-} from "@exam/authz";
+import { Permission, type PermissionKey } from "@exam/authz";
 import type { MeResponse } from "@exam/contracts";
 import { routes } from "@/lib/routes";
 
-// Memoized preset sets (presets are static; safe for module lifetime).
-const PRESET_SETS = new Map<string, ReadonlySet<PermissionKey>>();
-function presetFor(role: string): ReadonlySet<PermissionKey> {
-  let set = PRESET_SETS.get(role);
-  if (!set) {
-    set = new Set(permissionsForRole(role as RoleKey));
-    PRESET_SETS.set(role, set);
-  }
-  return set;
-}
-
 /**
- * Returns true if the user's role preset grants the permission. UX-only.
+ * Returns true if the user's capability set grants the permission. UX-only.
  * Backend remains authoritative.
+ *
+ * Capabilities are the union of every active role assignment's preset,
+ * resolved at authenticate time by loadAssignmentAuthority.
  */
-export function can(user: Pick<MeResponse, "role">, permission: PermissionKey) {
-  return presetFor(user.role).has(permission);
+export function can(
+  user: Pick<MeResponse, "role" | "capabilities">,
+  permission: PermissionKey,
+) {
+  return user.capabilities.includes(permission);
 }
 
-// ── Coarse UX role classes (derived from the preset, not hardcoded role lists) ──
-// These keep nav logic readable while still flowing through the preset. A
-// future backend-provided capability set replaces `can()` without touching
-// call sites.
+// ── Coarse UX role classes (derived from role, NOT capabilities) ──
+// These are shell-classification semantics (admin console vs exam runtime),
+// not capability gates. They use user.role intentionally.
+// isAdmin and isCandidate are used for routing shell layout, not for
+// authorization decisions.
 
 /** Admin = the compatibility superset (sees everything). UX shortcut. */
 export function isAdmin(user: Pick<MeResponse, "role">): boolean {
@@ -59,15 +48,24 @@ export function isCandidate(user: Pick<MeResponse, "role">): boolean {
 }
 
 /**
- * Roles that may use the Admin console at all (vs being routed to the exam
- * runtime). Candidate is excluded; everyone with at least one non-candidate,
- * non-system preset enters the console.
+ * Returns true if the user has any admin-console capability (is gated into the
+ * admin shell). Derived from adminLandingPath: if there is any console surface
+ * the user can reach, console access is granted.
  */
-export function canAccessAdminConsole(user: Pick<MeResponse, "role">): boolean {
-  // System is non-login and never appears in MeResponse.role. Candidate is
-  // routed to the exam runtime; every other role (Admin/Teacher/Proctor/Grader)
-  // holds at least one non-candidate capability -> console access.
-  return !isCandidate(user);
+export function canAccessAdminConsole(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return adminLandingPath(user) !== null;
+}
+
+/**
+ * Exam-runtime access: requires ExamTake capability (Candidate's entry perm).
+ * Multi-role users with secondary Candidate reach the exam shell.
+ */
+export function canAccessExamRuntime(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.ExamTake);
 }
 
 // ── Per-surface visibility (the single source the sidebar/layout consult) ──
@@ -100,108 +98,181 @@ const MANAGEMENT_SURFACE_PERMS: readonly PermissionKey[] = [
 /**
  * Management surface (users/candidates/audit/settings/system) — visible when
  * the principal holds any management-surface capability. Derived from the
- * preset (same source `can()` consults), not from a role-label shortcut.
+ * capability set (same source `can()` consults), not from a role-label shortcut.
  */
-export function canSeeManagement(user: Pick<MeResponse, "role">): boolean {
-  return hasManagementCapability(presetFor(user.role));
+export function canSeeManagement(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return hasManagementCapability(user.capabilities as PermissionKey[]);
 }
 
 /**
  * Pure permission-set predicate: true iff the set contains any management-surface
  * capability. Independent of role labels — any role (or custom set) that holds
  * at least one management perm is authorized. This is the canonical gate; the
- * role-preset wrapper above is a convenience for the common case.
+ * capability-set wrapper above is a convenience for the common case.
  */
 export function hasManagementCapability(
-  permissions: ReadonlySet<PermissionKey>,
+  permissions: readonly PermissionKey[],
 ): boolean {
-  return MANAGEMENT_SURFACE_PERMS.some((p) => permissions.has(p));
+  return MANAGEMENT_SURFACE_PERMS.some((p) => permissions.includes(p));
 }
 
-export function canSeeDashboard(user: Pick<MeResponse, "role">): boolean {
+/**
+ * Settings page visibility — used when the caller needs to check settings
+ * access without importing the full management surface helper (e.g. DateTimeContext).
+ */
+export function canSeeSettings(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
+  return can(user, Permission.SettingsView);
+}
+
+export function canSeeDashboard(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.SystemHealthView);
 }
 
-export function canSeeCourses(user: Pick<MeResponse, "role">): boolean {
+export function canSeeCourses(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.CourseView);
 }
 
-export function canSeeQuestions(user: Pick<MeResponse, "role">): boolean {
+export function canSeeQuestions(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.QuestionView);
 }
 
-export function canImportQuestions(user: Pick<MeResponse, "role">): boolean {
+export function canImportQuestions(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.QuestionImport);
 }
 
 /** Exams nav (list/detail/author) — Admin + Teacher. */
-export function canSeeExams(user: Pick<MeResponse, "role">): boolean {
+export function canSeeExams(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamView);
 }
 
 /** Grading queue nav — Admin + Grader (NOT Teacher). */
-export function canSeeGradingQueue(user: Pick<MeResponse, "role">): boolean {
+export function canSeeGradingQueue(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.GradingQueueView);
 }
 
 /** Results/scores nav — Admin + Teacher (ScoreAllView) + Grader (no, lacks it). */
-export function canSeeResults(user: Pick<MeResponse, "role">): boolean {
+export function canSeeResults(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ScoreAllView);
 }
 
 /** Proctor monitoring nav — Admin + Proctor. */
-export function canSeeProctor(user: Pick<MeResponse, "role">): boolean {
+export function canSeeProctor(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamRoomView);
 }
 
 // ── Exam-page action visibility (task 10.4) ──
 
-export function canPublishExam(user: Pick<MeResponse, "role">): boolean {
+export function canPublishExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamPublish);
 }
-export function canCreateExam(user: Pick<MeResponse, "role">): boolean {
+export function canCreateExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamCreate);
 }
-export function canUpdateExam(user: Pick<MeResponse, "role">): boolean {
+export function canUpdateExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamUpdate);
 }
-export function canCloseExam(user: Pick<MeResponse, "role">): boolean {
+export function canCloseExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamClose);
 }
-export function canPublishResults(user: Pick<MeResponse, "role">): boolean {
+export function canPublishResults(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamResultPublish);
 }
-export function canManageEnrollments(user: Pick<MeResponse, "role">): boolean {
+export function canManageEnrollments(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamEnrollmentManage);
 }
 // Admin-only destructive exam actions (task 2.5) — Teacher must NOT see these.
-export function canUnpublishExam(user: Pick<MeResponse, "role">): boolean {
+export function canUnpublishExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamUnpublish);
 }
-export function canCancelExam(user: Pick<MeResponse, "role">): boolean {
+export function canCancelExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamCancel);
 }
-export function canArchiveExam(user: Pick<MeResponse, "role">): boolean {
+export function canArchiveExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamArchive);
 }
-export function canDeleteExam(user: Pick<MeResponse, "role">): boolean {
+export function canDeleteExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamDelete);
 }
-export function canExtendExam(user: Pick<MeResponse, "role">): boolean {
+export function canExtendExam(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): boolean {
   return can(user, Permission.ExamExtend);
 }
 
 export function adminLandingPath(
-  user: Pick<MeResponse, "role">,
+  user: Pick<MeResponse, "role" | "capabilities">,
 ): string | null {
+  // Most specific role workspaces first, tiered by role specificity.
+  // Dashboard (SystemHealthView) is Admin-only — check first so Admin lands
+  // on the dashboard even though Admin also holds all other capability perms.
+  // Proctor workspace is the most targeted non-Admin surface, followed by
+  // grading queue, then exams as a general fallback. CourseView, QuestionView,
+  // and management-surface perms extend the set so non-standard presets or
+  // multi-role unions still get a console landing.
   if (canSeeDashboard(user)) return routes.admin.dashboard;
-  if (canSeeExams(user)) return routes.admin.exams;
-  if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
   if (canSeeProctor(user)) return routes.admin.proctorWorkspace;
+  if (canSeeGradingQueue(user)) return routes.admin.gradingQueue;
+  if (canSeeExams(user)) return routes.admin.exams;
+  if (canSeeCourses(user)) return routes.admin.courses;
+  if (canSeeQuestions(user)) return routes.admin.questions;
+  if (hasManagementCapability(user.capabilities as PermissionKey[]))
+    return routes.admin.users;
   return null;
 }
 
-export function defaultLandingPath(user: Pick<MeResponse, "role">): string {
-  if (isCandidate(user)) return routes.exam.list;
-  return adminLandingPath(user) ?? routes.admin.root;
+export function defaultLandingPath(
+  user: Pick<MeResponse, "role" | "capabilities">,
+): string {
+  // If user has any admin-console capability, resolve which surface they land on.
+  const adminPath = adminLandingPath(user);
+  if (adminPath) {
+    // Primary-Candidate users with console capabilities default to exam runtime
+    // (Candidate-primary preference).
+    if (isCandidate(user)) return routes.exam.list;
+    return adminPath;
+  }
+  // Pure candidate or secondary-candidate-only user.
+  if (canAccessExamRuntime(user)) return routes.exam.list;
+  // No capabilities — redirect to login.
+  return routes.login;
 }

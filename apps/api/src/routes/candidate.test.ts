@@ -38,6 +38,19 @@ describe("candidate routes", () => {
       createdAt: now,
       updatedAt: now,
     });
+    // RBAC-M10-E: every login-capable test user needs a primary active
+    // assignment, or the authority resolver returns no_active_assignments
+    // and every authenticated request fail-closes with 401.
+    await ctx.db.insert(schema.userRoleAssignments).values({
+      id: crypto.randomUUID(),
+      organizationId,
+      userId: adminId,
+      role: "Admin",
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
     adminToken = signJWT({
       actorId: adminId,
       role: "Admin",

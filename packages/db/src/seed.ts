@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Database } from "./types.js";
-import { schema } from "./schema/pg.js";
+import {
+  executeInTransaction,
+  type Database,
+  type TenantContext,
+} from "./types.js";
+import { schema, ASSIGNABLE_ROLES } from "./schema/pg.js";
+import type { AssignableRole } from "./schema/pg.js";
+import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 import dotenv from "dotenv";
-import { eq } from "drizzle-orm";
 
 dotenv.config({ quiet: true });
 
@@ -73,6 +78,15 @@ const USER_DEFS = [
  * Seeds the baseline database with a default organization and three users
  * (admin, candidate, candidate2). Idempotent — re-running upserts on
  * conflict by username.
+ *
+ * Phase 1 minimal authentication/dev seed: creates `organizations` + `users` +
+ * `user_role_assignments` only. Does NOT create `candidate_profiles`,
+ * `candidate_fields`, `organization_settings`, courses, exams, or attempts.
+ * Use `demo-seed.ts` for a complete interactive demo. A `Candidate`-role user
+ * created by this seed can authenticate but has no CandidateProfile —
+ * `POST /users/:id/reset-password` will reject it (target identity check
+ * requires a profile).
+ *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
  * @returns Created organization ID and user IDs.
@@ -97,6 +111,9 @@ export async function seed(
       updatedAt: timestamp,
     })
     .onConflictDoUpdate({
+      // Conflict branch only updates `updatedAt` — deliberately does NOT
+      // overwrite `name`/`displayName`, to preserve admin-configured
+      // organization identity on re-seed.
       target: schema.organizations.slug,
       set: { updatedAt: timestamp },
     })
@@ -104,7 +121,15 @@ export async function seed(
   const orgId = orgRows[0]!.id;
 
   const userIds: string[] = [];
-  const seededUsers: { id: string; role: string }[] = [];
+
+  const seedCtx: TenantContext = {
+    organizationId: orgId,
+    actorId: "seed",
+    role: "Admin",
+    permissions: [],
+  };
+
+  const assignableRoleSet = new Set<string>(ASSIGNABLE_ROLES);
 
   for (const def of USER_DEFS) {
     const username = process.env[def.envUsername] || def.defaults.username;
@@ -112,53 +137,58 @@ export async function seed(
     const name = process.env[def.envName] || def.nameDefault;
     const passwordHash = await hashFn(password);
 
-    const userRows = await db
-      .insert(schema.users)
-      .values({
-        id: randomUUID(),
-        organizationId: orgId,
-        username,
-        passwordHash,
-        name,
-        role: def.defaults.role,
-        isActive: true,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
-      .onConflictDoUpdate({
-        target: [schema.users.organizationId, schema.users.username],
-        set: { passwordHash, isActive: true, updatedAt: timestamp },
-      })
-      .returning({ id: schema.users.id });
+    let seededUserId: string | undefined;
+    await executeInTransaction(
+      db,
+      async (tx) => {
+        const userRows = await tx
+          .insert(schema.users)
+          .values({
+            id: randomUUID(),
+            organizationId: orgId,
+            username,
+            passwordHash,
+            name,
+            role: def.defaults.role,
+            isActive: true,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          })
+          .onConflictDoUpdate({
+            // Conflict branch only resets `passwordHash`/`name` — deliberately
+            // does NOT overwrite `role`/`isActive`, to preserve (a) authority
+            // changes made via the role-assignment surface since the last seed,
+            // and (b) account-disable state (RBAC-M10-E authority preservation,
+            // commit 9f0261a).
+            target: [schema.users.organizationId, schema.users.username],
+            set: { passwordHash, name, updatedAt: timestamp },
+          })
+          .returning({ id: schema.users.id, role: schema.users.role });
 
-    userIds.push(userRows[0]!.id);
-    seededUsers.push({ id: userRows[0]!.id, role: def.defaults.role });
-  }
+        const user = userRows[0]!;
+        seededUserId = user.id;
 
-  // RBAC-M7: mirror each seeded user into a primary active role assignment so
-  // users.role and user_role_assignments agree after seed. Idempotent upsert
-  // (re-seed safe) on the (org, user, role) unique index.
-  for (const u of seededUsers) {
-    await db
-      .insert(schema.userRoleAssignments)
-      .values({
-        id: randomUUID(),
-        organizationId: orgId,
-        userId: u.id,
-        role: u.role as never,
-        isPrimary: true,
-        isActive: true,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.userRoleAssignments.organizationId,
-          schema.userRoleAssignments.userId,
-          schema.userRoleAssignments.role,
-        ],
-        set: { isPrimary: true, isActive: true, updatedAt: timestamp },
-      });
+        const assignmentRepo = createUserRoleAssignmentRepo(tx);
+        const assignments = await assignmentRepo.listForUser(seedCtx, user.id);
+        const hasActive = assignments.some((a) => a.isActive);
+        if (hasActive) return;
+        const hasAny = assignments.length > 0;
+        if (hasAny) return;
+
+        if (assignableRoleSet.has(user.role)) {
+          await assignmentRepo.ensurePrimaryAssignmentWithinTransaction(
+            tx,
+            seedCtx,
+            {
+              userId: user.id,
+              role: user.role as AssignableRole,
+            },
+          );
+        }
+      },
+      "read committed",
+    );
+    userIds.push(seededUserId!);
   }
 
   return {

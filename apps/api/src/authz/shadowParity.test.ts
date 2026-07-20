@@ -1,17 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { shadowRequireCapability, type ShadowLogger } from "./shadow.js";
-import { Permission, Role } from "@exam/authz";
+import {
+  Permission,
+  Role,
+  permissionsForRole,
+  type PermissionKey,
+  type RoleKey,
+} from "@exam/authz";
 
 /**
- * Shadow parity matrix (RBAC runtime activation, PR #3 Step 4).
+ * Shadow parity matrix (RBAC-M10-E).
  *
- * ADR §10.3 requires shadow parity evidence before flipping gates. The legacy
- * `requireRole(["Admin"])` and the new `requireCapability(permission)` agree
- * exactly on Admin and Candidate. For Proctor/Grader the capability decision
- * is *intentionally broader* — that is the whole point of RBAC activation —
- * so this test pins the EXPECTED diff matrix: Proctor is allowed exactly its
- * preset perms (and denied everything else); Grader likewise; Candidate/Teacher
- * get nothing proctor/grading. There must be NO unexpected diff.
+ * Post-flip, shadow compares the legacy `users.role` projection (the
+ * `legacyGate` side) against the authoritative assignment-derived capability
+ * union (the `capabilities` side). For a single-role user, the capability set
+ * equals that role's preset — so this matrix populates `ctx.capabilities`
+ * from `permissionsForRole(role)` and confirms shadow reports the expected
+ * parity / broadening for each role. Production follows the capability side;
+ * shadow records any drift as a warning.
  */
 function makeLogger(): ShadowLogger & { mismatches: number } {
   const logger: ShadowLogger & { mismatches: number } = {
@@ -22,6 +28,15 @@ function makeLogger(): ShadowLogger & { mismatches: number } {
     },
   };
   return logger;
+}
+
+/** Builds a ShadowContext carrying the role's preset as its capabilities. */
+function ctxFor(role: RoleKey, actorId: string) {
+  return {
+    actorId,
+    role,
+    capabilities: permissionsForRole(role) as readonly PermissionKey[],
+  };
 }
 
 const proctorPerms = [
@@ -54,7 +69,7 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       const r = shadowRequireCapability(
         {
           route: `PROBE ${perm}`,
-          ctx: { actorId: "a", role: Role.Admin, permissions: [] },
+          ctx: ctxFor(Role.Admin, "a"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "system", id: "x" },
@@ -73,7 +88,7 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       const r = shadowRequireCapability(
         {
           route: `PROBE ${perm}`,
-          ctx: { actorId: "c", role: Role.Candidate, permissions: [] },
+          ctx: ctxFor(Role.Candidate, "c"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "system", id: "x" },
@@ -92,7 +107,7 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       const r = shadowRequireCapability(
         {
           route: `PROBE ${perm}`,
-          ctx: { actorId: "p", role: Role.Proctor, permissions: [] },
+          ctx: ctxFor(Role.Proctor, "p"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "system", id: "x" },
@@ -112,7 +127,7 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       const r = shadowRequireCapability(
         {
           route: `PROBE ${perm}`,
-          ctx: { actorId: "g", role: Role.Grader, permissions: [] },
+          ctx: ctxFor(Role.Grader, "g"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "system", id: "x" },
@@ -137,7 +152,7 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       const r = shadowRequireCapability(
         {
           route: `PROBE ${perm}`,
-          ctx: { actorId: "t", role: Role.Teacher, permissions: [] },
+          ctx: ctxFor(Role.Teacher, "t"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "system", id: "x" },
@@ -160,7 +175,7 @@ describe("RBAC Step 4 shadow parity matrix (expected diffs only)", () => {
       shadowRequireCapability(
         {
           route: `ADMIN ${perm}`,
-          ctx: { actorId: "a", role: Role.Admin, permissions: [] },
+          ctx: ctxFor(Role.Admin, "a"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "system", id: "x" },
@@ -208,7 +223,7 @@ describe("M10-D shadow parity matrix", () => {
       const r = shadowRequireCapability(
         {
           route: `M10D ${perm}`,
-          ctx: { actorId: "admin", role: Role.Admin, permissions: [] },
+          ctx: ctxFor(Role.Admin, "admin"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "organization", id: "org-1" },
@@ -226,7 +241,7 @@ describe("M10-D shadow parity matrix", () => {
       shadowRequireCapability(
         {
           route: `M10D-ADMIN ${perm}`,
-          ctx: { actorId: "admin", role: Role.Admin, permissions: [] },
+          ctx: ctxFor(Role.Admin, "admin"),
           legacyGate: ["Admin"],
           permission: perm,
           resource: { type: "organization", id: "org-1" },
@@ -244,7 +259,7 @@ describe("M10-D shadow parity matrix", () => {
         const r = shadowRequireCapability(
           {
             route: `M10D ${role}/${perm}`,
-            ctx: { actorId: role.toLowerCase(), role, permissions: [] },
+            ctx: ctxFor(role, role.toLowerCase()),
             legacyGate: ["Admin"],
             permission: perm,
             resource: { type: "organization", id: "org-1" },

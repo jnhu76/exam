@@ -15,3 +15,8 @@ apps/api/public/
 .claude/
 .zcode/
 .mimocode/
+
+# Throwaway mutation-testing artifacts (mutant logs, source snapshots).
+# Findings belong in docs/dev/test-flakes.md or the relevant phase report,
+# not in tracked artifacts at the repo root.
+mutation-campaign-results/

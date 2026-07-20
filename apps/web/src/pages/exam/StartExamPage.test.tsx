@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { StartExamPage } from "./StartExamPage";
 import { ApiError } from "@/lib/api";
+import { permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -59,6 +60,7 @@ function renderPage() {
           name: "Candidate",
           role: "Candidate",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Candidate")],
         }}
       >
         <BrandProvider>

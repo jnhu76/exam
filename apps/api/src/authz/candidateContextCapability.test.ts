@@ -4,16 +4,22 @@ import { Permission, type PermissionKey, type RoleKey } from "@exam/authz";
 
 /**
  * Unit tests for the candidate-context capability preHandler (RBAC-M10-A
- * archetype A, preset-only gate). Verifies the gate is the strict capability
- * analogue of the legacy role check and that it does NOT branch on role name.
+ * archetype A, capability-only gate). Verifies the gate reads the authoritative
+ * ctx.capabilities union and does NOT branch on role name.
  */
 
-function presetFrom(map: Record<string, PermissionKey[]>) {
-  return (role: RoleKey, perm: PermissionKey) =>
-    (map[role] ?? []).includes(perm);
+const ROLE_CAPS: Record<string, PermissionKey[]> = {
+  Candidate: [Permission.ExamTake],
+};
+
+function capabilitiesFor(role: string): readonly PermissionKey[] {
+  return ROLE_CAPS[role] ?? [];
 }
 
-const CANDIDATE_PRESET = presetFrom({ Candidate: [Permission.ExamTake] });
+/** Request-scoped predicate that reads ctx.capabilities (RBAC-M10-E). */
+function allows(request: FastifyRequest, perm: PermissionKey): boolean {
+  return (request.ctx?.capabilities ?? []).includes(perm);
+}
 
 function makeReq(role: string, hasCtx = true): FastifyRequest {
   return {
@@ -23,6 +29,8 @@ function makeReq(role: string, hasCtx = true): FastifyRequest {
             actorId: "actor-1",
             organizationId: "org-1",
             role,
+            roles: [role as RoleKey],
+            capabilities: capabilitiesFor(role),
             permissions: [],
             sessionId: "s",
           },
@@ -60,9 +68,7 @@ const { buildCandidateContextCapabilityPreHandler } =
 
 describe("RBAC-M10-A candidate-context capability preHandler", () => {
   const build = () =>
-    buildCandidateContextCapabilityPreHandler(CANDIDATE_PRESET)(
-      Permission.ExamTake,
-    );
+    buildCandidateContextCapabilityPreHandler(allows)(Permission.ExamTake);
 
   it("allows a Candidate (preset holds ExamTake)", async () => {
     const reply = makeReply();

@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { toast } from "sonner";
 import { ExamEditPage } from "./ExamEditPage";
+import { permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPatch } = vi.hoisted(() => {
   const mockCourses = [{ id: "c1", name: "数学", code: "MATH101" }];
@@ -75,6 +76,7 @@ function renderPage() {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>

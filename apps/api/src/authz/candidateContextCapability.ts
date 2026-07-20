@@ -32,22 +32,26 @@
  */
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { buildErrorResponse } from "../lib/errorResponse.js";
-import { type PermissionKey, type RoleKey } from "@exam/authz";
+import { type PermissionKey } from "@exam/authz";
 
-/** Predicate that decides the flat role-preset capability verdict. */
-export type CandidateContextPresetAllows = (
-  role: RoleKey,
+/**
+ * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * `ctx.capabilities` union. Signature matches the scoped / score / own-attempt
+ * / exam-eligibility gates.
+ */
+export type CandidateContextAllows = (
+  request: FastifyRequest,
   permission: PermissionKey,
 ) => boolean;
 
 /**
- * Builds the candidate-context capability preHandler. Pure: the preset
+ * Builds the candidate-context capability preHandler. Pure: the capability
  * predicate is injected, matching {@link requireCapability}'s contract. The
  * decorator attaches runtime metadata `{ kind: "candidate_context", permission }`
  * so conformance tests can distinguish this archetype from generic `scoped`.
  */
 export function buildCandidateContextCapabilityPreHandler(
-  presetAllows: CandidateContextPresetAllows,
+  allows: CandidateContextAllows,
 ): (
   permission: PermissionKey,
 ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
@@ -58,7 +62,7 @@ export function buildCandidateContextCapabilityPreHandler(
         .code(401)
         .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
     }
-    if (!presetAllows(ctx.role as RoleKey, permission)) {
+    if (!allows(request, permission)) {
       return reply
         .code(403)
         .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));

@@ -2,9 +2,10 @@
  * Route permission registry (RBAC-M4).
  *
  * Declarative `route → permission → scope → audit` mapping for every route
- * currently gated by `requireRole(["Admin"|"Candidate"])` in `apps/api/src/routes`.
- * Source of truth: ADR §Route → Permission → Scope → Audit Registry and the
- * live `rg requireRole` inventory (re-verified for this job).
+ * currently gated by `requireCapability(...)` / resource-aware capability gates
+ * (`requireScopedCapability` / `requireScoreCapability` / `requireCandidateContext`
+ * / `requireExamEligibility` / `requireOwnAttempt`).
+ * Source of truth: ADR §Route → Permission → Scope → Audit Registry.
  *
  * **This job does NOT enforce anything.** The registry is metadata + a coverage
  * test. RBAC-M5 (shadow) and RBAC-M10 / PROCTOR-M1 / GRADING-M1 (enforcement)

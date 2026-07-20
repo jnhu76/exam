@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamPage } from "./ExamPage";
+import { permissionsForRole } from "@exam/authz";
 
 const { apiGet } = vi.hoisted(() => ({
   apiGet: vi.fn().mockResolvedValue({
@@ -62,6 +63,7 @@ function renderPage(role: "Admin" | "Teacher" = "Admin") {
           name: "Admin",
           role,
           organizationId: "org1",
+          capabilities: [...permissionsForRole(role)],
         }}
       >
         <BrandProvider>

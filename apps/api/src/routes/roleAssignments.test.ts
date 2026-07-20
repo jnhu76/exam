@@ -1,4 +1,12 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import userRoutes from "./user.js";
 import roleAssignmentRoutes from "./roleAssignments.js";
 import { buildTestApp } from "./testHelpers.js";
@@ -6,6 +14,8 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
+import { ValidationError } from "@exam/domain";
+import * as adminInvariantModule from "../authz/adminInvariant.js";
 
 async function createTargetUser(
   db: Database,
@@ -203,5 +213,77 @@ describe("RBAC-M8 role-assignment routes", () => {
       .from(schema.users)
       .where(eq(schema.users.id, target.id));
     expect(userRow[0]!.role).toBe("Grader");
+  });
+
+  // Route-wiring tests (layer 5.2): stub mutateWithEffectiveAdminPostcondition
+  // to verify HTTP transport mapping for the deactivate + delete paths.
+  describe("last-admin invariant — route wiring (RBAC-M10-E)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("PATCH /api/role-assignments/:id (deactivate) — postcondition throws LAST_ACTIVE_ADMIN -> 400", async () => {
+      // Create a target assignment to deactivate.
+      const target = await createTargetUser(ctx.db, ctx.org.id, "deact-target");
+      const assignment = await createPrimaryAssignment(
+        ctx.db,
+        ctx.org.id,
+        target.id,
+        "Candidate",
+      );
+      vi.spyOn(
+        adminInvariantModule,
+        "mutateWithEffectiveAdminPostcondition",
+      ).mockImplementation(() => {
+        throw new ValidationError("不能停用或降级最后一位活跃管理员", {
+          reason: "LAST_ACTIVE_ADMIN",
+        });
+      });
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/role-assignments/${assignment.id}`,
+        payload: { isActive: false },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: {
+          code: "VALIDATION_ERROR",
+          details: { reason: "LAST_ACTIVE_ADMIN" },
+          requestId: expect.any(String),
+        },
+      });
+    });
+
+    it("DELETE /api/role-assignments/:id — postcondition throws LAST_ACTIVE_ADMIN -> 400", async () => {
+      const target = await createTargetUser(ctx.db, ctx.org.id, "del-target");
+      const assignment = await createPrimaryAssignment(
+        ctx.db,
+        ctx.org.id,
+        target.id,
+        "Candidate",
+      );
+      vi.spyOn(
+        adminInvariantModule,
+        "mutateWithEffectiveAdminPostcondition",
+      ).mockImplementation(() => {
+        throw new ValidationError("不能停用或降级最后一位活跃管理员", {
+          reason: "LAST_ACTIVE_ADMIN",
+        });
+      });
+      const res = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/role-assignments/${assignment.id}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: {
+          code: "VALIDATION_ERROR",
+          details: { reason: "LAST_ACTIVE_ADMIN" },
+          requestId: expect.any(String),
+        },
+      });
+    });
   });
 });
