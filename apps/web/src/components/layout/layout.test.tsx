@@ -1,4 +1,5 @@
 import type { MeResponse } from "@exam/contracts";
+import { permissionsForRole } from "@exam/authz";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -17,6 +18,7 @@ const admin: MeResponse = {
   username: "admin",
   name: "管理员",
   role: "Admin",
+  capabilities: [...permissionsForRole("Admin")],
 };
 
 const candidate: MeResponse = {
@@ -25,6 +27,7 @@ const candidate: MeResponse = {
   username: "candidate",
   name: "考生",
   role: "Candidate",
+  capabilities: [...permissionsForRole("Candidate")],
 };
 
 const teacher: MeResponse = {
@@ -33,6 +36,7 @@ const teacher: MeResponse = {
   username: "t",
   name: "教师",
   role: "Teacher",
+  capabilities: [...permissionsForRole("Teacher")],
 };
 const grader: MeResponse = {
   ...admin,
@@ -40,6 +44,7 @@ const grader: MeResponse = {
   username: "g",
   name: "评分员",
   role: "Grader",
+  capabilities: [...permissionsForRole("Grader")],
 };
 const proctor: MeResponse = {
   ...admin,
@@ -47,6 +52,7 @@ const proctor: MeResponse = {
   username: "p",
   name: "监考员",
   role: "Proctor",
+  capabilities: [...permissionsForRole("Proctor")],
 };
 
 function BrandingProbe() {

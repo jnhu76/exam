@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { QuestionEditPage } from "./QuestionEditPage";
+import { permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -63,6 +64,7 @@ function renderNew(apiImpl?: (...args: unknown[]) => Promise<unknown>) {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>
@@ -95,6 +97,7 @@ function renderEdit() {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>
@@ -503,6 +506,7 @@ describe("QuestionEditPage — text_response authoring", () => {
             name: "Admin",
             role: "Admin",
             organizationId: "org1",
+            capabilities: [...permissionsForRole("Admin")],
           }}
         >
           <BrandProvider>

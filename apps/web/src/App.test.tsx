@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AdminIndexRoute, AppTitle } from "@/App";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { permissionsForRole } from "@exam/authz";
 import type { MeResponse } from "@exam/contracts";
 
 function renderTitleProbe(route: string, productName = "测评平台") {
@@ -73,6 +74,7 @@ describe("AdminIndexRoute", () => {
       name: "教师",
       role: "Teacher",
       organizationId: "org",
+      capabilities: [...permissionsForRole("Teacher")],
     });
 
     expect(screen.getByTestId("current-path").textContent).toBe("/admin/exams");
@@ -85,6 +87,7 @@ describe("AdminIndexRoute", () => {
       name: "监考员",
       role: "Proctor",
       organizationId: "org",
+      capabilities: [...permissionsForRole("Proctor")],
     });
 
     expect(screen.getByTestId("current-path").textContent).toBe(

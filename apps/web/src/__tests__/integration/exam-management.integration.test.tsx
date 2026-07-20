@@ -5,6 +5,7 @@ import { setupServer } from "msw/node";
 import { BrowserRouter } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ExamPage } from "@/pages/admin/ExamPage";
+import { permissionsForRole } from "@exam/authz";
 
 const server = setupServer(
   http.get("http://localhost:5173/api/exams", () => {
@@ -42,6 +43,7 @@ const server = setupServer(
       name: "管理员",
       role: "Admin",
       organizationId: "org-1",
+      capabilities: [...permissionsForRole("Admin")],
     });
   }),
 );
@@ -57,6 +59,7 @@ describe("考试管理流程集成测试", () => {
             name: "管理员",
             role: "Admin",
             organizationId: "org-1",
+            capabilities: [...permissionsForRole("Admin")],
           }}
         >
           <ExamPage />

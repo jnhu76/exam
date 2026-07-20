@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { permissionsForRole } from "@exam/authz";
 import { LoginPage } from "./LoginPage";
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
@@ -130,6 +131,7 @@ describe("LoginPage smoke", () => {
       name: "Admin",
       role: "Admin",
       organizationId: "org1",
+      capabilities: [...permissionsForRole("Admin")],
     });
     await act(async () => {});
   });
@@ -142,6 +144,7 @@ describe("LoginPage smoke", () => {
       name: "Admin",
       role: "Admin",
       organizationId: "org1",
+      capabilities: [...permissionsForRole("Admin")],
     });
 
     renderLogin();
@@ -165,6 +168,7 @@ describe("LoginPage smoke", () => {
       name: "Candidate",
       role: "Candidate",
       organizationId: "org1",
+      capabilities: [...permissionsForRole("Candidate")],
     });
 
     renderLogin();

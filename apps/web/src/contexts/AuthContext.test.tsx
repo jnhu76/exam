@@ -1,4 +1,5 @@
 import type { MeResponse } from "@exam/contracts";
+import { permissionsForRole } from "@exam/authz";
 import { Role } from "@exam/domain";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -12,6 +13,7 @@ const adminUser: MeResponse = {
   name: "管理员",
   role: Role.Admin,
   organizationId: "org",
+  capabilities: [...permissionsForRole("Admin")],
 };
 
 const candidateUser: MeResponse = {
@@ -20,6 +22,7 @@ const candidateUser: MeResponse = {
   name: "考生",
   role: Role.Candidate,
   organizationId: "org",
+  capabilities: [...permissionsForRole("Candidate")],
 };
 
 const teacherUser: MeResponse = {
@@ -28,6 +31,7 @@ const teacherUser: MeResponse = {
   username: "teacher",
   name: "教师",
   role: Role.Teacher,
+  capabilities: [...permissionsForRole("Teacher")],
 };
 
 const graderUser: MeResponse = {
@@ -36,6 +40,7 @@ const graderUser: MeResponse = {
   username: "grader",
   name: "评分员",
   role: Role.Grader,
+  capabilities: [...permissionsForRole("Grader")],
 };
 
 const proctorUser: MeResponse = {
@@ -44,6 +49,7 @@ const proctorUser: MeResponse = {
   username: "proctor",
   name: "监考员",
   role: Role.Proctor,
+  capabilities: [...permissionsForRole("Proctor")],
 };
 
 function AuthProbe() {

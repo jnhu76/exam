@@ -23,6 +23,7 @@ import {
   canSeeProctor,
   canSeeQuestions,
   canSeeResults,
+  canSeeSettings,
   canUnpublishExam,
   canUpdateExam,
   defaultLandingPath,
@@ -31,9 +32,28 @@ import {
   hasManagementCapability,
 } from "./capabilities";
 
-/** Build a minimal MeResponse-shaped user for a role. */
-function user(role: MeResponse["role"]): Pick<MeResponse, "role"> {
-  return { role };
+/**
+ * Build a minimal MeResponse-shaped user for a role, with the capability
+ * union derived from the role's preset. When `capabilities` is explicitly
+ * provided it overrides the default (used for multi-role tests).
+ */
+function userWith(
+  role: MeResponse["role"],
+  capabilities?: readonly PermissionKey[],
+): Pick<MeResponse, "role" | "capabilities"> {
+  return {
+    role,
+    capabilities: capabilities
+      ? [...capabilities]
+      : [...permissionsForRole(role)],
+  };
+}
+
+/** Shorthand for single-role users (capabilities = role preset). */
+function user(
+  role: MeResponse["role"],
+): Pick<MeResponse, "role" | "capabilities"> {
+  return userWith(role);
 }
 
 describe("P4-4 capability helper — per-role nav/action visibility", () => {
@@ -179,7 +199,7 @@ describe("P4-4 capability helper — default landing paths", () => {
 });
 
 describe("P4-4 capability helper — raw can() parity with backend presets", () => {
-  // A spot-check that the frontend preset-derived verdict matches a known
+  // A spot-check that the frontend capability verdict matches a known
   // backend decision, so a future preset change surfaces here.
   it("Teacher can(QuestionCreate) is true (matches P4-2B cutover)", () => {
     // Permission.QuestionCreate = "question.create"
@@ -199,10 +219,10 @@ describe("P4-4 capability helper — raw can() parity with backend presets", () 
 describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capability-derived", () => {
   // canSeeManagement must NOT short-circuit on a role label (isAdmin). It is an
   // aggregate over the management-surface permission set: the management nav is
-  // visible iff the principal's preset grants ANY of UserView/CandidateView/
-  // AuditLogView/SettingsView/SystemHealthView/CandidateFieldView. This keeps
-  // the gate aligned with the backend per-route requireCapability gates and
-  // avoids anointing a single surrogate permission (directive §3).
+  // visible iff the principal's capability set grants ANY of
+  // UserView/AuditLogView/SettingsView/SystemHealthView/CandidateFieldView.
+  // This keeps the gate aligned with the backend per-route requireCapability
+  // gates and avoids anointing a single surrogate permission (directive §3).
   it("Admin sees management (holds UserView + the full management set)", () => {
     expect(canSeeManagement(user("Admin"))).toBe(true);
   });
@@ -238,15 +258,46 @@ describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — canSeeManagement is capabil
     // capability-derived, not role-label-derived.
     //
     // Proof 1: Admin preset passes the pure-set gate.
-    const adminPerms = new Set(permissionsForRole("Admin"));
+    const adminPerms = permissionsForRole("Admin");
     expect(hasManagementCapability(adminPerms)).toBe(true);
 
     // Proof 2: A hypothetical non-Admin role that holds UserView passes.
-    const customPerms = new Set<PermissionKey>(["user.view"]);
+    const customPerms: PermissionKey[] = ["user.view"];
     expect(hasManagementCapability(customPerms)).toBe(true);
 
     // Proof 3: A role with zero management perms fails.
-    const emptyPerms = new Set<PermissionKey>();
+    const emptyPerms: PermissionKey[] = [];
     expect(hasManagementCapability(emptyPerms)).toBe(false);
+  });
+});
+
+describe("RBAC-M10-E closure — multi-role capability union", () => {
+  it("primary Candidate + secondary Teacher grants exam.view from the union", () => {
+    // Candidate lacks exam.view; Teacher's preset includes it. The capability
+    // union (passed explicitly) must reflect the multi-role truth.
+    const teacherPerms = [...permissionsForRole("Teacher")];
+    const u = userWith("Candidate", teacherPerms);
+    expect(canSeeExams(u)).toBe(true);
+    expect(canSeeResults(u)).toBe(true);
+    // Shell classification still uses role: Candidate routes to exam runtime.
+    expect(isCandidate(u)).toBe(true);
+    expect(canAccessAdminConsole(u)).toBe(false);
+  });
+
+  it("primary Candidate + secondary Admin grants all Admin capabilities", () => {
+    const adminPerms = [...permissionsForRole("Admin")];
+    const u = userWith("Candidate", adminPerms);
+    expect(canSeeManagement(u)).toBe(true);
+    expect(canSeeDashboard(u)).toBe(true);
+    expect(canSeeGradingQueue(u)).toBe(true);
+    expect(canSeeProctor(u)).toBe(true);
+    // Shell classification: primary role is Candidate, so console is hidden.
+    expect(canAccessAdminConsole(u)).toBe(false);
+  });
+
+  it("canSeeSettings works with explicit capability set", () => {
+    const u = userWith("Candidate", ["settings.view"]);
+    expect(canSeeSettings(u)).toBe(true);
+    expect(canSeeManagement(u)).toBe(true); // SettingsView is a management perm
   });
 });
