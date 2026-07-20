@@ -17,6 +17,7 @@ import { createDatabase } from "@exam/db";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
@@ -57,9 +58,15 @@ export async function resetAdminPassword(
   if (!user) {
     throw new Error(`User "${params.username}" not found.`);
   }
-  if (user.role !== "Admin") {
+  const assignmentRepo = createUserRoleAssignmentRepo(db);
+  const activeAssignments = await assignmentRepo.listActiveForUser(
+    systemCtx,
+    user.id,
+  );
+  const isEffectiveAdmin = activeAssignments.some((a) => a.role === "Admin");
+  if (!isEffectiveAdmin) {
     throw new Error(
-      `User "${params.username}" is not an Admin. ` +
+      `User "${params.username}" is not an effective Admin. ` +
         `This script can only reset Admin passwords.`,
     );
   }

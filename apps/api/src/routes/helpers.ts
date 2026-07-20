@@ -4,13 +4,20 @@ import { z } from "zod";
 import type { ZodError } from "zod";
 import { ImportJobLogStatusEnum } from "@exam/contracts";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import type { RuntimeRequestContext } from "../types/requestContext.js";
 
 /**
- * Extracts the typed `RequestContext` from an authenticated Fastify request.
+ * Extracts the typed runtime context from an authenticated Fastify request.
  * Throws if `ctx` is absent (i.e. the route was reached without authentication).
  * Use this instead of `request.ctx!` to get a runtime guard plus type narrowing.
+ *
+ * Returns {@link RuntimeRequestContext} — every authenticated request now
+ * carries `roles` + `capabilities` (RBAC-M10-E); the legacy `RequestContext`
+ * base fields are still present.
  */
-export function getRequestContext(request: FastifyRequest): RequestContext {
+export function getRequestContext(
+  request: FastifyRequest,
+): RuntimeRequestContext {
   const ctx = request.ctx;
   if (!ctx) {
     throw new Error(
@@ -52,14 +59,20 @@ export function resolveImportStatus(input: {
  * `organizationId`. This is used to enforce single-tenant data boundaries
  * where all operations target the caller's own organization.
  *
+ * Generic over the context shape so a {@link RuntimeRequestContext} (which
+ * carries `roles` + `capabilities`) is not narrowed back to the base
+ * {@link RequestContext} — the extension fields survive the spread (P1-1).
+ *
  * @param ctx - The incoming request context.
  * @returns A new context with `targetOrganizationId` guaranteed to be set.
  */
-export function ensureTargetOrg(ctx: RequestContext): RequestContext {
+export function ensureTargetOrg<T extends RequestContext>(
+  ctx: T,
+): T & { targetOrganizationId: string } {
   if (!ctx.targetOrganizationId) {
     return { ...ctx, targetOrganizationId: ctx.organizationId };
   }
-  return ctx;
+  return ctx as T & { targetOrganizationId: string };
 }
 
 /**

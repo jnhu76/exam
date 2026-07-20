@@ -1,4 +1,5 @@
 import type { MeResponse } from "@exam/contracts";
+import { permissionsForRole } from "@exam/authz";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
@@ -14,6 +15,7 @@ const admin: MeResponse = {
   username: "admin",
   name: "管理员",
   role: "Admin",
+  capabilities: [...permissionsForRole("Admin")],
 };
 
 function renderWithProviders(

@@ -32,21 +32,25 @@
  * RUNTIME STATE and remain in the handler / exam-engine. This preHandler
  * answers ONLY "may this actor see/start this exam at all".
  */
-import type { FastifyReply, FastifyRequest } from "fastify";
-import type { FastifyBaseLogger } from "fastify";
+import type { FastifyBaseLogger, FastifyReply, FastifyRequest } from "fastify";
 import type { Database } from "@exam/db/src/types.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
-import {
-  type PermissionKey,
-  type RoleKey,
-  type ResolverContext,
-} from "@exam/authz";
+import { type PermissionKey, type ResolverContext } from "@exam/authz";
 import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
 import {
   resolveExamEligibilityScope,
   isExamEligibilityDenied,
   type ExamEligibilityResolution,
 } from "./resolvers/examEligibilityResolver.js";
+
+/**
+ * Capability predicate over the request (RBAC-M10-E). Reads the authoritative
+ * `ctx.capabilities` union. Signature matches the other gates.
+ */
+export type ExamEligibilityAllows = (
+  request: FastifyRequest,
+  permission: PermissionKey,
+) => boolean;
 
 /** Input to the eligibility capability preHandler builder (pure, injectable). */
 export interface ExamEligibilityCapabilityInput {
@@ -55,10 +59,10 @@ export interface ExamEligibilityCapabilityInput {
   /** Fastify logger (injected; for resolver monitoring events). */
   logger?: FastifyBaseLogger;
   /**
-   * Flat role-preset predicate (injected; wraps @exam/authz presetAllows).
-   * Same source as {@link requireCapability} — not a role-name branch.
+   * Capability predicate (injected; reads ctx.capabilities). Same authority
+   * source as {@link requireCapability} — not a role-name branch.
    */
-  presetAllows: (role: RoleKey, permission: PermissionKey) => boolean;
+  allows: ExamEligibilityAllows;
 }
 
 /**
@@ -98,7 +102,7 @@ export function buildExamEligibilityCapabilityPreHandler(
   resourceIdKey: string,
   eligibilityDenialMode: EligibilityDenialMode,
 ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
-  const { db, logger, presetAllows: allows } = input;
+  const { db, logger, allows } = input;
   return (permission, resourceIdKey, denialMode) => async (request, reply) => {
     const ctx = request.ctx;
     if (!ctx) {
@@ -149,10 +153,9 @@ export function buildExamEligibilityCapabilityPreHandler(
       }
     }
 
-    // Resolved under the org anchor. The capability (preset) check is the
-    // strict analogue of the legacy role gate.
-    const role = ctx.role as RoleKey;
-    if (!allows(role, permission)) {
+    // Resolved under the org anchor. The capability check reads the
+    // authoritative ctx.capabilities union (RBAC-M10-E).
+    if (!allows(request, permission)) {
       return reply
         .code(403)
         .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));

@@ -1,4 +1,12 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from "vitest";
 import { eq, and } from "drizzle-orm";
 import type { Database } from "./types.js";
 import { getIsolatedTestDb } from "./testDb.js";
@@ -6,6 +14,7 @@ import { seed } from "./seed.js";
 import { schema } from "./schema/pg.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { verifyPassword } from "@exam/auth/src/password.js";
+import { createUserRoleAssignmentRepo } from "./repository/userRoleAssignmentRepo.js";
 
 describe("seed idempotency", () => {
   let db: Database;
@@ -71,7 +80,7 @@ describe("seed idempotency", () => {
     expect(seededRoles).toEqual(["Admin", "Candidate", "Candidate"]);
   });
 
-  it("is idempotent on second run and resets password/isActive", async () => {
+  it("is idempotent on second run and resets password without reactivating the account", async () => {
     const r1 = await seed(db, hashPassword);
 
     await db
@@ -89,7 +98,9 @@ describe("seed idempotency", () => {
       .select()
       .from(schema.users)
       .where(eq(schema.users.id, r2.users.adminId));
-    expect(admin[0]!.isActive).toBe(true);
+    // RBAC-M10-E: seed preserves account-level isActive; it must not silently
+    // re-enable a disabled seed account.
+    expect(admin[0]!.isActive).toBe(false);
     expect(await verifyPassword("admin123", admin[0]!.passwordHash)).toBe(true);
   });
 
@@ -125,5 +136,100 @@ describe("seed idempotency", () => {
         );
       expect(rows).toHaveLength(1);
     }
+  });
+});
+
+describe("seed authority preservation (RBAC-M10-E)", () => {
+  let db: Database;
+  let cleanup: () => Promise<void>;
+
+  beforeEach(async () => {
+    const result = await getIsolatedTestDb("db-seed-authority");
+    db = result.db;
+    cleanup = result.cleanup;
+  });
+
+  afterEach(async () => {
+    await cleanup();
+  });
+
+  function makeCtx(orgId: string) {
+    return {
+      organizationId: orgId,
+      actorId: "seed-test",
+      role: "Admin" as const,
+      permissions: [],
+    };
+  }
+
+  it("preserves a formal primary role change on re-seed", async () => {
+    const first = await seed(db, hashPassword);
+    const ctx = makeCtx(first.orgId);
+    const repo = createUserRoleAssignmentRepo(db);
+
+    await repo.replacePrimaryRole(ctx, {
+      userId: first.users.candidateId,
+      role: "Teacher",
+    });
+    // Simulate the product path that also syncs users.role (sync lives in
+    // apps/api; the db package only tests the assignment invariant).
+    await db
+      .update(schema.users)
+      .set({ role: "Teacher" })
+      .where(eq(schema.users.id, first.users.candidateId));
+
+    await seed(db, hashPassword);
+
+    const primary = await repo.findPrimaryActiveForUser(
+      ctx,
+      first.users.candidateId,
+    );
+    expect(primary?.role).toBe("Teacher");
+
+    const userRow = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, first.users.candidateId));
+    expect(userRow[0]!.role).toBe("Teacher");
+  });
+
+  it("repairs a user with zero assignment rows from current users.role", async () => {
+    const first = await seed(db, hashPassword);
+    const ctx = makeCtx(first.orgId);
+    const repo = createUserRoleAssignmentRepo(db);
+
+    const assignments = await repo.listForUser(ctx, first.users.candidateId);
+    for (const a of assignments) {
+      await repo.remove(ctx, a.id);
+    }
+
+    await db
+      .update(schema.users)
+      .set({ role: "Admin" })
+      .where(eq(schema.users.id, first.users.candidateId));
+
+    await seed(db, hashPassword);
+
+    const primary = await repo.findPrimaryActiveForUser(
+      ctx,
+      first.users.candidateId,
+    );
+    expect(primary?.role).toBe("Admin");
+  });
+
+  it("does not reactivate inactive-only assignments on re-seed", async () => {
+    const first = await seed(db, hashPassword);
+    const ctx = makeCtx(first.orgId);
+    const repo = createUserRoleAssignmentRepo(db);
+
+    const assignments = await repo.listForUser(ctx, first.users.candidateId);
+    for (const a of assignments) {
+      await repo.deactivate(ctx, a.id);
+    }
+
+    await seed(db, hashPassword);
+
+    const active = await repo.listActiveForUser(ctx, first.users.candidateId);
+    expect(active).toHaveLength(0);
   });
 });

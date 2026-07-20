@@ -2,6 +2,7 @@ import "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Permission, RequestContext, Role } from "@exam/domain";
 import type { PermissionKey, ResourceResolverKey } from "@exam/authz";
+import type { RuntimeRequestContext } from "./requestContext.js";
 
 /**
  * Route-specific eligibility denial policy for exam-eligibility routes.
@@ -59,7 +60,21 @@ export interface AuthzPreHandler {
 
 declare module "fastify" {
   interface FastifyRequest {
-    ctx?: RequestContext;
+    /**
+     * The runtime request context. On authenticated requests this is a
+     * {@link RuntimeRequestContext} (carrying `roles` + `capabilities`).
+     * Typed as the base {@link RequestContext} for callers that only need
+     * the base fields; capability gates cast to RuntimeRequestContext.
+     */
+    ctx?: RuntimeRequestContext;
+    /**
+     * Score preHandler's authoritative own/all decision (RBAC-M10-E). Set
+     * ONLY by `requireScoreCapability`'s preHandler after it arbitrates
+     * ScoreAllView vs ScoreOwnView+ownership. Consumed by the score
+     * publication handler to decide visibility — NEVER defaults; a missing
+     * signal is a wiring bug and surfaces as 503 AUTHZ_UNAVAILABLE (P1-4).
+     */
+    scoreView?: "own" | "all";
   }
 
   interface FastifyInstance {

@@ -18,6 +18,7 @@ import { createDatabase } from "@exam/db";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
@@ -61,7 +62,10 @@ export async function bootstrapAdmin(
 
   const { user } = await executeInTransaction(db, async (tx) => {
     const txUserRepo = createUserRepo(tx);
-    const activeAdminCount = await txUserRepo.countActiveByRole(
+    // RBAC-M10-E: "already has an active admin" is an assignment-backed
+    // question (a user whose users.role is Candidate but holds a secondary
+    // active Admin assignment IS an admin authority-wise). P0-7.
+    const activeAdminCount = await txUserRepo.countEffectiveActiveUsersWithRole(
       systemCtx,
       "Admin",
     );
@@ -78,6 +82,18 @@ export async function bootstrapAdmin(
       role: "Admin",
       isActive: true,
     });
+    // RBAC-M10-E: create the primary Admin assignment in the SAME transaction
+    // so the bootstrap user is authority-complete before the txn commits.
+    await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+      tx,
+      systemCtx,
+      {
+        userId: user.id,
+        role: "Admin",
+        isPrimary: true,
+        isActive: true,
+      },
+    );
     return { user };
   });
 

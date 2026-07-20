@@ -44,7 +44,9 @@ export const LoginRequestSchema = z.object({
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
 /**
- * Response schema returned after successful login, including user identity and role.
+ * Response schema returned after successful login, including user identity,
+ * role, and the actor's effective capability set (the union of all active
+ * role assignments' presets — RBAC-M10-E).
  */
 export const LoginResponseSchema = z.object({
   id: z.string().uuid(),
@@ -52,6 +54,7 @@ export const LoginResponseSchema = z.object({
   name: z.string(),
   role: RoleSchema,
   organizationId: z.string().uuid(),
+  capabilities: z.array(z.string()),
 });
 
 /** Type for a login response. */
@@ -61,6 +64,14 @@ export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
 /**
  * Response schema for the current authenticated user's profile (GET /auth/me).
+ *
+ * `capabilities` mirrors {@link LoginResponseSchema}: the authoritative union
+ * of every active role assignment's preset, resolved fresh on each request
+ * from `user_role_assignments` (RBAC-M10-E). Including it on `/me` (and on
+ * `PATCH /auth/me/profile`) closes the session-restore / profile-update gap
+ * where `AuthContext` previously lost capabilities and the frontend had to
+ * re-derive visibility from `presetFor(user.role)` — a primary-role projection
+ * that hid secondary-role capabilities from navigation.
  */
 export const MeResponseSchema = z.object({
   id: z.string().uuid(),
@@ -68,6 +79,7 @@ export const MeResponseSchema = z.object({
   name: z.string(),
   role: RoleSchema,
   organizationId: z.string().uuid(),
+  capabilities: z.array(z.string()),
 });
 
 /** Type for the current-user profile response. */

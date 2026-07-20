@@ -10,6 +10,7 @@ import {
 import type { OrganizationSettingsDTO } from "@exam/contracts";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
+import { canSeeSettings } from "@/lib/capabilities";
 import {
   createFallbackDateTimeFormatter,
   createProductDateTimeFormatter,
@@ -24,7 +25,7 @@ export function DateTimeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [organizationTimeZone, setOrganizationTimeZone] = useState<string>();
   const refresh = useCallback(async () => {
-    if (user?.role !== "Admin") {
+    if (!user || !canSeeSettings(user)) {
       setOrganizationTimeZone(undefined);
       return;
     }
@@ -36,7 +37,7 @@ export function DateTimeProvider({ children }: { children: ReactNode }) {
     } catch {
       setOrganizationTimeZone(undefined);
     }
-  }, [user?.role]);
+  }, [user]);
 
   useEffect(() => {
     void refresh();

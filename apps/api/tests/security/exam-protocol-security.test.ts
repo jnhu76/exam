@@ -143,6 +143,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
 
     const otherCandidateUserId = randomUUID();
+    const otherNow = new Date();
     await db.insert(schema.users).values({
       id: otherCandidateUserId,
       organizationId: candidate.organizationId,
@@ -151,16 +152,30 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
       name: "Other Candidate",
       role: "Candidate",
       isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: otherNow,
+      updatedAt: otherNow,
     });
     await db.insert(schema.candidateProfiles).values({
       id: randomUUID(),
       userId: otherCandidateUserId,
       organizationId: candidate.organizationId,
       fields: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: otherNow,
+      updatedAt: otherNow,
+    });
+    // RBAC-M10-E: the "other candidate" must authenticate to exercise the
+    // cross-candidate submit rejection at the ownership layer. Seed an active
+    // primary Candidate assignment so the failure is at ownership (404), not
+    // at authenticate (401).
+    await db.insert(schema.userRoleAssignments).values({
+      id: randomUUID(),
+      organizationId: candidate.organizationId,
+      userId: otherCandidateUserId,
+      role: "Candidate" as never,
+      isPrimary: true,
+      isActive: true,
+      createdAt: otherNow,
+      updatedAt: otherNow,
     });
     otherCandidateToken = signJWT({
       actorId: otherCandidateUserId,

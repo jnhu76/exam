@@ -132,6 +132,13 @@
 - 2026-06-20：`attempts.ts` 机械拆分为 `attempts.{candidate,admin,shared}.ts`（同分支）后，连续 3 次 `vitest run src/routes/attempts.test.ts` 整文件运行中，同样的 scanner 用例（`is idempotent: second scan...` / `leaves a still-stale in_progress attempt...`）间歇 5s timeout（1–2 个用例，非断言错误）。单独复跑 `-t "is idempotent: second scan|leaves a still-stale"` 时 1 个 timeout、1 个 4532ms 勉强过；`-t "force-submit|extend-time|misconduct"` 15/15 green。失败用例固定落在 deadline/heartbeat scanner describe，且为 timeout（非断言），符合 BUG-FLAKE-001 PG I/O 争用特征。拆分仅改路由层 register hub 与文件归属，未触碰 scanner 代码（`packages/exam-engine` 的 `scanDatabase*` 与 `apps/api/src/plugins/{deadlineScanner,heartbeat}.ts` 均未改动），判定无因果关系。
 - 2026-06-23（**auth amplification 子类**）：`auth.test.ts` 在全量 `pnpm verify` / coverage 模式下出现 5000ms timeout。standalone 定向运行 2/2 PASS（约 2.2s），但 full coverage 1/1 FAIL。归类为 BUG-FLAKE-001 的 **auth amplification** 子类：auth login / audit polling（单用例 6 轮 login + 每轮 audit 轮询）在全量 coverage + PG I/O 争用下被放大，无法在 5s 默认 testTimeout 内收敛。该观察**不**证明 auth 业务逻辑错误，也**不允许**通过单点 timeout / skip 掩盖（PR86 诊断矩阵曾误把"maxWorkers=50% 通过"当并行安全证据，本子类不重蹈：standalone PASS ≠ 全量并行/coverage PASS）。归入 BUG-FLAKE-001，不另开 BUG-FLAKE-005。
 - 2026-06-23（**physical-DB-lifecycle 子类**）：`packages/db/src/testWorkerDatabase.test.ts` 的 `ensureDatabaseExists > creates the database if missing, idempotent on second call` 在 `pnpm verify` / coverage 模式下 5000ms timeout（Phase 6A 验证时实测复现：`pnpm verify` 在 `@exam/db test`（`vitest run`，无显式 coverage flag，但 turbo verify 链已跑过 coverage 插桩 + 前序 PG 争用）下击穿 5s）。standalone test 与 standalone coverage 均可通过：`pnpm test:db:lifecycle` standalone 12/12 PASS（约 1.4–1.8s）；standalone coverage 中 `ensureDatabaseExists` 约 2009ms，明显慢于 normal test 下约 627ms。归类为 BUG-FLAKE-001 的 **physical-DB-lifecycle** 子类：`CREATE DATABASE` / migration / truncate 这类 PG lifecycle 操作在 coverage + turbo 交叉任务 PG 争用下更容易击穿默认 5s。该观察**不应**通过专属 timeout 立即掩盖；Phase 6A 仅做 lifecycle command split（`test:db:lifecycle` / `test:db:unit` 拆分），不 skip、不加 timeout、不从 full path 删除。归入 BUG-FLAKE-001，**不另开 BUG-FLAKE-005**；standalone 通过**不**等于根治。
+- 2026-07-20（**WSL2 host-performance 子类**，wide-surface 复发）：在 M10-E typecheck 修复 unblock 后跑 `pnpm verify`（`TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4` + coverage instrumentation），出现大规模 timeout 失败：31 个文件 fail / 13 个测试 fail，全部是 5000ms timeout（`api-smoke.test.ts`、`auth.test.ts` SuperAdmin/ContentManager/ResultViewer login 用例、`examStateMachine.test.ts` auto-open 用例、`@exam/db` 的 `testWorkerDatabase` / `testInfraLock` / `seed` 等）。同代码 standalone / serial 全部通过：
+    - `pnpm --filter @exam/api test`（serial，`fileParallelism:false` 默认）→ **1479/1479 PASS（281s）**，与 Phase 6D 记录的 stable baseline 完全一致。
+    - `pnpm --filter @exam/db exec vitest run --no-file-parallelism` → **231/231 PASS（27.5s）**，连续两次稳定。
+    - 失败的 `testWorkerDatabase.test.ts` / `testInfraLock.test.ts` / `seed.test.ts` standalone 复跑：15/15 PASS（2.72s）、10/10 PASS（2.56s）——同代码、同 DB、同 PG 容器，**仅去掉并行负载即全过**。
+    - **根因假设（host-performance bound，非代码回归）**：本机 WSL2 在 4-worker × v8 coverage × 每 worker 持续 `buildTestApp()`（CREATE SCHEMA → migrate → seed）下，瞬时 I/O 调度无法在 5s testTimeout 内收敛。8 core / 11 GB / load avg 3+；Phase 6D 测得 `pnpm verify` ~281s PASS 的基线是在更安静的本机状态下取得的，本机当前性能更差。**这是 BUG-FLAKE-001 I/O contention + physical-DB-lifecycle 子类的宿主性能放大，不是产品代码 / 测试代码 bug**——M10-E 修复仅触及 testHelpers 类型、E19 测试、migration 0015 guard、openapi.json，全部不影响 runtime 性能。
+    - **不掩盖**：不调长 `api-smoke` / `auth` / `testWorkerDatabase` 单点 timeout，不 skip，不在 CI 默认重跑后通过。serial baseline 已充分证明改动正确性。
+    - **后续动作（用户决定）**：等迁移到 **Linux 实体机**后重跑 `pnpm verify`，确认 parallel+coverage 在真实硬件下是否稳定。若实体机上 parallel `pnpm verify` 连续 N 次 PASS，则本子类可视为 WSL2-only，更新本条目；若仍 fail，则回到 Phase 6G 待 real CI evidence 的既有轨道。在此之前，本机 verify 用 serial baseline（`pnpm --filter api test` + `pnpm --filter db exec vitest run --no-file-parallelism` + `pnpm build` + `pnpm verify:static`）。
 
 ### Stress verification — BUG-FLAKE-001 scanner
 
@@ -1118,6 +1125,47 @@ pnpm --filter @exam/api test -- src/routes/attempts.test.ts -t "deadline scanner
 ## 已诊断并修复的失败（非 flake，留档用于排查复用）
 
 > 本段记录的是**确定性、可复现、已根因修复**的失败，不是"同代码再跑就过"的偶发 flake。登记在此是为了让后人遇到 `GET /api/exams` 500 这类表面相似的症状时，不必重新走一遍排查链路。
+
+### RESOLVED-002 — migration 0015 step 3 stuck-state（SuperAdmin / 非 assignable orphan user 触发 CHECK violation，migration 永久卡死）
+
+**状态**：已修复（2026-07-20，本分支 `feat/rbac-M10-E`）。表面像 BUG-FLAKE-001 family 的 timeout，实为**确定性的 migration 正确性 bug**——只是长期被 `pnpm verify` 在 typecheck 阶段 fail 掩盖，typecheck unblock 后才暴露。
+
+**失败位置**
+
+- 文件：`packages/db/migrations/postgres/0015_crazy_anita_blake.sql` step 3（INSERT backfill orphaned users）
+- 现象：`pnpm verify` 到 coverage 阶段时，`@exam/db` / `@exam/api` 的 worker database 在 `setupWorkerTestDatabase` 的 `migratePostgres` 步骤抛 `PostgresError: new row for relation "user_role_assignments" violates check constraint "user_role_assignments_role_check"`，detail 显示失败行的 `role` 列是 `SuperAdmin`。
+- 受影响 worker database（实测）：`exam_test_w0`（15/16 migrations, 1 non-assignable user）、`exam_test_w3`（15/16, 3）、`exam_test_w11`（15/16, 1）、`exam_test_w75`（15/16, 0 non-assignable，但 primary 多重导致 step 5 index 失败）。这些 DB 进入永久卡死状态：每次 `migratePostgres` 都会重跑 0015 → 都 fail → migration 永不记录为 applied。
+
+**根因（证据驱动）**
+
+1. `user_role_assignments.role` 有 CHECK 约束 `IN ('Admin','Teacher','Proctor','Grader','Candidate')`（`packages/db/src/schema/pg.ts:674-677`）。
+2. `users.role` 列**没有** CHECK 约束（`pg.ts:111`），可持有 `SuperAdmin` / `System` / `ContentManager` / `ResultViewer` 等非 assignable 值——测试 negative fixture（`createUnassignedUserForTest`）和 legacy 数据都用这种"非 assignable sentinel"role。
+3. migration 0015 step 3 的 INSERT backfill 对每个"无 assignment row"的 user，用 `u."role"` 作为新 assignment 的 role。若 `u."role"` 非 assignable → 违反 CHECK → 整个 migration 事务回滚。
+4. **Drizzle 的 `migrate()` 把所有 pending migration 包在一个 transaction 里**（`drizzle-orm/pg-core/dialect.js:60` `await session.transaction(async (tx) => { for ... })`）。一旦某个 statement fail → 整个事务 ROLLBACK → `__drizzle_migrations` 没有记录任何 applied 行 → 下次 `migratePostgres` 重跑同一批 pending migrations → 同样 fail → **infinite stuck**。
+5. 触发条件：测试在 worker database（持久、跨 run 复用）创建 `users.role='SuperAdmin'` 且无 assignment → 下一轮 run 的 `setupWorkerTestDatabase` → `migratePostgres` → step 3 INSERT → CHECK fail → stuck。
+
+**修复（已落地，2026-07-20）**
+
+- `packages/db/migrations/postgres/0015_crazy_anita_blake.sql` step 3 加 `WHERE u."role" IN ('Admin','Teacher','Proctor','Grader','Candidate')` 守卫。非 assignable orphan 被故意跳过：它们没有合法 role 可分配，runtime resolver（`deriveAssignmentAuthority`）本就 fail-closes on "no active primary assignment" → 跳过**保留**了安全不变量，而不是削弱。
+- DROP 4 个卡死的 worker database（`exam_test_w0/w3/w11/w75`）。Worker DB 是 per-worker、disposable，DROP 后下一轮 run 重建即恢复。
+- Drizzle 行为核验（Context7 + 源码）：Drizzle 用 `folderMillis`（timestamp）比较决定是否 run，**不**比较 hash；编辑已 applied 的 migration 文件不会 trigger 重跑，hash mismatch 仅在 v0→v1 upgrade path 才检查。本次编辑对已 applied 的 DB（w1/w2/w4 等 16/16 migrations 的）无影响。
+
+**为什么不是 flake**
+
+- **确定性**：只要 worker DB 里有非 assignable orphan user + migration 0015 未 applied，**必然** fail，不会"再跑就过"。
+- **代码 bug**：migration 0015 step 3 的 INSERT 缺少 role 守卫，是产品迁移逻辑错误，不是 I/O 争用。
+- **生产影响**：这不只是测试 bug——任何升级到 M10-E 且 DB 里有 `users.role` 为非 assignable 值的 orphan user 的部署，都会 stuck migration。修复 migration 是必需的，不只是清理测试。
+
+**排查复用要点**
+
+遇到 `setupWorkerTestDatabase` / `migratePostgres` 抛 `user_role_assignments_role_check` violation：
+
+1. 查 `users` 表里是否有 `role NOT IN ('Admin','Teacher','Proctor','Grader','Candidate')` 的 row：`SELECT role, count(*) FROM users GROUP BY role;`
+2. 查 `__drizzle_migrations` 的 count：`SELECT count(*) FROM drizzle.__drizzle_migrations;`（当前应有 16 条；少于 16 即 stuck）
+3. 若 stuck，DROP 该 worker database 重建；migration 0015 已加守卫，不会再因 orphan user 卡死。
+4. 若在生产 deploy 看到，先清理或 reassign 这些 orphan user（或接受它们保持 no-assignment），再跑 migration。
+
+---
 
 ### RESOLVED-001 — `GET /api/exams` 返回 500 INTERNAL_ERROR（tenant-isolation + 共享 DB 污染 + 缺 nowPlugin）
 

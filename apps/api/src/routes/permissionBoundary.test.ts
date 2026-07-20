@@ -1141,8 +1141,11 @@ describe("permission boundary", () => {
       );
       requireDefined(newAudit, "new login.failure audit row must exist");
       const metadata = newAudit.auditLog.metadata as Record<string, unknown>;
-      expect(metadata.reason).toBe("non_login_role");
-      expect(metadata.role).toBe("System");
+      // RBAC-M10-E: System cannot hold an assignment (not in the assignable
+      // set), so the authority resolver returns no_active_assignments before
+      // the ASSIGNABLE_LOGIN_ROLES check is reached. The audit reason reflects
+      // that — System is still rejected, just via the authority-first path.
+      expect(metadata.reason).toBe("no_active_assignments");
       expect(metadata.username).toBe(username);
     });
   });

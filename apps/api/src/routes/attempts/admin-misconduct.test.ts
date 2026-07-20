@@ -59,11 +59,12 @@ describe("attempt routes", () => {
 
       const passwordHash = await hashPassword("password123");
 
+      const adminId = crypto.randomUUID();
       const admin = (
         await ctx.db
           .insert(schema.users)
           .values({
-            id: crypto.randomUUID(),
+            id: adminId,
             organizationId: org.id,
             username: `admin-${slug}`,
             passwordHash,
@@ -75,12 +76,23 @@ describe("attempt routes", () => {
           })
           .returning()
       )[0]!;
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        userId: adminId,
+        role: "Admin",
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
 
+      const candidateId = crypto.randomUUID();
       const candidate = (
         await ctx.db
           .insert(schema.users)
           .values({
-            id: crypto.randomUUID(),
+            id: candidateId,
             organizationId: org.id,
             username: `candidate-${slug}`,
             passwordHash,
@@ -92,6 +104,16 @@ describe("attempt routes", () => {
           })
           .returning()
       )[0]!;
+      await ctx.db.insert(schema.userRoleAssignments).values({
+        id: crypto.randomUUID(),
+        organizationId: org.id,
+        userId: candidateId,
+        role: "Candidate",
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
 
       const profile = (
         await ctx.db

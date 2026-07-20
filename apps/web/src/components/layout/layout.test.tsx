@@ -1,4 +1,5 @@
 import type { MeResponse } from "@exam/contracts";
+import { permissionsForRole } from "@exam/authz";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
@@ -17,6 +18,7 @@ const admin: MeResponse = {
   username: "admin",
   name: "管理员",
   role: "Admin",
+  capabilities: [...permissionsForRole("Admin")],
 };
 
 const candidate: MeResponse = {
@@ -25,6 +27,7 @@ const candidate: MeResponse = {
   username: "candidate",
   name: "考生",
   role: "Candidate",
+  capabilities: [...permissionsForRole("Candidate")],
 };
 
 const teacher: MeResponse = {
@@ -33,6 +36,7 @@ const teacher: MeResponse = {
   username: "t",
   name: "教师",
   role: "Teacher",
+  capabilities: [...permissionsForRole("Teacher")],
 };
 const grader: MeResponse = {
   ...admin,
@@ -40,6 +44,7 @@ const grader: MeResponse = {
   username: "g",
   name: "评分员",
   role: "Grader",
+  capabilities: [...permissionsForRole("Grader")],
 };
 const proctor: MeResponse = {
   ...admin,
@@ -47,6 +52,32 @@ const proctor: MeResponse = {
   username: "p",
   name: "监考员",
   role: "Proctor",
+  capabilities: [...permissionsForRole("Proctor")],
+};
+
+// Multi-role users: capabilities are the union of both presets.
+const candidateTeacher: MeResponse = {
+  ...admin,
+  id: "d",
+  username: "ct",
+  name: "考生+教师",
+  role: "Candidate",
+  capabilities: [
+    ...permissionsForRole("Candidate"),
+    ...permissionsForRole("Teacher"),
+  ],
+};
+
+const teacherCandidate: MeResponse = {
+  ...admin,
+  id: "e",
+  username: "tc",
+  name: "教师+考生",
+  role: "Teacher",
+  capabilities: [
+    ...permissionsForRole("Teacher"),
+    ...permissionsForRole("Candidate"),
+  ],
 };
 
 function BrandingProbe() {
@@ -374,17 +405,19 @@ describe("layout shells", () => {
     expect(screen.queryByTestId("admin-layout")).not.toBeInTheDocument();
   });
 
-  it("ExamLayout redirects non-Candidate users to login", () => {
+  it("ExamLayout redirects non-ExamTake users with admin console to admin landing", () => {
+    // Admin has no ExamTake but has admin console → redirect to dashboard.
     renderWithProviders(
       <AuthProvider initialUser={admin}>
         <Routes>
           <Route path="/exam/list" element={<ExamLayout />} />
+          <Route path="/admin/dashboard" element={<div>admin dashboard</div>} />
           <Route path="/login" element={<div>login page</div>} />
         </Routes>
       </AuthProvider>,
       "/exam/list",
     );
-    expect(screen.getByText("login page")).toBeInTheDocument();
+    expect(screen.getByText("admin dashboard")).toBeInTheDocument();
   });
 
   it("ExamLayout renders exam layout for Candidate", () => {
@@ -397,5 +430,139 @@ describe("layout shells", () => {
       "/exam/list",
     );
     expect(screen.getByTestId("exam-layout")).toBeInTheDocument();
+  });
+
+  // ── RBAC-M10-E-FRONTEND-MULTI-ROLE-SHELL-CORRECTIVE-1 ──
+
+  it("AdminLayout renders for Teacher (single-role console user)", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={teacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="exams" element={<PlaceholderPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/exams",
+    );
+    expect(screen.getByTestId("admin-layout")).toBeInTheDocument();
+  });
+
+  it("AdminLayout renders for Grader (single-role console user)", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={grader}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="grading-queue" element={<PlaceholderPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/grading-queue",
+    );
+    expect(screen.getByTestId("admin-layout")).toBeInTheDocument();
+  });
+
+  it("AdminLayout renders for Proctor (single-role console user)", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={proctor}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="proctor" element={<PlaceholderPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/proctor",
+    );
+    expect(screen.getByTestId("admin-layout")).toBeInTheDocument();
+  });
+
+  it("AdminLayout redirects pure Candidate to exam list", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={candidate}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="*" element={<PlaceholderPage />} />
+          </Route>
+          <Route path="/exam/list" element={<div>exam list page</div>} />
+          <Route path="/login" element={<div>login page</div>} />
+        </Routes>
+      </AuthProvider>,
+      "/admin/dashboard",
+    );
+    expect(screen.getByText("exam list page")).toBeInTheDocument();
+  });
+
+  it("AdminLayout renders for primary Candidate + secondary Teacher", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={candidateTeacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="exams" element={<PlaceholderPage />} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/exams",
+    );
+    expect(screen.getByTestId("admin-layout")).toBeInTheDocument();
+  });
+
+  it("ExamLayout renders for primary Teacher + secondary Candidate", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={teacherCandidate}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamLayout />} />
+        </Routes>
+      </AuthProvider>,
+      "/exam/list",
+    );
+    expect(screen.getByTestId("exam-layout")).toBeInTheDocument();
+  });
+
+  it("ExamLayout renders for primary Candidate + secondary Teacher", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={candidateTeacher}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamLayout />} />
+        </Routes>
+      </AuthProvider>,
+      "/exam/list",
+    );
+    expect(screen.getByTestId("exam-layout")).toBeInTheDocument();
+  });
+
+  it("AdminLayout redirects user with no capabilities to login", () => {
+    const noCap: MeResponse = {
+      ...admin,
+      capabilities: [],
+    };
+    renderWithProviders(
+      <AuthProvider initialUser={noCap}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="*" element={<PlaceholderPage />} />
+          </Route>
+          <Route path="/login" element={<div>login page</div>} />
+        </Routes>
+      </AuthProvider>,
+      "/admin/dashboard",
+    );
+    expect(screen.getByText("login page")).toBeInTheDocument();
+  });
+
+  it("ExamLayout redirects user with no capabilities to login", () => {
+    const noCap: MeResponse = {
+      ...admin,
+      capabilities: [],
+    };
+    renderWithProviders(
+      <AuthProvider initialUser={noCap}>
+        <Routes>
+          <Route path="/exam/list" element={<ExamLayout />} />
+          <Route path="/login" element={<div>login page</div>} />
+        </Routes>
+      </AuthProvider>,
+      "/exam/list",
+    );
+    expect(screen.getByText("login page")).toBeInTheDocument();
   });
 });

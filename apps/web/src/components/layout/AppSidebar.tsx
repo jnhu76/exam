@@ -57,7 +57,7 @@ interface NavItem {
   to: string;
   icon: LucideIcon;
   end?: boolean;
-  visible?: (user: Pick<MeResponse, "role">) => boolean;
+  visible?: (user: Pick<MeResponse, "role" | "capabilities">) => boolean;
 }
 
 /** A navigation group: the i18n key for its heading + its items. */

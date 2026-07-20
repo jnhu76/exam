@@ -52,6 +52,29 @@ describe("candidate field routes", () => {
         updatedAt: now,
       },
     ]);
+    // RBAC-M10-E: primary active assignments for both test users.
+    await ctx.db.insert(schema.userRoleAssignments).values([
+      {
+        id: crypto.randomUUID(),
+        organizationId,
+        userId: adminId,
+        role: "Admin",
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: crypto.randomUUID(),
+        organizationId,
+        userId: candidateUserId,
+        role: "Candidate",
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
     await ctx.db.insert(schema.candidateProfiles).values({
       id: crypto.randomUUID(),
       organizationId,
@@ -252,6 +275,29 @@ describe("candidate field routes", () => {
         passwordHash: await hashPassword("password123"),
         name: "Candidate Field Delete Test User",
         role: "Candidate",
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    // RBAC-M10-E: primary active assignments for the local test users.
+    await ctx.db.insert(schema.userRoleAssignments).values([
+      {
+        id: crypto.randomUUID(),
+        organizationId: localOrgId,
+        userId: localAdminId,
+        role: "Admin",
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: crypto.randomUUID(),
+        organizationId: localOrgId,
+        userId: localCandidateUserId,
+        role: "Candidate",
+        isPrimary: true,
         isActive: true,
         createdAt: now,
         updatedAt: now,

@@ -70,14 +70,18 @@ function denied(reason: string) {
   return { denied: true, reason };
 }
 
-function presetFrom(map: Record<string, PermissionKey[]>) {
-  return (role: RoleKey, perm: PermissionKey) =>
-    (map[role] ?? []).includes(perm);
+const ROLE_CAPS: Record<string, PermissionKey[]> = {
+  Candidate: [Permission.ExamTake, Permission.AttemptStart],
+};
+
+function capabilitiesFor(role: string): readonly PermissionKey[] {
+  return ROLE_CAPS[role] ?? [];
 }
 
-const CANDIDATE_PRESET = presetFrom({
-  Candidate: [Permission.ExamTake, Permission.AttemptStart],
-});
+/** Request-scoped predicate that reads ctx.capabilities (RBAC-M10-E). */
+function allows(request: FastifyRequest, perm: PermissionKey): boolean {
+  return (request.ctx?.capabilities ?? []).includes(perm);
+}
 
 function makeReq(
   role: string,
@@ -92,6 +96,8 @@ function makeReq(
             actorId,
             organizationId: "org-1",
             role,
+            roles: [role as RoleKey],
+            capabilities: capabilitiesFor(role),
             permissions: [],
             sessionId: "s",
           },
@@ -133,7 +139,7 @@ describe("RBAC-M10-A exam-eligibility capability preHandler", () => {
   const build = (denialMode: EligibilityDenialMode = "resource_not_found") =>
     buildExamEligibilityCapabilityPreHandler({
       db: {} as never,
-      presetAllows: CANDIDATE_PRESET,
+      allows,
     })(Permission.ExamTake, "examId", denialMode);
 
   // ── Allow cases ──

@@ -22,26 +22,27 @@ async function createProctor(
   const username = `e2e-proctor-${stamp}`;
   const password = "proctor123";
   const headers = { Cookie: `auth-token=${adminToken}` };
+  // Create the user directly with role "Proctor". The POST /users route
+  // creates the user AND its primary active assignment in ONE transaction
+  // (RBAC-M10-E), so the resulting user has exactly ONE active assignment
+  // (Proctor). Do NOT layer a secondary Teacher assignment on top — under
+  // M10-E the runtime authority is the UNION of every active assignment, so
+  // a Teacher+Proctor user would inherit Teacher's QuestionView and the
+  // forbidden-nav assertion below would correctly fail (题目管理 would
+  // appear). A pure Proctor user has only Proctor's preset (ExamRoomView +
+  // Attempt*View/Mark/Extend/ForceSubmit), which excludes QuestionView,
+  // CourseView, ExamView, ScoreAllView, and every management perm — exactly
+  // what the forbidden-nav list asserts.
   const createResponse = await request.post(`${BASE_URL}/api/users`, {
     headers,
     data: {
       username,
       password,
       name: `E2E Proctor ${stamp}`,
-      role: "Teacher",
+      role: "Proctor",
     },
   });
   expect(createResponse.status()).toBe(201);
-  const created = (await createResponse.json()) as { id: string };
-
-  const assignmentResponse = await request.post(
-    `${BASE_URL}/api/users/${created.id}/role-assignments`,
-    {
-      headers,
-      data: { role: "Proctor", isPrimary: true },
-    },
-  );
-  expect(assignmentResponse.status()).toBe(201);
   return { username, password };
 }
 

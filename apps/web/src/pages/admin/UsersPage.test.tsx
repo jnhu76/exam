@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { UsersPage } from "./UsersPage";
+import { permissionsForRole } from "@exam/authz";
 
 const { apiGet, apiPost, apiPatch } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -46,6 +47,7 @@ function renderPage() {
           name: "Admin",
           role: "Admin",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Admin")],
         }}
       >
         <BrandProvider>

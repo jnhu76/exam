@@ -15,6 +15,7 @@ import { NotFoundError } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { recordAudit } from "./audit.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
+import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -219,10 +220,30 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         };
       }
       if (data.isActive === false) {
-        const deactivated = await assignmentRepo.deactivate(ctx, assignmentId);
-        if (!deactivated) throw new NotFoundError("role assignment");
-        if (deactivated.isPrimary) {
-          await syncUsersRoleFromPrimary(fastify.db, ctx, deactivated.userId);
+        const targetAssignment = await assignmentRepo.findById(
+          ctx,
+          assignmentId,
+        );
+        if (!targetAssignment) throw new NotFoundError("role assignment");
+
+        const deactivated = await mutateWithEffectiveAdminPostcondition(
+          fastify.db,
+          ctx,
+          async (tx) => {
+            const txRepo = createUserRoleAssignmentRepo(tx);
+            const result = await txRepo.deactivateWithinTransaction(
+              tx,
+              ctx,
+              assignmentId,
+            );
+            if (result?.isPrimary) {
+              await syncUsersRoleFromPrimary(tx, ctx, result.userId);
+            }
+            return result;
+          },
+        );
+
+        if (deactivated?.isPrimary) {
           const userRepo = createUserRepo(fastify.db);
           const user = await userRepo.findById(ctx, deactivated.userId);
           recordAudit(
@@ -246,21 +267,21 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
             ctx,
             "user.role_changed",
             "user",
-            deactivated.userId,
+            deactivated!.userId,
             {
               assignmentDeactivated: true,
-              role: deactivated.role,
+              role: deactivated!.role,
               isPrimary: false,
-              assignmentId: deactivated.id,
+              assignmentId: deactivated!.id,
             },
           );
         }
         return {
-          id: deactivated.id,
-          userId: deactivated.userId,
-          role: deactivated.role,
-          isPrimary: deactivated.isPrimary,
-          isActive: deactivated.isActive,
+          id: deactivated!.id,
+          userId: deactivated!.userId,
+          role: deactivated!.role,
+          isPrimary: deactivated!.isPrimary,
+          isActive: deactivated!.isActive,
         };
       }
       // No-op patch (neither isPrimary nor isActive=false given): return as-is.
@@ -287,13 +308,27 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { assignmentId } = request.params as { assignmentId: string };
       const assignmentRepo = createUserRoleAssignmentRepo(fastify.db);
-      // remove() returns the deleted row + auto-promotes the next active if the
-      // removed one was primary. Re-sync users.role so the cache matches.
-      const removed = await assignmentRepo.remove(ctx, assignmentId);
-      if (!removed) throw new NotFoundError("role assignment");
-      if (removed.isPrimary) {
-        await syncUsersRoleFromPrimary(fastify.db, ctx, removed.userId);
-      }
+
+      const targetAssignment = await assignmentRepo.findById(ctx, assignmentId);
+      if (!targetAssignment) throw new NotFoundError("role assignment");
+
+      const removed = await mutateWithEffectiveAdminPostcondition(
+        fastify.db,
+        ctx,
+        async (tx) => {
+          const txRepo = createUserRoleAssignmentRepo(tx);
+          const result = await txRepo.removeWithinTransaction(
+            tx,
+            ctx,
+            assignmentId,
+          );
+          if (result?.isPrimary) {
+            await syncUsersRoleFromPrimary(tx, ctx, result.userId);
+          }
+          return result;
+        },
+      );
+
       recordAudit(
         fastify,
         request,
@@ -301,7 +336,7 @@ const roleAssignmentRoutes: FastifyPluginAsync = async (fastify) => {
         "user.role_changed",
         "role_assignment",
         assignmentId,
-        { removed: true, affectedUserId: removed.userId },
+        { removed: true, affectedUserId: removed!.userId },
       );
       return reply.code(204).send();
     },

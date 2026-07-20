@@ -64,6 +64,33 @@ describe("audit log baseline (S06-lite)", () => {
       role: "Candidate",
       organizationId: orgId,
     });
+
+    // RBAC-M10-E: every authenticated request resolves authority from ACTIVE
+    // user_role_assignments. Seed one active primary assignment per test user
+    // so authenticate grants the role's preset (audit endpoints are gated by
+    // capability). Without these rows both users collapse to 401 AUTH_REQUIRED.
+    await ctx.db.insert(schema.userRoleAssignments).values([
+      {
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        userId: adminId,
+        role: "Admin" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: crypto.randomUUID(),
+        organizationId: orgId,
+        userId: candidateId,
+        role: "Candidate" as never,
+        isPrimary: true,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
   });
 
   afterAll(async () => {

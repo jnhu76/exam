@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { TakeExamPage } from "./TakeExamPage";
 import type { CandidateTakeSnapshot } from "@exam/contracts";
+import { permissionsForRole } from "@exam/authz";
 
 /**
  * P3-FSM-0 integration tests — authoritative CandidateTakeSnapshot read path.
@@ -97,6 +98,7 @@ function renderPage() {
           name: "Candidate",
           role: "Candidate",
           organizationId: "org1",
+          capabilities: [...permissionsForRole("Candidate")],
         }}
       >
         <BrandProvider>

@@ -3,8 +3,18 @@ import {
   shadowRequireCapability,
   type ShadowLogger,
   type ShadowInput,
+  type ShadowContext,
 } from "./shadow.js";
 import { Permission, Role, type PermissionKey } from "@exam/authz";
+
+/**
+ * RBAC-M10-E shadow tests. Post-flip semantics:
+ *   - ShadowContext carries `capabilities` (the authoritative assignment union),
+ *     NOT the legacy `permissions` array.
+ *   - `decision` mirrors `capabilityAllowed` (production follows capability).
+ *   - A mismatch means `users.role` is stale relative to the assignment table;
+ *     shadow records it but never alters a production request (advisory only).
+ */
 
 // A collecting logger so tests can assert what shadow recorded without pino.
 function makeLogger(): ShadowLogger & { records: unknown[] } {
@@ -18,19 +28,19 @@ function makeLogger(): ShadowLogger & { records: unknown[] } {
   };
 }
 
-const adminCtx = {
+const adminCtx: ShadowContext = {
   actorId: "admin-1",
   role: Role.Admin,
-  permissions: ["attempt.force_submit"] as PermissionKey[],
+  capabilities: ["attempt.force_submit"] as PermissionKey[],
 };
-const candidateCtx = {
+const candidateCtx: ShadowContext = {
   actorId: "cand-1",
   role: Role.Candidate,
-  permissions: [] as PermissionKey[],
+  capabilities: [],
 };
 
-describe("RBAC-M5 shadow mode — legacy stays authoritative", () => {
-  it("returns the LEGACY decision (never the capability one)", () => {
+describe("RBAC-M10-E shadow mode — decision follows capability (authoritative)", () => {
+  it("returns the CAPABILITY decision (allow when the capability set holds the perm)", () => {
     const log = makeLogger();
     const input: ShadowInput = {
       route: "POST /admin/attempts/:attemptId/force-submit",
@@ -39,12 +49,14 @@ describe("RBAC-M5 shadow mode — legacy stays authoritative", () => {
       permission: Permission.AttemptForceSubmit,
       resource: { type: "attempt", id: "att-1" },
     };
-    // Admin passes legacy gate -> shadow returns allow.
-    expect(shadowRequireCapability(input, log).legacyAllowed).toBe(true);
-    expect(shadowRequireCapability(input, log).decision).toBe("allow");
+    // Admin passes the legacy gate AND holds the capability -> allow.
+    const r = shadowRequireCapability(input, log);
+    expect(r.legacyAllowed).toBe(true);
+    expect(r.capabilityAllowed).toBe(true);
+    expect(r.decision).toBe("allow");
   });
 
-  it("denies when legacy denies (Candidate hitting Admin route)", () => {
+  it("denies when capability denies (Candidate hitting Admin route)", () => {
     const log = makeLogger();
     const input: ShadowInput = {
       route: "POST /admin/attempts/:attemptId/force-submit",
@@ -55,37 +67,62 @@ describe("RBAC-M5 shadow mode — legacy stays authoritative", () => {
     };
     const r = shadowRequireCapability(input, log);
     expect(r.legacyAllowed).toBe(false);
+    expect(r.capabilityAllowed).toBe(false);
     expect(r.decision).toBe("deny");
   });
 });
 
-describe("RBAC-M5 shadow mode — records disagreement but never blocks", () => {
-  it("logs a mismatch (legacy allow + capability deny) but still returns the legacy allow", () => {
+describe("RBAC-M10-E shadow mode — records drift but never blocks", () => {
+  it("logs a mismatch (legacy allow + capability deny) and decision follows capability", () => {
     const log = makeLogger();
-    // Force a real matrix mismatch: Admin passes the legacy ["Admin"] gate,
-    // but a System-only permission is not in the Admin preset -> capability
-    // denies. (Admin is a superset of all Admin-route perms, so the only way
-    // to construct legacy-allow + capability-deny is a System-only perm —
-    // which is exactly the kind of matrix bug shadow exists to catch.)
-    const ctx = {
+    // Construct the canonical M10-E drift case: users.role = Admin (legacy
+    // projection) but the assignment table says Candidate (the authoritative
+    // capability set holds no admin perm). Shadow records the mismatch;
+    // production would follow the capability side.
+    const ctx: ShadowContext = {
       actorId: "admin-1",
       role: Role.Admin,
-      permissions: [] as PermissionKey[],
+      capabilities: [],
     };
     const input: ShadowInput = {
       route: "POST /admin/attempts/:attemptId/force-submit",
       ctx,
       legacyGate: ["Admin"],
-      permission: Permission.SystemAutoSubmit,
+      permission: Permission.AttemptForceSubmit,
       resource: { type: "attempt", id: "att-1" },
     };
     const r = shadowRequireCapability(input, log);
-    // Legacy authoritative -> allow, even though capability disagrees.
     expect(r.legacyAllowed).toBe(true);
     expect(r.capabilityAllowed).toBe(false);
-    expect(r.decision).toBe("allow");
+    // Decision follows capability (authoritative post-M10-E).
+    expect(r.decision).toBe("deny");
     // A mismatch was recorded as a warning.
     expect(log.records.length).toBeGreaterThan(0);
+    const mismatchRecord = log.records.find(
+      (rec) => (rec as { decision?: string }).decision === "mismatch",
+    );
+    expect(mismatchRecord).toBeDefined();
+  });
+
+  it("logs the reverse drift (legacy deny + capability allow)", () => {
+    const log = makeLogger();
+    // users.role = Candidate but assignment table granted Admin perms.
+    const ctx: ShadowContext = {
+      actorId: "admin-1",
+      role: Role.Candidate,
+      capabilities: ["attempt.force_submit"] as PermissionKey[],
+    };
+    const input: ShadowInput = {
+      route: "POST /admin/attempts/:attemptId/force-submit",
+      ctx,
+      legacyGate: ["Admin"],
+      permission: Permission.AttemptForceSubmit,
+      resource: { type: "attempt", id: "att-1" },
+    };
+    const r = shadowRequireCapability(input, log);
+    expect(r.legacyAllowed).toBe(false);
+    expect(r.capabilityAllowed).toBe(true);
+    expect(r.decision).toBe("allow");
     const mismatchRecord = log.records.find(
       (rec) => (rec as { decision?: string }).decision === "mismatch",
     );
@@ -96,16 +133,16 @@ describe("RBAC-M5 shadow mode — records disagreement but never blocks", () => 
     const log = makeLogger();
     const input: ShadowInput = {
       route: "POST /admin/attempts/:attemptId/force-submit",
-      ctx: { actorId: "x", role: Role.Admin, permissions: [] as never },
+      ctx: { actorId: "x", role: Role.Admin, capabilities: [] },
       legacyGate: ["Admin"],
-      permission: Permission.SystemAutoSubmit,
+      permission: Permission.AttemptForceSubmit,
       resource: { type: "attempt", id: "att-1" },
     };
     expect(() => shadowRequireCapability(input, log)).not.toThrow();
   });
 });
 
-describe("RBAC-M5 shadow mode — sensitive resource logging hygiene (ADR §10.6/§3.8)", () => {
+describe("RBAC-M10-E shadow mode — sensitive resource logging hygiene (ADR §10.6/§3.8)", () => {
   it("records resource type + opaque id hash, never the resource payload", () => {
     const log = makeLogger();
     const input: ShadowInput = {
@@ -125,10 +162,9 @@ describe("RBAC-M5 shadow mode — sensitive resource logging hygiene (ADR §10.6
   });
 });
 
-describe("RBAC-M5 shadow mode — never crashes on missing/loose inputs (ADR §10.3)", () => {
+describe("RBAC-M10-E shadow mode — never crashes on missing/loose inputs (ADR §10.3)", () => {
   // Shadow mode MUST NEVER throw or alter a production request, even when a
-  // legacy caller passes a missing resource id or omits permissions. These are
-  // the Gemini-code-assist regression guards.
+  // caller passes a missing resource id or an empty capability set.
 
   it("does not throw when resource.id is undefined (system-scope / no-id route)", () => {
     const log = makeLogger();
@@ -143,12 +179,12 @@ describe("RBAC-M5 shadow mode — never crashes on missing/loose inputs (ADR §1
     expect(log.records.length).toBeGreaterThan(0);
   });
 
-  it("does not throw when ctx.permissions is missing (legacy caller)", () => {
+  it("does not throw when capabilities is empty (capability deny, no fallback)", () => {
     const log = makeLogger();
-    const ctx = {
+    const ctx: ShadowContext = {
       actorId: "admin-1",
       role: Role.Admin,
-      permissions: undefined as never,
+      capabilities: [],
     };
     const input: ShadowInput = {
       route: "POST /admin/attempts/:attemptId/force-submit",
@@ -157,18 +193,11 @@ describe("RBAC-M5 shadow mode — never crashes on missing/loose inputs (ADR §1
       permission: Permission.AttemptForceSubmit,
       resource: { type: "attempt", id: "att-1" },
     };
-    // Admin preset already holds attempt.force_submit, so capability is true
-    // via the preset branch and the missing-permissions fallback is never hit;
-    // but a System-only perm (not in Admin preset) forces the fallback path.
-    const inputFallback: ShadowInput = {
-      ...input,
-      permission: Permission.SystemAutoSubmit,
-    };
-    expect(() => shadowRequireCapability(inputFallback, log)).not.toThrow();
-    const r = shadowRequireCapability(inputFallback, log);
-    // Legacy (Admin gate) allows; capability (System-only perm, no perms array)
-    // denies -> mismatch recorded, but no throw, decision stays legacy-allow.
-    expect(r.decision).toBe("allow");
+    // Empty capability set -> capability denies; legacy (Admin gate) allows ->
+    // mismatch recorded, but no throw, decision follows capability (deny).
+    expect(() => shadowRequireCapability(input, log)).not.toThrow();
+    const r = shadowRequireCapability(input, log);
     expect(r.capabilityAllowed).toBe(false);
+    expect(r.decision).toBe("deny");
   });
 });

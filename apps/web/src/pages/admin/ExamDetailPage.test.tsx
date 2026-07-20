@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrandProvider } from "@/components/layout/BrandProvider";
 import { ExamDetailPage } from "./ExamDetailPage";
+import { permissionsForRole } from "@exam/authz";
 
 vi.mock("@/lib/api", () => ({
   api: {
@@ -55,6 +56,7 @@ function renderPage(role: "Admin" | "Teacher" = "Admin") {
           name: "Admin",
           role,
           organizationId: "org1",
+          capabilities: [...permissionsForRole(role)],
         }}
       >
         <BrandProvider>

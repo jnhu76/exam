@@ -16,6 +16,22 @@ CREATE UNIQUE INDEX "user_role_assignments_org_user_role_unique" ON "user_role_a
 -- RBAC-M7 backfill: mirror every existing user into a primary active
 -- assignment so users.role and the new table agree after migration. Runs once
 -- (migrations are single-applied). gen_random_uuid() is core (PG13+, no ext).
+--
+-- The WHERE guard skips users whose users.role is outside the assignable set
+-- (SuperAdmin, System, ContentManager, ResultViewer). The users.role column has
+-- no CHECK constraint (it is plain text), so it can hold non-assignable values
+-- used by tests and legacy data as non-login / non-authority sentinels.
+-- Backfilling such a row with its own role would violate
+-- user_role_assignments_role_check, abort the migration's transaction, and
+-- leave the DB permanently stuck (Drizzle wraps all pending migrations in one
+-- transaction; a failed migration is never recorded as applied and is retried
+-- every run). Non-assignable users are deliberately skipped: they have no valid
+-- role to assign, and the runtime resolver already fail-closes on any user
+-- without an active primary assignment, so skipping them preserves the
+-- security invariant instead of weakening it.
+-- BEGIN 0011_BACKFILL_ASSIGNMENTS
 INSERT INTO "user_role_assignments" ("id", "organization_id", "user_id", "role", "is_primary", "is_active", "created_at", "updated_at")
 SELECT gen_random_uuid()::text, "organization_id", "id", "role", true, "is_active", now(), now()
-FROM "users";
+FROM "users"
+WHERE "role" IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate');
+-- END 0011_BACKFILL_ASSIGNMENTS

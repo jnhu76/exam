@@ -1,5 +1,9 @@
 import type { Database } from "../types.js";
-import { users } from "../schema/pg.js";
+import {
+  users,
+  userRoleAssignments,
+  type AssignableRole,
+} from "../schema/pg.js";
 import {
   createAsyncTenantCrudRepo,
   resolveOptionalOrganizationId,
@@ -7,7 +11,7 @@ import {
 } from "./baseRepo.js";
 import type { TenantContext } from "../types.js";
 import { UserAlreadyExistsError, type RequestContext } from "@exam/domain";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, eq, exists, inArray, sql } from "drizzle-orm";
 
 /** Extracts the PostgreSQL constraint name from an error object. */
 function getConstraintName(err: unknown): string | undefined {
@@ -115,6 +119,47 @@ export function createUserRepo(db: Database) {
           ),
         );
       return rows.length;
+    },
+    /**
+     * Counts active users who hold ANY ACTIVE role assignment of the given
+     * role, scoped to the tenant (RBAC-M10-E effective authority).
+     *
+     * A user is counted iff:
+     *   - their `users` row is active, AND
+     *   - they have at least one assignment row with `role = <role>` and
+     *     `is_active = true` under the same org anchor.
+     *
+     * Uses an EXISTS subquery so the count is not inflated by multiple
+     * assignments per user.
+     */
+    async countEffectiveActiveUsersWithRole(
+      ctx: TenantContext | RequestContext,
+      role: AssignableRole,
+    ): Promise<number> {
+      const orgId = resolveOrganizationId(ctx);
+      const rows = await db
+        .select({ cnt: count() })
+        .from(users)
+        .where(
+          and(
+            eq(users.organizationId, orgId),
+            eq(users.isActive, true),
+            exists(
+              db
+                .select({ one: sql`1` })
+                .from(userRoleAssignments)
+                .where(
+                  and(
+                    eq(userRoleAssignments.organizationId, orgId),
+                    eq(userRoleAssignments.userId, users.id),
+                    eq(userRoleAssignments.role, role),
+                    eq(userRoleAssignments.isActive, true),
+                  ),
+                ),
+            ),
+          ),
+        );
+      return Number(rows[0]?.cnt ?? 0);
     },
     /**
      * Creates a user with a pre-check for username uniqueness. Throws

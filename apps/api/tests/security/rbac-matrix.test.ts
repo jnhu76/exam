@@ -86,6 +86,20 @@ describe("RBAC Permission Matrix (S02)", () => {
       createdAt: now,
       updatedAt: now,
     });
+    // RBAC-M10-E: authenticate resolves authority from ACTIVE
+    // user_role_assignments. The seeded admin/candidate come assignment-complete
+    // via seed(); the manually-inserted admin here needs the same primary
+    // assignment or it collapses to 401 AUTH_REQUIRED (no authority).
+    await db.insert(schema.userRoleAssignments).values({
+      id: randomUUID(),
+      organizationId: org.id,
+      userId: adminId,
+      role: "Admin" as never,
+      isPrimary: true,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     adminToken = signJWT({
       actorId: adminId,
@@ -187,8 +201,13 @@ describe("RBAC Permission Matrix (S02)", () => {
     });
   });
 
-  describe("AC7: ctx.permissions is populated", () => {
-    it("authenticated user has non-empty permissions", async () => {
+  describe("AC7: ctx.capabilities is populated (RBAC-M10-E)", () => {
+    it("authenticated user has non-empty capabilities", async () => {
+      // RBAC-M10-E: the authoritative runtime authority field is
+      // `ctx.capabilities` (the union of every active role assignment's
+      // preset, resolved from user_role_assignments). The legacy
+      // `ctx.permissions` slot is intentionally empty post-flip — it is no
+      // longer the authority surface.
       const res = await app.inject({
         method: "GET",
         url: "/api/auth/me",
@@ -196,8 +215,8 @@ describe("RBAC Permission Matrix (S02)", () => {
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
-      const permissions = body.ctx.permissions as Permission[];
-      expect(permissions.length).toBeGreaterThan(0);
+      const capabilities = body.ctx.capabilities as Permission[];
+      expect(capabilities.length).toBeGreaterThan(0);
     });
   });
 });

@@ -12,6 +12,7 @@ import { PaginationParamsSchema } from "@exam/contracts";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
+import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -276,6 +277,19 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             role: "Candidate" as const,
             isActive: true,
           });
+          // RBAC-M10-E: a candidate created here MUST get a primary active
+          // Candidate assignment in the SAME transaction, or the M10-E flip
+          // would leave the new candidate with no authority row (locked out).
+          await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+            tx,
+            ctx,
+            {
+              userId: user.id,
+              role: "Candidate",
+              isPrimary: true,
+              isActive: true,
+            },
+          );
           return txCandidateRepo.create(ctx, {
             userId: user.id,
             fields: data.fields,
@@ -508,20 +522,40 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           const passwordHash = await hashPassword(password);
-          const user = await userRepo.createUnique(ctx, {
-            username,
-            passwordHash,
-            name,
-            role: "Candidate" as const,
-            isActive: true,
-          });
+          // RBAC-M10-E: create user + primary Candidate assignment +
+          // candidate profile in ONE per-row transaction. A failure in any of
+          // the three rolls back all three for THIS row only; other rows are
+          // unaffected. The catch below records the row-level import error.
+          const candidate = await executeInTransaction(
+            fastify.db,
+            async (tx) => {
+              const txUserRepo = createUserRepo(tx);
+              const txCandidateRepo = createCandidateRepo(tx);
+              const createdUser = await txUserRepo.createUnique(ctx, {
+                username,
+                passwordHash,
+                name,
+                role: "Candidate" as const,
+                isActive: true,
+              });
+              await createUserRoleAssignmentRepo(tx).assignWithinTransaction(
+                tx,
+                ctx,
+                {
+                  userId: createdUser.id,
+                  role: "Candidate",
+                  isPrimary: true,
+                  isActive: true,
+                },
+              );
+              return txCandidateRepo.create(ctx, {
+                userId: createdUser.id,
+                fields,
+              });
+            },
+          );
           existingUsernames.add(username);
-          userIdMap.set(username, user.id);
-
-          const candidate = await candidateRepo.create(ctx, {
-            userId: user.id,
-            fields,
-          });
+          userIdMap.set(username, candidate.userId);
           allCandidates.push(candidate);
           created++;
         } catch (err) {

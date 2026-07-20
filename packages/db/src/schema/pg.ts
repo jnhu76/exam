@@ -637,11 +637,12 @@ export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
  * rows per organization, exactly one of which is the primary active role.
  * `users.role` is kept in sync with the primary active assignment during the
  * migration window (ADR § compatibility cache). The primary-uniqueness rule
- * (≤1 primary active per user/org) is enforced at the application layer
- * (userRoleAssignmentRepo, transactional) because a partial unique index on
- * `(organization_id, user_id) WHERE is_primary AND is_active` is awkward to
- * express declaratively in Drizzle; the table-level check constrains `role`
- * to the assignable set as a direct-write guard.
+ * (≤1 primary active per user/org) is enforced BOTH at the application layer
+ * (userRoleAssignmentRepo `assign` / `assignWithinTransaction` /
+ * `ensurePrimaryAssignment` transactional demotion) AND by the
+ * `user_role_assignments_active_primary_unique` partial unique index, which
+ * the runtime resolver (RBAC-M10-E) also fail-closes on. The table-level
+ * check constrains `role` to the assignable set as a direct-write guard.
  */
 export const userRoleAssignments = pgTable(
   "user_role_assignments",
@@ -663,6 +664,13 @@ export const userRoleAssignments = pgTable(
       table.userId,
       table.role,
     ),
+    // RBAC-M10-E: DB-level backstop for the ≤1 active-primary-per-(org,user)
+    // invariant. The app layer demotes prior primaries transactionally; this
+    // partial unique index makes concurrent-insert corruption reject at the DB
+    // (23505) rather than only fail-closed in the resolver.
+    uniqueIndex("user_role_assignments_active_primary_unique")
+      .on(table.organizationId, table.userId)
+      .where(sql`is_primary = true AND is_active = true`),
     check(
       "user_role_assignments_role_check",
       sql`${table.role} IN ('Admin', 'Teacher', 'Proctor', 'Grader', 'Candidate')`,

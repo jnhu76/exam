@@ -18,12 +18,7 @@
  */
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
-import {
-  type PermissionKey,
-  type ResourceResolverKey,
-  type RoleKey,
-} from "@exam/authz";
-import { presetAllows } from "../lib/presetCache.js";
+import { type PermissionKey, type ResourceResolverKey } from "@exam/authz";
 import {
   buildScopedCapabilityPreHandler,
   type ResolverRegistry,
@@ -38,6 +33,21 @@ import { buildExamEligibilityCapabilityPreHandler } from "../authz/examEligibili
 import { buildOwnAttemptCapabilityPreHandler } from "../authz/ownAttemptCapability.js";
 import type { AuthzPreHandler } from "../types/fastify-auth.d.js";
 import type { EligibilityDenialMode } from "../types/fastify-auth.d.js";
+
+/**
+ * The single capability predicate every resource-aware gate uses
+ * (RBAC-M10-E). Reads the authoritative `ctx.capabilities` union resolved at
+ * authenticate time from `user_role_assignments` — NOT a role preset lookup.
+ * Centralizing it here means every scoped / candidate / score gate switches
+ * authority in lockstep with {@link requireCapability}.
+ */
+function ctxAllows(
+  request: FastifyRequest,
+  permission: PermissionKey,
+): boolean {
+  const ctx = request.ctx;
+  return !!ctx && ctx.capabilities.includes(permission);
+}
 
 const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Resolver registry: one DB-backed resolver per resource family the flipped
@@ -63,11 +73,8 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
         resolverKey,
         resourceIdKey,
         resolvers,
-        presetAllows: (request: FastifyRequest, perm: PermissionKey) => {
-          const ctx = request.ctx;
-          if (!ctx) return false;
-          return presetAllows(ctx.role as RoleKey, perm);
-        },
+        presetAllows: (request: FastifyRequest, perm: PermissionKey) =>
+          ctxAllows(request, perm),
       });
       const preHandler: AuthzPreHandler = (request, reply) =>
         handler(request, reply);
@@ -83,12 +90,14 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
 
   // Score-route capability gate (RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1).
   // Capability + ownership arbitration for `GET /scores/attempts/:attemptId`.
-  // Own/all is resolved from the role preset (ScoreAllView / ScoreOwnView) plus
-  // the resolved attempt ownership — never from a role-name branch.
+  // Own/all is resolved from the actor's capability set (ScoreAllView /
+  // ScoreOwnView) plus the resolved attempt ownership — never from a role-name
+  // branch. Emits request.scoreView for the publication handler (P1-4).
   const scoreHandler = buildScoreCapabilityPreHandler({
     db: fastify.db,
     logger: fastify.log,
-    presetAllows,
+    allows: (request: FastifyRequest, perm: PermissionKey) =>
+      ctxAllows(request, perm),
   });
   fastify.decorate("requireScoreCapability", () => {
     return (request: FastifyRequest, reply: FastifyReply) =>
@@ -99,7 +108,7 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   // Preset-only gate for `GET /candidate/exams`; the handler scopes the list to
   // the candidate profile (defense-in-depth, directive §6.6). No DB resolver.
   const candidateContextHandler = buildCandidateContextCapabilityPreHandler(
-    (role: RoleKey, perm: PermissionKey) => presetAllows(role, perm),
+    (request: FastifyRequest, perm: PermissionKey) => ctxAllows(request, perm),
   );
   fastify.decorate("requireCandidateContext", (permission: PermissionKey) => {
     const handler = candidateContextHandler(permission);
@@ -116,7 +125,8 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   const examEligibilityHandler = buildExamEligibilityCapabilityPreHandler({
     db: fastify.db,
     logger: fastify.log,
-    presetAllows,
+    allows: (request: FastifyRequest, perm: PermissionKey) =>
+      ctxAllows(request, perm),
   });
   fastify.decorate(
     "requireExamEligibility",
@@ -150,7 +160,8 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
   const ownAttemptHandler = buildOwnAttemptCapabilityPreHandler({
     db: fastify.db,
     logger: fastify.log,
-    presetAllows,
+    allows: (request: FastifyRequest, perm: PermissionKey) =>
+      ctxAllows(request, perm),
   });
   fastify.decorate(
     "requireOwnAttempt",
