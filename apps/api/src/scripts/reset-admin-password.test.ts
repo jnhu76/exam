@@ -32,10 +32,11 @@ async function insertUser(
   username: string,
   password: string,
 ) {
+  const userId = crypto.randomUUID();
   const rows = await db
     .insert(schema.users)
     .values({
-      id: crypto.randomUUID(),
+      id: userId,
       organizationId: orgId,
       username,
       passwordHash: await hashPassword(password),
@@ -46,6 +47,20 @@ async function insertUser(
       updatedAt: new Date(),
     })
     .returning();
+  // RBAC-M10-E: a user's authority comes from active assignments, not the
+  // users.role compatibility projection. The reset-admin script now checks
+  // effective Admin via assignments, so the fixture must seed an active
+  // primary assignment for the user to be a valid target.
+  await db.insert(schema.userRoleAssignments).values({
+    id: crypto.randomUUID(),
+    organizationId: orgId,
+    userId,
+    role: role as never,
+    isPrimary: true,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
   return rows[0]!;
 }
 

@@ -124,7 +124,21 @@ export function buildAuthPlugin(
         permissions: [] as Permission[],
         sessionId: "",
       };
-      const authority = await loadAuthority(fastify.db, lookupCtx, user.id);
+      let authority: Awaited<ReturnType<LoadAssignmentAuthorityFn>>;
+      try {
+        authority = await loadAuthority(fastify.db, lookupCtx, user.id);
+      } catch (err) {
+        // The loader threw (unexpected failure). Treat identically to an
+        // operational / integrity failure: 503, never masquerade as 401,
+        // never fall back to users.role (E14 / P1-3 / ADR §3.9).
+        fastify.log.error(
+          { err, actorId: user.id },
+          "authenticate: assignment authority loader threw — fail closed",
+        );
+        return reply
+          .code(503)
+          .send(buildErrorResponse(request.id, "AUTHZ_UNAVAILABLE"));
+      }
       if (!authority.ok) {
         // 401: the actor is genuinely not authorized (no active assignment).
         // 503: an operational / integrity failure — never masquerade as auth

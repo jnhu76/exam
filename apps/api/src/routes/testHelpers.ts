@@ -16,6 +16,7 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import { schema, type AssignableRole } from "@exam/db/src/schema/pg.js";
+import { sql } from "drizzle-orm";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
@@ -67,16 +68,34 @@ import {
  */
 let workerDbTruncated = false;
 
-/** Role constants for future roles not yet active in Phase 1 (Teacher, Proctor, Grader, etc.). */
-export const LEGACY_ROLES = [
+/**
+ * Roles that exist in the broader Phase 3 vocabulary but are not assignable
+ * through the Phase 1 role-assignment surface. Used for negative fixtures that
+ * prove users.role is not authority.
+ */
+export const UNSUPPORTED_ROLES = [
   "SuperAdmin",
-  "Teacher",
-  "Proctor",
-  "Grader",
   "ContentManager",
   "ResultViewer",
 ] as const;
-/** Union type of the legacy role string literals. */
+/** Union type of unsupported role string literals. */
+export type UnsupportedRole = (typeof UNSUPPORTED_ROLES)[number];
+
+/**
+ * @deprecated Kept only while old call sites migrate. Mixes assignable and
+ * unsupported roles, which obscures fixture intent. Prefer
+ * {@link createUnassignedAssignableUserForTest} or
+ * {@link createUnsupportedRoleUserForTest}.
+ */
+export const LEGACY_ROLES = [
+  ...UNSUPPORTED_ROLES,
+  "Teacher",
+  "Proctor",
+  "Grader",
+] as const;
+/**
+ * @deprecated Use AssignableRole or UnsupportedRole explicitly.
+ */
 export type LegacyRole = (typeof LEGACY_ROLES)[number];
 
 let _counter = 0;
@@ -388,12 +407,8 @@ export async function createAssignedUserForTest(
 }
 
 /**
- * Creates a user with a future/legacy role (e.g. Teacher, Proctor) for
- * testing role-gated endpoints. Returns the user row and a signed JWT token.
- *
- * Delegates to {@link createAssignedUserForTest} so the user is
- * assignment-complete (RBAC-M10-E: a user without an assignment is locked
- * out post-flip).
+ * @deprecated Alias for {@link createAssignedUserForTest}. Replace callers
+ * with createAssignedUserForTest(role) and remove this helper.
  */
 export async function createFutureRoleUserForTest(
   db: Database,
@@ -405,15 +420,14 @@ export async function createFutureRoleUserForTest(
 }
 
 /**
- * Creates a user row WITHOUT any role assignment — the canonical negative
- * fixture for "no active assignment" tests (E10 / E13). The returned token
- * authenticates the identity but the actor has NO authority, so any
- * capability gate / login attempt fails closed.
+ * Creates a user row with an assignable role but WITHOUT any role assignment.
+ * Use this for "no active assignment" tests where the compatibility
+ * projection itself is a legitimate assignable role.
  */
-export async function createUnassignedUserForTest(
+export async function createUnassignedAssignableUserForTest(
   db: Database,
   orgId: string,
-  role: LegacyRole,
+  role: AssignableRole,
   usernamePrefix: string,
 ): Promise<{ user: TestUser; token: string }> {
   const now = new Date();
@@ -442,6 +456,98 @@ export async function createUnassignedUserForTest(
     getRuntimeConfig().authSecret.jwtSecret,
   );
   return { user, token };
+}
+
+/**
+ * Creates a user row with an unsupported role and NO assignment. The canonical
+ * negative fixture proving users.role is not authority.
+ */
+export async function createUnsupportedRoleUserForTest(
+  db: Database,
+  orgId: string,
+  role: UnsupportedRole,
+  usernamePrefix: string,
+): Promise<{ user: TestUser; token: string }> {
+  const now = new Date();
+  const passwordHash = await hashPassword("password123");
+  const userRows = await db
+    .insert(schema.users)
+    .values({
+      id: randomUUID(),
+      organizationId: orgId,
+      username: `${usernamePrefix}-${uniquePrefix()}`,
+      passwordHash,
+      name: `${role} Test User`,
+      role,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  const user = userRows[0]!;
+  const token = signJWT(
+    {
+      actorId: user.id,
+      role: user.role as Role,
+      organizationId: user.organizationId,
+    },
+    getRuntimeConfig().authSecret.jwtSecret,
+  );
+  return { user, token };
+}
+
+/**
+ * @deprecated Use {@link createUnassignedAssignableUserForTest} for assignable
+ * roles or {@link createUnsupportedRoleUserForTest} for unsupported roles.
+ */
+export async function createUnassignedUserForTest(
+  db: Database,
+  orgId: string,
+  role: LegacyRole,
+  usernamePrefix: string,
+): Promise<{ user: TestUser; token: string }> {
+  if (
+    role === "SuperAdmin" ||
+    role === "ContentManager" ||
+    role === "ResultViewer"
+  ) {
+    return createUnsupportedRoleUserForTest(db, orgId, role, usernamePrefix);
+  }
+  return createUnassignedAssignableUserForTest(
+    db,
+    orgId,
+    role as AssignableRole,
+    usernamePrefix,
+  );
+}
+
+/**
+ * Creates an assignment-complete user, then corrupts the `users.role`
+ * compatibility projection with a stale/unsupported value via raw SQL.
+ * Use this to prove that runtime authority comes from assignments, not from
+ * the users.role cache.
+ */
+export async function corruptUsersRoleProjectionForTest(
+  db: Database,
+  orgId: string,
+  assignmentRole: AssignableRole,
+  projectedRole: string,
+  usernamePrefix: string,
+): Promise<{ user: TestUser; token: string }> {
+  const { user, token } = await createAssignedUserForTest(
+    db,
+    orgId,
+    assignmentRole,
+    usernamePrefix,
+  );
+  await db.execute(
+    sql`UPDATE ${schema.users} SET role = ${projectedRole} WHERE ${schema.users.id} = ${user.id}`,
+  );
+  const rows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, user.id));
+  return { user: rows[0]!, token };
 }
 
 /**

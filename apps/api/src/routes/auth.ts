@@ -316,6 +316,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         name: user.name,
         role: primaryRole,
         organizationId: user.organizationId,
+        capabilities: authority.authority.capabilities,
       });
 
       return reply.code(200).send(response);

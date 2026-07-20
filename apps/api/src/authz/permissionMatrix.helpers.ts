@@ -3,8 +3,17 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { signJWT } from "@exam/auth/src/session.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
+import type { AssignableRole } from "@exam/db/src/schema/pg.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { buildTestApp } from "../routes/testHelpers.js";
+
+/**
+ * MatrixRole is structurally identical to {@link AssignableRole} (the five
+ * roles backed by `user_role_assignments`). It is re-aliased here so the
+ * matrix fixtures carry a domain-meaningful name without re-declaring the
+ * literal union, which would drift if the assignable set ever changes.
+ */
+export type MatrixRole = AssignableRole;
 
 /**
  * RBAC-M10-E: post-flip, every authenticated request resolves its authority
@@ -25,13 +34,6 @@ const ASSIGNABLE_ROLES: readonly MatrixRole[] = [
   "Grader",
   "Candidate",
 ];
-
-export type MatrixRole =
-  | "Admin"
-  | "Teacher"
-  | "Proctor"
-  | "Grader"
-  | "Candidate";
 
 export type MatrixVerdict = "denied" | "passed" | "unexpected";
 export type MatrixRoute = readonly [
@@ -112,7 +114,7 @@ export async function buildPermissionMatrixFixture(
     id: randomUUID(),
     organizationId: testApp.org.id,
     userId: user.id,
-    role: user.role as never,
+    role: user.role,
     isPrimary: true,
     isActive: true,
     createdAt: now,

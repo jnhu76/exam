@@ -15,7 +15,11 @@ import {
   buildTestApp,
   createFutureRoleUserForTest,
   createUnassignedUserForTest,
+  createUnassignedAssignableUserForTest,
+  createUnsupportedRoleUserForTest,
+  corruptUsersRoleProjectionForTest,
   LEGACY_ROLES,
+  type UnsupportedRole,
 } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
@@ -253,7 +257,7 @@ describe("auth routes", () => {
       id: crypto.randomUUID(),
       organizationId: ctx.org.id,
       userId: disableUserId,
-      role: "Admin" as never,
+      role: "Admin",
       isPrimary: true,
       isActive: true,
       createdAt: now,
@@ -499,22 +503,47 @@ describe("auth routes", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("POST /api/auth/login rejects non-login/unknown roles (SuperAdmin/ContentManager/ResultViewer) with generic auth failure", async () => {
-    const legacyCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
-    // RBAC-M10-E: the only login-capable roles are the 5 assignable human
-    // roles (Admin/Teacher/Proctor/Grader/Candidate). SuperAdmin /
-    // ContentManager / ResultViewer are NOT assignable, so they cannot hold an
-    // active assignment — the user row exists but the authority resolver
-    // returns no_active_assignments -> 401. (A user row with role=SuperAdmin
-    // but no assignment is the canonical non-login fixture post-flip.)
-    const nonLoginRoles = LEGACY_ROLES.filter(
-      (r) => r !== "Teacher" && r !== "Proctor" && r !== "Grader",
+  it("POST /api/auth/login: users.role is not authority — a stale SuperAdmin projection does not widen access", async () => {
+    // RBAC-M10-E: runtime authority comes from active assignments, not the
+    // users.role compatibility cache. A user whose assignment is Candidate but
+    // whose users.role is the unsupported SuperAdmin must log in as Candidate.
+    const { user } = await corruptUsersRoleProjectionForTest(
+      ctx.db,
+      ctx.org.id,
+      "Candidate",
+      "SuperAdmin",
+      `stale-superadmin-${Date.now()}`,
     );
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: user.username, password: "password123" },
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.role).toBe("Candidate");
+    expect(body.capabilities).toBeDefined();
+    // The JWT compatibility claim must also be Candidate, not SuperAdmin.
+    const token = signJWT({
+      actorId: user.id,
+      role: "Candidate",
+      organizationId: ctx.org.id,
+    });
+    expect(token).toBeDefined();
+  });
+
+  it("POST /api/auth/login rejects unsupported roles (SuperAdmin/ContentManager/ResultViewer) with generic auth failure", async () => {
+    const legacyCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    const unsupportedRoles: UnsupportedRole[] = [
+      "SuperAdmin",
+      "ContentManager",
+      "ResultViewer",
+    ];
     try {
-      for (const role of nonLoginRoles) {
-        // createUnassignedUserForTest: user row with no assignment — the
-        // authority resolver returns no_active_assignments on login.
-        const legacy = await createUnassignedUserForTest(
+      for (const role of unsupportedRoles) {
+        // Unsupported roles cannot hold an assignment, so the authority
+        // resolver returns no_active_assignments -> 401.
+        const legacy = await createUnsupportedRoleUserForTest(
           legacyCtx.db,
           legacyCtx.org.id,
           role,
@@ -538,11 +567,53 @@ describe("auth routes", () => {
           },
         });
         expect(JSON.stringify(body)).not.toContain(role);
-        expect(JSON.stringify(body)).not.toContain("non_login_role");
         expect(JSON.stringify(body)).not.toContain("no_active_assignments");
       }
     } finally {
       await legacyCtx.cleanup();
+    }
+  });
+
+  it("POST /api/auth/login rejects a user with no active assignment (assignable role, zero assignments)", async () => {
+    const noAssignCtx = await buildTestApp(authRoutes, { prefix: "/api/auth" });
+    try {
+      const noAssign = await createUnassignedAssignableUserForTest(
+        noAssignCtx.db,
+        noAssignCtx.org.id,
+        "Candidate",
+        `no-assign-${Date.now()}`,
+      );
+      const response = await noAssignCtx.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: {
+          username: noAssign.user.username,
+          password: "password123",
+        },
+      });
+      expect(response.statusCode).toBe(401);
+      const body = response.json();
+      expect(body).toMatchObject({
+        error: {
+          code: "AUTH_INVALID_CREDENTIALS",
+          message: "用户名或密码错误",
+          requestId: expect.any(String),
+        },
+      });
+      expect(JSON.stringify(body)).not.toContain("no_active_assignments");
+
+      // Existing JWT for the same identity also fails closed.
+      const meRes = await noAssignCtx.app.inject({
+        method: "GET",
+        url: "/api/auth/me",
+        cookies: { "auth-token": noAssign.token },
+      });
+      expect(meRes.statusCode).toBe(401);
+      expect(meRes.json()).toMatchObject({
+        error: { code: "AUTH_REQUIRED" },
+      });
+    } finally {
+      await noAssignCtx.cleanup();
     }
   });
 });

@@ -1,4 +1,12 @@
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import userRoutes from "./user.js";
 import {
   buildTestApp,
@@ -9,6 +17,8 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { eq } from "drizzle-orm";
 import type { Database } from "@exam/db/src/types.js";
+import { ValidationError } from "@exam/domain";
+import * as adminInvariantModule from "../authz/adminInvariant.js";
 
 async function createCandidateUser(
   db: Database,
@@ -449,6 +459,70 @@ describe("user routes", () => {
       expect(
         await verifyPassword("password123", updated[0]!.passwordHash),
       ).toBe(false);
+    });
+  });
+
+  // Route-wiring tests (layer 5.2): stub mutateWithEffectiveAdminPostcondition
+  // to verify HTTP transport mapping without constructing "actor is last Admin"
+  // scenarios — the real post-condition behavior is covered by
+  // adminInvariant.test.ts (layer 5.1).
+  describe("last-admin invariant — route wiring (RBAC-M10-E)", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("PATCH /api/users/:id — postcondition throws LAST_ACTIVE_ADMIN -> 400 VALIDATION_ERROR", async () => {
+      // Stub the postcondition so it throws as-if the invariant fired. The
+      // route handler must map that to a 400 with reason LAST_ACTIVE_ADMIN
+      // and not leak internal detail.
+      vi.spyOn(
+        adminInvariantModule,
+        "mutateWithEffectiveAdminPostcondition",
+      ).mockImplementation(() => {
+        throw new ValidationError("不能停用或降级最后一位活跃管理员", {
+          reason: "LAST_ACTIVE_ADMIN",
+        });
+      });
+      const res = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/users/${ctx.admin.id}`,
+        payload: { name: "attempt while invariant fires" },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: {
+          code: "VALIDATION_ERROR",
+          details: { reason: "LAST_ACTIVE_ADMIN" },
+          requestId: expect.any(String),
+        },
+      });
+      // The mutation callback was never entered (the stub throws
+      // synchronously before executing the wrapped function).
+    });
+
+    it("DELETE /api/users/:id — postcondition throws LAST_ACTIVE_ADMIN -> 400 VALIDATION_ERROR", async () => {
+      vi.spyOn(
+        adminInvariantModule,
+        "mutateWithEffectiveAdminPostcondition",
+      ).mockImplementation(() => {
+        throw new ValidationError("不能停用或降级最后一位活跃管理员", {
+          reason: "LAST_ACTIVE_ADMIN",
+        });
+      });
+      const res = await ctx.app.inject({
+        method: "DELETE",
+        url: `/api/users/${ctx.admin.id}`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({
+        error: {
+          code: "VALIDATION_ERROR",
+          details: { reason: "LAST_ACTIVE_ADMIN" },
+          requestId: expect.any(String),
+        },
+      });
     });
   });
 });

@@ -44,7 +44,9 @@ export const LoginRequestSchema = z.object({
 export type LoginRequest = z.infer<typeof LoginRequestSchema>;
 
 /**
- * Response schema returned after successful login, including user identity and role.
+ * Response schema returned after successful login, including user identity,
+ * role, and the actor's effective capability set (the union of all active
+ * role assignments' presets — RBAC-M10-E).
  */
 export const LoginResponseSchema = z.object({
   id: z.string().uuid(),
@@ -52,6 +54,7 @@ export const LoginResponseSchema = z.object({
   name: z.string(),
   role: RoleSchema,
   organizationId: z.string().uuid(),
+  capabilities: z.array(z.string()),
 });
 
 /** Type for a login response. */

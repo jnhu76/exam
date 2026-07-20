@@ -74,6 +74,7 @@ function makeReq(
   role: string,
   actorId = "actor-1",
   params: Record<string, string> = { attemptId: "att-1" },
+  capabilities: PermissionKey[] = [],
 ): FastifyRequest {
   return {
     ctx: {
@@ -81,9 +82,7 @@ function makeReq(
       organizationId: "org-1",
       role,
       roles: [role as RoleKey],
-      // Capabilities are populated by the injected predicate at decision
-      // time; the field is here for RuntimeRequestContext structural completeness.
-      capabilities: [],
+      capabilities,
       permissions: [],
       sessionId: "s",
     },
@@ -254,11 +253,10 @@ describe("score capability preHandler — own/all arbitration (no role branching
     // Primary role is Candidate (no ScoreAllView in its own preset).
     // Capabilities are the UNION of Candidate + Grader — Grader's preset
     // includes ScoreAllView, so the union includes ScoreAllView.
-    const req = makeReq("Candidate", "actor-1");
-    (req.ctx as any).capabilities = [
+    const req = makeReq("Candidate", "actor-1", undefined, [
       Permission.ScoreOwnView, // from Candidate preset
       Permission.ScoreAllView, // from secondary Grader assignment
-    ];
+    ]);
     await handler(req, reply);
     // ScoreAllView must win (strictly broader) — the handler proceeds
     // (no reply sent, scoreView="all").
