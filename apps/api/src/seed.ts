@@ -25,7 +25,9 @@ process.stdout.write(
   "\nDone! Phase 1 dev/test seed credentials:\n" +
     "  Admin:      admin / admin123\n" +
     "  Candidate:  candidate / candidate123\n" +
-    "  Candidate:  candidate2 / candidate123\n",
+    "  Candidate:  candidate2 / candidate123\n" +
+    "\nThis seed creates authentication-only accounts. For full demo data\n" +
+    "(courses, questions, exams, attempts), use: pnpm db:seed:demo\n",
 );
 
 await conn.sql.end();

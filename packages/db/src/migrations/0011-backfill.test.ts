@@ -138,9 +138,9 @@ describe("0011 backfill guard — assignable users only", () => {
         ),
       );
     expect(adminAssignments.length).toBe(1);
-    expect(adminAssignments[0].role).toBe("Admin");
-    expect(adminAssignments[0].isPrimary).toBe(true);
-    expect(adminAssignments[0].isActive).toBe(true);
+    expect(adminAssignments[0]!.role).toBe("Admin");
+    expect(adminAssignments[0]!.isPrimary).toBe(true);
+    expect(adminAssignments[0]!.isActive).toBe(true);
 
     // Candidate has exactly one primary active assignment
     const candidateAssignments = await env.conn.db
@@ -153,9 +153,9 @@ describe("0011 backfill guard — assignable users only", () => {
         ),
       );
     expect(candidateAssignments.length).toBe(1);
-    expect(candidateAssignments[0].role).toBe("Candidate");
-    expect(candidateAssignments[0].isPrimary).toBe(true);
-    expect(candidateAssignments[0].isActive).toBe(true);
+    expect(candidateAssignments[0]!.role).toBe("Candidate");
+    expect(candidateAssignments[0]!.isPrimary).toBe(true);
+    expect(candidateAssignments[0]!.isActive).toBe(true);
 
     // SuperAdmin has ZERO assignment rows (skipped by guard)
     const superAdminAssignments = await env.conn.db
@@ -242,6 +242,6 @@ describe("0011 backfill guard — all legacy non-assignable roles", () => {
       .from(schema.userRoleAssignments)
       .where(eq(schema.userRoleAssignments.organizationId, orgId));
     expect(allAssignments.length).toBe(1);
-    expect(allAssignments[0].role).toBe("Admin");
+    expect(allAssignments[0]!.role).toBe("Admin");
   });
 });

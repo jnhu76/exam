@@ -78,6 +78,15 @@ const USER_DEFS = [
  * Seeds the baseline database with a default organization and three users
  * (admin, candidate, candidate2). Idempotent — re-running upserts on
  * conflict by username.
+ *
+ * Phase 1 minimal authentication/dev seed: creates `organizations` + `users` +
+ * `user_role_assignments` only. Does NOT create `candidate_profiles`,
+ * `candidate_fields`, `organization_settings`, courses, exams, or attempts.
+ * Use `demo-seed.ts` for a complete interactive demo. A `Candidate`-role user
+ * created by this seed can authenticate but has no CandidateProfile —
+ * `POST /users/:id/reset-password` will reject it (target identity check
+ * requires a profile).
+ *
  * @param db - Database instance.
  * @param hashFn - Password hashing function.
  * @returns Created organization ID and user IDs.
@@ -102,6 +111,9 @@ export async function seed(
       updatedAt: timestamp,
     })
     .onConflictDoUpdate({
+      // Conflict branch only updates `updatedAt` — deliberately does NOT
+      // overwrite `name`/`displayName`, to preserve admin-configured
+      // organization identity on re-seed.
       target: schema.organizations.slug,
       set: { updatedAt: timestamp },
     })
@@ -143,6 +155,11 @@ export async function seed(
             updatedAt: timestamp,
           })
           .onConflictDoUpdate({
+            // Conflict branch only resets `passwordHash`/`name` — deliberately
+            // does NOT overwrite `role`/`isActive`, to preserve (a) authority
+            // changes made via the role-assignment surface since the last seed,
+            // and (b) account-disable state (RBAC-M10-E authority preservation,
+            // commit 9f0261a).
             target: [schema.users.organizationId, schema.users.username],
             set: { passwordHash, name, updatedAt: timestamp },
           })

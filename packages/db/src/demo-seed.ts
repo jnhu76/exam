@@ -82,7 +82,13 @@ function makeGradingRule(overrides: Partial<GradingRule> = {}): GradingRule {
  * Seeds a full demo dataset: organization, settings, candidate fields, users,
  * candidate profiles, courses, questions, exams, enrollments, and attempts.
  *
+ * Complete interactive demo seed — the counterpart to `seed.ts` (which creates
+ * authentication-only accounts). This seed creates organizations, users,
+ * courses, questions, exams, enrollments, attempts, grading entries, and
+ * organization settings for a full interactive demo experience.
+ *
  * This is a demo reset routine: it writes demo questions, exams, enrollments,
+ * and attempts to a known sample state. User authority is preserved if the
  * and attempts to a known sample state. User authority is preserved if the
  * user already has any assignment rows. It is NOT allowed in production.
  *
