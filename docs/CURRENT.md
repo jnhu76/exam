@@ -1,6 +1,8 @@
 # Current Documentation Index
 
-> Entry point for developers and AI agents. Start here, not in `docs/archive/`.
+> **Note:** The canonical documentation entry point is now
+> [`docs/README.md`](README.md). This file is retained as a legacy pointer.
+> Start at `docs/README.md`, not here and not in `docs/archive/`.
 
 ## Active Documents
 
@@ -15,11 +17,24 @@
 
 | Document | Purpose |
 |----------|---------|
-| `phase2-baseline.md` | Phase 2 implementation baseline |
-| `phase2-closeout-report.md` | Phase 2 closeout report with i18n status |
 | `i18n-copy-policy.md` | i18n copy rules and gate documentation |
 | `observability-contract.md` | Logging, audit, trace conventions |
 | `redis-baseline.md` | Redis optional infrastructure baseline |
+| `test-flakes.md` | Test flake register and improvement log |
+
+## Historical closure evidence (`docs/evidence/`)
+
+These are final closure / verification proofs. They record that a milestone
+was reached; they are **not** active plans and must not be treated as current
+implementation guidance.
+
+| Document | Purpose |
+|----------|---------|
+| `docs/evidence/phase2-baseline.md` | Phase 2 implementation baseline (closure evidence) |
+| `docs/evidence/phase2-closeout-report.md` | Phase 2 closeout report with i18n status |
+| `docs/evidence/RBAC-M10-F-FINAL-VERIFICATION-1.md` | Pre-PR-197 M10-F closure (carries an INVALIDATION NOTICE — superseded by a pending post-PR-197 rerun) |
+| `docs/evidence/RBAC-M10-FINISH-BASELINE-1.md` | RBAC M10 finish baseline |
+| `docs/evidence/wave1-document-link-audit.md` | Wave 1 documentation link-audit evidence |
 
 ## Do NOT read
 

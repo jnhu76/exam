@@ -8,7 +8,7 @@
 
 The exam platform frontend currently manages all state through manual
 `useState` / `useEffect` / `useRef` orchestration with no formal state machine
-modeling. The frontend audit (`docs/phase3/architecture/frontend-state-machine-audit.md`)
+modeling. The frontend audit (`docs/archive/phase3-plans/architecture/frontend-state-machine-audit.md`)
 identified ~116 independent state variables across 14 key files, five implicit
 state machines without explicit modeling, hardcoded Admin/Candidate binary role
 assumptions, and zero `AbortController` usage for request cancellation.
