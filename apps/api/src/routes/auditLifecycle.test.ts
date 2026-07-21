@@ -176,7 +176,7 @@ describe("tracked audit write lifecycle", () => {
   });
 
   afterAll(async () => {
-    await ctx.drainAuditWrites();
+    await ctx.drainAuditWritesStrict();
     await ctx.cleanup();
   });
 
@@ -209,7 +209,7 @@ describe("tracked audit write lifecycle", () => {
     const targetId = await scheduleAudit(ctx, organizationId);
     let cleanupStarted = false;
 
-    const cleanup = ctx.drainAuditWrites().then(async () => {
+    const cleanup = ctx.drainAuditWritesStrict().then(async () => {
       cleanupStarted = true;
       await cleanupBusinessData(ctx.db, organizationId);
     });
@@ -229,7 +229,7 @@ describe("tracked audit write lifecycle", () => {
     await scheduleAudit(ctx, organizationId);
     let cleanupStarted = false;
 
-    const cleanup = ctx.drainAuditWrites().then(async () => {
+    const cleanup = ctx.drainAuditWritesStrict().then(async () => {
       cleanupStarted = true;
       await cleanupOrganizationTestData(ctx.db, organizationId);
     });

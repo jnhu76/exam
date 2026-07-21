@@ -273,7 +273,7 @@ describe("ADR-006 audit durability and atomicity", () => {
 
       expect(response.statusCode).toBe(401);
       expect(response.json().error.code).toBe("AUTH_INVALID_CREDENTIALS");
-      await ctx.drainAuditWrites();
+      await ctx.drainAuditWritesStrict();
     } finally {
       await removeFailure();
     }

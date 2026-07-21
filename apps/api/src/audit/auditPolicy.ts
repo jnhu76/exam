@@ -540,7 +540,7 @@ export const AUDIT_ACTION_DEFINITIONS = {
       .object({
         incidentType: z.string().max(50),
         examId: identifier,
-        candidateId: identifier.nullable(),
+        candidateId: identifier,
         attemptId: identifier,
         reasonCode: z.string().max(100).nullable(),
         note: z.string().max(500).nullable(),

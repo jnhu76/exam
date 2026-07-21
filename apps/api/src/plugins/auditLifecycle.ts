@@ -61,7 +61,11 @@ export function createAuditWriteLifecycle(): AuditWriteLifecycle {
     timeoutMs?: number;
   }): Promise<AuditDrainResult> => {
     if (terminalDrainResult) {
-      return Promise.resolve(terminalDrainResult);
+      // timedOut is sticky, but pendingCount should reflect live state.
+      return Promise.resolve({
+        ...terminalDrainResult,
+        pendingCount: pending.size,
+      });
     }
     if (activeDrain) return activeDrain;
     const timeoutMs = options?.timeoutMs ?? AUDIT_DRAIN_TIMEOUT_MS;

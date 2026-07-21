@@ -616,6 +616,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
               return { exam: existing, draftObservation: false };
             }
           }
+          // Same-value draft guard: skip mutation and audit when no field
+          // actually differs from the current exam.
+          if (exam.status === "draft") {
+            const changedFields = determineChangedExamFields(data, existing);
+            if (changedFields.length === 0) {
+              return { exam: existing, draftObservation: false };
+            }
+          }
           if (exam.status === "draft" && data.questionIds) {
             const questionChecks = await Promise.all(
               data.questionIds.map((questionId) =>
@@ -1587,5 +1595,34 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     },
   );
 };
+
+/**
+ * Returns the subset of request fields whose value differs from the current
+ * exam. Fields not present in `data` are ignored. Used to skip no-op PATCH
+ * mutations and their audits.
+ */
+function determineChangedExamFields(
+  data: Record<string, unknown>,
+  existing: Exam,
+): string[] {
+  return Object.entries(data)
+    .filter(([key, value]) => {
+      if (value === undefined) return false;
+      const current = (existing as unknown as Record<string, unknown>)[key];
+      if (current instanceof Date) {
+        return value !== current.toISOString();
+      }
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        typeof current === "object" &&
+        current !== null
+      ) {
+        return JSON.stringify(value) !== JSON.stringify(current);
+      }
+      return value !== current;
+    })
+    .map(([key]) => key);
+}
 
 export default examRoutes;

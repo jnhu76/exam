@@ -359,7 +359,7 @@ describe("attempt routes", () => {
     }
 
     beforeEach(async () => {
-      await ctx.drainAuditWrites();
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -372,7 +372,7 @@ describe("attempt routes", () => {
     });
 
     afterAll(async () => {
-      await ctx.drainAuditWrites();
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)

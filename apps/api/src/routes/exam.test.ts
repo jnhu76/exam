@@ -927,6 +927,38 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     expect(res.json().updatedAt).toBe(updatedAtBefore);
   });
 
+  it("PATCH draft with same-value fields returns 200 without mutation or audit", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Noop Draft Fields",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const created = createRes.json();
+    const updatedAtBefore = created.updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${created.id}`,
+      payload: {
+        title: created.title,
+        passingScore: created.passingScore,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
+
   it("PATCH published with same closeAt returns 200 without mutation or audit", async () => {
     const examId = await createPublishedExam("Noop Published");
     const getRes = await ctx.app.inject({

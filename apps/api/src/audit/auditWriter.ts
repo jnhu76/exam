@@ -92,7 +92,9 @@ function requestEvent<Action extends AuditActionKey>(
     targetType: checked.targetType,
     targetId: checked.targetId,
     metadata,
-    ipAddress: truncate(request.ip, AUDIT_IP_ADDRESS_MAX_LENGTH),
+    ...(request.ip
+      ? { ipAddress: truncate(request.ip, AUDIT_IP_ADDRESS_MAX_LENGTH) }
+      : {}),
     ...(rawUserAgent
       ? { userAgent: truncate(rawUserAgent, AUDIT_USER_AGENT_MAX_LENGTH) }
       : {}),
