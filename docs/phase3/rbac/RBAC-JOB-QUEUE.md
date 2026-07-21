@@ -57,7 +57,7 @@
 | 14 | **M10-Step3** `createAttemptResolver` + `createExamResolver` (org-anchor + fail-closed) | resolver impl + tests | — | medium | [x] | ✅ enforcement PRs |
 | 15 | **PROCTOR flip** — `proctorMonitoring.ts` (×2) flipped to `requireCapability` | route flip | — | high | [x] | ✅ enforcement PRs |
 | 16 | **GRADING flip** — `gradingQueue.ts` (×3) + `attempts.admin.ts` (×6) flipped to `requireCapability`; permission-matrix test + swagger stub | route flip | — | high | [x] | ✅ enforcement PRs |
-| 17 | **RBAC-M10-finish** — wire scope resolvers into the `requireCapability` request path; flip remaining 44 `requireRole` routes and remediate 21 flat-capability routes requiring scoped enforcement | resolver wiring + route flips | ❌ future PRs | high | **[ ] open** — baseline frozen at 8ef50e5 (see RBAC-M10-FINISH-BASELINE-1 below); 65 routes total, decomposed into 6 sub-jobs (M10-A through M10-F) | ❌ |
+| 17 | **RBAC-M10-finish** — wire scope resolvers into the `requireCapability` request path; flip remaining 44 `requireRole` routes and remediate 21 flat-capability routes requiring scoped enforcement | resolver wiring + route flips | — | high | **[x] CLOSED** — see RBAC-M10-F-FINAL-VERIFICATION-1.md; all 6 sub-jobs (M10-A through M10-F) closed | ✅ |
 
 ## Final review — APPROVED (foundation PR only)
 
@@ -336,7 +336,21 @@ to `users.role`).
   green.
 - Known follow-up: multi-role score-arbitration test (Mutation G coverage gap).
 
-## RBAC-M10-F — NOT STARTED
+## RBAC-M10-F — ✅ CLOSED (verified via verify/rbac-M10-F)
+
+Final drift and mutation closure. Full report:
+`docs/phase3/rbac/RBAC-M10-F-FINAL-VERIFICATION-1.md`
+
+```text
+RBAC-M10-finish:
+CLOSED
+
+M10-A through M10-F:
+all CLOSED
+
+M11:
+DEFERRED — NOT STARTED
+```
 
 ## Acceptance per job (filled in as each lands)
 
