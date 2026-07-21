@@ -47,8 +47,14 @@ Legend: ✅ IMPLEMENTED · 🟡 PARTIAL (infra present but gated / scope-limited
 
 | Capability | Status | Evidence / Note |
 |------------|--------|-----------------|
-| Proctor monitoring (visibility + incident logging) | 🟡 | `routes/proctorMonitoring.ts` (dashboard, attempts, events, incident POST). Source comment defers force-submit/extend-time to "L7". |
-| Force-submit / extend-time / misconduct state actions | ⬜ | No matches in routes/web. Only permission enum + audit-only incident recording exist. Deferred. |
+| Proctor visibility (exam list, attempt roster) | ✅ | `GET /admin/proctor/exams`, `GET /admin/exams/:examId/proctor/attempts` (`routes/proctorMonitoring.ts`); `pages/admin/ProctorDashboardPage.tsx` |
+| Proctor event stream (per-attempt events) | ✅ | `GET /admin/attempts/:attemptId/proctor-events` (`routes/proctorMonitoring.ts`) |
+| Proctor live polling dashboard | ✅ | HTTP polling (`ProctorDashboardPage.tsx` `setInterval(loadStatus, POLL_INTERVAL_MS)`). No WS/SSE (ADR-002) |
+| Proctor incident logging (audit-event-only) | ✅ | `POST /admin/attempts/:attemptId/proctor-incident` (`routes/proctorMonitoring.ts`). Audit-event storage only — no dedicated incident table |
+| Force-submit (admin → submit+grade in one transaction) | ✅ | `POST /admin/attempts/:attemptId/force-submit` (`routes/attempts.admin.ts:124`), capability `Permission.AttemptForceSubmit`, Zod `ForceSubmitRequestSchema`, submits + grades in the same transaction (no submitted-but-not-graded window), idempotent for graded. Tests: `admin-force-submit.test.ts` (7). UI: `ProctorDashboardPage` force-submit handler |
+| Extend-time (admin extends an attempt's window) | ✅ | `POST /admin/attempts/:attemptId/extend-time` (`routes/attempts.admin.ts:274`), capability `Permission.AttemptTimeExtend`. Tests: `admin-extend-time.test.ts` (4) |
+| Misconduct flag (admin records severity + notes on an attempt) | ✅ | `POST /admin/attempts/:attemptId/misconduct` (`routes/attempts.admin.ts:61`), capability `Permission.AttemptMisconductMark`. Tests: `admin-misconduct.test.ts` (4). UI: `ProctorDashboardPage` misconduct dialog (severity + notes) |
+| Attempt timeline (chronological audit view) | ✅ | `GET /admin/attempts/:attemptId/timeline` (`routes/attempts.admin.ts:351`), capability `Permission.AttemptTimelineView`. UI: audit timeline on `ExamDetailPage`/`AttemptDetailPage` |
 | Manual grading queue | ✅ | `routes/gradingQueue.ts` (queue, detail, grade-question); `pages/admin/GradingQueuePage.tsx`, `GradingDetailPage.tsx`; `packages/exam-engine/src/manualGrading.ts` |
 | Canceled exam state | 🟡 | Enum present (`contracts/src/exam.ts`, `domain/src/enums.ts`); `POST /exams/:id/cancel` (`routes/exam.ts`). Cancellation-marker result/export semantics NOT implemented (`errors.ts` — canceled exams reject scores/export with 409). |
 | Disrupted attempt recovery UI | ✅ | `pages/exam/*` restore flow + `attempts.candidate.ts` restore endpoint |
@@ -73,7 +79,7 @@ Legend: ✅ IMPLEMENTED · 🟡 PARTIAL (infra present but gated / scope-limited
 
 | Capability | Status | Evidence / Note |
 |------------|--------|-----------------|
-| Redis | 🟡 | Adapter `apps/api/src/plugins/redis.ts`, compose service, diagnostics ping exist. **No production business path uses Redis.** Default disabled (ADR-001). |
+| Redis | 🟡 | **Code-level optional; Docker Compose default-on; no business path depends on it.** Adapter `apps/api/src/plugins/redis.ts` decorates `fastify.redis` and gracefully no-ops when `REDIS_URL` is unset/empty (`config/runtimeConfig.ts:386-393`). Compose (`docker-compose.yml`, `docker-compose.dev.yml`) deploys a `redis:7-alpine` service and wires `REDIS_URL` by default, so a deployed stack connects on boot. The **only** non-test production touch is a diagnostics ping in `routes/system.ts:277-282`. No business code (attempts, grading, proctor, sessions) reads/writes Redis (ADR-001). |
 | Email | 🟡 | Full SMTP/outbox/retry plumbing under `apps/api/src/email/`; gated off by default (`EMAIL_ENABLED=false`). `routes/email.ts` `POST /email/test`. |
 | WebSocket / SSE | ⬜ | Not present. Proctor dashboard uses HTTP polling (ADR-002). |
 | Job queue | ⬜ | Not present. All work synchronous/request-scoped (ADR-003). |
