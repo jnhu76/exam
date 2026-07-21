@@ -4,7 +4,7 @@ import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { setupIsolatedTestDb } from "@exam/db/src/testIsolation.js";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { verifyPassword } from "@exam/auth/src/password.js";
 import { bootstrapAdmin } from "./bootstrap-admin.js";
 
@@ -23,6 +23,38 @@ async function freshOrg(db: Database): Promise<string> {
     })
     .returning({ id: schema.organizations.id });
   return rows[0]!.id;
+}
+
+async function installBootstrapAuditFailure(
+  db: Database,
+): Promise<() => Promise<void>> {
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const functionName = `fail_bootstrap_audit_${suffix}`;
+  const triggerName = `fail_bootstrap_audit_trigger_${suffix}`;
+  await db.execute(
+    sql.raw(`
+      CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected bootstrap audit failure';
+      END;
+      $$ LANGUAGE plpgsql
+    `),
+  );
+  await db.execute(
+    sql.raw(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE INSERT ON audit_logs
+      FOR EACH ROW
+      WHEN (NEW.action = 'admin.bootstrap')
+      EXECUTE FUNCTION ${functionName}()
+    `),
+  );
+  return async () => {
+    await db.execute(
+      sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+    );
+    await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
+  };
 }
 
 describe("bootstrapAdmin service", () => {
@@ -92,6 +124,44 @@ describe("bootstrapAdmin service", () => {
     expect(JSON.stringify(metadata)).not.toContain("password");
     expect(JSON.stringify(metadata)).not.toContain("StrongPass123!");
     expect(metadata.username).toBe(username);
+  });
+
+  it("rolls back the CLI-created identity when the audit insert fails", async () => {
+    const orgId = await freshOrg(db);
+    const username = `boot-rollback-${Date.now()}`;
+    const removeFailure = await installBootstrapAuditFailure(db);
+    try {
+      await expect(
+        bootstrapAdmin(db, orgId, {
+          username,
+          password: "StrongPass123!",
+          name: "Rolled Back Admin",
+        }),
+      ).rejects.toThrow();
+
+      const users = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(
+          and(
+            eq(schema.users.organizationId, orgId),
+            eq(schema.users.username, username),
+          ),
+        );
+      expect(users).toHaveLength(0);
+      const audits = await db
+        .select({ id: schema.auditLogs.id })
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.organizationId, orgId),
+            eq(schema.auditLogs.action, "admin.bootstrap"),
+          ),
+        );
+      expect(audits).toHaveLength(0);
+    } finally {
+      await removeFailure();
+    }
   });
 
   it("refuses when an active Admin already exists", async () => {

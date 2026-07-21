@@ -1,4 +1,5 @@
 import type { RequestContext, ExamAttempt } from "@exam/domain";
+import type { FastifyRequest } from "fastify";
 import { InvalidStateTransitionError, NotFoundError } from "@exam/domain";
 import type { Database } from "@exam/db/src/types.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
@@ -17,6 +18,7 @@ import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
+import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 
 export interface SubmitAndGradeResult {
   attempt: ExamAttempt;
@@ -42,8 +44,8 @@ export interface SubmitAndGradeResult {
  * landed but grading didn't, so a retry grades it idempotently without
  * re-submitting. `graded` is the only truly terminal state.
  *
- * Does NOT handle: request validation, candidate profile lookup,
- * audit recording, or HTTP response serialization.
+ * Does NOT handle: request validation, candidate profile lookup, or
+ * HTTP response serialization.
  */
 export async function submitAndGradeAttempt(
   db: Database,
@@ -51,6 +53,7 @@ export async function submitAndGradeAttempt(
   attemptId: string,
   candidateProfileId: string,
   now: Date,
+  audit?: { request: FastifyRequest },
 ): Promise<SubmitAndGradeResult> {
   const alreadyGraded = await executeInTransaction(db, async (tx) => {
     // P3-FORMAL-P0-D2: build the engine repo pair ONCE, mint the
@@ -148,6 +151,13 @@ export async function submitAndGradeAttempt(
             (await exams.findById(lockedAttempt.examId))
               ?.minSubmitAfterStartMinutes ?? null,
         });
+        if (audit) {
+          await recordAtomicHttpAudit(tx, audit.request, ctx, {
+            action: "attempt.submit",
+            targetType: "attempt",
+            targetId: attemptId,
+          });
+        }
       }
 
       // P3-L0-2C: branch on the authoritative gradingStatus established at

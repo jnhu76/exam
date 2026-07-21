@@ -8,7 +8,7 @@
  *   - 8 mutating routes: real non-vacuous zero-write evidence
  *   - candidate-field PATCH/DELETE: real fixture, material property change
  *   - candidate import: positive control — Admin same-payload success
- *   - audit absence: fire-and-forget settle-window stability
+ *   - audit absence after awaited transactional mutation boundaries
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { HTTPMethods } from "fastify";

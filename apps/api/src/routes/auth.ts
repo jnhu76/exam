@@ -22,13 +22,17 @@ import {
 import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import type { PublicBrandingContext, RequestContext, Role } from "@exam/domain";
 import { NotFoundError } from "@exam/domain";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
 } from "../lib/errorResponse.js";
-import { recordAudit } from "./audit.js";
+import {
+  recordAtomicHttpAudit,
+  recordBestEffortAudit,
+} from "../audit/auditWriter.js";
 import { getRequestContext } from "./helpers.js";
 import { getRuntimeConfig } from "../config/runtimeConfig.js";
 import { loadAssignmentAuthority } from "../authz/assignmentAuthority.js";
@@ -108,10 +112,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           await verifyPasswordOrDummy(data.password, null);
           fastify.log.warn(
             {
-              event: "login.failure",
+              event: "security.authentication",
+              outcome: "denied",
               reason: "unknown_organization",
-              organizationSlug: resolvedSlug,
-              username: data.username,
+              organizationKnown: false,
+              requestId: request.id,
             },
             "Login failed: unknown organization",
           );
@@ -138,26 +143,37 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         user?.isActive ? user.passwordHash : null,
       );
       if (!user?.isActive || !isPasswordValid) {
+        const reason = !user
+          ? "unknown_user"
+          : !user.isActive
+            ? "disabled_user"
+            : "invalid_password";
+        fastify.log.warn(
+          {
+            event: "security.authentication",
+            outcome: "denied",
+            reason,
+            organizationKnown: true,
+            organizationId: org.id,
+            actorId: user?.id,
+            requestId: request.id,
+          },
+          "Login denied",
+        );
         const failureCtx: RequestContext = {
-          actorId: "anonymous",
+          actorId: user?.id ?? "anonymous",
           organizationId: org.id,
           targetOrganizationId: org.id,
           role: "Candidate",
           permissions: [],
           sessionId: "anonymous",
         };
-        recordAudit(
-          fastify,
-          request,
-          failureCtx,
-          "login.failure",
-          "login",
-          data.username,
-          {
-            reason: "invalid_credentials",
-            username: data.username,
-          },
-        );
+        recordBestEffortAudit(fastify, request, failureCtx, {
+          action: "login.failure",
+          targetType: "login",
+          targetId: user?.id ?? "anonymous",
+          metadata: { reason },
+        });
         return reply
           .code(401)
           .send(buildErrorResponse(request.id, "AUTH_INVALID_CREDENTIALS"));
@@ -193,23 +209,21 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             permissions: [],
             sessionId: "anonymous",
           };
-          recordAudit(
-            fastify,
-            request,
-            noAssignmentCtx,
-            "login.failure",
-            "login",
-            user.id,
-            {
-              reason: "no_active_assignments",
-              username: data.username,
-            },
-          );
+          recordBestEffortAudit(fastify, request, noAssignmentCtx, {
+            action: "login.failure",
+            targetType: "login",
+            targetId: user.id,
+            metadata: { reason: "no_active_assignments" },
+          });
           fastify.log.warn(
             {
-              event: "login.failure",
+              event: "security.authentication",
+              outcome: "denied",
               reason: "no_active_assignments",
-              username: data.username,
+              organizationKnown: true,
+              organizationId: org.id,
+              actorId: user.id,
+              requestId: request.id,
             },
             "Login failed: user has no active role assignment",
           );
@@ -219,9 +233,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         }
         fastify.log.error(
           {
-            event: "login.failure",
+            event: "security.authentication",
+            outcome: "error",
             reason: authority.reason,
-            username: data.username,
+            organizationKnown: true,
+            organizationId: org.id,
+            actorId: user.id,
+            requestId: request.id,
           },
           "Login failed: assignment authority resolution failed — fail closed",
         );
@@ -246,24 +264,24 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           permissions: [],
           sessionId: "anonymous",
         };
-        recordAudit(
-          fastify,
-          request,
-          blockedCtx,
-          "login.failure",
-          "login",
-          user.id,
-          {
+        recordBestEffortAudit(fastify, request, blockedCtx, {
+          action: "login.failure",
+          targetType: "login",
+          targetId: user.id,
+          metadata: {
             reason: "non_login_role",
-            username: user.username,
             role: primaryRole,
           },
-        );
+        });
         fastify.log.warn(
           {
-            event: "login.failure",
+            event: "security.authentication",
+            outcome: "denied",
             reason: "non_login_role",
-            username: user.username,
+            organizationKnown: true,
+            organizationId: org.id,
+            actorId: user.id,
+            requestId: request.id,
             role: primaryRole,
           },
           "Login failed: primary assignment role is not login-capable",
@@ -284,14 +302,6 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         getRuntimeConfig().authSecret.jwtSecret,
       );
 
-      reply.setCookie("auth-token", token, {
-        httpOnly: true,
-        secure: getRuntimeConfig().authSecret.cookieSecure,
-        sameSite: "strict",
-        maxAge: 24 * 60 * 60,
-        path: "/",
-      });
-
       const successCtx: RequestContext = {
         actorId: user.id,
         organizationId: user.organizationId,
@@ -300,15 +310,31 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         permissions: [],
         sessionId: "login",
       };
-      recordAudit(
-        fastify,
-        request,
-        successCtx,
-        "login.success",
-        "user",
-        user.id,
-        { username: user.username },
+      fastify.log.info(
+        {
+          event: "security.authentication",
+          outcome: "success",
+          reason: "credentials_and_authority_accepted",
+          organizationKnown: true,
+          organizationId: org.id,
+          actorId: user.id,
+          requestId: request.id,
+        },
+        "Login accepted",
       );
+      recordBestEffortAudit(fastify, request, successCtx, {
+        action: "login.success",
+        targetType: "user",
+        targetId: user.id,
+      });
+
+      reply.setCookie("auth-token", token, {
+        httpOnly: true,
+        secure: getRuntimeConfig().authSecret.cookieSecure,
+        sameSite: "strict",
+        maxAge: 24 * 60 * 60,
+        path: "/",
+      });
 
       const response = LoginResponseSchema.parse({
         id: user.id,
@@ -354,7 +380,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             permissions: [],
             sessionId: "logout",
           };
-          recordAudit(fastify, request, ctx, "logout", "user", payload.actorId);
+          recordBestEffortAudit(fastify, request, ctx, {
+            action: "logout",
+            targetType: "user",
+            targetId: payload.actorId,
+          });
         } catch (err) {
           fastify.log.warn(
             { err, event: "logout.invalid_token" },
@@ -470,8 +500,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(newPassword);
-      const updated = await userRepo.update(targetCtx, user.id, {
-        passwordHash: newHash,
+      const updated = await executeInTransaction(fastify.db, async (tx) => {
+        const changed = await createUserRepo(tx).update(targetCtx, user.id, {
+          passwordHash: newHash,
+        });
+        if (!changed) return null;
+        await recordAtomicHttpAudit(tx, request, targetCtx, {
+          action: "auth.password_update",
+          targetType: "user",
+          targetId: user.id,
+        });
+        return changed;
       });
       if (!updated) {
         return reply
@@ -515,24 +554,24 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         ...ctx,
         targetOrganizationId: ctx.targetOrganizationId ?? ctx.organizationId,
       };
-      const userRepo = createUserRepo(fastify.db);
-      const updated = await userRepo.update(targetCtx, targetCtx.actorId, {
-        name,
-      });
+      const updated = await createUserRepo(fastify.db).update(
+        targetCtx,
+        targetCtx.actorId,
+        { name },
+      );
+      if (updated) {
+        recordBestEffortAudit(fastify, request, targetCtx, {
+          action: "auth.profile_update",
+          targetType: "user",
+          targetId: updated.id,
+          metadata: { changedFields: ["name"] },
+        });
+      }
       if (!updated) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(
-        fastify,
-        request,
-        targetCtx,
-        "auth.profile_update",
-        "user",
-        updated.id,
-        { name },
-      );
       const profile = {
         id: updated.id,
         username: updated.username,

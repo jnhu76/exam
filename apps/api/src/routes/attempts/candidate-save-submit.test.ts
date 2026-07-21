@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -16,6 +16,38 @@ import {
   enrollCandidateForExam,
   buildSharedAttemptFixture,
 } from "./attempts.testHelpers.js";
+
+async function installSubmitAuditFailure(
+  db: Awaited<ReturnType<typeof buildTestApp>>["db"],
+): Promise<() => Promise<void>> {
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const functionName = `fail_submit_audit_${suffix}`;
+  const triggerName = `fail_submit_audit_trigger_${suffix}`;
+  await db.execute(
+    sql.raw(`
+      CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected submit audit failure';
+      END;
+      $$ LANGUAGE plpgsql
+    `),
+  );
+  await db.execute(
+    sql.raw(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE INSERT ON audit_logs
+      FOR EACH ROW
+      WHEN (NEW.action = 'attempt.submit')
+      EXECUTE FUNCTION ${functionName}()
+    `),
+  );
+  return async () => {
+    await db.execute(
+      sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+    );
+    await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
+  };
+}
 
 describe("attempt routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -312,6 +344,16 @@ describe("attempt routes", () => {
       expect(body.accepted).toBe(true);
       expect(body.serverVersion).toBe(1);
       expect(body.savedAt).toBeDefined();
+      const auditRows = await ctx.db
+        .select({ id: schema.auditLogs.id })
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.action, "attempt.saveAnswer"),
+            eq(schema.auditLogs.targetId, attemptId),
+          ),
+        );
+      expect(auditRows).toEqual([]);
     });
 
     it("returns idempotent result for same clientSeq", async () => {
@@ -347,6 +389,16 @@ describe("attempt routes", () => {
       expect(res2.json().accepted).toBe(true);
       expect(res2.json().serverVersion).toBe(res1.json().serverVersion);
       expect(res2.json().savedAt).toBe(savedAt);
+      const auditRows = await ctx.db
+        .select({ id: schema.auditLogs.id })
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.action, "attempt.saveAnswer"),
+            eq(schema.auditLogs.targetId, attemptId),
+          ),
+        );
+      expect(auditRows).toEqual([]);
     });
 
     it("accepts new version with correct baseVersion", async () => {
@@ -517,6 +569,36 @@ describe("attempt routes", () => {
       attemptId = startRes.json().id;
     });
 
+    it("rolls back the service-owned submit transition when audit insertion fails", async () => {
+      const removeFailure = await installSubmitAuditFailure(ctx.db);
+      try {
+        const response = await ctx.app.inject({
+          method: "POST",
+          url: `/api/attempts/${attemptId}/submit`,
+          cookies: { "auth-token": ctx.candidateToken },
+        });
+
+        expect(response.statusCode).toBe(500);
+        const attempts = await ctx.db
+          .select({ status: schema.examAttempts.status })
+          .from(schema.examAttempts)
+          .where(eq(schema.examAttempts.id, attemptId));
+        expect(attempts[0]?.status).toBe("in_progress");
+        const auditRows = await ctx.db
+          .select({ id: schema.auditLogs.id })
+          .from(schema.auditLogs)
+          .where(
+            and(
+              eq(schema.auditLogs.action, "attempt.submit"),
+              eq(schema.auditLogs.targetId, attemptId),
+            ),
+          );
+        expect(auditRows).toHaveLength(0);
+      } finally {
+        await removeFailure();
+      }
+    });
+
     it("submits in_progress attempt", async () => {
       const res = await ctx.app.inject({
         method: "POST",
@@ -532,6 +614,16 @@ describe("attempt routes", () => {
       expect(res.json().questionSnapshot[0]).not.toHaveProperty(
         "standardAnswer",
       );
+      const auditRows = await ctx.db
+        .select({ id: schema.auditLogs.id })
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.action, "attempt.submit"),
+            eq(schema.auditLogs.targetId, attemptId),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
 
     it("idempotent: re-submitting a graded attempt returns the graded result (FIX-2)", async () => {
@@ -546,6 +638,16 @@ describe("attempt routes", () => {
       expect(body.status).toBe("graded");
       expect(body.score).toBe(0);
       expect(body.passed).toBe(false);
+      const auditRows = await ctx.db
+        .select({ id: schema.auditLogs.id })
+        .from(schema.auditLogs)
+        .where(
+          and(
+            eq(schema.auditLogs.action, "attempt.submit"),
+            eq(schema.auditLogs.targetId, attemptId),
+          ),
+        );
+      expect(auditRows).toHaveLength(1);
     });
   });
 

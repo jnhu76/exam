@@ -1134,6 +1134,24 @@ describe("grading queue routes (P2D-J3 / P3-L0-2E Slice 3)", () => {
       },
       actorName: ctx.admin.name,
     });
+
+    const scoreAudits = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+      requestContext,
+      1,
+      50,
+      {
+        action: "grading.score_entered",
+        targetId: attemptId,
+      },
+    );
+    const finalizedAudits = await createAuditLogRepo(
+      ctx.db,
+    ).listPaginatedFiltered(requestContext, 1, 50, {
+      action: "grading.finalized",
+      targetId: attemptId,
+    });
+    expect(scoreAudits.total).toBe(1);
+    expect(finalizedAudits.total).toBe(1);
   });
 
   // ── Slice 12: grading-details surfaces the candidate's answer ────

@@ -3,7 +3,6 @@ import fp from "fastify-plugin";
 import type { RequestContext } from "@exam/domain";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import { markDisrupted } from "@exam/exam-engine";
@@ -106,14 +105,12 @@ function createSystemContext(organizationId: string): RequestContext {
 
 /**
  * Marks a single attempt as disrupted inside a transaction with a
- * `FOR UPDATE` row lock, then writes a best-effort `attempt.disrupted`
- * audit entry. Mirrors the deadline scanner's `autoSubmitAndGrade` shape.
+ * `FOR UPDATE` row lock and writes its audit entry in that transaction.
+ * Mirrors the deadline scanner's `autoSubmitAndGrade` shape.
  *
  * @returns `true` when the attempt was transitioned `in_progress` →
  *   `disrupted`; `false` for a no-op race (the locked row was no longer
- *   `in_progress`, or it vanished). The audit write is best-effort and
- *   never fails the disruption; its errors are swallowed, matching the
- *   deadline scanner.
+ *   `in_progress`, or it vanished).
  */
 export async function markAttemptDisrupted(
   db: Database,
@@ -137,25 +134,14 @@ export async function markAttemptDisrupted(
 
   if (!stateChanged) return false;
 
-  try {
-    await createAuditLogRepo(db).create(ctx, {
-      actorId: SYSTEM_ACTOR_ID,
-      action: "attempt.disrupted",
-      targetType: "attempt",
-      targetId: attemptId,
-      metadata: { source: "heartbeat-scanner" },
-    });
-  } catch {
-    // Audit is best-effort; scanner must not fail because of audit write.
-  }
-
   return true;
 }
 
 /**
  * Iterates over all organizations and scans their in-progress attempts for
  * staleness. Each stale attempt is marked as disrupted in its own transaction
- * with a row lock and a best-effort `attempt.disrupted` audit entry.
+ * with a row lock. The attempt row is the canonical domain-state owner; this
+ * runtime transition does not depend on the compliance audit table.
  *
  * Failed disruptions are not counted in `markedCount` and are retried on the
  * next scan (the stale attempt remains `in_progress`). Returns aggregate
@@ -218,38 +204,42 @@ const heartbeatPlugin: FastifyPluginAsync = async (fastify) => {
     config.heartbeat.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS;
   const heartbeatTimeoutMs = config.heartbeat.timeoutMs;
 
-  let scanRunning = false;
-  const interval = setInterval(async () => {
-    if (scanRunning) return;
-    scanRunning = true;
-    try {
-      // ADR-006: one operation now per tick, from the time authority.
-      const result = await scanDatabaseForDisruptedAttempts(
-        fastify,
-        fastify.now(),
-        heartbeatTimeoutMs,
-      );
-      heartbeatMetrics.lastScanAt = fastify.now();
-      heartbeatMetrics.disruptedCount += result.markedCount;
-      if (result.markedCount > 0) {
-        fastify.log.info(
-          {
-            markedCount: result.markedCount,
-            failedCount: result.failedCount,
-          },
-          "Marked stale exam attempts as disrupted",
+  let activeScan: Promise<void> | null = null;
+  let closing = false;
+  const interval = setInterval(() => {
+    if (closing || activeScan) return;
+    activeScan = (async () => {
+      try {
+        // ADR-006: one operation now per tick, from the time authority.
+        const result = await scanDatabaseForDisruptedAttempts(
+          fastify,
+          fastify.now(),
+          heartbeatTimeoutMs,
         );
+        heartbeatMetrics.lastScanAt = fastify.now();
+        heartbeatMetrics.disruptedCount += result.markedCount;
+        if (result.markedCount > 0) {
+          fastify.log.info(
+            {
+              markedCount: result.markedCount,
+              failedCount: result.failedCount,
+            },
+            "Marked stale exam attempts as disrupted",
+          );
+        }
+      } catch (err) {
+        fastify.log.error({ err }, "Error scanning for disrupted attempts");
       }
-    } catch (err) {
-      fastify.log.error({ err }, "Error scanning for disrupted attempts");
-    } finally {
-      scanRunning = false;
-    }
+    })().finally(() => {
+      activeScan = null;
+    });
   }, scanIntervalMs);
   interval.unref();
 
   fastify.addHook("onClose", async () => {
+    closing = true;
     clearInterval(interval);
+    await activeScan;
   });
 };
 

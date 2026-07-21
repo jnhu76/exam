@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { getIsolatedTestDb } from "../testDb.js";
-import { createAuditLogRepo } from "./auditLogRepo.js";
+import { createAuditLogTestRepo } from "../testHelpers/auditLogTestRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import type { Database } from "../types.js";
 
@@ -48,7 +48,7 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
   });
 
   it("returns only rows matching (targetType, targetId) for the org, oldest-first", async () => {
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
     const attemptId = randomUUID();
 
     const first = await repo.create(ctx, {
@@ -76,7 +76,7 @@ describe("auditLogRepo.listByTarget (timeline)", () => {
   });
 
   it("excludes rows for a different targetId (boundary isolation)", async () => {
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
     const targetA = randomUUID();
     const targetB = randomUUID();
 

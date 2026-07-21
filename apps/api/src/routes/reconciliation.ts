@@ -1,16 +1,16 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { RequestContext, Exam } from "@exam/domain";
+import type { Database } from "@exam/db/src/types.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
+import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { checkAndUpdateExamStatus } from "@exam/exam-engine";
 import type { ExamRepository } from "@exam/exam-engine";
-import { recordAudit } from "./audit.js";
+import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
 
 /**
  * Structured result of an automatic exam status reconciliation.
  *
- * - `changed: false` — no status transition occurred; no audit written.
- * - `changed: true` — one or two status transitions persisted; `auditActions`
- *   lists the audit action(s) the caller should record (after tx for
- *   mutations, immediately for reads).
+ * - `changed: false` — no status transition occurred.
+ * - `changed: true` — a canonical domain status transition persisted.
  */
 export type ReconciliationResult =
   | { exam: Exam; changed: false }
@@ -19,13 +19,11 @@ export type ReconciliationResult =
       changed: true;
       fromStatus: string;
       toStatus: string;
-      auditActions: string[];
     };
 
 /**
  * Core reconciliation logic shared by read and mutation paths.
- * Calls `checkAndUpdateExamStatus`, computes audit actions per J2.7 policy,
- * but does NOT record audits — callers decide when/how to record.
+ * Calls `checkAndUpdateExamStatus` and returns the canonical domain result.
  */
 async function reconcileExamCore(
   repo: ExamRepository,
@@ -41,56 +39,46 @@ async function reconcileExamCore(
     return { exam, changed: false };
   }
 
-  const auditActions: string[] = [];
-
-  // J2.7 double-transition edge case: published → open → closed in one pass.
-  // `transition` is "closed" (the last one), but we need to emit both audits.
-  if (previousStatus === "published" && transition === "closed") {
-    auditActions.push("exam.open", "exam.closed");
-  } else {
-    auditActions.push(`exam.${transition}`);
-  }
-
   return {
     exam,
     changed: true,
     fromStatus: previousStatus,
     toStatus: exam.status,
-    auditActions,
   };
 }
 
 /**
  * Reconcile exam status for read-only entry points (candidate list, detail,
- * start attempt). Records audit immediately if a transition occurred.
+ * start attempt).
  *
- * Use this when the caller is NOT inside a transaction and does not hold
- * a row-level lock. No transaction or lock is acquired here.
+ * Use this when the caller is not already inside a transaction. The helper
+ * owns a short transaction and row lock so concurrent reconciliation cannot
+ * race another status mutation.
  */
 export async function reconcileExamForRead(
-  repo: ExamRepository,
+  db: Database,
   examId: string,
   now: Date,
-  fastify: FastifyInstance,
-  request: FastifyRequest,
   ctx: RequestContext,
 ): Promise<ReconciliationResult | null> {
-  const result = await reconcileExamCore(repo, examId, now);
-  if (!result) return null;
+  return executeInTransaction(db, async (tx) => {
+    const repo = createExamRepo(tx);
+    const locked = await repo.findByIdForUpdate(ctx, examId);
+    if (!locked) return null;
+    const result = await reconcileExamCore(
+      createExamRepoAdapter(repo, ctx),
+      examId,
+      now,
+    );
+    if (!result) return null;
 
-  if (result.changed) {
-    for (const action of result.auditActions) {
-      recordAudit(fastify, request, ctx, action, "exam", examId);
-    }
-  }
-
-  return result;
+    return result;
+  });
 }
 
 /**
  * Reconcile exam status for mutation entry points (admin close, extend,
- * cancel, archive, etc.). Returns audit actions for the caller to record
- * AFTER the transaction commits.
+ * cancel, archive, etc.).
  *
  * Use this when the caller already holds a transaction and row-level lock.
  * No transaction or lock is acquired here.

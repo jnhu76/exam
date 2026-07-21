@@ -4,8 +4,41 @@ import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import { eq, sql } from "drizzle-orm";
 import candidateRoutes from "./candidate.js";
 import { buildTestApp, createFutureRoleUserForTest } from "./testHelpers.js";
+
+async function installCandidateCreateAuditFailure(
+  db: Awaited<ReturnType<typeof buildTestApp>>["db"],
+): Promise<() => Promise<void>> {
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const functionName = `fail_candidate_create_audit_${suffix}`;
+  const triggerName = `fail_candidate_create_audit_trigger_${suffix}`;
+  await db.execute(
+    sql.raw(`
+      CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected candidate create audit failure';
+      END;
+      $$ LANGUAGE plpgsql
+    `),
+  );
+  await db.execute(
+    sql.raw(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE INSERT ON audit_logs
+      FOR EACH ROW
+      WHEN (NEW.action = 'candidate.create')
+      EXECUTE FUNCTION ${functionName}()
+    `),
+  );
+  return async () => {
+    await db.execute(
+      sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+    );
+    await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
+  };
+}
 
 describe("candidate routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -306,6 +339,39 @@ describe("candidate routes", () => {
     expect(body.created).toBe(0);
     expect(body.updated).toBe(1);
     expect(body.errors).toHaveLength(0);
+  });
+
+  it("rolls back a newly created identity row when its import audit fails", async () => {
+    const username = `audit-failure-${Date.now()}`;
+    const removeFailure = await installCandidateCreateAuditFailure(ctx.db);
+    try {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/candidates/import",
+        payload: {
+          rows: [
+            {
+              username,
+              password: "password123",
+              name: "Rolled Back Candidate",
+              fields: { [identityFieldName]: `R-${Date.now()}` },
+            },
+          ],
+        },
+        cookies: { "auth-token": adminToken },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ created: 0, updated: 0 });
+      expect(response.json().errors).toHaveLength(1);
+      const users = await ctx.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.username, username));
+      expect(users).toHaveLength(0);
+    } finally {
+      await removeFailure();
+    }
   });
 
   it("POST /api/candidates/import rejects missing username or name", async () => {

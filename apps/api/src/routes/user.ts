@@ -16,7 +16,10 @@ import { executeInTransaction } from "@exam/db/src/types.js";
 import { ValidationError } from "@exam/domain";
 import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { recordAudit } from "./audit.js";
+import {
+  recordAtomicHttpAudit,
+  recordBestEffortAudit,
+} from "../audit/auditWriter.js";
 import { syncUsersRoleFromPrimary } from "../authz/roleSync.js";
 import { mutateWithEffectiveAdminPostcondition } from "../authz/adminInvariant.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
@@ -161,9 +164,13 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
             isActive: true,
           },
         );
+        await recordAtomicHttpAudit(tx, request, ctx, {
+          action: "user.create",
+          targetType: "user",
+          targetId: created.id,
+        });
         return created;
       });
-      recordAudit(fastify, request, ctx, "user.create", "user", user.id);
       return reply.code(201).send({
         id: user.id,
         organizationId: user.organizationId,
@@ -227,6 +234,10 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
 
       const newRole = data.role;
       const roleChanged = newRole !== undefined && newRole !== target.role;
+      const activeChanged =
+        data.isActive !== undefined && data.isActive !== target.isActive;
+      const profileChanged =
+        data.name !== undefined && data.name !== target.name;
 
       const finalUser = await mutateWithEffectiveAdminPostcondition(
         fastify.db,
@@ -255,7 +266,24 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           await syncUsersRoleFromPrimary(tx, ctx, id);
-          return txUserRepo.findByOrganizationAndId(ctx, id);
+          const final = await txUserRepo.findByOrganizationAndId(ctx, id);
+          if (!final) return null;
+          if (roleChanged) {
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "user.role_changed",
+              targetType: "user",
+              targetId: id,
+              metadata: { oldRole: target.role, newRole },
+            });
+          }
+          if (activeChanged) {
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: data.isActive ? "user.reactivated" : "user.disabled",
+              targetType: "user",
+              targetId: id,
+            });
+          }
+          return final;
         },
       );
 
@@ -265,11 +293,12 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      recordAudit(fastify, request, ctx, "user.update", "user", id);
-      if (roleChanged) {
-        recordAudit(fastify, request, ctx, "user.role_changed", "user", id, {
-          oldRole: target.role,
-          newRole,
+      if (profileChanged) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "user.profile_updated",
+          targetType: "user",
+          targetId: id,
+          metadata: { changedFields: ["name"] },
         });
       }
 
@@ -343,21 +372,23 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const newHash = await hashPassword(data.newPassword);
-      const updated = await repo.update(ctx, id, { passwordHash: newHash });
+      const updated = await executeInTransaction(fastify.db, async (tx) => {
+        const changed = await createUserRepo(tx).update(ctx, id, {
+          passwordHash: newHash,
+        });
+        if (!changed) return null;
+        await recordAtomicHttpAudit(tx, request, ctx, {
+          action: "candidate.password_reset",
+          targetType: "user",
+          targetId: id,
+        });
+        return changed;
+      });
       if (!updated) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "candidate.password_reset",
-        "user",
-        id,
-        { username: target.username },
-      );
       return { ok: true as const };
     },
   );
@@ -401,10 +432,13 @@ const userRoutes: FastifyPluginAsync = async (fastify) => {
         ctx,
         async (tx) => {
           await createUserRepo(tx).delete(ctx, id);
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "user.delete",
+            targetType: "user",
+            targetId: id,
+          });
         },
       );
-
-      recordAudit(fastify, request, ctx, "user.delete", "user", id);
       return reply.code(204).send();
     },
   );

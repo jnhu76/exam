@@ -28,9 +28,8 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGradingEntryRepo.js";
-import { executeInTransaction } from "@exam/db/src/types.js";
-import type { Database } from "@exam/db/src/types.js";
 import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import {
   createAttemptRepoAdapter,
   createExamEngineRepos,
@@ -42,6 +41,10 @@ import {
   getRequestContext,
 } from "./helpers.js";
 import { cookieAuth, toCandidateAttemptResponse } from "./attempts.shared.js";
+import {
+  recordAtomicHttpAudit,
+  recordSensitiveReadAudit,
+} from "../audit/auditWriter.js";
 
 /**
  * Registers all admin-facing attempt routes: misconduct flag, force-submit,
@@ -87,36 +90,24 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       const { attemptId } = parsed.data;
       const { severity, notes } = body.data;
 
-      // P2C-J4 §17: no transaction / no row lock. flagMisconduct performs a
-      // single best-effort jsonb update on the attempt.
-      await flagMisconduct(
-        createAttemptRepoAdapter(createAttemptRepo(fastify.db), ctx),
-        attemptId,
-        ctx.actorId,
-        severity,
-        notes,
-        fastify.now(),
-      );
-
-      // Audit is awaited + best-effort (deterministic for tests).
-      try {
-        await createAuditLogRepo(fastify.db as Database).create(ctx, {
-          actorId: ctx.actorId,
+      // The attempt mutation and privileged-action evidence share one
+      // transaction so neither can commit without the other.
+      await executeInTransaction(fastify.db, async (tx) => {
+        await flagMisconduct(
+          createAttemptRepoAdapter(createAttemptRepo(tx), ctx),
+          attemptId,
+          ctx.actorId,
+          severity,
+          notes,
+          fastify.now(),
+        );
+        await recordAtomicHttpAudit(tx, request, ctx, {
           action: "attempt.misconductFlagged",
           targetType: "attempt",
           targetId: attemptId,
-          metadata: {
-            requestId: request.id,
-            severity,
-            notes,
-          },
+          metadata: { severity, notes },
         });
-      } catch (err) {
-        request.log.error(
-          { err, attemptId, action: "attempt.misconductFlagged" },
-          "Failed to record misconduct-flag audit",
-        );
-      }
+      });
 
       return reply.send({ ok: true } as const);
     },
@@ -176,116 +167,96 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
       // whole tx rolls back atomically — the attempt can never be left
       // `submitted` without grading. The `forceSubmitted` flag still drives the
       // audit-on-real-transition-only rule below.
-      const forceSubmitted = await executeInTransaction(
-        fastify.db,
-        async (tx) => {
-          // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
-          // capability via the canonical seam, and thread the same instances
-          // + capability to the grading consumer.
-          const txAttemptRepo = createAttemptRepo(tx);
-          const txEnrollmentRepo = createEnrollmentRepo(tx);
-          const { exams, enrollments, attempts } = createExamEngineRepos(
-            {
-              examRepo: createExamRepo(tx),
-              attemptRepo: txAttemptRepo,
-              enrollmentRepo: txEnrollmentRepo,
-            },
-            ctx,
+      await executeInTransaction(fastify.db, async (tx) => {
+        // P3-FORMAL-P0-D2: build the engine repo pair once, mint the EA
+        // capability via the canonical seam, and thread the same instances
+        // + capability to the grading consumer.
+        const txAttemptRepo = createAttemptRepo(tx);
+        const txEnrollmentRepo = createEnrollmentRepo(tx);
+        const { exams, enrollments, attempts } = createExamEngineRepos(
+          {
+            examRepo: createExamRepo(tx),
+            attemptRepo: txAttemptRepo,
+            enrollmentRepo: txEnrollmentRepo,
+          },
+          ctx,
+        );
+        const cap = await lockEnrollmentAndAttempt(
+          enrollments,
+          attempts,
+          attemptId,
+        );
+        const locked = await attempts.findById(attemptId);
+        if (!locked) {
+          throw new NotFoundError("Attempt not found");
+        }
+        // voided is the only truly invalid state for force-submit.
+        if (locked.status === "voided") {
+          throw new InvalidStateTransitionError(
+            `Cannot force-submit attempt in ${locked.status} state`,
           );
-          const cap = await lockEnrollmentAndAttempt(
+        }
+
+        // Idempotent: already terminal (submitted/grading/graded) -> skip
+        // submit, but still run gradeAttemptIdempotent so a `submitted` row
+        // left by a crashed earlier attempt is recovered to `graded` here.
+        const needsSubmit =
+          locked.status === "in_progress" || locked.status === "disrupted";
+        // Slice 4: the grading workset repo is needed both for submitAttempt
+        // (when materializing) and for gradeAttemptIdempotent (when
+        // aggregating from the entries). Hoist it out of the `needsSubmit`
+        // block so the crash-recovery path (`submitted` row, no submit) can
+        // still aggregate from the previously-materialized workset.
+        const gradingWorksetRepo = createGradingWorksetRepoAdapter(
+          createAttemptGradingEntryRepo(tx),
+          ctx,
+        );
+        if (needsSubmit) {
+          // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
+          // guard (source = "proctor" — the SubmitSource for admin/proctor
+          // intervention; "admin" is not a valid SubmitSource value).
+          // P3-L0-2E: submitAttempt owns grading workset materialization.
+          await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
+            source: "proctor",
+          });
+        }
+
+        // Grade inside the SAME locked tx. `gradeAttemptIdempotent` handles
+        // `submitted`->graded (the crash-recovery path: a submitted row left
+        // by a crashed earlier attempt, or the row we just submitted) and is
+        // a no-op for `graded`. `grading` is a transient mid-flight state we
+        // cannot resume from a row read alone (it is the candidate-path's
+        // own submit-tx mid-transition) — leave it untouched.
+        // Slice 4: gradeAttemptIdempotent aggregates from the tx-scoped
+        // workset repo (created above for submitAttempt).
+        // P3-FORMAL-P0-D2: the capability is the EA protocol authority.
+        if (locked.status !== "grading") {
+          await gradeAttemptIdempotent(
+            exams,
             enrollments,
             attempts,
-            attemptId,
+            gradingWorksetRepo,
+            cap,
+            now,
           );
-          const locked = await attempts.findById(attemptId);
-          if (!locked) {
-            throw new NotFoundError("Attempt not found");
-          }
-          // voided is the only truly invalid state for force-submit.
-          if (locked.status === "voided") {
-            throw new InvalidStateTransitionError(
-              `Cannot force-submit attempt in ${locked.status} state`,
-            );
-          }
+        }
 
-          // Idempotent: already terminal (submitted/grading/graded) -> skip
-          // submit, but still run gradeAttemptIdempotent so a `submitted` row
-          // left by a crashed earlier attempt is recovered to `graded` here.
-          const needsSubmit =
-            locked.status === "in_progress" || locked.status === "disrupted";
-          // Slice 4: the grading workset repo is needed both for submitAttempt
-          // (when materializing) and for gradeAttemptIdempotent (when
-          // aggregating from the entries). Hoist it out of the `needsSubmit`
-          // block so the crash-recovery path (`submitted` row, no submit) can
-          // still aggregate from the previously-materialized workset.
-          const gradingWorksetRepo = createGradingWorksetRepoAdapter(
-            createAttemptGradingEntryRepo(tx),
-            ctx,
-          );
-          if (needsSubmit) {
-            // Admin force-submit bypasses the candidate minSubmitAfterStartMinutes
-            // guard (source = "proctor" — the SubmitSource for admin/proctor
-            // intervention; "admin" is not a valid SubmitSource value).
-            // P3-L0-2E: submitAttempt owns grading workset materialization.
-            await submitAttempt(attempts, gradingWorksetRepo, attemptId, now, {
-              source: "proctor",
-            });
-          }
+        if (needsSubmit) {
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "attempt.forceSubmit",
+            targetType: "attempt",
+            targetId: attemptId,
+            metadata: { ...(reason ? { reason } : {}) },
+          });
+        }
 
-          // Grade inside the SAME locked tx. `gradeAttemptIdempotent` handles
-          // `submitted`->graded (the crash-recovery path: a submitted row left
-          // by a crashed earlier attempt, or the row we just submitted) and is
-          // a no-op for `graded`. `grading` is a transient mid-flight state we
-          // cannot resume from a row read alone (it is the candidate-path's
-          // own submit-tx mid-transition) — leave it untouched.
-          // Slice 4: gradeAttemptIdempotent aggregates from the tx-scoped
-          // workset repo (created above for submitAttempt).
-          // P3-FORMAL-P0-D2: the capability is the EA protocol authority.
-          if (locked.status !== "grading") {
-            await gradeAttemptIdempotent(
-              exams,
-              enrollments,
-              attempts,
-              gradingWorksetRepo,
-              cap,
-              now,
-            );
-          }
-
-          return needsSubmit;
-        },
-      );
+        return needsSubmit;
+      });
 
       const attemptRepo = createAttemptRepo(fastify.db);
       const attempt = await attemptRepo.findById(ctx, attemptId);
       if (!attempt) {
         throw new NotFoundError("Attempt not found after force-submit");
-      }
-
-      // Audit only when a real transition occurred (P2C-J2 review fix): an
-      // idempotent no-op (already submitted/grading/graded) must NOT emit a
-      // duplicate audit row. Awaited + best-effort so the row is committed
-      // before the response (spec §20/§23).
-      if (forceSubmitted) {
-        try {
-          await createAuditLogRepo(fastify.db as Database).create(ctx, {
-            actorId: ctx.actorId,
-            action: "attempt.forceSubmit",
-            targetType: "attempt",
-            targetId: attemptId,
-            metadata: {
-              requestId: request.id,
-              ...(reason ? { reason } : {}),
-            },
-            ipAddress: request.ip,
-            userAgent: request.headers["user-agent"],
-          });
-        } catch (err) {
-          request.log.error(
-            { err, attemptId, action: "attempt.forceSubmit" },
-            "Failed to record force-submit audit",
-          );
-        }
       }
 
       return LoadAttemptResponseSchema.parse(
@@ -347,35 +318,21 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
           },
           ctx,
         );
-        return extendAttemptTime(
+        const extended = await extendAttemptTime(
           exams,
           attempts,
           attemptId,
           additionalMinutes,
           fastify.now(),
         );
-      });
-
-      // Audit is awaited + best-effort so the row is committed before the
-      // response (deterministic for tests); a failed write must not fail the
-      // extend.
-      try {
-        await createAuditLogRepo(fastify.db as Database).create(ctx, {
-          actorId: ctx.actorId,
+        await recordAtomicHttpAudit(tx, request, ctx, {
           action: "attempt.extendTime",
           targetType: "attempt",
           targetId: attemptId,
-          metadata: {
-            requestId: request.id,
-            additionalMinutes,
-          },
+          metadata: { additionalMinutes },
         });
-      } catch (err) {
-        request.log.error(
-          { err, attemptId, action: "attempt.extendTime" },
-          "Failed to record extend-time audit",
-        );
-      }
+        return extended;
+      });
 
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt as ExamAttempt, fastify.now()),
@@ -423,7 +380,7 @@ export async function registerAdminAttemptRoutes(fastify: FastifyInstance) {
         throw new NotFoundError("Attempt not found");
       }
 
-      const auditLogRepo = createAuditLogRepo(fastify.db as Database);
+      const auditLogRepo = createAuditLogRepo(fastify.db);
       const rows = await auditLogRepo.listByTarget(ctx, "attempt", attemptId);
 
       return reply.send({
@@ -607,10 +564,7 @@ async function buildAttemptExport(
   };
 }
 
-/**
- * Records the attempt.exported audit row (awaited + best-effort so a failed
- * write never fails the export itself).
- */
+/** Records the synchronous sensitive-read attempt export evidence. */
 async function recordExportAudit(
   fastify: FastifyInstance,
   ctx: RequestContext,
@@ -618,22 +572,12 @@ async function recordExportAudit(
   attemptId: string,
   format: "json" | "csv",
 ): Promise<void> {
-  try {
-    await createAuditLogRepo(fastify.db as Database).create(ctx, {
-      actorId: ctx.actorId,
-      action: "attempt.exported",
-      targetType: "attempt",
-      targetId: attemptId,
-      metadata: { requestId: request.id, format },
-      ipAddress: request.ip,
-      userAgent: request.headers["user-agent"],
-    });
-  } catch (err) {
-    request.log.error(
-      { err, attemptId, action: "attempt.exported" },
-      "Failed to record export audit",
-    );
-  }
+  await recordSensitiveReadAudit(fastify.db, request, ctx, {
+    action: "attempt.exported",
+    targetType: "attempt",
+    targetId: attemptId,
+    metadata: { format },
+  });
 }
 
 /** Formats an answer value as a display string for CSV export. */

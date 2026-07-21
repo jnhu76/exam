@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Database, TenantContext } from "../types.js";
+import type { Database, TenantContext, TransactionDatabase } from "../types.js";
 import type { RequestContext } from "@exam/domain";
 import { userRoleAssignments, type AssignableRole } from "../schema/pg.js";
 import {
@@ -154,7 +154,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * active primary already exists.
    */
   async function assignWithinTransaction(
-    tx: Database,
+    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     params: {
       userId: string;
@@ -213,7 +213,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * transaction MUST use {@link ensurePrimaryAssignment} instead.
    */
   async function ensurePrimaryAssignmentWithinTransaction(
-    tx: Database,
+    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     params: { userId: string; role: AssignableRole },
   ): Promise<UserRoleAssignmentRow> {
@@ -289,7 +289,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * Transaction-only variant — call inside an existing transaction.
    */
   async function promoteOrAssignPrimaryWithinTransaction(
-    tx: Database,
+    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     params: { userId: string; role: AssignableRole },
   ): Promise<UserRoleAssignmentRow> {
@@ -319,7 +319,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * Transaction-only variant — call inside an existing transaction.
    */
   async function replacePrimaryRoleWithinTransaction(
-    tx: Database,
+    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     params: { userId: string; role: AssignableRole },
   ): Promise<UserRoleAssignmentRow> {
@@ -356,39 +356,46 @@ export function createUserRoleAssignmentRepo(db: Database) {
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
+    return executeInTransaction(db, (tx) =>
+      setPrimaryWithinTransaction(tx, ctx, assignmentId),
+    );
+  }
+
+  /** Transaction-only variant of {@link setPrimary}. */
+  async function setPrimaryWithinTransaction(
+    tx: TransactionDatabase,
+    ctx: TenantContext | RequestContext,
+    assignmentId: string,
+  ): Promise<UserRoleAssignmentRow | null> {
     const orgId = resolveOrganizationId(ctx);
-    return executeInTransaction(db, async (tx) => {
-      const target = await tx
-        .select()
-        .from(userRoleAssignments)
-        .where(
-          and(
-            eq(userRoleAssignments.organizationId, orgId),
-            eq(userRoleAssignments.id, assignmentId),
-          ),
-        )
-        .limit(1);
-      if (!target[0]) return null;
-      const t = target[0];
-      // Demote other primaries for the same user.
-      await tx
-        .update(userRoleAssignments)
-        .set({ isPrimary: false, updatedAt: now() })
-        .where(
-          and(
-            eq(userRoleAssignments.organizationId, orgId),
-            eq(userRoleAssignments.userId, t.userId),
-            eq(userRoleAssignments.isPrimary, true),
-          ),
-        );
-      // Promote + activate the target.
-      const updated = await tx
-        .update(userRoleAssignments)
-        .set({ isPrimary: true, isActive: true, updatedAt: now() })
-        .where(eq(userRoleAssignments.id, assignmentId))
-        .returning();
-      return updated[0] ? row(updated[0]) : null;
-    });
+    const target = await tx
+      .select()
+      .from(userRoleAssignments)
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.id, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!target[0]) return null;
+    const t = target[0];
+    await tx
+      .update(userRoleAssignments)
+      .set({ isPrimary: false, updatedAt: now() })
+      .where(
+        and(
+          eq(userRoleAssignments.organizationId, orgId),
+          eq(userRoleAssignments.userId, t.userId),
+          eq(userRoleAssignments.isPrimary, true),
+        ),
+      );
+    const updated = await tx
+      .update(userRoleAssignments)
+      .set({ isPrimary: true, isActive: true, updatedAt: now() })
+      .where(eq(userRoleAssignments.id, assignmentId))
+      .returning();
+    return updated[0] ? row(updated[0]) : null;
   }
 
   /**
@@ -429,7 +436,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * (RBAC-M7 invariant). Transaction-only variant.
    */
   async function deactivateWithinTransaction(
-    tx: Database,
+    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
@@ -476,7 +483,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
    * Transaction-only variant.
    */
   async function removeWithinTransaction(
-    tx: Database,
+    tx: TransactionDatabase,
     ctx: TenantContext | RequestContext,
     assignmentId: string,
   ): Promise<UserRoleAssignmentRow | null> {
@@ -527,6 +534,7 @@ export function createUserRoleAssignmentRepo(db: Database) {
     promoteOrAssignPrimaryWithinTransaction,
     replacePrimaryRole,
     replacePrimaryRoleWithinTransaction,
+    setPrimaryWithinTransaction,
     setPrimary,
     deactivate,
     deactivateWithinTransaction,

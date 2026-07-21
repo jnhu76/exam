@@ -6,10 +6,7 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
-import {
-  cleanupBusinessData,
-  cleanupOrganizationTestData,
-} from "@exam/db/src/testCleanup.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
@@ -255,16 +252,18 @@ describe("attempt routes", () => {
     }
 
     beforeEach(async () => {
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
         .where(like(schema.organizations.slug, `${EXTEND_TIME_TEST_PREFIX}%`));
       for (const org of stale) {
-        await cleanupBusinessData(ctx.db, org.id);
+        await cleanupOrganizationTestData(ctx.db, org.id);
       }
     });
 
     afterAll(async () => {
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -302,6 +301,7 @@ describe("attempt routes", () => {
         beforeDeadline.getTime() + 10 * 60_000,
       );
 
+      await ctx.drainAuditWrites();
       const auditRows = await ctx.db
         .select()
         .from(schema.auditLogs)

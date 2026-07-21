@@ -9,6 +9,7 @@ import nowPlugin from "../../src/plugins/now.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
 import zodProviderPlugin from "../../src/plugins/zodProvider.js";
 import setupSecurity from "../../src/plugins/security.js";
+import auditLifecyclePlugin from "../../src/plugins/auditLifecycle.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
@@ -246,6 +247,7 @@ describe("Tenant Isolation (S01)", () => {
     await app.register(zodProviderPlugin);
     await app.register(fastifyCookie);
     await app.register(createDbPlugin(db));
+    await app.register(auditLifecyclePlugin);
     await app.register(nowPlugin);
     await app.register(authPlugin);
     await app.register(tenantPlugin);

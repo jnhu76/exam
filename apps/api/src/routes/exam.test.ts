@@ -897,6 +897,106 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
   });
+
+  it("PATCH draft with empty body returns 200 without mutation or audit", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Noop Draft",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const created = createRes.json();
+    const updatedAtBefore = created.updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${created.id}`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
+
+  it("PATCH draft with same-value fields returns 200 without mutation or audit", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Noop Draft Fields",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const created = createRes.json();
+    const updatedAtBefore = created.updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${created.id}`,
+      payload: {
+        title: created.title,
+        passingScore: created.passingScore,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
+
+  it("PATCH published with same closeAt returns 200 without mutation or audit", async () => {
+    const examId = await createPublishedExam("Noop Published");
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const exam = getRes.json();
+    const updatedAtBefore = exam.updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { closeAt: exam.closeAt },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
+
+  it("PATCH published with empty body returns 200 without mutation or audit", async () => {
+    const examId = await createPublishedExam("Noop Published Empty");
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const updatedAtBefore = getRes.json().updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
 });
 
 // ADR-005 Slice 4 (cancel-minimal) — POST /api/exams/:id/cancel
@@ -1206,25 +1306,18 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     expect(first.statusCode).toBe(200);
     expect(first.json().status).toBe("archived");
 
-    // Wait for the first audit event to land (recordAudit is fire-and-forget).
-    const waitForAuditCount = async (want: number) => {
-      for (let i = 0; i < 10; i++) {
-        const auditRes = await ctx.app.inject({
-          method: "GET",
-          url: `/api/admin/audit-logs?action=exam.archive`,
-          cookies: { "auth-token": ctx.adminToken },
-        });
-        const rows =
-          auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
-        const mine = rows.filter(
-          (r: { targetId: string }) => r.targetId === examId,
-        );
-        if (mine.length >= want) return mine.length;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-      return -1;
+    const readAuditCount = async () => {
+      const auditRes = await ctx.app.inject({
+        method: "GET",
+        url: `/api/admin/audit-logs?action=exam.archive`,
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(auditRes.statusCode).toBe(200);
+      const rows = auditRes.json().items ?? [];
+      return rows.filter((row: { targetId: string }) => row.targetId === examId)
+        .length;
     };
-    expect(await waitForAuditCount(1)).toBe(1);
+    expect(await readAuditCount()).toBe(1);
 
     // Second archive: idempotent no-op -> 200, NO additional audit.
     const second = await ctx.app.inject({
@@ -1234,8 +1327,7 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     });
     expect(second.statusCode).toBe(200);
     expect(second.json().status).toBe("archived");
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(await waitForAuditCount(2)).toBe(-1); // still 1, no second event
+    expect(await readAuditCount()).toBe(1);
   });
 
   it("successful archive writes exactly one exam.archive audit event", async () => {
@@ -1247,19 +1339,15 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     });
     expect(res.statusCode).toBe(200);
 
-    let rows: { targetId: string }[] = [];
-    for (let i = 0; i < 10; i++) {
-      const auditRes = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/audit-logs?action=exam.archive`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const allRows =
-        auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
-      rows = allRows.filter((r: { targetId: string }) => r.targetId === examId);
-      if (rows.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    const auditRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/audit-logs?action=exam.archive`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(auditRes.statusCode).toBe(200);
+    const rows = (auditRes.json().items ?? []).filter(
+      (row: { targetId: string }) => row.targetId === examId,
+    );
     expect(rows.length).toBe(1);
   });
 
@@ -1273,20 +1361,15 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     });
     expect(res.statusCode).toBe(200);
 
-    // recordAudit is fire-and-forget; poll until the log appears.
-    let rows: { targetId: string }[] = [];
-    for (let i = 0; i < 10; i++) {
-      const auditRes = await ctx.app.inject({
-        method: "GET",
-        url: `/api/admin/audit-logs?action=exam.cancel`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      const allRows =
-        auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
-      rows = allRows.filter((r: { targetId: string }) => r.targetId === examId);
-      if (rows.length > 0) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
+    const auditRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/admin/audit-logs?action=exam.cancel`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(auditRes.statusCode).toBe(200);
+    const rows = (auditRes.json().items ?? []).filter(
+      (row: { targetId: string }) => row.targetId === examId,
+    );
     expect(rows.length).toBe(1);
   });
 

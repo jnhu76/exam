@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { signJWT } from "@exam/auth/src/session.js";
@@ -8,6 +8,13 @@ import auditRoutes from "./audit.js";
 import { buildTestApp } from "./testHelpers.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
+import type { RequestContext } from "@exam/domain";
+import {
+  recordAtomicHttpAudit,
+  recordSensitiveReadAudit,
+} from "../audit/auditWriter.js";
+import type { AuditActionForDurability } from "../audit/auditPolicy.js";
 
 const combinedPlugin: FastifyPluginAsync = async (fastify) => {
   await fastify.register(authRoutes, { prefix: "/auth" });
@@ -132,14 +139,26 @@ describe("audit log baseline (S06-lite)", () => {
   }
 
   async function waitForAudit(predicate?: () => Promise<boolean>) {
-    const timeoutMs = predicate ? 2000 : 800;
-    const deadline = Date.now() + timeoutMs;
-    const check =
-      predicate ?? (async () => (await readAuditsForActor(adminId)).length > 0);
-    while (Date.now() < deadline) {
-      if (await check()) return;
-      await new Promise((r) => setTimeout(r, 25));
-    }
+    await ctx.drainAuditWrites();
+    if (predicate) expect(await predicate()).toBe(true);
+  }
+
+  async function writeTransactionalAudit(
+    request: FastifyRequest,
+    requestContext: RequestContext,
+    action: AuditActionForDurability<"atomic">,
+    targetType: string,
+    targetId: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    await executeInTransaction(ctx.db, (tx) =>
+      recordAtomicHttpAudit(tx, request, requestContext, {
+        action,
+        targetType,
+        targetId,
+        ...(metadata ? { metadata } : {}),
+      }),
+    );
   }
 
   describe("login.success audit", () => {
@@ -163,9 +182,8 @@ describe("audit log baseline (S06-lite)", () => {
       expect(successRows[0]!.actorId).toBe(adminId);
       expect(successRows[0]!.targetType).toBe("user");
       expect(successRows[0]!.targetId).toBe(adminId);
-      expect(successRows[0]!.metadata).toMatchObject({
-        username: adminUsername,
-      });
+      expect(successRows[0]!.metadata).toHaveProperty("requestId");
+      expect(successRows[0]!.metadata).not.toHaveProperty("username");
     });
   });
 
@@ -184,23 +202,23 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.statusCode).toBe(401);
 
       await waitForAudit(
-        async () => (await readAuditsForTarget(adminUsername)).length >= 1,
+        async () => (await readAuditsForTarget(adminId)).length >= 1,
       );
-      const rows = await readAuditsForTarget(adminUsername);
+      const rows = await readAuditsForTarget(adminId);
       const failures = rows.filter((r) => r.action === "login.failure");
       expect(failures).toHaveLength(1);
       expect(failures[0]!.targetType).toBe("login");
       expect(failures[0]!.metadata).toMatchObject({
-        username: adminUsername,
-        reason: "invalid_credentials",
+        reason: "invalid_password",
       });
+      expect(failures[0]!.metadata).not.toHaveProperty("username");
     });
 
     it("emits login.failure when user is unknown", async () => {
       const marker = `nobody-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       await ctx.db
         .delete(schema.auditLogs)
-        .where(eq(schema.auditLogs.targetId, marker));
+        .where(eq(schema.auditLogs.targetId, "anonymous"));
 
       const response = await ctx.app.inject({
         method: "POST",
@@ -213,15 +231,13 @@ describe("audit log baseline (S06-lite)", () => {
       expect(response.statusCode).toBe(401);
 
       await waitForAudit(
-        async () => (await readAuditsForTarget(marker)).length > 0,
+        async () => (await readAuditsForTarget("anonymous")).length > 0,
       );
-      const rows = await readAuditsForTarget(marker);
+      const rows = await readAuditsForTarget("anonymous");
       const failures = rows.filter((r) => r.action === "login.failure");
       expect(failures).toHaveLength(1);
-      expect(failures[0]!.metadata).toMatchObject({
-        username: marker,
-        reason: "invalid_credentials",
-      });
+      expect(failures[0]!.metadata).toMatchObject({ reason: "unknown_user" });
+      expect(failures[0]!.metadata).not.toHaveProperty("username");
     });
   });
 
@@ -291,9 +307,7 @@ describe("audit log baseline (S06-lite)", () => {
           },
         });
       }
-      await waitForAudit(
-        async () => (await readAuditsForActor(adminId)).length >= 3,
-      );
+      await waitForAudit();
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -346,9 +360,7 @@ describe("audit log baseline (S06-lite)", () => {
           password: "nope",
         },
       });
-      await waitForAudit(
-        async () => (await readAuditsForActor(adminId)).length >= 3,
-      );
+      await waitForAudit();
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -370,16 +382,14 @@ describe("audit log baseline (S06-lite)", () => {
 
     it("filters by targetType query param", async () => {
       await clearAudits();
-      const { recordAudit } = await import("./audit.js");
       const fakeReq = {
         id: "t",
         ip: "127.0.0.1",
         headers: { "user-agent": "vitest" },
-      } as unknown as Parameters<typeof recordAudit>[1];
+      } as unknown as FastifyRequest;
       const examTarget = crypto.randomUUID();
       const userTarget = crypto.randomUUID();
-      recordAudit(
-        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+      await writeTransactionalAudit(
         fakeReq,
         {
           actorId: adminId,
@@ -388,12 +398,11 @@ describe("audit log baseline (S06-lite)", () => {
           permissions: [],
           sessionId: "test",
         },
-        "exam.create",
+        "exam.publish",
         "exam",
         examTarget,
       );
-      recordAudit(
-        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+      await writeTransactionalAudit(
         fakeReq,
         {
           actorId: adminId,
@@ -435,12 +444,6 @@ describe("audit log baseline (S06-lite)", () => {
 
     it("filters by inclusive date range (from / to)", async () => {
       await clearAudits();
-      const { recordAudit } = await import("./audit.js");
-      const fakeReq = {
-        id: "t",
-        ip: "127.0.0.1",
-        headers: { "user-agent": "vitest" },
-      } as unknown as Parameters<typeof recordAudit>[1];
       const t0 = "2026-01-01T00:00:00.000Z";
       const t1 = "2026-02-01T00:00:00.000Z";
       const t2 = "2026-03-01T00:00:00.000Z";
@@ -449,29 +452,16 @@ describe("audit log baseline (S06-lite)", () => {
       for (const [tag, ts] of Object.entries({ t0, t1, t2, t3 })) {
         const targetId = `range-${tag}-${crypto.randomUUID()}`;
         markers[tag] = targetId;
-        recordAudit(
-          ctx.app as unknown as Parameters<typeof recordAudit>[0],
-          fakeReq,
-          {
-            actorId: adminId,
-            organizationId: orgId,
-            role: "Admin",
-            permissions: [],
-            sessionId: "test",
-          },
-          `range.${tag}`,
-          "range_test",
+        await ctx.db.insert(schema.auditLogs).values({
+          id: crypto.randomUUID(),
+          organizationId: orgId,
+          actorId: adminId,
+          action: `range.${tag}`,
+          targetType: "range_test",
           targetId,
-        );
-        await waitForAudit(
-          async () => (await readAuditsForTarget(targetId)).length >= 1,
-        );
-        // Backdate so the date-range bounds are deterministic.
-        const { eq: eqOp } = await import("drizzle-orm");
-        await ctx.db
-          .update(schema.auditLogs)
-          .set({ createdAt: new Date(ts) })
-          .where(eq(schema.auditLogs.targetId, targetId));
+          metadata: { requestId: "t" },
+          createdAt: new Date(ts),
+        });
       }
 
       // Filter by targetType=range_test so these queries only see the 4
@@ -548,15 +538,14 @@ describe("audit log baseline (S06-lite)", () => {
 
     it("respects pageSize parameter", async () => {
       await clearAudits();
-      const { recordAudit } = await import("./audit.js");
       const fakeReq = {
         id: "t",
         ip: "127.0.0.1",
         headers: { "user-agent": "vitest" },
-      } as unknown as Parameters<typeof recordAudit>[1];
+      } as unknown as FastifyRequest;
       for (let i = 0; i < 5; i += 1) {
-        recordAudit(
-          ctx.app as unknown as Parameters<typeof recordAudit>[0],
+        await recordSensitiveReadAudit(
+          ctx.db,
           fakeReq,
           {
             actorId: adminId,
@@ -565,9 +554,12 @@ describe("audit log baseline (S06-lite)", () => {
             permissions: [],
             sessionId: "test",
           },
-          "login.success",
-          "user",
-          adminId,
+          {
+            action: "attempt.exported",
+            targetType: "attempt",
+            targetId: adminId,
+            metadata: { format: "csv" },
+          },
         );
       }
       await waitForAudit(
@@ -588,9 +580,7 @@ describe("audit log baseline (S06-lite)", () => {
   });
 
   describe("SuperAdmin cross-org metadata", () => {
-    it("recordAudit captures actorOrganizationId in metadata when ctx acts cross-org", async () => {
-      const { recordAudit } = await import("./audit.js");
-
+    it("transactional audit captures actorOrganizationId when ctx acts cross-org", async () => {
       await clearAudits();
       const otherOrgId = crypto.randomUUID();
       const otherSlug = `audit-other-${otherOrgId.slice(0, 8)}`;
@@ -609,11 +599,10 @@ describe("audit log baseline (S06-lite)", () => {
         id: "test-req-id",
         ip: "127.0.0.1",
         headers: { "user-agent": "vitest" },
-      } as unknown as Parameters<typeof recordAudit>[1];
+      } as unknown as FastifyRequest;
 
       try {
-        recordAudit(
-          ctx.app as unknown as Parameters<typeof recordAudit>[0],
+        await writeTransactionalAudit(
           fakeRequest,
           {
             actorId: adminId,
@@ -623,10 +612,10 @@ describe("audit log baseline (S06-lite)", () => {
             permissions: [],
             sessionId: "test",
           },
-          "exam.publish",
+          "user.role_changed",
           "exam",
           targetId,
-          { foo: "bar" },
+          { oldRole: "Admin", newRole: "Candidate" },
         );
 
         await waitForAudit(
@@ -640,7 +629,8 @@ describe("audit log baseline (S06-lite)", () => {
         expect(rows.length).toBe(1);
         expect(rows[0]!.organizationId).toBe(orgId);
         expect(rows[0]!.metadata).toMatchObject({
-          foo: "bar",
+          oldRole: "Admin",
+          newRole: "Candidate",
           actorOrganizationId: orgId,
         });
         expect(rows[0]!.metadata).not.toHaveProperty("targetOrganizationId");
@@ -652,9 +642,7 @@ describe("audit log baseline (S06-lite)", () => {
       }
     });
 
-    it("recordAudit does NOT add actorOrganizationId when ctx targets its own org", async () => {
-      const { recordAudit } = await import("./audit.js");
-
+    it("transactional audit omits actorOrganizationId for the actor org", async () => {
       await clearAudits();
       const targetId2 = crypto.randomUUID();
 
@@ -662,10 +650,9 @@ describe("audit log baseline (S06-lite)", () => {
         id: "test-req-id-2",
         ip: "127.0.0.1",
         headers: { "user-agent": "vitest" },
-      } as unknown as Parameters<typeof recordAudit>[1];
+      } as unknown as FastifyRequest;
 
-      recordAudit(
-        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+      await writeTransactionalAudit(
         fakeRequest,
         {
           actorId: adminId,
@@ -675,10 +662,9 @@ describe("audit log baseline (S06-lite)", () => {
           permissions: [],
           sessionId: "test",
         },
-        "course.create",
+        "exam.publish",
         "course",
         targetId2,
-        { courseCode: "X" },
       );
 
       await waitForAudit();
@@ -691,9 +677,7 @@ describe("audit log baseline (S06-lite)", () => {
       expect(rows[0]!.metadata).not.toHaveProperty("targetOrganizationId");
     });
 
-    it("recordAudit includes requestId in metadata from request.id", async () => {
-      const { recordAudit } = await import("./audit.js");
-
+    it("transactional audit includes requestId from request.id", async () => {
       await clearAudits();
       const targetId3 = crypto.randomUUID();
       const testRequestId = crypto.randomUUID();
@@ -702,10 +686,9 @@ describe("audit log baseline (S06-lite)", () => {
         id: testRequestId,
         ip: "127.0.0.1",
         headers: { "user-agent": "vitest" },
-      } as unknown as Parameters<typeof recordAudit>[1];
+      } as unknown as FastifyRequest;
 
-      recordAudit(
-        ctx.app as unknown as Parameters<typeof recordAudit>[0],
+      await writeTransactionalAudit(
         fakeRequest,
         {
           actorId: adminId,

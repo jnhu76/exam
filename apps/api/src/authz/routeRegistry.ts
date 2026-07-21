@@ -108,7 +108,10 @@ export interface RoutePermissionRegistryEntry {
   runtimeAuthz?: CandidateRuntimeAuthzStrategy;
   /** Optional resource spec (id source / list filter). */
   resource?: ResourceSpec;
-  /** Audit action to emit when the route is a sensitive read or state change. */
+  /**
+   * Single unambiguous audit action emitted by this route. Conditional routes
+   * that can emit different actions intentionally omit this advisory field.
+   */
   auditAction?: AuditActionKey;
   /** Whether the route touches a sensitive resource (extra audit/scrutiny). */
   sensitive: boolean;
@@ -193,7 +196,6 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
         resourceIdKey: "examId",
         eligibilityDenialMode: "permission_denied",
       },
-      auditAction: "attempt.start",
       sensitive: false,
       migrationStage: 7,
     },
@@ -387,7 +389,6 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.CandidateUpdate,
       scope: Scope.Candidate,
       resolver: "candidate",
-      auditAction: "candidate.update",
       sensitive: true,
       migrationStage: 6,
     },
@@ -521,15 +522,15 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
     },
     {
       // P4-1 §G.3 drift closure: the proctor-incident write is already
-      // requireCapability-gated at runtime (proctorMonitoring.ts:164). It marks
-      // misconduct on an attempt, so it shares the misconduct semantic.
+      // requireCapability-gated at runtime and records a distinct canonical
+      // incident observation rather than changing attempt misconduct state.
       method: "POST",
       path: "/admin/attempts/:attemptId/proctor-incident",
       legacyGate: "Admin",
       permission: Permission.AttemptMisconductMark,
       scope: Scope.Attempt,
       resolver: "attempt",
-      auditAction: "attempt.misconductFlagged",
+      auditAction: "proctor.incident_marked",
       sensitive: true,
       migrationStage: 7,
     },
@@ -599,7 +600,6 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.UserUpdate,
       scope: Scope.Organization,
       resolver: "user",
-      auditAction: "user.update",
       sensitive: true,
       migrationStage: 6,
     },
@@ -816,7 +816,6 @@ export const ROUTE_PERMISSION_REGISTRY: readonly RoutePermissionRegistryEntry[] 
       permission: Permission.ExamUpdate,
       scope: Scope.Exam,
       resolver: "exam",
-      auditAction: "exam.update",
       sensitive: false,
       migrationStage: 6,
     },

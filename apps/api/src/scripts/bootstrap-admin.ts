@@ -19,7 +19,7 @@ import type { Database } from "@exam/db/src/types.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
 import { createUserRoleAssignmentRepo } from "@exam/db/src/repository/userRoleAssignmentRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { recordAtomicSystemAudit } from "../audit/auditWriter.js";
 import { loadRootEnv } from "../config/loadRootEnv.js";
 import { resolveDatabaseUrlFromEnv } from "../config/runtimeConfig.js";
 import { eq } from "drizzle-orm";
@@ -94,19 +94,21 @@ export async function bootstrapAdmin(
         isActive: true,
       },
     );
+    await recordAtomicSystemAudit(
+      tx,
+      { tenant: systemCtx },
+      {
+        action: "admin.bootstrap",
+        targetType: "user",
+        targetId: user.id,
+        metadata: {
+          username: user.username,
+          name: user.name,
+          source: "local_script",
+        },
+      },
+    );
     return { user };
-  });
-
-  await createAuditLogRepo(db).create(systemCtx, {
-    actorId: "system",
-    action: "admin.bootstrap",
-    targetType: "user",
-    targetId: user.id,
-    metadata: {
-      username: user.username,
-      name: user.name,
-      source: "local_script",
-    },
   });
 
   return {

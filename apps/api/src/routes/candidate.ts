@@ -27,7 +27,10 @@ import {
   getRequestContext,
   resolveImportStatus,
 } from "./helpers.js";
-import { recordAudit } from "./audit.js";
+import {
+  recordAtomicHttpAudit,
+  recordBestEffortAudit,
+} from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
@@ -290,10 +293,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
               isActive: true,
             },
           );
-          return txCandidateRepo.create(ctx, {
+          const created = await txCandidateRepo.create(ctx, {
             userId: user.id,
             fields: data.fields,
           });
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "candidate.create",
+            targetType: "candidate",
+            targetId: created.id,
+          });
+          return created;
         });
       } catch (err: unknown) {
         if (err instanceof UserAlreadyExistsError) {
@@ -322,15 +331,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         }
         throw err;
       }
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "candidate.create",
-        "candidate",
-        candidate.id,
-      );
-
       return reply.code(201).send({
         ...candidate,
         name: data.name,
@@ -391,25 +391,56 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         if (duplicate && duplicate.id !== id) {
           throw new CandidateIdentityConflictError();
         }
-        await candidateRepo.update(ctx, id, { fields: data.fields });
       }
-      if (data.name !== undefined || data.isActive !== undefined) {
-        await createUserRepo(fastify.db).update(ctx, candidate.userId, {
-          ...(data.name !== undefined ? { name: data.name } : {}),
-          ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-        });
-      }
-      const updated = await candidateRepo.findById(ctx, id);
+      const updated = await executeInTransaction(fastify.db, async (tx) => {
+        const txCandidateRepo = createCandidateRepo(tx);
+        const txUserRepo = createUserRepo(tx);
+        const targetUser = await txUserRepo.findById(ctx, candidate.userId);
+        const activeChanged =
+          data.isActive !== undefined &&
+          targetUser !== null &&
+          data.isActive !== targetUser.isActive;
+        if (data.fields) {
+          await txCandidateRepo.update(ctx, id, { fields: data.fields });
+        }
+        if (data.name !== undefined || data.isActive !== undefined) {
+          await txUserRepo.update(ctx, candidate.userId, {
+            ...(data.name !== undefined ? { name: data.name } : {}),
+            ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+          });
+        }
+        const changed = await txCandidateRepo.findById(ctx, id);
+        if (!changed) return null;
+        if (activeChanged) {
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: data.isActive ? "user.reactivated" : "user.disabled",
+            targetType: "user",
+            targetId: candidate.userId,
+          });
+        }
+        return changed;
+      });
       if (!updated) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(fastify, request, ctx, "candidate.update", "candidate", id);
       const user = await createUserRepo(fastify.db).findById(
         ctx,
         updated.userId,
       );
+      const changedFields = [
+        ...(data.fields ? ["fields"] : []),
+        ...(data.name !== undefined ? ["name"] : []),
+      ];
+      if (changedFields.length > 0) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "candidate.update",
+          targetType: "candidate",
+          targetId: id,
+          metadata: { changedFields },
+        });
+      }
       return {
         ...updated,
         name: user?.name ?? "",
@@ -505,8 +536,12 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
             existing = await candidateRepo.findByUserId(ctx, userId);
           }
           if (existing) {
-            await candidateRepo.update(ctx, existing.id, { fields });
-            await userRepo.update(ctx, existing.userId, { name });
+            await executeInTransaction(fastify.db, async (tx) => {
+              await createCandidateRepo(tx).update(ctx, existing.id, {
+                fields,
+              });
+              await createUserRepo(tx).update(ctx, existing.userId, { name });
+            });
             existingUsernames.add(username);
             userIdMap.set(username, existing.userId);
             updated++;
@@ -548,10 +583,16 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
                   isActive: true,
                 },
               );
-              return txCandidateRepo.create(ctx, {
+              const createdCandidate = await txCandidateRepo.create(ctx, {
                 userId: createdUser.id,
                 fields,
               });
+              await recordAtomicHttpAudit(tx, request, ctx, {
+                action: "candidate.create",
+                targetType: "candidate",
+                targetId: createdCandidate.id,
+              });
+              return createdCandidate;
             },
           );
           existingUsernames.add(username);
@@ -570,15 +611,6 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
 
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "candidate.import",
-        "organization",
-        ctx.targetOrganizationId!,
-        { total: data.rows.length, created, updated, errors: errors.length },
-      );
       const candidateLogStatus = resolveImportStatus({
         errors: errors.length,
         affectedCount: created + updated,
@@ -605,6 +637,17 @@ const candidateRoutes: FastifyPluginAsync = async (fastify) => {
           "Failed to persist candidate import log; import result is unchanged",
         );
       }
+      recordBestEffortAudit(fastify, request, ctx, {
+        action: "candidate.import",
+        targetType: "candidate_import",
+        targetId: logId ?? request.id,
+        metadata: {
+          total: data.rows.length,
+          created,
+          updated,
+          errors: errors.length,
+        },
+      });
       return {
         total: data.rows.length,
         created,

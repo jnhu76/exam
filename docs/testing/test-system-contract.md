@@ -263,6 +263,100 @@ These are allowed with caution:
 | Backoff/retry pure function tests | Testing algorithmic logic without real time |
 | `Date.now()` for seeding unique data | NOT for elapsed assertions |
 
+### 3.4 Audit completion and background-work lifecycle contract
+
+Audit tests must first select the production durability and lifecycle contract;
+a drain is not a substitute for a transaction or a durable response boundary.
+
+| Durability | Completion boundary | Test assertion |
+| --- | --- | --- |
+| `atomic` | Security-sensitive business mutation and audit insert use the same branded PostgreSQL transaction. | Assert both after success; inject audit failure and assert both absent; inject business failure/no-op and assert no false audit. Do not poll or drain. |
+| `synchronous_sensitive_read` | Final audit insert settles before sensitive response data is returned. | Inject audit failure and assert a failed response contains no protected data; immediately query successful evidence. Do not poll or drain. |
+| `best_effort` | Response may precede persistence; accepted work belongs to the Fastify audit lifecycle. | Prove audit failure does not change the business HTTP result. Use a controlled deferred promise and explicit drain/close boundary. SIGKILL loss is accepted. |
+| `domain_history` | Canonical domain rows own the state; compliance audit is excluded. | Assert the domain transition/save succeeds independently and no excluded audit action is emitted, including idempotent replay. |
+
+`apps/api/src/routes/auditAtomicity.test.ts` uses a transaction-local
+PostgreSQL trigger to fail audit insertion for a selected action. This is the
+standard deterministic failure injection: it exercises the real repository
+and transaction rather than replacing the audit writer with a mock. Each
+mutation case must record the HTTP/script result, business state, audit state,
+and rollback expectation. The retained families include route-owned,
+admin-invariant/role assignment, submit/grading service, exam transition
+executor, CLI/bootstrap, and bulk import boundaries.
+
+`apps/api/src/audit/auditArchitecture.test.ts` keeps the five-dimensional
+action definition exhaustive, recursively inventories production emitters,
+separates ACTIVE from RESERVED/DEPRECATED vocabulary, forbids direct writer
+bypasses, and proves that a root `Database` cannot satisfy the branded
+`TransactionDatabase` contract. Required inventory invariants are:
+
+```text
+ACTIVE_WITH_ZERO_CALLSITES = 0
+RESERVED_WITH_ACTIVE_CALLSITE = 0
+UNOWNED_DIRECT_WRITER = 0
+```
+
+Best-effort background work started by a request, hook, or helper must have an
+explicit lifecycle owner. The owner registers the work before control is
+released, observes every rejection, removes settled work from its registry,
+and provides an awaitable quiescence or drain barrier.
+
+The following rules are mandatory:
+
+- No destructive fixture cleanup may begin while a side effect associated
+  with the preceding test is pending.
+- A real sleep, retry loop, or cleanup helper is not a synchronization
+  barrier. Tests must use the owning component's explicit drain or a
+  deterministic deferred-Promise barrier.
+- `afterAll` means test callbacks have returned; it does not prove that
+  unawaited work created by those callbacks has settled.
+- `cleanupBusinessData` deletes business rows while retaining an organization;
+  callers must quiesce producers and drain their work first.
+- `cleanupOrganizationTestData` destructively removes an organization and its
+  dependent rows; callers must quiesce producers and drain their work first.
+  Neither helper discovers or waits for application-owned work.
+- Applications built with `buildTestApp` expose `drainAuditWrites()` for
+  best-effort tests. Call it before destructive cleanup whenever the test has
+  scheduled best-effort work. `cleanup()` calls `app.close()`, whose audit
+  close hook drains accepted work before the test DB connection is closed.
+- A test-owned Fastify builder that exercises `recordBestEffortAudit` must also
+  register the production audit lifecycle plugin. It must not substitute an
+  immediately awaited test-only sink that hides production lifecycle races.
+
+The ordinary test barrier includes writes scheduled while a drain is active
+until the pending set becomes empty. Production close first stops accepting
+new best-effort work, then drains for 10 seconds. Timeout tests use fake timers
+and a controlled unresolved promise; they assert the returned timed-out result,
+pending count, late-work rejection, no lifecycle-owned fatal/process mutation,
+and bounded completion. The server may log a warning, but best-effort loss alone
+must not set a nonzero exit code. Real sleeps and polling are forbidden here.
+
+### 3.5 Attempt-suite fixture lifecycle
+
+The seven attempt suites below use one organization per test.
+Their business data has the same lifetime as that organization. Each
+`beforeEach` drains accepted audit writes left by the preceding request before
+deleting a stale prefixed organization; each nested `afterAll` drains before
+final prefixed-organization deletion; and the outer `afterAll` calls
+`ctx.cleanup()`, which closes the app, drains application-owned audit work, and
+then closes the DB connection.
+
+These retained drain calls are lifecycle hygiene for the shared application
+builder; they are not the correctness boundary for atomic attempt audits, which
+are awaited and transactional. Automatic submit/disruption and answer saves
+are domain-history exclusions and therefore do not use this drain as a hidden
+durability boundary.
+
+| Suite | Before-test destructive cleanup | Final destructive cleanup |
+|---|---|---|
+| `admin-status.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+| `heartbeat.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+| `admin-force-submit.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+| `admin-misconduct.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+| `admin-extend-time.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+| `timeline.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+| `deadline-scanner.test.ts` | drain, then `cleanupOrganizationTestData` | nested `afterAll`: drain, then organization cleanup |
+
 ---
 
 ## 4. E2E Contract

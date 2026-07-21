@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
@@ -308,6 +308,17 @@ describe("P2D-J5a: result publishing policy", () => {
     expect(second.statusCode).toBe(200);
     expect(second.json().alreadyPublished).toBe(true);
     expect(second.json().resultsPublishedAt).toBe(firstTs);
+
+    const transitionAudits = await ctx.db
+      .select({ id: schema.auditLogs.id })
+      .from(schema.auditLogs)
+      .where(
+        and(
+          eq(schema.auditLogs.action, "exam.publish_results"),
+          eq(schema.auditLogs.targetId, examId),
+        ),
+      );
+    expect(transitionAudits).toHaveLength(1);
   });
 
   // ── Slice 5 ───────────────────────────────────────────────────────

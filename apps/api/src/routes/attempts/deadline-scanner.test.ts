@@ -8,10 +8,7 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
 import { scanDatabaseForExpiredAttempts } from "../../plugins/deadlineScanner.js";
 import { autoSubmitAndGrade } from "../../plugins/deadlineScanner.js";
-import {
-  cleanupBusinessData,
-  cleanupOrganizationTestData,
-} from "@exam/db/src/testCleanup.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
@@ -304,6 +301,7 @@ describe("attempt routes", () => {
     });
 
     beforeEach(async () => {
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -311,11 +309,12 @@ describe("attempt routes", () => {
           like(schema.organizations.slug, `${DEADLINE_SCANNER_TEST_PREFIX}%`),
         );
       for (const org of stale) {
-        await cleanupBusinessData(ctx.db, org.id);
+        await cleanupOrganizationTestData(ctx.db, org.id);
       }
     });
 
     afterAll(async () => {
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -349,7 +348,7 @@ describe("attempt routes", () => {
       expect(attempt?.score).toBeDefined();
     });
 
-    it("records exactly one attempt.autoSubmit audit event on a successful auto-submit", async () => {
+    it("uses canonical attempt state without an attempt.autoSubmit compliance audit", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -366,8 +365,7 @@ describe("attempt routes", () => {
       const autoSubmitRows = auditRows.filter(
         (r) => r.action === "attempt.autoSubmit",
       );
-      expect(autoSubmitRows).toHaveLength(1);
-      expect(autoSubmitRows[0]!.targetType).toBe("attempt");
+      expect(autoSubmitRows).toHaveLength(0);
     });
 
     it("does NOT write a phantom attempt.autoSubmit audit when the row is already submitted at lock time (race no-op)", async () => {
@@ -416,7 +414,7 @@ describe("attempt routes", () => {
       expect(attempt?.status).toBe("submitted");
     });
 
-    it("is idempotent: second scan does not re-grade or duplicate audit", async () => {
+    it("is idempotent: second scan does not re-grade or create a compliance audit", async () => {
       const t = await createIsolatedTestOrg();
       const { attemptId } = await createStartedAttemptWithQuestion(
         t,
@@ -454,7 +452,7 @@ describe("attempt routes", () => {
       const autoSubmitCount = auditRows.filter(
         (r) => r.action === "attempt.autoSubmit",
       ).length;
-      expect(autoSubmitCount).toBe(1);
+      expect(autoSubmitCount).toBe(0);
     });
 
     it("auto-submits a disrupted attempt whose deadline has passed", async () => {

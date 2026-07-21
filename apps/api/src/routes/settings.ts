@@ -12,7 +12,7 @@ import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo
 import type { Database } from "@exam/db/src/types.js";
 import type { PublicBrandingContext } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { recordAudit } from "./audit.js";
+import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { Permission } from "@exam/authz";
 
@@ -193,24 +193,23 @@ const settingsRoutes: FastifyPluginAsync = async (fastify) => {
       const rawCtx = getRequestContext(request);
       const ctx = ensureTargetOrg(rawCtx);
       const data = UpdateBrandingRequestSchema.parse(request.body);
-      const settingsRepo = createSettingsRepo(fastify.db);
-      const settings = await settingsRepo.upsert(
+      const settings = await createSettingsRepo(fastify.db).upsert(
         ctx,
         data as Record<string, string>,
       );
+      if (settings) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "branding.update",
+          targetType: "organization",
+          targetId: ctx.targetOrganizationId!,
+          metadata: { changedFields: Object.keys(data) },
+        });
+      }
       if (!settings) {
         return reply
           .code(500)
           .send(buildErrorResponse(request.id, "INTERNAL_ERROR"));
       }
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "branding.update",
-        "organization",
-        ctx.targetOrganizationId!,
-      );
       return {
         id: settings.id,
         organizationId: settings.organizationId,

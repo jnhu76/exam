@@ -4,7 +4,7 @@ import type { RequestContext } from "@exam/domain";
 import { beforeAll, describe, expect, it, afterAll } from "vitest";
 import { getIsolatedTestDb } from "../testDb.js";
 import { auditLogs } from "../schema/pg.js";
-import { createAuditLogRepo } from "./auditLogRepo.js";
+import { createAuditLogTestRepo } from "../testHelpers/auditLogTestRepo.js";
 import { createOrganizationRepo } from "./organizationRepo.js";
 import { createUserRepo } from "./userRepo.js";
 import type { Database } from "../types.js";
@@ -64,7 +64,7 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
   });
 
   it("filters by targetType", async () => {
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
     const examTarget = randomUUID();
     const userTarget = randomUUID();
 
@@ -92,7 +92,7 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
   });
 
   it("filters by inclusive date range (from / to)", async () => {
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
 
     const t0 = new Date("2026-01-01T00:00:00.000Z");
     const t1 = new Date("2026-02-01T00:00:00.000Z");
@@ -153,7 +153,7 @@ describe("auditLogRepo.listPaginatedFiltered (filters)", () => {
   });
 
   it("combines action + targetType + date range", async () => {
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
     const keep = await repo.create(ctx, {
       actorId: ctx.actorId,
       action: "combo.keep",
@@ -209,7 +209,7 @@ describe("auditLogRepo.listPaginatedFiltered (actorName join)", () => {
       isActive: true,
     });
     // Seed an audit log referencing that user.
-    const auditRepo = createAuditLogRepo(db);
+    const auditRepo = createAuditLogTestRepo(db);
     await auditRepo.create(ctx, {
       actorId: actor.id,
       action: "exam.create",
@@ -237,7 +237,7 @@ describe("auditLogRepo.listPaginatedFiltered (actorName join)", () => {
   it("resolves actorId → actorName via LEFT JOIN users", async () => {
     const stored = rootContext as unknown as { _ctx: RequestContext };
     const ctx = stored._ctx;
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
     const { items } = await repo.listPaginatedFiltered(ctx, 1, 50, {});
     const createRow = items.find((r) => r.auditLog.action === "exam.create");
     expect(createRow).toBeDefined();
@@ -247,7 +247,7 @@ describe("auditLogRepo.listPaginatedFiltered (actorName join)", () => {
   it("returns null actorName when no matching user exists", async () => {
     const stored = rootContext as unknown as { _ctx: RequestContext };
     const ctx = stored._ctx;
-    const repo = createAuditLogRepo(db);
+    const repo = createAuditLogTestRepo(db);
     const { items } = await repo.listPaginatedFiltered(ctx, 1, 50, {
       action: "admin.bootstrap",
     });

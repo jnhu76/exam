@@ -22,8 +22,8 @@ import {
 } from "../lib/proctorMonitoringService.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import type { Database } from "@exam/db/src/types.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
+import { recordAtomicHttpAudit } from "../audit/auditWriter.js";
 
 /**
  * OpenAPI security definition for cookie-based authentication.
@@ -235,7 +235,14 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { attemptId } = parsed.data;
-      const { incidentType, examId, candidateId, reasonCode, note } = body.data;
+      const {
+        incidentType,
+        examId: suppliedExamId,
+        candidateId: suppliedCandidateId,
+        attemptId: suppliedAttemptId,
+        reasonCode,
+        note,
+      } = body.data;
 
       // Verify the attempt belongs to the caller's org (cross-org → 404).
       const attemptRepo = createAttemptRepo(fastify.db);
@@ -245,30 +252,34 @@ const proctorMonitoringRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
+      if (
+        (suppliedExamId !== undefined && suppliedExamId !== attempt.examId) ||
+        (suppliedCandidateId !== undefined &&
+          suppliedCandidateId !== attempt.candidateId) ||
+        (suppliedAttemptId !== undefined && suppliedAttemptId !== attemptId)
+      ) {
+        return reply.code(400).send(
+          buildErrorResponse(request.id, "VALIDATION_ERROR", {
+            reason: "INCIDENT_RESOURCE_MISMATCH",
+          }),
+        );
+      }
 
-      // Audit-event-only storage: write to audit_logs, no incident table.
-      try {
-        await createAuditLogRepo(fastify.db as Database).create(ctx, {
-          actorId: ctx.actorId,
+      await executeInTransaction(fastify.db, async (tx) => {
+        await recordAtomicHttpAudit(tx, request, ctx, {
           action: AuditAction.ProctorIncidentMarked,
           targetType: "attempt",
           targetId: attemptId,
           metadata: {
-            requestId: request.id,
             incidentType,
-            examId,
-            candidateId: candidateId ?? null,
+            examId: attempt.examId,
+            candidateId: attempt.candidateId,
             attemptId,
             reasonCode: reasonCode ?? null,
             note: note ?? null,
           },
         });
-      } catch (err) {
-        request.log.error(
-          { err, attemptId, action: AuditAction.ProctorIncidentMarked },
-          "Failed to record proctor incident audit",
-        );
-      }
+      });
 
       return reply.send({ ok: true } as const);
     },

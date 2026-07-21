@@ -136,6 +136,14 @@ describe("auth contracts", () => {
     expect(result.success).toBe(true);
   });
 
+  it("LoginRequestSchema rejects an attacker-controlled username over 50 characters", () => {
+    const result = LoginRequestSchema.safeParse({
+      username: "u".repeat(51),
+      password: "admin123",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("LoginRequestSchema does not model organizationSlug as a Phase 1 field", () => {
     const parsed = LoginRequestSchema.parse({
       username: "admin",

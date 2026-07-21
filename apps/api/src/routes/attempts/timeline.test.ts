@@ -4,12 +4,9 @@ import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { createAuditLogTestRepo } from "@exam/db/src/testHelpers/auditLogTestRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
-import {
-  cleanupBusinessData,
-  cleanupOrganizationTestData,
-} from "@exam/db/src/testCleanup.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { RequestContext, Role } from "@exam/domain";
@@ -256,16 +253,18 @@ describe("attempt routes", () => {
     }
 
     beforeEach(async () => {
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
         .where(like(schema.organizations.slug, `${TIMELINE_TEST_PREFIX}%`));
       for (const org of stale) {
-        await cleanupBusinessData(ctx.db, org.id);
+        await cleanupOrganizationTestData(ctx.db, org.id);
       }
     });
 
     afterAll(async () => {
+      await ctx.drainAuditWritesStrict();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -310,26 +309,53 @@ describe("attempt routes", () => {
         t,
         "Timeline Ordered Exam",
       );
+      await ctx.drainAuditWrites();
 
-      const repo = createAuditLogRepo(ctx.db);
+      const repo = createAuditLogTestRepo(ctx.db);
       const adminCtx = makeAdminCtx(t);
-      // The candidate's start already emitted attempt.start; add two more
-      // synthetic events to verify ordering end-to-end.
-      await repo.create(adminCtx, {
+      // Runtime attempt.start is canonical domain state, not a compliance
+      // audit. Seed three privileged audit records to verify ordering.
+      const misconductEvent = await repo.create(adminCtx, {
+        actorId: t.adminUserId,
+        action: "attempt.misconductFlagged",
+        targetType: "attempt",
+        targetId: attemptId,
+        metadata: { severity: "low" },
+      });
+      const extendEvent = await repo.create(adminCtx, {
         actorId: t.adminUserId,
         action: "attempt.extendTime",
         targetType: "attempt",
         targetId: attemptId,
         metadata: { additionalMinutes: 5 },
       });
-      await new Promise((r) => setTimeout(r, 15));
-      await repo.create(adminCtx, {
+      const forceEvent = await repo.create(adminCtx, {
         actorId: t.adminUserId,
         action: "attempt.forceSubmit",
         targetType: "attempt",
         targetId: attemptId,
         metadata: { reason: "proctor" },
       });
+      const seededEvents = await ctx.db
+        .select()
+        .from(schema.auditLogs)
+        .where(eq(schema.auditLogs.targetId, attemptId));
+      const seededMisconductEvent = seededEvents.find(
+        (event) => event.id === misconductEvent.id,
+      );
+      expect(seededMisconductEvent).toBeDefined();
+      await ctx.db
+        .update(schema.auditLogs)
+        .set({ createdAt: new Date("2026-01-01T00:00:00.000Z") })
+        .where(eq(schema.auditLogs.id, seededMisconductEvent!.id));
+      await ctx.db
+        .update(schema.auditLogs)
+        .set({ createdAt: new Date("2026-01-01T00:00:01.000Z") })
+        .where(eq(schema.auditLogs.id, extendEvent.id));
+      await ctx.db
+        .update(schema.auditLogs)
+        .set({ createdAt: new Date("2026-01-01T00:00:02.000Z") })
+        .where(eq(schema.auditLogs.id, forceEvent.id));
 
       const response = await ctx.app.inject({
         method: "GET",
@@ -339,12 +365,11 @@ describe("attempt routes", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       const actions = body.events.map((e: { action: string }) => e.action);
-      // attempt.start (from candidate start) should come before the two seeded.
-      const startIdx = actions.indexOf("attempt.start");
+      const misconductIdx = actions.indexOf("attempt.misconductFlagged");
       const extendIdx = actions.indexOf("attempt.extendTime");
       const forceIdx = actions.indexOf("attempt.forceSubmit");
-      expect(startIdx).toBeGreaterThanOrEqual(0);
-      expect(extendIdx).toBeGreaterThan(startIdx);
+      expect(misconductIdx).toBeGreaterThanOrEqual(0);
+      expect(extendIdx).toBeGreaterThan(misconductIdx);
       expect(forceIdx).toBeGreaterThan(extendIdx);
       // Shape check on the last event.
       expect(body.events[0]).toMatchObject({
@@ -375,7 +400,7 @@ describe("attempt routes", () => {
         sessionId: "test",
         targetOrganizationId: other.orgId,
       };
-      await createAuditLogRepo(ctx.db).create(otherCtx, {
+      await createAuditLogTestRepo(ctx.db).create(otherCtx, {
         actorId: other.adminUserId,
         action: "attempt.forceSubmit",
         targetType: "attempt",
