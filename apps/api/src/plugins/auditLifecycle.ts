@@ -8,6 +8,15 @@ export interface AuditDrainResult {
   pendingCount: number;
 }
 
+export class AuditDrainTimeoutError extends Error {
+  constructor(pendingCount: number, timeoutMs: number) {
+    super(
+      `Audit drain timed out after ${timeoutMs}ms with ${pendingCount} pending tasks`,
+    );
+    this.name = "AuditDrainTimeoutError";
+  }
+}
+
 export class AuditWriteRejectedError extends Error {
   constructor() {
     super("Audit lifecycle no longer accepts best-effort work");
@@ -21,6 +30,7 @@ export interface AuditWriteLifecycle {
     onRejected: (error: unknown) => void,
   ): void;
   drain(options?: { timeoutMs?: number }): Promise<AuditDrainResult>;
+  drainStrict(options?: { timeoutMs?: number }): Promise<void>;
   pendingCount(): number;
   isDraining(): boolean;
   isAccepting(): boolean;
@@ -31,6 +41,7 @@ declare module "fastify" {
   interface FastifyInstance {
     auditWrites: AuditWriteLifecycle;
     drainAuditWrites(): Promise<AuditDrainResult>;
+    drainAuditWritesStrict(): Promise<void>;
   }
 }
 
@@ -44,6 +55,36 @@ export function createAuditWriteLifecycle(): AuditWriteLifecycle {
     while (pending.size > 0) {
       await Promise.all([...pending]);
     }
+  };
+
+  const drain = (options?: {
+    timeoutMs?: number;
+  }): Promise<AuditDrainResult> => {
+    if (terminalDrainResult) {
+      return Promise.resolve(terminalDrainResult);
+    }
+    if (activeDrain) return activeDrain;
+    const timeoutMs = options?.timeoutMs ?? AUDIT_DRAIN_TIMEOUT_MS;
+    activeDrain = new Promise<AuditDrainResult>((resolve) => {
+      const timeout = setTimeout(() => {
+        accepting = false;
+        resolve({ timedOut: true, pendingCount: pending.size });
+      }, timeoutMs);
+      timeout.unref?.();
+
+      void drainPending().then(() => {
+        clearTimeout(timeout);
+        resolve({ timedOut: false, pendingCount: 0 });
+      });
+    })
+      .then((result) => {
+        if (!accepting) terminalDrainResult = result;
+        return result;
+      })
+      .finally(() => {
+        activeDrain = null;
+      });
+    return activeDrain;
   };
 
   return {
@@ -71,32 +112,15 @@ export function createAuditWriteLifecycle(): AuditWriteLifecycle {
         });
       pending.add(tracked);
     },
-    drain(options) {
-      if (terminalDrainResult) {
-        return Promise.resolve(terminalDrainResult);
+    drain,
+    async drainStrict(options) {
+      const result = await drain(options);
+      if (result.timedOut) {
+        throw new AuditDrainTimeoutError(
+          result.pendingCount,
+          options?.timeoutMs ?? AUDIT_DRAIN_TIMEOUT_MS,
+        );
       }
-      if (activeDrain) return activeDrain;
-      const timeoutMs = options?.timeoutMs ?? AUDIT_DRAIN_TIMEOUT_MS;
-      activeDrain = new Promise<AuditDrainResult>((resolve) => {
-        const timeout = setTimeout(() => {
-          accepting = false;
-          resolve({ timedOut: true, pendingCount: pending.size });
-        }, timeoutMs);
-        timeout.unref?.();
-
-        void drainPending().then(() => {
-          clearTimeout(timeout);
-          resolve({ timedOut: false, pendingCount: 0 });
-        });
-      })
-        .then((result) => {
-          if (!accepting) terminalDrainResult = result;
-          return result;
-        })
-        .finally(() => {
-          activeDrain = null;
-        });
-      return activeDrain;
     },
     pendingCount() {
       return pending.size;
@@ -124,6 +148,11 @@ const auditLifecyclePlugin: FastifyPluginAsync<
   fastify.decorate("auditWrites", lifecycle);
   fastify.decorate("drainAuditWrites", async () => {
     return lifecycle.drain({
+      timeoutMs: options.drainTimeoutMs ?? AUDIT_DRAIN_TIMEOUT_MS,
+    });
+  });
+  fastify.decorate("drainAuditWritesStrict", async () => {
+    await lifecycle.drainStrict({
       timeoutMs: options.drainTimeoutMs ?? AUDIT_DRAIN_TIMEOUT_MS,
     });
   });

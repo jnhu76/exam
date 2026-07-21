@@ -562,6 +562,17 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const data = parsed.data;
 
+      if (Object.keys(data).length === 0) {
+        const repo = createExamRepo(fastify.db);
+        const exam = (await repo.findById(ctx, id)) as Exam | null;
+        if (!exam) {
+          return reply
+            .code(404)
+            .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
+        }
+        return toExamResponse(exam);
+      }
+
       const result = await executeInTransaction(
         fastify.db,
         async (
@@ -595,6 +606,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             const forbidden = Object.keys(data).filter((k) => !allowed.has(k));
             if (forbidden.length > 0) {
               throw new ExamUpdateNotAllowedError();
+            }
+            // Same-value schedule: skip mutation and audit.
+            const sameOpenAt =
+              !data.openAt || data.openAt === existing.openAt.toISOString();
+            const sameCloseAt =
+              !data.closeAt || data.closeAt === existing.closeAt.toISOString();
+            if (sameOpenAt && sameCloseAt) {
+              return { exam: existing, draftObservation: false };
             }
           }
           if (exam.status === "draft" && data.questionIds) {

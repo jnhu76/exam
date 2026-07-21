@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import auditLifecyclePlugin, {
+  AuditDrainTimeoutError,
   AuditWriteRejectedError,
   createAuditWriteLifecycle,
 } from "./auditLifecycle.js";
@@ -125,6 +126,57 @@ describe("audit write lifecycle", () => {
 
     gate.resolve();
     await vi.runAllTimersAsync();
+  });
+
+  it("drainStrict succeeds when all tasks finish", async () => {
+    const lifecycle = createAuditWriteLifecycle();
+    lifecycle.schedule(async () => undefined, vi.fn());
+    await expect(lifecycle.drainStrict()).resolves.toBeUndefined();
+    expect(lifecycle.pendingCount()).toBe(0);
+  });
+
+  it("drainStrict throws AuditDrainTimeoutError on timeout", async () => {
+    vi.useFakeTimers();
+    const lifecycle = createAuditWriteLifecycle();
+    const gate = createDeferred();
+    lifecycle.schedule(async () => gate.promise, vi.fn());
+
+    const drain = lifecycle.drainStrict({ timeoutMs: 25 });
+    drain.catch(() => {});
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expect(drain).rejects.toThrow(AuditDrainTimeoutError);
+    gate.resolve();
+    await vi.runAllTimersAsync();
+  });
+
+  it("drainStrict exposed via Fastify plugin", async () => {
+    vi.useFakeTimers();
+    const app = Fastify();
+    await app.register(auditLifecyclePlugin, { drainTimeoutMs: 25 });
+    await app.ready();
+
+    app.auditWrites.schedule(async () => undefined, vi.fn());
+    await expect(app.drainAuditWritesStrict()).resolves.toBeUndefined();
+    await app.close();
+  });
+
+  it("drainStrict on Fastify rejects on timeout", async () => {
+    vi.useFakeTimers();
+    const app = Fastify();
+    await app.register(auditLifecyclePlugin, { drainTimeoutMs: 25 });
+    await app.ready();
+    const gate = createDeferred();
+    app.auditWrites.schedule(async () => gate.promise, vi.fn());
+
+    const drain = app.drainAuditWritesStrict();
+    drain.catch(() => {});
+    await vi.advanceTimersByTimeAsync(25);
+
+    await expect(drain).rejects.toThrow(AuditDrainTimeoutError);
+    gate.resolve();
+    await vi.runAllTimersAsync();
+    await app.close();
   });
 
   it("bounds plugin close without mutating process exit policy", async () => {

@@ -29,6 +29,30 @@ async function collectProductionSources(
   return result;
 }
 
+const AUDIT_EMITTER_CALLS = new Set([
+  "recordAtomicHttpAudit",
+  "recordAtomicSystemAudit",
+  "recordSensitiveReadAudit",
+  "recordBestEffortAudit",
+  "executeAdminExamTransition",
+]);
+
+function isInsideWriterCall(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (ts.isCallExpression(current)) {
+      if (
+        ts.isIdentifier(current.expression) &&
+        AUDIT_EMITTER_CALLS.has(current.expression.text)
+      ) {
+        return true;
+      }
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 function emittedActions(file: ProductionSource): AuditActionKey[] {
   if (!file.source.includes("audit/auditWriter.js")) return [];
   const sourceFile = ts.createSourceFile(
@@ -62,7 +86,8 @@ function emittedActions(file: ProductionSource): AuditActionKey[] {
     if (
       ts.isPropertyAssignment(node) &&
       ((ts.isIdentifier(node.name) && node.name.text === "action") ||
-        (ts.isStringLiteral(node.name) && node.name.text === "action"))
+        (ts.isStringLiteral(node.name) && node.name.text === "action")) &&
+      isInsideWriterCall(node)
     ) {
       collectInitializer(node.initializer);
     }

@@ -193,13 +193,17 @@ export function recordBestEffortAudit(
     ...target,
     metadata: { ...(target.metadata ?? {}) },
   };
+  let event: ReturnType<typeof requestEvent>;
+  try {
+    event = requestEvent(request, ctx, snapshot);
+  } catch (error) {
+    logBestEffortFailure(fastify.log, ctx, snapshot, error);
+    return;
+  }
   fastify.auditWrites.schedule(
     async () => {
       assertAuditDurability(snapshot.action, "best_effort");
-      await createAuditLogWriter<AuditActionKey>(fastify.db).insert(
-        ctx,
-        requestEvent(request, ctx, snapshot),
-      );
+      await createAuditLogWriter<AuditActionKey>(fastify.db).insert(ctx, event);
     },
     (error) => logBestEffortFailure(fastify.log, ctx, snapshot, error),
   );

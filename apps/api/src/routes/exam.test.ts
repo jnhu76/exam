@@ -897,6 +897,74 @@ describe("exam unpublish / extend / PATCH-clarify (ADR-005 Slice 2)", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe("EXAM_UPDATE_NOT_ALLOWED");
   });
+
+  it("PATCH draft with empty body returns 200 without mutation or audit", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: {
+        title: "Noop Draft",
+        courseId,
+        durationMinutes: 60,
+        openAt: new Date(Date.now() + 3600_000).toISOString(),
+        closeAt: new Date(Date.now() + 86_400_000 + 3600_000).toISOString(),
+        passingScore: 60,
+        totalScore: 100,
+        questionIds: [questionId],
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const created = createRes.json();
+    const updatedAtBefore = created.updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${created.id}`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
+
+  it("PATCH published with same closeAt returns 200 without mutation or audit", async () => {
+    const examId = await createPublishedExam("Noop Published");
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const exam = getRes.json();
+    const updatedAtBefore = exam.updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { closeAt: exam.closeAt },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
+
+  it("PATCH published with empty body returns 200 without mutation or audit", async () => {
+    const examId = await createPublishedExam("Noop Published Empty");
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const updatedAtBefore = getRes.json().updatedAt;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: {},
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().updatedAt).toBe(updatedAtBefore);
+  });
 });
 
 // ADR-005 Slice 4 (cancel-minimal) — POST /api/exams/:id/cancel

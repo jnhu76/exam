@@ -146,6 +146,27 @@ describe("owned audit writer boundary", () => {
     expect(await countAudit(ctx, "question.update", targetId)).toBe(0);
   });
 
+  it("records best-effort metadata eagerly without retaining request", async () => {
+    const targetId = crypto.randomUUID();
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/audit-writer/best-effort",
+      cookies: { "auth-token": ctx.adminToken },
+      payload: {
+        targetId,
+        changedFields: ["name"],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    await ctx.drainAuditWrites();
+    const rows = await ctx.db
+      .select({ action: schema.auditLogs.action })
+      .from(schema.auditLogs)
+      .where(eq(schema.auditLogs.targetId, targetId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.action).toBe("question.update");
+  });
+
   it("truncates user-agent evidence to its documented bound", async () => {
     const response = await ctx.app.inject({
       method: "POST",

@@ -44,8 +44,8 @@ export interface SubmitAndGradeResult {
  * landed but grading didn't, so a retry grades it idempotently without
  * re-submitting. `graded` is the only truly terminal state.
  *
- * Does NOT handle: request validation, candidate profile lookup,
- * audit recording, or HTTP response serialization.
+ * Does NOT handle: request validation, candidate profile lookup, or
+ * HTTP response serialization.
  */
 export async function submitAndGradeAttempt(
   db: Database,

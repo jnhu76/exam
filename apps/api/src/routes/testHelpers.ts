@@ -139,6 +139,7 @@ export interface TestContext {
   candidateToken: string;
   setNow: (now: Date | null) => void;
   drainAuditWrites: () => Promise<AuditDrainResult>;
+  drainAuditWritesStrict: () => Promise<void>;
 }
 
 const TEST_DB_URL = resolveTestDbUrl();
@@ -343,6 +344,7 @@ async function finishBuildTestApp(args: {
       app.setNowOverride(now ? () => now : null);
     },
     drainAuditWrites: () => app.drainAuditWrites(),
+    drainAuditWritesStrict: () => app.drainAuditWritesStrict(),
   };
 }
 
