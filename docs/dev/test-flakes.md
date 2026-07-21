@@ -50,6 +50,75 @@
 
 ---
 
+## 已修复事故
+
+### 2026-07-21 — fire-and-forget audit 与破坏性清理发生生命周期竞态
+
+- **现象**：attempt 路由测试偶发命中
+  `audit_logs_organization_id_organizations_id_fk`；把 `beforeEach` 改成
+  `cleanupBusinessData` 后 FK 错误消失，但上一测试的延迟 audit 行仍可进入下一测试。
+- **已证实根因**：`recordAudit` 创建的 Promise 没有 owner，HTTP 响应、
+  `beforeEach`、`afterAll`、`app.close()` 和连接池关闭都没有 pending-work
+  barrier。受控 deferred Promise + 真实 PostgreSQL 确定性复现了 audit delete
+  与 organization delete 之间落入 INSERT 的 `23503`，也复现了清理后的跨测试
+  late-row 污染。
+- **错误缓解**：只保留 organization、删除 business rows 是 FK containment，
+  不是同步；它把 FK 失败换成了隔离失败。删除重试或真实延时同样不构成修复。
+- **最终不变量**：上一测试关联的 side effect 尚未 drain 时，不得开始破坏性
+  fixture 清理；优雅关闭不得早于所有已接收、已跟踪的 audit 写入 settle。
+- **修复提交**：`1b01925`（tracked audit registry、显式 drain、Fastify close /
+  scanner / DB pool 顺序）；七个套件恢复每测试 organization 生命周期，并在
+  `beforeEach` 与 nested `afterAll` 明确 drain。
+- **回归测试**：`routes/auditLifecycle.test.ts` 覆盖非阻塞响应、真实 DB drain、
+  跨测试污染、破坏性清理、失败日志和 `app.close`；
+  `plugins/auditLifecycle.test.ts` 覆盖同步注册、乱序完成、多写入、拒绝清除和
+  drain 期间的新工作；`plugins/db.test.ts` 覆盖 audit drain 先于 pool close。
+
+### 2026-07-21 — ADR-006 审计原子性、崩溃耐久性与无界关闭缺口（历史中间态，已被比例性 corrective 修正）
+
+- **现象**：前一项 lifecycle 修复只保证优雅关闭会等待已登记的异步写入；业务
+  事务仍先提交、审计随后异步执行。因此审计 INSERT 失败或进程在两者之间
+  SIGKILL 时，API 已成功但审计永久缺失；永久不 settle 的 Promise 还会使
+  `app.close()` 永不返回。
+- **已证实根因**：旧的通用 audit helper 同时承载不同可靠性要求，却只暴露
+  fire-and-forget 语义，并固定使用根 DB 连接。调用者不能把写入加入当前事务，
+  action vocabulary 也没有逐项耐久性分类，drain 没有 deadline 或退出策略。
+- **历史中间态**：该修复把 48/58 个 action 归入事务关键，并把登录、答案保存、
+  自动提交/中断、自动开闭都放入审计可用性边界；还让“可丢失”的后台观察在
+  drain 超时后写 `process.exitCode = 1`。后续独立 review 证明这些口径过宽且互相
+  矛盾，不能作为当前合同。
+- **保留的真实修复**：原子 writer 必须使用同一个 branded transaction；真实
+  PostgreSQL trigger failure injection 继续作为高价值证据；后台 Promise 必须有
+  lifecycle owner 和有限 drain。
+- **被撤销的合同**：登录不再因 tenant audit 失败而拒绝；答案保存和自动领域
+  迁移不再写 compliance audit；best-effort 超时不再导致非零退出。
+- **结论**：本条作为根因演进历史保留。当前权威口径见下一条和 ADR-006 的
+  “Audit contract proportionality corrective”。
+
+### 2026-07-21 — ADR-006 audit contract proportionality corrective
+
+- **已证实根因**：旧分类把“mutation”近似等同于“必须与审计原子提交”，混淆
+  enum 完整性与运行时 emitter 完整性，并让 candidate runtime、普通登录和 routine
+  authoring 依赖 `audit_logs` 可用性。
+- **当前不变量**：只有 authority、credential、privileged mutation 的窄集合使用
+  atomic writer；三个明确的敏感读取在响应前同步落审计；普通登录和 routine
+  observation 使用 tracked best-effort；`attempt.saveAnswer`、自动提交/中断、自动
+  开闭属于 canonical domain state，不进入 compliance audit。
+- **lifecycle**：ACTIVE、RESERVED、DEPRECATED 与 durability 独立。三个
+  `email.*` action 是 RESERVED，不能计入 active coverage。递归 production inventory
+  要求 active-zero、reserved-emitter、direct-writer-bypass 全为零。
+- **关闭策略**：lifecycle 只返回 `{ timedOut, pendingCount }`，不处理 signal、不改
+  `process.exitCode`。server 在 timeout 时记录 warning 并继续有界关闭；仅真正的
+  graceful-shutdown failure 才选择非零退出。
+- **确定性回归**：trigger 注入覆盖 route-owned、admin invariant、submit/grading
+  service、exam transition executor、CLI/bootstrap、bulk import 和 manual grading
+  家族；sensitive-read 测试证明 audit 失败时响应不含受保护数据；best-effort 测试
+  使用 deferred Promise + fake timer，无 wall-clock sleep。
+- **测试隔离口径**：只有 best-effort action 需要 drain。atomic action 与业务事务
+  一起 settle；domain-history exclusion 不得靠 drain 伪装成审计保证。
+
+---
+
 ## 已升级条目
 
 ### BUG-FLAKE-001 — `attempts.test.ts:1070` 后台扫描在 coverage 模式下 5s timeout
@@ -1408,6 +1477,14 @@ path 拆出。**不 skip、不从 full path 删除、不加专属 timeout**—�
 ### 复发记录
 
 - 2026-06-23：P2E-J2 实现 `pnpm verify` 收尾时单次出现（1/151），`pnpm --filter @exam/db test testWorkerDatabase` 立即 12/12 PASS。
+- 2026-07-21：ADR-006 proportionality corrective 的 `pnpm verify` 在 full turbo
+  coverage 负载下再次命中同一 `ensureDatabaseExists` 用例；本次 suite
+  timeout 已是 15,000ms，失败仍是超时而非断言或 PostgreSQL 错误。失败后
+  PostgreSQL `pg_stat_activity` 中无 `exam_test%` 活动/等待连接；当时有 84 个
+  历史 `exam_test_w%` worker database。同代码立即隔离复跑整文件 15/15 PASS
+  （2.18s），随后 `@exam/db` 全 coverage 233/233 PASS（13.38s）。继续按已有
+  处置：不增加单点 timeout、不 skip，将 full-turbo PG DDL 争用作为独立
+  test-infrastructure follow-up，不与本次 audit 业务改动混合。
 
 ---
 

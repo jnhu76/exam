@@ -2,9 +2,10 @@
 
 ## Status
 
-**Accepted.** The canonical time authority plugin (`apps/api/src/plugins/now.ts`)
-already exists and is in use; this ADR records that decision as binding and
-adds the structural rules that prevent regression.
+**Accepted — amended by the audit atomicity corrective (2026-07-21).** The
+canonical time authority plugin (`apps/api/src/plugins/now.ts`) already exists
+and is in use; this ADR records that decision as binding and adds the
+structural rules that prevent regression.
 
 > This ADR does **not** introduce a new clock. `fastify.clock.now()` must not
 > be added. `apps/api/src/plugins/now.ts` and the `fastify.now()` decoration it
@@ -58,7 +59,7 @@ domain policy / state machine({ now })
   ↓
 repo query uses now parameter
   ↓
-audit uses same now
+optional security audit records the privileged action
 ```
 
 ### Binding rules
@@ -73,7 +74,8 @@ audit uses same now
 - Commands receive `now` explicitly.
 - Domain / state-machine / policy functions receive `now` explicitly.
 - Repositories receive `now` for time-sensitive queries.
-- Audit events caused by the same operation use the same operation `now`.
+- Audit metadata that represents a business instant uses the same operation
+  `now`. `audit_logs.createdAt` remains a non-authoritative storage stamp.
 - Frontend / browser time is **never** authoritative for exam lifecycle
   decisions.
 - DB `now()` / `CURRENT_TIMESTAMP` / `clock_timestamp()` /
@@ -140,18 +142,13 @@ request/tick
   -> command({ now })                 (explicit param)
   -> policy / stateMachine({ now })   (explicit param)
   -> repo.method(ctx, ..., now)       (explicit param for time-sensitive queries)
-  -> recordAudit(..., metadata)       (same operation now)
+  -> recordAtomicHttpAudit(tx, ...)    (only for an atomic security action)
 ```
 
 Any business path that reads the wall clock directly (`new Date()`,
 `Date.now()`, SQL `now()`) instead of the threaded `now` is a bug.
 
-> **Note on audit placement:** the chain shows `recordAudit` using the same
-> operation `now`. That part (using one `now`) **is** enforced. The *separate*
-> question of whether the audit write happens **inside** the same DB
-> transaction as the mutate is **not** yet enforced — see "Follow-up: Audit
-> Atomicity Refactor" below. Today audit is written after the tx commits
-> (best-effort); a future PR moves it inside the tx.
+Audit placement and durability are binding and closed by the corrective below.
 
 ## Non-goals
 
@@ -178,44 +175,177 @@ Any business path that reads the wall clock directly (`new Date()`,
   in-process scanner + DB-backed state, consistent with single-instance
   Phase 2.
 
-## Follow-up: Audit Atomicity Refactor (deferred — item #4)
+## Audit contract proportionality corrective (2026-07-21)
 
-This ADR records the *ideal* ordering (mutate → audit → commit, all inside one
-transaction) as the construction hard rule, but the **current implementation
-writes audit after the transaction commits** (best-effort, fire-and-forget).
-This applies to every admin operation (close/unpublish/extend/cancel/archive),
-`attempts.ts` (save/submit/restore/heartbeat), and the deadline/heartbeat
-scanners. It is the established repo convention, and changing it is
-**intentionally deferred** from the P2B-J1/J2 tail cleanup as a repo-wide
-follow-up so that a future PR can do it in one consistent pass.
+The earlier broad audit amendment is retained as historical context but is
+superseded by this section. It incorrectly treated nearly every mutation as
+transaction-critical, coupled candidate runtime to `audit_logs`, classified
+authentication as response-critical despite the pre-tenant gap, and made a
+best-effort drain timeout fail the process.
 
-**FOLLOW-UP: Audit Atomicity Refactor**
+### Independent dimensions and inventory
 
-Move state-transition audit writes into the same DB transaction as the
-mutation, so a crash between commit and audit-write can no longer leave a
-mutated row with no audit trail (or vice-versa).
+`apps/api/src/audit/auditPolicy.ts` defines five independent dimensions for
+each declared action: lifecycle, durability, security obligation, expected
+frequency, and a strict payload schema. Enum completeness is vocabulary
+completeness only; recursive production-emitter inventory proves runtime
+coverage separately.
 
-Scope of that future PR:
+```text
+DECLARED:   62
+ACTIVE:     51
+RESERVED:    3
+DEPRECATED:  8
 
-- Affected paths: all admin operations (`routes/exam.ts` close/unpublish/
-  extend/cancel/archive), `routes/attempts.ts` (save/submit/restore/heartbeat),
-  and the deadline/heartbeat scanners.
-- Move each `recordAudit(...)` call from after-`executeInTransaction` into the
-  tx callback, after the mutate step and before the implicit commit.
-- `recordAudit` currently uses its own repo on the shared `fastify.db` (not the
-  tx-scoped connection); the refactor must give it the tx-scoped connection so
-  the audit row participates in the same transaction. This touches the audit
-  repo's connection handling and the `recordAudit` helper signature.
-- Tests: every "audit written exactly once / no duplicate audit / rejected op
-  writes no audit" assertion stays valid; add a test that a forced tx rollback
-  also rolls back the audit row.
-- Non-goal of that PR: do not change *what* is audited or the audit action
-  vocabulary — only *when/where* the write happens.
+ATOMIC:                         28
+SYNCHRONOUS_SENSITIVE_READ:      3
+BEST_EFFORT:                    24
+DOMAIN_HISTORY:                  7
+```
 
-Out of scope for that PR (still): Redis/MQ, distributed clock, per-attempt
-audit, audit retention/rotation. This ADR (ADR-006) only owns the time-authority
-model; audit atomicity is a sibling concern being tracked here because the
-hard-rule wording references it.
+The durability totals cover all declared vocabulary, including reserved and
+deprecated entries. Active best-effort actions number 20. The three reserved
+email actions have no production emitter and make no runtime guarantee.
+
+### Durability sets
+
+| Durability | Contract | Actions |
+| --- | --- | --- |
+| **Atomic** | The privileged/authority/credential operation must not commit unless its audit evidence commits in the same branded PostgreSQL transaction. | `admin.bootstrap`, `admin.password_reset.local`, `auth.password_update`, `attempt.submit`, `attempt.forceSubmit`, `attempt.extendTime`, `attempt.misconductFlagged`, `candidate.create`, `candidate.password_reset`, `enrollment.add`, `enrollment.remove`, `exam.published_schedule_updated`, `exam.publish`, `exam.unpublish`, `exam.close`, `exam.cancel`, `exam.archive`, `exam.delete`, `exam.extend`, `exam.publish_results`, `user.create`, `user.disabled`, `user.reactivated`, `user.delete`, `grading.score_entered`, `grading.finalized`, `user.role_changed`, `proctor.incident_marked` |
+| **Synchronous sensitive read** | Audit must be durable before sensitive data is returned; an audit failure denies the read. | `attempt.exported`, `export_scores`, `grading.detail_viewed` |
+| **Active best effort** | Failure is observed but does not fail the business operation or request. | `login.success`, `login.failure`, `logout`, `auth.profile_update`, `branding.update`, `candidate.update`, `candidate.import`, `candidate_field.create`, `candidate_field.update`, `candidate_field.delete`, `course.create`, `course.update`, `course.delete`, `exam.create`, `exam.update`, `question.create`, `question.update`, `question.delete`, `question.import`, `user.profile_updated` |
+| **Domain-history exclusion** | Canonical business state owns the fact; the compliance table is not a hidden event store. | `attempt.start`, `attempt.saveAnswer`, `attempt.restore`, `attempt.autoSubmit`, `attempt.disrupted`, `exam.open`, `exam.closed` |
+| **Reserved** | Vocabulary only; no active coverage claim. | `email.outbox_created`, `email.send_failed`, `email.send_retried` |
+| **Deprecated mixed action** | Historical rows remain queryable, but production must use the split action. | `user.update` |
+
+Routine draft edits use best-effort `exam.update`; a published schedule or
+availability edit uses atomic `exam.published_schedule_updated`. A role-only
+user edit emits only `user.role_changed`; display-name, disable, and reactivate
+use `user.profile_updated`, `user.disabled`, and `user.reactivated`
+respectively. Candidate import keeps per-row business transactions, emits
+atomic `candidate.create` only for a newly created login identity, and emits
+one best-effort import summary. Existing identity-field updates do not become
+per-field compliance events.
+
+`attempt.submit` and `exam.publish_results` describe state transitions, not
+command attempts. Idempotent replays emit nothing. Automatic close/open and
+deadline/heartbeat transitions use canonical exam/attempt rows and never emit
+the explicit administrator actions.
+
+### Candidate runtime availability and volume
+
+`attempt.saveAnswer` never writes `audit_logs`. Its authority is the versioned
+answer state (`questionId`, value, version, client sequence/history, server
+save time, and attempt activity time). No answer value or standard answer is
+copied into audit or structured logs.
+
+The current frontend uses a 1.5-second per-question debounce and flushes
+pending work before submit. No production load histogram exists, so capacity
+figures are assumptions, not measurements. For a transparent fixture of a
+60-question, 60-minute exam with one settled save per question plus ten edits,
+one candidate performs about 70 saves (1.17/minute); 100 and 1,000 concurrent
+candidates produce about 117 and 1,167 saves/minute. The theoretical debounce
+ceiling is 40 requests/minute/candidate if a user repeatedly pauses after each
+change. Before this corrective every accepted save added the same number of
+transaction-critical audit inserts. After it, additional audit writes on this
+path are exactly zero and an audit-table failure cannot reject a valid save.
+
+### Authentication evidence channels
+
+Pre-tenant and tenant-aware authentication evidence are separate:
+
+- A bounded structured platform security log records sanitized reason codes
+  for unknown organization/user, invalid password, disabled user, missing
+  assignment, non-login role, and authority-resolution failure. It does not
+  require or fabricate an organization ID and never logs credentials, hashes,
+  cookies, JWTs, authorization headers, or an attacker-controlled username.
+- Tenant `login.success`/`login.failure` observations are scheduled only after
+  the default organization is resolved. They are best effort, use a user UUID
+  or the bounded literal `anonymous`, and cannot turn ordinary authentication
+  success/denial into an audit-driven outage.
+- Public credential denials remain the same generic 401. Authority subsystem
+  errors remain a generic 503; they are not disguised as bad credentials.
+- `login.success` means credentials, assignment authority, and session
+  issuance were accepted and a cookie was attached to the server response. It
+  does not prove client delivery or a later authenticated request.
+
+Login usernames are bounded at 50 characters by the request contract.
+
+### Sensitive-read availability decision
+
+The following privacy-over-availability tradeoff is explicitly accepted:
+
+- Attempt export exposes candidate answers and standard answers.
+- Score export exposes bulk candidate result data.
+- Grading detail exposes candidate answers and grading material.
+
+These reads fail before response data is returned if their audit insert fails.
+This set is intentionally limited to those three operations; login and proctor
+mutation paths are not mislabeled as sensitive reads.
+
+`proctor.incident_marked` currently uses the minimal coherent model: its
+append-only audit row is the canonical incident mutation and is inserted
+atomically in a transaction. It is distinct from
+`attempt.misconductFlagged`, which changes the attempt's misconduct state. No
+route emits both for one command. A dedicated incident entity is a future
+product decision, not an implied current store.
+
+### Owned writers, payload, and storage
+
+Only the audit module constructs production writes. HTTP atomic, system
+atomic, synchronous-read, and best-effort APIs are separately typed; CLI and
+scanner code never fabricates a `FastifyRequest`. The database writer exposes
+only `insert`, performs one `INSERT` with no readback, and exposes no update,
+delete, or retention surface. Query access is separate.
+
+Every active action uses a strict allowed-key schema. Common limits are:
+
+| Field | Limit |
+| --- | ---: |
+| serialized metadata | 4,096 bytes |
+| target type | 64 characters |
+| target ID / actor ID | 128 characters |
+| request/correlation ID | 128 characters |
+| user agent | 512 characters |
+| IP address | 64 characters |
+| incident/misconduct note | 500 / 1,000 characters |
+
+Unexpected fields are rejected for atomic/synchronous operations; a malformed
+best-effort observation is logged and dropped without failing the request.
+Network/request evidence is bounded by truncation. Free-text incident notes
+may contain PII and must be minimized by operators.
+
+The table retains its existing primary key and
+`audit_logs_org_created_at_idx (organization_id, created_at)`. On the local
+realistic development fixture it contained 21 rows and occupied 48 KiB.
+`EXPLAIN` showed the organization/time query using this index backward;
+target/type and action queries use the same organization index with residual
+filters. That dataset is too small to justify speculative indexes. Monitor
+weekly row/byte growth and alert if seven-day growth exceeds twice its
+four-week baseline or database free space falls below 20%; reconsider
+target/action indexes only with production query latency/selectivity evidence.
+Retention/archive/deletion duration remains a deferred compliance/product
+decision and is not claimed as implemented.
+
+### Transaction and shutdown evidence
+
+Atomic writers require `TransactionDatabase`. Deterministic PostgreSQL trigger
+tests prove audit-failure rollback for route-owned mutations, the
+admin-invariant/role wrapper, submit/grading service transactions, the exam
+transition executor, CLI bootstrap, bulk import rows, and manual finalization.
+The reverse direction is also covered: failed/no-op business operations cannot
+persist a false successful mutation audit.
+
+Best-effort work has one lifecycle owner: it synchronously registers accepted
+promises, stops accepting on close, drains for at most 10 seconds, and returns
+`{ timedOut, pendingCount }`. A timeout logs a warning, abandons the
+observation, and continues normal shutdown. The lifecycle module never owns
+signals or mutates `process.exitCode`; `server.ts` owns process policy and sets
+a nonzero code only for an actual graceful-shutdown failure. SIGKILL loss is
+accepted for best-effort observations.
+
+No message bus, Kafka, Redis stream, workflow engine, or general-purpose
+outbox is introduced.
 
 ## Alternatives considered
 
