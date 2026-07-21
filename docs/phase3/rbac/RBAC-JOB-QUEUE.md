@@ -349,7 +349,7 @@ M10-A through M10-F:
 all CLOSED
 
 M11:
-DEFERRED — NOT IMPLEMENTED
+DEFERRED — NOT STARTED
 ```
 
 ## Acceptance per job (filled in as each lands)

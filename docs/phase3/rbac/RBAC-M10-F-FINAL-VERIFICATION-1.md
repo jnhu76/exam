@@ -23,7 +23,9 @@ WORKTREE == clean: ✓
 
 ## C. Current Route Inventory
 
-Reconstructed from `apps/api/src/routes/` production files (19 route files, excluding `*.test.ts` and helpers).
+Reconstructed from the shared `registerApiRoutes` production composition with
+a Fastify `onRoute` capture. Auto-generated `HEAD` aliases are excluded; every
+explicitly registered HTTP method/path pair is counted once.
 
 ### Runtime gate counts
 
@@ -31,15 +33,19 @@ Reconstructed from `apps/api/src/routes/` production files (19 route files, excl
 | --- | ---: |
 | PUBLIC (no auth, no gate) | 6 |
 | AUTHENTICATED_ONLY (no capability gate) | 4 |
-| FLAT_CAPABILITY (`requireCapability`) | 54 |
-| SCOPED_CAPABILITY (`requireScopedCapability`) | 6 |
+| FLAT_CAPABILITY (`requireCapability`) | 65 |
+| SCOPED_CAPABILITY (`requireScopedCapability`) | 5 |
 | SCORE_CAPABILITY (`requireScoreCapability`) | 1 |
 | CANDIDATE_CONTEXT (`requireCandidateContext`) | 1 |
 | EXAM_ELIGIBILITY (`requireExamEligibility`) | 3 |
-| OWN_ATTEMPT (`requireOwnAttempt`) | 7 |
-| **Total route handlers** | **82** |
+| OWN_ATTEMPT (`requireOwnAttempt`) | 6 |
+| **Total route handlers** | **91** |
 
-Permissions mapped to every gate. All gates read from `ctx.capabilities` (assignment-backed union). No `requireRole` consumer on any production route.
+The 81 capability/ownership-gated routes comprise 80 preHandler gates carrying
+runtime authorization metadata and the dedicated score gate on
+`GET /scores/attempts/:attemptId`. Permissions are mapped to every gate. All
+gates read from `ctx.capabilities` (assignment-backed union). No `requireRole`
+consumer exists on any production route.
 
 ## D. Legacy Residue
 
@@ -58,9 +64,12 @@ Route registry vs runtime metadata conformance verified:
 
 | Metric | Result |
 | --- | --- |
-| Registry entries | **82** (all gated routes in `routeRegistry.ts`) |
-| Registry route count | **82** |
-| Runtime route count | **82** (excluding unauthenticated/public) |
+| Registry entries | **81** (all capability/ownership-gated routes in `routeRegistry.ts`) |
+| Runtime metadata-gated routes | **80** |
+| Dedicated score-capability route | **1** |
+| Total capability/ownership-gated routes | **81** |
+| Authenticated-only routes outside registry | **4** |
+| Public routes outside registry | **6** |
 | Missing registry entries | **0** |
 | Extra stale entries | **0** |
 | Permission mismatch | **0** |
@@ -68,13 +77,16 @@ Route registry vs runtime metadata conformance verified:
 | Resolver mismatch | **0** |
 | Resource-key mismatch | **0** |
 
-Conformance test: `routeRegistryConformance.test.ts` — **82/82 PASS**
+The independent shared-composition capture reconciled **81/81 gated routes**.
+`routeRegistryConformance.test.ts` also passed **82/82 test assertions**; that
+number is a test count, not a route count. The dedicated score-capability path
+is additionally covered by `scoreCapability.test.ts` and route tests.
 
 ## F. Assignment Authority
 
 ### Source-to-sink dataflow
 
-```
+```text
 user_role_assignments rows (PostgreSQL)
    │
    ▼
@@ -122,16 +134,17 @@ Allow / Deny
 
 | Gate family | Routes | Verified |
 | --- | --- | --- |
-| `requireScopedCapability` | 6 | Positive same-org, missing capability, cross-org, not-found, resolver error, handler-not-reached |
+| `requireScopedCapability` | 5 | Positive same-org, missing capability, cross-org, not-found, resolver error, handler-not-reached |
 | `requireScoreCapability` | 1 | Own/all arbitration, ownership, cross-candidate 404, cross-org |
 | `requireCandidateContext` | 1 | Preset gate, handler-level defense-in-depth |
 | `requireExamEligibility` | 3 | Exam resolution, enrollment check, org anchor, anti-enumeration |
-| `requireOwnAttempt` | 7 | Attempt ownership, cross-candidate 404, org anchor |
+| `requireOwnAttempt` | 6 | Attempt ownership, cross-candidate 404, org anchor |
 
 Denial semantics:
 - Missing capability → **403**
+- Organization mismatch / ownership mismatch / broken parent chain → **403**
 - Not-found / anti-enumeration → **404**
-- Resolver error / broken chain → **503**
+- Resolver operational error → **503**
 - Handler never reached on denial
 
 ## H. Admin Invariant (Last-Effective-Admin)
@@ -224,7 +237,10 @@ Per RBAC-M10-E implementation report (§E), the mutation campaign was executed w
 
 ## L. Commands
 
-All commands executed on `verify/rbac-M10-F` branch at `94bc020`:
+The original verification commands were executed on `verify/rbac-M10-F` at
+`94bc020`. After the teardown correction at `d0f1676` and the review-feedback
+dispositions in this report, the complete `pnpm verify` gate was rerun on the
+closure worktree and passed again.
 
 | Command | Result |
 | --- | --- |
@@ -241,7 +257,7 @@ All commands executed on `verify/rbac-M10-F` branch at `94bc020`:
 | `pnpm --filter @exam/api exec vitest run src/authz/` | 23 files, 276 PASS |
 | `pnpm --filter @exam/api exec vitest run src/routes/candidateOwnership.test.ts src/routes/candidateInvariant.test.ts src/authz/adminInvariant.test.ts` | 3 files, 56 PASS |
 | `pnpm --filter @exam/api exec vitest run src/authz/scoreCapability.test.ts src/authz/candidateContextCapability.test.ts src/authz/examEligibilityCapability.test.ts src/authz/ownAttemptCapability.test.ts src/authz/assignmentAuthority.test.ts src/authz/assignmentAuthorityRuntime.test.ts` | 6 files, 74 PASS |
-| `pnpm --filter @exam/api exec vitest run src/authz/permissionBoundary.test.ts src/authz/adminSuperset.test.ts src/authz/shadowParity.test.ts` | 2 files, 11 PASS |
+| `pnpm --filter @exam/api exec vitest run src/authz/permissionBoundary.test.ts src/authz/adminSuperset.test.ts src/authz/shadowParity.test.ts` | 3 files, 11 PASS |
 | `pnpm --filter @exam/api exec vitest run src/routes/roleAssignments.test.ts src/routes/user.test.ts src/routes/candidate.test.ts` | 3 files, 41 PASS |
 | `pnpm --filter @exam/api exec vitest run src/routes/proctorMonitoring.crossOrg.test.ts src/routes/proctorDiscovery.test.ts` | 2 files, 26 PASS |
 | `pnpm --filter @exam/api exec vitest run src/routes/scores.test.ts src/routes/examAuthoringCapability.test.ts src/routes/questionAuthoringCapability.test.ts` | 3 files, 34 PASS |
@@ -255,11 +271,30 @@ All commands executed on `verify/rbac-M10-F` branch at `94bc020`:
 | `pnpm build` | PASS (9 tasks) |
 | `pnpm verify` | PASS |
 
+### Job completion summary
+
+- Primary documentation: `docs/phase3/rbac/RBAC-M10-F-FINAL-VERIFICATION-1.md`
+  and `docs/phase3/rbac/RBAC-JOB-QUEUE.md`.
+- Post-verification test cleanup: seven attempt-route test files changed their
+  per-test teardown from organization deletion to business-data cleanup; final
+  organization deletion remains in suite teardown.
+- New tests: none. No test case was skipped or deleted by M10-F.
+- Coverage: `pnpm coverage` passed across 16 tasks. API completed 118/118 test
+  files with 1,501 passed / 5 skipped and 85.62% statements, 73.90% branches,
+  89.29% functions, and 86.63% lines. The recorded package test metrics were
+  Web 95 files / 1,177 passed, DB 22 files / 236 passed, and AuthZ 9 files / 65
+  passed; AuthZ source coverage was 100% statements/lines and 90.90% branches.
+- Full gate: `pnpm verify` passed, including format, lint, architecture, copy,
+  DB-config, typecheck, coverage, and build.
+- Known limitations: the explicitly deferred items in §M remain outside M10-F;
+  no M11 actor-to-resource assignments or Phase 4 multi-tenant authority were
+  introduced.
+
 ## M. Known Limitations
 
 ```text
 M11 actor-to-resource assignment (Teacher→course, Grader→work, etc.):
-DEFERRED — NOT IMPLEMENTED
+DEFERRED — NOT STARTED
 
 multi-tenant authorization:
 OUT OF SCOPE (Phase 4)
@@ -319,13 +354,13 @@ AUTHORIZED
 | # | Condition | Status |
 | --- | --- | --- |
 | 1 | PR #195 merged and independent PASS | ✓ |
-| 2 | Current master route inventory complete | ✓ (82 routes) |
+| 2 | Current master route inventory complete | ✓ (91 routes) |
 | 3 | Production `requireRole` consumers = 0 | ✓ |
 | 4 | Production `requirePermission` consumers = 0 | ✓ |
 | 5 | `users.role` authority decisions = 0 | ✓ |
 | 6 | JWT `role` authority decisions = 0 | ✓ |
 | 7 | Assignment union is only human runtime authority | ✓ |
-| 8 | Registry/runtime metadata zero drift | ✓ (82/82 conformance) |
+| 8 | Registry/runtime authorization zero drift | ✓ (81/81 gated routes; 82/82 conformance assertions) |
 | 9 | Scoped resolver fail-closed | ✓ |
 | 10 | Cross-org and cross-owner boundaries hold | ✓ |
 | 11 | Denial handler-not-reached and zero-write | ✓ |
