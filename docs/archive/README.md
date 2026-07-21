@@ -16,23 +16,32 @@
 
 ```txt
 archive/
-├── dev/                          # 开发文档归档（测试基线、配置、种子数据等）
+├── dev/                          # 开发文档归档（测试基线、配置、种子数据、
+│                                 #   ADR-007 audit companions、openapi-audit 等）
+├── audit/                        # 2026-07-21 Wave 1 归档：docs/audit/ 与
+│                                 #   docs/phase3/audit/ 下的时点审查与纠正报告
+├── phase3-rbac/                  # 2026-07-21 Wave 1 归档：docs/phase3/rbac/ 下的
+│                                 #   RBAC M10 系列自评、对抗审查、纠正与旧 job-queue 计划
+├── phase3-plans/                 # 2026-07-21 Wave 1 归档：docs/phase3/ 旧实施计划、
+│                                 #   architecture/、emails/
+├── frontend-rollouts/            # 2026-07-21 Wave 1 归档：docs/frontend/ 下已被
+│                                 #   权威文档取代的 P3 closeout/review/corrective/
+│                                 #   per-wave 迁移报告与 job 计划
+├── followups/                    # 2026-07-21 Wave 1 归档：docs/followups/ 时点跟进项
 ├── phase1-archive/               # Phase 1.0–1.8 实施文档
-│   ├── phase-1.0/
-│   ├── phase-1.1/
-│   ├── phase-1.2/
-│   ├── phase-1.3/
-│   ├── phase-1.4/
-│   ├── phase-1.5/
-│   ├── phase-1.6/
-│   ├── phase-1.7/
-│   ├── phase1.8/
+│   ├── phase-1.0/ … phase1.8/
 │   └── ui-20260610/
 ├── phase2-archive/               # Phase 2 实施文档
 │   └── phase2/
-├── frontend/                     # UI 交互规范
+├── audits/                       # 历史 UI/前端契约审查
+├── frontend/                     # 历史 UI 交互规范
 └── known-test-isolation-issues.md
 ```
+
+> 注：当前活跃权威文档索引已迁移至 `docs/README.md`。最终阶段关闭证据（如
+> `phase2-closeout-report.md`、`phase2-baseline.md`、
+> `RBAC-M10-F-FINAL-VERIFICATION-1.md`、`RBAC-M10-FINISH-BASELINE-1.md`）
+> 已移至 `docs/evidence/`，不再放在 archive 下。
 
 ## 参考指南
 

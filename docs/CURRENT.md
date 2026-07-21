@@ -1,6 +1,8 @@
 # Current Documentation Index
 
-> Entry point for developers and AI agents. Start here, not in `docs/archive/`.
+> **Note:** The canonical documentation entry point is now
+> [`docs/README.md`](README.md). This file is retained as a legacy pointer.
+> Start at `docs/README.md`, not here and not in `docs/archive/`.
 
 ## Active Documents
 
