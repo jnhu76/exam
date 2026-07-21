@@ -12,7 +12,7 @@ BASELINE SYSTEM COMMIT:
                  e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
                  The codebase state this overview was reconstructed from.
 LAST VERIFIED REPOSITORY COMMIT:
-                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 2ca3d687371a2f20eec518634d2e70c2c03421f5
                  The baseline system commit is NOT the final verification
                  commit of the reorganized repository.
 SUPERSEDES:       —

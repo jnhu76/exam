@@ -11,7 +11,7 @@ OWNER:            Architecture
 BASELINE SYSTEM COMMIT:
                  e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197, Wave 1 base)
 LAST VERIFIED REPOSITORY COMMIT:
-                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2  (filled at corrective closeout)
+                 2ca3d687371a2f20eec518634d2e70c2c03421f5  (filled at corrective closeout)
 SUPERSEDES:       —
 RELATED ADRS:     — (governed by docs/architecture/* and docs/roadmap/current.md)
 ```
