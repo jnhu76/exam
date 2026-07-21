@@ -30,7 +30,6 @@
     "db:seed:demo": "pnpm --filter @exam/api db:seed:demo",
     "db:seed:demo:verify": "pnpm --filter @exam/api db:seed:demo:verify",
     "db:seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
-    "seed:e2e": "pnpm --filter @exam/api db:seed:e2e",
     "test:integration": "turbo test:integration",
     "test:e2e": "turbo test:e2e",
     "e2e:docker": "bash scripts/e2e/run.sh",
@@ -40,7 +39,6 @@
     "test:db": "pnpm --filter @exam/db test",
     "coverage:db": "pnpm --filter @exam/db coverage",
     "coverage:api": "TEST_DB_ISOLATION=worker-database API_TEST_MAX_WORKERS=4 pnpm --filter @exam/api coverage",
-    "verify:nodb-tests": "turbo coverage --filter=!@exam/db --filter=!@exam/api",
     "verify:static": "pnpm format:check && pnpm lint && pnpm lint:copy && pnpm lint:arch && pnpm lint:db-config && pnpm lint:ui-gates && pnpm lint:eslint && pnpm typecheck && pnpm --filter @exam/api api:openapi:check",
     "prepare": "husky"
   },
