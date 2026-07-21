@@ -3,7 +3,7 @@
 ## Status
 
 Proposed (documentation-only). No code, test, or CI change is authorized by this
-ADR. Implementation phases are sequenced in `docs/dev/test-ci-parallelism-plan.md`
+ADR. Implementation phases are sequenced in `docs/archive/dev/test-ci-parallelism-plan.md`
 and executed by follow-up PRs that must each carry their own stress evidence.
 
 This ADR is a **long-term architecture constraint**, not a record of completed
@@ -27,7 +27,7 @@ because a set of behaviors can only be exercised on the real engine:
 
 Tests today are slow, and the slowness is structural rather than incidental.
 The contributing factors, as evidenced in `apps/api/vitest.config.ts`,
-`docs/dev/test-flakes.md`, and `docs/known-test-isolation-issues.md`:
+`docs/standards/test-flakes.md`, and `docs/archive/known-test-isolation-issues.md`:
 
 - `apps/api/vitest.config.ts` sets `fileParallelism: false`. Vitest's
   `resolveConfig` then forces `maxWorkers = 1`, so all ~45 API test files run
@@ -37,7 +37,7 @@ The contributing factors, as evidenced in `apps/api/vitest.config.ts`,
   `buildTestApp({ schemaName })`): `CREATE SCHEMA` → migration → seed at
   start, `DROP SCHEMA ... CASCADE` at end.
 - The historical reason serial execution was retained is captured in
-  `docs/dev/test-flakes.md` as `BUG-FLAKE-001`. This ADR treats that record
+  `docs/standards/test-flakes.md` as `BUG-FLAKE-001`. This ADR treats that record
   strictly as **historical background and motivation**. This ADR does **not**
   claim the flake is fixed, and does not authorize removing any current
   mitigation.
@@ -327,7 +327,7 @@ Rules:
   MUST be explicitly closed in teardown. Leaked workers are a test-defining bug,
   not a tolerated artifact.
 
-### 5. Test taxonomy (summary; full version in `docs/dev/test-suite-taxonomy.md`)
+### 5. Test taxonomy (summary; full version in `docs/archive/dev/test-suite-taxonomy.md`)
 
 | Group          | Purpose                                     | Isolation                                  | Execution                  |
 | -------------- | ------------------------------------------- | ------------------------------------------ | -------------------------- |
@@ -528,7 +528,7 @@ Queue prefix: exam:test:s{shard}:w{worker}
 ## Rollout plan (summary)
 
 Full sequencing and acceptance gates live in
-`docs/dev/test-ci-parallelism-plan.md`. Phases at a glance:
+`docs/archive/dev/test-ci-parallelism-plan.md`. Phases at a glance:
 
 - **Phase 0 — docs only (this PR).** Add ADR + plan + taxonomy. No code change.
 - **Phase 1 — classify tests.** Tag ordinary / background / concurrency / E2E.
@@ -661,7 +661,7 @@ with `static` / `verify` / both `api-fast` shards / `e2e` all PASS, and no
 recurrence of physical-DB-lifecycle timeout, auth amplification timeout,
 worker-database shard isolation failure, or e2e ordering/cold-start failure.
 Preferred: 3 consecutive clean runs with recorded timing. Full checklist lives
-in `docs/dev/test-flakes.md` Phase 6G section.
+in `docs/standards/test-flakes.md` Phase 6G section.
 
 ## Completion Boundary
 
@@ -748,7 +748,7 @@ Failure principles:
 
 ## Relationship to existing flake records
 
-This ADR is informed by, but does not modify, `docs/dev/test-flakes.md`:
+This ADR is informed by, but does not modify, `docs/standards/test-flakes.md`:
 
 - `BUG-FLAKE-001` (scanner 5s timeout under parallel + shared schema) is the
   historical motivation for serial execution and per-file schema isolation. It
@@ -764,9 +764,9 @@ This ADR is informed by, but does not modify, `docs/dev/test-flakes.md`:
 
 ## References
 
-- `docs/dev/test-flakes.md` — flake registry, including `BUG-FLAKE-001`
+- `docs/standards/test-flakes.md` — flake registry, including `BUG-FLAKE-001`
   through `BUG-FLAKE-004` and the PR86 / PR87 / PR88 diagnostic matrices.
-- `docs/known-test-isolation-issues.md` — pre-existing isolation issues.
+- `docs/archive/known-test-isolation-issues.md` — pre-existing isolation issues.
 - `docs/adr/ADR-001-redis.md` — Redis adoption triggers (currently Deferred).
 - `docs/adr/ADR-003-job-queue.md` — job queue adoption triggers (currently
   Deferred).
@@ -774,5 +774,5 @@ This ADR is informed by, but does not modify, `docs/dev/test-flakes.md`:
   Vitest `resolveConfig` semantics that make it unbypassable.
 - `packages/db/src/testIsolation.ts` — existing per-file / per-worker schema
   isolation helper, retained as the legacy fallback.
-- `docs/dev/test-ci-parallelism-plan.md` — phased implementation plan.
-- `docs/dev/test-suite-taxonomy.md` — full test taxonomy and tagging rules.
+- `docs/archive/dev/test-ci-parallelism-plan.md` — phased implementation plan.
+- `docs/archive/dev/test-suite-taxonomy.md` — full test taxonomy and tagging rules.

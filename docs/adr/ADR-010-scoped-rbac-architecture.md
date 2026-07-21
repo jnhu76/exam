@@ -2,14 +2,33 @@
 
 > **Type:** Large Design Job / Grillme / ADR (documentation only)
 > **Phase:** Phase 3 Pre-Implementation
-> **Job card:** `docs/phase3/rbac/P3-L2 Scoped RBAC Architecture + Permission Matrix.md`
+> **Job card:** `docs/archive/phase3/P3-L2-scoped-rbac-job-card.md`
 > **Status:** Proposed
 > **Date:** 2026-06-30
 > **Branch:** `role-permission`
 
 ## Status
 
-**Proposed.** This ADR records architecture decisions only. It changes no code, no DB schema, no API contract, no permission enforcement, and no audit action. Every implementation detail in this document is a *proposal* that a later Middle Job must implement behind its own tests and review.
+**Accepted — infrastructure implemented.** The capability-based authorization
+model, permission catalog, role presets, scope model, and resolver matrix
+described in this ADR are **implemented and live** (`packages/authz/`,
+`apps/api/src/authz/`). Every production route is capability-gated; legacy
+`requireRole` and `users.role` authority have been removed (M10-A through
+M10-F, all merged). See [`docs/architecture/authorization.md`](../architecture/authorization.md)
+for the implemented model.
+
+> **What is NOT implemented** is the Phase 3 *product* work built on top of this
+> infrastructure: scoped Teacher/Proctor/Grader role bundles as product roles,
+> resource-relationship assignment (M11), staff invitation, SMTP password reset,
+> and account-lifecycle UI. Those are tracked in
+> [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md).
+>
+> **Gate 0.5 caveat:** the post-PR-197 re-verification (M10-F rerun) is PENDING.
+> The infrastructure is live; the PASS closure verdict is not freshly
+> re-verified. See [`docs/status/implementation-status.md`](../status/implementation-status.md).
+
+This ADR is documentation-only — it changes no code by being written. It records
+the architecture decisions that the implementation then realized.
 
 ---
 
@@ -19,13 +38,13 @@ The platform is a **LAN / on-premise exam system** (`docs/SPEC.md`, `AGENTS.md`)
 
 This ADR is the formal authorization design that **must** exist before any Phase 3 role/permission implementation job begins (job card §1). It is built directly on top of the fact base produced by the Phase 3 audits:
 
-- `docs/phase3/rbac/audit-authz-framework-readiness.md` (P3-AUTHZ-AUDIT) — primary evidence source
-- `docs/phase3/audit/audit-current-role-checks.md` (S3)
-- `docs/phase3/audit/audit-current-events.md` (S6)
-- `docs/phase3/audit/audit-current-grading-api.md` (S3b)
-- `docs/phase3/audit/audit-current-redis.md` (S5)
-- `docs/phase3/audit/audit-current-candidate-runtime.md` (S7)
-- `docs/phase3/audit/audit-current-answer-payload.md` (S8)
+- `docs/archive/phase3/audit-authz-framework-readiness.md` (P3-AUTHZ-AUDIT) — primary evidence source
+- `docs/archive/phase3/audit-current-role-checks.md` (S3)
+- `docs/archive/phase3/audit-current-events.md` (S6)
+- `docs/archive/phase3/audit-current-grading-api.md` (S3b)
+- `docs/archive/phase3/audit-current-redis.md` (S5)
+- `docs/archive/phase3/audit-current-candidate-runtime.md` (S7)
+- `docs/archive/phase3/audit-current-answer-payload.md` (S8)
 
 All load-bearing claims in this ADR cite a file path + line number, an audit section, or a live `rg` result (job card §17). Where evidence is ambiguous, this ADR says so explicitly.
 
@@ -40,7 +59,7 @@ All load-bearing claims in this ADR cite a file path + line number, an audit sec
 > (Scoped RBAC foundation, SYSTEM-M1, multi-role assignments, 11 flipped routes
 > — PR #149–#153 + enforcement series). The text is retained verbatim because it
 > is the ADR's problem statement; it is **not** the current state. For current
-> status see `docs/phase3/plan.md` §0 and `RBAC-JOB-QUEUE.md` ("Current real
+> status see `docs/status/implementation-status.md` and `docs/archive/phase3/RBAC-JOB-QUEUE.md` ("Current real
 > gap"). The single remaining open item is RBAC-M10-finish (resolver wiring +
 > remaining route flips).
 
@@ -1132,7 +1151,7 @@ await authz.can(ctx, {
 - **Goal:** make Admin a compatibility superset (add 4 proctor perms + grading perms to Admin preset) so Stage 6/7 flips preserve behavior. **Non-goals:** Candidate-own or System-only perms. **Inputs:** §Admin Compatibility Policy. **Outputs:** preset update + last-admin-guard-over-assignments plan. **Files:** `packages/authz/src/presets.ts`. **Tests:** Admin passes all current routes. **Acceptance:** shadow parity for Admin. **Rollback:** revert. **Risk:** medium (migration trap).
 
 ### RBAC-M7 — User Role Assignment Schema Proposal
-- **Goal:** propose (not implement) the `roles`/`permissions`/`role_permissions`/`user_role_assignments` schema + `users.role` backfill + last-admin guard migration. **Non-goals:** migration execution. **Inputs:** §Data Model Option C. **Outputs:** migration design doc. **Files:** `docs/phase3/`. **Tests:** n/a (design). **Acceptance:** design reviewed. **Rollback:** n/a. **Risk:** high if guard moves late.
+- **Goal:** propose (not implement) the `roles`/`permissions`/`role_permissions`/`user_role_assignments` schema + `users.role` backfill + last-admin guard migration. **Non-goals:** migration execution. **Inputs:** §Data Model Option C. **Outputs:** migration design doc. **Files:** `docs/archive/phase3/` (historical) and `docs/adr/`. **Tests:** n/a (design). **Acceptance:** design reviewed. **Rollback:** n/a. **Risk:** high if guard moves late.
 
 ### RBAC-M8 — Built-in Role Assignment Admin API
 - **Goal:** API to assign built-in roles with scope; retains last-admin guard. **Non-goals:** custom roles. **Inputs:** RBAC-M7 (executed). **Outputs:** assignment endpoints + audit (`user.role_changed`). **Files:** `apps/api/src/routes/userRole.ts`. **Tests:** assignment + guard tests. **Acceptance:** scoped roles enforce. **Rollback:** revert. **Risk:** medium.
@@ -1162,7 +1181,7 @@ await authz.can(ctx, {
 
 ## Acceptance Criteria (job §19)
 
-- ✅ `docs/phase3/rbac/adr-scoped-rbac-architecture.md` exists.
+- ✅ `docs/adr/ADR-010-scoped-rbac-architecture.md` exists (this ADR, formerly at `docs/phase3/rbac/adr-scoped-rbac-architecture.md`).
 - ✅ The ADR clearly states Phase 3 will use formal Scoped RBAC (Formal Model).
 - ✅ Distinguishes RBAC core from custom role UI (Data Model Option C vs D; Non-Goals).
 - ✅ Permission catalog v0 exists (§Permission Catalog, 9 groups).
