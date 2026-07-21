@@ -1083,7 +1083,7 @@ Phase 1 最小规则：
 
 ## 七、分阶段交付
 
-> 阶段边界以 `docs/phase-roadmap.md` 为权威。本节只保留摘要。
+> 阶段边界以 `docs/roadmap/phase-roadmap.md` 为权威。本节只保留摘要。
 
 ### Phase 1: Minimal Deliverable Exam System
 

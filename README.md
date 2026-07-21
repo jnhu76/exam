@@ -203,30 +203,26 @@ packages/
 | Cache | Redis 7 (optional, for rate limiting/presence) |
 | Monorepo | pnpm 11 + Turborepo 2.9.16 |
 
-See `docs/dev/ci-baseline.md` for CI infrastructure details and local testing setup.
+See `docs/standards/testing.md` for CI infrastructure details and local testing setup.
 
 ## Documentation
 
+The canonical documentation index is [`docs/README.md`](docs/README.md). Start there.
+
 | Document | Description |
 |---|---|
-| `docs/SPEC.md` | Full product specification (authoritative) |
-| `docs/code-quality.md` | Code quality rules and conventions (authoritative) |
-| `docs/dev/ci-baseline.md` | CI infrastructure baseline (versions, job structure, local setup) |
-| `docs/phase2/phase2.plan.md` | Phase 2 Exam Runtime Closure plan (authoritative) |
-| `docs/phase2/discovery/01-frontend-inventory.md` | Phase 1 frontend route/component inventory |
-| `docs/phase2/discovery/02-backend-api-inventory.md` | Phase 1 backend API endpoint inventory |
-| `docs/phase2/discovery/03-openapi-contract-audit.md` | OpenAPI spec vs actual code audit |
-| `docs/phase2/discovery/04-state-machine-audit.md` | Exam/attempt/enrollment state machine audit |
-| `docs/phase2/discovery/05-user-flow-trace-map.md` | End-to-end user flow trace (candidate, admin, proctor) |
-| `docs/phase2/discovery/06-phase2-gap-analysis.md` | Phase 2 gap analysis with P0/P1/P2 priorities |
-| `docs/dev/demo-seed-plan.md` | Demo seed dataset plan (historical — actual seed differs) |
-| `docs/dev/demo-seed-contract.md` | Enum values, entity fields, lifecycle rules, data relations |
-| `docs/dev/demo-seed-test-guide.md` | Step-by-step manual test guide for demo seed |
-| `docs/dev/exam-data-chain.md` | Entity relationships and data flow documentation |
-| `docs/dev/manual-test-bugs.md` | Known bugs from manual testing |
-| `docs/dev/redis-baseline.md` | Redis plugin architecture and test isolation |
-| `docs/dev/AUDIT-PHASE2-REALITY.md` | Phase 2 implementation reality audit (code vs spec drift) |
-| `docs/dev/phase2-closeout-report.md` | Phase 2 closeout report (final status, known gaps) |
+| `docs/SPEC.md` | Full product specification — invariants, domain model, architecture (authoritative) |
+| `docs/README.md` | Canonical documentation index and authority precedence |
+| `docs/roadmap/phase-roadmap.md` | Phase 1/2/3/4 scope authority |
+| `docs/roadmap/current.md` | Current work and what comes next |
+| `docs/status/implementation-status.md` | What is implemented / partial / limited now |
+| `docs/standards/code-quality.md` | Code quality rules, gates, AI coding rules |
+| `docs/standards/testing.md` | Testing & CI contract |
+| `docs/architecture/authorization.md` | Capability-based authorization model (implemented) |
+| `docs/adr/README.md` | Architecture Decision Records index |
+| `docs/frontend/P3-UI-Foundation-plan.md` | Frontend visual authority (UI foundation plan) |
+
+Historical material (plans, audits, reviews, implementation reports) lives under `docs/archive/` and is not current implementation guidance.
 
 ## Environment Variables
 
@@ -313,7 +309,7 @@ pnpm coverage
 E2E browser tests live in `apps/e2e/e2e/*.spec.ts` and cover the candidate
 exam lifecycle (happy-path, resume, submit-flush, demo-seed accounts, manual
 grading, result publishing, proctor runtime, disconnect/restore, deadline
-crash, fill_blank, multi_select, proctor monitoring UI). See **[`docs/dev/e2e-testing.md`](docs/dev/e2e-testing.md)** for the
+crash, fill_blank, multi_select, proctor monitoring UI). See **[`docs/standards/testing.md`](docs/standards/testing.md)** for the
 full guide (prerequisites, flags, env vars, targeting, seed, debugging).
 
 **Two execution modes — choose by environment:**

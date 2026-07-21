@@ -8,7 +8,7 @@ Configurable **LAN/on-premise exam and assessment platform**. It is not hardcode
 
 Strict closed-book proctored exam operation is Phase 2+. Teacher-like roles, Proctor, Grader, scoped permissions, invitation, and email account lifecycle are Phase 3. Pass-to-proceed APIs, service tokens, external integrations, optional multiTenant, and SuperAdmin are Phase 4 platformization/integration.
 
-**Read `docs/SPEC.md` and `docs/phase-roadmap.md` first** — they are the specification and phase authority documents. If implementation conflicts with them, the spec and roadmap win.
+**Read `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` first** — they are the specification and phase authority documents. If implementation conflicts with them, the spec and roadmap win.
 
 ## Product Generalization Rules
 
@@ -285,11 +285,11 @@ docs/                    # design documents
 - `packages/db` repository methods must receive `ctx` — no bare SQL in routes
 - `packages/domain` has no internal package dependency (leaf node)
 - `apps/web` cannot import from `packages/db` directly
-- See `docs/code-quality.md` §6 for full dependency graph
+- See `docs/standards/code-quality.md` §6 for full dependency graph
 
 ## Code Quality
 
-**Read `docs/code-quality.md` before implementing any Job.** Key rules:
+**Read `docs/standards/code-quality.md` before implementing any Job.** Key rules:
 
 - **TypeScript strict mode** — no `any`, no `as any`, see `tsconfig.base.json`
 - **Prettier + ESLint** — `pnpm verify` must pass
@@ -301,7 +301,7 @@ docs/                    # design documents
 - **Structured logging** — pino in api, no `console.log` anywhere in packages
 - **No duplicate DTOs** — import from `@exam/domain` or `@exam/contracts`, never redefine
 - **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
-- **AI coding rules** — see `docs/code-quality.md` §17
+- **AI coding rules** — see `docs/standards/code-quality.md` §17
 - **Research before toolchain changes** — Docker, pnpm, Node module resolution, CI, package manager, and build-system changes require MCP/doc search + local repo verification before editing. Do not guess.
 - **Frontend visual authority** — see the "Frontend Visual Authority" section below
 
@@ -436,7 +436,7 @@ Do **not** claim that all typography or all surface recipes are lint-enforced �
 - Then: **E2E re-enable** for happy path / resume / submit-flush as blocking CI.
 - **Phase2 has not started.**
 - **Phase plans control implementation schedule.**
-- **SPEC and `docs/phase-roadmap.md` win over implementation details.**
+- **SPEC and `docs/roadmap/phase-roadmap.md` win over implementation details.**
 - **Phase 2 does NOT implement multi-tenant.** Multi-tenant is Phase 4 platformization only.
 
 ---

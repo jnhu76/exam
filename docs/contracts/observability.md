@@ -116,7 +116,7 @@ Phase 2 (in-process `setInterval`). Their diagnostics contract:
 ## Test diagnostics fields
 
 For test failure diagnosis (BUG-FLAKE-001 etc.), the contract is captured in
-`docs/dev/test-flakes.md` + `docs/dev/adr-isolation-audit.md`. Minimum fields
+`docs/standards/test-flakes.md` + `docs/archive/dev/adr-isolation-audit.md`. Minimum fields
 a flake record carries:
 
 | Field | Notes |

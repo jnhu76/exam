@@ -13,7 +13,7 @@ runtime, constrain outgoing responses, and feed the generated OpenAPI spec.
 artifact. It is derived from the same Zod route schemas via
 `fastify-type-provider-zod`'s `jsonSchemaTransform`.
 
-Hand-written documentation (including `docs/api/reference.md`) is
+Hand-written documentation (including `api-reference.md`) is
 **human-readable guidance** and may lag behind the generated OpenAPI. If this
 document or any hand-written doc conflicts with generated OpenAPI or route
 schemas, **generated OpenAPI / route schemas win**.
@@ -166,7 +166,7 @@ The following items are intentionally left out of this document's scope:
   responses (400, 404, 409).
 - Clean up `course.ts` legacy ad-hoc error envelopes (no `requestId`, no
   standardized code).
-- Eventually regenerate or rewrite `docs/api/reference.md` from generated
+- Eventually regenerate or rewrite `api-reference.md` from generated
   OpenAPI.
 - Future API reference / settings UI should consume generated OpenAPI, not the
   hand-written reference.

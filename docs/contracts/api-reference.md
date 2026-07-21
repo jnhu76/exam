@@ -10,10 +10,10 @@
 > document conflicts with generated OpenAPI or route schemas, **generated
 > OpenAPI / route schemas win**.
 >
-> See `docs/api/contract.md` for the full runtime-first API contract policy,
+> See `api-contract.md` for the full runtime-first API contract policy,
 > error envelope, and ErrorCode conventions.
 
-> **Phase realignment note**: `docs/SPEC.md` and `docs/phase-roadmap.md` are authoritative for product phase scope. Phase 1 current product roles are Admin + Candidate only. The API reference below has been updated to reflect Phase 1 permissions. Fields like `queue`, `restrictIp`, `controlFlags.retakePolicy`, `controlFlags.scoreStrategy` remain in response schemas as structural residue from the exam model but are not Phase 1 product paths. Optional multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed, service tokens, and external integration are Phase 4 capabilities unless explicitly re-scoped.
+> **Phase realignment note**: `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` are authoritative for product phase scope. Phase 1 current product roles are Admin + Candidate only. The API reference below has been updated to reflect Phase 1 permissions. Fields like `queue`, `restrictIp`, `controlFlags.retakePolicy`, `controlFlags.scoreStrategy` remain in response schemas as structural residue from the exam model but are not Phase 1 product paths. Optional multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed, service tokens, and external integration are Phase 4 capabilities unless explicitly re-scoped.
 
 ## 概述
 
