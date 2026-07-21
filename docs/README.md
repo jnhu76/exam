@@ -76,11 +76,9 @@ When documents conflict, higher precedence wins:
 
 | Document | Purpose |
 | --- | --- |
-| [`frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md`](frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md) | Accepted as-built visual-language audit |
-| [`frontend/P3-UI-Foundation-plan.md`](frontend/P3-UI-Foundation-plan.md) | UI foundation authority (chain, recipes, sequence, lint rules) |
-| [`frontend/P3-UI-component-authority.md`](frontend/P3-UI-component-authority.md) | Per-component role ownership |
-| [`frontend/component-governance.md`](frontend/component-governance.md) | Stack freeze + dependency rules |
-| [`frontend/design-preview.html`](frontend/design-preview.html) | Quiet Graphite visual specimen (companion to root `DESIGN.md`) |
+| [`architecture/frontend.md`](architecture/frontend.md) | As-built frontend architecture (shell, routing, layouts, API client, state, package boundaries, tech stack, responsive structure) |
+| [`standards/ui-system.md`](standards/ui-system.md) | As-built UI system constraints (design tokens, fonts, typography recipes, surface/elevation, component authority, Tailwind boundary, status color, icons, tables, accessibility, active `exam-ui/*` lint) |
+| [`roadmap/ui-open-items.md`](roadmap/ui-open-items.md) | Unfinished visual-authority migration work |
 
 See also the root [`DESIGN.md`](../DESIGN.md) (project-owned visual authority) and
 [`AGENTS.md`](../AGENTS.md) §"Frontend Visual Authority".

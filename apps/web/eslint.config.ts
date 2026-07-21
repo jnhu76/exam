@@ -6,7 +6,7 @@
  *
  * Visual-authority rules live under the local `exam-ui/*` namespace. They
  * enforce the frontend visual authority model defined in AGENTS.md and
- * docs/frontend/P3-UI-Foundation-plan.md (UI-LINT-1 stage).
+ * docs/standards/ui-system.md.
  *
  * Scope rules:
  *   - exam-ui/* apply to business / feature source ONLY:

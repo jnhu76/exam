@@ -6,9 +6,10 @@
  *   - business pages may use raw Tailwind color palettes
  *   - font-bold is a valid way to build hierarchy
  *
- * Scans active docs (docs/frontend/**, docs/SPEC.md, README.md, AGENTS.md,
- * CONTEXT.md). docs/archive/** is excluded (archived history; the ant-removal
- * audit separately confirms archive mentions frame Ant as forbidden/purged).
+ * Scans active docs (docs/architecture/frontend.md, docs/standards/ui-system.md,
+ * docs/SPEC.md, README.md, AGENTS.md, CONTEXT.md). docs/archive/** is excluded
+ * (archived history; the ant-removal audit separately confirms archive mentions
+ * frame Ant as forbidden/purged).
  */
 import { readdir, readFile } from "node:fs/promises";
 import { relative } from "node:path";
@@ -55,7 +56,8 @@ async function walk(path, out = []) {
 }
 
 const targets = [
-  "docs/frontend",
+  "docs/architecture/frontend.md",
+  "docs/standards/ui-system.md",
   "docs/SPEC.md",
   "README.md",
   "AGENTS.md",

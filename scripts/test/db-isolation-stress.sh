@@ -2,7 +2,7 @@
 # db-isolation-stress.sh — Comprehensive stress test for B方案 (isolated PG schema).
 #
 # Validates that per-worker/per-file isolated PostgreSQL schemas resolve the
-# four BUG-FLAKE entries from docs/dev/test-flakes.md:
+# four BUG-FLAKE entries from docs/standards/test-flakes.md:
 #
 #   BUG-FLAKE-001: scanner timeout under shared schema + coverage
 #   BUG-FLAKE-002: cross-package seed/cleanup collision

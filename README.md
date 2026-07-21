@@ -220,7 +220,8 @@ The canonical documentation index is [`docs/README.md`](docs/README.md). Start t
 | `docs/standards/testing.md` | Testing & CI contract |
 | `docs/architecture/authorization.md` | Capability-based authorization model (implemented) |
 | `docs/adr/README.md` | Architecture Decision Records index |
-| `docs/frontend/P3-UI-Foundation-plan.md` | Frontend visual authority (UI foundation plan) |
+| `docs/architecture/frontend.md` | Frontend architecture (as-built) |
+| `docs/standards/ui-system.md` | UI system constraints (as-built visual authority) |
 
 Historical material (plans, audits, reviews, implementation reports) lives under `docs/archive/` and is not current implementation guidance.
 

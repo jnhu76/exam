@@ -1,6 +1,6 @@
 /**
- * Density semantic vocabulary — machine-readable mirror of
- * docs/frontend/P3-UI-density-vocabulary.md (UI-SURFACE-1 §6).
+ * Density semantic vocabulary — machine-readable mirror of the density
+ * vocabulary documented in docs/standards/ui-system.md.
  *
  * Density describes INFORMATION density (how tightly a region packs content),
  * NOT raw padding values. Per the surface vocabulary §6, component layout
