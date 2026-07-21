@@ -8,8 +8,14 @@ STATUS:          CURRENT
 AUTHORITY:        Status
 SCOPE:            Capability implementation status across api/web/packages
 OWNER:            Architecture
-LAST VERIFIED:    2712c01 — evidence from apps/api/src/routes, apps/web/src/pages,
-                  packages/*/src
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+                 The codebase state the matrix was reconstructed from.
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 The repository commit at which this document was last checked.
+                 The baseline system commit is NOT the final verification
+                 commit of the reorganized repository.
 SUPERSEDES:       —
 RELATED ADRS:     ADR-001 (Redis), ADR-002 (WS/SSE), ADR-003 (job queue),
                   ADR-004 (desktop), ADR-005 (operation state), ADR-008 (submit freeze)
@@ -59,9 +65,9 @@ Legend: ✅ IMPLEMENTED · 🟡 PARTIAL (infra present but gated / scope-limited
 | Capability | Status | Note |
 |------------|--------|------|
 | `timed_window` timing mode | ✅ | The only Phase 1 timing mode |
-| `timed_sync` / `untimed` timing modes | ⬜ | Deferred to Phase 2+ hardening / Phase 3 |
-| Queue admission (`requireQueue` + `batchSize` + `batchInterval`) | ⬜ | Deferred (Phase 2 exam operation) |
-| Degradation / basic health check | 🟡 | Basic health check only; full degradation deferred to Phase 2 |
+| `timed_sync` / `untimed` timing modes | ⬜ | Not implemented; deferred to Phase 3 |
+| Queue admission (`requireQueue` + `batchSize` + `batchInterval`) | ⬜ | Not implemented; deferred (Phase 2 exam operation, not operationally wired) |
+| Degradation / basic health check | 🟡 | Basic health check only. Full degradation is a Phase 2 feature that is itself not yet implemented (not "deferred to Phase 2") |
 
 ## Deferred infrastructure (present but dormant)
 
@@ -71,7 +77,7 @@ Legend: ✅ IMPLEMENTED · 🟡 PARTIAL (infra present but gated / scope-limited
 | Email | 🟡 | Full SMTP/outbox/retry plumbing under `apps/api/src/email/`; gated off by default (`EMAIL_ENABLED=false`). `routes/email.ts` `POST /email/test`. |
 | WebSocket / SSE | ⬜ | Not present. Proctor dashboard uses HTTP polling (ADR-002). |
 | Job queue | ⬜ | Not present. All work synchronous/request-scoped (ADR-003). |
-| Desktop / Electron | ⬜ | `apps/desktop/` does not exist. `controlFlags.requireLockdown` schema-only (ADR-004). |
+| Desktop client | ⬜ | `apps/desktop/` does not exist. `controlFlags.requireLockdown` schema-only. ADR-004 records Desktop as DEFERRED; **runtime container TBD** (Electron vs another runtime is undecided — no accepted ADR fixes the implementation technology) |
 | OCR | ⬜ | No code anywhere. |
 | AI grading | ⬜ | Not present. |
 

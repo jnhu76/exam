@@ -8,7 +8,13 @@ STATUS:          CURRENT
 AUTHORITY:        Architecture
 SCOPE:            Whole system: packages, runtimes, boundaries, tech stack
 OWNER:            Architecture
-LAST VERIFIED:    2712c01 — reconstructed from apps/, packages/ source
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+                 The codebase state this overview was reconstructed from.
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 The baseline system commit is NOT the final verification
+                 commit of the reorganized repository.
 SUPERSEDES:       —
 RELATED ADRS:     ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-006, ADR-008
 ```

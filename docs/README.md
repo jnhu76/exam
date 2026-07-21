@@ -7,7 +7,10 @@ STATUS:          CURRENT
 AUTHORITY:        Documentation navigation index
 SCOPE:            Whole repository documentation tree
 OWNER:            Architecture
-LAST VERIFIED:    2712c01 (chore/project-simplification-wave1)
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
 SUPERSEDES:       docs/CURRENT.md (CURRENT.md is retained as a legacy pointer;
                   this README is now the canonical entry point)
 RELATED ADRS:     —

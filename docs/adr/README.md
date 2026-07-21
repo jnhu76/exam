@@ -9,7 +9,11 @@ STATUS:          CURRENT
 AUTHORITY:        Index
 SCOPE:            docs/adr/ decision records
 OWNER:            Architecture
-LAST VERIFIED:    2712c01 — statuses read verbatim from each ADR file
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 ADR Status fields are read verbatim from each ADR file.
 SUPERSEDES:       —
 RELATED ADRS:     ADR-001 through ADR-009 (see table)
 ```

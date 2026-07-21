@@ -7,8 +7,12 @@ STATUS:          CURRENT
 AUTHORITY:        Architecture
 SCOPE:            Exam runtime kernel, exam-engine package boundary, attempt lifecycle
 OWNER:            Architecture
-LAST VERIFIED:    2712c01 — reconstructed from packages/exam-engine/src,
-                  apps/api/src/routes/attempts.*, packages/exam-engine tests
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 The baseline system commit is NOT the final verification
+                 commit of the reorganized repository.
 SUPERSEDES:       —
 RELATED ADRS:     ADR-005 (operation state baseline), ADR-006 (time authority),
                   ADR-008 (submit answer freeze)

@@ -7,8 +7,12 @@ STATUS:          CURRENT
 AUTHORITY:        Architecture
 SCOPE:            packages/db boundary, repository rule, db ↔ domain contract
 OWNER:            Architecture
-LAST VERIFIED:    2712c01 — reconstructed from packages/db/src, packages/db/package.json,
-                  apps/api route files
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 The baseline system commit is NOT the final verification
+                 commit of the reorganized repository.
 SUPERSEDES:       —
 RELATED ADRS:     ADR-005 (lock-reconcile-assert-mutate), ADR-006 (now() in repos)
 ```

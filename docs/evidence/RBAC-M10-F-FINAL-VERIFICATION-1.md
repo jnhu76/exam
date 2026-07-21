@@ -1,5 +1,26 @@
 # RBAC-M10-F-FINAL-DRIFT-AND-MUTATION-CLOSURE-1 — Final Verification Report
 
+> **INVALIDATION NOTICE (2026-07-21, Project-Simplification-Wave-1-Corrective-1).**
+> This report's PASS verdict was produced against base SHA `94bc020` (PR #195
+> merge), which is an **ancestor of** PR #197 (`e7af792 — fix(audit): make
+> ADR-006 durability contract proportional`). PR #197 modified the audit
+> durability contract bound by ADR-006, and the project-simplification scan
+> review (Gate 0.5) requires M10-F to be re-executed against a post-PR-197
+> baseline before any RBAC-sensitive change is trusted. **This evidence is
+> therefore invalidated as current closure.** It is retained as the historical
+> pre-PR-197 record only.
+>
+> **Replacement status:** PENDING. The required fresh evidence file
+> `docs/evidence/rbac-m10-closure-after-pr197.md` (baseline, fresh route
+> inventory, authorization drift result, mutation/fault-injection result,
+> verification result, final verdict) does not yet exist. Until it is produced
+> and independently supported, Gate 0.5 is **PENDING** and the following remain
+> blocked: deletion of `packages/auth/src/rbac.ts`, deletion of the
+> `requirePermission` implementation/type declaration, deletion of Type 3
+> authorization tests, refactoring of the route authorization oracle, deletion
+> of permission compatibility evidence, and any move of authz enforcement code.
+> M10-F re-execution may proceed in parallel on a separate branch.
+
 ## A. Verdict
 
 ```text

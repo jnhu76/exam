@@ -7,8 +7,12 @@ STATUS:          CURRENT
 AUTHORITY:        Architecture
 SCOPE:            Authorization model, authz package boundary, route authorization
 OWNER:            Architecture / Security
-LAST VERIFIED:    2712c01 — reconstructed from packages/authz, apps/api/src/authz,
-                  apps/api/src/plugins/authz.ts, route conformance tests
+BASELINE SYSTEM COMMIT:
+                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
+LAST VERIFIED REPOSITORY COMMIT:
+                 c0dde8f1c11d05e78cf9dfb871afd3bbdee6daa2
+                 The baseline system commit is NOT the final verification
+                 commit of the reorganized repository.
 SUPERSEDES:       —
 RELATED ADRS:     ADR-005 (exam operation state), ADR-006 (time authority audit)
 ```
