@@ -26,7 +26,7 @@ export interface SubjectiveQuestionSeed {
 
 /**
  * A text_response question to seed (P3-MOD-P0-4). Per the approved protocol
- * (`docs/phase3/exam-protocol.md` §1.1) text_response is an independent
+ * (`docs/architecture/exam-runtime.md` §1.1) text_response is an independent
  * QuestionType — NOT a fill_blank variant. The renderer dispatches it to a
  * textarea via `TextResponseInput`. standardAnswer is optional; rubric is
  * required at publish time (the API enforces this).

@@ -331,7 +331,7 @@ pnpm verify
 
 ## 10. Cross-references
 
-- **Design spec (authority):** `docs/phase3/emails/email.md` — including
+- **Design spec (authority):** `docs/archive/phase3/email-outbox-foundation.md` — including
   `§Status` (delivered capabilities + open gaps: no business integration, no
   worker daemon, no `users.email` column).
 - **Config loader:** `apps/api/src/config/runtimeConfig.ts` →

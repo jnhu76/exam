@@ -10,7 +10,7 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
  *
  * Guardrail tests proving that Redis failure/absence does NOT corrupt
  * PostgreSQL authoritative candidate state. Per the M7 audit
- * (`docs/phase3/audit/audit-redis-fallback-guard-m7.md`), Redis is
+ * (`docs/archive/phase3/audit-redis-fallback-guard-m7.md`), Redis is
  * diagnostics-only today: no candidate/answer/score/submit/attempt code path
  * reads or writes Redis. These tests make that invariant explicit so a future
  * regression (someone wiring Redis into a candidate flow) fails loudly.
