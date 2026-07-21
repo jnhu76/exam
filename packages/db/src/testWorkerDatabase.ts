@@ -18,7 +18,7 @@
  *   6. return a {@link WorkerDatabaseHandle} with `resetPostgres()` (TRUNCATE)
  *      and `close()`
  *
- * Non-goals of this PR (see ADR-007 + docs/dev/test-ci-parallelism-plan.md):
+ * Non-goals of this PR (see ADR-007 + docs/archive/dev/test-ci-parallelism-plan.md):
  *   - Does NOT enable `fileParallelism: true`.
  *   - Does NOT change default `maxWorkers`.
  *   - Does NOT remove the legacy `file-schema` fallback (`testIsolation.ts`).

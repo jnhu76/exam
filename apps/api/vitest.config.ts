@@ -15,7 +15,7 @@ for (const [key, value] of Object.entries(envVars)) {
 
 // FIXME(BUG-FLAKE-001): apps/api 跨文件并行 + 共享 PostgreSQL schema + coverage
 // instrumentation 会造成 attempts.test.ts:1070 后台扫描用例在 pnpm verify 路径下
-// 偶发 5s timeout（已升级条目，见 docs/dev/test-flakes.md）。
+// 偶发 5s timeout（已升级条目，见 docs/standards/test-flakes.md）。
 //
 // 默认缓解（未变）：fileParallelism: false 让所有 apps/api 测试文件串行执行，
 // 从源头消除跨文件 DB 资源争用。代价：apps/api test/coverage 时间约翻倍。
@@ -38,7 +38,7 @@ for (const [key, value] of Object.entries(envVars)) {
 // 强制为 1（见 vitest resolveConfig / UserWhence 类型 doc comment：
 // "Setting this to `false` will override `maxWorkers` option to `1`"），
 // 单独传 --maxWorkers=50% 会被覆盖、退化为串行。
-// 详见 docs/dev/test-flakes.md BUG-FLAKE-001。
+// 详见 docs/standards/test-flakes.md BUG-FLAKE-001。
 //
 // ─── ADR-007 Phase 5A/5B opt-in local parallelism（env-gated）──────────────
 // 默认行为不变：fileParallelism:false（串行）。仅当同时满足两个条件时才打开并行：
