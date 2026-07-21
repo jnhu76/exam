@@ -431,11 +431,10 @@ Do **not** claim that all typography or all surface recipes are lint-enforced �
 
 ## Current Roadmap Authority
 
-- **Project Simplification Wave 1 (docs reorganization + mechanical + test cleanup) is complete** — see `docs/roadmap/current.md` and `docs/status/project-simplification.md`.
-- **E2E is enabled and runs as blocking CI.** The `e2e` job in `.github/workflows/ci.yml` (sharded) gates every PR; PR #198 passed both shards. The earlier "E2E re-enable as next work" framing was inaccurate — E2E was already enabled and blocking.
-- **Phase 2 (Exam Operation) gate items are implemented** — proctor visibility/event-stream/polling/incident-logging, force-submit, extend-time, misconduct flag, attempt timeline, manual grading queue, retake policy, score strategy, diagnostics, result publishing, telemetry, and the candidate/admin permission boundary are in place. `timed_window` is the only timing mode.
-- **Phase 3 is partially implemented.** The authorization *infrastructure* (permission catalog, role presets, scoped/scored capability resolvers, assignment-backed runtime authority, candidate/admin permission boundary) is live. The Phase 3 *product* work (scoped Teacher/Proctor/Grader role bundles as product roles, staff invitation, SMTP reset, account lifecycle UI, fill-blank/subjective runtime, WYSIWYG submit) is not done.
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PENDING** — it blocks future RBAC-sensitive changes only; it does not block PR #198, which does not touch production authorization enforcement, Redis, Docker, the route registry, or Type 3 security tests.
+- **Current work is documentation realignment for Phase 1 Minimal Deliverable Exam System.**
+- Next work: **Phase 1 singleTenant cleanup**.
+- Then: **E2E re-enable** for happy path / resume / submit-flush as blocking CI.
+- **Phase2 has not started.**
 - **Phase plans control implementation schedule.**
 - **SPEC and `docs/phase-roadmap.md` win over implementation details.**
 - **Phase 2 does NOT implement multi-tenant.** Multi-tenant is Phase 4 platformization only.
