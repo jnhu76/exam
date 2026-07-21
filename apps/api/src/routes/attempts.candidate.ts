@@ -53,12 +53,10 @@ import {
   prepareReconciledAttemptMutation,
 } from "@exam/exam-engine";
 import {
-  createExamRepoAdapter,
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
 } from "../adapters/repoAdapters.js";
 import { submitAndGradeAttempt } from "../orchestrators/submitAndGradeAttempt.js";
-import { recordAudit } from "./audit.js";
 import { formatZodError, getRequestContext } from "./helpers.js";
 import { reconcileExamForRead } from "./reconciliation.js";
 import {
@@ -307,20 +305,16 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         candidateProfile.id,
       );
 
-      const examRepo = createExamRepo(fastify.db);
       const attemptRepo = createAttemptRepo(fastify.db);
       // ADR-006: one operation now for this list request.
       const now = fastify.now();
 
       return Promise.all(
         enrollments.map(async (enrollment) => {
-          const examAdapter = createExamRepoAdapter(examRepo, ctx);
           const result = await reconcileExamForRead(
-            examAdapter,
+            fastify.db,
             enrollment.examId,
             now,
-            fastify,
-            request,
             ctx,
           );
           if (!result) return null;
@@ -440,13 +434,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       // ADR-006: one operation now, threaded through the whole request.
       const now = fastify.now();
-      const examRepo = createExamRepo(fastify.db);
       const statusResult = await reconcileExamForRead(
-        createExamRepoAdapter(examRepo, ctx),
+        fastify.db,
         parsed.data.examId,
         now,
-        fastify,
-        request,
         ctx,
       );
       if (!statusResult) {
@@ -580,13 +571,10 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
       const candidateProfile = await getCandidateProfile(fastify, ctx);
       const candidateId = candidateProfile.id;
 
-      const examRepo = createExamRepo(fastify.db);
       const statusResult = await reconcileExamForRead(
-        createExamRepoAdapter(examRepo, ctx),
+        fastify.db,
         examId,
         fastify.now(),
-        fastify,
-        request,
         ctx,
       );
       if (!statusResult) {
@@ -614,7 +602,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
             ctx,
           );
 
-          return startOrRestoreAttempt(
+          const started = await startOrRestoreAttempt(
             exams,
             enrollments,
             attempts,
@@ -626,18 +614,11 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
                 new PermissionDeniedError(message),
             },
           );
+          return started;
         },
         "read committed",
       );
 
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        isNew ? "attempt.start" : "attempt.restore",
-        "attempt",
-        attempt.id,
-      );
       examQueues.set(
         examId,
         (examQueues.get(examId) ?? []).filter(
@@ -900,7 +881,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         // inspects the returned semantic result to translate it to the wire
         // contract. It does NOT validate membership, compute the effective
         // deadline, reconstruct AnswerState, or write attempt.answers itself.
-        return saveAnswer(attempts, mutationContext, {
+        const saved = await saveAnswer(attempts, mutationContext, {
           attemptId,
           questionId,
           answer: body.answer,
@@ -908,18 +889,8 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           clientSavedAt: body.clientSavedAt,
           baseVersion: body.baseVersion,
         });
+        return saved;
       });
-
-      if (result.accepted) {
-        recordAudit(
-          fastify,
-          request,
-          ctx,
-          "attempt.saveAnswer",
-          "attempt",
-          attemptId,
-        );
-      }
 
       if (result.accepted) {
         return SaveAnswerAcceptedSchema.parse({
@@ -988,15 +959,7 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
         attemptId,
         candidateProfile.id,
         fastify.now(),
-      );
-
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "attempt.submit",
-        "attempt",
-        attemptId,
+        { request },
       );
 
       return LoadAttemptResponseSchema.parse(
@@ -1116,17 +1079,14 @@ export async function registerCandidateAttemptRoutes(fastify: FastifyInstance) {
           fastify.now(),
         );
 
-        return restoreAttempt(exams, attempts, attemptId, fastify.now());
+        const restored = await restoreAttempt(
+          exams,
+          attempts,
+          attemptId,
+          fastify.now(),
+        );
+        return restored;
       });
-
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "attempt.restore",
-        "attempt",
-        attemptId,
-      );
       return LoadAttemptResponseSchema.parse(
         toCandidateAttemptResponse(attempt, fastify.now()),
       );

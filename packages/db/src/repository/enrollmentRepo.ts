@@ -16,6 +16,25 @@ export function createEnrollmentRepo(db: Database) {
 
   return {
     ...repo,
+    /** Finds an enrollment by ID and locks it for a transactional mutation. */
+    async findByIdForUpdate(
+      ctx: TenantContext | RequestContext,
+      enrollmentId: string,
+    ) {
+      const orgId = resolveOptionalOrganizationId(ctx);
+      const rows = await db
+        .select()
+        .from(examEnrollments)
+        .for("update")
+        .where(
+          and(
+            eq(examEnrollments.organizationId, orgId),
+            eq(examEnrollments.id, enrollmentId),
+          ),
+        )
+        .limit(1);
+      return (rows[0] as EnrollmentSelect | undefined) ?? null;
+    },
     /**
      * Finds an enrollment by exam and candidate profile ID, scoped to the tenant.
      */

@@ -11,7 +11,7 @@ import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import type { RequestContext } from "@exam/domain";
 import { Permission } from "@exam/authz";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { recordAudit } from "./audit.js";
+import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 
 /** OpenAPI security scheme: HTTP-only cookie authentication. */
@@ -153,12 +153,16 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const course = await repo.create(ctx, {
+      const course = await createCourseRepo(fastify.db).create(ctx, {
         name: data.name,
         code: data.code,
         description: data.description,
       });
-      recordAudit(fastify, request, ctx, "course.create", "course", course.id);
+      recordBestEffortAudit(fastify, request, ctx, {
+        action: "course.create",
+        targetType: "course",
+        targetId: course.id,
+      });
       return reply.code(201).send({
         id: course.id,
         organizationId: course.organizationId,
@@ -191,18 +195,24 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
       const data = UpdateCourseRequestSchema.parse(request.body);
-      const repo = createCourseRepo(fastify.db);
-      const updated = await repo.update(
+      const updated = await createCourseRepo(fastify.db).update(
         ctx,
         id,
         data as Record<string, unknown>,
       );
+      if (updated) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "course.update",
+          targetType: "course",
+          targetId: id,
+          metadata: { changedFields: Object.keys(data) },
+        });
+      }
       if (!updated) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(fastify, request, ctx, "course.update", "course", id);
       return {
         id: updated.id,
         organizationId: updated.organizationId,
@@ -254,13 +264,19 @@ const courseRoutes: FastifyPluginAsync = async (fastify) => {
           }),
         );
       }
-      const deleted = await repo.delete(ctx, id);
+      const deleted = await createCourseRepo(fastify.db).delete(ctx, id);
+      if (deleted) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "course.delete",
+          targetType: "course",
+          targetId: id,
+        });
+      }
       if (!deleted) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(fastify, request, ctx, "course.delete", "course", id);
       return reply.code(204).send();
     },
   );

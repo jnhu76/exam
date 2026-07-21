@@ -44,51 +44,25 @@ function requireDefined<T>(
   expect(value, message).toBeDefined();
 }
 
-/**
- * Polling helper for fire-and-forget audit assertions. `recordAudit` is
- * async/fire-and-forget (audit.ts:77 `.catch()`), so a direct
- * `listPaginatedFiltered` after the HTTP response may race with the write.
- * Polls up to `timeoutMs` for the expected count.
- */
-async function waitForAuditCount<TFilter extends AuditLogListFilter>(
+/** Reads an awaited atomic/sensitive audit count immediately after response. */
+async function readAuditCount<TFilter extends AuditLogListFilter>(
   auditRepo: ReturnType<typeof createAuditLogRepo>,
   ctx: Parameters<typeof auditRepo.listPaginatedFiltered>[0],
   expectedTotal: number,
   filter: TFilter,
-  timeoutMs = 1500,
 ): Promise<number> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
-    if (result.total >= expectedTotal) return result.total;
-    await new Promise((r) => setTimeout(r, 30));
-  }
   const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
+  expect(result.total).toBe(expectedTotal);
   return result.total;
 }
 
-/**
- * Polling helper for ABSENCE-of-audit assertions. Polls for the full
- * `settleMs` window, continuously checking that the filtered audit count
- * never exceeds `expectedTotal`. If a fire-and-forget audit write races
- * after the HTTP response, this catches it before the settle window ends.
- */
-async function expectAuditCountStable<TFilter extends AuditLogListFilter>(
+/** Asserts immediate atomic/sensitive audit absence after rejection. */
+async function expectAuditCount<TFilter extends AuditLogListFilter>(
   auditRepo: ReturnType<typeof createAuditLogRepo>,
   ctx: Parameters<typeof auditRepo.listPaginatedFiltered>[0],
   expectedTotal: number,
   filter: TFilter,
-  settleMs = 800,
 ): Promise<void> {
-  const deadline = Date.now() + settleMs;
-  while (Date.now() < deadline) {
-    const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
-    if (result.total > expectedTotal) {
-      expect(result.total).toBe(expectedTotal);
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 30));
-  }
   const result = await auditRepo.listPaginatedFiltered(ctx, 1, 1000, filter);
   expect(result.total).toBe(expectedTotal);
 }
@@ -1120,9 +1094,11 @@ describe("permission boundary", () => {
       }
       // Generic error code — does not leak the System-role reason.
       expect(res.json().error.code).toBe("AUTH_INVALID_CREDENTIALS");
-      // login.failure audit was written with the System-specific reason.
-      // Poll because recordAudit is fire-and-forget (audit.ts:77).
-      const auditTotal = await waitForAuditCount(
+      // Tenant login audit is tracked best-effort. Drain the tracked work
+      // before asserting its eventual evidence; the 401 above must not wait
+      // for audit storage.
+      await ctx.drainAuditWrites();
+      const auditTotal = await readAuditCount(
         auditRepo,
         adminCtx(),
         auditBefore.total + 1,
@@ -1146,7 +1122,7 @@ describe("permission boundary", () => {
       // the ASSIGNABLE_LOGIN_ROLES check is reached. The audit reason reflects
       // that — System is still rejected, just via the authority-first path.
       expect(metadata.reason).toBe("no_active_assignments");
-      expect(metadata.username).toBe(username);
+      expect(metadata).not.toHaveProperty("username");
     });
   });
 
@@ -1262,7 +1238,7 @@ describe("permission boundary", () => {
         1000,
       );
       expect(afterCount.total).toBe(beforeCount.total);
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.create",
       });
     });
@@ -1296,7 +1272,7 @@ describe("permission boundary", () => {
       expect(after.isActive).toBe(before.isActive);
       expect(after.passwordHash).toBe(before.passwordHash);
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.update",
         targetType: "user",
         targetId: user.id,
@@ -1334,7 +1310,7 @@ describe("permission boundary", () => {
       requireDefined(after, "reset-password deny: user must still exist");
       expect(after.passwordHash).toBe(before.passwordHash);
       expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "candidate.password_reset",
         targetType: "user",
         targetId: user.id,
@@ -1372,7 +1348,7 @@ describe("permission boundary", () => {
       const afterAssignments = await readAssignmentsForUser(user.id);
       expect(afterAssignments.length).toBe(beforeAssignments.length);
       expect(afterAssignments.some((a) => a.id === assignment.id)).toBe(true);
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.delete",
         targetType: "user",
         targetId: user.id,
@@ -1408,7 +1384,7 @@ describe("permission boundary", () => {
       );
       const afterAssignments = await readAssignmentsForUser(user.id);
       expect(afterAssignments.length).toBe(beforeAssignments.length);
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.role_changed",
         targetId: user.id,
       });
@@ -1498,7 +1474,7 @@ describe("permission boundary", () => {
       requireDefined(afterUser, "PATCH assignment deny: user must still exist");
       expect(afterUser.role).toBe(beforeUser.role);
       expect(afterUser.role).toBe("Candidate");
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.role_changed",
         targetType: "user",
         targetId: user.id,
@@ -1544,7 +1520,7 @@ describe("permission boundary", () => {
         "DELETE assignment deny: user must still exist",
       );
       expect(afterUser.role).toBe(beforeUser.role);
-      await expectAuditCountStable(auditRepo, adminCtx(), auditBefore.total, {
+      await expectAuditCount(auditRepo, adminCtx(), auditBefore.total, {
         action: "user.role_changed",
         targetType: "role_assignment",
         targetId: assignment.id,
@@ -1707,6 +1683,7 @@ describe("permission boundary", () => {
 
     it("PATCH /users/:id role-change syncs users.role to the new role", async () => {
       const { user } = await insertTargetUserWithPrimary("Candidate");
+      const auditRepo = createAuditLogRepo(ctx.db);
       const res = await ctx.app.inject({
         method: "PATCH",
         url: `/api/users/${user.id}`,
@@ -1716,6 +1693,28 @@ describe("permission boundary", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().role).toBe("Admin");
       expect(await readUserRole(user.id)).toBe("Admin");
+
+      const roleAudits = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.role_changed", targetId: user.id },
+      );
+      const genericAudits = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.update", targetId: user.id },
+      );
+      const profileAudits = await auditRepo.listPaginatedFiltered(
+        adminCtx(),
+        1,
+        1000,
+        { action: "user.profile_updated", targetId: user.id },
+      );
+      expect(roleAudits.total).toBe(1);
+      expect(genericAudits.total).toBe(0);
+      expect(profileAudits.total).toBe(0);
     });
 
     it("POST secondary assignment writes a user.role_changed audit", async () => {
@@ -1736,7 +1735,7 @@ describe("permission boundary", () => {
       });
       expect(res.statusCode).toBe(201);
 
-      const auditTotal = await waitForAuditCount(
+      const auditTotal = await readAuditCount(
         auditRepo,
         adminCtx(),
         auditBefore.total + 1,
@@ -1789,7 +1788,7 @@ describe("permission boundary", () => {
       });
       expect(res.statusCode).toBe(200);
 
-      const auditTotal = await waitForAuditCount(
+      const auditTotal = await readAuditCount(
         auditRepo,
         adminCtx(),
         auditBefore.total + 1,
@@ -1819,7 +1818,7 @@ describe("permission boundary", () => {
     it("PATCH deactivate primary assignment auto-promotes and writes audit", async () => {
       const { user } = await insertTargetUserWithPrimary("Candidate");
       const auditRepo = createAuditLogRepo(ctx.db);
-      // Baseline BEFORE any setup that writes audit (fire-and-forget race).
+      // Baseline before setup adds its own transactional role-change audit.
       const auditBefore = await auditRepo.listPaginatedFiltered(
         adminCtx(),
         1,
@@ -1859,7 +1858,7 @@ describe("permission boundary", () => {
       expect(res.statusCode).toBe(200);
 
       // Wait for BOTH audits (secondary-creation + primary-deactivation).
-      const auditTotal = await waitForAuditCount(
+      const auditTotal = await readAuditCount(
         auditRepo,
         adminCtx(),
         auditBefore.total + 2,

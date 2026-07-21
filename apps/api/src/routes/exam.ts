@@ -48,11 +48,11 @@ import {
 } from "@exam/domain";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { reconcileExamForMutation } from "./reconciliation.js";
+import { executeAdminExamTransition } from "./examTransitionExecutor.js";
 import {
-  executeAdminExamTransition,
-  recordReconAudit,
-} from "./examTransitionExecutor.js";
-import { recordAudit } from "./audit.js";
+  recordAtomicHttpAudit,
+  recordBestEffortAudit,
+} from "../audit/auditWriter.js";
 import { createExamRepoAdapter } from "../adapters/repoAdapters.js";
 import {
   buildErrorResponse,
@@ -490,7 +490,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const exam = await repo.create(ctx, {
+      const exam = await createExamRepo(fastify.db).create(ctx, {
         title: data.title,
         description: data.description,
         courseId: data.courseId,
@@ -510,15 +510,16 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         maxAttempts: data.maxAttempts,
         latestStartOffsetMinutes: data.latestStartOffsetMinutes ?? null,
         minSubmitAfterStartMinutes: data.minSubmitAfterStartMinutes ?? null,
-        // P2D-J5a: authoritative visibility field. Coerce from the legacy
-        // showResultImmediately flag when the caller did not set the mode;
-        // default to 'immediate' when neither is present.
         resultPublicationMode: resolveResultPublicationMode(
           request.body,
           data.resultPublicationMode ?? "immediate",
         ),
       });
-      recordAudit(fastify, request, ctx, "exam.create", "exam", exam.id);
+      recordBestEffortAudit(fastify, request, ctx, {
+        action: "exam.create",
+        targetType: "exam",
+        targetId: exam.id,
+      });
 
       return reply.code(201).send(toExamResponse(exam as Exam));
     },
@@ -563,7 +564,9 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
 
       const result = await executeInTransaction(
         fastify.db,
-        async (tx): Promise<{ exam: Exam } | null> => {
+        async (
+          tx,
+        ): Promise<{ exam: Exam; draftObservation: boolean } | null> => {
           const repo = createExamRepo(tx);
 
           // 1. Lock the exam row.
@@ -614,7 +617,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           // mode. Mirrors the create-handler shim.
           if (data.resultPublicationMode !== undefined) {
             updateData.resultPublicationMode = data.resultPublicationMode;
-          } else {
+          } else if (exam.status === "draft") {
             // Always apply the coerced value so that legacy
             // showResultImmediately: true (→ "immediate") is persisted,
             // matching the create-handler behavior.
@@ -629,7 +632,15 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             updateData,
           )) as Exam | null;
           if (!updated) return null;
-          return { exam: updated };
+          if (exam.status === "published") {
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "exam.published_schedule_updated",
+              targetType: "exam",
+              targetId: id,
+              metadata: { changedFields: Object.keys(data) },
+            });
+          }
+          return { exam: updated, draftObservation: exam.status === "draft" };
         },
       );
 
@@ -638,7 +649,14 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(fastify, request, ctx, "exam.update", "exam", id);
+      if (result.draftObservation) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "exam.update",
+          targetType: "exam",
+          targetId: id,
+          metadata: { changedFields: Object.keys(data) },
+        });
+      }
       return toExamResponse(result.exam);
     },
   );
@@ -681,9 +699,19 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       ).filter((q): q is NonNullable<typeof q> => q !== null) as Question[];
 
       try {
-        const examRepoAdapter = createExamRepoAdapter(examRepo, ctx);
-        const updated = await publishExam(examRepoAdapter, id, questions);
-        recordAudit(fastify, request, ctx, "exam.publish", "exam", id);
+        const updated = await executeInTransaction(fastify.db, async (tx) => {
+          const published = await publishExam(
+            createExamRepoAdapter(createExamRepo(tx), ctx),
+            id,
+            questions,
+          );
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "exam.publish",
+            targetType: "exam",
+            targetId: id,
+          });
+          return published;
+        });
         return toExamResponse(updated);
       } catch (err) {
         if (err instanceof InvalidStateTransitionError) {
@@ -778,6 +806,23 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             unresolvedCount,
           };
         },
+        request,
+        (data) =>
+          data.fromStatus === "closed"
+            ? []
+            : [
+                {
+                  action: "exam.close",
+                  targetType: "exam",
+                  targetId: id,
+                  metadata: {
+                    reason,
+                    fromStatus: data.fromStatus,
+                    toStatus: "closed",
+                    activeAttemptCount: data.unresolvedCount,
+                  },
+                },
+              ],
       );
 
       if (!result) {
@@ -786,21 +831,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const { closed, fromStatus } = result.data;
+      const { closed } = result.data;
 
-      recordReconAudit(fastify, request, ctx, id, result);
-
-      // Audit — only for a genuine transition (idempotent close writes no
-      // duplicate audit, review decision #2). activeAttemptCount included
-      // per ADR-005 §Audit events (will be 0 here since the guard passed).
-      if (fromStatus !== "closed") {
-        recordAudit(fastify, request, ctx, "exam.close", "exam", id, {
-          reason,
-          fromStatus,
-          toStatus: "closed",
-          activeAttemptCount: result.data.unresolvedCount,
-        });
-      }
       return toExamResponse(closed);
     },
   );
@@ -855,17 +887,21 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           const updated = await unpublishExam(repo, id);
           return { exam: updated, fromStatus: exam.status };
         },
+        request,
+        (data) => [
+          {
+            action: "exam.unpublish",
+            targetType: "exam",
+            targetId: id,
+            metadata: { fromStatus: data.fromStatus, toStatus: "draft" },
+          },
+        ],
       );
       if (!result) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordReconAudit(fastify, request, ctx, id, result);
-      recordAudit(fastify, request, ctx, "exam.unpublish", "exam", id, {
-        fromStatus: result.data.fromStatus,
-        toStatus: "draft",
-      });
       return toExamResponse(result.data.exam);
     },
   );
@@ -923,19 +959,26 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             newCloseAt: new Date(updated.closeAt),
           };
         },
+        request,
+        (data) => [
+          {
+            action: "exam.extend",
+            targetType: "exam",
+            targetId: id,
+            metadata: {
+              extendMinutes,
+              oldCloseAt: data.oldCloseAt.toISOString(),
+              newCloseAt: data.newCloseAt.toISOString(),
+              reason,
+            },
+          },
+        ],
       );
       if (!result) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordReconAudit(fastify, request, ctx, id, result);
-      recordAudit(fastify, request, ctx, "exam.extend", "exam", id, {
-        extendMinutes,
-        oldCloseAt: result.data.oldCloseAt,
-        newCloseAt: result.data.newCloseAt,
-        reason,
-      });
       return toExamResponse(result.data.exam);
     },
   );
@@ -1019,6 +1062,20 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             unresolvedCount,
           };
         },
+        request,
+        (data) => [
+          {
+            action: "exam.cancel",
+            targetType: "exam",
+            targetId: id,
+            metadata: {
+              reason,
+              fromStatus: data.fromStatus,
+              toStatus: "canceled",
+              activeAttemptCount: data.unresolvedCount,
+            },
+          },
+        ],
       );
 
       if (!result) {
@@ -1027,16 +1084,6 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      recordReconAudit(fastify, request, ctx, id, result);
-
-      // Audit (outside tx, best-effort). activeAttemptCount is 0 here
-      // (guard passed).
-      recordAudit(fastify, request, ctx, "exam.cancel", "exam", id, {
-        reason,
-        fromStatus: result.data.fromStatus,
-        toStatus: "canceled",
-        activeAttemptCount: result.data.unresolvedCount,
-      });
       return toExamResponse(result.data.exam);
     },
   );
@@ -1064,10 +1111,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
      * #3: brought under the ADR-005 construction hard rule so it is consistent
      * with close/unpublish/extend/cancel — lock -> reconcile -> assert ->
      * mutate inside ONE transaction, with 404 for a missing exam, 409 for an
-     * invalid transition, and idempotent already-archived behavior (no
-     * duplicate audit). The audit write stays outside the tx, matching the
-     * repo convention for this slice (audit-in-tx is a deferred repo-wide
-     * follow-up, #4).
+     * invalid transition, idempotent already-archived behavior (no duplicate
+     * audit), and an atomic audit row in the same transaction.
      */
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
@@ -1095,6 +1140,21 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           }
           return { archived, fromStatus: exam.status };
         },
+        request,
+        (data) =>
+          data.fromStatus === "archived"
+            ? []
+            : [
+                {
+                  action: "exam.archive",
+                  targetType: "exam",
+                  targetId: id,
+                  metadata: {
+                    fromStatus: data.fromStatus,
+                    toStatus: "archived",
+                  },
+                },
+              ],
       );
 
       if (!result) {
@@ -1103,18 +1163,8 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
 
-      const { archived, fromStatus } = result.data;
+      const { archived } = result.data;
 
-      recordReconAudit(fastify, request, ctx, id, result);
-
-      // Audit — only for a genuine transition (idempotent archive writes no
-      // duplicate audit). fromStatus captured from the reconciled pre-image.
-      if (fromStatus !== "archived") {
-        recordAudit(fastify, request, ctx, "exam.archive", "exam", id, {
-          fromStatus,
-          toStatus: "archived",
-        });
-      }
       return toExamResponse(archived);
     },
   );
@@ -1162,15 +1212,27 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      const examRepo = createExamRepo(fastify.db);
-
       let result: { exam: Exam; alreadyPublished: boolean } | null = null;
       try {
-        result = await publishResults(
-          createExamRepoAdapter(examRepo, ctx),
-          id,
-          fastify.now(),
-        );
+        result = await executeInTransaction(fastify.db, async (tx) => {
+          const published = await publishResults(
+            createExamRepoAdapter(createExamRepo(tx), ctx),
+            id,
+            fastify.now(),
+          );
+          if (!published.alreadyPublished) {
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "exam.publish_results",
+              targetType: "exam",
+              targetId: id,
+              metadata: {
+                resultsPublishedAt:
+                  published.exam.resultsPublishedAt!.toISOString(),
+              },
+            });
+          }
+          return published;
+        });
       } catch (err) {
         if (err instanceof InvalidStateTransitionError) {
           throw new ExamPublishResultsNotAllowedError();
@@ -1184,12 +1246,6 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         throw err;
       }
       const { exam, alreadyPublished } = result;
-      // Audit only on a genuine transition; idempotent re-publish records
-      // the action with alreadyPublished=true but does not change state.
-      recordAudit(fastify, request, ctx, "exam.publish_results", "exam", id, {
-        alreadyPublished,
-        resultsPublishedAt: exam.resultsPublishedAt?.toISOString(),
-      });
       return {
         ok: true as const,
         resultsPublishedAt: exam.resultsPublishedAt!.toISOString(),
@@ -1218,21 +1274,24 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      const repo = createExamRepo(fastify.db);
-
-      const exam = (await repo.findById(ctx, id)) as Exam | null;
-      if (!exam) {
+      const deleted = await executeInTransaction(fastify.db, async (tx) => {
+        const txRepo = createExamRepo(tx);
+        const exam = (await txRepo.findByIdForUpdate(ctx, id)) as Exam | null;
+        if (!exam) return false;
+        if (exam.status !== "draft") throw new ExamNotDraftError();
+        if (!(await txRepo.delete(ctx, id))) return false;
+        await recordAtomicHttpAudit(tx, request, ctx, {
+          action: "exam.delete",
+          targetType: "exam",
+          targetId: id,
+        });
+        return true;
+      });
+      if (!deleted) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-
-      if (exam.status !== "draft") {
-        throw new ExamNotDraftError();
-      }
-
-      await repo.delete(ctx, id);
-      recordAudit(fastify, request, ctx, "exam.delete", "exam", id);
       return reply.code(204).send();
     },
   );
@@ -1365,22 +1424,22 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
           skippedCandidates.push({ candidateId, reason: "NOT_FOUND" });
           continue;
         }
-        const enrollment = await enrollmentRepo.create(ctx, {
-          examId,
-          candidateId,
-          status: "assigned",
-          attemptCount: 0,
-        });
-        recordAudit(
-          fastify,
-          request,
-          ctx,
-          "enrollment.add",
-          "enrollment",
-          enrollment.id,
-          {
-            examId,
-            candidateId,
+        const enrollment = await executeInTransaction(
+          fastify.db,
+          async (tx) => {
+            const created = await createEnrollmentRepo(tx).create(ctx, {
+              examId,
+              candidateId,
+              status: "assigned",
+              attemptCount: 0,
+            });
+            await recordAtomicHttpAudit(tx, request, ctx, {
+              action: "enrollment.add",
+              targetType: "enrollment",
+              targetId: created.id,
+              metadata: { examId, candidateId },
+            });
+            return created;
           },
         );
         added++;
@@ -1426,32 +1485,39 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         examId: string;
         enrollmentId: string;
       };
-      const enrollmentRepo = createEnrollmentRepo(fastify.db);
-      const enrollment = await enrollmentRepo.findById(ctx, enrollmentId);
-      if (!enrollment || enrollment.examId !== examId) {
+      const removalResult = await executeInTransaction(
+        fastify.db,
+        async (tx) => {
+          const txRepo = createEnrollmentRepo(tx);
+          const enrollment = await txRepo.findByIdForUpdate(ctx, enrollmentId);
+          if (!enrollment || enrollment.examId !== examId) {
+            return "not_found" as const;
+          }
+          if (enrollment.status !== "assigned") {
+            return "not_removable" as const;
+          }
+          if (!(await txRepo.delete(ctx, enrollmentId))) {
+            return "not_found" as const;
+          }
+          await recordAtomicHttpAudit(tx, request, ctx, {
+            action: "enrollment.remove",
+            targetType: "enrollment",
+            targetId: enrollmentId,
+            metadata: { examId, candidateId: enrollment.candidateId },
+          });
+          return "removed" as const;
+        },
+      );
+      if (removalResult === "not_found") {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      if (enrollment.status !== "assigned") {
+      if (removalResult === "not_removable") {
         return reply
           .code(409)
           .send(buildErrorResponse(request.id, "ENROLLMENT_NOT_REMOVABLE"));
       }
-
-      await enrollmentRepo.delete(ctx, enrollmentId);
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "enrollment.remove",
-        "enrollment",
-        enrollmentId,
-        {
-          examId,
-          candidateId: enrollment.candidateId,
-        },
-      );
       return reply.code(204).send();
     },
   );

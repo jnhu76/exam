@@ -6,7 +6,6 @@ import {
   cleanupBusinessData,
   cleanupOrganizationChildData,
   cleanupOrganizationTestData,
-  isForeignKeyViolation,
 } from "./testCleanup.js";
 import { schema } from "./schema/pg.js";
 
@@ -103,17 +102,7 @@ describe("cleanupOrganizationTestData", () => {
     await cleanupOrganizationTestData(db, otherOrganizationId);
   });
 
-  it("cleans up an org with a pre-existing audit log (baseline for the FK-race retry)", async () => {
-    // Regression context for the candidateField.test.ts cleanup race: a
-    // production route writes its audit log via the fire-and-forget
-    // recordAudit() helper, whose insert is NOT awaited by the request. When
-    // the test tears the org down, a pending insert can commit between this
-    // helper's audit_logs delete and its organizations delete, triggering an
-    // audit_logs_organization_id_organizations_id_fk violation. The helper
-    // handles this with a bounded retry that re-deletes audit_logs. This test
-    // pins the baseline contract (a committed audit log is deleted before the
-    // org); the FK-violation detection that drives the retry is covered
-    // deterministically by isForeignKeyViolation() unit tests below.
+  it("cleans up an org with a pre-existing audit log", async () => {
     const organizationId = crypto.randomUUID();
     const now = new Date();
 
@@ -152,28 +141,6 @@ describe("cleanupOrganizationTestData", () => {
       .from(schema.auditLogs)
       .where(eq(schema.auditLogs.organizationId, organizationId));
     expect(auditRows).toEqual([]);
-  });
-});
-
-describe("isForeignKeyViolation", () => {
-  // The retry loop in cleanupOrganizationTestData keys on this predicate. These
-  // deterministic unit tests prove the retry is triggered exactly for PG
-  // SQLSTATE 23503 (foreign_key_violation) and nothing else, which is what
-  // makes the late-landing-audit race recoverable instead of fatal.
-  it("returns true for a Postgres foreign-key violation (SQLSTATE 23503)", () => {
-    expect(isForeignKeyViolation({ code: "23503" })).toBe(true);
-  });
-
-  it("returns false for other Postgres errors", () => {
-    expect(isForeignKeyViolation({ code: "23505" })).toBe(false); // unique violation
-    expect(isForeignKeyViolation({ code: "42P01" })).toBe(false); // undefined table
-  });
-
-  it("returns false for non-pg errors, null, and primitives", () => {
-    expect(isForeignKeyViolation(new Error("boom"))).toBe(false);
-    expect(isForeignKeyViolation(null)).toBe(false);
-    expect(isForeignKeyViolation(undefined)).toBe(false);
-    expect(isForeignKeyViolation("23503")).toBe(false);
   });
 });
 

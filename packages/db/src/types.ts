@@ -5,6 +5,16 @@ import type { schema } from "./schema/pg.js";
 /** Drizzle database type bound to the application schema. */
 export type Database = PostgresJsDatabase<typeof schema>;
 
+declare const transactionDatabaseBrand: unique symbol;
+
+/**
+ * Database handle proven to belong to the active transaction callback.
+ * Only {@link executeInTransaction} creates this branded view.
+ */
+export type TransactionDatabase = Database & {
+  readonly [transactionDatabaseBrand]: true;
+};
+
 /** Context for repository operations scoped to a specific organization (tenant). */
 export interface TenantContext {
   organizationId: string;
@@ -117,7 +127,7 @@ function isRetryableError(err: unknown): boolean {
  */
 export async function executeInTransaction<T>(
   db: Database,
-  fn: (tx: Database) => Promise<T>,
+  fn: (tx: TransactionDatabase) => Promise<T>,
   isolationLevel: "read committed" | "repeatable read" = "repeatable read",
 ): Promise<T> {
   let lastError: unknown;
@@ -132,7 +142,7 @@ export async function executeInTransaction<T>(
     try {
       return await db.transaction(
         async (tx) => {
-          return fn(tx as Database);
+          return fn(tx as unknown as TransactionDatabase);
         },
         { isolationLevel },
       );

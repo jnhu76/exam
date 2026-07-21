@@ -449,7 +449,6 @@ describe("Proctor scoped routes — cross-org isolation", () => {
           payload: {
             incidentType: "manual_note_added",
             examId: orgAExamId,
-            candidateId: randomUUID(),
           },
         },
       ];

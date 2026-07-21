@@ -16,9 +16,7 @@ import { createAttemptGradingEntryRepo } from "@exam/db/src/repository/attemptGr
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createGradingQueueRepo } from "@exam/db/src/repository/gradingQueueRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
-import type { Database } from "@exam/db/src/types.js";
 import {
   createExamEngineRepos,
   createGradingWorksetRepoAdapter,
@@ -30,7 +28,10 @@ import {
 } from "./helpers.js";
 import { cookieAuth } from "./attempts.shared.js";
 import { Permission } from "@exam/authz";
-import { recordAudit } from "./audit.js";
+import {
+  recordAtomicHttpAudit,
+  recordSensitiveReadAudit,
+} from "../audit/auditWriter.js";
 
 /**
  * Registers the admin manual-grading queue routes (P2D-J3 / P3-L0-2E Slice 3):
@@ -212,18 +213,15 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
       // AUDIT-M2: sensitive read of candidate answers / grading detail. Audit
       // the FACT of access only — metadata carries opaque ids, never the
       // candidateAnswer payload (ADR sec.3.8).
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "grading.detail_viewed",
-        "attempt",
-        attemptId,
-        {
+      await recordSensitiveReadAudit(fastify.db, request, ctx, {
+        action: "grading.detail_viewed",
+        targetType: "attempt",
+        targetId: attemptId,
+        metadata: {
           examId: attempt.examId,
           candidateId: attempt.candidateId,
         },
-      );
+      });
 
       return reply.send({
         attemptId: attempt.id,
@@ -339,7 +337,7 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           attempts,
           attemptId,
         );
-        return gradeQuestion(
+        const graded = await gradeQuestion(
           attempts,
           enrollments,
           createGradingWorksetRepoAdapter(txEntryRepo, ctx),
@@ -357,17 +355,11 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
           // the domain type.
           exam as unknown as import("@exam/domain").Exam,
         );
-      });
-
-      // Audit is awaited + best-effort (deterministic for tests).
-      try {
-        await createAuditLogRepo(fastify.db as Database).create(ctx, {
-          actorId: ctx.actorId,
+        await recordAtomicHttpAudit(tx, request, ctx, {
           action: "grading.score_entered",
           targetType: "attempt",
           targetId: attemptId,
           metadata: {
-            requestId: request.id,
             questionId,
             score,
             maxScore,
@@ -375,43 +367,19 @@ export async function registerGradingQueueRoutes(fastify: FastifyInstance) {
             graderId: ctx.actorId,
           },
         });
-      } catch (err) {
-        request.log.error(
-          {
-            err,
-            attemptId,
-            questionId,
-            action: "grading.score_entered",
-          },
-          "Failed to record manual-grading audit",
-        );
-      }
-
-      // Record grading.finalized when the attempt becomes fully_graded.
-      if (result.fullyGraded) {
-        try {
-          await createAuditLogRepo(fastify.db as Database).create(ctx, {
-            actorId: ctx.actorId,
+        if (graded.fullyGraded) {
+          await recordAtomicHttpAudit(tx, request, ctx, {
             action: "grading.finalized",
             targetType: "attempt",
             targetId: attemptId,
             metadata: {
-              requestId: request.id,
               gradingStatus: "fully_graded",
               graderId: ctx.actorId,
             },
           });
-        } catch (err) {
-          request.log.error(
-            {
-              err,
-              attemptId,
-              action: "grading.finalized",
-            },
-            "Failed to record grading-finalized audit",
-          );
         }
-      }
+        return graded;
+      });
 
       return reply.send({
         attemptId,

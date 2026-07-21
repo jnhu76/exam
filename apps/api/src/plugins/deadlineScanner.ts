@@ -5,7 +5,6 @@ import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createEnrollmentRepo } from "@exam/db/src/repository/enrollmentRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { executeInTransaction } from "@exam/db/src/types.js";
 import type { Database } from "@exam/db/src/types.js";
 import {
@@ -220,18 +219,6 @@ export async function autoSubmitAndGrade(
 
   if (!stateChanged) return false;
 
-  try {
-    await createAuditLogRepo(db).create(ctx, {
-      actorId: SYSTEM_ACTOR_ID,
-      action: "attempt.autoSubmit",
-      targetType: "attempt",
-      targetId: attemptId,
-      metadata: { source: "deadline-scanner" },
-    });
-  } catch {
-    // Audit is best-effort; scanner must not fail because of audit write.
-  }
-
   return true;
 }
 
@@ -302,34 +289,38 @@ const deadlineScannerPlugin: FastifyPluginAsync = async (fastify) => {
   );
   deadlineScannerMetrics.scanIntervalMs = scanIntervalMs;
 
-  let scanRunning = false;
-  const interval = setInterval(async () => {
-    if (scanRunning) return;
-    scanRunning = true;
-    try {
-      const result = await scanDatabaseForExpiredAttempts(fastify);
-      deadlineScannerMetrics.lastScanAt = fastify.now();
-      deadlineScannerMetrics.autoSubmitCount += result.submittedCount;
-      deadlineScannerMetrics.failedCount += result.failedCount;
-      if (result.submittedCount > 0 || result.failedCount > 0) {
-        fastify.log.info(
-          {
-            submittedCount: result.submittedCount,
-            failedCount: result.failedCount,
-          },
-          "Deadline scanner auto-submitted expired attempts",
-        );
+  let activeScan: Promise<void> | null = null;
+  let closing = false;
+  const interval = setInterval(() => {
+    if (closing || activeScan) return;
+    activeScan = (async () => {
+      try {
+        const result = await scanDatabaseForExpiredAttempts(fastify);
+        deadlineScannerMetrics.lastScanAt = fastify.now();
+        deadlineScannerMetrics.autoSubmitCount += result.submittedCount;
+        deadlineScannerMetrics.failedCount += result.failedCount;
+        if (result.submittedCount > 0 || result.failedCount > 0) {
+          fastify.log.info(
+            {
+              submittedCount: result.submittedCount,
+              failedCount: result.failedCount,
+            },
+            "Deadline scanner auto-submitted expired attempts",
+          );
+        }
+      } catch (err) {
+        fastify.log.error({ err }, "Error scanning for expired attempts");
       }
-    } catch (err) {
-      fastify.log.error({ err }, "Error scanning for expired attempts");
-    } finally {
-      scanRunning = false;
-    }
+    })().finally(() => {
+      activeScan = null;
+    });
   }, scanIntervalMs);
   interval.unref();
 
   fastify.addHook("onClose", async () => {
+    closing = true;
     clearInterval(interval);
+    await activeScan;
   });
 };
 

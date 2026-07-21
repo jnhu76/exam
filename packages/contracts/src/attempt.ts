@@ -316,12 +316,14 @@ export type ProctorIncidentType = z.infer<typeof ProctorIncidentTypeEnum>;
 
 /**
  * Request body schema for a proctor marking an incident on an attempt.
- * Audit-event-only storage — no dedicated incident table.
- * `note` is optional, length-limited, and must not contain candidate answers.
+ * Audit-event-only storage — no dedicated incident table. Resource IDs are
+ * optional compatibility hints; the server derives canonical IDs from the
+ * path attempt and rejects contradictory hints. `note` is length-limited,
+ * may contain PII, and callers must not include candidate answers.
  */
 export const MarkProctorIncidentRequestSchema = z.object({
   incidentType: ProctorIncidentTypeEnum,
-  examId: z.string().uuid(),
+  examId: z.string().uuid().optional(),
   candidateId: z.string().uuid().optional(),
   attemptId: z.string().uuid().optional(),
   reasonCode: z.string().max(100).optional(),

@@ -104,7 +104,7 @@ describe("RBAC-M4 route permission registry — ADR §8 special mappings", () =>
     const e = find("POST", "/admin/attempts/:attemptId/proctor-incident");
     expect(e?.permission).toBe("attempt.misconduct.mark");
     expect(e?.scope).toBe("attempt");
-    expect(e?.auditAction).toBe("attempt.misconductFlagged");
+    expect(e?.auditAction).toBe("proctor.incident_marked");
     expect(e?.sensitive).toBe(true);
   });
 
@@ -179,7 +179,7 @@ describe("RBAC-SCOPED-AUTHORIZATION-CORRECTIVE-1 — migrated-route registry dec
     expect(e?.permission).toBe(Permission.AttemptMisconductMark);
     expect(e?.scope).toBe(Scope.Attempt);
     expect(e?.resolver).toBe("attempt");
-    expect(e?.auditAction).toBe("attempt.misconductFlagged");
+    expect(e?.auditAction).toBe("proctor.incident_marked");
     // Runtime uses requireScopedCapability(AttemptMisconductMark, "attempt", "attemptId").
   });
 });

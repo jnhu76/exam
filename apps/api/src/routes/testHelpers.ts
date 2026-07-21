@@ -10,6 +10,8 @@ import rateLimitPlugin from "../plugins/rateLimit.js";
 import nowPlugin from "../plugins/now.js";
 import zodProviderPlugin from "../plugins/zodProvider.js";
 import emailPlugin from "../plugins/email.js";
+import auditLifecyclePlugin from "../plugins/auditLifecycle.js";
+import type { AuditDrainResult } from "../plugins/auditLifecycle.js";
 import { setupErrorHandler } from "../plugins/errors.js";
 import setupSecurity from "../plugins/security.js";
 import { hashPassword } from "@exam/auth/src/password.js";
@@ -136,6 +138,7 @@ export interface TestContext {
   adminToken: string;
   candidateToken: string;
   setNow: (now: Date | null) => void;
+  drainAuditWrites: () => Promise<AuditDrainResult>;
 }
 
 const TEST_DB_URL = resolveTestDbUrl();
@@ -271,6 +274,7 @@ async function finishBuildTestApp(args: {
   await app.register(zodProviderPlugin);
   await app.register(fastifyCookie);
   await app.register(createDbPlugin(db));
+  await app.register(auditLifecyclePlugin);
   await app.register(nowPlugin);
   await app.register(authPlugin);
   await app.register(authzScopedPlugin);
@@ -338,6 +342,7 @@ async function finishBuildTestApp(args: {
     setNow: (now: Date | null) => {
       app.setNowOverride(now ? () => now : null);
     },
+    drainAuditWrites: () => app.drainAuditWrites(),
   };
 }
 

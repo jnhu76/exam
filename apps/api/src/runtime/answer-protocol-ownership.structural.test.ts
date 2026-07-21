@@ -178,7 +178,7 @@ describe("EXAM-ANSWER-CLOSURE-0 — Save Answer route delegates to the canonical
     // request object literal close. The new signature does not. We assert the
     // route binds mutationContext near the saveAnswer call.
     const saveCallIdx = routeLines.findIndex((l) =>
-      /return\s+saveAnswer\s*\(/.test(stripComments(l)),
+      /await\s+saveAnswer\s*\(/.test(stripComments(l)),
     );
     expect(saveCallIdx).toBeGreaterThanOrEqual(0);
     const window = routeLines.slice(saveCallIdx, saveCallIdx + 12).join("\n");

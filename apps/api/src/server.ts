@@ -16,6 +16,7 @@ import rateLimitPlugin from "./plugins/rateLimit.js";
 import heartbeatPlugin from "./plugins/heartbeat.js";
 import deadlineScannerPlugin from "./plugins/deadlineScanner.js";
 import emailPlugin from "./plugins/email.js";
+import auditLifecyclePlugin from "./plugins/auditLifecycle.js";
 import zodProviderPlugin from "./plugins/zodProvider.js";
 import { setupErrorHandler } from "./plugins/errors.js";
 import { registerApiRoutes } from "./routes/registerApiRoutes.js";
@@ -28,6 +29,45 @@ import { REDACT_CONFIG } from "./lib/logRedaction.js";
 loadRootEnv();
 
 const { port, host } = getRuntimeConfig();
+
+function registerShutdownSignals(app: ReturnType<typeof Fastify>) {
+  let shutdownStarted = false;
+  const close = async () => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+    try {
+      app.auditWrites.stopAccepting();
+      const closeResult = app.close().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const auditDrain = await app.drainAuditWrites();
+      if (auditDrain.timedOut) {
+        app.log.warn(
+          {
+            event: "audit.drain_timeout",
+            pendingCount: auditDrain.pendingCount,
+          },
+          "Best-effort audit drain timed out; pending observations will be abandoned",
+        );
+      }
+      const closeError = await closeResult;
+      if (closeError) throw closeError;
+    } catch (err: unknown) {
+      app.log.error({ err }, "Graceful shutdown failed");
+      process.exitCode = 1;
+    }
+  };
+  const onSignal = () => {
+    void close();
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  app.addHook("onClose", async () => {
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+  });
+}
 
 /**
  * Entry point for the API server. Creates a Fastify instance, registers
@@ -43,6 +83,7 @@ async function main() {
   setupErrorHandler(app);
   await app.register(zodProviderPlugin);
   await app.register(dbPlugin);
+  await app.register(auditLifecyclePlugin);
   await app.register(redisPlugin);
   await app.register(nowPlugin);
   await app.register(authPlugin);
@@ -109,6 +150,7 @@ async function main() {
     });
   }
 
+  registerShutdownSignals(app);
   await app.listen({ port, host });
 }
 

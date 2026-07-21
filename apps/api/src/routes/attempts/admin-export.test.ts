@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { buildTestApp, uniquePrefix } from "../testHelpers.js";
 import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
@@ -13,6 +13,38 @@ import type { Role } from "@exam/domain";
 import { buildExamPayload } from "./attempts.testHelpers.js";
 
 const EXPORT_TEST_PREFIX = "export-test-";
+
+async function installAttemptExportAuditFailure(
+  db: Awaited<ReturnType<typeof buildTestApp>>["db"],
+): Promise<() => Promise<void>> {
+  const suffix = crypto.randomUUID().replaceAll("-", "");
+  const functionName = `fail_attempt_export_audit_${suffix}`;
+  const triggerName = `fail_attempt_export_audit_trigger_${suffix}`;
+  await db.execute(
+    sql.raw(`
+      CREATE FUNCTION ${functionName}() RETURNS trigger AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected attempt export audit failure';
+      END;
+      $$ LANGUAGE plpgsql
+    `),
+  );
+  await db.execute(
+    sql.raw(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE INSERT ON audit_logs
+      FOR EACH ROW
+      WHEN (NEW.action = 'attempt.exported')
+      EXECUTE FUNCTION ${functionName}()
+    `),
+  );
+  return async () => {
+    await db.execute(
+      sql.raw(`DROP TRIGGER IF EXISTS ${triggerName} ON audit_logs`),
+    );
+    await db.execute(sql.raw(`DROP FUNCTION IF EXISTS ${functionName}()`));
+  };
+}
 
 describe("attempt routes", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
@@ -369,6 +401,32 @@ describe("attempt routes", () => {
       expect(exportRows).toHaveLength(1);
       expect(exportRows[0]!.actorId).toBe(t.adminUserId);
       expect(exportRows[0]!.targetType).toBe("attempt");
+    });
+
+    it("does not return sensitive export data before its audit insert succeeds", async () => {
+      const t = await createIsolatedTestOrg();
+      const { attemptId } = await createStartedAttempt(
+        t,
+        "Export Ordering Exam",
+      );
+      const removeFailure = await installAttemptExportAuditFailure(ctx.db);
+      try {
+        const response = await ctx.app.inject({
+          method: "GET",
+          url: `/api/admin/attempts/${attemptId}/export`,
+          cookies: { "auth-token": t.adminToken },
+        });
+
+        expect(response.statusCode).toBe(500);
+        expect(response.body).not.toContain("What is 1+1?");
+        const rows = await ctx.db
+          .select({ id: schema.auditLogs.id })
+          .from(schema.auditLogs)
+          .where(eq(schema.auditLogs.targetId, attemptId));
+        expect(rows).toHaveLength(0);
+      } finally {
+        await removeFailure();
+      }
     });
 
     it("exports graded attempt with question results", async () => {

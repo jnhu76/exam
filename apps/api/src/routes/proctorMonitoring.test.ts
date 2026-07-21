@@ -366,7 +366,7 @@ describe("proctor monitoring API", () => {
       expect(res.statusCode).toBe(403);
     });
 
-    it("audit payload excludes candidate answer content", async () => {
+    it("stores only the declared bounded incident note field", async () => {
       const examId = await createOpenExam("Incident Exam D");
       const cand = await createCandidateViaApi(
         ctx.app,
@@ -385,7 +385,7 @@ describe("proctor monitoring API", () => {
         payload: {
           incidentType: "identity_check_failed",
           examId,
-          note: "SECRET_ANSWER_CONTENT",
+          note: "Identity could not be verified",
         },
         cookies: { "auth-token": ctx.adminToken },
       });
@@ -407,7 +407,63 @@ describe("proctor monitoring API", () => {
       expect(mine).toBeDefined();
       const serialized = JSON.stringify(mine!.auditLog.metadata);
       expect(serialized).not.toContain("candidateAnswer");
-      expect(serialized).not.toContain("answer");
+      expect(serialized).not.toContain("standardAnswer");
+      expect(mine!.auditLog.metadata.note).toBe(
+        "Identity could not be verified",
+      );
+    });
+
+    it("rejects contradictory client-supplied resource IDs", async () => {
+      const examId = await createOpenExam("Incident Canonical IDs");
+      const cand = await createCandidateViaApi(
+        ctx.app,
+        ctx.adminToken,
+        `cand-inc-canonical-${Date.now()}`,
+        ctx.org.id,
+      );
+      const attemptId = await enrollAndStart(examId, {
+        profileId: cand.candidateProfileId,
+        token: cand.token,
+      });
+
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: `/api/admin/attempts/${attemptId}/proctor-incident`,
+        payload: {
+          incidentType: "manual_note_added",
+          examId: crypto.randomUUID(),
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const { items } = await createAuditLogRepo(ctx.db).listPaginatedFiltered(
+        {
+          actorId: ctx.admin.id,
+          organizationId: ctx.org.id,
+          targetOrganizationId: ctx.org.id,
+          role: "Admin",
+          permissions: [],
+          sessionId: "test",
+        },
+        1,
+        50,
+        { action: "proctor.incident_marked", targetId: attemptId },
+      );
+      expect(items).toHaveLength(0);
+    });
+
+    it("rejects an incident note over 500 characters", async () => {
+      const response = await ctx.app.inject({
+        method: "POST",
+        url: "/api/admin/attempts/00000000-0000-4000-8000-000000000001/proctor-incident",
+        payload: {
+          incidentType: "manual_note_added",
+          note: "n".repeat(501),
+        },
+        cookies: { "auth-token": ctx.adminToken },
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     it("unauthenticated → 401", async () => {

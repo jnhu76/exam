@@ -1,4 +1,8 @@
-import type { Database, TenantContext } from "@exam/db/src/types.js";
+import type {
+  Database,
+  TenantContext,
+  TransactionDatabase,
+} from "@exam/db/src/types.js";
 import type { RequestContext } from "@exam/domain";
 import { acquireOrganizationAdvisoryLock } from "@exam/db/src/lock.js";
 import { createUserRepo } from "@exam/db/src/repository/userRepo.js";
@@ -34,7 +38,7 @@ import { ValidationError } from "@exam/domain";
 export async function mutateWithEffectiveAdminPostcondition<T>(
   db: Database,
   ctx: TenantContext | RequestContext,
-  mutate: (tx: Database) => Promise<T>,
+  mutate: (tx: TransactionDatabase) => Promise<T>,
 ): Promise<T> {
   return executeInTransaction(
     db,

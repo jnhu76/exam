@@ -6,10 +6,7 @@ import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { signJWT } from "@exam/auth/src/session.js";
-import {
-  cleanupBusinessData,
-  cleanupOrganizationTestData,
-} from "@exam/db/src/testCleanup.js";
+import { cleanupOrganizationTestData } from "@exam/db/src/testCleanup.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { getRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { Role } from "@exam/domain";
@@ -254,6 +251,7 @@ describe("attempt routes", () => {
     }
 
     beforeEach(async () => {
+      await ctx.drainAuditWrites();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -261,11 +259,12 @@ describe("attempt routes", () => {
           like(schema.organizations.slug, `${MISCONDUCT_FLAG_TEST_PREFIX}%`),
         );
       for (const org of stale) {
-        await cleanupBusinessData(ctx.db, org.id);
+        await cleanupOrganizationTestData(ctx.db, org.id);
       }
     });
 
     afterAll(async () => {
+      await ctx.drainAuditWrites();
       const stale = await ctx.db
         .select({ id: schema.organizations.id })
         .from(schema.organizations)
@@ -307,6 +306,7 @@ describe("attempt routes", () => {
       // Flag does not change status.
       expect(attempt?.status).toBe("in_progress");
 
+      await ctx.drainAuditWrites();
       const auditRows = await ctx.db
         .select()
         .from(schema.auditLogs)

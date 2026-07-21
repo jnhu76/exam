@@ -1,11 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, count, desc, eq, gte, lte } from "drizzle-orm";
 import type { RequestContext } from "@exam/domain";
 import type { Database, TenantContext } from "../types.js";
 import { auditLogs, users } from "../schema/pg.js";
-import {
-  createAsyncTenantCrudRepo,
-  resolveOrganizationId,
-} from "./baseRepo.js";
+import { resolveOrganizationId } from "./baseRepo.js";
 
 /** An audit-log row enriched with the actor's display name (when resolvable). */
 export interface AuditLogRowWithActor {
@@ -14,7 +12,7 @@ export interface AuditLogRowWithActor {
 }
 
 /**
- * Filter options for {@link createAuditLogRepo}.listPaginatedFiltered.
+ * Filter options for {@link createAuditLogQueryRepo}.listPaginatedFiltered.
  *
  * - `action` / `targetType` / `targetId`: exact-match string filters.
  * - `from` / `to`: inclusive `createdAt` bounds (JS `Date` against the
@@ -29,19 +27,41 @@ export interface AuditLogListFilter {
 }
 
 /**
- * Creates a repository for the `auditLogs` table.
- *
- * Extends the base tenant-scoped CRUD repo with paginated filtered listing
- * by action / targetType / inclusive createdAt range, scoped to the caller's
- * organization.
- *
- * @param db - Drizzle database connection.
- * @returns Object with base CRUD methods plus `listPaginatedFiltered`.
+ * Validated append-only event accepted by the audit storage boundary.
  */
-export function createAuditLogRepo(db: Database) {
-  const base = createAsyncTenantCrudRepo(db, auditLogs);
+export interface AuditLogInsert<Action extends string> {
+  actorId: string;
+  action: Action;
+  targetType: string;
+  targetId: string;
+  metadata: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export interface AuditLogWriter<Action extends string> {
+  insert(
+    ctx: TenantContext | RequestContext,
+    event: AuditLogInsert<Action>,
+  ): Promise<void>;
+}
+
+export function createAuditLogWriter<Action extends string>(
+  db: Database,
+): AuditLogWriter<Action> {
   return {
-    ...base,
+    async insert(ctx, event) {
+      await db.insert(auditLogs).values({
+        id: randomUUID(),
+        organizationId: resolveOrganizationId(ctx),
+        ...event,
+      });
+    },
+  };
+}
+
+export function createAuditLogQueryRepo(db: Database) {
+  return {
     /**
      * Lists audit log entries with pagination and optional filters
      * (action, targetType, inclusive createdAt range). Ordered by `createdAt`
@@ -121,3 +141,5 @@ export function createAuditLogRepo(db: Database) {
     },
   };
 }
+
+export const createAuditLogRepo = createAuditLogQueryRepo;

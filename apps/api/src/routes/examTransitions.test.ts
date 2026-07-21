@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import courseRoutes from "./course.js";
 import questionRoutes from "./question.js";
 import examRoutes from "./exam.js";
@@ -79,28 +79,21 @@ async function getExamStatus(
   return rows[0]?.status ?? "missing";
 }
 
-async function waitForAuditCount(
+async function countAudit(
   ctx: Awaited<ReturnType<typeof buildTestApp>>,
   action: string,
   targetId: string,
-  want: number,
-  timeoutMs = 1000,
 ): Promise<number> {
-  for (let i = 0; i < Math.ceil(timeoutMs / 50); i++) {
-    const auditRes = await ctx.app.inject({
-      method: "GET",
-      url: `/api/admin/audit-logs?action=${action}`,
-      cookies: adminCookies(ctx.adminToken),
-    });
-    const rows =
-      auditRes.statusCode === 200 ? (auditRes.json().items ?? []) : [];
-    const mine = rows.filter(
-      (r: { targetId: string }) => r.targetId === targetId,
+  const rows = await ctx.db
+    .select({ id: schema.auditLogs.id })
+    .from(schema.auditLogs)
+    .where(
+      and(
+        eq(schema.auditLogs.action, action),
+        eq(schema.auditLogs.targetId, targetId),
+      ),
     );
-    if (mine.length >= want) return mine.length;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  return -1;
+  return rows.length;
 }
 
 describe("exam reconciliation characterization (P2D-J2.6)", () => {
@@ -142,7 +135,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
   }
 
   describe("candidate-triggered reconciliation: published -> open", () => {
-    it("candidate exam list reconciles published -> open and writes exam.open audit", async () => {
+    it("candidate exam list reconciles published -> open without a compliance audit", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Recon Pub->Open",
@@ -164,7 +157,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(listRes.statusCode).toBe(200);
 
       expect(await getExamStatus(ctx, examId)).toBe("open");
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
     });
 
     it("candidate start attempt reconciles published -> open", async () => {
@@ -193,7 +186,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
   });
 
   describe("candidate-triggered reconciliation: open -> closed", () => {
-    it("candidate exam list reconciles published->open->closed and writes both exam.open and exam.closed audits", async () => {
+    it("candidate exam list reconciles published->open->closed without compliance audits", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Recon Open->Closed",
@@ -215,13 +208,13 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(listRes.statusCode).toBe(200);
 
       expect(await getExamStatus(ctx, examId)).toBe("closed");
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
-      expect(await waitForAuditCount(ctx, "exam.closed", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.closed", examId)).toBe(0);
     });
   });
 
   describe("reconciliation idempotency", () => {
-    it("repeated candidate access does not write duplicate exam.open audit", async () => {
+    it("repeated candidate access does not write domain-transition compliance audits", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Recon Idempotent",
@@ -240,7 +233,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
         url: "/api/candidate/exams",
         cookies: { "auth-token": candidateToken },
       });
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
 
       await ctx.app.inject({
         method: "GET",
@@ -253,14 +246,12 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
         cookies: { "auth-token": candidateToken },
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      const count = await waitForAuditCount(ctx, "exam.open", examId, 1);
-      expect(count).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
     });
   });
 
   describe("admin route reconciliation: close", () => {
-    it("close after reconciliation triggers open->closed writes exam.closed audit (not exam.close)", async () => {
+    it("automatic close emits neither a domain-transition nor an explicit admin-close audit", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Close Recon No Dup",
@@ -282,14 +273,9 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().status).toBe("closed");
 
-      // Reconciliation did published→open→closed in one pass.
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
-      expect(await waitForAuditCount(ctx, "exam.closed", examId, 1)).toBe(1);
-
-      // The close command was a no-op — exam.close audit is NOT written.
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      const closeCount = await waitForAuditCount(ctx, "exam.close", examId, 1);
-      expect(closeCount).toBe(-1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.closed", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.close", examId)).toBe(0);
     });
   });
 
@@ -369,7 +355,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
   });
 
   describe("admin route reconciliation: archive", () => {
-    it("archive after reconciliation (published->open->closed) writes exam.open, exam.closed, and exam.archive audits", async () => {
+    it("archive after reconciliation records only the explicit archive transition", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Archive Recon",
@@ -390,11 +376,9 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       expect(res.statusCode).toBe(200);
       expect(res.json().status).toBe("archived");
 
-      // Reconciliation did published→open→closed in one pass.
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
-      expect(await waitForAuditCount(ctx, "exam.closed", examId, 1)).toBe(1);
-      // Explicit archive action audit.
-      expect(await waitForAuditCount(ctx, "exam.archive", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.closed", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.archive", examId)).toBe(1);
     });
 
     it("archive idempotency: already-archived returns 200 with NO duplicate audit", async () => {
@@ -415,7 +399,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
         url: `/api/exams/${examId}/archive`,
         cookies: adminCookies(ctx.adminToken),
       });
-      expect(await waitForAuditCount(ctx, "exam.archive", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.archive", examId)).toBe(1);
 
       const second = await ctx.app.inject({
         method: "POST",
@@ -424,9 +408,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       });
       expect(second.statusCode).toBe(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      const count = await waitForAuditCount(ctx, "exam.archive", examId, 2);
-      expect(count).toBe(-1);
+      expect(await countAudit(ctx, "exam.archive", examId)).toBe(1);
     });
   });
 
@@ -456,7 +438,7 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
         payload: { reason: "done" },
         cookies: adminCookies(ctx.adminToken),
       });
-      expect(await waitForAuditCount(ctx, "exam.close", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.close", examId)).toBe(1);
 
       const auditRes = await ctx.app.inject({
         method: "GET",
@@ -491,24 +473,17 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       });
       expect(adminGetRes.statusCode).toBe(200);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      const countBeforeCandidate = await waitForAuditCount(
-        ctx,
-        "exam.open",
-        examId,
-        1,
-      );
-      expect(countBeforeCandidate).toBe(-1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
 
       await ctx.app.inject({
         method: "GET",
         url: "/api/candidate/exams",
         cookies: { "auth-token": candidateToken },
       });
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
     });
 
-    it("admin extend on stale-published reconciles and writes exam.open audit", async () => {
+    it("admin extend on stale-published records only the explicit extend audit", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Extend Recon Open",
@@ -529,11 +504,11 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       });
       expect(res.statusCode).toBe(200);
 
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
-      expect(await waitForAuditCount(ctx, "exam.extend", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.extend", examId)).toBe(1);
     });
 
-    it("admin cancel on stale-published reconciles and writes exam.open audit", async () => {
+    it("admin cancel on stale-published records only the explicit cancel audit", async () => {
       const examId = await createExamWithTimeWindow(
         ctx,
         "Cancel Recon Open",
@@ -554,8 +529,8 @@ describe("exam reconciliation characterization (P2D-J2.6)", () => {
       });
       expect(res.statusCode).toBe(200);
 
-      expect(await waitForAuditCount(ctx, "exam.open", examId, 1)).toBe(1);
-      expect(await waitForAuditCount(ctx, "exam.cancel", examId, 1)).toBe(1);
+      expect(await countAudit(ctx, "exam.open", examId)).toBe(0);
+      expect(await countAudit(ctx, "exam.cancel", examId)).toBe(1);
     });
   });
 });

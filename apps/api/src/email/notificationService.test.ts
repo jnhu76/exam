@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getIsolatedTestDb } from "@exam/db/src/testDb.js";
 import { createEmailOutboxRepo } from "@exam/db/src/repository/emailOutboxRepo.js";
 import { createOrganizationRepo } from "@exam/db/src/repository/organizationRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
+import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import type { RequestContext as RC } from "@exam/domain";
 import { EmailNotificationService } from "./notificationService.js";
 
@@ -154,14 +154,13 @@ describe("EmailNotificationService", () => {
 
   it("BUSINESS SAFETY: a committed business row persists even when email enqueue fails", async () => {
     // This is the M3 business-transaction non-rollback invariant (Option C).
-    // We use a real audit-log repo to write a real business row, then call the
+    // We use a real course repo to write a real business row, then call the
     // notification service backed by a FAILING repo (best-effort). The audit
     // row must still exist — email failure must never roll back committed work.
     const result = await getIsolatedTestDb("api-email-safety");
     try {
       const db = result.db;
       const organizationRepo = createOrganizationRepo(db);
-      const auditRepo = createAuditLogRepo(db);
       const org = await organizationRepo.create(
         {
           actorId: "system",
@@ -179,14 +178,12 @@ describe("EmailNotificationService", () => {
       const bizCtx = createContext(org.id);
 
       // 1. Commit a real business row (audit log).
-      const auditRow = await auditRepo.create(bizCtx, {
-        actorId: bizCtx.actorId,
-        action: "test.email.safety",
-        targetType: "email",
-        targetId: "n/a",
-        metadata: { ok: true },
+      const courseRepo = createCourseRepo(db);
+      const course = await courseRepo.create(bizCtx, {
+        name: "Email safety course",
+        code: `email-${randomUUID().slice(0, 8)}`,
+        description: "",
       });
-      const writtenId = auditRow.id;
 
       // 2. Email enqueue fails (failing repo) — but the caller uses the
       //    best-effort surface, so the failure is swallowed (logged).
@@ -207,9 +204,8 @@ describe("EmailNotificationService", () => {
 
       // 3. The business row is still there.
       expect(enqueued).toBeNull();
-      const stillThere = await auditRepo.findById(bizCtx, writtenId);
-      expect(stillThere?.id).toBe(writtenId);
-      expect(stillThere?.action).toBe("test.email.safety");
+      const stillThere = await courseRepo.findById(bizCtx, course.id);
+      expect(stillThere?.id).toBe(course.id);
     } finally {
       await result.cleanup();
     }

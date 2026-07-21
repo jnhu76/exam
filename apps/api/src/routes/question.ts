@@ -12,6 +12,7 @@ import {
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
 import { createCourseRepo } from "@exam/db/src/repository/courseRepo.js";
 import { createImportJobLogRepo } from "@exam/db/src/repository/importJobLogRepo.js";
+import { executeInTransaction } from "@exam/db/src/types.js";
 import { Permission } from "@exam/authz";
 import type { RequestContext } from "@exam/domain";
 import {
@@ -19,7 +20,7 @@ import {
   getRequestContext,
   resolveImportStatus,
 } from "./helpers.js";
-import { recordAudit } from "./audit.js";
+import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import {
   buildErrorResponse,
   buildValidationErrorResponse,
@@ -203,7 +204,6 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const data = parsed.data;
-      const repo = createQuestionRepo(fastify.db);
       if (!(await createCourseRepo(fastify.db).findById(ctx, data.courseId))) {
         return reply.code(400).send(
           buildErrorResponse(request.id, "VALIDATION_ERROR", {
@@ -218,7 +218,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const question = await repo.create(ctx, {
+      const question = await createQuestionRepo(fastify.db).create(ctx, {
         courseId: data.courseId,
         type: data.type,
         content: data.content,
@@ -233,19 +233,13 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         difficulty: data.difficulty,
         tags: data.tags,
         gradingRule: data.gradingRule,
-        // P3-L0-1C: forward the validated rubric through the production
-        // write path. Previously dropped here, which caused P3-L0-5 to
-        // (correctly) reject text_response publication.
         rubric: data.rubric,
       });
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "question.create",
-        "question",
-        question.id,
-      );
+      recordBestEffortAudit(fastify, request, ctx, {
+        action: "question.create",
+        targetType: "question",
+        targetId: question.id,
+      });
 
       return reply.code(201).send({
         id: question.id,
@@ -317,7 +311,7 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           }),
         );
       }
-      const updated = await repo.update(ctx, id, {
+      const updated = await createQuestionRepo(fastify.db).update(ctx, id, {
         ...validated,
         options: (validated.options ?? []).map((option) => ({
           id: option.id,
@@ -327,12 +321,19 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
             : {}),
         })),
       });
+      if (updated) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "question.update",
+          targetType: "question",
+          targetId: id,
+          metadata: { changedFields: Object.keys(data) },
+        });
+      }
       if (!updated) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(fastify, request, ctx, "question.update", "question", id);
       return {
         id: updated.id,
         organizationId: updated.organizationId,
@@ -374,14 +375,19 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
     async (request: any, reply: any) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { id } = request.params as { id: string };
-      const repo = createQuestionRepo(fastify.db);
-      const deleted = await repo.delete(ctx, id);
+      const deleted = await createQuestionRepo(fastify.db).delete(ctx, id);
+      if (deleted) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "question.delete",
+          targetType: "question",
+          targetId: id,
+        });
+      }
       if (!deleted) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(fastify, request, ctx, "question.delete", "question", id);
       return reply.code(204).send();
     },
   );
@@ -414,7 +420,6 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
           .send(buildValidationErrorResponse(request.id, parsed.error));
       }
       const body = parsed.data;
-      const repo = createQuestionRepo(fastify.db);
       if (!(await createCourseRepo(fastify.db).findById(ctx, body.courseId))) {
         return reply.code(400).send(
           buildErrorResponse(request.id, "VALIDATION_ERROR", {
@@ -429,111 +434,126 @@ const questionRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const details: Array<{
-        row: number;
-        status: "valid" | "warning" | "error";
-        message?: string;
-      }> = [];
+      const processRows = async (
+        repo: ReturnType<typeof createQuestionRepo>,
+      ) => {
+        const details: Array<{
+          row: number;
+          status: "valid" | "warning" | "error";
+          message?: string;
+        }> = [];
+        let valid = 0;
+        const warnings = 0;
+        let errors = 0;
 
-      let valid = 0;
-      let warnings = 0;
-      let errors = 0;
+        for (let i = 0; i < body.rows.length; i++) {
+          const raw = body.rows[i];
+          if (!raw) continue;
+          const parsedRow = CreateQuestionRequestSchema.safeParse({
+            courseId: body.courseId,
+            type: raw.type,
+            content: raw.content,
+            options:
+              raw.optionA || raw.optionB
+                ? [
+                    raw.optionA
+                      ? {
+                          id: "A",
+                          content: raw.optionA,
+                          isCorrect: false as boolean,
+                        }
+                      : undefined,
+                    raw.optionB
+                      ? {
+                          id: "B",
+                          content: raw.optionB,
+                          isCorrect: false as boolean,
+                        }
+                      : undefined,
+                    raw.optionC
+                      ? {
+                          id: "C",
+                          content: raw.optionC,
+                          isCorrect: false as boolean,
+                        }
+                      : undefined,
+                    raw.optionD
+                      ? {
+                          id: "D",
+                          content: raw.optionD,
+                          isCorrect: false as boolean,
+                        }
+                      : undefined,
+                  ].filter((o): o is NonNullable<typeof o> => o !== undefined)
+                : undefined,
+            standardAnswer: raw.standardAnswer,
+            score: raw.score,
+            difficulty: raw.difficulty,
+            tags:
+              typeof raw.tags === "string"
+                ? raw.tags.split(",").map((t: string) => t.trim())
+                : undefined,
+            gradingRule: raw.gradingRule,
+            rubric: raw.rubric,
+          });
 
-      for (let i = 0; i < body.rows.length; i++) {
-        const raw = body.rows[i];
-        if (!raw) continue;
-        const parsed = CreateQuestionRequestSchema.safeParse({
-          courseId: body.courseId,
-          type: raw.type,
-          content: raw.content,
-          options:
-            raw.optionA || raw.optionB
-              ? [
-                  raw.optionA
-                    ? {
-                        id: "A",
-                        content: raw.optionA,
-                        isCorrect: false as boolean,
-                      }
-                    : undefined,
-                  raw.optionB
-                    ? {
-                        id: "B",
-                        content: raw.optionB,
-                        isCorrect: false as boolean,
-                      }
-                    : undefined,
-                  raw.optionC
-                    ? {
-                        id: "C",
-                        content: raw.optionC,
-                        isCorrect: false as boolean,
-                      }
-                    : undefined,
-                  raw.optionD
-                    ? {
-                        id: "D",
-                        content: raw.optionD,
-                        isCorrect: false as boolean,
-                      }
-                    : undefined,
-                ].filter((o): o is NonNullable<typeof o> => o !== undefined)
-              : undefined,
-          standardAnswer: raw.standardAnswer,
-          score: raw.score,
-          difficulty: raw.difficulty,
-          tags:
-            typeof raw.tags === "string"
-              ? raw.tags.split(",").map((t: string) => t.trim())
-              : undefined,
-          gradingRule: raw.gradingRule,
-          rubric: raw.rubric,
+          if (!parsedRow.success) {
+            errors++;
+            details.push({
+              row: i + 1,
+              status: "error",
+              message: parsedRow.error.issues
+                .map((issue) => issue.message)
+                .join("; "),
+            });
+            continue;
+          }
+
+          const data = parsedRow.data;
+          if (body.confirm) {
+            await repo.create(ctx, {
+              courseId: data.courseId,
+              type: data.type,
+              content: data.content,
+              options: (data.options ?? []).map((option) => ({
+                id: option.id,
+                content: option.content,
+                ...(option.isCorrect !== undefined
+                  ? { isCorrect: option.isCorrect }
+                  : {}),
+              })),
+              standardAnswer: data.standardAnswer,
+              attachments: data.attachments,
+              score: data.score,
+              difficulty: data.difficulty,
+              tags: data.tags,
+              gradingRule: data.gradingRule,
+              rubric: data.rubric,
+            });
+          }
+          valid++;
+          details.push({ row: i + 1, status: "valid" });
+        }
+        return { details, valid, warnings, errors };
+      };
+
+      const processed = body.confirm
+        ? await executeInTransaction(fastify.db, async (tx) => {
+            return processRows(createQuestionRepo(tx));
+          })
+        : await processRows(createQuestionRepo(fastify.db));
+      const { details, valid, warnings, errors } = processed;
+
+      if (body.confirm) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "question.import",
+          targetType: "course",
+          targetId: body.courseId,
+          metadata: { total: body.rows.length, valid, errors },
         });
-
-        if (!parsed.success) {
-          errors++;
-          details.push({
-            row: i + 1,
-            status: "error",
-            message: parsed.error.issues.map((iss) => iss.message).join("; "),
-          });
-          continue;
-        }
-
-        const data = parsed.data;
-        if (body.confirm) {
-          await repo.create(ctx, {
-            courseId: data.courseId,
-            type: data.type,
-            content: data.content,
-            options: (data.options ?? []).map((o) => ({
-              id: o.id,
-              content: o.content,
-              ...(o.isCorrect !== undefined ? { isCorrect: o.isCorrect } : {}),
-            })),
-            standardAnswer: data.standardAnswer,
-            attachments: data.attachments,
-            score: data.score,
-            difficulty: data.difficulty,
-            tags: data.tags,
-            gradingRule: data.gradingRule,
-            rubric: data.rubric,
-          });
-        }
-        valid++;
-        details.push({ row: i + 1, status: "valid" });
       }
 
       if (body.confirm) {
-        recordAudit(
-          fastify,
-          request,
-          ctx,
-          "question.import",
-          "course",
-          body.courseId,
-          { total: body.rows.length, valid, errors },
-        );
         const questionLogStatus = resolveImportStatus({
           errors,
           affectedCount: valid,

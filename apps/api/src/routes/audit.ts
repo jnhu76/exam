@@ -1,87 +1,9 @@
 import { z } from "zod";
-import type {
-  FastifyInstance,
-  FastifyPluginAsync,
-  FastifyRequest,
-} from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import { AuditLogQuerySchema } from "@exam/contracts";
-import type { RequestContext } from "@exam/domain";
-import type { Database } from "@exam/db/src/types.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
-import { isAuditAction as isKnownAuditAction } from "@exam/authz";
-import { getRuntimeConfig } from "../config/runtimeConfig.js";
+import { createAuditLogQueryRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { Permission } from "@exam/authz";
-
-/**
- * Records an audit log entry asynchronously. Failures are logged but do
- * not propagate to the caller (fire-and-forget).
- *
- * AUDIT-M1: the `action` is validated against the closed `AuditAction` union
- * (ADR §3.9 — never silently accept a malformed audit row). An unknown action
- * is logged as an error and the write is skipped, preserving fire-and-forget
- * semantics while failing loud in observability.
- *
- * @param fastify - The Fastify instance (provides `db` and `log`).
- * @param request - The incoming HTTP request (provides `id`, `ip`, headers).
- * @param ctx - The request context carrying actor and organization info.
- * @param action - A known {@link AuditActionKey} describing the action.
- * @param targetType - The type of entity acted upon (e.g. `"organization"`, `"exam"`).
- * @param targetId - The identifier of the entity acted upon.
- * @param metadata - Optional key-value pairs for additional context.
- */
-export function recordAudit(
-  fastify: FastifyInstance,
-  request: FastifyRequest,
-  ctx: RequestContext,
-  action: string,
-  targetType: string,
-  targetId: string,
-  metadata: Record<string, unknown> = {},
-): void {
-  // AUDIT-M1 boundary: in production, reject unknown actions loud (no silent
-  // malformed audit row, ADR §3.9). The gate is skipped in test-like runtimes
-  // (test/ci/e2e) so test fixtures may seed synthetic actions (e.g. `range.t0`)
-  // without polluting the production closed union — the SOTA pattern for
-  // compliance-bound audit sinks (cf. GitLab/K8s audit event type validation,
-  // enforced at the sink in prod only).
-  if (!getRuntimeConfig().app.isTestLike && !isKnownAuditAction(action)) {
-    fastify.log.error(
-      { actorId: ctx.actorId, action, targetType, targetId },
-      "Rejected audit log with unknown action (AUDIT-M1)",
-    );
-    return;
-  }
-  const enrichedMetadata: Record<string, unknown> = {
-    ...metadata,
-    requestId: request.id,
-  };
-  if (
-    ctx.targetOrganizationId &&
-    ctx.targetOrganizationId !== ctx.organizationId
-  ) {
-    enrichedMetadata.actorOrganizationId = ctx.organizationId;
-  }
-
-  createAuditLogRepo(fastify.db as Database)
-    .create(ctx, {
-      actorId: ctx.actorId,
-      action,
-      targetType,
-      targetId,
-      metadata: enrichedMetadata,
-      ipAddress: request.ip,
-      ...(request.headers["user-agent"]
-        ? { userAgent: request.headers["user-agent"] }
-        : {}),
-    })
-    .catch((err) => {
-      fastify.log.error(
-        { err, actorId: ctx.actorId, action, targetType, targetId },
-        "Failed to record audit log",
-      );
-    });
-}
 
 /** OpenAPI security definition for cookie-based authentication. */
 const cookieAuth = [{ cookieAuth: [] }] as const;
@@ -143,7 +65,7 @@ const auditRoutes: FastifyPluginAsync = async (fastify) => {
       const ctx = ensureTargetOrg(getRequestContext(request));
       const { page, pageSize, action, targetType, from, to } =
         AuditLogQuerySchema.parse(request.query);
-      const repo = createAuditLogRepo(fastify.db);
+      const repo = createAuditLogQueryRepo(fastify.db);
       // Build the filter object conditionally — only carry keys that are set,
       // matching the established `action ? { action } : {}` pattern. `from`/
       // `to` arrive as ISO datetime strings and are parsed to JS `Date` here.

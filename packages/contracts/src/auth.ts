@@ -36,7 +36,7 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
  * Request schema for logging in with username and password.
  */
 export const LoginRequestSchema = z.object({
-  username: z.string(),
+  username: z.string().max(50),
   password: passwordLoginField(),
 });
 

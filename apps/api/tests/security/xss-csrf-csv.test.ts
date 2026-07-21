@@ -8,6 +8,7 @@ import rateLimitPlugin from "../../src/plugins/rateLimit.js";
 import { setupErrorHandler } from "../../src/plugins/errors.js";
 import zodProviderPlugin from "../../src/plugins/zodProvider.js";
 import setupSecurity from "../../src/plugins/security.js";
+import auditLifecyclePlugin from "../../src/plugins/auditLifecycle.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
@@ -73,6 +74,7 @@ describe("XSS / CSRF / CSV Security Baseline (S08-lite)", () => {
     await app.register(zodProviderPlugin);
     await app.register(fastifyCookie);
     await app.register(createDbPlugin(db));
+    await app.register(auditLifecyclePlugin);
     await app.register(authPlugin);
     await app.register(tenantPlugin);
     await app.register(rateLimitPlugin);

@@ -8,7 +8,7 @@ import {
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
 import { createCandidateRepo } from "@exam/db/src/repository/candidateRepo.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
-import { recordAudit } from "./audit.js";
+import { recordBestEffortAudit } from "../audit/auditWriter.js";
 import { buildErrorResponse } from "../lib/errorResponse.js";
 import { Permission } from "@exam/authz";
 
@@ -104,15 +104,15 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
             buildErrorResponse(request.id, "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
           );
       }
-      const field = await repo.create(ctx, data);
-      recordAudit(
-        fastify,
-        request,
+      const field = await createCandidateFieldRepo(fastify.db).create(
         ctx,
-        "candidate_field.create",
-        "candidate_field",
-        field.id,
+        data,
       );
+      recordBestEffortAudit(fastify, request, ctx, {
+        action: "candidate_field.create",
+        targetType: "candidate_field",
+        targetId: field.id,
+      });
       return reply.code(201).send({
         ...field,
         createdAt: field.createdAt.toISOString(),
@@ -160,26 +160,34 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
             buildErrorResponse(request.id, "CANDIDATE_IDENTITY_FIELD_CONFLICT"),
           );
       }
-      const updated = await repo.update(ctx, id, {
-        ...(data.label !== undefined ? { label: data.label } : {}),
-        ...(data.fieldType !== undefined ? { fieldType: data.fieldType } : {}),
-        ...(data.required !== undefined ? { required: data.required } : {}),
-        ...(data.unique !== undefined ? { unique: data.unique } : {}),
-        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-      });
+      const updated = await createCandidateFieldRepo(fastify.db).update(
+        ctx,
+        id,
+        {
+          ...(data.label !== undefined ? { label: data.label } : {}),
+          ...(data.fieldType !== undefined
+            ? { fieldType: data.fieldType }
+            : {}),
+          ...(data.required !== undefined ? { required: data.required } : {}),
+          ...(data.unique !== undefined ? { unique: data.unique } : {}),
+          ...(data.sortOrder !== undefined
+            ? { sortOrder: data.sortOrder }
+            : {}),
+        },
+      );
+      if (updated) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "candidate_field.update",
+          targetType: "candidate_field",
+          targetId: id,
+          metadata: { changedFields: Object.keys(data) },
+        });
+      }
       if (!updated) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "candidate_field.update",
-        "candidate_field",
-        id,
-      );
       return { ...updated, createdAt: updated.createdAt.toISOString() };
     },
   );
@@ -222,20 +230,22 @@ const candidateFieldRoutes: FastifyPluginAsync = async (fastify) => {
           .code(409)
           .send(buildErrorResponse(request.id, "CANDIDATE_FIELD_IN_USE"));
       }
-      const deleted = await repo.delete(ctx, id);
+      const deleted = await createCandidateFieldRepo(fastify.db).delete(
+        ctx,
+        id,
+      );
+      if (deleted) {
+        recordBestEffortAudit(fastify, request, ctx, {
+          action: "candidate_field.delete",
+          targetType: "candidate_field",
+          targetId: id,
+        });
+      }
       if (!deleted) {
         return reply
           .code(404)
           .send(buildErrorResponse(request.id, "RESOURCE_NOT_FOUND"));
       }
-      recordAudit(
-        fastify,
-        request,
-        ctx,
-        "candidate_field.delete",
-        "candidate_field",
-        id,
-      );
       return reply.code(204).send();
     },
   );

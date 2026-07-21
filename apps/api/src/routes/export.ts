@@ -4,11 +4,11 @@ import { ErrorResponseSchema } from "@exam/contracts";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createCandidateFieldRepo } from "@exam/db/src/repository/candidateFieldRepo.js";
-import { createAuditLogRepo } from "@exam/db/src/repository/auditLogRepo.js";
 import { ensureTargetOrg, getRequestContext } from "./helpers.js";
 import { generateCSV } from "@exam/import-export";
 import { Permission } from "@exam/authz";
 import { buildErrorResponse } from "../lib/errorResponse.js";
+import { recordSensitiveReadAudit } from "../audit/auditWriter.js";
 
 /**
  * Zod schema for route parameters that expect a UUID `id`.
@@ -131,15 +131,11 @@ export const exportRoutes: FastifyPluginAsync = async (fastify) => {
         `attachment; filename="scores-${examId}-${Date.now()}.csv"`,
       );
 
-      const auditRepo = createAuditLogRepo(fastify.db);
-      await auditRepo.create(ctx, {
-        actorId: ctx.actorId,
+      await recordSensitiveReadAudit(fastify.db, request, ctx, {
         action: "export_scores",
         targetType: "exam",
         targetId: examId,
         metadata: { format: "csv", rowCount: results.length },
-        ipAddress: request.ip ?? null,
-        userAgent: request.headers["user-agent"] ?? null,
       });
 
       return reply.send(csv);
