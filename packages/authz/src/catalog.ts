@@ -151,6 +151,6 @@ export const Role = {
 
 export type RoleKey = (typeof Role)[keyof typeof Role];
 
-// Audit actions are owned by auditActions.ts (AUDIT-M1: full legacy union +
-// recordAudit boundary validation). See that module for the closed set; the
+// Audit actions are owned by auditActions.ts (AUDIT-M1: full legacy union and
+// API audit-boundary validation). See that module for the closed set; the
 // barrel re-exports `AuditAction` / `AuditActionKey` for convenience.

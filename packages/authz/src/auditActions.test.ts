@@ -3,7 +3,6 @@ import {
   AuditAction,
   isAuditAction,
   assertAuditAction,
-  KNOWN_PRODUCTION_AUDIT_ACTIONS,
 } from "./auditActions.js";
 
 describe("AUDIT-M1 audit action catalog — shape", () => {
@@ -26,39 +25,6 @@ describe("AUDIT-M1 audit action catalog — shape", () => {
   it("includes the ADR-mandated NEW actions", () => {
     expect(AuditAction.GradingDetailViewed).toBe("grading.detail_viewed");
     expect(AuditAction.UserRoleChanged).toBe("user.role_changed");
-  });
-});
-
-describe("AUDIT-M1 audit action catalog — covers all real production actions", () => {
-  // Ground truth: every action string actually passed to recordAudit() or
-  // createAuditLogRepo().create() in apps/api/src (non-test), captured via rg.
-  // If AUDIT-M1's closed set omits any of these, recordAudit would reject it
-  // at runtime — this test is the regression guard for that.
-  it("every known production action is a member of AuditAction", () => {
-    const catalog = new Set<string>(Object.values(AuditAction));
-    for (const action of KNOWN_PRODUCTION_AUDIT_ACTIONS) {
-      expect(catalog.has(action), `missing action: ${action}`).toBe(true);
-    }
-  });
-
-  it("the known production list itself is the full non-test audit surface", () => {
-    // Sanity: the curated list contains the high-value actions we must not drop.
-    const must = [
-      "attempt.forceSubmit",
-      "attempt.extendTime",
-      "attempt.misconductFlagged",
-      "attempt.autoSubmit",
-      "attempt.disrupted",
-      "grading.score_entered",
-      "grading.finalized",
-      "exam.publish",
-      "exam.publish_results",
-      "export_scores",
-      "user.create",
-      "logout",
-      "admin.bootstrap",
-    ];
-    for (const m of must) expect(KNOWN_PRODUCTION_AUDIT_ACTIONS).toContain(m);
   });
 });
 

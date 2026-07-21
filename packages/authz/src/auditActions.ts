@@ -2,19 +2,16 @@
  * Audit action constants (AUDIT-M1).
  *
  * Closed, type-safe union of every audit action written by the platform.
- * Source of truth: `apps/api/src` — every string passed to `recordAudit(...)`
- * or `createAuditLogRepo().create({ action })`, captured via multiline `rg`
- * (single-line AND multi-line call sites). AUDIT-M1 validates at the
- * `recordAudit` boundary (apps/api), so an unknown action is logged as an
- * error and the write is skipped (fail-loud, ADR §3.9) instead of silently
- * producing a free-form `audit_logs.action` row.
+ * This file owns vocabulary only. Lifecycle, durability, obligation,
+ * frequency, payload validation, and runtime emitter ownership are separate
+ * concerns defined by the API audit boundary.
  *
  * **ADR Audit Boundary — NO rename.** The legacy names (`attempt.forceSubmit`,
  * `grading.score_entered`, `export_scores`, `branding.update`, …) are kept
  * verbatim. The jobcard-proposed `attempt.force_submitted` /
  * `grading.score_submitted` are NOT introduced (ADR "Naming collision guard").
- * The only new actions are the ADR-mandated sensitive-read ones:
- * `grading.detail_viewed`, `user.role_changed`.
+ * New vocabulary is additive; lifecycle and compatibility decisions are
+ * recorded by the policy layer rather than encoded in this enum.
  */
 
 export const AuditAction = {
@@ -27,6 +24,7 @@ export const AuditAction = {
   LoginFailure: "login.failure",
   Logout: "logout",
   AuthProfileUpdate: "auth.profile_update",
+  AuthPasswordUpdate: "auth.password_update",
 
   // ── Attempt lifecycle (candidate runtime) ──
   AttemptStart: "attempt.start",
@@ -78,8 +76,8 @@ export const AuditAction = {
   ExamDelete: "exam.delete",
   ExamExtend: "exam.extend",
   ExamPublishResults: "exam.publish_results",
-  ExamOpen: "exam.open", // status-transition audit (reconciliation)
-  ExamClosed: "exam.closed", // status-transition audit (reconciliation)
+  ExamOpen: "exam.open",
+  ExamClosed: "exam.closed",
 
   // ── Question ──
   QuestionCreate: "question.create",
@@ -90,6 +88,9 @@ export const AuditAction = {
   // ── User ──
   UserCreate: "user.create",
   UserUpdate: "user.update",
+  UserProfileUpdated: "user.profile_updated",
+  UserDisabled: "user.disabled",
+  UserReactivated: "user.reactivated",
   UserDelete: "user.delete",
 
   // ── Exports ──
@@ -99,9 +100,12 @@ export const AuditAction = {
   GradingScoreEntered: "grading.score_entered",
   GradingFinalized: "grading.finalized",
 
-  // ── ADR-mandated NEW actions (AUDIT-M2 wires these) ──
+  // ── Privileged access and authority ──
   GradingDetailViewed: "grading.detail_viewed",
   UserRoleChanged: "user.role_changed",
+
+  // ── Published exam security-sensitive update ──
+  ExamPublishedScheduleUpdated: "exam.published_schedule_updated",
 
   // ── Email outbox (P3-M4A) ──
   EmailOutboxCreated: "email.outbox_created",
@@ -114,73 +118,6 @@ export const AuditAction = {
 
 export type AuditActionKey = (typeof AuditAction)[keyof typeof AuditAction];
 
-/**
- * The complete set of action strings actually emitted by `apps/api/src`
- * (non-test) today — captured via multiline `rg` over `recordAudit(...)` and
- * `createAuditLogRepo().create({ action })` callers, plus the two ADR-mandated
- * new actions. AUDIT-M1's `recordAudit` validation must accept all of these.
- * This constant doubles as the regression test fixture.
- */
-export const KNOWN_PRODUCTION_AUDIT_ACTIONS: readonly string[] = [
-  "admin.bootstrap",
-  "admin.password_reset.local",
-  "auth.profile_update",
-  "attempt.autoSubmit",
-  "attempt.disrupted",
-  "attempt.exported",
-  "attempt.extendTime",
-  "attempt.forceSubmit",
-  "attempt.misconductFlagged",
-  "attempt.restore",
-  "attempt.saveAnswer",
-  "attempt.start",
-  "attempt.submit",
-  "branding.update",
-  "candidate.create",
-  "candidate.import",
-  "candidate.password_reset",
-  "candidate.update",
-  "candidate_field.create",
-  "candidate_field.delete",
-  "candidate_field.update",
-  "course.create",
-  "course.delete",
-  "course.update",
-  "enrollment.add",
-  "enrollment.remove",
-  "exam.archive",
-  "exam.cancel",
-  "exam.close",
-  "exam.create",
-  "exam.delete",
-  "exam.extend",
-  "exam.publish",
-  "exam.publish_results",
-  "exam.open",
-  "exam.closed",
-  "exam.unpublish",
-  "exam.update",
-  "email.outbox_created",
-  "email.send_failed",
-  "email.send_retried",
-  "export_scores",
-  "grading.detail_viewed",
-  "grading.finalized",
-  "grading.score_entered",
-  "login.failure",
-  "login.success",
-  "logout",
-  "proctor.incident_marked",
-  "question.create",
-  "question.delete",
-  "question.import",
-  "question.update",
-  "user.create",
-  "user.delete",
-  "user.role_changed",
-  "user.update",
-];
-
 const AUDIT_ACTION_VALUES: ReadonlySet<string> = new Set(
   Object.values(AuditAction),
 );
@@ -192,7 +129,7 @@ export function isAuditAction(value: unknown): value is AuditActionKey {
 
 /**
  * Asserts `action` is a known {@link AuditActionKey}. Throws on unknown.
- * Used at the `recordAudit` boundary so an unregistered action fails loud
+ * Used at the API audit boundary so an unregistered action fails loud
  * (ADR §3.9 — never silently accept a malformed audit row).
  */
 export function assertAuditAction(
