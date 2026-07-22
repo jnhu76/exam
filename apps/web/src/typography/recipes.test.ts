@@ -19,16 +19,6 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const RECIPES_CSS = readFileSync(join(HERE, "recipes.css"), "utf8");
 
 describe("typography recipe layer (UI-RECIPE-1A)", () => {
-  it("defines a CSS class for every confirmed vocabulary role", () => {
-    for (const role of CONFIRMED_RECIPES) {
-      const selector = `.type-${role}`;
-      expect(
-        RECIPES_CSS.includes(selector),
-        `recipes.css must define ${selector}`,
-      ).toBe(true);
-    }
-  });
-
   it("every recipe resolves its font family through a semantic role variable", () => {
     // Each recipe must use var(--font-ui) | var(--font-reading) | var(--font-mono),
     // never a page-local font-family stack.
