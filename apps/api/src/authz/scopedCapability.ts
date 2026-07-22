@@ -21,7 +21,7 @@
  * preHandler does not run shadow — it is the live capability+resolver gate on
  * routes that have already flipped off `requireRole`.
  *
- * Source of truth: `docs/phase3/rbac/adr-scoped-rbac-architecture.md` §3.9,
+ * Source of truth: `docs/adr/ADR-010-scoped-rbac-architecture.md` §3.9,
  * §Resource Resolver Matrix, §3.4 (organization anchor).
  */
 import type { FastifyReply, FastifyRequest } from "fastify";

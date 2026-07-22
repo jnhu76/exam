@@ -7,7 +7,7 @@
  * `requireCapability` uses) and the DB-backed scope resolvers
  * (`createAttemptResolver` / `createExamResolver`). The decorator is the
  * accepted request-path wiring seam for resource-aware authorization
- * (`docs/phase3/rbac/adr-scoped-rbac-architecture.md` §3.9, §Resource Resolver
+ * (`docs/adr/ADR-010-scoped-rbac-architecture.md` §3.9, §Resource Resolver
  * Matrix; precedent: `plugins/tenant.ts` onRoute pattern).
  *
  * Routes opt in by replacing `fastify.requireCapability(perm)` with

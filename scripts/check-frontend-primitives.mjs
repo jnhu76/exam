@@ -3,8 +3,8 @@
  * Optional, low-false-positive scanner for handwritten UI primitives.
  *
  * Flags suspected hand-rolled complex interaction primitives OUTSIDE
- * components/ui/. The goal is to catch regressions against
- * docs/frontend/component-governance.md §4 (forbidden hand-builds):
+ * components/ui/. The goal is to catch regressions against the forbidden
+ * hand-builds documented in docs/standards/ui-system.md §Forbidden dependencies:
  * DatePicker / Calendar grids, Dialog/Modal, Select/Combobox, Popover,
  * DropdownMenu, Tooltip, Tabs, FocusTrap.
  *

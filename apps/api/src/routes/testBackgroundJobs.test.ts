@@ -1,7 +1,7 @@
 /**
  * ADR-007 Phase 4 — background-job default-off regression guard.
  *
- * Audit finding (recorded in docs/dev/test-ci-parallelism-plan.md):
+ * Audit finding (recorded in docs/archive/dev/test-ci-parallelism-plan.md):
  * `buildTestApp()` does NOT start any background timers. The only periodic
  * timers in `apps/api/src/**` live inside `heartbeatPlugin` and
  * `deadlineScannerPlugin`, both registered EXCLUSIVELY by production

@@ -1,7 +1,7 @@
 /**
  * Phase 3 Scoped RBAC catalog constants (RBAC-M1).
  *
- * Source of truth: `docs/phase3/rbac/adr-scoped-rbac-architecture.md`
+ * Source of truth: `docs/adr/ADR-010-scoped-rbac-architecture.md`
  * §Permission Catalog v0, §Scope Model v0, §Role Presets.
  *
  * These are the closed, type-safe unions. Unknown strings are a load-time

@@ -1,57 +1,50 @@
-# Architecture Decision Records — Index
+# Architecture Decision Records
 
-> Each ADR carries an explicit `Status` field in its own file. This index
-> summarizes statuses for navigation. Status labels are the authority; file
-> age or location is not.
+> Formal architectural decisions. Each ADR records a concrete problem,
+> alternatives considered, the decision, its consequences, and a status.
+> An ADR is **not** an audit report, implementation report, corrective review,
+> or evidence-gap analysis — those live in [`docs/archive/`](../archive/).
 
-```text
-STATUS:          CURRENT
-AUTHORITY:        Index
-SCOPE:            docs/adr/ decision records
-OWNER:            Architecture
-BASELINE SYSTEM COMMIT:
-                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
-LAST VERIFIED REPOSITORY COMMIT:
-                 2ca3d687371a2f20eec518634d2e70c2c03421f5
-                 ADR Status fields are read verbatim from each ADR file.
-SUPERSEDES:       —
-RELATED ADRS:     ADR-001 through ADR-009 (see table)
+## How to read an ADR
+
+Every ADR carries this metadata (in its Status section or header):
+
+```markdown
+- Status: ACCEPTED | PROPOSED | DEFERRED | SUPERSEDED | REJECTED
+- Date: YYYY-MM-DD
+- Decision owners: project
+- Supersedes: ADR-NNN or none
+- Superseded by: ADR-NNN or none
 ```
 
-## Status legend
+- **ACCEPTED** — the decision is binding and (where applicable) implemented.
+- **PROPOSED** — the decision is recorded but not yet accepted; implementation
+  may not have begun or may be partial.
+- **DEFERRED** — the decision is to *not* build the thing now; revisited on a
+  documented trigger.
+- **SUPERSEDED** — replaced by a later ADR (see `Superseded by`).
+- **REJECTED** — considered and not adopted.
 
-- **Accepted** — decision is binding and reflected in code.
-- **Accepted (amended)** — binding, with a later corrective section that
-  supersedes part of the original text (the original is retained as history).
-- **Deferred** — a real decision recorded now; adoption is gated on stated
-  trigger conditions. Deferred ADRs are **not** archived.
-- **Proposed** — recorded proposal, pending acceptance. Not yet binding.
-- **Superseded** — replaced by a later ADR. Retained for history.
+## Index
 
-## ADR index
+| ID | Title | Status | Current / Historical | Supersedes | Superseded by |
+| --- | --- | --- | --- | --- | --- |
+| [ADR-001](ADR-001-redis.md) | Redis as Optional Infrastructure | ACCEPTED (baseline) / DEFERRED (full adoption) | Current | none | none |
+| [ADR-002](ADR-002-websocket-sse.md) | WebSocket / SSE for Real-Time Updates | DEFERRED | Current | none | none |
+| [ADR-003](ADR-003-job-queue.md) | Job Queue for Async / Long-Running Workloads | DEFERRED | Current | none | none |
+| [ADR-004](ADR-004-desktop-electron.md) | Desktop / Electron Exam Runtime | DEFERRED | Current | none | none |
+| [ADR-005](ADR-005-exam-operation-state-baseline.md) | Exam Operation State Baseline | ACCEPTED (implemented, Rev 2) | Current | none | none |
+| [ADR-006](ADR-006-exam-time-authority.md) | Exam Time Authority | ACCEPTED (amended 2026-07-21) | Current | none | none |
+| [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful Infrastructure Test Isolation | PROPOSED (long-term constraint) | Current | none | none |
+| [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | ACCEPTED (Phase 2 conservative) | Current | none | none |
+| [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend State Machine Adoption | PROPOSED (pending human audit) | Current | none | none |
+| [ADR-010](ADR-010-scoped-rbac-architecture.md) | Phase 3 Scoped RBAC Architecture | ACCEPTED (infrastructure implemented) | Current | none | none |
 
-| ADR | Title | Status | Note |
-|-----|-------|--------|------|
-| [ADR-001](ADR-001-redis.md) | Redis as Optional Infrastructure | **Accepted** (baseline) / **Deferred** (full adoption) | Optional baseline wired; no business feature depends on Redis. Full adoption gated on a measured trigger. Not archived. |
-| [ADR-002](ADR-002-websocket-sse.md) | WebSocket / SSE for Real-Time Updates | **Deferred** | Phase 2 proctor dashboard uses HTTP polling. WS/SSE revisited only if polling latency is operationally insufficient. |
-| [ADR-003](ADR-003-job-queue.md) | Job Queue for Async / Long-Running Workloads | **Deferred** | No queue in Phase 2; all work synchronous/request-scoped. PostgreSQL-backed in-process worker is the first adoption path. |
-| [ADR-004](ADR-004-desktop-electron.md) | Desktop / Electron Exam Runtime | **Deferred** | `apps/desktop/` not started; `controlFlags.requireLockdown` schema-only. Future Desktop must reuse the server-side exam protocol. |
-| [ADR-005](ADR-005-exam-operation-state-baseline.md) | Exam Operation State Baseline | **Accepted** (implemented, Rev 2) | Three-axis state model; lock-reconcile-assert-mutate transaction rule; close/cancel/unpublish/extend/archive implemented. |
-| [ADR-006](ADR-006-exam-time-authority.md) | Exam Time Authority | **Accepted** (amended 2026-07-21) | `fastify.now()` is the single runtime clock. 2026-07-21 amendment binds the audit durability contract; the prior broad audit amendment is retained as history and superseded by the amendment section. |
-| [ADR-007](ADR-007-stateful-infrastructure-test-isolation.md) | Stateful Infrastructure Test Isolation | **Proposed** (documentation-only) | Long-term test-resource isolation contract. Phases 2A–6F mostly complete (local/test evidence); Phase 6G live-CI validation and Redis/Queue-prefix integration deferred. The two former ADR-007 audit companions (`flake-and-speed-audit`, `phase6-evidence-gap-audit`) have been moved to `docs/archive/dev/`. |
-| [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | **Accepted** (Phase 2 conservative) | `submitAndGradeAttempt` collapsed into a single transaction under the row lock. Option D (WYSIWYG submit) deferred to Phase 3. |
-| [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend State Machine Adoption Strategy | **Proposed** | Incremental FSM adoption (reducer + transition table, no XState/Zustand in Phases A–C). `CandidateExamMachine` first. Pending human audit. |
+## Numbering
 
-## ADRs that must not be archived
-
-ADR-001, ADR-004, and ADR-009 record real (even if deferred or proposed)
-decisions. They are **not** archived regardless of status; only their `Status`
-field is updated when the decision changes. Archiving a deferred decision
-loses context.
-
-## Numbering note
-
-There is exactly one file per ADR number under `docs/adr/`. The historical
-ADR-007 trio (one governing ADR + two audit-companion reports) has been
-collapsed: the two companions were moved to `docs/archive/dev/`, leaving
-`ADR-007-stateful-infrastructure-test-isolation.md` as the sole ADR-007.
+ADR numbers are stable and never reused. The next free number is **ADR-011**.
+Two files previously in `docs/adr/` used the `ADR-007` prefix
+(`ADR-007-flake-and-speed-audit.md`, `ADR-007-phase6-evidence-gap-audit.md`)
+but were **audit reports about** ADR-007, not ADRs themselves — they have been
+moved to [`docs/archive/audits/`](../archive/audits/). The genuine ADR-007 is
+`ADR-007-stateful-infrastructure-test-isolation.md`.

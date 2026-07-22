@@ -15,7 +15,7 @@
  * the harness can later bind to a PostgreSQL database, a Redis key prefix, a
  * queue prefix, and a background-worker lifecycle.
  *
- * Non-goals of this PR (see ADR-007 + docs/dev/test-ci-parallelism-plan.md):
+ * Non-goals of this PR (see ADR-007 + docs/archive/dev/test-ci-parallelism-plan.md):
  *   - Does NOT open `fileParallelism: true`.
  *   - Does NOT change `maxWorkers` defaults.
  *   - Does NOT create real worker databases (that is Phase 3).
@@ -45,7 +45,7 @@ export type TestInfraScopeKind =
   | "concurrency"
   | "e2e";
 
-/** Test group, mirrors docs/dev/test-suite-taxonomy.md. */
+/** Test group, mirrors docs/archive/dev/test-suite-taxonomy.md. */
 export type TestGroup = "fast" | "background" | "concurrency" | "e2e" | "all";
 
 /** PostgreSQL isolation strategy. */

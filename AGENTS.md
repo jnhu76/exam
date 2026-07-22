@@ -8,7 +8,7 @@ Configurable **LAN/on-premise exam and assessment platform**. It is not hardcode
 
 Strict closed-book proctored exam operation is Phase 2+. Teacher-like roles, Proctor, Grader, scoped permissions, invitation, and email account lifecycle are Phase 3. Pass-to-proceed APIs, service tokens, external integrations, optional multiTenant, and SuperAdmin are Phase 4 platformization/integration.
 
-**Read `docs/SPEC.md` and `docs/phase-roadmap.md` first** — they are the specification and phase authority documents. If implementation conflicts with them, the spec and roadmap win.
+**Read `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` first** — they are the specification and phase authority documents. If implementation conflicts with them, the spec and roadmap win.
 
 ## Product Generalization Rules
 
@@ -285,11 +285,11 @@ docs/                    # design documents
 - `packages/db` repository methods must receive `ctx` — no bare SQL in routes
 - `packages/domain` has no internal package dependency (leaf node)
 - `apps/web` cannot import from `packages/db` directly
-- See `docs/code-quality.md` §6 for full dependency graph
+- See `docs/standards/code-quality.md` §6 for full dependency graph
 
 ## Code Quality
 
-**Read `docs/code-quality.md` before implementing any Job.** Key rules:
+**Read `docs/standards/code-quality.md` before implementing any Job.** Key rules:
 
 - **TypeScript strict mode** — no `any`, no `as any`, see `tsconfig.base.json`
 - **Prettier + ESLint** — `pnpm verify` must pass
@@ -301,7 +301,7 @@ docs/                    # design documents
 - **Structured logging** — pino in api, no `console.log` anywhere in packages
 - **No duplicate DTOs** — import from `@exam/domain` or `@exam/contracts`, never redefine
 - **Route handler simplicity** — read request → validate → create ctx → call command/service/repo → return response
-- **AI coding rules** — see `docs/code-quality.md` §17
+- **AI coding rules** — see `docs/standards/code-quality.md` §17
 - **Research before toolchain changes** — Docker, pnpm, Node module resolution, CI, package manager, and build-system changes require MCP/doc search + local repo verification before editing. Do not guess.
 - **Frontend visual authority** — see the "Frontend Visual Authority" section below
 
@@ -330,10 +330,11 @@ Every Job completion requires:
 
 **Authority documents** (read before any frontend visual work):
 
-- `docs/frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md` — accepted as-built visual-language audit.
-- `docs/frontend/P3-UI-Foundation-plan.md` — the authority for UI foundation work (authority chain, recipes, sequence, lint rules).
+- `docs/architecture/frontend.md` — as-built frontend architecture (shell, routing, layouts, API client, auth projection, state/data ownership, page composition, package boundaries, tech stack, responsive structure).
+- `docs/standards/ui-system.md` — as-built UI system constraints (design tokens, fonts, typography recipes, surface/elevation, component authority, Tailwind boundary, status color, icons, tables, accessibility, forbidden dependencies, active `exam-ui/*` lint).
+- `docs/roadmap/ui-open-items.md` — unfinished visual-authority migration work (blocked on UI-PILOT-1 / UI-MIGRATE-N).
 
-Do **not** treat `docs/ui/*` paths as current authority — that directory no longer exists; references to it in this file and elsewhere are historical/archive only.
+The historical construction-stage UI documents (`P3-UI-*`, audits, recons, closures, plans) live under `docs/archive/frontend/` and are not current guidance. Do **not** treat `docs/ui/*` or `docs/frontend/P3-UI-*` paths as current authority — those directories no longer exist in the active tree; references to them are historical/archive only.
 
 ### Authority chain
 
@@ -356,9 +357,11 @@ Before creating or locally recreating a visual structure, inspect these in order
 ```text
 apps/web/src/components/ui          # shadcn primitives (generated, do not hand-edit)
 apps/web/src/components/shared      # authoritative shared business components
-existing semantic recipes           # (being introduced progressively; few exist yet)
-the visual authority registry       # (does not exist yet — planned in UI-VOCAB-1)
+existing semantic recipes           # apps/web/src/typography/recipes.css (type-*) + apps/web/src/surface/recipes.css (surface-*)
+the recipe ownership registry       # apps/web/src/typography/recipeRegistry.ts (single canonical source)
 ```
+
+The per-component role → owner mapping is documented in `docs/standards/ui-system.md` §Component authority.
 
 Distinguish **component does not exist** from **component exists but appears insufficient**. The latter triggers the insufficiency protocol below — it is **not** a license to bypass the authority. Writing local Tailwind is never, by itself, justification to bypass an existing visual authority.
 
@@ -403,7 +406,7 @@ Distinguish **domain status** (must flow through `statusMeta` + `StatusBadge`) f
 
 ### Elevation guidance
 
-Ordinary business content must **not** invent shadow-based elevation. Shadows are reserved for visual roles that intentionally own elevation — especially overlay / floating surfaces and the sticky topbar. This is a forward authority rule. The former business-shadow debt is **closed** (UI-MIGRATE-N-W4B): the `exam-ui/no-business-shadow` baseline is now empty, and any business-page `shadow-*` utility is a real, unshielded error. Elevation in ordinary content must come from an authoritative component primitive (e.g. the `Card` primitive, which owns `shadow-sm`) or be absent when the surface is flat (e.g. `surface-content`). Do not add `shadow-*` to business pages, and do not assume all current shadow usage is already compliant — `components/ui` (generated primitives) and `components/layout` (sticky topbar) are the only exempt scopes.
+Ordinary business content must **not** invent shadow-based elevation. Shadows are reserved for visual roles that intentionally own elevation — especially overlay / floating surfaces and the sticky topbar. This is a forward authority rule. The business-shadow baseline is empty, and any business-page `shadow-*` utility is a real, unshielded error. Elevation in ordinary content must come from an authoritative component primitive (e.g. the `Card` primitive, which owns `shadow-sm`) or be absent when the surface is flat (e.g. `surface-content`). Do not add `shadow-*` to business pages, and do not assume all current shadow usage is already compliant — `components/ui` (generated primitives) and `components/layout` (sticky topbar) are the only exempt scopes.
 
 ### Enforcement
 
@@ -421,7 +424,7 @@ Deterministic enforcement of the high-confidence boundaries above is provided by
 
 - Broader typography recipes (`type-metric`, `type-body`, `type-secondary`, …) — authority exists, migration coverage does not (`StatsCard` has one consumer; ~20 metric bypasses unmigrated). Blocked on UI-PILOT-1 / UI-MIGRATE-N.
 - Component-authority bypasses (`PageSection` vs `<Card><CardHeader>`, `StatsCard` vs `text-2xl font-bold`) — authority exists, migration coverage does not. Blocked on UI-PILOT-1 / UI-MIGRATE-N.
-- Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. See `docs/frontend/P3-UI-LINT-2-phase3-authority-bypass-decision.md` for the semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary).
+- Domain-status-color authority — authority exists (`statusMeta` + `StatusBadge`), but the bypass shape is dynamic-`className` / data-flow, not statically token-detectable without unacceptable false positives against categorical `<Badge>` labels. Enforced by review and migration, not by lint. The semantic-ownership boundary (which semantic domains `statusMeta` owns vs. which are distinct domains that merely reuse the `StatusTone` vocabulary) is documented in `docs/standards/ui-system.md` §Status color.
 - Field-error authority (`FieldError`) — authority exists and is the canonical owner of "form field validation error", but the former `exam-ui/prefer-field-error` structural lint rule was **retired** in UI-FIELD-ERROR-AUTHORITY-CLOSURE-1 (§8): its recipe (`<p> + text-destructive + text-size`) could not deterministically distinguish FieldError ownership from DOMAIN_WARNING / CONTROL_STATE_FEEDBACK / INLINE_OPERATION_ERROR roles (4/4 remaining hits were false-semantic-overlap). All known same-role bypasses have been migrated; ownership is now enforced by semantic migration review + `FieldError.test.tsx`, not a structural lint proxy. Do **not** re-introduce a structural field-error lint rule without a proven deterministic ownership detector.
 - `type-section-title` / `surface-content` recipe recomposition — authority exists and is canonical, but the structural lint proxies (`exam-ui/no-raw-typography`, `exam-ui/no-raw-surface-recipe`) were **retired** in UI-MIGRATE-N-W3 (§12-§13): after the proven same-role migrations every remaining hit was false-semantic-overlap (TOPBAR / QUESTION / RUNTIME / OVERLAY titles; SIDEBAR surface), and no sound NARROW AST boundary could distinguish the owner role from those distinct roles. All known same-role bypasses have been migrated; recipe/component ownership is enforced by semantic migration review + the recipe authority tests, not a structural lint proxy. Do **not** re-introduce these structural recipe lint rules without a proven deterministic ownership detector. (Note: RECON-1 added `exam-ui/no-typography-authority-conflict`, which is a DIFFERENT, sound rule — it fires only when a `type-*` recipe IS explicitly selected, so there is no role-inference surface. It does not replace the retired raw-node proxies, which remain retired.)
 
@@ -431,13 +434,12 @@ Do **not** claim that all typography or all surface recipes are lint-enforced �
 
 ## Current Roadmap Authority
 
-- **Project Simplification Wave 1 (docs reorganization + mechanical + test cleanup) is complete** — see `docs/roadmap/current.md` and `docs/status/project-simplification.md`.
-- **E2E is enabled and runs as blocking CI.** The `e2e` job in `.github/workflows/ci.yml` (sharded) gates every PR; PR #198 passed both shards. The earlier "E2E re-enable as next work" framing was inaccurate — E2E was already enabled and blocking.
+- **E2E is enabled and runs as blocking CI.** The `e2e` job in `.github/workflows/ci.yml` (sharded) gates every PR; the three named blocking specs (candidate-happy-path, resume-attempt, submit-flush) run and pass.
 - **Phase 2 (Exam Operation) gate items are implemented** — proctor visibility/event-stream/polling/incident-logging, force-submit, extend-time, misconduct flag, attempt timeline, manual grading queue, retake policy, score strategy, diagnostics, result publishing, telemetry, and the candidate/admin permission boundary are in place. `timed_window` is the only timing mode.
-- **Phase 3 is partially implemented.** The authorization *infrastructure* (permission catalog, role presets, scoped/scored capability resolvers, assignment-backed runtime authority, candidate/admin permission boundary) is live. The Phase 3 *product* work (scoped Teacher/Proctor/Grader role bundles as product roles, staff invitation, SMTP reset, account lifecycle UI, fill-blank/subjective runtime, WYSIWYG submit) is not done.
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PENDING** — it blocks future RBAC-sensitive changes only; it does not block PR #198, which does not touch production authorization enforcement, Redis, Docker, the route registry, or Type 3 security tests.
+- **Phase 3 is partially implemented.** The authorization *infrastructure* (permission catalog, role presets, scoped/scored capability resolvers, assignment-backed runtime authority, candidate/admin permission boundary) is live. The Phase 3 *product* work (scoped Teacher/Proctor/Grader role bundles as product roles, staff invitation, SMTP reset, account lifecycle UI, fill-blank/subjective runtime, WYSIWYG submit) is not done. See `docs/roadmap/phase3-open-items.md`.
+- **Gate 0.5 (M10-F post-PR-197 rerun) is PENDING** — it blocks future RBAC-sensitive changes only.
 - **Phase plans control implementation schedule.**
-- **SPEC and `docs/phase-roadmap.md` win over implementation details.**
+- **SPEC and `docs/roadmap/phase-roadmap.md` win over implementation details.**
 - **Phase 2 does NOT implement multi-tenant.** Multi-tenant is Phase 4 platformization only.
 
 ---
@@ -466,10 +468,7 @@ Phase1.4 UI Foundation Reset is a **UI foundation stabilization reference**, not
 
 ### Documentation Reference (Historical / Archive)
 
-The `docs/ui/` paths below were the Phase1.4 reference set. **That directory no longer exists** — these entries are retained as historical pointers only; archived copies may exist under `docs/archive/`. For current frontend visual authority, use the documents named in the "Frontend Visual Authority" section above:
-
-- `docs/frontend/P3-UI-AUDIT-0-frontend-visual-language-audit.md`
-- `docs/frontend/P3-UI-Foundation-plan.md`
+The `docs/ui/` paths below were the Phase1.4 reference set. **That directory no longer exists** — these entries are retained as historical pointers only; archived copies may exist under `docs/archive/`. For current frontend visual authority, use the documents named in the "Frontend Visual Authority" section above (`docs/architecture/frontend.md`, `docs/standards/ui-system.md`, `docs/roadmap/ui-open-items.md`).
 
 Historical Phase1.4 reference filenames (archive only, not current authority):
 
@@ -486,7 +485,7 @@ Historical Phase1.4 reference filenames (archive only, not current authority):
 
 ### Migration Plan (Historical / Archive)
 
-The Phase1.4 migration plan below is retained for history. It references the now-archived `docs/ui/` set; it is **not** the current UI foundation sequence. The current sequence is `docs/frontend/P3-UI-Foundation-plan.md` (UI-PLAN-0 → UI-AGENT-1 → UI-LINT-1 → …).
+The Phase1.4 migration plan below is retained for history. It references the now-archived `docs/ui/` set; it is **not** the current UI foundation sequence. The current authority is `docs/architecture/frontend.md` + `docs/standards/ui-system.md`.
 
 Historical Phase1.4 PR split:
 

@@ -242,7 +242,7 @@ describe("ESLint config wiring (scope + grandfathering)", () => {
 
   // The no-raw-typography and no-raw-surface-recipe grandfathering + new-violation
   // tests were removed in UI-MIGRATE-N-W3 §14: both rules were retired (see
-  // index.ts and docs/frontend/P3-UI-MIGRATE-N-W3-typography-surface-closure.md).
+  // index.ts and docs/archive/frontend/P3-UI-MIGRATE-N-W3-typography-surface-closure.md).
   // After the proven same-role migrations, every remaining hit was
   // false-semantic-overlap and no sound NARROW AST boundary existed — the same
   // unsoundness that retired prefer-field-error. The baseline arrays for those

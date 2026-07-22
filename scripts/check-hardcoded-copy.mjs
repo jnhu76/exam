@@ -59,7 +59,7 @@ const CJK_REGEX = /[\u4e00-\u9fff]/;
  *  - status-reason strings (`scoreViewDisabledReason`/`deleteDisabledReason`)
  *    returned in the response body and rendered verbatim by the web client
  *    today. Migrating these to machine-readable codes + web i18n mapping is a
- *    tracked follow-up (see docs/dev/i18n-copy-policy.md); until then they are
+ *    tracked follow-up (see docs/standards/i18n-copy-policy.md); until then they are
  *    allowlisted as an explicit documented exception.
  */
 const CJK_ALLOWLIST = [
@@ -339,7 +339,7 @@ if (tier1Violations.length > 0) {
     console.error(`    ${v.content}\n`);
   }
   console.error(
-    "See docs/code-quality.md §4.1 for the Hardcoded Business Copy Guard rules.\n",
+    "See docs/standards/code-quality.md §4.1 for the Hardcoded Business Copy Guard rules.\n",
   );
 }
 

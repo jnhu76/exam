@@ -1,119 +1,102 @@
 # Authorization Architecture
 
-> Reconstructed from production code at the verified commit.
+> Current authority for the platform's capability-based authorization model.
+> This describes what is **implemented** today (Phase 2 + Phase 3 infrastructure),
+> not future scoped-role-bundle product work — see
+> [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md) for that.
+
+## Authority
+
+- Formal decision: [ADR-010 — Scoped RBAC Architecture](../adr/ADR-010-scoped-rbac-architecture.md)
+- Phase scope: [`docs/roadmap/phase-roadmap.md`](../roadmap/phase-roadmap.md) (Phase 3)
+
+## Model
+
+Authorization is **capability-based**, not `requireRole`-based. Every protected
+route declares a capability requirement; the runtime resolves whether the actor
+holds that capability via assignment-backed authority.
 
 ```text
-STATUS:          CURRENT
-AUTHORITY:        Architecture
-SCOPE:            Authorization model, authz package boundary, route authorization
-OWNER:            Architecture / Security
-BASELINE SYSTEM COMMIT:
-                 e7af792815e8cf4bcff122a3d1d8db500b9d6eff (PR #197)
-LAST VERIFIED REPOSITORY COMMIT:
-                 2ca3d687371a2f20eec518634d2e70c2c03421f5
-                 The baseline system commit is NOT the final verification
-                 commit of the reorganized repository.
-SUPERSEDES:       —
-RELATED ADRS:     ADR-005 (exam operation state), ADR-006 (time authority audit)
+actor (session)
+   │
+   ▼
+permission catalog  ── capability enum (Permission.*)
+   │
+   ▼
+role presets        ── role → capability set (admin, candidate, proctor, grader, ...)
+   │
+   ▼
+assignment-backed   ── loadAssignmentAuthority(ctx) → derived authority for this request
+runtime authority      (multi-role union, last-admin invariant, fail-closed)
+   │
+   ▼
+route guard         ── requireCapability / requireScopedCapability / requireOwnAttempt / ...
 ```
 
-## 1. Model
+## Implemented primitives
 
-Authorization is a **permission + scope** model.
+All of the following are live in `packages/authz/` and `apps/api/src/authz/`:
 
-- **Permission** — a dotted-key capability (defined in `packages/authz/src/catalog.ts`).
-  This is the single authority for "what permissions exist".
-- **Scope** — the data boundary a permission applies to (organization, exam,
-  course, candidate group, attempt, etc.).
-- **Role** — a preset bundle of permissions (defined in
-  `packages/authz/src/presets.ts`). Phase 1 product roles are **Admin** and
-  **Candidate** only. Teacher-like / Proctor / Grader bundles are Phase 3.
+| Primitive | Purpose |
+| --- | --- |
+| `requireCapability(perm)` | Flat capability gate (most admin/system routes) |
+| `requireScopedCapability(perm)` | Scope-aware capability gate |
+| `requireScoreCapability(perm)` | Score-result capability gate |
+| `requireCandidateContext` | Candidate-context ownership gate |
+| `requireExamEligibility` | Exam-eligibility gate (candidate may start) |
+| `requireOwnAttempt` | Attempt-ownership gate (candidate owns the attempt) |
+| `loadAssignmentAuthority(ctx)` | Loads assignment-backed runtime authority for the request |
+| permission catalog | Enum of all capabilities (`Permission.*`) |
+| role presets | Built-in role → capability mappings (admin, candidate, proctor, grader, ...) |
 
-Two runtime consumers share this language:
+## Assignment-backed runtime authority
 
-| Consumer | Use | Source |
-|----------|-----|--------|
-| `apps/api` | Runtime enforcement on every route via the authz plugin + scoped/scored capability resolvers | `apps/api/src/plugins/authz.ts`, `apps/api/src/authz/*` |
-| `apps/web` | UI capability checks (show/hide actions) | `apps/web/src/lib/capabilities.ts` imports `Permission`/`PermissionKey` |
+The authority kernel is **assignment-backed**, not `users.role`-based:
 
-Web uses a **stateless, deterministic** capability function for UI gating only.
-Runtime enforcement always happens server-side.
+- `user_role_assignments` is the source of truth for which capabilities an actor holds.
+- `loadAssignmentAuthority` derives the request authority by unioning all active
+  role assignments for the actor in the current organization.
+- **Last-admin invariant**: an advisory lock prevents removing the last admin,
+  so a deployment can never lock itself out.
+- **Multi-role union**: an actor may hold multiple roles; their capabilities union.
+- **Fail-closed contract**: when authority cannot be resolved, the request is
+  rejected (401 unauthenticated / 503 fail-closed), never allowed.
 
-## 2. Boundary: `packages/authz`
+## Route coverage
 
-`authz` is a **framework-agnostic permission language**. Verified facts:
+Per the M10-A through M10-F migration series (all merged):
 
-- Internal deps: `@exam/domain` only.
-- No `fastify`, `@fastify/*`, `drizzle-orm`, or `react` imports (verified by
-  `rg`; enforced by `scripts/check-architecture.mjs`).
-- Barrel `index.ts` re-exports: `catalog`, `legacyMap`, `presets`,
-  `auditActions`, `resolver`, `systemActor`.
+- **91 total protected routes**.
+- **81 capability/ownership-gated**.
+- **0 `requireRole` consumers** (legacy two-role gate fully removed).
+- **0 `users.role` authority decisions** (role column is not consulted for authz).
+- **0 JWT-role authority decisions** (JWT role is identity, not authority).
 
-**Why it is a package, not folded into the API:** the same permission language
-is consumed by both API (runtime enforcement) and Web (UI capability checks).
-Folding it into the API would either (a) couple Web to the API package, or
-(b) duplicate the permission catalog in Web. Keeping `authz` as a leaf-shaped
-package preserves a single source of truth.
+> **Gate 0.5 caveat.** The post-PR-197 re-verification (Gate 0.5, M10-F rerun)
+> is **PENDING**. The route inventory above is the last-recorded state; its
+> PASS closure verdict must NOT be cited as freshly re-verified evidence until
+> Gate 0.5 is re-run. See
+> [`docs/status/implementation-status.md`](../status/implementation-status.md).
 
-### Known dead / transitional code in `authz` (Wave 2 cleanup, not Wave 1)
+## Candidate / admin permission boundary
 
-- `legacyMap.ts` — migration bridge; **zero external callers** (verified by
-  `rg`). Slated for deletion after migration confirmation.
-- `packages/auth/src/rbac.ts` (note: in the `auth` package, not `authz`) —
-  legacy `getPermissionsForRole`. **Zero production callers.** Kept in Wave 1
-  only because M10-F re-verification is pending (scan review Gate 0.5). Do not
-  delete in Wave 1.
+Phase 1 product roles are **Admin** and **Candidate** only. The capability model
+enforces this boundary:
 
-## 3. Route authorization
+- Admin capabilities: full system management within the internal default organization.
+- Candidate capabilities: `own_attempt`, `own_score`, `exam_eligibility`,
+  `candidate_context` — candidates can only access their own attempts/results.
 
-Every route declares its authorization requirement. Two artifacts record this:
+This boundary is enforced on every production route; the frontend navigation
+gating is UX-only, the backend is the security truth source.
 
-| Artifact | Location | Purpose | Status |
-|----------|----------|---------|--------|
-| Runtime enforcement | `apps/api/src/plugins/authz.ts` + scoped/scored capability resolvers in `apps/api/src/authz/` | Actual allow/deny decision per request | Live, authoritative |
-| Route registry | `apps/api/src/authz/routeRegistry.ts` | Manually-maintained metadata table (1061 LOC) | **Test-only** — zero production importers; consumed by route-authorization conformance tests |
+## Non-goals (Phase 3 product work, not implemented)
 
-**Critical constraint on the route registry:** it is a manually-maintained
-oracle, not auto-generated. Auto-generating the *expected* capability from
-runtime metadata would create a circular proof (runtime says Permission A →
-auto-generated says Permission A → test passes) and could not catch
-"should-be-Permission-B" drift. Any future refactor must split the file into
-an auto-generated route inventory + a manually-maintained policy table; it
-must not collapse them. The registry must not be moved or rewritten in Wave 1.
+These are tracked in [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md):
 
-## 4. Single-tenant data boundary
-
-Phase 1.x is single-tenant, multi-user. The `organization` table and
-`organizationId` columns are the **internal data boundary**; there is exactly
-one organization (the internal default). Every repository method receives a
-`ctx` that carries the resolved organization and actor. Repository code must
-never be bypassed from routes (no bare `db.select()`).
-
-Cross-tenant operations, `organizationSlug` login, tenant switcher, and
-SuperAdmin are **Phase 4 platformization** and must not appear in current work.
-
-## 5. What authorization is NOT
-
-- It is not a CRUD permission matrix UI (Phase 3).
-- It is not role invitation / lifecycle (Phase 3).
-- It is not a proctor authority boundary. Proctor *visibility* and
-  *incident recording* exist (lightweight); force-submit / extend-time /
-  misconduct state mutation are deferred (source-documented at
-  `apps/api/src/routes/proctorMonitoring.ts`).
-- It is not the audit subsystem. Audit recording is a separate concern bound
-  by ADR-006's audit durability contract (Atomic / Synchronous sensitive read /
-  Active best effort / Domain-history exclusion).
-
-## 6. Wave 1 boundary (what this doc does NOT authorize)
-
-This document describes the current authorization architecture. It does **not**
-authorize:
-
-- Merging `authz` into `apps/api` (rejected by scan review §2.2).
-- Deleting `packages/auth/src/rbac.ts` or `requirePermission` (blocked on
-  M10-F re-verification — scan review Gate 0.5).
-- Deleting Type 3 RBAC / permission-boundary tests (blocked on mutation
-  evidence).
-- Moving or rewriting `routeRegistry.ts`.
-
-See `docs/roadmap/current.md` for the authorized next work.
+- Scoped Teacher / Proctor / Grader role **bundles as product roles** (the
+  presets exist in the catalog, but the assignment UI and product flows do not).
+- Resource-relationship authorization (M11): Teacher→course, Proctor→exam,
+  Grader→work assignment. No junction tables exist; no `scope_type` columns.
+- Staff invitation, SMTP password reset, account lifecycle UI.
+- Custom roles, multi-tenant, SuperAdmin (Phase 4).

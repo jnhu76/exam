@@ -35,7 +35,7 @@ for (const [key, value] of Object.entries(envVars)) {
 //      demo-seed.test.ts 5032ms > 5s, BUG-FLAKE-002 family,
 //      not a packages/db file-parallelism issue)
 //   - `pnpm verify`                                          → PASS
-// See docs/dev/test-flakes.md BUG-FLAKE-001 PR87 section.
+// See docs/standards/test-flakes.md BUG-FLAKE-001 PR87 section.
 //
 // Do NOT blanket-copy apps/api's fileParallelism:false here. If a future
 // packages/db test becomes heavy enough to flake under parallelism, add a

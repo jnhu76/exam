@@ -11,7 +11,7 @@ import type {
  * The symbols below are INTENTIONALLY module-private. Do NOT export either
  * symbol, any alias of either symbol, or any user-defined type predicate that
  * narrows to {@link LockedEnrollmentAttemptIdentity}. Exporting any of these
- * creates a mint bypass (see `docs/audit/p3-formal-p0-d1-lock-seam-design.md`
+ * creates a mint bypass (see `docs/archive/audits/p3-formal-p0-d1-lock-seam-design.md`
  * §17.G: TYPE_GUARD_NARROWING_FORGERY = REACHABLE for an exported guard).
  *
  * Runtime repo-affinity (assertCapabilityFor) is the correctness authority;

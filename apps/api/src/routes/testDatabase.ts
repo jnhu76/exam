@@ -130,7 +130,7 @@ export async function setupApiTestDatabaseFromEnv(options?: {
   //   - "0" / any other literal                    → disabled, schemaName
   //     undefined, caller connects to the base DB's default schema.
   // Note: "file-schema" is treated as ENABLED. It is the documented legacy
-  // mode name (see docs/dev/test-suite-taxonomy.md); without this it would
+  // mode name (see docs/archive/dev/test-suite-taxonomy.md); without this it would
   // fall through to the disabled branch and silently run tests on the shared
   // `public` schema with NO isolation.
   const isoEnabled = (() => {

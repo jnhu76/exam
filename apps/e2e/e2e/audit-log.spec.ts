@@ -10,7 +10,7 @@ import { adminApiToken, adminGet, adminPost } from "../lib/flow";
 /**
  * P2E-J1 e2e — "admin views and filters audit logs".
  *
- * Covers spec §22 of docs/phase2/jobs/P2E-J1-audit-log-viewer.md:
+ * Covers spec §22 of docs/archive/phase2-archive/phase2/jobs/P2E-J1-audit-log-viewer.md:
  *   - admin can view paginated audit logs
  *   - filter by action
  *   - filter by targetType (now server-side, P2E-J1 date-range job)

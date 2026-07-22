@@ -599,7 +599,7 @@ describe("attempt routes", () => {
     // only preserves an existing value; scanner/submit never write deadlineAt.
     // A NULL active deadlineAt is therefore schema-admissible but
     // protocol-unreachable — a legacy/corrupt/historical defensive-recovery
-    // state, NOT a Phase-1 timing mode (see docs/phase3/exam-protocol.md §5.1
+    // state, NOT a Phase-1 timing mode (see docs/architecture/exam-runtime.md §5.1
     // and computeEffectiveDeadline REACHABILITY BOUNDARY).
     //
     // T1 (reachability invariant): production-started attempts always carry a

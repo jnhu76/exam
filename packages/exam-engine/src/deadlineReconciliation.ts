@@ -143,7 +143,7 @@ const AUTOSUBMITTABLE_STATUSES: ReadonlySet<ExamAttempt["status"]> = new Set<
  * `disrupted` introduces NULL (`restoreAttempt` only preserves it). The
  * fallback therefore covers schema-admissible but protocol-unreachable
  * legacy / corrupt / historical NULL rows; it does not declare NULL a valid
- * protocol timing state. See `docs/phase3/exam-protocol.md` §5.1 for the
+ * protocol timing state. See `docs/architecture/exam-runtime.md` §5.1 for the
  * reachable-invariant / defensive-recovery split.
  *
  * CANONICAL DEADLINE AUTHORITY: this is the single source of truth for the

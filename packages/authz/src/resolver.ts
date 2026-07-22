@@ -1,7 +1,7 @@
 /**
  * Scope resolver interfaces + ownership-chain integrity rules (RBAC-M3).
  *
- * Source of truth: `docs/phase3/rbac/adr-scoped-rbac-architecture.md`
+ * Source of truth: `docs/adr/ADR-010-scoped-rbac-architecture.md`
  * §Resource Resolver Matrix, §Confused Deputy / Resource Re-parenting (§22.1),
  * §Scope Resolver Performance (§22.2), and cross-cutting invariant §3.4
  * (Organization Anchor).

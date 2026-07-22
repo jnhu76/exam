@@ -1,6 +1,6 @@
 /**
- * Surface semantic vocabulary — machine-readable mirror of
- * docs/frontend/P3-UI-surface-vocabulary.md (UI-SURFACE-1).
+ * Surface semantic vocabulary — machine-readable mirror of the surface
+ * vocabulary documented in docs/standards/ui-system.md.
  *
  * This is the source of truth for the confirmed semantic surface recipe names.
  * Future UI-LINT-2 (`exam-ui/no-raw-surface`) synchronizes its allowed-recipe
