@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CONFIRMED_DENSITIES,
-  isConfirmedDensity,
-  type DensityRecipeName,
-} from "./density-vocabulary";
+import { CONFIRMED_DENSITIES, isConfirmedDensity } from "./density-vocabulary";
 
 /**
  * Structural tests for the semantic density vocabulary (UI-SURFACE-1 §6).
@@ -31,10 +27,5 @@ describe("density vocabulary (UI-SURFACE-1 §6)", () => {
     expect(isConfirmedDensity("p5")).toBe(false);
     expect(isConfirmedDensity("card")).toBe(false);
     expect(isConfirmedDensity("table")).toBe(false);
-  });
-
-  it("exposes the type for compile-time authority", () => {
-    const d: DensityRecipeName = "compact";
-    expect(CONFIRMED_DENSITIES).toContain(d);
   });
 });

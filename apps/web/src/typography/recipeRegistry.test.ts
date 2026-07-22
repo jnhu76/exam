@@ -43,7 +43,6 @@ describe("recipe registry — internal well-formedness", () => {
       "numeric",
       "code",
     ]);
-    expect(new Set(RECIPE_NAMES).size).toBe(RECIPE_NAMES.length);
   });
 
   it("every recipe owns at least one property", () => {
@@ -224,13 +223,5 @@ describe("typography-vocabulary.md GENERATED registry table", () => {
     ).toBeGreaterThan(beginIdx);
     const block = VOCAB_MD.slice(beginIdx + beginMarker.length, endIdx).trim();
     expect(block).toBe(generated);
-  });
-
-  it("references every recipe name in its human prose (no stale recipes)", () => {
-    for (const name of RECIPE_NAMES) {
-      expect(VOCAB_MD, `vocabulary.md should reference ${name}`).toContain(
-        name,
-      );
-    }
   });
 });

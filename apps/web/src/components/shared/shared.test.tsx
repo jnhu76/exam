@@ -12,7 +12,6 @@ import { EmptyState } from "./EmptyState";
 import { ErrorState } from "./ErrorState";
 import { FormSection } from "./FormSection";
 import { FieldStack, FormStack } from "./FormStack";
-import { InlineErrorBanner } from "./InlineErrorBanner";
 import { ListToolbar } from "./ListToolbar";
 import { LoadingState } from "./LoadingState";
 import { PageHeader } from "./PageHeader";
@@ -49,6 +48,20 @@ describe("PageHeader", () => {
   it("renders status slot when provided", () => {
     render(<PageHeader title="考试详情" status={<span>已发布</span>} />);
     expect(screen.getByText("已发布")).toBeInTheDocument();
+  });
+
+  it("uses the semantic page-title recipe", () => {
+    const { container } = render(<PageHeader title="测试" />);
+    const h1 = container.querySelector("h1");
+    expect(h1).toHaveClass("type-page-title");
+    expect(h1).not.toHaveClass("font-bold", "font-semibold");
+  });
+
+  it("renders the description through the page-description recipe", () => {
+    const { container } = render(
+      <PageHeader title="测试" description="说明文字" />,
+    );
+    expect(container.querySelector("p")).toHaveClass("type-page-description");
   });
 });
 
@@ -91,6 +104,20 @@ describe("EmptyState", () => {
     );
     expect(screen.getByText("暂无数据")).toBeInTheDocument();
     expect(container.querySelector("svg")).toBeInTheDocument();
+  });
+
+  it("hides the icon wrapper from assistive technology", () => {
+    const { container } = render(
+      <EmptyState
+        icon={<span data-testid="icon">📚</span>}
+        title="空"
+        description="无数据"
+      />,
+    );
+    expect(container.querySelector(".text-muted-foreground")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
   });
 });
 
@@ -398,14 +425,6 @@ describe("FormStack", () => {
     );
 
     expect(screen.getByLabelText("名称")).toBeInTheDocument();
-  });
-});
-
-describe("InlineErrorBanner", () => {
-  it("renders message with role alert", () => {
-    render(<InlineErrorBanner>保存失败</InlineErrorBanner>);
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-    expect(screen.getByText("保存失败")).toBeInTheDocument();
   });
 });
 
