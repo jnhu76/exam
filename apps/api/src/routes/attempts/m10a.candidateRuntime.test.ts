@@ -202,6 +202,10 @@ describe("RBAC-M10-A candidate runtime — zero-side-effect denial (directive §
       cookies: { "auth-token": candidateU.token },
     });
     expect(res.statusCode).toBe(403);
+    // The start route declares eligibilityDenialMode "permission_denied", so the
+    // missing-enrollment denial is 403 PERMISSION_DENIED — both the HTTP status
+    // AND the error code are oracles and must be pinned together (review G.5).
+    expect(res.json().error.code).toBe("PERMISSION_DENIED");
 
     // No A enrollment mutation
     const aCountAfter = await aEnrollmentAttemptCount();

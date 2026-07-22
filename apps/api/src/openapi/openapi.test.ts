@@ -43,6 +43,11 @@ describe("OpenAPI spec generation", () => {
     expect(Object.keys(spec.paths!).length).toBeGreaterThan(0);
   });
 
+  // Security-scheme ownership: the cookieAuth apiKey scheme is the auth surface
+  // every protected route declares (`security: cookieAuth`). `api:openapi:check`
+  // only verifies byte-parity of the committed openapi.json, so a silent removal
+  // of the scheme (or its rename) would be blessed on regenerate. This test is
+  // the explicit property owner.
   it("declares the cookieAuth security scheme in components", async () => {
     const spec = await generateOpenAPISpec();
     const schemes = (
@@ -97,6 +102,10 @@ describe("OpenAPI spec generation", () => {
     expect(probe!.responses["401"]).toBeUndefined();
   });
 
+  // Health-endpoint response-schema ownership: /api/health is the liveness
+  // surface. Its typed 200 response is a real contract consumed by probes/load
+  // balancers. `api:openapi:check` only verifies byte-parity, so a schema removal
+  // would be blessed on regenerate. This test is the explicit property owner.
   it("includes GET /api/health with a typed 200 response", async () => {
     const spec = await generateOpenAPISpec();
     const op = spec.paths["/api/health"]?.get;

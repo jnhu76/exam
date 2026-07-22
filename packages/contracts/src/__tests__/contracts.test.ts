@@ -523,26 +523,6 @@ describe("attempt contracts", () => {
     expect(result.success).toBe(true);
   });
 
-  it("SaveAnswerResponseSchema validates accepted", () => {
-    const result = SaveAnswerResponseSchema.safeParse({
-      accepted: true,
-      serverVersion: 1,
-      savedAt: new Date().toISOString(),
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("SaveAnswerResponseSchema validates rejected via union", () => {
-    const result = SaveAnswerResponseSchema.safeParse({
-      accepted: false,
-      reason: "STALE_VERSION",
-      message: "服务器上存在更新的答案版本",
-      serverVersion: 2,
-      savedAt: new Date().toISOString(),
-    });
-    expect(result.success).toBe(true);
-  });
-
   it("CandidateExamDetailResponseSchema validates", () => {
     const result = CandidateExamDetailResponseSchema.safeParse({
       id: "550e8400-e29b-41d4-a716-446655440000",

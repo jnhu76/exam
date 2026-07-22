@@ -58,21 +58,10 @@ describe("i18n locale catalog", () => {
       }
     });
 
-    it("returns a non-empty string for unknown codes", () => {
-      const msg = getMessageForLocale("UNKNOWN_CODE", "zh-CN");
-      expect(typeof msg).toBe("string");
-      expect(msg.length).toBeGreaterThan(0);
-    });
-
     it("returns fallbackMessages.unknownError for unknown codes", () => {
       expect(getMessageForLocale("UNKNOWN_CODE", "zh-CN")).toBe(
         fallbackMessages.unknownError,
       );
-    });
-
-    it("accepts plain string code (not just ErrorCode)", () => {
-      const msg = getMessageForLocale("AUTH_REQUIRED");
-      expect(msg).toBe(errorMessages.AUTH_REQUIRED);
     });
   });
 

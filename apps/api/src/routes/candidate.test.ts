@@ -122,6 +122,21 @@ describe("candidate routes", () => {
   });
 
   it("GET /api/candidates returns paginated list", async () => {
+    const username = `listed-candidate-${Date.now()}`;
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/candidates",
+      payload: {
+        username,
+        password: "password123",
+        name: "Listed Candidate",
+        fields: { [identityFieldName]: `listed-${Date.now()}` },
+      },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = createRes.json();
+
     const res = await ctx.app.inject({
       method: "GET",
       url: "/api/candidates",
@@ -134,6 +149,16 @@ describe("candidate routes", () => {
     expect(body).toHaveProperty("page", 1);
     expect(body).toHaveProperty("pageSize");
     expect(body.items).toBeInstanceOf(Array);
+    expect(body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: created.id,
+          name: "Listed Candidate",
+          username,
+          isActive: true,
+        }),
+      ]),
+    );
   });
 
   it("allows Teacher to read the candidate list used by enrollment", async () => {
@@ -166,7 +191,7 @@ describe("candidate routes", () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it("POST /api/candidates creates a candidate with user", async () => {
+  it("creates a candidate and updates its name through the HTTP routes", async () => {
     const identity = `E-${Date.now()}`;
     const res = await ctx.app.inject({
       method: "POST",
@@ -183,6 +208,19 @@ describe("candidate routes", () => {
     const body = res.json();
     expect(body.fields).toEqual({ [identityFieldName]: identity });
     expect(body).toHaveProperty("userId");
+
+    const updateRes = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/candidates/${body.id}`,
+      payload: { name: "Updated Candidate" },
+      cookies: { "auth-token": adminToken },
+    });
+    expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.json()).toMatchObject({
+      id: body.id,
+      name: "Updated Candidate",
+      fields: { [identityFieldName]: identity },
+    });
   });
 
   it("POST /api/candidates returns field validation details", async () => {

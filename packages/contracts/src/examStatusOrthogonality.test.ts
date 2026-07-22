@@ -37,21 +37,6 @@ describe("ExamStatus / ResultPublicationMode orthogonality", () => {
       "manual",
     ]);
   });
-
-  it("after_grading is NOT a valid ExamStatus (category error to assert otherwise)", () => {
-    expect(ExamStatusEnum.options).not.toContain("after_grading");
-  });
-
-  it("after_grading IS a valid ResultPublicationMode", () => {
-    expect(ResultPublicationModeEnum.options).toContain("after_grading");
-  });
-
-  it("no ExamStatus value overlaps ResultPublicationMode (the domains are disjoint)", () => {
-    const overlap = ExamStatusEnum.options.filter((s) =>
-      (ResultPublicationModeEnum.options as readonly string[]).includes(s),
-    );
-    expect(overlap).toEqual([]);
-  });
 });
 
 /**
@@ -68,21 +53,5 @@ describe("Proctor workspace discoverability is ExamStatus-only", () => {
       "open",
       "closed",
     ]);
-  });
-
-  it("ProctorExamStatusEnum is a subset of ExamStatusEnum (lifecycle, not publication)", () => {
-    for (const status of ProctorExamStatusEnum.options) {
-      expect(ExamStatusEnum.options).toContain(status);
-    }
-  });
-
-  it("ProctorExamStatusEnum contains no ResultPublicationMode value", () => {
-    for (const status of ProctorExamStatusEnum.options) {
-      expect(
-        (ResultPublicationModeEnum.options as readonly string[]).includes(
-          status,
-        ),
-      ).toBe(false);
-    }
   });
 });

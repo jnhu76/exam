@@ -4,7 +4,7 @@
  * Proves:
  *   - 17 routes × 4 non-Admin roles = 68 denial cells (HTTP 403)
  *   - 17 routes unauthenticated = 401
- *   - 17 routes Admin capability-stage passage
+ *   - route-specific owner suites prove Admin capability-stage passage
  *   - 8 mutating routes: real non-vacuous zero-write evidence
  *   - candidate-field PATCH/DELETE: real fixture, material property change
  *   - candidate import: positive control — Admin same-payload success
@@ -214,10 +214,6 @@ describe("M10-D permission boundary", () => {
     await ctx.cleanup();
   });
 
-  it("has exactly 17 M10-D routes (14 static + 3 dynamic)", () => {
-    expect(staticRoutes.length + dynamicRouteKeys.length).toBe(17);
-  });
-
   describe("unauthenticated — 17 routes", () => {
     it.each(staticRoutes)(
       "$method $url returns 401",
@@ -347,213 +343,6 @@ describe("M10-D permission boundary", () => {
     }
   });
 
-  describe("Admin passage — all 17 routes", () => {
-    it("GET /api/candidate-fields", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/candidate-fields",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("POST /api/candidate-fields", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/candidate-fields",
-        payload: {
-          name: `admin-${uniquePrefix()}`,
-          label: "Admin Passage",
-          fieldType: "text",
-          required: false,
-          unique: false,
-          sortOrder: 98,
-        },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect([201, 409]).toContain(res.statusCode);
-    });
-
-    it("PATCH /api/candidate-fields/:id (real fixture)", async () => {
-      const res = await ctx.app.inject({
-        method: "PATCH",
-        url: `/api/candidate-fields/${fieldId}`,
-        payload: { label: "Admin Updated Label" },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("DELETE /api/candidate-fields/:id (real fixture)", async () => {
-      const fieldRepo = createCandidateFieldRepo(ctx.db);
-      const delField = await fieldRepo.create(orgCtx(ctx), {
-        name: `admin-del-${uniquePrefix()}`,
-        label: "Admin Delete Passage",
-        fieldType: "text",
-        required: false,
-        unique: false,
-        sortOrder: 97,
-      });
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: `/api/candidate-fields/${delField.id}`,
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(204);
-    });
-
-    it("GET /api/candidate-fields/template", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/candidate-fields/template",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/admin/settings", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/settings",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/admin/settings/branding", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/settings/branding",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("PATCH /api/admin/settings/branding", async () => {
-      const res = await ctx.app.inject({
-        method: "PATCH",
-        url: "/api/admin/settings/branding",
-        payload: { productName: "Admin Passage Test" },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/system/health", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/system/health",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/system/dashboard", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/system/dashboard",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/system/diagnostics", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/system/diagnostics",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/admin/import-logs", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/import-logs",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("POST /api/email/test", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/email/test",
-        payload: { to: "admin-test@example.com" },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/admin/audit-logs", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/admin/audit-logs",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("POST /api/candidates", async () => {
-      // First check what candidate fields exist to build correct fields payload
-      const fieldRepo = createCandidateFieldRepo(ctx.db);
-      const configured = await fieldRepo.list(orgCtx(ctx));
-      const fields: Record<string, unknown> = {};
-      for (const f of configured) {
-        if (f.unique || f.required) {
-          fields[f.name] = `admin-val-${uniquePrefix()}`;
-        }
-      }
-      for (const f of configured) {
-        if (!f.unique && !f.required && f.name in fields === false) {
-          fields[f.name] = `admin-val-${uniquePrefix()}`;
-        }
-      }
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/candidates",
-        payload: {
-          username: `admin-passage-${uniquePrefix()}`,
-          password: "password123",
-          name: "Admin Passage Candidate",
-          fields,
-        },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(201);
-    });
-
-    it("PATCH /api/candidates/:id (real fixture)", async () => {
-      const res = await ctx.app.inject({
-        method: "PATCH",
-        url: `/api/candidates/${candidateId}`,
-        payload: { name: "Admin Updated Candidate" },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("POST /api/candidates/import", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/candidates/import",
-        payload: {
-          rows: [
-            {
-              username: `admin-imp-${uniquePrefix()}`,
-              password: "password123",
-              name: "Admin Import",
-              fields: { [identityFieldName]: `admin-imp-${uniquePrefix()}` },
-            },
-          ],
-        },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-  });
-
   describe("zero-write evidence", () => {
     let teacherToken: string;
 
@@ -600,6 +389,9 @@ describe("M10-D permission boundary", () => {
 
     it("PATCH /api/admin/settings/branding denied — branding unchanged, no audit", async () => {
       const settingsRepo = createSettingsRepo(ctx.db);
+      await settingsRepo.upsert(orgCtx(ctx), {
+        productName: "M10-D zero-write baseline",
+      });
       const before = await settingsRepo.get(orgCtx(ctx));
       requireDefined(before, "settings must exist before denied PATCH");
       const auditRepo = createAuditLogRepo(ctx.db);

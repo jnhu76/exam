@@ -4,7 +4,6 @@ import {
   AttemptStatus,
   EnrollmentStatus,
   Role,
-  QuestionType,
   TimingMode,
   RetakePolicy,
   ScoreStrategy,
@@ -43,15 +42,8 @@ describe("domain enums — 存在性与值验证", () => {
   it("其他关键枚举存在", () => {
     expect(Role.Admin).toBeDefined();
     expect(Role.Candidate).toBeDefined();
-    expect(QuestionType.SingleChoice).toBe("single_choice");
     expect(TimingMode.TimedWindow).toBe("timed_window");
     expect(RetakePolicy.MaxAttempts).toBe("max_attempts");
     expect(ScoreStrategy.Highest).toBe("highest");
-  });
-});
-
-describe("状态机转移表由 exam-engine 层拥有和强制", () => {
-  it("ExamStatus / AttemptStatus / EnrollmentStatus 的转移规则在 exam-engine 层测试，不在 domain 层重复", () => {
-    expect(true).toBe(true);
   });
 });

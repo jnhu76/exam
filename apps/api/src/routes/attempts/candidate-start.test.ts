@@ -4,7 +4,6 @@ import examRoutes from "../exam.js";
 import attemptRoutes from "../attempts.js";
 import { schema } from "@exam/db/src/schema/pg.js";
 import { createAttemptRepo } from "@exam/db/src/repository/attemptRepo.js";
-import { signJWT } from "@exam/auth/src/session.js";
 import {
   buildExamPayload,
   DEFAULT_CONTROL_FLAGS,
@@ -134,58 +133,6 @@ describe("attempt routes", () => {
         url: `/api/attempts/${examId}/start`,
       });
       expect(res.statusCode).toBe(401);
-    });
-
-    it("rejects unenrolled candidate (Phase 1 requires explicit enrollment)", async () => {
-      const unenrolledUserId = crypto.randomUUID();
-      const now = new Date();
-      await ctx.db.insert(schema.users).values({
-        id: unenrolledUserId,
-        organizationId: ctx.org.id,
-        username: `unenrolled-${uniquePrefix()}`,
-        passwordHash: "$argon2id$dummy",
-        name: "Unenrolled Candidate",
-        role: "Candidate",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await ctx.db.insert(schema.candidateProfiles).values({
-        id: crypto.randomUUID(),
-        organizationId: ctx.org.id,
-        userId: unenrolledUserId,
-        fields: {},
-        createdAt: now,
-        updatedAt: now,
-      });
-      // RBAC-M10-E: the candidate must authenticate to reach the enrollment
-      // gate. Seed an active primary Candidate assignment so the rejection
-      // happens at the capability/enrollment layer (403 PERMISSION_DENIED),
-      // not at authenticate (401 AUTH_REQUIRED). The user is intentionally
-      // NOT enrolled in `examId` — that is the property under test.
-      await ctx.db.insert(schema.userRoleAssignments).values({
-        id: crypto.randomUUID(),
-        organizationId: ctx.org.id,
-        userId: unenrolledUserId,
-        role: "Candidate" as never,
-        isPrimary: true,
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      });
-      const unenrolledToken = signJWT({
-        actorId: unenrolledUserId,
-        role: "Candidate",
-        organizationId: ctx.org.id,
-      });
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": unenrolledToken },
-      });
-      expect(res.statusCode).toBe(403);
-      expect(res.json().error.code).toBe("PERMISSION_DENIED");
     });
   });
 
@@ -411,22 +358,6 @@ describe("attempt routes", () => {
 
       expect(rejectRes.statusCode).toBe(409);
       expect(rejectRes.json().error.code).toBe("MAX_ATTEMPTS_REACHED");
-    });
-
-    it("rejects start API with 403 when candidate is not enrolled", async () => {
-      const notEnrolledExamId = await createAndEnrollExam({
-        title: "Not Enrolled Exam",
-        enroll: false,
-      });
-
-      const rejectRes = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${notEnrolledExamId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-
-      expect(rejectRes.statusCode).toBe(403);
-      expect(rejectRes.json().error.code).toBe("PERMISSION_DENIED");
     });
 
     it("derives graded/view_result when graded but attempts remain", async () => {

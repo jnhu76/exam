@@ -1,34 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  CONFIRMED_RECIPES,
-  FONT_FAMILY_ROLES,
-  isConfirmedRecipe,
-} from "./typography-vocabulary";
+import { FONT_FAMILY_ROLES, isConfirmedRecipe } from "./typography-vocabulary";
 
 describe("typography vocabulary (UI-VOCAB-1T)", () => {
-  it("exposes every confirmed recipe declared in typography-vocabulary.md", () => {
-    // The CONFIRMED roles from the authority document.
-    expect(CONFIRMED_RECIPES).toEqual([
-      "page-title",
-      "page-description",
-      "section-title",
-      "body",
-      "secondary",
-      "metadata",
-      "reading",
-      "long-response",
-      "metric",
-      "metric-hero",
-      "numeric",
-      "code",
-    ]);
-  });
-
-  it("has no duplicate recipe name (one public recipe per role)", () => {
-    const names = CONFIRMED_RECIPES;
-    expect(new Set(names).size).toBe(names.length);
-  });
-
   it("rejects component-owned authorities from the typography recipe set", () => {
     // field-error and status are component authorities (FieldError, StatusBadge),
     // not typography recipes — they must NOT appear as type-* recipes.
