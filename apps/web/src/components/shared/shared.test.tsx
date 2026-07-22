@@ -107,14 +107,14 @@ describe("EmptyState", () => {
   });
 
   it("hides the icon wrapper from assistive technology", () => {
-    const { container } = render(
+    render(
       <EmptyState
         icon={<span data-testid="icon">📚</span>}
         title="空"
         description="无数据"
       />,
     );
-    expect(container.querySelector(".text-muted-foreground")).toHaveAttribute(
+    expect(screen.getByTestId("icon").parentElement).toHaveAttribute(
       "aria-hidden",
       "true",
     );
