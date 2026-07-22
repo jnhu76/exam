@@ -473,6 +473,22 @@ describe("exam close (ADR-005 Slice 1)", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().status).toBe("closed");
+
+    const listRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/exams",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(listRes.statusCode).toBe(200);
+    expect(listRes.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: examId,
+          canViewScores: false,
+          scoreViewDisabledReason: "暂无成绩数据",
+        }),
+      ]),
+    );
   });
 
   it("is idempotent: closing an already-closed exam returns 200", async () => {
