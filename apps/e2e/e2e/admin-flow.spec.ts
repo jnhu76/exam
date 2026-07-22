@@ -168,20 +168,31 @@ test.describe("admin operation flow", () => {
     const searchInput = page.getByPlaceholder("搜索考生");
     const targetCheckbox = page.getByRole("checkbox", { name: extraName });
     const loadMore = page.getByRole("button", { name: "加载更多" });
-    for (let i = 0; i < 10; i += 1) {
-      await searchInput.fill(extraName);
-      if (await targetCheckbox.isVisible().catch(() => false)) break;
+    await searchInput.fill(extraName);
 
-      if (await loadMore.isEnabled().catch(() => false)) {
-        const responsePromise = page.waitForResponse(
-          /\/api\/candidates\?page=\d+&pageSize=50/,
-        );
-        await loadMore.click();
-        await responsePromise;
-        continue;
-      }
+    while (!(await targetCheckbox.isVisible().catch(() => false))) {
+      if (!(await loadMore.isEnabled().catch(() => false))) break;
 
-      break; // no more pages and target not found
+      const responsePromise = page.waitForResponse(
+        /\/api\/candidates\?page=\d+&pageSize=50/,
+      );
+
+      await loadMore.click();
+      await responsePromise;
+
+      // Wait for React to finish updating state after pagination:
+      // target visible, next page available, or pagination exhausted.
+      await expect
+        .poll(async () => {
+          const targetVisible = await targetCheckbox
+            .isVisible()
+            .catch(() => false);
+          const loadMoreVisible = await loadMore.isVisible().catch(() => false);
+          const loadMoreEnabled = await loadMore.isEnabled().catch(() => false);
+
+          return targetVisible || !loadMoreVisible || loadMoreEnabled;
+        })
+        .toBe(true);
     }
     await expect(targetCheckbox).toBeVisible({ timeout: 5_000 });
     await targetCheckbox.click();
