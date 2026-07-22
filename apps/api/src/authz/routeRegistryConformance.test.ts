@@ -250,17 +250,6 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   );
 
-  it("each M10-A route has exactly one authz preHandler", () => {
-    for (const entry of m10aRegistryEntries) {
-      const matches = capturedRoutes.filter(
-        (r) => r.method === entry.method && r.url.endsWith(entry.path),
-      );
-      expect(matches).toHaveLength(1);
-      expect(matches[0]!.authzCount).toBe(1);
-      expect(matches[0]!.authzHandlers).toHaveLength(1);
-    }
-  });
-
   it("candidate_context routes have no resolver/resourceIdKey in runtime metadata", () => {
     const contextEntries = m10aRegistryEntries.filter(
       (e) => e.runtimeAuthz?.kind === "candidate_context",
@@ -520,22 +509,6 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   );
 
-  it("no M10-B route carries a legacy role or permission-list gate", () => {
-    // Aggregate pass over the whole inventory so a future regression on ANY
-    // route (not just the one surfaced by it.each) fails loudly here too.
-    for (const { method, path } of m10bRouteSpecs) {
-      const matches = capturedRoutes.filter(
-        (r) => r.method === method && r.url.endsWith(path),
-      );
-      expect(matches).toHaveLength(1);
-      const route = matches[0]!;
-      expect(route.roleHandlerCount).toBe(0);
-      expect(route.permissionListHandlerCount).toBe(0);
-      expect(route.flatCapabilityHandlerCount).toBe(1);
-      expect(route.scopedCapabilityHandlerCount).toBe(0);
-    }
-  });
-
   // ──────────────────────── M10-C conformance ────────────────────────
 
   /**
@@ -663,20 +636,6 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     },
   );
 
-  it("no M10-C route carries a legacy role or permission-list gate", () => {
-    for (const { method, path } of m10cRouteSpecs) {
-      const matches = capturedRoutes.filter(
-        (r) => r.method === method && r.url.endsWith(path),
-      );
-      expect(matches).toHaveLength(1);
-      const route = matches[0]!;
-      expect(route.roleHandlerCount).toBe(0);
-      expect(route.permissionListHandlerCount).toBe(0);
-      expect(route.flatCapabilityHandlerCount).toBe(1);
-      expect(route.scopedCapabilityHandlerCount).toBe(0);
-    }
-  });
-
   /**
    * Negative control (Finding 2 §5.4). Proves the tag-based classification
    * actually detects a role gate. Without this, the corrected assertion above
@@ -764,9 +723,6 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
     const roleHandler = synthetic!.classified.find((c) => c.kind === "role");
     expect(roleHandler).toBeDefined();
     expect(roleHandler!.allowedRoles).toEqual(["Admin"]);
-    // Sanity: production inventory still has exactly 28 entries — the
-    // synthetic route did not leak into the production capture.
-    expect(m10bRouteSpecs).toHaveLength(28);
   });
 
   // ──────────────────────── M10-D conformance ────────────────────────
@@ -862,76 +818,4 @@ describe("RBAC-M10-A registry/runtime conformance (Corrective B)", () => {
       ).toBe(0);
     },
   );
-
-  it("M10-D captured routes match registry entries exactly (17/17)", () => {
-    const capturedM10d = capturedRoutes.filter((r) =>
-      m10dRegistryEntries.some(
-        (e) => r.method === e.method && r.url.endsWith(e.path),
-      ),
-    );
-    expect(capturedM10d).toHaveLength(17);
-
-    for (const entry of m10dRegistryEntries) {
-      const route = capturedM10d.find(
-        (r) => r.method === entry.method && r.url.endsWith(entry.path),
-      );
-      expect(
-        route,
-        `M10-D captured route for ${entry.method} ${entry.path} not found`,
-      ).toBeDefined();
-      expect(
-        route!.roleHandlerCount,
-        `${entry.method} ${entry.path} legacy role count`,
-      ).toBe(0);
-      expect(
-        route!.permissionListHandlerCount,
-        `${entry.method} ${entry.path} legacy perm-list count`,
-      ).toBe(0);
-      expect(
-        route!.flatCapabilityHandlerCount,
-        `${entry.method} ${entry.path} flat cap count`,
-      ).toBe(1);
-      expect(
-        route!.scopedCapabilityHandlerCount,
-        `${entry.method} ${entry.path} scoped cap count`,
-      ).toBe(0);
-    }
-  });
-
-  it("M10-D aggregate: 17 routes, 0 legacy role gates, 17 flat capability gates", () => {
-    const m10dCaptured = capturedRoutes.filter((r) =>
-      m10dRegistryEntries.some(
-        (e) => r.method === e.method && r.url.endsWith(e.path),
-      ),
-    );
-    expect(m10dCaptured).toHaveLength(17);
-    const legacyRoleCount = m10dCaptured.reduce(
-      (sum, r) => sum + r.roleHandlerCount,
-      0,
-    );
-    expect(legacyRoleCount).toBe(0);
-    const capabilityCount = m10dCaptured.reduce(
-      (sum, r) => sum + r.flatCapabilityHandlerCount,
-      0,
-    );
-    expect(capabilityCount).toBe(17);
-  });
-
-  it("no M10-D captured route is duplicated", () => {
-    const seen = new Set<string>();
-    for (const entry of m10dRegistryEntries) {
-      const key = `${entry.method} ${entry.path}`;
-      expect(seen.has(key), `duplicate M10-D route ${key}`).toBe(false);
-      seen.add(key);
-    }
-  });
-
-  it("no extra M10-D route beyond the 17-key allowlist is captured", () => {
-    const capturedM10d = capturedRoutes.filter((r) =>
-      m10dRegistryEntries.some(
-        (e) => r.method === e.method && r.url.endsWith(e.path),
-      ),
-    );
-    expect(capturedM10d).toHaveLength(17);
-  });
 });

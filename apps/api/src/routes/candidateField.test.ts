@@ -105,6 +105,18 @@ describe("candidate field routes", () => {
     expect(res.json()).toBeInstanceOf(Array);
   });
 
+  it("GET /api/candidate-fields/template returns the configured template", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/candidate-fields/template",
+      cookies: { "auth-token": adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      headers: expect.arrayContaining(["username"]),
+    });
+  });
+
   it("POST /api/candidate-fields creates a field", async () => {
     const res = await ctx.app.inject({
       method: "POST",

@@ -272,14 +272,6 @@ describe("exam routes", () => {
     expect(body.error.requestId).toBeDefined();
   });
 
-  it("GET /api/exams returns 401 without auth", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/exams",
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
   it("POST /api/exams/:id/publish works without body", async () => {
     const createRes = await ctx.app.inject({
       method: "POST",

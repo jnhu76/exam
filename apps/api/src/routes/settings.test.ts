@@ -56,6 +56,19 @@ describe("settings routes", () => {
     ).toBe(true);
   });
 
+  it("GET /api/admin/settings/branding returns branding for authenticated admin", async () => {
+    const res = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/settings/branding",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(
+      typeof body === "object" && body !== null && !Array.isArray(body),
+    ).toBe(true);
+  });
+
   it("PATCH /api/admin/settings/branding updates branding", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",

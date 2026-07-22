@@ -365,6 +365,7 @@ describe("auth routes", () => {
     });
 
     expect(response.statusCode).toBe(400);
+    expect(response.headers["content-type"]).toMatch(/application\/json/);
     expect(response.json()).toMatchObject({
       error: {
         code: "VALIDATION_ERROR",

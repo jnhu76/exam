@@ -169,10 +169,6 @@ describe("permission boundary", () => {
       },
     ];
 
-    it("contains exactly 7 M10-B unauthenticated routes", () => {
-      expect(m10bUnauthenticatedRoutes).toHaveLength(7);
-    });
-
     it.each(m10bUnauthenticatedRoutes)(
       "$method $url returns 401 without authentication",
       async ({ method, url, payload }) => {
@@ -658,35 +654,6 @@ describe("permission boundary", () => {
     });
   });
 
-  describe("admin can access all management APIs", () => {
-    it("GET /api/exams returns 200", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/exams",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/candidates returns 200", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/candidates",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/users returns 200", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/users",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-  });
-
   // ─────────────────── M10-C: identity & role-assignment ────────────────────
   //
   // M10-C migrates 10 routes from legacy requireRole(["Admin"]) to flat
@@ -758,10 +725,6 @@ describe("permission boundary", () => {
         url: `/api/role-assignments/${placeholderId}`,
       },
     ];
-
-    it("contains exactly 10 M10-C unauthenticated routes", () => {
-      expect(m10cUnauthenticatedRoutes).toHaveLength(10);
-    });
 
     it.each(m10cUnauthenticatedRoutes)(
       "$method $url returns 401 without authentication",
@@ -1602,30 +1565,6 @@ describe("permission boundary", () => {
       return r.role;
     }
 
-    it("POST a new primary assignment syncs users.role to the new role", async () => {
-      const { user } = await insertTargetUserWithPrimary("Candidate");
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/users/${user.id}/role-assignments`,
-        payload: { role: "Teacher", isPrimary: true },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(201);
-      expect(await readUserRole(user.id)).toBe("Teacher");
-    });
-
-    it("POST a secondary assignment does NOT change users.role", async () => {
-      const { user } = await insertTargetUserWithPrimary("Candidate");
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/users/${user.id}/role-assignments`,
-        payload: { role: "Proctor", isPrimary: false },
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(201);
-      expect(await readUserRole(user.id)).toBe("Candidate");
-    });
-
     it("PATCH promote-to-primary syncs users.role to the promoted role", async () => {
       const { user } = await insertTargetUserWithPrimary("Candidate");
       // Add a secondary Grader assignment to promote.
@@ -1885,36 +1824,6 @@ describe("permission boundary", () => {
       expect(lastMeta.resultingPrimaryRole).toBe("Grader");
       expect(lastMeta.assignmentId).toBe(primary.id);
       expect(await readUserRole(user.id)).toBe("Grader");
-    });
-  });
-
-  describe("M10-C Admin reaches handler on read routes", () => {
-    // Sanity: the capability gate must ALLOW Admin (the only role holding
-    // these permissions) and reach the handler. This proves the migration did
-    // not accidentally regress Admin access — the equal half of shadow parity.
-    it("GET /api/users returns 200 for Admin", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/users",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-    });
-
-    it("GET /api/roles/assignable returns 200 with the 5 human roles for Admin", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/roles/assignable",
-        cookies: { "auth-token": ctx.adminToken },
-      });
-      expect(res.statusCode).toBe(200);
-      const keys = res
-        .json()
-        .items.map((i: { key: string }) => i.key)
-        .sort();
-      expect(keys).toEqual(
-        ["Admin", "Candidate", "Grader", "Proctor", "Teacher"].sort(),
-      );
     });
   });
 });

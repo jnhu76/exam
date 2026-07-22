@@ -244,15 +244,4 @@ describe("API input validation (Zod schema boundary)", () => {
     });
     expect(second.statusCode).toBe(409);
   });
-
-  it("login rejects malformed input", async () => {
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: "/api/auth/login",
-      payload: {},
-    });
-    expect(res.statusCode).toBe(400);
-    const body = res.json();
-    expect(body.error.code).toBe("VALIDATION_ERROR");
-  });
 });

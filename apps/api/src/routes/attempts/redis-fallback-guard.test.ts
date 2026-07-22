@@ -127,18 +127,4 @@ describe("P3-M7 redis fallback guard — candidate PG state with Redis absent", 
     // After submit the attempt is no longer in_progress (submitted or graded).
     expect(submitted!.status).not.toBe("in_progress");
   });
-
-  // Negative assertion: there is no Redis-backed source of truth for candidate
-  // state today. This is a structural guard — if someone adds a Redis read to
-  // the candidate flow, the diagnostics ping-throws test (system.test.ts) plus
-  // the above Redis-absent flow tests together guarantee that PG, not Redis,
-  // drives attempt/answer/submit outcomes. (A dedicated "Redis read returns
-  // wrong data → candidate state unchanged" test would require inventing a
-  // Redis integration that does not exist, which is explicitly forbidden.)
-  it("documents that no candidate flow reads Redis (structural guard)", () => {
-    // This test exists to name the invariant explicitly in the suite output.
-    // The enforceable assertion is the suite above: every candidate operation
-    // ran with fastify.redis absent and produced correct PG state.
-    expect(true).toBe(true);
-  });
 });

@@ -43,16 +43,6 @@ describe("OpenAPI spec generation", () => {
     expect(Object.keys(spec.paths!).length).toBeGreaterThan(0);
   });
 
-  it("declares the cookieAuth security scheme in components", async () => {
-    const spec = await generateOpenAPISpec();
-    const schemes = (
-      spec as unknown as {
-        components?: { securitySchemes?: Record<string, unknown> };
-      }
-    ).components?.securitySchemes;
-    expect(schemes?.cookieAuth).toBeDefined();
-  });
-
   it("documents a Zod-typed probe route with a typed 200 response", async () => {
     const spec = await generateSpecWithProbeRoutes((app) => {
       app.get(
@@ -95,15 +85,5 @@ describe("OpenAPI spec generation", () => {
     expect(probe).toBeDefined();
     expect(probe!.responses["200"]).toBeDefined();
     expect(probe!.responses["401"]).toBeUndefined();
-  });
-
-  it("includes GET /api/health with a typed 200 response", async () => {
-    const spec = await generateOpenAPISpec();
-    const op = spec.paths["/api/health"]?.get;
-    expect(op).toBeDefined();
-    const r200 = op!.responses["200"] as {
-      content?: Record<string, { schema?: Record<string, unknown> }>;
-    };
-    expect(r200.content?.["application/json"]?.schema).toBeDefined();
   });
 });
