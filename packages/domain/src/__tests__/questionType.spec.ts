@@ -2,10 +2,6 @@ import { describe, it, expect } from "vitest";
 import { QuestionType } from "../enums";
 
 describe("QuestionType — text_response 扩展 (P3-L0-1)", () => {
-  it("包含 text_response 作为独立题型", () => {
-    expect(QuestionType.TextResponse).toBe("text_response");
-  });
-
   it("题型集合为 5 个封闭值（single/multiple/true_false/fill_blank/text_response）", () => {
     const values = Object.values(QuestionType);
     expect(values).toEqual([
@@ -15,6 +11,5 @@ describe("QuestionType — text_response 扩展 (P3-L0-1)", () => {
       "true_false",
       "text_response",
     ]);
-    expect(new Set(values).size).toBe(values.length);
   });
 });

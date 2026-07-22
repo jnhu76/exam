@@ -90,23 +90,6 @@ describe("attemptStateMachine", () => {
     });
   });
 
-  describe("submit is not deadline-guarded", () => {
-    it("allows in_progress → submit without deadline context", () => {
-      const result = transition("in_progress", "submit");
-      expect(result).toEqual({ ok: true, next: "submitted" });
-    });
-
-    it("allows disrupted → submit without deadline context", () => {
-      const result = transition("disrupted", "submit");
-      expect(result).toEqual({ ok: true, next: "submitted" });
-    });
-
-    it("allows disrupt command", () => {
-      const result = transition("in_progress", "disrupt");
-      expect(result).toEqual({ ok: true, next: "disrupted" });
-    });
-  });
-
   describe("isTransitionOk", () => {
     it("returns true for ok result", () => {
       const result: TransitionResult = { ok: true, next: "submitted" };

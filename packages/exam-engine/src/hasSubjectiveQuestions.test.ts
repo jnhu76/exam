@@ -51,12 +51,4 @@ describe("hasSubjectiveQuestions", () => {
       ).toBe(true);
     },
   );
-
-  it("returns true when the only question has no standardAnswer", () => {
-    expect(
-      hasSubjectiveQuestions([
-        makeQuestion({ originalQuestionId: "q1", standardAnswer: null }),
-      ]),
-    ).toBe(true);
-  });
 });

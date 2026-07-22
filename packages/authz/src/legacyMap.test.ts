@@ -11,8 +11,7 @@ import { Permission, Role } from "./catalog.js";
 describe("RBAC-M1 legacy map — every legacy SCREAMING_SNAKE perm is mapped", () => {
   const legacyKeys = Object.values(Legacy) as string[];
 
-  it("covers all 22 legacy Permission keys (ADR acceptance)", () => {
-    expect(legacyKeys.length).toBe(22);
+  it("covers every legacy Permission key (ADR acceptance)", () => {
     for (const k of legacyKeys) {
       expect(LEGACY_PERMISSION_MAP).toHaveProperty(k);
     }

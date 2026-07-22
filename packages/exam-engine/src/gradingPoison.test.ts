@@ -226,16 +226,6 @@ describe("Slice 5 Step 6 — submittedAnswers are not re-graded during terminal 
     expect(result.questionResults[0]!.score).toBe(40);
     expect(result.questionResults[0]!.correct).toBe(true);
   });
-
-  it("submittedAnswers is submit-time materialization input, not terminal score input (structural note)", () => {
-    // Step 6 allowance: if the canonical aggregator cannot see submittedAnswers
-    // by type/signature, record that as stronger structural evidence. The
-    // aggregator CAN receive an ExamAttempt, so the structural proof that its
-    // body never reads .submittedAnswers lives in
-    // gradingArchitecture.structural.test.ts. This test exists to document the
-    // relationship and keep the behavioral + structural halves together.
-    expect(true).toBe(true);
-  });
 });
 
 // ── Step 7: live questions have zero terminal authority (structural) ──
