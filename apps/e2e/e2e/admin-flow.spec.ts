@@ -152,23 +152,38 @@ test.describe("admin operation flow", () => {
     await page.getByRole("button", { name: "添加考生" }).click();
     await page.getByRole("dialog").waitFor({ state: "visible" });
 
-    // Select the freshly-created candidate by its name label. The dialog's
-    // candidate list is paginated (pageSize=50, no search), so candidates
-    // created late in a polluted DB may sit beyond the first page. Loop the
-    // "加载更多" button until the target checkbox appears, then click it
-    // (Playwright's click auto-scrolls into view).
-    const targetCheckbox = page.getByLabel(extraName);
+    // Select the freshly-created candidate. The dialog's candidate list is
+    // paginated (pageSize=50) and searchable. Wait for the first page to
+    // render, then filter by the distinctive name so the target checkbox is
+    // immediately visible without scrolling through unrelated candidates. If the
+    // target has not been loaded yet (very long candidate list), load more pages
+    // while waiting for the real network response instead of sleeping.
+    await expect(
+      page
+        .locator("label")
+        .filter({ has: page.getByRole("checkbox") })
+        .first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const searchInput = page.getByPlaceholder("搜索考生");
+    const targetCheckbox = page.getByRole("checkbox", { name: extraName });
     const loadMore = page.getByRole("button", { name: "加载更多" });
     for (let i = 0; i < 10; i += 1) {
+      await searchInput.fill(extraName);
       if (await targetCheckbox.isVisible().catch(() => false)) break;
-      if (await loadMore.isVisible().catch(() => false)) {
+
+      if (await loadMore.isEnabled().catch(() => false)) {
+        const responsePromise = page.waitForResponse(
+          /\/api\/candidates\?page=\d+&pageSize=50/,
+        );
         await loadMore.click();
-        // wait for the next page to render before re-checking
-        await page.waitForTimeout(400);
+        await responsePromise;
         continue;
       }
+
       break; // no more pages and target not found
     }
+    await expect(targetCheckbox).toBeVisible({ timeout: 5_000 });
     await targetCheckbox.click();
 
     // Submit; the button label reflects the selection count.
