@@ -51,4 +51,16 @@ describe("hasSubjectiveQuestions", () => {
       ).toBe(true);
     },
   );
+
+  // Single-question input class: the only question has no standardAnswer. This
+  // is a distinct input class from the multi-question cases above — a
+  // length-branch regression in the implementation (e.g. guarding on
+  // `questions.length > 1`) is caught here but NOT by the multi-question cases.
+  it("returns true when the only question has no standardAnswer", () => {
+    expect(
+      hasSubjectiveQuestions([
+        makeQuestion({ originalQuestionId: "q1", standardAnswer: null }),
+      ]),
+    ).toBe(true);
+  });
 });
