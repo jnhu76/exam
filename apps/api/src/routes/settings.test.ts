@@ -56,20 +56,7 @@ describe("settings routes", () => {
     ).toBe(true);
   });
 
-  it("GET /api/admin/settings/branding returns branding for authenticated admin", async () => {
-    const res = await ctx.app.inject({
-      method: "GET",
-      url: "/api/admin/settings/branding",
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(
-      typeof body === "object" && body !== null && !Array.isArray(body),
-    ).toBe(true);
-  });
-
-  it("PATCH /api/admin/settings/branding updates branding", async () => {
+  it("PATCH updates branding and authenticated GET returns it", async () => {
     const res = await ctx.app.inject({
       method: "PATCH",
       url: "/api/admin/settings/branding",
@@ -79,5 +66,13 @@ describe("settings routes", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.productName).toBe("Updated Platform");
+
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: "/api/admin/settings/branding",
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.statusCode).toBe(200);
+    expect(getRes.json()).toMatchObject({ productName: "Updated Platform" });
   });
 });
