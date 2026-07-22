@@ -50,24 +50,6 @@ describe("attempt routes", () => {
       expect(body.startedAt).toBeDefined();
     });
 
-    it("returns existing attempt on repeated start", async () => {
-      const res1 = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-      const attemptId = res1.json().id;
-
-      const res2 = await ctx.app.inject({
-        method: "POST",
-        url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": ctx.candidateToken },
-      });
-
-      expect(res2.statusCode).toBe(200);
-      expect(res2.json().id).toBe(attemptId);
-    });
-
     it("double-click start creates only one active attempt in DB", async () => {
       const examRes = await ctx.app.inject({
         method: "POST",

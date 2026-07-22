@@ -377,39 +377,7 @@ describe("Exam Protocol Security Baseline (S08-lite)", () => {
     });
   });
 
-  describe("AC5: Unenrolled candidate cannot start attempt", () => {
-    it("returns error when candidate is not enrolled in the exam", async () => {
-      const examRes = await app.inject({
-        method: "POST",
-        url: "/api/exams",
-        payload: {
-          title: "Unenrolled Exam",
-          courseId,
-          durationMinutes: 60,
-          openAt: new Date(Date.now() - 3600000).toISOString(),
-          closeAt: new Date(Date.now() + 86400000).toISOString(),
-          passingScore: 6,
-          totalScore: 10,
-          questionIds: [questionId],
-        },
-        cookies: { "auth-token": adminToken },
-      });
-      const examId = examRes.json().id;
-      await app.inject({
-        method: "POST",
-        url: `/api/exams/${examId}/publish`,
-        cookies: { "auth-token": adminToken },
-      });
-
-      const startRes = await app.inject({
-        method: "POST",
-        url: `/api/attempts/${examId}/start`,
-        cookies: { "auth-token": otherCandidateToken },
-      });
-      expect(startRes.statusCode).toBeGreaterThanOrEqual(400);
-    });
-  });
-
+  // AC5 unenrolled-start denial is owned by m10a.candidateRuntime.test.ts.
   describe("AC6: Submit after already submitted attempt is idempotent", () => {
     it("second submit returns same graded result (idempotent, not an error)", async () => {
       const attemptId = await createExamAndStart("Double Submit Exam");
