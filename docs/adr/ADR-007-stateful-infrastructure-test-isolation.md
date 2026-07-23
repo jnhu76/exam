@@ -4,10 +4,11 @@
 
 ACCEPTED (infrastructure implemented, Phase 6G/7 deferred).
 
-Phase 2–6F are implemented and enforced in local dev and CI. The core
-isolation contract (per-worker DB, scope resolver, background default-off,
-CI shard config) is in active use. Phase 6G (live CI validation) and Phase 7
-(Redis/Queue prefix) remain deferred until triggered.
+Phase 2–4 and 6E are implemented and enforced. Phases 5A/5B and 6D have
+local-only evidence; Phases 6 and 6F have CI config prepared but await live
+validation. The core isolation contract (per-worker DB, scope resolver,
+background default-off) is in active use. Phase 6G (live CI validation) and
+Phase 7 (Redis/Queue prefix) remain deferred until triggered.
 
 This ADR is a **long-term architecture constraint** that governs how every
 stateful test resource (PostgreSQL, Redis, Queue, background worker) is

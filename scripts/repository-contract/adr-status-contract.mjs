@@ -24,13 +24,13 @@ if (!/ACCEPTED/i.test(statusText)) {
 }
 if (
   !/Phase\s+6G\/7\s+.*defer/i.test(statusText) &&
-  !/Phase\s+6G.*defer/i.test(adrContent)
+  !/Phase\s+6G.*defer/i.test(statusText)
 ) {
   errors.push(`${ADR} Status must note Phase 6G is deferred/pending`);
 }
 if (
   !/Phase\s+6G\/7\s+.*defer/i.test(statusText) &&
-  !/Phase\s+7.*defer/i.test(adrContent)
+  !/Phase\s+7.*defer/i.test(statusText)
 ) {
   errors.push(`${ADR} Status must note Phase 7 is deferred`);
 }
