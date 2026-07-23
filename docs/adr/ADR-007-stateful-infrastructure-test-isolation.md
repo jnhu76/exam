@@ -68,9 +68,6 @@ that covers PostgreSQL, Redis, Queue, and background workers together.
 
 ## Non-Goals
 
-- This ADR does **not** claim `BUG-FLAKE-001` (or any entry in
-  `test-flakes.md`) is fixed. Existing mitigations remain until a follow-up
-  PR removes them with its own evidence.
 - No claim that `BUG-FLAKE-001` (or any entry in `test-flakes.md`) is fixed.
   Existing mitigations (`fileParallelism: false`, `verify:db-tests` serial
   chain, scanner legacy timeout, per-file schema isolation) remain in force
@@ -388,7 +385,7 @@ Rules:
     Portable, composes with CI service isolation, and works on a shared
     instance. Long-term default.
 3. **Dedicated Redis service/container per CI job (chosen for CI).** Pair with
-    option 10: shard-level dedicated Redis + worker-level prefix. Eliminates
+    option 2: shard-level dedicated Redis + worker-level prefix. Eliminates
     cross-shard contention entirely.
 
 ### Queue isolation options

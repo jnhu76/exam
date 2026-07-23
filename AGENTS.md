@@ -74,7 +74,13 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
 4. **Do not invent a fourth database.** The three-DB split (`exam` / `exam_test` / `exam_e2e`) is the contract. Do not create `exam_dev`, `exam_local`, or any other name.
 5. **Env-var priority (SOTA: shell > `.env.local` > `.env`).** This is Vite/dotenv native behavior and is NOT negotiable:
    - `process.env` (shell export) always wins; `.env` files never overwrite it.
-   - `.env` MUST define **both** `DATABASE_URL` (→ `exam`) and `TEST_DATABASE_URL` (→ `exam_test`) with local defaults, so a bare `pnpm verify` / `pnpm test` / `pnpm dev` works with **zero** shell setup. Never comment out `TEST_DATABASE_URL` in `.env` — doing so breaks bare `pnpm verify`.
+   - `.env` defines runtime/dev config (`DATABASE_URL`, Redis, JWT, etc.). Copy from `.env.example`.
+   - `.env.test.local` defines test config (`TEST_DATABASE_URL`, isolation vars). Copy from `.env.test.example`:
+     ```bash
+     cp .env.example .env              # runtime/dev (one-time)
+     cp .env.test.example .env.test.local  # test config (one-time)
+     ```
+   - A bare `pnpm dev` reads `.env`; a bare `pnpm test` / `pnpm verify` reads `.env` + `.env.test.local`. Both should work with zero shell setup after the two copies above.
    - An agent must NOT rely on a shell `export` to fix a missing `.env` value. If `.env` is missing a required DB URL, fix `.env`, not the shell.
    - Shell env residue is per-session only and does not persist; treat any inherited `DATABASE_URL`/`TEST_DATABASE_URL`/`APP_MODE` as suspect. When in doubt, prefix the command with an explicit `unset` or the intended values, e.g.:
 

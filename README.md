@@ -152,7 +152,8 @@ docker compose down -v   # remove database data
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
-| `.env.example`            | Environment variable template                                                 |
+| `.env.example`            | Runtime/dev environment template                                              |
+| `.env.test.example`       | Test/coverage environment template (copy to `.env.test.local`)                |
 
 ## Development Commands
 
@@ -296,10 +297,10 @@ pnpm --filter db test
 > dev compose maps PostgreSQL to host port **`15432`** (host `:5432` is
 > commonly occupied on Windows/WSL; override via `DB_HOST_PORT`).
 > `pnpm db:up` auto-creates both `exam` (dev runtime) and `exam_test` (tests)
-> databases; set `DATABASE_URL` / `TEST_DATABASE_URL` / `REDIS_URL` in `.env`
-> to point at them (see `.env.example`). In CI, GitHub Actions `services:
-> postgres` and `services: redis` provide these instead (on `:5432`/`:6379`,
-> since CI runs in an isolated VM).
+> databases; set `DATABASE_URL` in `.env` (see `.env.example`) and
+> `TEST_DATABASE_URL` in `.env.test.local` (see `.env.test.example`). In CI,
+> GitHub Actions `services: postgres` and `services: redis` provide these
+> instead (on `:5432`/`:6379`, since CI runs in an isolated VM).
 
 ### Quick local test setup
 
@@ -307,12 +308,14 @@ pnpm --filter db test
 # 1. Start PostgreSQL + Redis (creates exam + exam_test databases)
 pnpm db:up
 
-# 2. Copy .env.example → .env and adjust ports if needed:
-#    DATABASE_URL=postgresql://exam:exam@localhost:15432/exam
-#    TEST_DATABASE_URL=postgresql://exam:exam@localhost:15432/exam_test
-#    REDIS_URL=redis://localhost:6379
+# 2. Copy env templates and adjust ports if needed:
+cp .env.example .env                              # runtime/dev config
+cp .env.test.example .env.test.local              # test config
+#    .env        → DATABASE_URL=postgresql://exam:exam@localhost:15432/exam
+#    .env.test.local → TEST_DATABASE_URL=postgresql://exam:exam@localhost:15432/exam_test
+#    .env        → REDIS_URL=redis://localhost:6379
 
-# 3. Run tests (vitest loads .env; @exam/db + @exam/api hit exam_test)
+# 3. Run tests (vitest reads .env + .env.test.local; @exam/db + @exam/api hit exam_test)
 pnpm coverage
 ```
 
