@@ -85,9 +85,14 @@ The authorization **infrastructure** is live (not "not started"):
   scores subjective items, completes grading → `graded + fully_graded`.
 - ✅ Email outbox + SMTP backend foundation (outbox table, 3 senders, retry
   policy, notification service, `POST /api/email/test`). See Known limitations.
+- ✅ ADR-011 accepted as the Notification and Email delivery architecture
+  authority (two-channel Inbox + asynchronous Email outbox, resident worker,
+  atomic business transaction, validated `PUBLIC_WEB_ORIGIN` / `actionPath`).
 
 See [`docs/architecture/authorization.md`](../architecture/authorization.md)
-for the model details.
+for the model details and
+[`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md)
+for the notification/email architecture.
 
 ### Not implemented (Phase 3 product work)
 
@@ -96,13 +101,37 @@ See [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md):
 - Scoped Teacher / Proctor / Grader role bundles **as product roles**
   (presets exist; assignment UI and product flows do not).
 - Resource-relationship authorization (M11).
-- Staff invitation, SMTP password reset, account lifecycle UI.
-- `text_response` authoring UI flow (P2 ACTIVE — audit found gaps).
-- Result publishing closeout (P3 queued).
-- RBAC MVP role switch — Admin/Teacher/Candidate on MVP routes (P4 queued).
-- Email business triggers / worker daemon (P5).
-- WYSIWYG submit final-answer barrier (ADR-008 Option D follow-up).
-- Email template engine + backend i18n.
+
+The remaining Phase 3 product work is sequenced as a hard module execution
+order with real dependencies (not narrative sequence):
+
+```text
+P4 (RBAC MVP role switch)
+  → P5-0 (Email delivery runtime hardening)
+  → P3 (result publishing closeout)
+  → P5-N1 (Notification Inbox + result-published Email integration)
+  → P6 (MVP ready closeout)
+```
+
+| Job  | True dependency                                | What it adds                                                                              |
+| ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes.                           |
+| P5-0 | ADR-011 accepted; does not depend on P3         | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. |
+| P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. |
+| P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically.    |
+| P6   | Preceding MVP blockers closed                   | MVP ready closeout.                                                                        |
+
+The ordering principle: define permissions first (P4), then harden the Email
+base (P5-0), then close out result publishing (P3), then attach the first
+notification onto the now-stable result-publication transaction (P5-N1).
+
+- P2-1 Exam Authoring UI Flow has been removed from the active Phase 3 plan by
+  scope decision.
+- Staff invitation, SMTP password reset, and account lifecycle UI remain
+  Phase 3 scope but are separate future work (not silently included in P5-N1).
+- `text_response` authoring UI flow and WYSIWYG submit final-answer barrier
+  (ADR-008 Option D follow-up) remain Phase 3 product tasks.
+- Email template engine + backend i18n remain NOT STARTED.
 
 ## Phase 4 — Platformization and Integration: ⬜ NOT STARTED
 
@@ -122,6 +151,9 @@ audit, external log shipping. All Phase 4; none started.
   `POST /api/email/test` is the only production send path (synchronous, bypasses
   outbox). No worker daemon (enqueued rows would sit `pending` forever). No
   `users.email` column. No password-reset / invitation / registration flows.
+  This is the P5-0 + P5-N1 scope: P5-0 turns the outbox into a resident,
+  observable worker (ADR-011); P5-N1 adds the first real `result_published`
+  business caller. Neither is started yet.
 - **Gate 0.5 (M10-F post-PR-197 rerun) is PENDING**: it blocks future
   RBAC-sensitive changes. The last-recorded route inventory (91 routes, 81
   capability-gated, 0 `requireRole`) stands but is not freshly re-verified.

@@ -6,6 +6,8 @@
 > and [`docs/status/implementation-status.md`](../status/implementation-status.md).
 >
 > Phase scope authority: [`docs/roadmap/phase-roadmap.md`](phase-roadmap.md).
+> Notification and Email architecture authority:
+> [`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md).
 
 The Phase 3 authorization **infrastructure** is implemented (capability model,
 assignment-backed authority, permission boundary). The items below are the
@@ -14,40 +16,81 @@ Phase 3 **product** work that remains.
 ## Module execution order (hard constraint)
 
 ```text
-P2 (authoring, ACTIVE) → P3 (result publishing) → P4 (RBAC MVP role switch)
-  → P5 (email minimal) → P6 (MVP ready closeout)
+P4 (RBAC MVP role switch)
+  → P5-0 (Email delivery runtime hardening)
+  → P3 (result publishing closeout)
+  → P5-N1 (Notification Inbox + result-published Email integration)
+  → P6 (MVP ready closeout)
 ```
+
+P2-1 authoring UI flow has been removed from the active Phase 3 plan by scope
+decision.
+
+P5 is a two-Job module:
+
+```text
+P5-0 = Email delivery infrastructure
+P5-N1 = first real Inbox + Email business integration
+```
+
+P5-0 has no dependency on P3 and may be completed before result-publishing
+closeout. P5-N1 depends on both P5-0 and P3 because it integrates directly with
+the authoritative result-publication transaction and candidate result route.
+
+Identity lifecycle remains separate future work and is not silently included in
+P5-N1.
 
 ---
 
-## P2-1: Exam authoring UI flow (ACTIVE / CORRECTIVE REQUIRED)
-
-- **CAPABILITY**: Teacher/Admin creates MVP question types and assembles/publishes exams from the UI.
-- **CURRENT STATE**: ACTIVE — authoring UI flow audit found gaps.
-- **WHAT EXISTS**: Question CRUD API + Exam create/publish commands; Question CSV import.
-- **WHAT IS MISSING**: `text_response` authoring UI (rubric entry at publish); complete authoring→publish→candidate-visible E2E. Audit source: `docs/archive/phase3/p2-authoring-ui-flow-audit.md`.
-- **DEPENDENCIES**: P-1/L0 protocol (CLOSED), P0 candidate runtime (CLOSED).
-- **NOT AUTHORIZED ASSUMPTIONS**: random paper builder; question tag/category UI; question version history UI; batch import/export redesign.
-- **ACCEPTANCE BOUNDARY**: Teacher can create objective + text_response questions, assemble an exam, publish, and a candidate can start the resulting exam.
-
 ## P3: Result publishing closeout (QUEUED)
 
-- **CAPABILITY**: Results published per configured strategy; candidates see only what they are allowed to see.
-- **CURRENT STATE**: QUEUED after P2. Backend result-visibility modes exist (immediate / after_grading / manual).
-- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; admin result view.
-- **WHAT IS MISSING**: Result-visibility E2E (manual or after-grading); candidate answer/standard-answer leak test; admin/teacher result-view verification in published flow.
-- **DEPENDENCIES**: P2 closed.
-- **ACCEPTANCE BOUNDARY**: After scoring + publish policy allows, candidate views own result and cannot see hidden standard answers.
+- **CAPABILITY**: Results are published under the configured strategy; candidates see only what policy permits; Admin and Teacher access is verified under the final MVP role model.
+- **CURRENT STATE**: QUEUED after P5-0 in the hard execution order. Backend result-visibility modes already exist (`immediate`, `after_grading`, `manual`), but the published flow is not closed by final-role E2E and leak tests.
+- **WHAT EXISTS**: `resultVisibility` / `answerVisibility` separation; result publishing command; candidate and admin result surfaces; backend publication modes.
+- **WHAT IS MISSING**: Result-visibility E2E for manual or after-grading publication; candidate answer/standard-answer leak tests; Admin/Teacher result-view verification after the P4 role switch; a stable transaction and route boundary that P5-N1 can safely extend.
+- **DEPENDENCIES**: P4 closed. P5-0 is ordered before P3 for delivery-infrastructure readiness but is not a semantic dependency of result publishing.
+- **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules.
+- **ACCEPTANCE BOUNDARY**: Under the final Admin/Teacher/Candidate role model, an authorized actor publishes results according to configured policy; the candidate can view only the candidate's own permitted result and cannot see hidden standard answers. The result-publication command and transaction boundary are stable enough for P5-N1 to extend without redefining result semantics.
 
-## P4: RBAC MVP role switch — Admin / Teacher / Candidate (QUEUED)
+## P4: RBAC MVP role switch — Admin / Teacher / Candidate (QUEUED / NEXT)
 
 - **CAPABILITY**: Three product roles enforced on MVP routes.
-- **CURRENT STATE**: QUEUED after P3. Authorization infrastructure is implemented (see `docs/architecture/authorization.md`); this is the product role switch.
-- **WHAT EXISTS**: Capability catalog, role presets, assignment-backed authority, `requireCapability` gates on all routes.
-- **WHAT IS MISSING**: MVP route matrix (route → capability → role → scope); migration of remaining MVP routes to Teacher capabilities; frontend navigation gating for the three roles. Design matrix source: `docs/archive/phase3/p4-mvp-rbac-route-matrix.md`.
-- **DEPENDENCIES**: P3 closed.
+- **CURRENT STATE**: NEXT. Authorization infrastructure is implemented (see `docs/architecture/authorization.md`); this Job activates the final MVP product-role model before result-publishing closeout.
+- **WHAT EXISTS**: Capability catalog, role presets, assignment-backed authority, `requireCapability` gates on all routes; existing result publication and result-view routes that can be assigned to the final role matrix.
+- **WHAT IS MISSING**: MVP route matrix (route → capability → role → scope); migration of remaining MVP routes to Teacher capabilities; frontend navigation gating for Admin/Teacher/Candidate; explicit result-publish and result-view capability ownership.
+- **DEPENDENCIES**: Authorization infrastructure implemented. P3 closeout is not a prerequisite; P3 will verify the result flow after this role switch.
 - **NOT AUTHORIZED ASSUMPTIONS**: Proctor role activation; independent Grader role activation; custom roles; tenant/course/exam scope; `teacher_exam_assignments`; scoped role dispatch (teacher@course, proctor@exam).
-- **ACCEPTANCE BOUNDARY**: Admin/Teacher/Candidate each complete their MVP duties; unauthorized MVP-route access rejected by backend.
+- **ACCEPTANCE BOUNDARY**: Admin/Teacher/Candidate each complete their MVP duties; unauthorized MVP-route access is rejected by the backend; result publication and result viewing have final, explicit role/capability ownership for P3 verification.
+
+## P5-0: Email delivery runtime hardening (QUEUED)
+
+- **CAPABILITY**: Existing PostgreSQL Email outbox runs as a resident, observable, failure-recoverable worker process.
+- **CURRENT STATE**: QUEUED after P4. Email outbox and sender foundation exist, but delivery is manually invoked and lacks production locking/heartbeat semantics.
+- **WHAT EXISTS**: `email_outbox`; Email repository/service; SMTP, console, and disabled senders; retry policy; admin-only `POST /api/email/test`; existing Email diagnostics surface.
+- **WHAT IS MISSING**: `pending|processing|retry_wait|sent|dead` target state machine; `FOR UPDATE SKIP LOCKED` claim; persisted lock ownership; abandoned-lock recovery; explicit worker build/start entry; PostgreSQL-backed heartbeat; backlog/liveness diagnostics; unambiguous `EmailDeliveryService` naming.
+- **DEPENDENCIES**: P4 closed in the hard execution order; ADR-011 accepted. There is no dependency on P3 result-publishing closeout.
+- **NOT AUTHORIZED ASSUMPTIONS**: Inbox; users.email; real business caller; invitation; password reset; template engine; generic queue platform; Redis/BullMQ/RabbitMQ/Kafka.
+- **ACCEPTANCE BOUNDARY**: A standalone Email worker continuously claims, retries, and terminally records outbox rows without duplicate concurrent ownership; its heartbeat and backlog are visible through existing diagnostics.
+
+## P5-N1: Notification Inbox + result-published Email integration (QUEUED)
+
+- **CAPABILITY**: First operational two-channel notification: candidate Inbox plus optional Email for `result_published`.
+- **CURRENT STATE**: QUEUED after P3 and P5-0. ADR-011 is the architecture authority.
+- **WHAT EXISTS**: Result publishing command and result-visibility rules; hardened Email delivery runtime from P5-0; existing `EmailType` for grade notification.
+- **WHAT IS MISSING**: Optional `users.email` recipient source; `notifications` table/repository/contracts; channel-neutral `NotificationService`; static `result_published -> grade_notification` policy mapping; safe relative action link; Inbox APIs and candidate UI; atomic result mutation + Inbox + outbox transaction; removal of any old route-local Email trigger.
+- **DEPENDENCIES**: P3, P4, and P5-0 closed.
+- **NOT AUTHORIZED ASSUMPTIONS**: invitation/password reset migration; additional notification types; user preferences; announcements; WebSocket/SSE; stale-message skip; template engine; generic queue platform.
+- **ACCEPTANCE BOUNDARY**: Authorized result publication atomically commits result state, one candidate Inbox record, and a linked Email outbox row when an email exists; candidate can read the Inbox item and open the authoritative result; SMTP remains asynchronous.
+
+## P5-N2: Operational notification expansion (DEFERRED — NOT STARTED)
+
+- **CAPABILITY**: Migrate additional operational events onto the NotificationService one at a time.
+- **CURRENT STATE**: DEFERRED until P5-N1 proves the architecture.
+- **WHAT EXISTS**: ADR-011 event-policy model; after P5-N1, one implemented type (`result_published`).
+- **WHAT IS MISSING**: Event-specific policy, payload, dedupe, transaction, action-path, API/UI behavior, and tests for `exam_assigned`, schedule change/cancellation, and grading assignment.
+- **DEPENDENCIES**: P5-N1 closed; corresponding product flow and role must exist.
+- **NOT AUTHORIZED ASSUMPTIONS**: bulk organization announcements; generic fan-out; notification preferences; identity lifecycle migration.
+- **ACCEPTANCE BOUNDARY**: Each migrated event has one authoritative old/new path, explicit NotificationType→EmailType mapping, recipient-scoped dedupe, transaction tests, and no double-send.
 
 ## M11: Resource-relationship authorization (DEFERRED — NOT STARTED)
 
@@ -60,22 +103,23 @@ P2 (authoring, ACTIVE) → P3 (result publishing) → P4 (RBAC MVP role switch)
 
 ## Staff invitation + SMTP password reset + account lifecycle (NOT STARTED)
 
-- **CAPABILITY**: Staff invitation flow, email password reset, user activation/deactivation, permission audit.
-- **CURRENT STATE**: NOT STARTED. Email outbox/SMTP foundation exists but has no business caller (see below).
-- **WHAT EXISTS**: Email outbox + 3 senders + retry policy + notification service + `POST /api/email/test` (admin-only connectivity probe).
-- **WHAT IS MISSING**: `users.email` column; business callers wiring real events to `EmailNotificationService.enqueueBestEffort`; resident outbox worker daemon (analogous to `deadlineScanner`); invitation token lifecycle; password-reset flow; account activation/deactivation UI; permission audit.
-- **DEPENDENCIES**: P5 (email minimal trigger) for the email path.
-- **NOT AUTHORIZED ASSUMPTIONS**: complex template engine; notification history UI; email preference center.
-- **ACCEPTANCE BOUNDARY**: A real business event enqueues a minimal email via the existing outbox without making the core exam transaction depend on SMTP availability.
+- **CAPABILITY**: Staff invitation, Email password reset, activation/deactivation, and permission audit.
+- **CURRENT STATE**: NOT STARTED. Identity flows are explicitly excluded from the first NotificationService migration.
+- **WHAT EXISTS**: After P5-0/P5-N1: resident Email worker; sender adapters; optional `users.email`; Email outbox; retry and diagnostics; Email-only delivery path.
+- **WHAT IS MISSING**: Invitation token lifecycle; invitation acceptance; password-reset token lifecycle; identity-specific rate limiting; account activation/deactivation UI; permission audit integration; auditable security events.
+- **DEPENDENCIES**: P5-0 closed; P5-N1 closed for the shared optional email field. This item continues to use the Email-only path unless a later ADR explicitly migrates identity flows.
+- **NOT AUTHORIZED ASSUMPTIONS**: Identity Inbox requirement; NotificationService migration; complex template engine; notification preference center; multi-tenant sender configuration.
+- **ACCEPTANCE BOUNDARY**: Admin can invite staff through a single-use, expiring token; the recipient can activate the account and request a rate-limited password reset; activation/deactivation and security-relevant actions are audited; SMTP failure does not corrupt account state.
 
 ## Email template engine + backend i18n (NOT STARTED)
 
-- **CAPABILITY**: Templated, localized email bodies.
-- **CURRENT STATE**: NOT STARTED. Pure design note.
-- **WHAT EXISTS**: Design note (`docs/archive/phase3/...` via original `docs/phase3/emails/email-templates-i18n.md`); inline-string bodies only.
-- **WHAT IS MISSING**: Template engine; backend i18n; multi-locale.
-- **DEPENDENCIES**: A real email trigger entering scope (P5).
-- **ACCEPTANCE BOUNDARY**: Templated zh-CN (and future locale) email bodies driven by event type, not inline strings.
+- **CAPABILITY**: Templated, localized Email bodies.
+- **CURRENT STATE**: NOT STARTED. Pure design note; inline-string bodies remain.
+- **WHAT EXISTS**: Existing EmailType values and delivery adapter; P5-N1 provides the first real operational caller.
+- **WHAT IS MISSING**: Template registry; structured payloads; backend locale resolution; zh-CN rendering; future locale expansion; template tests.
+- **DEPENDENCIES**: P5-N1 closed or another real Email caller exists.
+- **NOT AUTHORIZED ASSUMPTIONS**: Full marketing template editor; user-authored HTML; per-organization branding; arbitrary locale negotiation.
+- **ACCEPTANCE BOUNDARY**: Email bodies are selected by EmailType and rendered from structured payloads through a tested zh-CN backend locale path rather than route-local inline strings.
 
 ## WYSIWYG submit final-answer barrier (NOT STARTED)
 
@@ -93,3 +137,31 @@ P2 (authoring, ACTIVE) → P3 (result publishing) → P4 (RBAC MVP role switch)
 - **WHAT IS MISSING**: CandidateFieldsPage, ExamConfigForm, QuestionForm, etc. admin form/modal copy.
 - **DEPENDENCIES**: None.
 - **ACCEPTANCE BOUNDARY**: `pnpm lint:copy` continues to pass; remaining admin form copy migrated.
+
+---
+
+## Required phase-roadmap alignment
+
+Because `docs/roadmap/phase-roadmap.md` is the phase-scope authority, the same PR
+that adopts this Open Items update should make the following minimal Phase 3
+alignment:
+
+Add to Phase 3 **In scope**:
+
+```text
+- In-app notification Inbox for selected operational events.
+- Asynchronous PostgreSQL-outbox Email delivery with a resident observable worker.
+- First operational notification integration for result publication.
+```
+
+Add to Phase 3 **Acceptance signals**:
+
+```text
+- Candidate can receive and read a result-publication Inbox notification.
+- A configured candidate email address receives the corresponding asynchronous
+  result notification without SMTP participating in the result transaction.
+- Email worker liveness and backlog are observable through diagnostics.
+```
+
+Do not move identity invitation/password-reset scope out of Phase 3. Do not add
+multiTenant behavior.
