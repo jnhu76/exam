@@ -39,10 +39,11 @@ Every ADR carries this metadata (in its Status section or header):
 | [ADR-008](ADR-008-submit-answer-freeze.md) | Submit Answer Freeze Barrier | ACCEPTED (Phase 2 conservative) | Current | none | none |
 | [ADR-009](ADR-009-frontend-state-machine-adoption.md) | Frontend State Machine Adoption | PROPOSED (pending human audit) | Current | none | none |
 | [ADR-010](ADR-010-scoped-rbac-architecture.md) | Phase 3 Scoped RBAC Architecture | ACCEPTED (infrastructure implemented) | Current | none | none |
+| [ADR-011](ADR-011-notification-and-email-delivery.md) | Notification Inbox and Email Delivery Architecture | PROPOSED | Current | none | none |
 
 ## Numbering
 
-ADR numbers are stable and never reused. The next free number is **ADR-011**.
+ADR numbers are stable and never reused. The next free number is **ADR-012**.
 Two files previously in `docs/adr/` used the `ADR-007` prefix
 (`ADR-007-flake-and-speed-audit.md`, `ADR-007-phase6-evidence-gap-audit.md`)
 but were **audit reports about** ADR-007, not ADRs themselves — they have been
