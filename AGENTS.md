@@ -61,6 +61,7 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
 > **Why `exam_e2e` is a third DB:** WSL E2E reseeds every run to a known demo state. Pointing it at `exam` would clobber the human's manual dev data; pointing it at `exam_test` would collide with vitest's worker-DB isolation. A dedicated `exam_e2e` keeps fast-iteration e2e, dev, and unit tests all isolated. The Docker E2E path (`scripts/e2e/run.sh` + `docker-compose.test.yml`) uses its own throwaway container volume instead and does NOT touch any of these host databases.
 
 **Connection facts:**
+
 - Container: `exam-db-1` (postgres:18.4), host port `15432` → container `5432`, user/pass `exam`/`exam`.
 - `exam_test` is created once at first container init by `docker/db/init/01-create-databases.sql`. It MUST exist (the test name-safety guard in `packages/db/src/testDb.ts` refuses any name without `test`/`e2e`/`ci`).
 - The DB name is resolved by APP_MODE: `test`/`ci`/`e2e` → `TEST_DATABASE_URL` (fail-fast, never falls back to `DATABASE_URL`); otherwise → `DATABASE_URL`. See `packages/db/src/databaseUrl.ts`.
@@ -73,21 +74,31 @@ The local dev Postgres container (`pnpm db:up`) intentionally runs **three datab
 4. **Do not invent a fourth database.** The three-DB split (`exam` / `exam_test` / `exam_e2e`) is the contract. Do not create `exam_dev`, `exam_local`, or any other name.
 5. **Env-var priority (SOTA: shell > `.env.local` > `.env`).** This is Vite/dotenv native behavior and is NOT negotiable:
    - `process.env` (shell export) always wins; `.env` files never overwrite it.
-   - `.env` MUST define **both** `DATABASE_URL` (→ `exam`) and `TEST_DATABASE_URL` (→ `exam_test`) with local defaults, so a bare `pnpm verify` / `pnpm test` / `pnpm dev` works with **zero** shell setup. Never comment out `TEST_DATABASE_URL` in `.env` — doing so breaks bare `pnpm verify`.
+   - `.env` defines runtime/dev config (`DATABASE_URL`, Redis, JWT, etc.). Copy from `.env.example`.
+   - `.env.test.local` defines test config (`TEST_DATABASE_URL`, isolation vars). Copy from `.env.test.example`:
+     ```bash
+     cp .env.example .env              # runtime/dev (one-time)
+     cp .env.test.example .env.test.local  # test config (one-time)
+     ```
+   - A bare `pnpm dev` reads `.env`; a bare `pnpm test` / `pnpm verify` reads `.env` + `.env.test.local`. Both should work with zero shell setup after the two copies above.
    - An agent must NOT rely on a shell `export` to fix a missing `.env` value. If `.env` is missing a required DB URL, fix `.env`, not the shell.
    - Shell env residue is per-session only and does not persist; treat any inherited `DATABASE_URL`/`TEST_DATABASE_URL`/`APP_MODE` as suspect. When in doubt, prefix the command with an explicit `unset` or the intended values, e.g.:
+
      ```bash
      # Bare run (relies on .env — preferred):
      pnpm verify
      # Force dev DB explicitly when a stale shell var is present:
      DATABASE_URL="postgresql://exam:exam@localhost:15432/exam" pnpm dev
      ```
+
 6. **Always verify the resolved DB, never assume.** Before trusting that dev uses `exam` or tests use `exam_test`, prove it:
+
    ```bash
    # Which DB does a process actually see? Query it, don't guess from .env:
    docker exec exam-db-1 psql -U exam -d exam -tAc "SELECT current_database(), count(*) FROM exams;"
    docker exec exam-db-1 psql -U exam -d exam_test -tAc "SELECT current_database(), count(*) FROM exams;"
    ```
+
 7. **Resetting `exam_test` is allowed and expected** (tests are disposable). Resetting `exam` wipes the human's working demo data — only do it if explicitly asked, and re-run `pnpm db:seed:demo` afterward.
 8. **If unsure which DB a running process is using, prove it by querying the API or the DB directly** — never guess from `.env` alone.
 
@@ -100,17 +111,29 @@ pnpm --filter web dev
 pnpm dev
 
 pnpm format:check
-pnpm lint
+pnpm lint              # code-quality checker (not ESLint)
+pnpm lint:eslint       # ESLint on the web package
 pnpm lint:copy
 pnpm lint:arch
 pnpm typecheck
 pnpm test
 pnpm coverage
-pnpm test:integration
-pnpm test:e2e
+pnpm test:integration  # compatibility alias of `pnpm test`
+pnpm test:e2e          # existing-env-only: needs migrated DB + seeded E2E data + running API/web
+pnpm e2e:docker        # managed Docker E2E lifecycle
+pnpm smoke             # lightweight PR smoke gate (single E2E spec)
 pnpm build
 pnpm verify
 ```
+
+- `pnpm lint` runs `scripts/check-code-quality.mjs` (copy, architecture, UI
+  guards). It is **not** ESLint; use `pnpm lint:eslint` for ESLint.
+- `pnpm lint:quality` is the canonical alias for `pnpm lint`.
+- `pnpm test:integration` is a compatibility alias for `pnpm test`; both invoke
+  `vitest run` with the same files.
+- `pnpm test:e2e` and `pnpm smoke` are **existing-environment-only**: they assume
+  an already-running API + web server and a migrated, E2E-seeded database. For a
+  managed lifecycle, use `pnpm e2e:docker` or `bash scripts/e2e/run-wsl.sh`.
 
 ## MCP / External Research Rules
 

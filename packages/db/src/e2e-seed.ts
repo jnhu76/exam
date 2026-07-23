@@ -1,8 +1,9 @@
 /**
- * Canonical E2E seed entry point for `@exam/db`.
+ * E2E seed entry point for `@exam/db`.
  *
- * Composes baseline `seed()` + `seedDemo()` + `verifyDemoSeed()` so that
- * CI E2E and local Docker E2E share exactly one seed contract.
+ * Thin adapter around `e2eSeedOrchestrator.runE2eSeed`. Handles env
+ * loading and database connection; delegates all orchestration to the
+ * shared function.
  *
  * Demo accounts produced (passwords identical):
  *   candidate1 / candidate123 = in_progress / resume
@@ -20,9 +21,9 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { seed } from "./seed.js";
-import { seedDemo } from "./demo-seed.js";
-import { verifyDemoSeed } from "./demo-seed-verify.js";
+import { createDatabase } from "./database.js";
+import { runE2eSeed, buildE2eSeedOutput } from "./e2eSeedOrchestrator.js";
+import { hashPassword } from "@exam/auth/src/password.js";
 
 dotenv.config({ quiet: true });
 
@@ -31,52 +32,31 @@ const isMain =
   resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
 if (isMain) {
-  let conn:
-    | Awaited<ReturnType<typeof import("./database.js").createDatabase>>
-    | undefined;
+  let conn: Awaited<ReturnType<typeof createDatabase>> | undefined;
   try {
     const skipMigrate = process.argv.includes("--skip-migrate");
 
-    const { createDatabase } = await import("./database.js");
-    const { migratePostgres } = await import("./postgres.js");
-    const { hashPassword } = await import("@exam/auth/src/password.js");
-
     conn = await createDatabase();
 
-    if (!skipMigrate) {
-      process.stdout.write("Running migrations...\n");
-      await migratePostgres(conn.db);
-    } else {
-      process.stdout.write("Skipping migrations (--skip-migrate)\n");
-    }
+    const result = await runE2eSeed(conn.db, hashPassword, {
+      skipMigrate,
+      migrateFn: async (db) => {
+        const { migratePostgres } = await import("./postgres.js");
+        await migratePostgres(db as Parameters<typeof migratePostgres>[0]);
+      },
+    });
 
-    process.stdout.write("Running baseline seed...\n");
-    await seed(conn.db, hashPassword);
-
-    process.stdout.write("Running demo seed...\n");
-    const ids = await seedDemo(conn.db, hashPassword);
-
-    process.stdout.write("Verifying demo seed...\n");
-    const errors = await verifyDemoSeed(conn.db, ids);
-    if (errors.length > 0) {
+    if (!result.ok) {
       process.stderr.write(
-        `\nDemo seed verification FAILED (${errors.length} errors):\n`,
+        `\nDemo seed verification FAILED (${result.errors.length} errors):\n`,
       );
-      for (const e of errors) {
+      for (const e of result.errors) {
         process.stderr.write(`  FAIL: ${e}\n`);
       }
-      throw new Error("Demo seed verification failed");
+      process.exitCode = 1;
+    } else {
+      process.stdout.write(buildE2eSeedOutput());
     }
-
-    process.stdout.write(
-      "\nDone! E2E seed credentials:\n" +
-        "  Admin:      admin      / admin123\n" +
-        "  Candidate:  candidate  / candidate123\n" +
-        "  Demo:       candidate1 / candidate123 = in_progress/resume\n" +
-        "  Demo:       candidate2 / candidate123 = available/start\n" +
-        "  Demo:       candidate3 / candidate123 = resumable/resume\n" +
-        "  Demo:       candidate4 / candidate123 = graded/view_result\n",
-    );
   } catch (err) {
     process.stderr.write(`E2E seed failed: ${String(err)}\n`);
     process.exitCode = 1;

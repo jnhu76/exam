@@ -6,3 +6,6 @@ docs/SPEC.md
 pnpm-lock.yaml
 coverage/
 *.md
+.venv/
+.mcp.json
+opencode.jsonc

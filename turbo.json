@@ -21,6 +21,7 @@
         "TEST_DATABASE_URL",
         "TEST_DB_URL",
         "TEST_DB_ISOLATION",
+        "API_TEST_MAX_WORKERS",
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
@@ -74,7 +75,25 @@
         "ALLOW_UNSAFE_TEST_DATABASE_URL"
       ]
     },
-    "test:e2e": {},
-    "smoke": {}
+    "test:e2e": {
+      "cache": false,
+      "passThroughEnv": [
+        "E2E_BASE_URL",
+        "E2E_SHARD_TOTAL",
+        "E2E_WORKERS_PER_SHARD",
+        "E2E_TRACE",
+        "CI"
+      ]
+    },
+    "smoke": {
+      "cache": false,
+      "passThroughEnv": [
+        "E2E_BASE_URL",
+        "E2E_SHARD_TOTAL",
+        "E2E_WORKERS_PER_SHARD",
+        "E2E_TRACE",
+        "CI"
+      ]
+    }
   }
 }

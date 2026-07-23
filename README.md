@@ -26,8 +26,8 @@ pnpm dev
 
 This starts:
 
-- **Web** (Vite): http://localhost:5173
-- **API** (Fastify): http://localhost:3000
+- **Web** (Vite): <http://localhost:5173>
+- **API** (Fastify): <http://localhost:3000>
 
 The web dev server proxies `/api/*` requests to the API server automatically.
 
@@ -124,8 +124,8 @@ pnpm db:seed     # Seed with test users
 pnpm dev         # Start API + Web with hot reload
 ```
 
-- Web: http://localhost:5173
-- API: http://localhost:3000
+- Web: <http://localhost:5173>
+- API: <http://localhost:3000>
 - Database: PostgreSQL 18 on `localhost:5432`
 
 ### Mode 2: Docker Compose (Full Stack)
@@ -139,7 +139,7 @@ docker compose down
 docker compose down -v   # remove database data
 ```
 
-- App: http://localhost:3000
+- App: <http://localhost:3000>
 - Database: PostgreSQL (internal, not exposed to host)
 - Migrations run automatically on container start
 
@@ -152,7 +152,8 @@ docker compose down -v   # remove database data
 | `docker-compose.dev.yml`  | Local development: PostgreSQL 18 + Redis 7 (for `pnpm db:up` / host runs)    |
 | `docker-compose.test.yml` | Full-stack + E2E: app (dev) + PostgreSQL 18 + Redis 7 + Playwright            |
 | `docker-entrypoint.sh`    | Runs migrations before starting the server                                    |
-| `.env.example`            | Environment variable template                                                 |
+| `.env.example`            | Runtime/dev environment template                                              |
+| `.env.test.example`       | Test/coverage environment template (copy to `.env.test.local`)                |
 
 ## Development Commands
 
@@ -170,12 +171,28 @@ docker compose down -v   # remove database data
 | `pnpm db:up`             | Start PostgreSQL container (dev, port 5432)                |
 | `pnpm db:down`           | Stop PostgreSQL container                                   |
 | `pnpm db:reset`          | Reset dev database (down + up + migrate)                   |
-| `pnpm test:pg`           | Run tests against PostgreSQL                                |
 | `pnpm test`              | Run all tests                                               |
 | `pnpm --filter web test` | Run web tests only                                          |
 | `pnpm typecheck`         | Type-check all packages                                     |
-| `pnpm lint`              | Lint all packages                                           |
+| `pnpm lint`              | Run the code-quality checker (not ESLint)                   |
+| `pnpm lint:eslint`       | Run ESLint on the web package                               |
+| `pnpm lint:quality`      | Canonical alias for `pnpm lint` (code-quality checker)      |
 | `pnpm verify`            | Full verification: format + lint + typecheck + test + build |
+| `pnpm verify:static`     | Static gates only (no DB-dependent tests)                   |
+| `pnpm e2e:docker`        | Managed Docker E2E lifecycle (build, migrate, seed, run)    |
+| `pnpm test:e2e`          | **Existing-env only**: runs Playwright against a pre-running API/web/seeded DB |
+| `pnpm smoke`             | Lightweight PR smoke gate (single Playwright E2E spec)      |
+
+> **Command semantics**
+>
+> - `pnpm lint` runs `scripts/check-code-quality.mjs` (architecture, copy, UI
+>   guards, etc.). For ESLint, use `pnpm lint:eslint`.
+> - `pnpm test:integration` is a compatibility alias for `pnpm test`; both run
+>   `vitest run` with the same test files.
+> - `pnpm test:e2e` and `pnpm smoke` are **existing-environment-only**: they
+>   assume PostgreSQL is migrated, E2E data is seeded, and the API + web servers
+>   are already running. Use `pnpm e2e:docker` (or `bash scripts/e2e/run-wsl.sh`)
+>   for a managed lifecycle that builds, migrates, seeds, and runs Playwright.
 
 ## Project Structure
 
@@ -280,10 +297,10 @@ pnpm --filter db test
 > dev compose maps PostgreSQL to host port **`15432`** (host `:5432` is
 > commonly occupied on Windows/WSL; override via `DB_HOST_PORT`).
 > `pnpm db:up` auto-creates both `exam` (dev runtime) and `exam_test` (tests)
-> databases; set `DATABASE_URL` / `TEST_DATABASE_URL` / `REDIS_URL` in `.env`
-> to point at them (see `.env.example`). In CI, GitHub Actions `services:
-> postgres` and `services: redis` provide these instead (on `:5432`/`:6379`,
-> since CI runs in an isolated VM).
+> databases; set `DATABASE_URL` in `.env` (see `.env.example`) and
+> `TEST_DATABASE_URL` in `.env.test.local` (see `.env.test.example`). In CI,
+> GitHub Actions `services: postgres` and `services: redis` provide these
+> instead (on `:5432`/`:6379`, since CI runs in an isolated VM).
 
 ### Quick local test setup
 
@@ -291,12 +308,14 @@ pnpm --filter db test
 # 1. Start PostgreSQL + Redis (creates exam + exam_test databases)
 pnpm db:up
 
-# 2. Copy .env.example → .env and adjust ports if needed:
-#    DATABASE_URL=postgresql://exam:exam@localhost:15432/exam
-#    TEST_DATABASE_URL=postgresql://exam:exam@localhost:15432/exam_test
-#    REDIS_URL=redis://localhost:6379
+# 2. Copy env templates and adjust ports if needed:
+cp .env.example .env                              # runtime/dev config
+cp .env.test.example .env.test.local              # test config
+#    .env        → DATABASE_URL=postgresql://exam:exam@localhost:15432/exam
+#    .env.test.local → TEST_DATABASE_URL=postgresql://exam:exam@localhost:15432/exam_test
+#    .env        → REDIS_URL=redis://localhost:6379
 
-# 3. Run tests (vitest loads .env; @exam/db + @exam/api hit exam_test)
+# 3. Run tests (vitest reads .env + .env.test.local; @exam/db + @exam/api hit exam_test)
 pnpm coverage
 ```
 
