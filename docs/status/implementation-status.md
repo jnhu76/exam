@@ -116,7 +116,7 @@ P4 (RBAC MVP role switch)
 | Job  | True dependency                                | What it adds                                                                              |
 | ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes.                           |
-| P5-0 | ADR-011 accepted; does not depend on P3         | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. |
+| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. |
 | P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. |
 | P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically.    |
 | P6   | Preceding MVP blockers closed                   | MVP ready closeout.                                                                        |
@@ -144,8 +144,8 @@ audit, external log shipping. All Phase 4; none started.
 - **Disrupted recovery UI**: once an attempt is `disrupted`, the frontend has no
   self-service restore button and no proctor recovery panel — it jumps to the
   result page with an "answering interrupted" message. Backend capability
-  exists; productization is Phase 2+ (P2A-J3 frontend restore UI + P2A-J4
-  proctor intervention).
+  exists; productization of frontend restore UI, heartbeat tuning, and proctor
+  intervention is deferred to Phase 2+ hardening.
 - **Email foundation has no business caller**: `EmailNotificationService` is
   never instantiated by any route; no email is ever enqueued in a real flow.
   `POST /api/email/test` is the only production send path (synchronous, bypasses

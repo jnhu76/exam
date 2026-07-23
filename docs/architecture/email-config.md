@@ -1,8 +1,8 @@
 # Email Backend Configuration Guide
 
 > Operational reference for wiring SMTP into the exam platform. This is the
-> **how-to / config** companion to the M3 design spec (`email.md`). The design
-> authority is `email.md`; this document is the deployer/operator guide.
+> **how-to / config** companion to the email delivery architecture (`docs/adr/ADR-011-notification-and-email-delivery.md`). The design
+> authority is ADR-011; this document is the deployer/operator guide.
 >
 > **Scope:** Phase 1 single-tenant. Email config is **env-only** — there is no
 > `email_config` / `smtp_config` table and none is planned for Phase 1 (see
@@ -32,7 +32,7 @@ AppRuntimeConfig.email  ──►  createEmailSender(config)
         routes use  fastify.emailSender.send()   (never nodemailer directly)
 ```
 
-**Key invariants (enforced by code, see `email.md` §Review Standard):**
+**Key invariants (enforced by code, see `docs/archive/phase3/email-outbox-foundation.md`):**
 
 - Business code never imports nodemailer. It goes through the `EmailSender`
   abstraction (`@exam/domain` interface).
@@ -112,7 +112,7 @@ EMAIL_FAKE_MODE=success   # flip to "failure" to exercise retry/error paths
 ```
 
 Tests **never** touch real SMTP, never need a secret. `.env.test.example` ships
-this exact block. See `email.md` §Required Tests for the full test contract.
+this exact block. See `docs/archive/phase3/email-outbox-foundation.md` for the full test contract.
 
 ### 3.3 Production with real SMTP
 
@@ -206,7 +206,7 @@ curl -s -b /tmp/admin-cookies.txt \
 > `fastify.emailSender.send()` and bypasses the outbox — this is intentional
 > (it's a connectivity probe). Real business emails must go through
 > `EmailNotificationService` → `email_outbox` → worker (not yet wired; see
-> `email.md` §Status).
+> not yet wired; see P5-0 scope.
 
 ---
 
@@ -300,9 +300,9 @@ Email config is **env-only** by design for Phase 1:
    (`.env` / container env), which is the LAN/on-premise security posture
    (`AGENTS.md`: no cloud, offline-capable).
 2. **No consumer yet.** There is no Admin "email settings" UI and no multi-tenant
-   sender requirement (`email.md` §Non-goals: "不做多租户发件人配置"). A config
+   sender requirement. A config
    table with no read UI would be dead weight.
-3. **Spec authority.** `email.md` Security Requirements mandate the password
+3. **Spec authority.** ADR-011 Security Requirements mandate the password
    never be logged/stringified — env-only is the simplest way to honor that.
 
 **When to revisit:** Phase 4 platformization (multi-tenant per-org senders) or

@@ -13,7 +13,7 @@
 > See `api-contract.md` for the full runtime-first API contract policy,
 > error envelope, and ErrorCode conventions.
 
-> **Phase realignment note**: `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` are authoritative for product phase scope. Phase 1 current product roles are Admin + Candidate only. The API reference below has been updated to reflect Phase 1 permissions. Fields like `queue`, `restrictIp`, `controlFlags.retakePolicy`, `controlFlags.scoreStrategy` remain in response schemas as structural residue from the exam model but are not Phase 1 product paths. Optional multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed, service tokens, and external integration are Phase 4 capabilities unless explicitly re-scoped.
+> **Phase realignment note**: `docs/SPEC.md` and `docs/roadmap/phase-roadmap.md` are authoritative for product phase scope. Phase 1 current product roles are Admin + Candidate only. The API reference below has been updated to reflect Phase 1 permissions. Fields like `queue`, `restrictIp` remain in response schemas as structural residue from the exam model but are not Phase 1 product paths. `controlFlags.retakePolicy` and `controlFlags.scoreStrategy` are implemented Phase 2 gate items (retake policy + score strategy). Optional multiTenant, SuperAdmin, tenant switcher, organizationSlug login, pass-to-proceed, service tokens, and external integration are Phase 4 capabilities unless explicitly re-scoped.
 
 ## 概述
 
@@ -506,7 +506,7 @@
 
 - `page`, `pageSize`: 分页
 - `courseId`: 按课程过滤
-- `type`: 按类型过滤 (`single_choice`, `multiple_choice`, `fill_blank`, `true_false`)
+- `type`: 按类型过滤 (`single_choice`, `multiple_choice`, `fill_blank`, `true_false`, `text_response`)
 - `difficulty`: 按难度过滤 (1-5)
 
 **响应** (200):
@@ -967,7 +967,7 @@
 | `STALE_VERSION` | `baseVersion < serverVersion`（乐观并发冲突） | 以 `details.serverAnswer` 合并/覆盖本地状态；用 `serverVersion` 重试 |
 | `ATTEMPT_ALREADY_SUBMITTED` | attempt 已在 `submitted` / `grading` / `graded` | 停止保存，提示考试已结束，引导跳转到结果页 |
 | `ATTEMPT_CLOSED` | attempt 在 `voided` 等终止状态（Phase 1 暂未持续触发） | 停止保存，提示考试已被关闭 |
-| `DEADLINE_EXCEEDED` | `now > deadlineAt`（save-answer 路由传入 `attempt.deadlineAt + fastify.now()` 给 `processSaveAnswer`） | 停止继续保存；已保存答案仍可 submit |
+| `DEADLINE_EXCEEDED` | `now > deadlineAt`（当前实现中，lazy deadline reconciliation 会先冻结 attempt，实际返回 `ATTEMPT_ALREADY_SUBMITTED`；`DEADLINE_EXCEEDED` 保留为契约枚举值但当前路径不触发） | 停止继续保存；已保存答案仍可 submit |
 
 **字段说明**：
 
@@ -978,7 +978,7 @@
 - `savedAt`: 服务器侧时间戳。
 - `details.serverAnswer?`: 仅在 `STALE_VERSION` 拒绝时返回，用于客户端合并冲突状态。
 
-> 该响应形态由 `SaveAnswerAcceptedSchema` / `SaveAnswerRejectedSchema` (strict) 在 `packages/contracts/src/attempt.ts` 定义；route handler 在 `apps/api/src/routes/attempts.ts` 通过这两个 schema 做出口校验。Phase 1.7 起，schema 标记为 `.strict()`，**禁止**返回 legacy 嵌套 `conflict: { reason, serverAnswer }` 形状或其他未声明字段。
+> 该响应形态由 `SaveAnswerAcceptedSchema` / `SaveAnswerRejectedSchema` (strict) 在 `packages/contracts/src/attempt.ts` 定义；route handler 在 `apps/api/src/routes/attempts.ts` 通过这两个 schema 做出口校验。schema 标记为 `.strict()`，**禁止**返回 legacy 嵌套 `conflict: { reason, serverAnswer }` 形状或其他未声明字段。
 
 ---
 
@@ -998,7 +998,7 @@
 }
 ```
 
-> Phase 1 语义：`submit` 不受 deadline 限制。deadline 仅限制继续保存答案（`save-answer` 在 deadline 后返回 `accepted:false, reason:"DEADLINE_EXCEEDED"`），不限制提交服务器已保存答案。submit 内联完成评分（in_progress/disrupted→submitted→graded），并对 `submitted`/`graded` 幂等——若 submit 在评分前崩溃，attempt 停在 `submitted`，再次 POST submit 会重试评分并推进到 `graded`。
+> **Deadline 行为**：`submit` 不受 deadline 限制——即使 `now > deadlineAt`，考生仍可提交已保存的答案。deadline 仅限制 `save-answer`：save 入口执行 lazy deadline reconciliation（冻结 attempt 为 deadline-submitted），之后 save 被拒绝（返回 `ATTEMPT_ALREADY_SUBMITTED`）。submit 内联完成评分（in_progress/disrupted→submitted→graded），并对 `submitted`/`graded` 幂等——若 submit 在评分前崩溃，attempt 停在 `submitted`，再次 POST submit 会重试评分并推进到 `graded`。
 
 ---
 
@@ -1016,7 +1016,7 @@
 
 **错误响应** (409): 当 attempt 不在 `in_progress` 时返回 ErrorResponse，`error.code` 为 `INVALID_STATE_TRANSITION`。
 
-> Phase 1 语义：心跳仅用于刷新 `lastActivityAt`，与 deadline 无耦合——deadline 之后的心跳仍会被接受。后台扫描任务（`HEARTBEAT_TIMEOUT_MS`，默认 60s）将长时间无活动的 `in_progress` attempt 标记为 `disrupted`。前端 restore UI 在 Phase 1.7 未接入，参见 `docs/todo.md` Phase 2 backlog。
+> 心跳仅用于刷新 `lastActivityAt`，与 deadline 无耦合——deadline 之后的心跳仍会被接受。后台扫描任务（`HEARTBEAT_TIMEOUT_MS`，默认 60s）将长时间无活动的 `in_progress` attempt 标记为 `disrupted`。前端 restore UI 未产品化，参见 `docs/status/implementation-status.md` Known limitations。
 
 ---
 

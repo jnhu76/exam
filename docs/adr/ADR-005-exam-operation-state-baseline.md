@@ -48,7 +48,7 @@ first, so the implementation has one authority to build against.
    (`packages/exam-engine/src/attemptCommands.ts:208`) checks only the attempt
    state machine — no elapsed-time guard.
 6. The roadmap already flagged this:
-   `docs/phase2/phase2.plan.md:297` — *"openExam()/closeExam() exist but no
+   `docs/archive/phase2-archive/phase2/phase2.plan.md:297` — *"openExam()/closeExam() exist but no
    route or scheduler calls them."*
 
 ### Why a design-first baseline (not direct implementation)
@@ -485,12 +485,11 @@ and testable; later slices depend on earlier ones.
 - `SubmitSource` discriminator across all submit call sites.
 - Validation rules (§4.2).
 
-### Slice 4 — Cancel (likely deferred further)
+### Slice 4 — Cancel (implemented in Phase 2)
 
 - `canceled` enum value + `exam.cancel` op + `EXAM_CANCEL_NOT_ALLOWED`.
-- **Only** if/when attempt-voiding and cancellation-marker export semantics
-  are decided. This ADR must be amended with those decisions before Slice 4
-  ships. Default assumption: **Slice 4 does not ship** in this work cycle.
+- Implemented: `published -> canceled`, `open → canceled` transitions with
+  unresolved-attempts guard.
 
 ## Boundary / non-collision with existing Phase 2C jobs
 

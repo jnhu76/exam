@@ -4,6 +4,10 @@ This roadmap is the documentation authority for phase scope. Phase 1 is a minima
 
 ## Phase 1: Minimal Deliverable Exam System
 
+### Status
+
+**Phase 1 is COMPLETE.**
+
 ### Goal
 
 Deliver a LAN/on-premise single-tenant exam system where one deployment represents one organization. Admin and Candidate can complete a reliable exam loop with recoverable answers, automatic grading, diagnostic evidence, and result export.
@@ -220,6 +224,10 @@ P4 (RBAC MVP role switch)
   → P6 (MVP ready closeout)
 ```
 
+P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
+Inbox + Email business integration. P5-0 has no dependency on P3 and may be
+completed before result-publishing closeout. P5-N1 depends on both P5-0 and P3.
+
 This ordering reflects real dependencies, not narrative sequence:
 P4 establishes the final Admin/Teacher/Candidate role model; P5-0 hardens the
 Email delivery runtime (ADR-011 accepted, no dependency on P3); P3 closes
@@ -229,7 +237,7 @@ result-publication transaction with the first Inbox + Email integration.
 | Job  | True dependency                                |
 | ---- | ---------------------------------------------- |
 | P4   | Authorization infrastructure implemented        |
-| P5-0 | ADR-011 accepted; does not depend on P3         |
+| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) |
 | P3   | P4 closed                                       |
 | P5-N1| P4 + P5-0 + P3 closed                           |
 | P6   | Preceding MVP blockers closed                   |

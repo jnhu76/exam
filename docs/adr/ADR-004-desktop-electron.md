@@ -8,7 +8,7 @@ Deferred
 
 The exam platform runs today as a web application: candidates take exams in a browser, with answers saved to the server via the Answer Save Protocol (HTTP POST, versioned, idempotent), a server-side timer as time authority, and a server-side heartbeat that detects disconnection.
 
-For strict closed-book / proctored exam scenarios, a browser is not always sufficient. Lockdown — restricting clipboard, screen capture, application switching, and other-tab access — cannot be reliably enforced from a web page. `controlFlags.requireLockdown` exists in the schema (SPEC §2.4) and is explicitly a future capability; Phase 1 does not implement Electron lockdown.
+For strict closed-book / proctored exam scenarios, a browser is not always sufficient. Lockdown — restricting clipboard, screen capture, application switching, and other-tab access — cannot be reliably enforced from a web page. `controlFlags.requireLockdown` exists in the schema (SPEC §2.6) and is explicitly a future capability; Phase 1 does not implement Electron lockdown.
 
 The project structure reserves `apps/desktop/` for an Electron shell (SPEC), but it is **not started**. The Phase 2 plan (§9 Future Phase — Desktop Exam Runtime) states plainly: Desktop/Electron implementation is **not** part of Phase 2; Phase 2 only records the ADR. The roadmap defers Electron lockdown to a future phase, and Phase 2 explicitly does not implement Electron lockdown (plan §11, non-goals).
 
@@ -16,7 +16,7 @@ This ADR records what problem Desktop would solve, why it is deferred, the scope
 
 ## Decision
 
-**Desktop/Electron implementation is deferred to Phase 3+. Phase 2 only records this ADR.**
+**Desktop/Electron implementation is deferred. Phase 2 only records this ADR.**
 
 No `apps/desktop/` code is written in Phase 2. `controlFlags.requireLockdown` remains schema-only and unused by any runtime path. Any future Desktop implementation requires a follow-up decision recorded against this ADR, and must obey the constraints in this document.
 
@@ -39,7 +39,7 @@ Each trigger must be tied to a real requirement from a real deployment. "Lockdow
 - A second exam protocol. Desktop must reuse the server-side exam protocol (see Constraints).
 - A required runtime component. Desktop, if built, is an **optional** client. The web exam path must remain fully functional.
 
-## Future Desktop Scope (Phase 3+, illustrative)
+## Future Desktop Scope (illustrative)
 
 If adopted, a Desktop runtime **may** include — this list is descriptive, not a commitment:
 
@@ -101,7 +101,7 @@ Rollback is safe because Desktop is optional and the server is always the source
 
 ## Phase 2 Decision
 
-**Desktop/Electron implementation is deferred to Phase 3+. Phase 2 only records this ADR.**
+**Desktop/Electron implementation is deferred. Phase 2 only records this ADR.**
 
 - `apps/desktop/` remains not-started.
 - `controlFlags.requireLockdown` stays schema-only; no runtime path enforces it in Phase 2.

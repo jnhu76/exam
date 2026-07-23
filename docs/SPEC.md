@@ -31,17 +31,13 @@ Phase 1 当前产品角色为 Admin + Candidate。Teacher / Proctor / Grader 是
 
 > **Phase 1 数据归属说明**：当前系统为单租户模式，所有业务数据归属于内部 default organization。route / repository 仍携带 organizationId，但 organizationId 来自 default organization，不允许产品路径中切换 organization。Phase 4 如启用 optional multiTenant，数据归属边界才扩展为租户隔离。
 
-> **当前实现边界（Phase 1.7）**：
+> **当前实现边界**：
 >
-> 上述原则是系统**长期不变契约**，不会被 Phase 1.7 削弱。但需要明确当前接线深度：
+> 上述原则是系统**长期不变契约**。但需要明确当前接线深度：
 >
-> - "答卷可恢复"在 Phase 1.7 仅保证**服务端层面**的能力——答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
+> - "答卷可恢复"仅保证**服务端层面**的能力——答案持久化、`disrupted` 自动标记、`restoreAttempt` 后端路由均已就绪。心跳扫描器（`apps/api/src/plugins/heartbeat.ts`）在 API 启动时**默认注册并运行**（30 秒扫描周期 / 60 秒超时，可由 `HEARTBEAT_SCAN_INTERVAL_MS` / `HEARTBEAT_TIMEOUT_MS` 调整），会真实把超时的 `in_progress` attempt 写为 `disrupted`。
 > - **前端恢复入口与监考裁决仍未产品化**：候考人没有自助 restore 按钮，监考也没有恢复 disrupted attempt 的操作面板；attempt 一旦 `disrupted`，前端只跳到结果页提示"答题中断"。
-> - 因此在 disrupted 状态被生产场景大规模触发之前，必须先完成下列前置 Phase 2 项：
->   - **P2A-J3 Attempt Heartbeat**：前端 restore UI、心跳调参、超时阈值评估
->   - **P2A-J4 disrupted 检测与恢复**：监考介入 / 恢复裁决流程
->
-> 详见 `docs/archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §2.1。
+> - 因此在 disrupted 状态被生产场景大规模触发之前，需要完成前端恢复 UI、心跳调参与超时阈值评估、以及监考介入 / 恢复裁决流程等产品化工作。
 
 ---
 
@@ -80,7 +76,7 @@ QuestionBank (题库)
 Exam (考试)
   ├── 从 QuestionBank 中抽题组卷
   ├── passingScore: 及格线
-  ├── timing: timed_sync | timed_window | deadline | untimed（见 §2.4）
+  ├── timing: timed_sync | timed_window | deadline | untimed（见 §2.5）
   ├── durationMinutes: 考试时长（timed 模式必填）
   ├── 管控细项（每项可独立开关，见 §2.5）
   └── startTime / endTime: 开放时间窗口
@@ -133,18 +129,18 @@ not_started → queued → in_progress → submitted → grading → graded
                                      └── disrupted   voided
 ```
 
-> 上图是状态机的**长期目标设计**。当前 Phase 1.7 的实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
+> 上图是状态机的**长期目标设计**。当前实现并未让所有状态都进入运行时主流程；下表给出每个状态在当前实现中的真实接线情况，避免后续读者把目标设计误读为已完成能力。状态机收敛策略与裁决记录见 `docs/archive/phase1-archive/phase-1.7/exam-lifecycle-non-e2e-closeout.md` §3。
 
 | 状态 | 含义 | 当前实现接线 |
 |------|------|------|
 | `not_started` | 已创建，尚未开始 | 保留，**当前无写入路径**（attempt 在 `startAttempt` 时直接进入 `in_progress`） |
 | `queued` | 排队中（requireQueue 时） | **Phase 2 / planned**：`requireQueue` 入口属于 timed_sync 计时模式（§2.5），仅在内存路径上短暂出现，不持久化 |
-| `in_progress` | 正在答题 | **Phase 1.7 已接线**：`startAttempt` 命令写入 |
-| `disrupted` | 心跳超时自动标记（60s 无心跳） | **Phase 1.7 后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**前端恢复入口与监考裁决仍未产品化**，生产大规模启用前仍依赖 P2A-J3 / P2A-J4（详见 §3.5 与 closeout §2.1） |
-| `submitted` | 已交卷，等待批改 | **Phase 1.7 已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
+| `in_progress` | 正在答题 | **已接线**：`startAttempt` 命令写入 |
+| `disrupted` | 心跳超时自动标记（60s 无心跳） | **后端已接线**：心跳扫描器默认注册并运行，到达超时阈值会真实写入 `disrupted` 状态。**前端恢复入口与监考裁决仍未产品化**，详见 §3.5 |
+| `submitted` | 已交卷，等待批改 | **已接线**：`submitAttempt` 内部 4-phase 改造的中间态，幂等可重入 |
 | `grading` | 正在批改 | 保留，**当前无写入路径**：`submitAttempt` 内联调用批改后直接落 `graded`；该状态保留以便 Phase 2 异步批改/AI 批改场景启用 |
-| `graded` | 批改完成 | **Phase 1.7 已接线** |
-| `voided` | 已作废（监考员或管理员操作） | **Phase 2 / planned**：`voidAttempt` command 仅作为目标设计，Phase 1.7 未提供管控入口 |
+| `graded` | 批改完成 | **已接线** |
+| `voided` | 已作废（监考员或管理员操作） | **Phase 2+ / planned**：`voidAttempt` command 仅作为目标设计，未提供管控入口 |
 
 **ExamAttempt 数据结构**：
 
@@ -282,11 +278,11 @@ Phase 3 才引入基于 permission + scope 的协作角色：
 | 模式 | 时间规则 | 典型场景 | 当前接线 |
 |------|----------|----------|------|
 | **定时统考** `timed_sync` | 监考员统一触发开考，所有人同时开始倒计时，到时强制交卷 | 期末考试、软考机考 | **Phase 2 / planned**（依赖监考面板） |
-| **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 | **Phase 1.7 已接线** |
+| **窗口限时** `timed_window` | 在开放窗口内考生自选时间开始，开始后倒计时 | 实验室准入、随堂测验 | **已接线** |
 | **纯截止日** `deadline` | 只有截止时间，不计时，做完就交 | 培训确认、课后作业 | **Phase 2 / planned** |
 | **不限时** `untimed` | 永久开放，随时做随时交（或管理员手动关闭） | 练习题、模拟考试 | **Phase 2 / planned** |
 
-> Phase 1.7 仅实现 `timed_window`。其它三种模式作为目标设计保留，**未在当前代码中接线**——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要等待 Phase 2C 显式启动（详见 §七 Phase 2 列表与 closeout §2.4）。
+> Phase 1 仅实现 `timed_window`。其它三种模式作为目标设计保留，**未在当前代码中接线**——后续 agent 不应把缺失视作状态机或排队逻辑的实现缺陷来"补全"，需要等待 Phase 2+ 硬化阶段显式启动（详见 §七 Phase 2 列表）。
 
 ```
 timed_sync 示例：
@@ -321,7 +317,7 @@ untimed 示例：
 | `batchSize` | - | 10 | 每批放行人数（同上） |
 | `batchInterval` | - | 3 | 批次间隔秒数（同上） |
 | `restrictIp` | 关 | 开 | 仅允许考场 IP 段 [Phase 2] |
-| `requireLockdown` | 关 | 关 | 强制 Electron 锁屏 [Phase 2] |
+| `requireLockdown` | 关 | 关 | 强制 Electron 锁屏 [Deferred] |
 | `showResultImmediately` | 开 | 可配置 | 交卷后是否立即显示成绩 |
 | `retakePolicy` | unlimited | max_attempts | 重考策略 |
 | `maxRetakeAttempts` | - | 1 | 最大重考次数 |
@@ -387,7 +383,7 @@ Phase 1 为单租户模式：
 | 客户端 | 场景 | 特性 |
 |--------|------|------|
 | **Web（浏览器）** | Admin 后台、Candidate 考试、Phase 1 全场景 | 标准浏览器 |
-| **Electron 桌面端** | 闭卷考试锁屏 [Phase 2] | 禁止切应用、全屏强制、设备指纹 |
+| **Electron 桌面端** | 闭卷考试锁屏 [Deferred] | 禁止切应用、全屏强制、设备指纹 |
 
 ---
 
@@ -591,10 +587,10 @@ SaveAnswerResponse {
 | 服务端重启 | 答案已实时持久化到数据库 → 所有 in_progress 的 attempt 保持原状态 → 考生继续 |
 | 网络中断 | 客户端切入离线模式 → 答案暂存本地 → 恢复后按 serverVersion 批量同步 |
 
-> **Phase 1.7 实现边界**：上表是恢复能力的**目标合约**。当前实现：
+> **实现边界**：上表是恢复能力的**目标合约**。当前实现：
 >
 > - "客户端崩溃 / 网络中断"在 attempt 仍处于 `in_progress` 时可正常恢复（前端在加载 attempt 时拉取服务端答案版本）。
-> - 一旦 attempt 被心跳扫描器置为 `disrupted`，**前端没有自助 restore 入口**——会直接跳到结果页提示"答题中断，请联系监考或重新进入"。这条恢复路径需要 P2A-J3（前端 restore UI）+ P2A-J4（监考介入）共同收口。
+> - 一旦 attempt 被心跳扫描器置为 `disrupted`，**前端没有自助 restore 入口**——会直接跳到结果页提示"答题中断，请联系监考或重新进入"。这条恢复路径需要前端 restore UI + 监考介入共同收口。
 > - "服务端重启"路径不依赖前端 UI，已具备能力。
 
 ### 3.6 Question Snapshot：题目快照底座
@@ -815,7 +811,7 @@ Admin 新建 Exam → 选择 Course
 
 **排队分批进入**（用于闭卷统考，**Phase 2 / planned**）：
 
-> 该子流程依赖 `timed_sync` 计时模式与监考面板触发"开考"动作，两者均归属 Phase 2（见 §2.5、§4.5）。Phase 1.7 不实现该流程，下文为目标设计示意。
+> 该子流程依赖 `timed_sync` 计时模式与监考面板触发"开考"动作，两者均归属 Phase 2+ 硬化（见 §2.5、§4.5）。当前不实现该流程，下文为目标设计示意。
 
 ```
 Phase 2 运营人员点击"开考"
@@ -897,7 +893,7 @@ Phase 2 运营人员点击"开考"
 |----|----------|------|
 | 前端 | React 19 + Vite + TypeScript | - |
 | UI | shadcn/ui + TailwindCSS v4 | - |
-| 桌面端 | Electron [Phase 2] | - |
+| 桌面端 | Electron [Deferred] | - |
 | API 框架 | Fastify | - |
 | 运行时 | Node.js LTS | - |
 | Schema 校验 | Zod | TypeBox |
@@ -925,7 +921,7 @@ exam/
 │   │       ├── routes/           # 路由处理器（一个文件一个领域）
 │   │       ├── plugins/          # Fastify 插件（auth、CORS、security）
 │   │       └── server.ts         # Fastify 入口
-│   └── desktop/            # Electron shell [Phase 2]
+│   └── desktop/            # Electron shell [Deferred]
 │
 ├── packages/
 │   ├── domain/             # 领域模型、状态机、策略，不依赖 Fastify
@@ -955,7 +951,7 @@ exam/
 │   │       ├── answerProtocol.ts
 │   │       └── grading.ts
 │   ├── import-export/      # CSV/Excel/PDF 导入导出
-│   └── ui/                 # Web/Electron 共用 UI 组件 [Phase 2]
+│   └── ui/                 # Web/Electron 共用 UI 组件
 │
 ├── docs/
 │   ├── SPEC.md             # 本文档
