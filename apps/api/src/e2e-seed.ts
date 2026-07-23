@@ -20,7 +20,7 @@ import { createDatabase } from "@exam/db/src/database.js";
 import { migratePostgres } from "@exam/db/src/postgres.js";
 import {
   runE2eSeed,
-  E2E_SEED_OUTPUT,
+  buildE2eSeedOutput,
 } from "@exam/db/src/e2eSeedOrchestrator.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 import { loadRootEnv } from "./config/loadRootEnv.js";
@@ -50,7 +50,7 @@ try {
     }
     process.exitCode = 1;
   } else {
-    process.stdout.write(E2E_SEED_OUTPUT);
+    process.stdout.write(buildE2eSeedOutput());
   }
 } finally {
   await conn.sql.end();

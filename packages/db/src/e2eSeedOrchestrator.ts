@@ -1,6 +1,6 @@
 import type { Database } from "./types.js";
 import type { HashFunction, DemoIds } from "./demo-seed.js";
-import { seed } from "./seed.js";
+import { seed, SEED_CREDENTIALS } from "./seed.js";
 import { seedDemo } from "./demo-seed.js";
 import { verifyDemoSeed } from "./demo-seed-verify.js";
 
@@ -89,12 +89,31 @@ export async function runE2eSeed(
   return { ok: errors.length === 0, errors };
 }
 
-export const E2E_SEED_OUTPUT = `
-Done! E2E seed credentials:
-  Admin:      admin      / admin123
-  Candidate:  candidate  / candidate123
-  Demo:       candidate1 / candidate123 = in_progress/resume
-  Demo:       candidate2 / candidate123 = available/start
-  Demo:       candidate3 / candidate123 = resumable/resume
-  Demo:       candidate4 / candidate123 = graded/view_result
-`;
+/**
+ * Builds the credential output string from effective seed configuration.
+ * Reads SEED_ADMIN_* and SEED_CANDIDATE_* env vars (same as seed()),
+ * falling back to defaults. Demo accounts (candidate1..4) always use
+ * the fixed default password since they have no env overrides.
+ */
+export function buildE2eSeedOutput(): string {
+  const adminUser =
+    process.env.SEED_ADMIN_USERNAME || SEED_CREDENTIALS.admin.username;
+  const adminPass =
+    process.env.SEED_ADMIN_PASSWORD || SEED_CREDENTIALS.admin.password;
+  const candidateUser =
+    process.env.SEED_CANDIDATE_USERNAME || SEED_CREDENTIALS.candidate.username;
+  const candidatePass =
+    process.env.SEED_CANDIDATE_PASSWORD || SEED_CREDENTIALS.candidate.password;
+
+  return [
+    "",
+    "Done! E2E seed credentials:",
+    `  Admin:      ${adminUser.padEnd(10)} / ${adminPass}`,
+    `  Candidate:  ${candidateUser.padEnd(10)} / ${candidatePass}`,
+    "  Demo:       candidate1 / candidate123 = in_progress/resume",
+    "  Demo:       candidate2 / candidate123 = available/start",
+    "  Demo:       candidate3 / candidate123 = resumable/resume",
+    "  Demo:       candidate4 / candidate123 = graded/view_result",
+    "",
+  ].join("\n");
+}

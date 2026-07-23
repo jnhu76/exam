@@ -39,17 +39,33 @@ const orchestrator = read(ORCHESTRATOR);
 if (!orchestrator.includes("export async function runE2eSeed")) {
   errors.push(`${ORCHESTRATOR} must export runE2eSeed`);
 }
-// The orchestrator may compose via injected workflow defaults or direct calls.
-const composesWorkflow =
-  (orchestrator.includes("seedFn(") &&
-    orchestrator.includes("seedDemoFn(") &&
-    orchestrator.includes("verifyDemoSeedFn(")) ||
-  (orchestrator.includes("seed(") &&
-    orchestrator.includes("seedDemo(") &&
-    orchestrator.includes("verifyDemoSeed("));
-if (!composesWorkflow) {
+// Verify the orchestrator imports seed modules (structural, not token-in-comment).
+const importsSeedModules =
+  /from\s+["']\.\/seed\.js["']/.test(orchestrator) &&
+  /from\s+["']\.\/demo-seed\.js["']/.test(orchestrator) &&
+  /from\s+["']\.\/demo-seed-verify\.js["']/.test(orchestrator);
+if (!importsSeedModules) {
   errors.push(
-    `${ORCHESTRATOR} must compose baseline seed, demo seed, and demo-seed verification`,
+    `${ORCHESTRATOR} must import seed.js, demo-seed.js, and demo-seed-verify.js`,
+  );
+}
+// Verify the orchestrator calls the workflow functions (non-comment lines only).
+const codeLines = orchestrator
+  .split("\n")
+  .filter(
+    (l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"),
+  );
+const code = codeLines.join("\n");
+const hasWorkflowCalls =
+  (code.includes("seedFn(") &&
+    code.includes("seedDemoFn(") &&
+    code.includes("verifyDemoSeedFn(")) ||
+  (code.includes("seed(") &&
+    code.includes("seedDemo(") &&
+    code.includes("verifyDemoSeed("));
+if (!hasWorkflowCalls) {
+  errors.push(
+    `${ORCHESTRATOR} must call seed/seedDemo/verifyDemoSeed functions in code (not comments)`,
   );
 }
 
@@ -57,8 +73,11 @@ if (!composesWorkflow) {
 for (const adapter of ADAPTERS) {
   const content = read(adapter);
 
+  if (!/from\s+["'][^"']+e2eSeedOrchestrator/.test(content)) {
+    errors.push(`${adapter} must import from e2eSeedOrchestrator module`);
+  }
   if (!content.includes("runE2eSeed")) {
-    errors.push(`${adapter} must import and call runE2eSeed`);
+    errors.push(`${adapter} must call runE2eSeed`);
   }
 
   for (const pattern of COMPOSED) {

@@ -22,7 +22,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { createDatabase } from "./database.js";
-import { runE2eSeed, E2E_SEED_OUTPUT } from "./e2eSeedOrchestrator.js";
+import { runE2eSeed, buildE2eSeedOutput } from "./e2eSeedOrchestrator.js";
 import { hashPassword } from "@exam/auth/src/password.js";
 
 dotenv.config({ quiet: true });
@@ -55,7 +55,7 @@ if (isMain) {
       }
       process.exitCode = 1;
     } else {
-      process.stdout.write(E2E_SEED_OUTPUT);
+      process.stdout.write(buildE2eSeedOutput());
     }
   } catch (err) {
     process.stderr.write(`E2E seed failed: ${String(err)}\n`);

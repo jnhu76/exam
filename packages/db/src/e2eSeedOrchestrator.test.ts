@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   runE2eSeed,
-  E2E_SEED_OUTPUT,
+  buildE2eSeedOutput,
   type E2eSeedLogger,
 } from "./e2eSeedOrchestrator.js";
 import type { Database } from "./types.js";
@@ -208,9 +208,25 @@ describe("e2eSeedOrchestrator", () => {
     ]);
   });
 
-  it("exposes canonical credential output", () => {
-    expect(E2E_SEED_OUTPUT).toContain("admin      / admin123");
-    expect(E2E_SEED_OUTPUT).toContain("candidate  / candidate123");
-    expect(E2E_SEED_OUTPUT).toContain("candidate1 / candidate123");
+  it("buildE2eSeedOutput reflects default credentials", () => {
+    const output = buildE2eSeedOutput();
+    expect(output).toContain("admin");
+    expect(output).toContain("admin123");
+    expect(output).toContain("candidate");
+    expect(output).toContain("candidate123");
+    expect(output).toContain("candidate1 / candidate123");
+  });
+
+  it("buildE2eSeedOutput reflects env-var overrides", () => {
+    vi.stubEnv("SEED_ADMIN_USERNAME", "myadmin");
+    vi.stubEnv("SEED_ADMIN_PASSWORD", "s3cret");
+    try {
+      const output = buildE2eSeedOutput();
+      expect(output).toContain("myadmin");
+      expect(output).toContain("s3cret");
+      expect(output).not.toContain("admin      / admin123");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
