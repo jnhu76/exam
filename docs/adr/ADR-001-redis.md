@@ -14,9 +14,9 @@ The exam platform is a LAN / on-premise, single-tenant deployment. Phase 1 and P
 - **Rate limiting** — in-memory limiter on the login route (`10/min`) and exam routes. Acceptable for a single-instance LAN deployment.
 - **Session/JWT** — stateless HTTP-only cookie + JWT. No server-side session store is required, so Redis is not needed for session affinity.
 
-Discovery (`docs/phase2/discovery/06-phase2-gap-analysis.md` §Redis / MQ / Job Queue Assessment) explicitly concluded: **Redis is not needed for Phase 2** as long as the deployment stays single-instance. This ADR records the pain points Redis would solve, the conditions that would trigger adoption, and the minimal viable path — so that a future team does not reach for Redis (or reject it) without the same reasoning.
+Discovery (`docs/archive/phase2-archive/phase2/discovery/06-phase2-gap-analysis.md` §Redis / MQ / Job Queue Assessment) explicitly concluded: **Redis is not needed for Phase 2** as long as the deployment stays single-instance. This ADR records the pain points Redis would solve, the conditions that would trigger adoption, and the minimal viable path — so that a future team does not reach for Redis (or reject it) without the same reasoning.
 
-Phase 2 hard rule (`docs/phase2/phase2.plan.md` §10): do not start Redis before Phase 2A Candidate Runtime P0 correctness is complete.
+Phase 2 hard rule (`docs/archive/phase2-archive/phase2/phase2.plan.md` §10): do not start Redis before Phase 2A Candidate Runtime P0 correctness is complete.
 
 ## Decision
 

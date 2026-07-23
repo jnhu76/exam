@@ -51,10 +51,13 @@ P4 (RBAC MVP role switch)
   → P6 (MVP ready closeout)
 ```
 
+P5 is a two-Job module: P5-0 = Email delivery infrastructure; P5-N1 = first real
+Inbox + Email business integration.
+
 | Job  | True dependency                                |
 | ---- | ---------------------------------------------- |
 | P4   | Authorization infrastructure implemented        |
-| P5-0 | ADR-011 accepted; does not depend on P3         |
+| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) |
 | P3   | P4 closed                                       |
 | P5-N1| P4 + P5-0 + P3 closed                           |
 | P6   | Preceding MVP blockers closed                   |

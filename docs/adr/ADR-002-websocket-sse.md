@@ -10,7 +10,7 @@ Phase 2 introduces a proctor workflow (P2C). The proctor dashboard (P2C-J5) need
 
 The Answer Save Protocol (SPEC §3.5) is HTTP-only: answers are saved to the server on every change via a versioned, idempotent POST. SPEC is explicit that answer saving must **not** depend on WebSocket as the only channel. So WebSocket/SSE is never a correctness requirement for the core exam loop — it is purely a latency/UX concern for the proctor dashboard and any future server-push UI.
 
-Discovery (`docs/phase2/discovery/06-phase2-gap-analysis.md`) notes that real-time status / candidate status cards / event stream are **missing** today, and that HTTP polling is an acceptable Phase 2 solution. The Phase 2 plan (`docs/phase2/phase2.plan.md` §7 P2C) and the P2C-J5 job card mandate **HTTP polling first, no WebSocket dependency**: the dashboard polls `GET /api/admin/exams/:id/candidates/status` at a configurable interval (default 5s) and refreshes on the next poll after an admin action.
+Discovery (`docs/archive/phase2-archive/phase2/discovery/06-phase2-gap-analysis.md`) notes that real-time status / candidate status cards / event stream are **missing** today, and that HTTP polling is an acceptable Phase 2 solution. The Phase 2 plan (`docs/archive/phase2-archive/phase2/phase2.plan.md` §7 P2C) and the P2C-J5 job card mandate **HTTP polling first, no WebSocket dependency**: the dashboard polls `GET /api/admin/exams/:id/candidates/status` at a configurable interval (default 5s) and refreshes on the next poll after an admin action.
 
 Therefore the only candidate pain point for WebSocket/SSE is proctor dashboard real-time feel. That pain has not been demonstrated; polling at 5s is the baseline.
 

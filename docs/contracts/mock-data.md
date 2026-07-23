@@ -335,9 +335,9 @@ fill_blank,HTTP 的默认端口是____,,,,,80,5,2,网络,,exact
 
 ---
 
-## Future / Phase 2 Examples
+## Phase 2+ Features (not in default Phase 1 mock)
 
-以下不是 Phase 1 default mock：
+以下不是 Phase 1 default mock（其中部分已在 Phase 2 实现，部分仍为 deferred）：
 
 - random question selection
 - queue admission (`requireQueue`, `batchSize`, `batchInterval`)

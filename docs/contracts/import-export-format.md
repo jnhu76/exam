@@ -292,4 +292,4 @@ SuperAdmin 不出现在 Phase 1 当前权限中。
 2. **空值处理**: 自定义字段空值显示为空字符串。
 3. **时间格式**: ISO 8601 格式：`YYYY-MM-DDTHH:mm:ss.sssZ`。
 4. **审计**: Phase 1 result CSV export 应写入最小 AuditLog。
-5. **大文件导出**: Phase 1 可以同步 CSV；Phase 2 才是 export job / large export / job log。
+5. **大文件导出**: Phase 1 可以同步 CSV；Phase 2 已实现 export job / large export / job log。

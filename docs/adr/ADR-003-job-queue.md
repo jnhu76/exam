@@ -17,7 +17,7 @@ Every Phase 1 and Phase 2 operation today completes within the synchronous reque
 
 There is no async workload, no background worker, and no message broker in the runtime today.
 
-Discovery (`docs/phase2/discovery/06-phase2-gap-analysis.md` §Redis / MQ / Job Queue Assessment) explicitly concluded: **Job Queue is not needed for Phase 2** — all operations complete within the request lifecycle; if PDF export or email is added, reconsider. The Phase 2 plan (`docs/phase2/phase2.plan.md` §8) reinforces this: a job queue is only revisited when export/import/email/auto-submit becomes too slow for the request lifecycle.
+Discovery (`docs/archive/phase2-archive/phase2/discovery/06-phase2-gap-analysis.md` §Redis / MQ / Job Queue Assessment) explicitly concluded: **Job Queue is not needed for Phase 2** — all operations complete within the request lifecycle; if PDF export or email is added, reconsider. The Phase 2 plan (`docs/archive/phase2-archive/phase2/phase2.plan.md` §8) reinforces this: a job queue is only revisited when export/import/email/auto-submit becomes too slow for the request lifecycle.
 
 This ADR records the pain points a job queue would solve, the conditions that would trigger adoption, and the minimal viable path.
 
