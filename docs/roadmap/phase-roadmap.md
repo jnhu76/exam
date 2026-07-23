@@ -196,6 +196,47 @@ Add multi-user collaboration, scoped authorization, and account lifecycle manage
 - Subjective / rich-text answer runtime + manual-grading candidate-answer detail and full grading workflow (deferred from Phase 2 — see `apps/e2e/e2e/manual-grading.spec.ts`).
 - WYSIWYG submit final-answer barrier (Option D, ADR-008 — `/submit` carries a final-answer payload / version barrier so the UI answer at submit-click time is the grading authority).
 - Remaining i18n page-level copy migration (CandidateFieldsPage, ExamConfigForm, QuestionForm, etc. — admin form/modal content deferred from J7).
+- In-app notification Inbox for selected operational events (architecture: ADR-011).
+- Asynchronous PostgreSQL-outbox Email delivery with a resident, observable worker (architecture: ADR-011).
+- First operational notification integration for result publication (`result_published`).
+
+### Architecture authority
+
+Notification and Email delivery are governed by
+[`docs/adr/ADR-011-notification-and-email-delivery.md`](../adr/ADR-011-notification-and-email-delivery.md):
+two channels (first-class Inbox + asynchronous Email outbox), at-least-once
+delivery, resident worker, atomic business mutation + Inbox + outbox
+transaction for operational events, and a validated `PUBLIC_WEB_ORIGIN` /
+site-relative `actionPath`. The Phase 3 product work that remains is broken
+into the module execution order below (see
+[`docs/roadmap/phase3-open-items.md`](phase3-open-items.md) for per-Job
+scope):
+
+```text
+P4 (RBAC MVP role switch)
+  → P5-0 (Email delivery runtime hardening)
+  → P3 (result publishing closeout)
+  → P5-N1 (Notification Inbox + result-published Email integration)
+  → P6 (MVP ready closeout)
+```
+
+This ordering reflects real dependencies, not narrative sequence:
+P4 establishes the final Admin/Teacher/Candidate role model; P5-0 hardens the
+Email delivery runtime (ADR-011 accepted, no dependency on P3); P3 closes
+result publishing under the final role model; P5-N1 extends the now-stable
+result-publication transaction with the first Inbox + Email integration.
+
+| Job  | True dependency                                |
+| ---- | ---------------------------------------------- |
+| P4   | Authorization infrastructure implemented        |
+| P5-0 | ADR-011 accepted; does not depend on P3         |
+| P3   | P4 closed                                       |
+| P5-N1| P4 + P5-0 + P3 closed                           |
+| P6   | Preceding MVP blockers closed                   |
+
+Identity lifecycle (invitation, SMTP password reset, account
+activation/deactivation) remains Phase 3 scope but is separate future work
+and is not silently included in P5-N1.
 
 ### Out of scope
 
@@ -214,11 +255,20 @@ Add multi-user collaboration, scoped authorization, and account lifecycle manage
 - Staff invitation and email password reset are auditable.
 - Permission audit explains who granted which capability and why.
 - Audit log query/export supports operational review.
+- Candidate receives and reads a result-publication Inbox notification.
+- Candidate with a configured email address receives the corresponding
+  asynchronous result email (SMTP never participates in the result-publication
+  transaction).
+- Email worker heartbeat and backlog are observable through diagnostics.
 
 ### Explicitly deferred items
 
 - Platform integrations and API keys move to Phase 4.
 - Optional multiTenant and SuperAdmin move to Phase 4.
+- Beyond the `result_published` first integration, additional operational
+  notification types (`exam_assigned`, schedule change/cancellation, grading
+  assignment) are deferred to later NotificationService migrations (P5-N2+),
+  governed by ADR-011.
 
 ## Phase 4: Platformization and Integration
 
