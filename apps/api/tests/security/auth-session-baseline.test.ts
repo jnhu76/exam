@@ -17,7 +17,7 @@ import { setupApiTestDatabaseFromEnv } from "../../src/routes/testDatabase.js";
 import { resolveTestDbUrl } from "@exam/db/src/testDb.js";
 import { eq } from "drizzle-orm";
 import { signJWT, verifyJWT } from "@exam/auth/src/session.js";
-import { seed } from "@exam/db/src/seed.js";
+import { seed, SEED_CREDENTIALS } from "@exam/db/src/seed.js";
 import authRoutes from "../../src/routes/auth.js";
 import type { Database } from "@exam/db/src/types.js";
 import type { Role } from "@exam/domain";
@@ -133,7 +133,7 @@ describe("Auth & Session Security Baseline (S08-lite)", () => {
         url: "/api/auth/login",
         payload: {
           username: adminUsername,
-          password: "admin123",
+          password: SEED_CREDENTIALS.admin.password,
         },
       });
       expect(res.statusCode).toBe(200);

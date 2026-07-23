@@ -20,3 +20,7 @@ apps/api/public/
 # Findings belong in docs/dev/test-flakes.md or the relevant phase report,
 # not in tracked artifacts at the repo root.
 mutation-campaign-results/
+
+# Local generated architecture discovery
+/.system-model/
+.code-review-graph/

@@ -2,13 +2,17 @@
 
 ## Status
 
-Proposed (documentation-only). No code, test, or CI change is authorized by this
-ADR. Implementation phases are sequenced in `docs/archive/dev/test-ci-parallelism-plan.md`
-and executed by follow-up PRs that must each carry their own stress evidence.
+ACCEPTED (infrastructure implemented, Phase 6G/7 deferred).
 
-This ADR is a **long-term architecture constraint**, not a record of completed
-work. It governs how every future stateful test resource (PostgreSQL, Redis,
-Queue, background worker) is allocated, isolated, and cleaned up.
+Phase 2–6F are implemented and enforced in local dev and CI. The core
+isolation contract (per-worker DB, scope resolver, background default-off,
+CI shard config) is in active use. Phase 6G (live CI validation) and Phase 7
+(Redis/Queue prefix) remain deferred until triggered.
+
+This ADR is a **long-term architecture constraint** that governs how every
+stateful test resource (PostgreSQL, Redis, Queue, background worker) is
+allocated, isolated, and cleaned up. Implementation phases are sequenced in
+`docs/archive/dev/test-ci-parallelism-plan.md`.
 
 ## Context
 
@@ -64,9 +68,9 @@ that covers PostgreSQL, Redis, Queue, and background workers together.
 
 ## Non-Goals
 
-- **No code, test, or CI change in this PR.** This ADR and its two companion
-  dev docs are the only deliverable. Implementation is phased and gated by
-  stress evidence in follow-up PRs.
+- This ADR does **not** claim `BUG-FLAKE-001` (or any entry in
+  `test-flakes.md`) is fixed. Existing mitigations remain until a follow-up
+  PR removes them with its own evidence.
 - No claim that `BUG-FLAKE-001` (or any entry in `test-flakes.md`) is fixed.
   Existing mitigations (`fileParallelism: false`, `verify:db-tests` serial
   chain, scanner legacy timeout, per-file schema isolation) remain in force
@@ -89,26 +93,32 @@ production code paths.
 
 ## Implementation Status
 
-> **Phase 6 口径修正（2026-06-23）**：下表 Phase 5A/5B 的 "Completed" 仅指 **local-only、
-> test-only evidence**（maxWorkers=2/4 的 5/5 stress 是本地单次 test pass，不含 coverage、
-> 不含 CI、不含 global/default 证据）。Phase 6 "Config prepared" 指 CI shard 配置已就绪，
-> **live CI validation 仍 pending**。这些状态**不**等价于 "CI-ready" 或 "coverage/global
-> proof"。详见下方 Completion Boundary。
+State taxonomy used in this table:
+
+- **ACCEPTED_AND_ENFORCED** — decision accepted and implementation enforced in
+  local dev and CI (e.g., scope resolver, worker DB isolation, background
+  default-off).
+- **LOCAL_ONLY_EVIDENCE** — implementation works locally and has local stress
+  evidence, but has not been validated in live CI or at coverage scale.
+- **CONFIG_PREPARED** — CI/workflow configuration is in place but has not yet
+  been exercised by a real CI run.
+- **LIVE_CI_UNVALIDATED** — CI configuration exists; live validation is pending.
+- **DEFERRED** — explicitly postponed until a documented trigger fires.
 
 | Phase                            | Status                    | Evidence / Notes                                    |
 | -------------------------------- | ------------------------- | --------------------------------------------------- |
-| Phase 2A — scope resolver        | Completed                 | resolver + scope naming landed                      |
-| Phase 3A — worker DB prototype   | Completed                 | db helper tested                                    |
-| Phase 3B — API worker DB opt-in  | Completed                 | API suite can run serial in worker DB mode           |
-| Phase 4 — background default-off | Completed                 | buildTestApp does not auto-start scanner timers     |
-| Phase 5A — local maxWorkers=2    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass (local, test-only)                                     |
-| Phase 5B — local maxWorkers=4    | Completed (local-only, test-only evidence; not CI-ready, not coverage/global proof) | 5/5 stress pass; local recommended mode (local, test-only)             |
-| Phase 6 — CI shard               | Config prepared; live CI shard validation pending | 2 shards × 1 worker in ci.yml; live CI validation pending |
-| Phase 6D — physical DB lifecycle contention | Mitigation implemented (local-only evidence; not CI-validated; does not close BUG-FLAKE-001) | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress |
-| Phase 6E — CI verify gate dedup | CI verify job optimized to avoid root test + coverage duplication | `verify:ci` uses coverage as test entry; `verify`/`verify:db-tests`/api-fast/e2e unchanged |
-| Phase 6F — CI job DAG optimization | CI DAG optimized, static-gated parallel jobs prepared | new `static` job; `verify`/`api-fast`/`e2e` now `needs: static` (parallel); test semantics unchanged; live CI validation pending |
-| Phase 6G — Live CI validation | Deferred | Blocked until GitHub Actions can run. Must validate `static`/`verify`/`api-fast`/`e2e` on the real CI DAG before changing defaults or closing ADR-007. Local evidence is not sufficient. |
-| Phase 7 — Redis / Queue prefix   | Deferred                  | Only when Redis / Queue adoption is triggered       |
+| Phase 2A — scope resolver        | ACCEPTED_AND_ENFORCED     | resolver + scope naming landed                      |
+| Phase 3A — worker DB prototype   | ACCEPTED_AND_ENFORCED     | db helper tested                                    |
+| Phase 3B — API worker DB opt-in  | ACCEPTED_AND_ENFORCED     | API suite can run serial in worker DB mode           |
+| Phase 4 — background default-off | ACCEPTED_AND_ENFORCED     | buildTestApp does not auto-start scanner timers     |
+| Phase 5A — local maxWorkers=2    | LOCAL_ONLY_EVIDENCE       | 5/5 local stress pass; not CI-ready, not coverage/global proof |
+| Phase 5B — local maxWorkers=4    | LOCAL_ONLY_EVIDENCE       | 5/5 local stress pass; local recommended mode; not CI-ready, not coverage/global proof |
+| Phase 6 — CI shard               | CONFIG_PREPARED           | 2 shards × 1 worker in ci.yml; live CI validation pending |
+| Phase 6D — physical DB lifecycle contention | LOCAL_ONLY_EVIDENCE | advisory lock + unique DB names + robust drop; coverage:db 5/5 PASS, verify 1/1 PASS + 2/2 stress; does not close BUG-FLAKE-001 |
+| Phase 6E — CI verify gate dedup | ACCEPTED_AND_ENFORCED     | `verify:ci` uses coverage as test entry; `verify`/`verify:db-tests`/api-fast/e2e semantics unchanged |
+| Phase 6F — CI job DAG optimization | CONFIG_PREPARED        | new `static` job; `verify`/`api-fast`/`e2e` now `needs: static` (parallel); test semantics unchanged; live CI validation pending |
+| Phase 6G — Live CI validation    | DEFERRED                  | Blocked until GitHub Actions can run. Must validate `static`/`verify`/`api-fast`/`e2e` on the real CI DAG before changing defaults or closing ADR-007. Local evidence is not sufficient. |
+| Phase 7 — Redis / Queue prefix   | DEFERRED                  | Only when Redis / Queue adoption is triggered       |
 
 ## Current Recommended Modes
 
@@ -371,19 +381,19 @@ Rules:
 
 ### Redis isolation options
 
-9. **Redis `SELECT DB`.** Simple, but not portable, fragile under shared
+1. **Redis `SELECT DB`.** Simple, but not portable, fragile under shared
    instances, and a 16-DB ceiling. **Rejected as the long-term primary
    isolation.**
-10. **Redis key prefix (chosen default).** `exam:test:s{shard}:w{worker}:`.
+2. **Redis key prefix (chosen default).** `exam:test:s{shard}:w{worker}:`.
     Portable, composes with CI service isolation, and works on a shared
     instance. Long-term default.
-11. **Dedicated Redis service/container per CI job (chosen for CI).** Pair with
+3. **Dedicated Redis service/container per CI job (chosen for CI).** Pair with
     option 10: shard-level dedicated Redis + worker-level prefix. Eliminates
     cross-shard contention entirely.
 
 ### Queue isolation options
 
-12. **`TEST_QUEUE_MODE`: `disabled` / `producer-only` / `worker-enabled`.**
+1. **`TEST_QUEUE_MODE`: `disabled` / `producer-only` / `worker-enabled`.**
     - `disabled`: ordinary tests where no enqueue is exercised.
     - `producer-only` (default for ordinary API tests that touch enqueue): the
       test asserts the enqueue succeeded and the job row exists; no consumer.
