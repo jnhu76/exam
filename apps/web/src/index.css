@@ -17,8 +17,8 @@
  */
 :root {
   --font-ui:
-    "Noto Sans CJK SC", "Source Han Sans SC", -apple-system, BlinkMacSystemFont,
-    "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    "HarmonyOS Sans SC", "Noto Sans CJK SC", "Noto Sans SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   --font-reading-stack: var(--font-ui);
   /*
    * Serif authority (UI-TYPO-2). The self-hosted "Noto Serif SC" family is the
@@ -37,6 +37,8 @@
 }
 
 @theme inline {
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5;
   --font-sans: var(--font-ui);
   --font-reading: var(--font-reading-stack);
   --font-serif: var(--font-serif-stack);
@@ -119,10 +121,10 @@
   --surface-muted: var(--surface-subtle);
   --surface-hover: #f8fafc;
   --surface-selected: #eff6ff;
-  --text: #111827;
-  --text-secondary: #475467;
-  --text-muted: #64748b;
-  --text-subtle: #94a3b8;
+  --text: rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(0, 0, 0, 0.65);
+  --text-muted: rgba(0, 0, 0, 0.45);
+  --text-subtle: rgba(0, 0, 0, 0.25);
   /* Structural borders — NEUTRAL grey ladder (no blue cast). Visual strength
    * ordering (strongest → weakest): control > shell ≈ header > row ≈ divider
    * > grid. The grid is now the WEAKEST line (it was previously stronger than
@@ -173,7 +175,7 @@
   --sidebar-active-soft: var(--primary-soft);
   --sidebar-hover: #f4f5f7;
   --sidebar-text: var(--text);
-  --sidebar-muted: var(--text-muted);
+  --sidebar-muted: var(--text-secondary);
   --sidebar-border: var(--border-shell);
   /* Semantic colors — perceptually uniform, mid-high lightness (L≈52-60%)
    * so they read bright and modern, not muddy. soft tints use one formula
@@ -217,14 +219,7 @@ body,
 }
 
 body {
-  @apply antialiased;
-  font-family: var(--font-ui);
-  font-size: 14px;
-  font-weight: 400;
-  /* UI-PRODUCT-FINISH-CLOSURE-1: forbid synthetic bold/italic. The self-hosted
-   * Noto Sans CJK SC has only 400/500/700; any 600 (or other missing weight)
-   * would be synthesized by the browser into a fuzzy fake bold. none forces the
-   * engine to pick the nearest real face instead of blurring. */
+  @apply antialiased font-sans text-sm font-normal;
   font-synthesis: none;
 }
 
@@ -255,6 +250,7 @@ h3 {
  * thin these ungoverned small icons to match the governed system. Targets only
  * 16px svgs inside primitive data-slots; larger icons (state/hero) are untouched.
  */
+svg.lucide,
 [data-slot="select-trigger"] svg,
 [data-slot="select-content"] svg,
 [data-slot="checkbox-indicator"] svg,
