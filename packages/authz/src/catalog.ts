@@ -38,6 +38,9 @@ export const Permission = {
   CandidateCreate: "candidate.create",
   CandidateUpdate: "candidate.update",
   CandidateImport: "candidate.import",
+  // CandidateDelete (candidate.delete): UNRESOLVED — granted to Admin but no
+  // DELETE /candidates/:id route exists today. Retained pending product
+  // decision (P4-G-04). Removing the route-less grant is out of P4-C1 scope.
   CandidateDelete: "candidate.delete",
   CandidateFieldView: "candidate_field.view",
   CandidateFieldCreate: "candidate_field.create",
@@ -93,18 +96,33 @@ export const Permission = {
   GradingDetailView: "grading.detail.view",
   GradingAnswerView: "grading.answer.view",
   GradingScoreWrite: "grading.score.write",
+  // GradingFinalize / GradingIdentityView: RESERVED for M11 scoped grading.
+  // Omitted from all human presets by design (scoped finalize + double-blind
+  // identity). No route consumes them today; grade-question +
+  // finalizeTerminalGrading run without a separate HTTP gate. Owner: M11.
   GradingFinalize: "grading.finalize",
   GradingIdentityView: "grading.identity.view",
 
   // §4.8 Scores / Results
+  // NOTE: the historical `result.publish` alias (ResultPublish) was removed in
+  // P4-C1. The live result-publication capability is `ExamResultPublish`
+  // (exam.result.publish), granted to Admin+Teacher and consumed by
+  // POST /exams/:id/publish-results. `result.publish` had zero route consumers
+  // and zero grants — see docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
   ScoreAllView: "score.all.view",
   ScoreExport: "score.export",
-  ResultPublish: "result.publish",
 
   // §4.9 System / Diagnostics
   SystemHealthView: "system.health.view",
   SystemDiagnosticsView: "system.diagnostics.view",
+  // SystemInfoView (system.info.view): UNRESOLVED — GET /system/info is public
+  // today, so no role needs this perm. Retained pending product decision
+  // (P4-G-04); removing it is out of P4-C1 scope.
   SystemInfoView: "system.info.view",
+  // SystemAutoSubmit / SystemHeartbeatScan / SystemLifecycleReconcile:
+  // System-actor-only capabilities bound to synthetic actor identities in the
+  // deadlineScanner / heartbeat plugins. Not human HTTP-route permissions; not
+  // login-capable; never reach the assignment-authority path.
   SystemAutoSubmit: "system.auto_submit",
   SystemHeartbeatScan: "system.heartbeat_scan",
   SystemLifecycleReconcile: "system.lifecycle_reconcile",

@@ -227,32 +227,15 @@ export function buildAuthPlugin(
       return handler;
     });
 
-    /**
-     * Returns a pre-handler that checks whether the authenticated actor holds
-     * the specified permission (legacy permission-list gate). Replies 401 if no
-     * context is present, or 403 if the permission is not in the actor's set.
-     *
-     * Tagged with `_isRequirePermission: true` for the same introspection reason
-     * as {@link requireRole}.
-     */
-    fastify.decorate("requirePermission", (permission: Permission) => {
-      const handler = async (request: FastifyRequest, reply: FastifyReply) => {
-        const ctx = request.ctx;
-        if (!ctx) {
-          return reply
-            .code(401)
-            .send(buildErrorResponse(request.id, "AUTH_REQUIRED"));
-        }
-
-        if (!ctx.permissions.includes(permission)) {
-          return reply
-            .code(403)
-            .send(buildErrorResponse(request.id, "PERMISSION_DENIED"));
-        }
-      };
-      Object.assign(handler, { _isRequirePermission: true });
-      return handler;
-    });
+    // NOTE: the dead legacy `requirePermission` decorator was removed in P4-C1.
+    // It had zero route consumers (verified: `rg fastify.requirePermission\(`)
+    // and read only `ctx.permissions`, which is `[]` on every runtime context.
+    // The authoritative capability gate is `requireCapability` below
+    // (`ctx.capabilities`). See docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
+    // The legacy `requireRole` decorator is retained solely as the test-fixture
+    // seam for the whole-app zero-requireRole regression lock's negative
+    // control (it lets the conformance test prove the classifier detects a
+    // synthetic role gate); it has zero production route consumers.
 
     /**
      * Returns a pre-handler that checks the authenticated actor's EFFECTIVE

@@ -428,7 +428,7 @@ Audit Action (constant)
 | --- | --- | --- | :---: | --- | --- | :---: | --- |
 | `score.all.view` | score | all.view | yes | Admin, Teacher | exam/course | read-opt | |
 | `score.export` | score | export | yes | Admin | organization/exam | yes (`export_scores`) | |
-| `result.publish` | result | publish | **yes** | Admin, Teacher | exam | yes (`exam.publish_results`) | alias of `exam.result.publish` |
+| ~~`result.publish`~~ | result | publish | — | — | — | — | **Removed in P4-C1.** Was a dead alias of `exam.result.publish` with zero route consumers and zero grants. The live result-publication capability is `exam.result.publish` (§4.4), granted to Admin+Teacher and consumed by `POST /exams/:id/publish-results`. See `docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`. |
 
 ### 4.9 System / Diagnostics
 

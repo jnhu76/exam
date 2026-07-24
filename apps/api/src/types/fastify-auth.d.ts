@@ -1,6 +1,6 @@
 import "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import type { Permission, RequestContext, Role } from "@exam/domain";
+import type { RequestContext, Role } from "@exam/domain";
 import type { PermissionKey, ResourceResolverKey } from "@exam/authz";
 import type { RuntimeRequestContext } from "./requestContext.js";
 
@@ -85,9 +85,11 @@ declare module "fastify" {
     requireRole: (
       roles: Role[],
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    requirePermission: (
-      permission: Permission,
-    ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    // NOTE: the dead legacy `requirePermission` decorator type was removed in
+    // P4-C1. It had zero route consumers and read only `ctx.permissions` (which
+    // is `[]` on every runtime context). The authoritative capability gate is
+    // `requireCapability` / `requireScopedCapability` / resource-aware gates.
+    // See docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md.
     /** Phase 3 capability gate (RBAC runtime activation, PR #3). */
     requireCapability: (permission: PermissionKey) => AuthzPreHandler;
     /**

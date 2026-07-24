@@ -100,8 +100,20 @@ const authzScopedPlugin: FastifyPluginAsync = async (fastify) => {
       ctxAllows(request, perm),
   });
   fastify.decorate("requireScoreCapability", () => {
-    return (request: FastifyRequest, reply: FastifyReply) =>
-      scoreHandler(request, reply);
+    // P4-C1: attach an introspection-only `_isScoreCapability: true` tag so the
+    // whole-app route regression lock can classify this gate as a protected
+    // capability/ownership gate. Unlike the other resource-aware gates this
+    // decorator does not attach `.authz` metadata (the dedicated score gate is
+    // documented in P4-V0 §7.2 / §8 as "80 metadata gates + 1 dedicated score
+    // gate = 81"); the tag closes that introspection gap without changing any
+    // runtime authorization decision. Production-neutral, mirrors the
+    // `_isAuthenticate` / `_isRequireRole` tag convention.
+    const preHandler = (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ): Promise<void> => scoreHandler(request, reply);
+    Object.assign(preHandler, { _isScoreCapability: true });
+    return preHandler;
   });
 
   // Candidate-context capability gate (RBAC-M10-A archetype A).
