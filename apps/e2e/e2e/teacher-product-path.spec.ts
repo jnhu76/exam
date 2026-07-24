@@ -14,10 +14,17 @@
  * no manual/after_grading publication semantics; result access only verifies
  * the permitted results surface, not P3 publication timing.
  *
- * Constraints honored (task §6.3): at least one meaningful Teacher mutation
- * travels through the browser UI when the existing UI already supports it
- * (Teacher lands on /admin/exams; we assert the capability-driven nav). API
- * setup for prerequisite fixture data uses the real supported API.
+ * CORR1 (F-1): the representative Teacher authoring mutation now travels
+ * through the rendered browser UI. After API setup (course + objective
+ * question), the Teacher clicks the capability-gated 创建考试 action, fills the
+ * real ExamCreatePage form, submits as draft, opens the created exam's detail
+ * page, and clicks the real 发布考试 action. The exam creation AND publication
+ * mutations both travel through the browser UI; only prerequisite fixture data
+ * (course, question) uses the real supported API.
+ *
+ * CORR1 (F-2): the result-surface assertion now pins the explicit contract
+ * (200 or 409 RESOURCE_CONFLICT with details.reason === "EXAM_NOT_FINISHED"),
+ * failing on 401/403/404/422/500/503.
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { loginAsTeacher } from "../lib/login";
@@ -27,7 +34,9 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 /**
  * Create a course as the Teacher through the real /api/courses API
- * (Teacher holds CourseCreate). Returns the course id.
+ * (Teacher holds CourseCreate). Returns the course id. API SETUP ONLY —
+ * not a representative authoring mutation (see F-1: the exam create/publish
+ * mutation is driven through the browser UI).
  */
 async function teacherCreateCourse(
   request: APIRequestContext,
@@ -53,6 +62,7 @@ async function teacherCreateCourse(
 /**
  * Create an objective (true_false) question as the Teacher through the real
  * /api/questions API (Teacher holds QuestionCreate). No text_response/rubric.
+ * API SETUP ONLY — not the representative authoring mutation (F-1).
  */
 async function teacherCreateObjectiveQuestion(
   request: APIRequestContext,
@@ -79,7 +89,7 @@ async function teacherCreateObjectiveQuestion(
 }
 
 test.describe("P4-C3 Teacher positive product path", () => {
-  test("Admin creates Teacher → Teacher logs in → Teacher authors + publishes → Teacher reaches results surface", async ({
+  test("Admin creates Teacher → Teacher logs in → Teacher authors + publishes via browser UI → Teacher reaches results surface", async ({
     page,
     request,
   }) => {
@@ -115,10 +125,11 @@ test.describe("P4-C3 Teacher positive product path", () => {
       page.getByRole("link", { name: "平台设置" }),
     ).not.toBeVisible();
 
-    // ── Step 4: Teacher performs a representative allowed mutation via the ──
-    // real supported API: create a course + an objective question + an exam +
-    // publish it (Teacher holds CourseCreate/QuestionCreate/ExamCreate/
-    // ExamPublish). No text_response/rubric (removed P2-1 scope).
+    // ── Step 4a (API setup): prerequisite fixture data only ──
+    // Course + objective question are created via the real supported API as
+    // the Teacher. These are SETUP for the browser mutation, NOT the
+    // representative authoring mutation itself (F-1): the exam create + publish
+    // mutations below are driven through the rendered browser UI.
     const teacherToken = await teacherApiToken(request, teacher);
     const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const courseId = await teacherCreateCourse(request, teacherToken, unique);
@@ -130,51 +141,148 @@ test.describe("P4-C3 Teacher positive product path", () => {
     );
     expect(questionId).toBeTruthy();
 
-    // Create an exam from the objective question and publish it as Teacher.
-    // Payload mirrors the proven seed.ts shape (openAt/closeAt are required;
-    // controlFlags/retakePolicy/scoreStrategy/maxAttempts default server-side).
-    const examRes = await request.post(`${BASE_URL}/api/exams`, {
-      headers: { Cookie: `auth-token=${teacherToken}` },
-      data: {
-        title: `Teacher考试-${unique}`,
-        description: "",
-        courseId,
-        questionIds: [questionId],
-        durationMinutes: 30,
-        openAt: new Date(Date.now() - 3600_000).toISOString(),
-        closeAt: new Date(Date.now() + 86400_000).toISOString(),
-        passingScore: 60,
-        totalScore: 100,
-        timingMode: "timed_window",
-        resultPublicationMode: "immediate",
-      },
-    });
-    expect(examRes.ok(), `Teacher create exam: ${examRes.status()}`).toBe(true);
-    const examId = ((await examRes.json()) as { id: string }).id;
+    // ── Step 4b (F-1 browser mutation): Teacher creates an exam through the ──
+    // rendered ExamCreatePage. The 创建考试 button is capability-gated
+    // (canCreateExam === ExamCreate, which the Teacher preset holds); it only
+    // renders for capability holders, so its visibility itself proves admission.
+    await expect(
+      page.getByRole("button", { name: "创建考试" }),
+      "Teacher must see the capability-gated create-exam action",
+    ).toBeVisible();
+    await page.getByRole("button", { name: "创建考试" }).click();
+    await expect(page).toHaveURL(/\/admin\/exams\/new(?:$|[/?#])/);
 
-    const publishRes = await request.post(
-      `${BASE_URL}/api/exams/${examId}/publish`,
-      { headers: { Cookie: `auth-token=${teacherToken}` }, data: {} },
+    // Fill the exam title through the rendered form. The course Select is
+    // auto-defaulted to the first course by ExamCreatePage.loadData (the
+    // Teacher-created course is the only course in this org after API setup,
+    // so it is the selected value). Times default server-side when left blank.
+    const examTitle = `Teacher考试-${unique}`;
+    await page.getByPlaceholder("请输入考试名称").fill(examTitle);
+
+    // Pick a question through the rendered 手动选题 dialog. The dialog lists
+    // the first page of /api/questions; the first available question belongs
+    // to the auto-selected (first) course, so it satisfies the
+    // "questions must belong to its course" publish invariant. We add it. The
+    // Teacher-created course + question remain prerequisite fixture data; the
+    // representative mutation is the exam create + publish, not which question
+    // is attached.
+    await page.getByRole("button", { name: "手动选题" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "添加" })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "关闭" }).click();
+
+    // Lower 及格分 (passingScore) through the rendered form so it stays <= the
+    // auto-computed totalScore. The selected question may carry a small demo
+    // score (totalScore auto-calculates from it), while passingScore defaults
+    // to 60; without this the client-side "passingScore > totalScore" guard
+    // would block the save. Set it to 1 (min allowed). 及格分 Label and its
+    // number Input are siblings inside the Field wrapper.
+    await page
+      .getByText("及格分", { exact: true })
+      .locator("xpath=following-sibling::input[1]")
+      .fill("1");
+
+    // Save as draft through the rendered UI. Capture the created exam id from
+    // the POST /api/exams response so we can open its detail page next.
+    const createResponsePromise = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/exams$/.test(new URL(res.url()).pathname),
     );
-    expect(publishRes.status(), `Teacher publish exam`).toBe(200);
+    await page.getByRole("button", { name: "保存草稿" }).click();
+    const createResponse = await createResponsePromise;
+    expect(
+      createResponse.ok(),
+      `Teacher create exam through UI: ${createResponse.status()}`,
+    ).toBe(true);
+    const examId = ((await createResponse.json()) as { id: string }).id;
+    expect(examId).toBeTruthy();
+
+    // Submission succeeds → observable navigation back to /admin/exams.
+    await expect(page).toHaveURL(/\/admin\/exams(?:$|[/?#])/);
+
+    // ── Step 4c (F-1 browser mutation): Teacher publishes the exam through ──
+    // the rendered ExamDetailPage. Open the created exam's detail page, then
+    // click the capability-gated 发布考试 action (canPublishExam === ExamPublish,
+    // which the Teacher preset holds). The button only renders for draft exams
+    // held by capability holders, so its visibility proves admission.
+    await page.goto(`${BASE_URL}/admin/exams/${examId}`);
+    await expect(page).toHaveURL(
+      new RegExp(`/admin/exams/${examId}(?:$|[/?#])`),
+    );
+    // The created exam identity is observable: its title renders on the detail
+    // page header.
+    await expect(page.getByRole("heading", { name: examTitle })).toBeVisible();
+
+    const publishBtn = page.getByRole("button", { name: "发布考试" });
+    await expect(
+      publishBtn,
+      "Teacher must see the capability-gated publish action on the draft exam",
+    ).toBeVisible();
+
+    const publishResponsePromise = page.waitForResponse(
+      (res) =>
+        res.request().method() === "POST" &&
+        /\/api\/exams\/[^/]+\/publish$/.test(new URL(res.url()).pathname),
+    );
+    // ExamDetailPage.handlePublish refetches the exam after a successful POST;
+    // wait for that GET so the status badge re-renders before we assert it.
+    const refetchPromise = page.waitForResponse(
+      (res) =>
+        res.request().method() === "GET" &&
+        /\/api\/exams\/[^/]+$/.test(new URL(res.url()).pathname),
+    );
+    await publishBtn.click();
+    const publishResponse = await publishResponsePromise;
+    expect(publishResponse.status(), `Teacher publish exam through UI`).toBe(
+      200,
+    );
+    await refetchPromise;
+
+    // Publication succeeds through the rendered UI. The publish action
+    // disappears (status is no longer draft) and the status badge re-renders
+    // as "已发布" (status.exam.published). The Teacher preset lacks
+    // ExamClose/ExamUnpublish, so no post-publish action button is expected to
+    // render for the Teacher — the badge + publish-action disappearance are the
+    // observable publication-success signals. We wait for handlePublish's
+    // refetch (already awaited above) so the badge assertion sees the updated
+    // status, not the stale draft. Assert the observable UI state, not just the
+    // network status.
+    await expect(publishBtn).toHaveCount(0);
+    await expect(
+      page.locator('[data-slot="status-badge"]'),
+      "published exam must surface the 已发布 status badge",
+    ).toContainText("已发布");
 
     // ── Step 5: Teacher reaches the permitted result surface ──
-    // Teacher holds ScoreAllView → /admin/results and /admin/exams/:id/scores
-    // are permitted. We verify AUTHORIZATION only (the route admits the
-    // Teacher — i.e. NOT a 403). The business state may return 200 (scores
-    // ready) or a non-403 conflict/empty state when no attempts exist yet;
-    // P3 owns publication timing / visibility semantics — not asserted here
-    // per task §6.3.
+    // Teacher holds ScoreAllView → /admin/exams/:id/scores is permitted. We
+    // verify AUTHORIZATION with an explicit contract (F-2): the response is
+    // either 200 (scores ready) or 409 RESOURCE_CONFLICT with
+    // details.reason === "EXAM_NOT_FINISHED" (the freshly-published exam has
+    // no attempts yet — a post-gate business state owned by P3). Any other
+    // status (401/403/404/422/500/503) fails the assertion. No P3 publication
+    // timing / visibility semantics are asserted here.
     const resultsRes = await request.get(
       `${BASE_URL}/api/exams/${examId}/scores`,
       {
         headers: { Cookie: `auth-token=${teacherToken}` },
       },
     );
+    const status = resultsRes.status();
     expect(
-      resultsRes.status(),
-      `Teacher view exam scores must be authorized (not 403)`,
-    ).not.toBe(403);
+      [200, 409],
+      `Teacher view exam scores must be authorized (200 or 409 EXAM_NOT_FINISHED), got ${status}`,
+    ).toContain(status);
+    if (status === 409) {
+      const body = (await resultsRes.json()) as {
+        error: { code: string; details?: { reason?: string } };
+      };
+      expect(body.error.code).toBe("RESOURCE_CONFLICT");
+      expect(body.error.details?.reason).toBe("EXAM_NOT_FINISHED");
+    }
 
     // The /admin/results page is reachable by the Teacher (direct URL renders,
     // not a 403 — P4-C2 route guard admits ScoreAllView holders).
