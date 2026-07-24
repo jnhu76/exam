@@ -139,7 +139,7 @@ describe("API input validation (Zod schema boundary)", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("publish rejects passingScore > totalScore", async () => {
+  it("create rejects passingScore > totalScore", async () => {
     const examRes = await ctx.app.inject({
       method: "POST",
       url: "/api/exams",
@@ -150,15 +150,7 @@ describe("API input validation (Zod schema boundary)", () => {
       },
       cookies: { "auth-token": ctx.adminToken },
     });
-    expect(examRes.statusCode).toBe(201);
-    const examId = examRes.json().id;
-
-    const publishRes = await ctx.app.inject({
-      method: "POST",
-      url: `/api/exams/${examId}/publish`,
-      cookies: { "auth-token": ctx.adminToken },
-    });
-    expect(publishRes.statusCode).toBe(400);
+    expect(examRes.statusCode).toBe(400);
   });
 
   it("publish rejects closeAt before openAt", async () => {

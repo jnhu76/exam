@@ -365,3 +365,67 @@ describe("ExamConfigForm fields", () => {
     expect(screen.getByText("管理员手动公布")).toBeInTheDocument();
   });
 });
+
+describe("ExamConfigForm passing-score invariant (EXAM-SCORE-INV-1)", () => {
+  it("passing-score input exposes min=0", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    const input = screen.getByTestId("passingScore-input");
+    expect(input).toHaveAttribute("min", "0");
+  });
+
+  it("total-score input remains min=1", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={baseConfig}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText("总分");
+    expect(input).toHaveAttribute("min", "1");
+  });
+
+  it("passingScore > totalScore shows validation error", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{ ...baseConfig, passingScore: 120, totalScore: 100 }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/及格分不能超过总分/)).toBeInTheDocument();
+  });
+
+  it("passingScore = totalScore does not show error", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{ ...baseConfig, passingScore: 100, totalScore: 100 }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/及格分不能超过总分/)).not.toBeInTheDocument();
+  });
+
+  it("passingScore = 0 does not produce a lower-bound UI error", () => {
+    render(
+      <ExamConfigForm
+        courses={[{ id: "course-1", name: "Course 1" }]}
+        data={{ ...baseConfig, passingScore: 0, totalScore: 100 }}
+        questions={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/及格分不能超过总分/)).not.toBeInTheDocument();
+  });
+});

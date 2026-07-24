@@ -257,6 +257,12 @@ export const exams = pgTable(
       "exams_min_submit_after_start_minutes_check",
       sql`${table.minSubmitAfterStartMinutes} >= 0`,
     ),
+    check("exams_passing_score_min_check", sql`${table.passingScore} >= 0`),
+    check("exams_total_score_positive_check", sql`${table.totalScore} > 0`),
+    check(
+      "exams_passing_score_max_check",
+      sql`${table.passingScore} <= ${table.totalScore}`,
+    ),
   ],
 );
 
