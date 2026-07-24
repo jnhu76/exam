@@ -1442,6 +1442,7 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
 describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
   let ctx: Awaited<ReturnType<typeof buildTestApp>>;
   let courseId: string;
+  let questionId: string;
 
   beforeAll(async () => {
     ctx = await buildTestApp(async (fastify) => {
@@ -1461,6 +1462,20 @@ describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
       cookies: { "auth-token": ctx.adminToken },
     });
     courseId = courseRes.json().id;
+
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Zero-pass question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    questionId = qRes.json().id;
   });
 
   afterAll(async () => {
@@ -1666,5 +1681,29 @@ describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().passingScore).toBe(60);
     expect(res.json().totalScore).toBe(100);
+  });
+
+  it("publishes a zero-passing-score exam through the full API path", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({
+        passingScore: 0,
+        totalScore: 100,
+        questionIds: [questionId],
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const examId = createRes.json().id;
+
+    const pubRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(pubRes.statusCode).toBe(200);
+    expect(pubRes.json().status).toBe("published");
+    expect(pubRes.json().passingScore).toBe(0);
   });
 });
