@@ -67,7 +67,7 @@ Teacher logs in through /login  (existing loginAsTeacher)
 → clicks 手动选题 → dialog → 添加 (pick a question) → 关闭
 → sets 及格分 (passingScore) = 1 (so passingScore <= auto-computed totalScore)
 → clicks 保存草稿 (save as draft)
-→ POST /api/exams observed + 200 asserted; examId captured from response
+→ POST /api/exams observed; response.ok() asserted (201 Created); examId captured from response
 → observable navigation back to /admin/exams asserted
 → opens /admin/exams/:id (ExamDetailPage)
 → created exam identity observable: heading === examTitle asserted
@@ -100,7 +100,7 @@ All selectors target the existing application UI with stable accessible names:
 | Open question picker | `getByRole("button", { name: "手动选题" })` | `ExamCreatePage` select-questions button |
 | Add question | `getByRole("dialog").getByRole("button", { name: "添加" }).first()` | `ExamCreatePage` dialog available-question row |
 | Close picker | `getByRole("button", { name: "关闭" })` | `ExamCreatePage` dialog footer |
-| Passing score | `getByText("及格分", { exact: true }).locator("xpath=following-sibling::input[1]")` | `ExamConfigForm` passing-score Field (Label + Input siblings) |
+| Passing score | `getByTestId("passingScore-input")` | `ExamConfigForm` passing-score Field (dedicated testid on the `<Input>`) |
 | Save draft | `getByRole("button", { name: "保存草稿" })` | `ExamCreatePage` save-draft action |
 | Created exam id | `waitForResponse(POST /api/exams)` → `.json().id` | network capture (id is then opened in the browser) |
 | Detail identity | `getByRole("heading", { name: examTitle })` | `ExamDetailPage` PageHeader `<h1>` |

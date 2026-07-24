@@ -7,7 +7,7 @@ import {
   canAccessAdminRoute,
   matchAdminRoute,
   routeCapabilityForPath,
-} from "./adminRouteCapabilities";
+} from "@/lib/adminRouteCapabilities";
 
 const baseUser = (overrides: Partial<MeResponse> = {}): MeResponse => ({
   id: "00000000-0000-4000-8000-000000000001",

@@ -23,7 +23,7 @@
  */
 import { Permission, type PermissionKey } from "@exam/authz";
 import type { MeResponse } from "@exam/contracts";
-import { can } from "./capabilities";
+import { can } from "@/lib/capabilities";
 
 /**
  * A single admin route's capability requirement.

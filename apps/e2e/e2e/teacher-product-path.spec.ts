@@ -178,12 +178,10 @@ test.describe("P4-C3 Teacher positive product path", () => {
     // auto-computed totalScore. The selected question may carry a small demo
     // score (totalScore auto-calculates from it), while passingScore defaults
     // to 60; without this the client-side "passingScore > totalScore" guard
-    // would block the save. Set it to 1 (min allowed). 及格分 Label and its
-    // number Input are siblings inside the Field wrapper.
-    await page
-      .getByText("及格分", { exact: true })
-      .locator("xpath=following-sibling::input[1]")
-      .fill("1");
+    // would block the save. Set it to 1 (min allowed). Reach the input through
+    // a dedicated data-testid rather than a fragile sibling XPath, so the
+    // locator survives Field-wrapper DOM changes.
+    await page.getByTestId("passingScore-input").fill("1");
 
     // Save as draft through the rendered UI. Capture the created exam id from
     // the POST /api/exams response so we can open its detail page next.

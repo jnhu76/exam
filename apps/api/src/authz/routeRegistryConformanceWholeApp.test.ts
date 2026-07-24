@@ -127,6 +127,17 @@ interface CapturedRoute {
 /**
  * Captured primary (non-HEAD) routes from the full production composition.
  * HEAD aliases (auto-generated for GET) are filtered out consistently.
+ *
+ * Conformance contract: this regression lock reads `preHandler` only. The
+ * application's access-control convention (verified across `apps/api/src/routes`
+ * and `apps/api/src/plugins`) is that every auth/authz gate — `authenticate`,
+ * `requireCapability`, `requireScoreCapability` — is registered on
+ * `preHandler` exclusively; no gate is attached to `onRequest`, `preParsing`,
+ * `preValidation`, or any other hook. Because the whole-app composition below
+ * mounts the real production routes, a route that placed its gate on a
+ * non-`preHandler` hook would surface here as a route with zero classified
+ * capability/authentication handlers and fail the inventory assertions, not
+ * silently pass.
  */
 const capturedRoutes: CapturedRoute[] = [];
 
