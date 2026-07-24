@@ -2,6 +2,8 @@ import { z } from "zod";
 
 // ── Exam ──────────────────────────────────────────────────────────
 
+export const PASSING_SCORE_EXCEEDS_TOTAL_MSG = "及格分不能超过总分";
+
 export const ExamStatusEnum = z.enum([
   "draft",
   "published",
@@ -139,7 +141,7 @@ export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["passingScore"],
-        message: "及格分不能超过总分",
+        message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
       });
     }
   },
@@ -183,7 +185,7 @@ export const UpdateExamRequestSchema = UpdateExamRequestBaseSchema.superRefine(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["passingScore"],
-        message: "及格分不能超过总分",
+        message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
       });
     }
   },

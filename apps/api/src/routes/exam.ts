@@ -14,6 +14,7 @@ import {
   ExamSchema,
   CandidateStatusResponseSchema,
   ErrorResponseSchema,
+  PASSING_SCORE_EXCEEDS_TOTAL_MSG,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -641,12 +642,12 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             const nextPassingScore = data.passingScore ?? exam.passingScore;
             const nextTotalScore = data.totalScore ?? exam.totalScore;
             if (nextPassingScore > nextTotalScore) {
-              throw new ValidationError("及格分不能超过总分", {
+              throw new ValidationError(PASSING_SCORE_EXCEEDS_TOTAL_MSG, {
                 fields: [
                   {
                     field: "passingScore",
-                    code: "CUSTOM",
-                    message: "及格分不能超过总分",
+                    code: "PASSING_SCORE_EXCEEDS_TOTAL",
+                    message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
                   },
                 ],
               });
