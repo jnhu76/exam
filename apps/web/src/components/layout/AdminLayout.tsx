@@ -21,6 +21,11 @@ import {
   canAccessAdminConsole,
   canAccessExamRuntime,
 } from "@/lib/capabilities";
+import {
+  adminRelativePath,
+  canAccessAdminRoute,
+} from "@/lib/adminRouteCapabilities";
+import { AccessDeniedPage } from "@/pages/admin/AccessDeniedPage";
 import { PageContainer } from "@/components/shared/PageContainer";
 
 /**
@@ -110,6 +115,15 @@ export function AdminLayout() {
     );
   }
 
+  // P4-C2: centralized per-route capability guard. The actor has some console
+  // capability (admitted above), but may lack the specific capability the
+  // current /admin/* route requires (e.g. a Teacher direct-URLing /admin/users).
+  // Render a clear 403 page instead of the privileged page. Backend remains
+  // authoritative; this fixes direct-URL UX consistency (P4-G-02).
+  const relativePath = adminRelativePath(location.pathname);
+  const routeDenied =
+    relativePath !== null && !canAccessAdminRoute(user, relativePath);
+
   const topbarTitle = getPageTitle(location.pathname);
   const containerRole =
     location.pathname === "/admin/system"
@@ -158,7 +172,7 @@ export function AdminLayout() {
         </header>
         <main className="p-4 lg:p-8">
           <PageContainer role={containerRole}>
-            <Outlet />
+            {routeDenied ? <AccessDeniedPage /> : <Outlet />}
           </PageContainer>
         </main>
       </div>

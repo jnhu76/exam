@@ -312,6 +312,7 @@ export function ExamConfigForm({
               <Field>
                 <Label>{t("admin.forms.exam.passingScore")}</Label>
                 <Input
+                  data-testid="passingScore-input"
                   type="number"
                   value={data.passingScore}
                   onChange={(e) =>

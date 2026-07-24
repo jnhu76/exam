@@ -549,6 +549,120 @@ describe("layout shells", () => {
     expect(screen.getByText("login page")).toBeInTheDocument();
   });
 
+  // ── P4-C2: per-route capability guard (direct-URL denial) ──
+
+  /**
+   * P4-G-02 closure. An authenticated console user who direct-URLs a
+   * /admin/* page whose capability they lack must see the 403 Access-Denied
+   * page, NOT the privileged page. The shell still renders (the user is in the
+   * console); only the routed page is replaced.
+   */
+  it("P4-C2: Teacher direct-URL /admin/users renders the 403 page, not the privileged page", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={teacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="users" element={<div>users page content</div>} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/users",
+    );
+    // Shell still renders.
+    expect(screen.getByTestId("admin-layout")).toBeInTheDocument();
+    // Privileged page content must NOT render.
+    expect(screen.queryByText("users page content")).not.toBeInTheDocument();
+    // The 403 access-denied message renders.
+    expect(screen.getByText("您没有权限访问该页面。")).toBeInTheDocument();
+  });
+
+  it("P4-C2: Teacher direct-URL /admin/grading-queue renders the 403 page", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={teacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route
+              path="grading-queue"
+              element={<div>grading queue content</div>}
+            />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/grading-queue",
+    );
+    expect(screen.queryByText("grading queue content")).not.toBeInTheDocument();
+    expect(screen.getByText("您没有权限访问该页面。")).toBeInTheDocument();
+  });
+
+  it("P4-C2: Teacher ALLOW direct-URL /admin/exams renders the page normally", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={teacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="exams" element={<div>exams page content</div>} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/exams",
+    );
+    expect(screen.getByText("exams page content")).toBeInTheDocument();
+    expect(
+      screen.queryByText("您没有权限访问该页面。"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("P4-C2: Teacher ALLOW direct-URL /admin/questions/import renders the page", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={teacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route
+              path="questions/import"
+              element={<div>import page content</div>}
+            />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/questions/import",
+    );
+    expect(screen.getByText("import page content")).toBeInTheDocument();
+  });
+
+  it("P4-C2: Candidate (no console cap) is redirected away from any /admin/* URL", () => {
+    // Candidate has no admin-console capability at all → the shell redirect
+    // fires before the per-route guard (console-access check is first).
+    renderWithProviders(
+      <AuthProvider initialUser={candidate}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="users" element={<div>users page content</div>} />
+          </Route>
+          <Route path="/exam/list" element={<div>exam list</div>} />
+        </Routes>
+      </AuthProvider>,
+      "/admin/users",
+    );
+    expect(screen.queryByText("users page content")).not.toBeInTheDocument();
+    expect(screen.getByText("exam list")).toBeInTheDocument();
+  });
+
+  it("P4-C2: multi-role primary Candidate + secondary Teacher reaches Teacher pages (union, not primary role)", () => {
+    renderWithProviders(
+      <AuthProvider initialUser={candidateTeacher}>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route path="exams" element={<div>exams page content</div>} />
+          </Route>
+        </Routes>
+      </AuthProvider>,
+      "/admin/exams",
+    );
+    expect(screen.getByText("exams page content")).toBeInTheDocument();
+    expect(
+      screen.queryByText("您没有权限访问该页面。"),
+    ).not.toBeInTheDocument();
+  });
+
   it("ExamLayout redirects user with no capabilities to login", () => {
     const noCap: MeResponse = {
       ...admin,

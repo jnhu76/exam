@@ -62,6 +62,24 @@ The authority kernel is **assignment-backed**, not `users.role`-based:
 - **Fail-closed contract**: when authority cannot be resolved, the request is
   rejected (401 unauthenticated / 503 fail-closed), never allowed.
 
+## `users.role` and JWT-role compatibility policy
+
+There are three role-bearing surfaces. Only the first is an authority:
+
+| Surface | Role in authorization | Read at runtime? |
+| --- | --- | --- |
+| `user_role_assignments` | **Runtime authorization source of truth.** `loadAssignmentAuthority` reads active assignments and unions their preset capabilities into `ctx.capabilities`. Every capability gate consults this. | Yes — authoritative. |
+| `users.role` | **Compatibility / display projection** of the active primary assignment, mirrored by `roleSync` on every primary-active assignment mutation. | **No.** Zero runtime authorization decisions widen or deny based on `users.role`. The column is retained as a non-authoritative cache; deprecating it is a later decision, not Phase-3/P4 scope. |
+| JWT `role` claim | **Identity / display projection and drift telemetry only.** A mismatch between the JWT claim and the assignment-backed primary role is logged at debug level and explicitly must never widen access. | **No.** Telemetry only. |
+
+This policy was made explicit in P4-C1 (see
+[`docs/audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md`](../audits/P4-C1-AUTHORIZATION-RESIDUE-CLEANUP.md)).
+The permanent whole-application regression lock
+(`routeRegistryConformanceWholeApp.test.ts`) guards against any future route
+re-introducing a role-based gate.
+
+
+
 ## Route coverage
 
 Per the M10-A through M10-F migration series and the P4-V0 Gate 0.5
@@ -93,7 +111,9 @@ excluded from the primary application-route count.
 
 ## MVP product-role boundary
 
-The active MVP product-role model is **Admin / Teacher / Candidate**.
+The active MVP product-role model is **Admin / Teacher / Candidate**. This model
+is **CLOSED** (P4 — RBAC MVP role switch, 2026-07-24, tested commit `b4dc1d6`;
+see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md)).
 
 - **Admin**: full system, user, configuration, examination, grading,
   proctoring, result-publication, export, audit, and diagnostics capabilities

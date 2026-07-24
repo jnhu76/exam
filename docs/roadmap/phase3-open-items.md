@@ -52,12 +52,24 @@ P5-N1.
 - **NOT AUTHORIZED ASSUMPTIONS**: Inbox or Email notification integration; additional result modes; redesign of grading; weakening answer-visibility rules.
 - **ACCEPTANCE BOUNDARY**: Under the final Admin/Teacher/Candidate role model, an authorized actor publishes results according to configured policy; the candidate can view only the candidate's own permitted result and cannot see hidden standard answers. The result-publication command and transaction boundary are stable enough for P5-N1 to extend without redefining result semantics.
 
-## P4: RBAC MVP role switch — Admin / Teacher / Candidate (QUEUED / NEXT)
+## P4: RBAC MVP role switch — Admin / Teacher / Candidate (CLOSED)
 
 - **CAPABILITY**: Three product roles enforced on MVP routes.
-- **CURRENT STATE**: NEXT. Authorization infrastructure is implemented (see `docs/architecture/authorization.md`); this Job activates the final MVP product-role model before result-publishing closeout.
-- **WHAT EXISTS**: Capability catalog, role presets, assignment-backed authority, `requireCapability` gates on all routes; existing result publication and result-view routes that can be assigned to the final role matrix.
-- **WHAT IS MISSING**: MVP route matrix (route → capability → role → scope); migration of remaining MVP routes to Teacher capabilities; frontend navigation gating for Admin/Teacher/Candidate; explicit result-publish and result-view capability ownership.
+- **CURRENT STATE**: **CLOSED** (2026-07-24, tested commit `b4dc1d6`). The final
+  Admin/Teacher/Candidate product-role model is activated on MVP routes. Final
+  independent re-audit and closeout:
+  [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md).
+  Gate 0.5 remains PASS; runtime inventory 91/81/10 with 81/81 registry MATCH;
+  0 `requireRole` / 0 `requirePermission` / 0 `users.role`-authority;
+  assignment-backed authority fail-closed; C1 residue cleanup, C2 frontend
+  capability gating, and C3 three-role E2E all complete; six-spec E2E passes
+  with zero skips; `pnpm verify` passes (exit 0). Accepted-deferred items
+  (`CandidateDelete` / `SystemInfoView` product decisions; `GradingFinalize` /
+  `GradingIdentityView` → M11; `System*` → System actor; `users.role` /
+  `legacyMap.ts` compatibility residue) remain visible with owners and do not
+  widen access.
+- **WHAT EXISTS**: Capability catalog, role presets, assignment-backed authority, `requireCapability` gates on all routes; frontend route/action gating (`adminRouteCapabilities.ts` + `AdminLayout` per-route guard); explicit result-publish and result-view capability ownership frozen for P3.
+- **WHAT IS MISSING**: (none — closed).
 - **DEPENDENCIES**: Authorization infrastructure implemented. P3 closeout is not a prerequisite; P3 will verify the result flow after this role switch.
 - **NOT AUTHORIZED ASSUMPTIONS**: Proctor role activation; independent Grader role activation; custom roles; tenant/course/exam scope; `teacher_exam_assignments`; scoped role dispatch (teacher@course, proctor@exam).
 - **ACCEPTANCE BOUNDARY**: Admin/Teacher/Candidate each complete their MVP duties; unauthorized MVP-route access is rejected by the backend; result publication and result viewing have final, explicit role/capability ownership for P3 verification.
