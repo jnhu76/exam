@@ -259,6 +259,12 @@ const zhCN = {
     },
   },
 
+  /** P4-C2 admin-console route guard (403 / Access-Denied) copy. */
+  adminRouteGuard: {
+    accessDenied: "您没有权限访问该页面。",
+    backToPermitted: "返回可访问的页面",
+  },
+
   /** ExamListPage (candidate-facing exam list) copy. */
   examList: {
     actions: {
