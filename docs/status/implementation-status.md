@@ -154,9 +154,22 @@ audit, external log shipping. All Phase 4; none started.
   This is the P5-0 + P5-N1 scope: P5-0 turns the outbox into a resident,
   observable worker (ADR-011); P5-N1 adds the first real `result_published`
   business caller. Neither is started yet.
-- **Gate 0.5 (M10-F post-PR-197 rerun) is PENDING**: it blocks future
-  RBAC-sensitive changes. The last-recorded route inventory (91 routes, 81
-  capability-gated, 0 `requireRole`) stands but is not freshly re-verified.
+- **Gate 0.5 (M10-F post-PR-197 rerun) is PASS** (verified 2026-07-24 on commit
+  `f2a7a80`): the runtime route tree was re-captured via a Fastify `onRoute`
+  hook over the full production composition and reconciles exactly — **91
+  primary application routes** (131 raw registrations = 91 + 40 auto-generated
+  HEAD aliases), **81 capability/ownership-gated** (65 flat + 16
+  scoped/resource-aware), **10 non-gated** (4 authenticate-only, 5 public, and
+  1 intentionally disabled public endpoint),
+  **0 `requireRole` route preHandlers**, **0 `requirePermission` route
+  consumers**, **0 `users.role`/JWT-role authority decisions**, registry ↔
+  runtime 81/81 MATCH with zero drift. The final repository gate `pnpm verify`
+  was executed in full during the P4-V0 re-issue and **passed (exit 0)**; the
+  grouped suite file/test counts were corrected against real `vitest run` output.
+  Full evidence:
+  [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
+  The baseline is now formally accepted; P4-C1 (authorization residue cleanup)
+  is unblocked.
 
 ## E2E status
 
