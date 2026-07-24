@@ -92,8 +92,8 @@ export async function publishExam(
   if (exam.questionIds.length === 0) {
     throw new ValidationError("Exam must have at least one question");
   }
-  if (exam.passingScore <= 0) {
-    throw new ValidationError("Passing score must be positive");
+  if (exam.passingScore < 0) {
+    throw new ValidationError("Passing score must not be negative");
   }
   if (exam.durationMinutes <= 0) {
     throw new ValidationError("Duration must be positive");

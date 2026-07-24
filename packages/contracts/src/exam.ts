@@ -2,6 +2,8 @@ import { z } from "zod";
 
 // ── Exam ──────────────────────────────────────────────────────────
 
+export const PASSING_SCORE_EXCEEDS_TOTAL_MSG = "及格分不能超过总分";
+
 export const ExamStatusEnum = z.enum([
   "draft",
   "published",
@@ -107,7 +109,7 @@ export type EnrollCandidatesRequest = z.infer<
  * Request schema for creating a new exam. Phase 1 supports only `timed_window` timing
  * and `manual` question selection.
  */
-export const CreateExamRequestSchema = z.object({
+export const CreateExamRequestBaseSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).default(""),
   courseId: z.string().uuid(),
@@ -133,6 +135,18 @@ export const CreateExamRequestSchema = z.object({
   resultPublicationMode: ResultPublicationModeEnum.optional(),
 });
 
+export const CreateExamRequestSchema = CreateExamRequestBaseSchema.superRefine(
+  (data, ctx) => {
+    if (data.passingScore > data.totalScore) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["passingScore"],
+        message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
+      });
+    }
+  },
+);
+
 /** Type for a create-exam request. */
 export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
 
@@ -140,7 +154,7 @@ export type CreateExamRequest = z.infer<typeof CreateExamRequestSchema>;
  * Request schema for updating an existing exam. All fields are optional;
  * only provided fields will be updated.
  */
-export const UpdateExamRequestSchema = z.object({
+export const UpdateExamRequestBaseSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).optional(),
   timingMode: Phase1TimingModeEnum.optional(),
@@ -160,6 +174,22 @@ export const UpdateExamRequestSchema = z.object({
   // accept full edits; published is schedule-only per ADR-005 Slice 2 §3.7).
   resultPublicationMode: ResultPublicationModeEnum.optional(),
 });
+
+export const UpdateExamRequestSchema = UpdateExamRequestBaseSchema.superRefine(
+  (data, ctx) => {
+    if (
+      data.passingScore !== undefined &&
+      data.totalScore !== undefined &&
+      data.passingScore > data.totalScore
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["passingScore"],
+        message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
+      });
+    }
+  },
+);
 
 /** Type for an update-exam request. */
 export type UpdateExamRequest = z.infer<typeof UpdateExamRequestSchema>;

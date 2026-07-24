@@ -6,12 +6,15 @@ import {
 import { z } from "zod";
 import {
   CreateExamRequestSchema,
+  CreateExamRequestBaseSchema,
   UpdateExamRequestSchema,
+  UpdateExamRequestBaseSchema,
   PaginationParamsSchema,
   EnrollCandidatesRequestSchema,
   ExamSchema,
   CandidateStatusResponseSchema,
   ErrorResponseSchema,
+  PASSING_SCORE_EXCEEDS_TOTAL_MSG,
 } from "@exam/contracts";
 import { createExamRepo } from "@exam/db/src/repository/examRepo.js";
 import { createQuestionRepo } from "@exam/db/src/repository/questionRepo.js";
@@ -435,7 +438,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
         fastify.requireCapability(Permission.ExamCreate),
       ],
       schema: {
-        body: CreateExamRequestSchema,
+        body: CreateExamRequestBaseSchema,
         security: cookieAuth,
         "x-role": ["Admin", "Teacher"],
         response: {
@@ -534,7 +537,7 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
       ],
       schema: {
         params: idParamsSchema,
-        body: UpdateExamRequestSchema,
+        body: UpdateExamRequestBaseSchema,
         security: cookieAuth,
         "x-role": ["Admin", "Teacher"],
         response: {
@@ -632,6 +635,22 @@ const examRoutes: FastifyPluginAsync = async (fastify) => {
             );
             if (questionChecks.some((q) => q?.courseId !== exam.courseId)) {
               throw new ValidationError("题目不属于所选课程");
+            }
+          }
+
+          if (exam.status === "draft") {
+            const nextPassingScore = data.passingScore ?? exam.passingScore;
+            const nextTotalScore = data.totalScore ?? exam.totalScore;
+            if (nextPassingScore > nextTotalScore) {
+              throw new ValidationError(PASSING_SCORE_EXCEEDS_TOTAL_MSG, {
+                fields: [
+                  {
+                    field: "passingScore",
+                    code: "PASSING_SCORE_EXCEEDS_TOTAL",
+                    message: PASSING_SCORE_EXCEEDS_TOTAL_MSG,
+                  },
+                ],
+              });
             }
           }
 

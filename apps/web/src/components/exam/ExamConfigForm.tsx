@@ -318,7 +318,7 @@ export function ExamConfigForm({
                   onChange={(e) =>
                     update({ passingScore: Number(e.target.value) })
                   }
-                  min={1}
+                  min={0}
                 />
               </Field>
             </div>

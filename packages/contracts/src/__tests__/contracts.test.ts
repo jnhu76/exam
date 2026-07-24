@@ -14,7 +14,11 @@ import {
   CreateCourseRequestSchema,
   UpdateCourseRequestSchema,
 } from "../course.js";
-import { CreateExamRequestSchema, ExamSchema } from "../exam.js";
+import {
+  CreateExamRequestSchema,
+  ExamSchema,
+  UpdateExamRequestSchema,
+} from "../exam.js";
 import {
   CreateQuestionRequestSchema,
   QuestionImportRowSchema,
@@ -254,6 +258,75 @@ describe("exam contracts", () => {
       passingScore: -1,
     });
     expect(result.success).toBe(false);
+  });
+
+  it("CreateExamRequestSchema rejects passingScore > totalScore", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      passingScore: 101,
+      totalScore: 100,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find(
+        (i) => i.path.includes("passingScore") && i.code === "custom",
+      );
+      expect(issue).toBeDefined();
+    }
+  });
+
+  it("CreateExamRequestSchema accepts passingScore = totalScore", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      passingScore: 100,
+      totalScore: 100,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema accepts passingScore = 0", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      passingScore: 0,
+      totalScore: 100,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("CreateExamRequestSchema rejects totalScore = 0", () => {
+    const result = CreateExamRequestSchema.safeParse({
+      ...validExam,
+      passingScore: 0,
+      totalScore: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("UpdateExamRequestSchema rejects both fields with passingScore > totalScore", () => {
+    const result = UpdateExamRequestSchema.safeParse({
+      passingScore: 80,
+      totalScore: 50,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find(
+        (i) => i.path.includes("passingScore") && i.code === "custom",
+      );
+      expect(issue).toBeDefined();
+    }
+  });
+
+  it("UpdateExamRequestSchema accepts single field (final-state validation is API-level)", () => {
+    const result = UpdateExamRequestSchema.safeParse({ passingScore: 80 });
+    expect(result.success).toBe(true);
+  });
+
+  it("UpdateExamRequestSchema accepts both fields with passingScore = totalScore", () => {
+    const result = UpdateExamRequestSchema.safeParse({
+      passingScore: 50,
+      totalScore: 50,
+    });
+    expect(result.success).toBe(true);
   });
 });
 

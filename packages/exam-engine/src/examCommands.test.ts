@@ -173,10 +173,24 @@ describe("examCommands", () => {
       );
     });
 
-    it("throws when passingScore is 0", async () => {
+    it("publishes when passingScore is 0 (zero-pass valid)", async () => {
       const repo = makeRepo(makeExam({ passingScore: 0 }));
+      const result = await publishExam(repo, "exam-1", testQuestions);
+      expect(result.status).toBe("published");
+      expect(result.passingScore).toBe(0);
+    });
+
+    it("throws when passingScore is negative", async () => {
+      const repo = makeRepo(makeExam({ passingScore: -1 }));
       await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
         ValidationError,
+      );
+    });
+
+    it("throws when passingScore exceeds effective question total", async () => {
+      const repo = makeRepo(makeExam({ passingScore: 101, totalScore: 100 }));
+      await expect(publishExam(repo, "exam-1", testQuestions)).rejects.toThrow(
+        /passing score cannot exceed total score/i,
       );
     });
 

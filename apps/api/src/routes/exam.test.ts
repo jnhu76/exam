@@ -1438,3 +1438,272 @@ describe("exam cancel (ADR-005 Slice 4)", () => {
     expect(rows.length).toBe(0);
   });
 });
+
+describe("exam passing-score invariant (EXAM-SCORE-INV-1)", () => {
+  let ctx: Awaited<ReturnType<typeof buildTestApp>>;
+  let courseId: string;
+  let questionId: string;
+
+  beforeAll(async () => {
+    ctx = await buildTestApp(async (fastify) => {
+      await fastify.register(courseRoutes);
+      await fastify.register(questionRoutes);
+      await fastify.register(examRoutes);
+    });
+
+    const courseRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/courses",
+      payload: {
+        name: "Score Inv Course",
+        code: `SIC-${uniquePrefix()}`,
+        description: "",
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    courseId = courseRes.json().id;
+
+    const qRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/questions",
+      payload: {
+        courseId,
+        type: "true_false",
+        content: "Zero-pass question.",
+        standardAnswer: true,
+        score: 100,
+      },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    questionId = qRes.json().id;
+  });
+
+  afterAll(async () => {
+    await ctx.cleanup();
+  });
+
+  function examPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      title: "Score Invariant Exam",
+      courseId,
+      durationMinutes: 60,
+      openAt: new Date().toISOString(),
+      closeAt: new Date(Date.now() + 86400000).toISOString(),
+      passingScore: 60,
+      totalScore: 100,
+      questionIds: [],
+      ...overrides,
+    };
+  }
+
+  it("POST create rejects passingScore > totalScore", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 101, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.details.fields[0].field).toBe("passingScore");
+  });
+
+  it("POST create accepts passingScore = totalScore", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 100, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().passingScore).toBe(100);
+  });
+
+  it("POST create accepts passingScore = 0", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 0, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().passingScore).toBe(0);
+  });
+
+  it("POST create rejects passingScore < 0", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: -1, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("POST create rejects totalScore <= 0", async () => {
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 0, totalScore: 0 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("PATCH totalScore below existing passingScore is rejected", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 60, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { totalScore: 50 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.json().passingScore).toBe(60);
+    expect(getRes.json().totalScore).toBe(100);
+  });
+
+  it("PATCH passingScore above existing totalScore is rejected", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 60, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { passingScore: 120 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(400);
+
+    const getRes = await ctx.app.inject({
+      method: "GET",
+      url: `/api/exams/${examId}`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(getRes.json().passingScore).toBe(60);
+    expect(getRes.json().totalScore).toBe(100);
+  });
+
+  it("PATCH both fields to valid pair succeeds", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 60, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { passingScore: 40, totalScore: 50 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().passingScore).toBe(40);
+    expect(res.json().totalScore).toBe(50);
+  });
+
+  it("PATCH passingScore = totalScore succeeds", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 60, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { passingScore: 50, totalScore: 50 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().passingScore).toBe(50);
+    expect(res.json().totalScore).toBe(50);
+  });
+
+  it("PATCH passingScore = 0 succeeds", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 60, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { passingScore: 0 },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().passingScore).toBe(0);
+  });
+
+  it("PATCH unrelated field preserves valid scores", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({ passingScore: 60, totalScore: 100 }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    const examId = createRes.json().id;
+
+    const res = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/exams/${examId}`,
+      payload: { title: "Renamed Exam" },
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().passingScore).toBe(60);
+    expect(res.json().totalScore).toBe(100);
+  });
+
+  it("publishes a zero-passing-score exam through the full API path", async () => {
+    const createRes = await ctx.app.inject({
+      method: "POST",
+      url: "/api/exams",
+      payload: examPayload({
+        passingScore: 0,
+        totalScore: 100,
+        questionIds: [questionId],
+      }),
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const examId = createRes.json().id;
+
+    const pubRes = await ctx.app.inject({
+      method: "POST",
+      url: `/api/exams/${examId}/publish`,
+      cookies: { "auth-token": ctx.adminToken },
+    });
+    expect(pubRes.statusCode).toBe(200);
+    expect(pubRes.json().status).toBe("published");
+    expect(pubRes.json().passingScore).toBe(0);
+  });
+});
