@@ -18,7 +18,7 @@ describe("table and color visual-finish authority", () => {
     expect(indexCss).toContain("--primary-soft-strong: #dbeafe");
     expect(indexCss).toContain("--primary-focus: #93c5fd");
     expect(indexCss).toContain("--bg: #f5f7fa");
-    expect(indexCss).toContain("--text: #111827");
+    expect(indexCss).toContain("--text: rgba(0, 0, 0, 0.88)");
     expect(indexCss).toContain("--border-control: #d1d5db");
     expect(indexCss).toContain("--border-shell: #dfe3e8");
     expect(indexCss).toContain("--border-header: #e1e5ea");
