@@ -41,7 +41,7 @@ All of the following are live in `packages/authz/` and `apps/api/src/authz/`:
 | --- | --- |
 | `requireCapability(perm)` | Flat capability gate (most admin/system routes) |
 | `requireScopedCapability(perm)` | Scope-aware capability gate |
-| `requireScoreCapability(perm)` | Score-result capability gate |
+| `requireScoreCapability()` | Arbitrates `ScoreOwnView` vs `ScoreAllView` and enforces attempt ownership |
 | `requireCandidateContext` | Candidate-context ownership gate |
 | `requireExamEligibility` | Exam-eligibility gate (candidate may start) |
 | `requireOwnAttempt` | Attempt-ownership gate (candidate owns the attempt) |
@@ -64,39 +64,66 @@ The authority kernel is **assignment-backed**, not `users.role`-based:
 
 ## Route coverage
 
-Per the M10-A through M10-F migration series (all merged):
+Per the M10-A through M10-F migration series and the P4-V0 Gate 0.5
+re-verification:
 
-- **91 total protected routes**.
-- **81 capability/ownership-gated**.
-- **0 `requireRole` consumers** (legacy two-role gate fully removed).
-- **0 `users.role` authority decisions** (role column is not consulted for authz).
-- **0 JWT-role authority decisions** (JWT role is identity, not authority).
+- **91 primary runtime routes** in the `registerApiRoutes` composition.
+- **81 capability/ownership-gated protected routes**.
+- **10 non-capability routes**: 4 authenticate-only, 5 public, and
+  1 intentionally disabled public endpoint.
+- **0 `requireRole` consumers**.
+- **0 `requirePermission` route consumers**.
+- **0 `users.role` authority decisions**.
+- **0 JWT-role authority decisions**.
+
+Fastify additionally generates 40 `HEAD` aliases for `GET` routes; these are
+excluded from the primary application-route count.
 
 > **Gate 0.5 caveat.** The post-PR-197 re-verification (Gate 0.5, M10-F rerun)
-> is **PENDING**. The route inventory above is the last-recorded state; its
-> PASS closure verdict must NOT be cited as freshly re-verified evidence until
-> Gate 0.5 is re-run. See
-> [`docs/status/implementation-status.md`](../status/implementation-status.md).
+> is **PASS** (verified 2026-07-24 on commit `f2a7a80`). The runtime route tree
+> was re-captured via a Fastify `onRoute` hook over the full production
+> composition and reconciles exactly to the inventory above (91 primary routes
+> = 131 raw registrations including 40 auto-generated HEAD aliases; 81
+> capability/ownership-gated; 10 non-gated; 81/81 registry ↔ runtime MATCH with
+> zero drift; 0 `requireRole` / `requirePermission` / `users.role`-authority).
+> The final repository gate `pnpm verify` was executed in full during the P4-V0
+> re-issue and **passed (exit 0)**. Full evidence:
+> [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
+> The route inventory above may now be cited as freshly re-verified evidence.
 
-## Candidate / admin permission boundary
+## MVP product-role boundary
 
-Phase 1 product roles are **Admin** and **Candidate** only. The capability model
-enforces this boundary:
+The active MVP product-role model is **Admin / Teacher / Candidate**.
 
-- Admin capabilities: full system management within the internal default organization.
-- Candidate capabilities: `own_attempt`, `own_score`, `exam_eligibility`,
-  `candidate_context` — candidates can only access their own attempts/results.
+- **Admin**: full system, user, configuration, examination, grading,
+  proctoring, result-publication, export, audit, and diagnostics capabilities
+  within the internal default organization.
+- **Teacher**: course and question authoring, exam authoring and selected
+  lifecycle operations, candidate enrollment management, result publication,
+  and all-score viewing. Teacher does not receive grading, proctoring,
+  user-management, organization-management, diagnostics, or score-export
+  capabilities.
+- **Candidate**: exam eligibility and own-resource capabilities only,
+  including own attempts and own results. Cross-candidate resource probes are
+  denied with anti-enumeration semantics.
 
-This boundary is enforced on every production route; the frontend navigation
-gating is UX-only, the backend is the security truth source.
+Frontend navigation and route gating are UX controls; backend capability and
+resource gates remain the security authority.
 
 ## Non-goals (Phase 3 product work, not implemented)
 
-These are tracked in [`docs/roadmap/phase3-open-items.md`](../roadmap/phase3-open-items.md):
+The following are not implemented in the current MVP authorization model:
 
-- Scoped Teacher / Proctor / Grader role **bundles as product roles** (the
-  presets exist in the catalog, but the assignment UI and product flows do not).
-- Resource-relationship authorization (M11): Teacher→course, Proctor→exam,
-  Grader→work assignment. No junction tables exist; no `scope_type` columns.
-- Staff invitation, SMTP password reset, account lifecycle UI.
-- Custom roles, multi-tenant, SuperAdmin (Phase 4).
+- Resource-relationship authorization (M11), including Teacher→Course,
+  Teacher→Exam, Proctor→Exam, and Grader→Work assignment.
+- Scoped role-assignment storage such as `scope_type`, `scope_resource_id`,
+  `course_staff`, `teacher_exam_assignments`, `exam_proctor`, and
+  `grading_assignment`.
+- Full scoped Proctor and Grader product workflows.
+- Staff invitation, SMTP password reset, and account-lifecycle UI.
+- Custom roles, permission-management UI, multi-tenant switching,
+  SuperAdmin, and cross-tenant authorization.
+
+Built-in global role assignments and the Admin / Teacher / Candidate MVP role
+model already exist; the deferred work is resource-level scoping, not basic
+Teacher activation.
