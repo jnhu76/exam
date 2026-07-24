@@ -115,8 +115,8 @@ P4 (RBAC MVP role switch)
 
 | Job  | True dependency                                | What it adds                                                                              |
 | ---- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes.                           |
-| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. |
+| P4   | Authorization infrastructure implemented        | Final Admin/Teacher/Candidate product-role model on MVP routes. **CLOSED** (2026-07-24, tested commit `b4dc1d6`); see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md). |
+| P5-0 | ADR-011 accepted; P4 closed in execution order (no semantic dependency on P3) | Resident, observable Email worker: lock/heartbeat/diagnostics; rename to `EmailDeliveryService`. (NEXT) |
 | P3   | P4 closed                                       | Result-publishing closeout under the final role model + leak tests; stable transaction boundary for P5-N1. |
 | P5-N1| P4 + P5-0 + P3 closed                           | First operational notification: `result_published` Inbox + optional Email, atomically.    |
 | P6   | Preceding MVP blockers closed                   | MVP ready closeout.                                                                        |
@@ -168,8 +168,10 @@ audit, external log shipping. All Phase 4; none started.
   grouped suite file/test counts were corrected against real `vitest run` output.
   Full evidence:
   [`docs/audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md`](../audits/P4-V0-GATE-0.5-BASELINE-VERIFICATION.md).
-  The baseline is now formally accepted; P4-C1 (authorization residue cleanup)
-  is unblocked.
+  Gate 0.5 was re-verified during P4-R1 closeout on commit `b4dc1d6` (the
+  conformance suite and the whole-application regression lock both pass); the
+  baseline remains PASS. P4 is **CLOSED** — see
+  [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md).
 
 ## E2E status
 

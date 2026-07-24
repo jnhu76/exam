@@ -111,7 +111,9 @@ excluded from the primary application-route count.
 
 ## MVP product-role boundary
 
-The active MVP product-role model is **Admin / Teacher / Candidate**.
+The active MVP product-role model is **Admin / Teacher / Candidate**. This model
+is **CLOSED** (P4 — RBAC MVP role switch, 2026-07-24, tested commit `b4dc1d6`;
+see [`docs/audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md`](../audits/P4-R1-FINAL-INDEPENDENT-REAUDIT-AND-CLOSEOUT.md)).
 
 - **Admin**: full system, user, configuration, examination, grading,
   proctoring, result-publication, export, audit, and diagnostics capabilities
