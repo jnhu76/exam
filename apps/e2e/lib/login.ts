@@ -45,6 +45,14 @@ async function buildLoginError(
  */
 const CANDIDATE_LANDING = /\/exam\/list(?:$|[/?#])/;
 const ADMIN_LANDING = /\/admin\/dashboard(?:$|[/?#])/;
+/**
+ * Teacher lands on its first permitted console surface. Per `adminLandingPath`
+ * (capabilities.ts): Teacher lacks SystemHealthView (dashboard), ExamRoomView
+ * (proctor), GradingQueueView (grading); its first match is `canSeeExams`
+ * (ExamView) → /admin/exams. This is the capability-union landing, not a
+ * role-string shortcut.
+ */
+const TEACHER_LANDING = /\/admin\/exams(?:$|[/?#])/;
 
 export async function loginViaUi(
   page: Page,
@@ -167,4 +175,19 @@ export async function loginAsAdmin(
   password: string = process.env.E2E_ADMIN_PASSWORD ?? "admin123",
 ): Promise<void> {
   await loginViaUi(page, username, password, ADMIN_LANDING);
+}
+
+/**
+ * Log in as a Teacher through the REAL /login UI flow and land on the Teacher
+ * capability-driven console surface (/admin/exams). Used by P4-C3 three-role
+ * E2E. The Teacher account is NOT a demo-seed account (there is intentionally
+ * no default Teacher seed — P4-G-01); callers create it first through the
+ * supported Admin product interface (POST /api/users { role: "Teacher" }).
+ */
+export async function loginAsTeacher(
+  page: Page,
+  username: string,
+  password: string,
+): Promise<void> {
+  await loginViaUi(page, username, password, TEACHER_LANDING);
 }
