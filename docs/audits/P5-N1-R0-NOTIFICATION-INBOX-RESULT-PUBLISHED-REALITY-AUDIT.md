@@ -289,9 +289,12 @@ result = await executeInTransaction(fastify.db, async (tx) => {   // line 1263, 
     fastify.now(),
   );
   if (!published.alreadyPublished) {                               // line 1269 — idempotency guard
-    await recordAtomicHttpAudit(tx, request, ctx, { ... });        // line 1270 — audit INSIDE tx
+    await recordAtomicHttpAudit(tx, request, ctx, { ... });        // line 1270 — audit INSIDE tx, immediately after mutation
     // ─── P5-N1 extension point (ADD here, lines 1278→1279) ───
-    // await notificationRepo.insert(tx, ...);                     //   notifications row per recipient
+    //Ordering: mutation → audit → fan-out (Inbox, then outbox) → commit
+    // const postPublishExam = await examRepo.findById(tx, id);    //   re-read exam for post-publication visibility
+    // await resolveRecipients(tx, postPublishExam, ctx);           //   §10 — visibility against post-publish state
+    // await notificationRepo.insert(tx, ...);                     //   notifications row per recipient (action_path NOT NULL)
     // await emailOutboxRepo.create(tx, ...);                      //   outbox row per recipient with email
   }
   return published;
@@ -390,7 +393,8 @@ Recipient rule (V1, manual publish):
 ### 10.3 Composition rule (concrete query)
 
 ```text
-For a manual publish of exam E:
+For a manual publish of exam E (inside the publication transaction, AFTER
+publishResults has flipped resultsPublishedAt):
 
   enrollments = enrollmentRepo.listByExam(ctx, E)        // enrollmentRepo.ts:109
   for each enrollment:
@@ -399,7 +403,7 @@ For a manual publish of exam E:
     authAttempt = enrollment.finalAttemptId                // score-strategy-selected; may be null
     if authAttempt == null → skip (no authoritative attempt yet)
     attempt = attemptRepo.findById(authAttempt)
-    visibility = computeResultVisibility(exam, attempt, "own")
+    visibility = computeResultVisibility(postPublishExam, attempt, "own")
     if visibility.visible == false → skip (result not yet visible to candidate)
     → recipient = user; authoritative attempt = authAttempt
 ```
@@ -407,6 +411,16 @@ For a manual publish of exam E:
 This composes existing primitives only — no new scoring authority is invented.
 `computeResultVisibility` is the same function the result page uses, so the
 notification never links to a hidden result.
+
+**Critical:** In manual mode, visibility depends on `exam.resultsPublishedAt !=
+null`. Recipient visibility MUST be evaluated against the post-publication
+exam state (after `publishResults` has flipped `resultsPublishedAt`). I2 must
+NOT evaluate recipients against an exam object loaded before the publication
+transition — that would classify all manual-mode recipients as
+`pending_publish`. I2 may satisfy this with exactly one of:
+  (A) re-read the exam through the transaction after `publishResults`; or
+  (B) construct an immutable post-publication exam view using the authoritative
+      `resultsPublishedAt` returned by `publishResults`.
 
 ### 10.4 Edge cases handled by the composition
 
@@ -480,21 +494,21 @@ globally unique per exam per the current invariant.
 ```text
 First successful publication (alreadyPublished=false):
   result mutation (resultsPublishedAt = now)        \
-  one Inbox row per eligible recipient               } same tx → commit together
-  one outbox row per recipient with email           /
-  publication audit (exam.publish_results)
+  publication audit (exam.publish_results)           } same tx → commit together
+  one Inbox row per eligible recipient              /
+  one outbox row per recipient with email          /
 
 Repeat publication (alreadyPublished=true):
   no result mutation
+  no new publication audit  (already suppressed)
   no new Inbox row          (suppressed by !alreadyPublished guard)
   no new outbox row         (suppressed by same guard)
-  no new publication audit  (already suppressed)
 
 Serialization-conflict retry (40001/40P01):
   failed attempt rolls back (commits nothing)
   fresh retry snapshot re-evaluates alreadyPublished
   → if another tx committed the publish first: alreadyPublished=true, side effects skipped
-  → if not: exactly one successful publish + one fan-out
+  → if not: exactly one successful publish + one audit + one fan-out
 ```
 
 ### 11.4 Four distinct guarantees (NOT the same)
@@ -520,7 +534,7 @@ The Job v2 §8.1 proposed 14 columns. Each is classified by V1 need:
 | `type` | list/unread-count display | yes | yes | can't distinguish types | **REQUIRED_NOW** |
 | `title` | list display | yes | yes | empty list row | **REQUIRED_NOW** |
 | `body` | list/detail display | yes | yes | empty list row | **REQUIRED_NOW** |
-| `action_path` | link to result | yes (rendered link) | yes | notification not actionable | **REQUIRED_NOW** |
+| `action_path` | link to result (NOT NULL) | yes (rendered link) | yes | notification not actionable | **REQUIRED_NOW** |
 | `created_at` | list ordering + unread | yes | yes | unstable order | **REQUIRED_NOW** |
 | `read_at` | unread filter + mark-read | yes | yes | no unread badge / mark-read | **REQUIRED_NOW** |
 | `dedupe_key` | dedupe insert | no | yes | duplicate rows | **REQUIRED_NOW** |
@@ -540,7 +554,8 @@ notifications
 - type                  TEXT NOT NULL  (V1: only "result_published")
 - title                 TEXT NOT NULL
 - body                  TEXT NOT NULL
-- action_path           TEXT (nullable — validated relative path)
+- action_path           TEXT NOT NULL  (validated relative path — V1 has no
+                                        non-actionable notification type)
 - created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 - read_at               TIMESTAMPTZ (nullable — null = unread)
 - dedupe_key            TEXT (nullable — unique per scope)
@@ -556,7 +571,12 @@ Indexes:
 list, stable ordering, unread count, mark read, dedupe, org + recipient
 isolation, and navigation. `severity`/`resource_type`/`resource_id`/
 `archived_at`/`invalidated_at` have no V1 reader, writer, endpoint, or test —
-they are speculative and deferred (§23).
+they are speculative and deferred (§23). `action_path` is NOT NULL because V1
+has exactly one notification type (`result_published`) and every such
+notification must navigate to the authoritative result. A nullable column would
+permit a broken `result_published` record. Nullable support for future
+announcement or informational types is speculative and must not weaken the V1
+invariant — a future migration may relax or redesign the model deliberately.
 
 ---
 
@@ -572,10 +592,12 @@ V1 contract for users.email:
   where edited:         Admin PATCH /api/users/:id, PATCH /api/candidates/:id
   roles that may edit:  Admin (writes via user/candidate routes)
   Candidate self-edit:  NO (Candidate has no self-edit email surface in V1)
-  normalization rule:   trim; lowercase (RFC 5321 local-part is case-sensitive
-                        but the repository's chosen rule is trim + lowercase —
-                        documented here, applied in the contracts Zod
-                        transform)
+  normalization rule:   trim surrounding whitespace; blank → null; preserve
+                        the validated address spelling/case (Email is not a
+                        login identifier, not unique, no case-insensitive
+                        lookup is required, so lowercase is an unnecessary
+                        semantic transformation; trim-only is the smallest
+                        behavior needed for SMTP delivery)
   validation rule:      Zod `z.string().email()` after normalize; max 320 chars
   API response exposure: included in admin user/candidate read DTOs; NOT in
                         Candidate's own /auth/me (no self-view of email in V1)
@@ -693,12 +715,14 @@ This is the real existing candidate result route (`routes.ts:37`,
 ```text
 buildResultPublishedActionPath(attemptId: string): string
   → returns `/exam/${attemptId}/result`
+  → always non-empty and valid (satisfies action_path NOT NULL)
 
   site-relative output            ✓ (starts with /exam/)
   no request Host authority       ✓ (built from attemptId only)
   PUBLIC_WEB_ORIGIN used only for rendered absolute Email links (render time)
   no external / protocol-relative destination  ✓
   existing route prefix verified  ✓ (/exam/* is a live route family)
+  guaranteed non-null              ✓ (V1 has no non-actionable type)
 ```
 
 ### 16.3 Validation (lightweight, V1-appropriate)
@@ -708,6 +732,8 @@ Even though the builder is trusted, V1 still requires:
 - matches the pattern `/exam/[a-zA-Z0-9_-]+/result`
 - no `..`, no backslash, no scheme, no encoded traversal
 - render-time re-validation before combining with `PUBLIC_WEB_ORIGIN`
+- `action_path` is NOT NULL (V1 has no non-actionable notification type; a
+  nullable column would permit a broken `result_published` record)
 
 This is **not** a generic URL-security framework — it is a single assertion
 that the stored path is the one the builder produced. Deferred: a shared
@@ -719,16 +745,21 @@ that the stored path is the one the builder produced. Deferred: a shared
 
 ### 17.1 Frozen extension seam
 
-Start from the P3-proven route transaction (`exam.ts:1263-1281`). Insert the
-fan-out inside the `!published.alreadyPublished` block, after the audit:
+Start from the P3-proven route transaction (`exam.ts:1263-1281`). The frozen
+ordering is: result mutation → audit → fan-out (Inbox, then outbox) → commit.
+Insert the fan-out inside the `!published.alreadyPublished` block, after the
+audit:
 
 ```text
 executeInTransaction(fastify.db, async (tx) => {
-  const published = await publishResults(...);                 // keep first
+  const published = await publishResults(...);                 // keep first — flips resultsPublishedAt
   if (!published.alreadyPublished) {
-    await recordAtomicHttpAudit(tx, ...);                      // keep
-    // P5-N1 extension:
-    const recipients = await resolveRecipients(tx, exam, ctx); // §10 composition
+    await recordAtomicHttpAudit(tx, ...);                      // keep — audit immediately after mutation
+    // P5-N1 extension (audit → fan-out ordering):
+    // Recipient visibility MUST use post-publication exam state (§10.3).
+    // Option A: re-read exam from tx. Option B: use published.postPublishExam.
+    const postPublishExam = await examRepo.findById(tx, exam.id); // Option A
+    const recipients = await resolveRecipients(tx, postPublishExam, ctx); // §10 composition
     for (const r of recipients) {
       await notificationRepo.insert(tx, {                      // Inbox row (required)
         organizationId, recipientUserId: r.userId,
@@ -753,13 +784,15 @@ executeInTransaction(fastify.db, async (tx) => {
 
 ```text
 result mutation
-+ required Inbox rows (one per eligible recipient)
-+ required outbox rows (one per recipient WITH email)
-+ publication audit
+→ publication audit
+→ required Inbox rows (one per eligible recipient)
+→ required outbox rows (one per recipient WITH email)
 → commit or roll back together
 ```
 
-SMTP remains outside the transaction (worker drains asynchronously).
+All five steps (result, audit, Inbox rows, outbox rows, commit) are inside the
+same transaction. If fan-out fails, the audit and result mutation roll back with
+it. SMTP remains outside the transaction (worker drains asynchronously).
 
 ### 17.3 Critical tension with `enqueueBestEffort`
 
@@ -787,11 +820,15 @@ surface.
 ### 17.5 Ordering (frozen)
 
 ```text
-result mutation  →  fan-out inserts (notifications, then outbox)  →  audit
+result mutation  →  audit  →  fan-out inserts (notifications, then outbox)  →  commit
 ```
 
-Within the fan-out: notification rows inserted first (so a notification read
-never misses its Inbox row), then outbox rows. Both inside the same tx.
+This preserves the current P3 route ordering (audit immediately after the
+mutation) and requires the smallest production diff in I2. Within the fan-out:
+notification rows inserted first (so a notification read never misses its Inbox
+row), then outbox rows. Both inside the same tx. If fan-out fails, the
+previously inserted audit row rolls back with the transaction — no persisted
+audit can claim success for a rolled-back publication.
 
 ### 17.6 Required vs. optional outbox when
 
@@ -1060,20 +1097,29 @@ Shared validator library across notification types
 ## 24. Required migrations
 
 ```text
-1. notifications table (§12.1) — 10 columns + 3 indexes (incl. partial UNIQUE
-   on dedupe_key). Owned by P5-N1-I1.
+Owned by P5-N1-I1 (foundation):
+  packages/db/migrations/postgres/0019_notifications_users_email.sql
+    - notifications table (§12.1) — 10 columns + 3 indexes (incl. partial
+      UNIQUE on dedupe_key)
+    - users.email (optional, nullable, normalized) — ALTER TABLE users ADD
+      COLUMN email TEXT; partial UNIQUE is NOT required (nulls allowed)
 
-2. users.email (optional, nullable, normalized) — ALTER TABLE users ADD COLUMN
-   email TEXT; partial UNIQUE is NOT required (nulls allowed). Owned by
-   P5-N1-I1.
+Owned by P5-N1-I2 (operational Email linkage):
+  packages/db/migrations/postgres/0020_email_outbox_notification_link.sql
+    - email_outbox.notification_id (nullable FK → notifications.id) — links
+      operational email rows to their Inbox notification
+    - email_outbox.recipient_user_id (nullable FK → users.id) — allows
+      recipient linkage independent of email
+    - their nullable foreign keys and required indexes, if any
 
-3. email_outbox.notification_id (nullable FK → notifications.id) — links
-   operational email rows to their Inbox notification. Owned by P5-N1-I2.
+The two migrations are separate because:
+  0019 = Inbox/user foundation
+  0020 = operational Email linkage and atomic integration
 
-4. email_outbox.recipient_user_id (nullable FK → users.id) — optional; allows
-   recipient linkage independent of email. Owned by P5-N1-I2.
-   (Alternatively, derive recipient from the notification join and skip this
-   column — recorded as an I2 design choice.)
+During I1:
+  packages/db/src/repository/emailOutboxRepo.ts remains unchanged
+  email_outbox schema remains unchanged
+  Email worker and Email services remain unchanged
 ```
 
 No migration renames `resultsPublishedAt` or touches `exam lifecycle`.
@@ -1085,9 +1131,11 @@ No migration renames `resultsPublishedAt` or touches `exam lifecycle`.
 ### 25.1 Layer — contracts/domain
 
 ```text
-optional valid email (z.string().email() after normalize)
+optional valid email (z.string().email() after trim + preserve)
 blank email → null
+mixed-case email preserved as supplied (no lowercase transform)
 malformed email rejected
+max length = 320
 candidate without email remains valid
 result_published is the only NotificationType value
 NotificationType ≠ EmailType string equality
@@ -1096,7 +1144,8 @@ NotificationType ≠ EmailType string equality
 ### 25.2 Layer — migration/schema
 
 ```text
-notifications table: columns, NOT NULLs, defaults, 3 indexes, partial UNIQUE
+notifications table: columns, NOT NULLs (incl. action_path), defaults,
+  3 indexes, partial UNIQUE
 users.email: nullable, no unique constraint (nulls allowed)
 email_outbox.notification_id: nullable FK
 ```
@@ -1138,6 +1187,10 @@ concurrent publication (Promise.all two authorized requests) → one timestamp,
   one audit, one fan-out set (M13-style)
 serialization-conflict retry re-evaluates alreadyPublished (design inference
   from executeInTransaction + !alreadyPublished guard; no forced-retry hook)
+manual publish with a result-ready finalAttemptId → recipient resolution runs
+  against post-publication exam state → exactly one notification created
+negative control: the same attempt evaluated against pre-publication state would
+  be hidden (proves the post-publication visibility test is not vacuous)
 ```
 
 ### 25.6 Layer — authorization/API
@@ -1205,16 +1258,17 @@ scope:
   - add notification contracts (packages/contracts/src/notification.ts:
       list/unread-count/mark-read/read-all Zod schemas; reuse
       PaginationParamsSchema + PaginatedResponseSchema)
-  - add notifications schema + repository (§12.1; insertMany with ON CONFLICT,
-      list with stable order + unread filter, markRead, markAllRead, unreadCount)
+  - add notifications schema + repository (§12.1; action_path NOT NULL;
+      insertMany with ON CONFLICT, list with stable order + unread filter,
+      markRead, markAllRead, unreadCount)
   - extend users read DTO to expose email to Admin only
 
 allowed files:
-  packages/db/migrations/postgres/0019_notifications_users_email.sql (new)
+  packages/db/migrations/postgres/0019_notifications_users_email.sql (new —
+    notifications table + users.email only; no email_outbox changes)
   packages/db/src/schema/pg.ts (notifications table, users.email)
   packages/db/src/repository/notificationRepo.ts (new)
-  packages/db/src/repository/emailOutboxRepo.ts (unchanged in I1; notification_id
-    added in I2)
+  packages/db/src/repository/emailOutboxRepo.ts (unchanged in I1)
   packages/domain/src/notification.ts (new)
   packages/domain/src/email.ts (no change — grade_notification already defined)
   packages/contracts/src/notification.ts (new)
@@ -1228,9 +1282,10 @@ forbidden files:
   apps/api/src/email/** (no change in I1)
   apps/web/src/** (UI is I3)
 
-migration ownership: 0019 (single migration: notifications table + users.email
-  + email_outbox.notification_id + email_outbox.recipient_user_id; or split
-  into 0019 + 0020 if reviewer prefers)
+migration ownership:
+  P5-N1-I1 owns 0019_notifications_users_email.sql only (notifications table +
+  users.email). email_outbox is NOT modified in I1; notification_id and
+  recipient_user_id are added by P5-N1-I2 in 0020.
 
 tests:
   contracts: email validation (valid/blank/null/malformed), candidate-without-email
@@ -1259,8 +1314,11 @@ same Draft PR as I2/I3? NO — I1 is the foundation PR; I2 and I3 build on it.
 
 ```text
 scope:
-  - result_published recipient policy (§10 composition rule)
-  - buildResultPublishedActionPath + V1 action-path validation (§16)
+  - result_published recipient policy (§10 composition rule); recipient
+    visibility evaluated against post-publication exam state (NOT
+    pre-publication state — see §10.3)
+  - buildResultPublishedActionPath + V1 action-path validation (§16;
+    action_path NOT NULL — builder always produces a valid non-empty path)
   - grade_notification Email renderer + structured payload (§14, §15)
   - static result_published → grade_notification policy mapping (policy.ts)
   - atomic extension of publish-results tx (§17): fan-out Inbox + outbox inside
@@ -1284,8 +1342,7 @@ allowed files:
     at render time)
   packages/db/src/schema/pg.ts (email_outbox.notification_id,
     email_outbox.recipient_user_id)
-  packages/db/migrations/postgres/0020_email_outbox_notification_link.sql (if
-    not folded into 0019)
+  packages/db/migrations/postgres/0020_email_outbox_notification_link.sql
   .env.example (add PUBLIC_WEB_ORIGIN)
 
 forbidden files:
@@ -1296,8 +1353,11 @@ forbidden files:
   apps/api/src/routes/gradingQueue.ts (no change)
   apps/web/src/** (UI is I3)
 
-migration ownership: 0020 (email_outbox notification_id + recipient_user_id) —
-  or folded into I1's 0019 if the PR boundary prefers.
+migration ownership:
+  P5-N1-I2 owns 0020_email_outbox_notification_link.sql only (email_outbox
+  notification_id + recipient_user_id + their nullable foreign keys and
+  required indexes). This is a separate migration from 0019 because 0020 is the
+  operational Email linkage and atomic integration.
 
 tests:
   policy: result_published requires Inbox; maps to grade_notification; missing
@@ -1307,6 +1367,9 @@ tests:
   Email render: subject/body/html contain examTitle (escaped) + link; no score,
     no standardAnswer
   recipient composition: skip no-attempt; skip not-visible; select finalAttemptId
+  recipient visibility: post-publication exam state used (NOT pre-publication);
+    manual publish with result-ready finalAttemptId → exactly one notification;
+    negative control: same attempt against pre-publication state would be hidden
   transaction: commit-together; Inbox-failure rolls back; outbox-failure rolls
     back (when email exists); no SMTP in tx; duplicate trigger → no rows;
     concurrent publish → one fan-out (M13-style)
@@ -1396,6 +1459,7 @@ same Draft PR as I1/I2? NO — separate PR (I3 depends on I2 merge).
 | `grade_notification` renderer leaks score/standardAnswer | Low (renderer is new, explicit §15 boundary) | High — recurrence of P3 leakage class | Renderer only receives `{ examTitle, actionPath }`; test asserts no score/standardAnswer/rubric/grader in output |
 | Concurrent publish + notification fan-out race | Low (M13 proves single timestamp + single audit) | Medium | Reuse `!alreadyPublished` guard; M13-style concurrent test for fan-out |
 | `notificationRepo.insertMany` driver support | Low | Low | Verify Drizzle supports multi-row insert + ON CONFLICT; fall back to looped `create` if not |
+| Recipient visibility evaluated against pre-publication exam state | Medium (manual mode visibility depends on `resultsPublishedAt != null`) | High — all manual recipients classified as `pending_publish` → zero notifications | I2 must evaluate visibility against post-publication exam state (§10.3); required negative-control test proves it is not vacuous |
 
 **No blockers.** P3 is closed; the seam is frozen; P5-0 runtime is proven. The
 audit's V1 decisions (§9–§22) are answerable from existing repository
@@ -1436,13 +1500,13 @@ reverting. I1 has no dependency on I2/I3; I2 depends on I1; I3 depends on I2.
 10. Authoritative attempt-selection      enrollment.finalAttemptId (shouldSelectAttempt, grading.ts:38-54)
 11. Dedupe identity                      result_published:{examId} (Inbox);
                                          result_published:{examId}:{recipientUserId} (outbox)
-12. Minimal notification schema          10 columns (§12.1); severity/resource*/archived/invalidated DEFER
+12. Minimal notification schema          10 columns (§12.1); action_path NOT NULL; severity/resource*/archived/invalidated DEFER
 13. Deferred schema fields               severity, resource_type, resource_id, archived_at, invalidated_at
-14. users.email contract                 optional, trim+lowercase, not unique, blank→null, not for login
+14. users.email contract                 optional, trim+preserve case, not unique, blank→null, not for login, max 320
 15. EmailType mapping                    result_published → grade_notification (explicit, tested)
 16. Email content boundary               results available + examTitle + trusted link; no score/answer/rubric
 17. Action-link design                   buildResultPublishedActionPath(attemptId) → /exam/:attemptId/result
-18. Transaction extension seam           exam.ts:1269-1279, inside !alreadyPublished, after audit
+18. Transaction extension seam           exam.ts:1269-1279, ordering: mutation → audit → fan-out (Inbox, then outbox), inside !alreadyPublished
 19. Fan-out strategy                     listByExam + batched inserts in same tx; LAN-scale, no MQ
 20. Failure policy                       Inbox required (rollback on failure); outbox required when email
                                          exists (rollback); SMTP failure after commit → worker retries

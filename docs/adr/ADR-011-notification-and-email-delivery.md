@@ -593,7 +593,8 @@ notifications
 - severity              TEXT NOT NULL (enum: info, warning, high)
 - resource_type         TEXT (nullable — e.g. 'exam', 'attempt')
 - resource_id           TEXT (nullable — e.g. exam UUID)
-- action_path           TEXT (nullable — validated relative path)
+- action_path           TEXT (nullable in the target model; V1 freezes this
+                          column as NOT NULL — see P5-N1-R0 audit §12.1)
 - created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 - read_at               TIMESTAMPTZ (nullable — null = unread)
 - archived_at           TIMESTAMPTZ (nullable)
@@ -674,7 +675,7 @@ Examples:
 
 | Scenario | dedupe_key |
 |---|---|
-| Result published to a candidate | `grade_notification:{attemptId}:{recipientUserId}:{publicationVersion}` |
+| Result published to a candidate | `grade_notification:{examId}:{recipientUserId}` (V1 uses `result_published:{examId}:{recipientUserId}` — no `publicationVersion`; the single irreversible `resultsPublishedAt` transition is the stable key) |
 | Exam assigned to a candidate | `exam_notification:{examId}:{recipientUserId}:{assignmentVersion}` |
 | Password reset for a user | `password_reset:{userId}:{tokenVersion}` |
 | Invitation to a pre-user email | `registration_welcome:{invitationId}:{normalizedEmail}` |
@@ -685,7 +686,7 @@ Rules:
 2. The same logical delivery for the same recipient MUST generate the same key on retry or re-trigger.
 3. `recipientIdentity` should use the stable `recipient_user_id` when available.
 4. For identity emails without a user ID, use the normalized email address or invitation ID.
-5. Email addresses used as key components MUST be normalized (lowercase, trimmed).
+5. Email addresses used as key components MUST be normalized (V1: trim + preserve case; no lowercase — see P5-N1-R0 audit §13).
 6. Random UUIDs MUST NOT be used as business deduplication keys.
 7. `dedupe_key` does NOT guarantee SMTP exactly-once delivery (see §11.1).
 8. Worker retry reuses the same outbox row; it does not create a new key.
@@ -743,32 +744,22 @@ GET /api/notifications
 
 **Pagination** (required, not optional):
 
-V1 uses cursor-based pagination. The cursor is an opaque base64url-encoded value:
+V1 uses offset/page pagination (consistent with the repository's existing
+`PaginationParamsSchema` / `PaginatedResponseSchema` convention — see
+`packages/contracts/src/common.ts`):
 
 ```http
-GET /api/notifications?cursor=eyJjcmVhdGVkQXQiOi...&limit=20
-```
-
-Cursor payload (decoded, not visible to clients):
-
-```json
-{
-  "createdAt": "2026-07-23T10:30:00.000Z",
-  "id": "notification-uuid"
-}
+GET /api/notifications?page=1&pageSize=20
 ```
 
 Rules:
 
-- Default `limit`: 20
-- Maximum `limit`: 100
+- Default `pageSize`: 20
+- Maximum `pageSize`: 100
 - Ordering: `created_at DESC, id DESC` (stable sort)
-- Cursor uses base64url encoding; the client must treat it as opaque
-- Decoded cursor must pass schema validation; malformed cursors return the standard validation error (400)
-- Cursor does not contain authorization information
-- Cursor cannot substitute for organization/user scope — the query MUST still filter by `organization_id` and `recipient_user_id` from the request context
-- The next-page query must correctly handle multiple rows sharing the same `created_at` timestamp via the `id` tiebreaker
+- Response: `{ items, total, page, pageSize, totalPages }`
 - No unbounded list responses
+- Pagination remains scoped by organization and recipient from context
 
 Optional filters:
 
@@ -1109,7 +1100,7 @@ Rejected because environment and domain changes would make persisted links stale
 6. Add `apps/api/src/notifications/service.ts` and `policy.ts`.
 7. Register the notification service through a Fastify plugin.
 8. Add the independent email worker entrypoint with build entry constraints.
-9. Add Inbox API contracts and routes with cursor pagination.
+9. Add Inbox API contracts and routes with offset/page pagination (reuse `PaginationParamsSchema`).
 10. Add the minimal web notification center.
 11. Rename `apps/api/src/email/notificationService.ts` → `emailDeliveryService.ts`.
 12. Migrate business events one at a time: result published, exam assigned, schedule change/cancellation, grading assigned.
@@ -1175,10 +1166,9 @@ The following items are explicitly deferred and NOT part of V1:
 - [ ] Inbox API passes authentication tests
 - [ ] Inbox API passes same-organization user isolation tests
 - [ ] Repository queries use `organization_id + recipient_user_id`
-- [ ] Inbox list enforces cursor pagination (no unbounded lists)
-- [ ] Cursor is an opaque base64url value (§10.1)
-- [ ] Malformed cursors are rejected with the standard validation error
-- [ ] Cursor pagination remains scoped by organization and recipient
+- [ ] Inbox list enforces offset/page pagination (no unbounded lists)
+- [ ] Pagination reuses `PaginationParamsSchema` + `PaginatedResponseSchema`
+- [ ] Pagination remains scoped by organization and recipient
 
 ### Worker and observability
 
