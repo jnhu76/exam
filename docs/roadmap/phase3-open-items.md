@@ -19,8 +19,8 @@ Phase 3 **product** work that remains.
 P4 (RBAC MVP role switch) ✅ CLOSED
   → P5-0 (Email delivery runtime hardening) ✅ CLOSED (2026-07-25, PR #210)
   → P3 (result publishing closeout) ✅ CLOSED (2026-07-25, PR #211)
-  → P5-N1 (Notification Inbox + result-published Email integration) 🔄 IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS
-  → P6 (MVP ready closeout) ⏸ BLOCKED until P5-N1 final corrective gates pass and PR is merged
+  → P5-N1 (Notification Inbox + result-published Email integration) ✅ CLOSED (2026-07-25, PR #213)
+  → P6 (MVP ready closeout) ⏭ NEXT — unblocked by P5-N1 close
 ```
 
 P2-1 authoring UI flow has been removed from the active Phase 3 plan by scope
@@ -86,12 +86,14 @@ P5-N1.
 - **NOT AUTHORIZED ASSUMPTIONS**: Inbox; users.email; real business caller; invitation; password reset; template engine; generic queue platform; Redis/BullMQ/RabbitMQ/Kafka.
 - **ACCEPTANCE BOUNDARY**: A standalone Email worker continuously claims, retries, and terminally records outbox rows without duplicate concurrent ownership; its heartbeat and backlog are visible through existing diagnostics.
 
-## P5-N1: Notification Inbox + result-published Email integration (IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS)
+## P5-N1: Notification Inbox + result-published Email integration (CLOSED)
 
 - **CAPABILITY**: First operational two-channel notification: candidate Inbox plus optional Email for `result_published`.
-- **CURRENT STATE**: IMPLEMENTATION COMPLETE — FINAL REVIEW CORRECTIVES IN PROGRESS (PR #213). P3, P4, and P5-0 are all closed; the P5-N1-R0 audit owns the V1 contract correction and the frozen implementation scope. ADR-011 is the architecture authority (status corrected to **Accepted** by this audit).
+- **CURRENT STATE**: **CLOSED** (2026-07-25, PR #213, merge commit `0b36aab`). P3, P4, and P5-0 are all closed; the P5-N1-R0 audit owns the V1 contract correction and the frozen implementation scope. ADR-011 is the architecture authority (status corrected to **Accepted** by this audit). The final review corrective cycle is complete — the CI FK-flake (`audit_logs_organization_id_*` from late best-effort audit writes racing org cleanup) is resolved and `pnpm verify` is green (127/127 API test files).
+  - Implementation closeout: [`docs/audits/P5-N1-I3-CLOSEOUT.md`](../audits/P5-N1-I3-CLOSEOUT.md).
+  - Reality audit: [`docs/audits/P5-N1-R0-NOTIFICATION-INBOX-RESULT-PUBLISHED-REALITY-AUDIT.md`](../audits/P5-N1-R0-NOTIFICATION-INBOX-RESULT-PUBLISHED-REALITY-AUDIT.md).
 - **WHAT EXISTS**: notifications migration + Drizzle schema; notification repository; NotificationService and result_published policy; optional users.email; grade_notification renderer; atomic publication → audit → Inbox → outbox flow; Inbox APIs; Candidate NotificationBell UI; API/unit/integration/E2E coverage; PUBLIC_WEB_ORIGIN and action-path validation.
-- **WHAT IS MISSING**: final corrective verification; final independent review disposition; PR merge/closeout.
+- **WHAT IS MISSING**: (none for P5-N1 scope — closed).
 - **DEPENDENCIES**: P3, P4, and P5-0 closed.
 - **NOT AUTHORIZED ASSUMPTIONS**: invitation/password reset migration; additional notification types; user preferences; announcements; WebSocket/SSE; stale-message skip; template engine; generic queue platform; `publicationVersion`; opaque-cursor pagination (repo uses offset/page); generic URL-security framework; removal of a nonexistent old Email caller.
 - **ACCEPTANCE BOUNDARY**: Authorized manual result publication atomically commits result state, one candidate Inbox record, and a linked Email outbox row when an email exists; candidate can read the Inbox item and open the authoritative result at `/exam/:attemptId/result`; SMTP remains asynchronous.
@@ -99,10 +101,10 @@ P5-N1.
 ## P5-N2: Operational notification expansion (DEFERRED — NOT STARTED)
 
 - **CAPABILITY**: Migrate additional operational events onto the NotificationService one at a time.
-- **CURRENT STATE**: DEFERRED until P5-N1 proves the architecture.
-- **WHAT EXISTS**: ADR-011 event-policy model; after P5-N1, one implemented type (`result_published`).
+- **CURRENT STATE**: DEFERRED — architecture now proven by P5-N1 (CLOSED). Eligible to start; not yet scoped into an active Job.
+- **WHAT EXISTS**: ADR-011 event-policy model; one implemented type (`result_published`) delivered by P5-N1.
 - **WHAT IS MISSING**: Event-specific policy, payload, dedupe, transaction, action-path, API/UI behavior, and tests for `exam_assigned`, schedule change/cancellation, and grading assignment.
-- **DEPENDENCIES**: P5-N1 closed; corresponding product flow and role must exist.
+- **DEPENDENCIES**: P5-N1 closed (✅); corresponding product flow and role must exist.
 - **NOT AUTHORIZED ASSUMPTIONS**: bulk organization announcements; generic fan-out; notification preferences; identity lifecycle migration.
 - **ACCEPTANCE BOUNDARY**: Each migrated event has one authoritative old/new path, explicit NotificationType→EmailType mapping, recipient-scoped dedupe, transaction tests, and no double-send.
 
@@ -121,7 +123,7 @@ P5-N1.
 - **CURRENT STATE**: NOT STARTED. Identity flows are explicitly excluded from the first NotificationService migration.
 - **WHAT EXISTS**: After P5-0/P5-N1: resident Email worker; sender adapters; optional `users.email`; Email outbox; retry and diagnostics; Email-only delivery path.
 - **WHAT IS MISSING**: Invitation token lifecycle; invitation acceptance; password-reset token lifecycle; identity-specific rate limiting; account activation/deactivation UI; permission audit integration; auditable security events.
-- **DEPENDENCIES**: P5-0 closed; P5-N1 closed for the shared optional email field. This item continues to use the Email-only path unless a later ADR explicitly migrates identity flows.
+- **DEPENDENCIES**: P5-0 closed (✅); P5-N1 closed (✅) for the shared optional email field. This item continues to use the Email-only path unless a later ADR explicitly migrates identity flows.
 - **NOT AUTHORIZED ASSUMPTIONS**: Identity Inbox requirement; NotificationService migration; complex template engine; notification preference center; multi-tenant sender configuration.
 - **ACCEPTANCE BOUNDARY**: Admin can invite staff through a single-use, expiring token; the recipient can activate the account and request a rate-limited password reset; activation/deactivation and security-relevant actions are audited; SMTP failure does not corrupt account state.
 
@@ -129,9 +131,9 @@ P5-N1.
 
 - **CAPABILITY**: Templated, localized Email bodies.
 - **CURRENT STATE**: NOT STARTED. Pure design note; inline-string bodies remain.
-- **WHAT EXISTS**: Existing EmailType values and delivery adapter; P5-N1 provides the first real operational caller.
+- **WHAT EXISTS**: Existing EmailType values and delivery adapter; P5-N1 (✅) provides the first real operational caller.
 - **WHAT IS MISSING**: Template registry; structured payloads; backend locale resolution; zh-CN rendering; future locale expansion; template tests.
-- **DEPENDENCIES**: P5-N1 closed or another real Email caller exists.
+- **DEPENDENCIES**: P5-N1 closed (✅) or another real Email caller exists.
 - **NOT AUTHORIZED ASSUMPTIONS**: Full marketing template editor; user-authored HTML; per-organization branding; arbitrary locale negotiation.
 - **ACCEPTANCE BOUNDARY**: Email bodies are selected by EmailType and rendered from structured payloads through a tested zh-CN backend locale path rather than route-local inline strings.
 
@@ -154,13 +156,15 @@ P5-N1.
 
 ---
 
-## Required phase-roadmap alignment
+## Phase-roadmap alignment (applied)
 
-Because `docs/roadmap/phase-roadmap.md` is the phase-scope authority, the same PR
-that adopts this Open Items update should make the following minimal Phase 3
-alignment:
+The notification/Email scope and acceptance signals below were added to
+`docs/roadmap/phase-roadmap.md` Phase 3 **In scope** and **Acceptance signals**
+during the notification/email delivery module work. They are recorded here as
+the applied alignment; the phase-scope authority remains
+[`docs/roadmap/phase-roadmap.md`](phase-roadmap.md).
 
-Add to Phase 3 **In scope**:
+Phase 3 **In scope** (notification/Email lines):
 
 ```text
 - In-app notification Inbox for selected operational events.
@@ -168,7 +172,7 @@ Add to Phase 3 **In scope**:
 - First operational notification integration for result publication.
 ```
 
-Add to Phase 3 **Acceptance signals**:
+Phase 3 **Acceptance signals** (notification/Email lines):
 
 ```text
 - Candidate can receive and read a result-publication Inbox notification.
